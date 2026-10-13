@@ -56,6 +56,14 @@ public static class ImportTemplate
             ["addressState"] = "NSW", ["addressPostcode"] = "2000", ["contact1Name"] = "Sam Example", ["contact1Relationship"] = "Next of kin",
             ["contact1Phone"] = "0400 000 001",
         },
+        ImportKind.Staff => new()
+        {
+            ["firstName"] = ImportParticipantRows.ExampleFirstName, ["lastName"] = ImportParticipantRows.ExampleLastName,
+            ["email"] = "example@example.com", ["mobile"] = "0400 000 000", ["role"] = "Support worker", ["position"] = "Support worker",
+            ["region"] = "Sydney", ["driversLicence"] = "Yes", ["driversLicenceExpiry"] = "30/06/2027", ["firstAid"] = "Yes",
+            ["firstAidExpiry"] = "30/06/2027", ["medication"] = "No", ["manualHandling"] = "Yes", ["manualHandlingExpiry"] = "30/06/2027",
+            ["overnight"] = "No", ["workerScreeningNumber"] = "1234567A", ["workerScreeningExpiry"] = "30/06/2030",
+        },
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 }

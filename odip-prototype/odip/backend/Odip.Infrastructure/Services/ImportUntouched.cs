@@ -57,4 +57,39 @@ public static class ImportUntouched
         await Add(db.ParticipantContactRoles.Where(r => list.Contains(r.ParticipantId) && r.CreatedAt > importedAt).Select(r => r.ParticipantId), "has contacts added after the import");
         return reasons;
     }
+
+    /// <summary>
+    /// The spec's rule (never signed in; no shifts, completions or leave) plus every record someone else can point at the account, because
+    /// deleting it would cascade them away or null them out (availability, pairings, patterns, preferred staff, trip roles, incidents, tasks).
+    /// What only the person themselves can write needs a sign-in first. A Restrict or ClientSetNull foreign key missed here fails the undo (409)
+    /// rather than deleting; the one SetNull it does not list (TripClaim.AuthorisedByUserId) is only set by the person themselves authorising a claim, which "has signed in" covers.
+    /// </summary>
+    public static async Task<Dictionary<Guid, string>> StaffBlockersAsync(OdipDbContext db, IReadOnlyCollection<Guid> ids, CancellationToken ct)
+    {
+        var list = ids.ToList();
+        var reasons = new Dictionary<Guid, string>();
+        async Task Add(IQueryable<Guid> blocked, string reason)
+        {
+            foreach (var id in await blocked.Distinct().ToListAsync(ct)) reasons.TryAdd(id, reason);
+        }
+
+        await Add(db.Users.Where(u => list.Contains(u.Id) && u.LastLoginAt != null).Select(u => u.Id), "has signed in");
+        await Add(db.Shifts.Where(s => s.UserId != null && list.Contains(s.UserId.Value)).Select(s => s.UserId!.Value), "has shifts");
+        await Add(db.ShiftPatterns.Where(p => p.DefaultUserId != null && list.Contains(p.DefaultUserId.Value)).Select(p => p.DefaultUserId!.Value), "is on a recurring shift pattern");
+        await Add(db.ShiftCompletions.Where(c => list.Contains(c.SubmittedByUserId)).Select(c => c.SubmittedByUserId), "has completed shifts");
+        await Add(db.LeaveRequests.Where(l => list.Contains(l.UserId)).Select(l => l.UserId), "has leave");
+        await Add(db.RecurringUnavailabilities.Where(r => list.Contains(r.UserId)).Select(r => r.UserId), "has recurring unavailability");
+        // StaffAvailability has no tenant filter; the ids are this organisation's own imported users.
+        await Add(db.StaffAvailabilities.Where(a => list.Contains(a.UserId)).Select(a => a.UserId), "has availability");
+        await Add(db.StaffParticipantCompatibilities.Where(c => list.Contains(c.UserId)).Select(c => c.UserId), "has participant pairings");
+        await Add(db.StaffAssignments.Where(a => list.Contains(a.UserId)).Select(a => a.UserId), "is assigned to a trip");
+        await Add(db.VehicleAssignments.Where(v => v.DriverUserId != null && list.Contains(v.DriverUserId.Value)).Select(v => v.DriverUserId!.Value), "drives on a trip");
+        await Add(db.Participants.Where(p => p.PreferredUserId != null && list.Contains(p.PreferredUserId.Value)).Select(p => p.PreferredUserId!.Value), "is a participant's preferred staff member");
+        await Add(db.IncidentReports.Where(i => list.Contains(i.ReportedByUserId)).Select(i => i.ReportedByUserId), "is named in an incident");
+        await Add(db.IncidentReports.Where(i => i.InvolvedUserId != null && list.Contains(i.InvolvedUserId.Value)).Select(i => i.InvolvedUserId!.Value), "is named in an incident");
+        await Add(db.IncidentWitnesses.Where(w => w.WitnessUserId != null && list.Contains(w.WitnessUserId.Value)).Select(w => w.WitnessUserId!.Value), "is a witness to an incident");
+        await Add(db.TripInstances.Where(t => t.LeadCoordinatorId != null && list.Contains(t.LeadCoordinatorId.Value)).Select(t => t.LeadCoordinatorId!.Value), "leads a trip");
+        await Add(db.BookingTasks.Where(t => t.OwnerId != null && list.Contains(t.OwnerId.Value)).Select(t => t.OwnerId!.Value), "owns tasks");
+        return reasons;
+    }
 }

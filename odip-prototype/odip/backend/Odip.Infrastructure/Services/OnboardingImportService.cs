@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
@@ -25,20 +26,24 @@ public sealed class OnboardingImportService
     /// <summary>A commit's 409 can be its own twin still finishing (a retry that waited past the lock timeout), so it points at the history.</summary>
     public const string CommitLockBusy = LockBusy + " If you just pressed Import, check Import history in a minute.";
     public const string ChooseLanding = "Choose whether these participants are already receiving services or are new onboarding.";
-    public const string CommitFailed = "The import failed, so nothing was imported. Try again; if it keeps failing, contact support.";
+    public const string StaffRace = "Someone else added a staff member with the same name or email at the same moment. Nothing was imported; import again.";
+    public const string RecordRace = "Someone else added a record with the same details at the same moment. Nothing was imported; import again.";
+    public const string CommitFailed ="The import failed, so nothing was imported. Try again; if it keeps failing, contact support.";
 
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
     private readonly ParticipantCreateService _participants;
+    private readonly StaffCreateService _staff;
     private readonly TimeProvider _clock;
     private readonly ILogger<OnboardingImportService>? _logger;
 
-    public OnboardingImportService(OdipDbContext db, ICurrentTenant tenant, ParticipantCreateService participants, TimeProvider clock,
+    public OnboardingImportService(OdipDbContext db, ICurrentTenant tenant, ParticipantCreateService participants, StaffCreateService staff, TimeProvider clock,
         ILogger<OnboardingImportService>? logger = null)
     {
         _db = db;
         _tenant = tenant;
         _participants = participants;
+        _staff = staff;
         _clock = clock;
         _logger = logger;
     }
@@ -49,14 +54,15 @@ public sealed class OnboardingImportService
     /// </summary>
     private Guid TenantId() => !_tenant.IsSuperAdmin && _tenant.TenantId is { } id ? id : throw new ImportException(ChooseOrganisation);
 
-    public async Task<ImportPreviewDto> PreviewAsync(ImportKind kind, byte[] content, string fileName, IReadOnlyList<string?>? mapping, CancellationToken ct)
+    public async Task<ImportPreviewDto> PreviewAsync(ImportKind kind, byte[] content, string fileName, IReadOnlyList<string?>? mapping, CancellationToken ct,
+        ClaimsPrincipal? caller = null)
     {
         TenantId();
         var table = ImportFileReader.Read(content, fileName);
         var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers);
         if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: false) is { } mappingError) throw new ImportException(mappingError);
 
-        var plans = await PlanAsync(kind, table, columns, ct);
+        var plans = await PlanAsync(kind, table, columns, caller, ct);
         var hash = Sha256(content);
         var previouslyImportedAt = await _db.ImportBatches
             .Where(b => b.FileSha256 == hash && b.UndoneAt == null)
@@ -66,7 +72,7 @@ public sealed class OnboardingImportService
 
         return new ImportPreviewDto(
             ImportFields.For(kind).Select(f => new ImportFieldDto(f.Key, f.Label, f.Required)).ToList(),
-            table.Headers.Select((header, i) => new ImportColumnDto(i, header, columns[i], null)).ToList(),
+            table.Headers.Select((header, i) => new ImportColumnDto(i, header, columns[i], ImportFields.NotImportedNote(kind, header))).ToList(),
             plans.Select(p => p.ToDto()).ToList(),
             plans.Count(p => p.Status == ImportRowStatus.Ready),
             plans.Count(p => p.Status == ImportRowStatus.Skipped),
@@ -75,8 +81,9 @@ public sealed class OnboardingImportService
     }
 
     /// <summary>Every row's status: the file's own rules, then people already in this organisation, then repeats within the file.</summary>
-    private async Task<List<ImportRowPlan>> PlanAsync(ImportKind kind, ImportTable table, IReadOnlyList<string?> mapping, CancellationToken ct)
+    private async Task<List<ImportRowPlan>> PlanAsync(ImportKind kind, ImportTable table, IReadOnlyList<string?> mapping, ClaimsPrincipal? caller, CancellationToken ct)
     {
+        if (kind == ImportKind.Staff) return await PlanStaffAsync(table, mapping, caller, ct);
         var asOf = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var plans = ImportParticipantRows.Build(table, mapping, asOf);
 
@@ -95,6 +102,61 @@ public sealed class OnboardingImportService
 
         ImportRowPlan.MarkFileDuplicates(plans, "NDIS number");
         return plans;
+    }
+
+    /// <summary>
+    /// Staff rows: emails are unique across ODIP, so every organisation's users are checked (only whether an address is taken elsewhere is said,
+    /// never by whom); then the staff form's address rules; then repeats within the file. Undone staff imports deleted their accounts, so every
+    /// user found here is real.
+    /// </summary>
+    private async Task<List<ImportRowPlan>> PlanStaffAsync(ImportTable table, IReadOnlyList<string?> mapping, ClaimsPrincipal? caller, CancellationToken ct)
+    {
+        var tenantId = TenantId();
+        var plans = ImportStaffRows.Build(table, mapping);
+        var emails = plans.Where(p => p.DuplicateKey != null).Select(p => p.DuplicateKey!).Distinct().ToList();
+        var users = (await _db.Users.IgnoreQueryFilters()
+                .Where(u => emails.Contains(u.Email.ToLower()))
+                .Select(u => new { Email = u.Email.ToLower(), u.TenantId, u.FirstName, u.LastName })
+                .ToListAsync(ct))
+            .GroupBy(u => u.Email)
+            .ToDictionary(g => g.Key, g => g.First());
+        var tenantDomain = await _staff.TenantEmailDomainAsync(tenantId, ct);
+
+        foreach (var plan in plans)
+        {
+            if (plan.DuplicateKey is not { } email || plan.Status == ImportRowStatus.Skipped) continue;
+            if (users.TryGetValue(email, out var user))
+            {
+                if (user.TenantId == tenantId) plan.Skip($"Already in ODIP as {user.FirstName} {user.LastName}.");
+                else plan.Refuse("This email belongs to another organisation.");
+                continue;
+            }
+            if (_staff.ReservedDomainError(caller, email) is { } reserved) plan.Refuse(reserved);
+            if (await _staff.OtherOrganisationAddressErrorAsync(caller, email, tenantId, ct) is { } elsewhere) plan.Refuse(elsewhere);
+            if (plan.Status == ImportRowStatus.Ready && tenantDomain is not null && AddressConfirmation.Needed(email, tenantDomain))
+                plan.Warnings.Add("This address is at neither your organisation's email domain nor a common provider. Check it before sending sign-in invites.");
+        }
+
+        ImportRowPlan.MarkFileDuplicates(plans, "email");
+        return plans;
+    }
+
+    /// <summary>
+    /// Creates one ready staff row through the staff form's service and saves it inside the import's transaction. The Import click is the
+    /// confirmation the form asks for an unusual address (the preview warned on those rows); every other rule is checked again here.
+    /// </summary>
+    private async Task<Guid?> CreateStaffAsync(ImportRowPlan plan, ClaimsPrincipal? caller, Guid tenantId, CancellationToken ct)
+    {
+        var staged = await _staff.StageAsync(plan.Staff! with { AddressConfirmed = true }, caller, tenantId, ct);
+        if (staged.User is null)
+        {
+            _db.ChangeTracker.Clear();
+            plan.Refuse(staged.Error!);
+            return null;
+        }
+        await _db.SaveChangesAsync(ct);
+        _db.ChangeTracker.Clear();
+        return staged.User.Id;
     }
 
     /// <summary>One advisory-lock key per organisation: imports and undos in one organisation queue, other organisations are not held up.</summary>
@@ -119,7 +181,7 @@ public sealed class OnboardingImportService
         // A request that waited behind its own twin finds the batch the twin made.
         if (await ReplayAsync(idempotencyKey, ct) is { } twin) return twin;
 
-        var plans = await PlanAsync(kind, table, columns, ct);
+        var plans = await PlanAsync(kind, table, columns, caller, ct);
         // The column holds 260 characters; a longer name would fail the final save after every row was written. The cut never splits an emoji.
         var name = Path.GetFileName(fileName);
         var batch = new ImportBatch
@@ -134,8 +196,11 @@ public sealed class OnboardingImportService
             foreach (var plan in plans.Where(p => p.Status == ImportRowStatus.Ready))
             {
                 rowNumber = plan.RowNumber;
-                if (await CreateAsync(plan, landing, caller, ct) is { } entityId)
-                    items.Add(new ImportBatchItem { Id = Guid.NewGuid(), BatchId = batch.Id, EntityType = nameof(Participant), EntityId = entityId });
+                var entityId = kind == ImportKind.Staff
+                    ? await CreateStaffAsync(plan, caller, tenantId, ct)
+                    : await CreateAsync(plan, landing, caller, ct);
+                if (entityId is { } id)
+                    items.Add(new ImportBatchItem { Id = Guid.NewGuid(), BatchId = batch.Id, EntityType = kind == ImportKind.Staff ? nameof(User) : nameof(Participant), EntityId = id });
             }
             batch.CreatedCount = items.Count;
             batch.SkippedCount = plans.Count(p => p.Status == ImportRowStatus.Skipped);
@@ -146,6 +211,13 @@ public sealed class OnboardingImportService
             _db.ImportBatchItems.AddRange(items);
             await _db.SaveChangesAsync(ct);
             await importLock.CommitAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" or "40P01" })
+        {
+            // Usernames and emails are unique across ODIP, so another organisation (which this lock does not hold back) can take one between
+            // the plan and the insert, or deadlock with this import. Nothing is kept, and a retry plans again with that row visible.
+            _logger?.LogWarning("Import {BatchId} met a concurrent write at row {RowNumber}: {ExceptionType}", batch.Id, rowNumber, ex.InnerException.GetType().Name);
+            throw new ImportException(kind == ImportKind.Staff ? StaffRace : RecordRace, 409);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -218,33 +290,69 @@ public sealed class OnboardingImportService
         // is seen by the checks below (an in-flight one is waited for). A write that starts after the lock waits for the undo to commit and then
         // still lands, on the now archived participant (archiving is an update, not a delete). SupportProfiles and ElectronicSigningSnapshots have
         // no foreign key to Participants, so their writes neither wait nor are guaranteed to be seen.
+        // Staff the same way: a shift, leave or pairing row's foreign key to Users conflicts with this lock too.
+        var staff = batch.Kind == ImportKind.Staff;
         if (_db.Database.IsNpgsql())
-            await _db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE", new object[] { ids.ToArray() }, ct);
-        var blockers = await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct);
+            await _db.Database.ExecuteSqlRawAsync(staff
+                ? "SELECT 1 FROM \"Users\" WHERE \"Id\" = ANY({0}) FOR UPDATE"
+                : "SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE", new object[] { ids.ToArray() }, ct);
+        var blockers = staff
+            ? await ImportUntouched.StaffBlockersAsync(_db, ids, ct)
+            : await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct);
         if (blockers.Count > 0)
         {
             var blockedIds = blockers.Keys.ToList();
-            var names = await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+            var names = staff
+                ? await _db.Users.Where(u => blockedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct)
+                : await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
             return new ImportUndoOutcome(false, blockers
                 .Select(b => new ImportUndoBlockerDto(b.Key, names.GetValueOrDefault(b.Key, ""), b.Value))
                 .OrderBy(b => b.Name).ToList(), null);
         }
 
         var now = DateTime.UtcNow;
-        // Archived, not deleted: the audit log keeps the import and the undo. A draft stays on the Onboarding tab whatever IsActive says
-        // (ParticipantStages), so an onboarding import's drafts are finalised as archived too: they leave that tab for the Archived view.
-        foreach (var participant in await _db.Participants.Where(p => ids.Contains(p.Id)).ToListAsync(ct))
+        if (staff)
         {
-            participant.IsActive = false;
-            participant.IsDraft = false;
-            participant.UpdatedAt = now;
+            // Deleted, not archived: the address must be free for a corrected re-import. The audit log keeps a Created and a Deleted row for each.
+            _db.Users.RemoveRange(await _db.Users.Where(u => ids.Contains(u.Id)).ToListAsync(ct));
+        }
+        else
+        {
+            // Archived, not deleted: the audit log keeps the import and the undo. A draft stays on the Onboarding tab whatever IsActive says
+            // (ParticipantStages), so an onboarding import's drafts are finalised as archived too: they leave that tab for the Archived view.
+            foreach (var participant in await _db.Participants.Where(p => ids.Contains(p.Id)).ToListAsync(ct))
+            {
+                participant.IsActive = false;
+                participant.IsDraft = false;
+                participant.UpdatedAt = now;
+            }
         }
         batch.UndoneAt = now;
         batch.UndoneById = ActorId(caller);
         batch.UndoneByName = ActorName(caller);
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateException ex)
+        {
+            // A reference StaffBlockersAsync does not know about: nothing is deleted (disposing the lock rolls its transaction back), and only
+            // the type is logged.
+            _logger?.LogError("Undo of import {BatchId} failed: {ExceptionType}", batch.Id, ex.GetType().Name);
+            throw new ImportException("Nothing was undone: one of its records is used elsewhere in ODIP.", 409);
+        }
         await importLock.CommitAsync(ct);
         return new ImportUndoOutcome(false, [], ToDto(batch));
+    }
+
+    /// <summary>
+    /// The staff a sign-in invite goes to: this organisation's staff batch, not undone, its members who have never signed in, in id order (the
+    /// invites' cursor; sorted here, not by the database, so the order is the same Guid comparison the cursor uses). Null: no such batch.
+    /// </summary>
+    public async Task<List<User>?> StaffToInviteAsync(Guid batchId, CancellationToken ct)
+    {
+        TenantId();
+        var batch = await _db.ImportBatches.FirstOrDefaultAsync(b => b.Id == batchId && b.Kind == ImportKind.Staff && b.UndoneAt == null, ct);
+        if (batch is null) return null;
+        var ids = _db.ImportBatchItems.Where(i => i.BatchId == batch.Id).Select(i => i.EntityId);
+        return (await _db.Users.Where(u => ids.Contains(u.Id) && u.LastLoginAt == null).ToListAsync(ct)).OrderBy(u => u.Id).ToList();
     }
 
     public async Task<List<ImportBatchDto>> HistoryAsync(CancellationToken ct)

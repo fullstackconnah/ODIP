@@ -14,6 +14,7 @@ public sealed class ImportRowPlan
     /// <summary>What duplicates are found by (a normalised NDIS number or email); null when the row has none.</summary>
     public string? DuplicateKey { get; init; }
     public CreateParticipantDto? Participant { get; init; }
+    public CreateStaffDto? Staff { get; init; }
 
     /// <summary>The row can't be imported for this reason. A skipped row stays skipped: it would not be imported anyway.</summary>
     public void Refuse(string reason)

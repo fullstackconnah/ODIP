@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
-import type { ImportBatchDto, ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto } from '../types'
+import type { ImportBatchDto, ImportInvitesDto, ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto } from '../types'
 
 const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' } }
 
@@ -47,6 +47,17 @@ export function useUndoImport() {
   return useMutation({
     mutationFn: (batchId: string) => apiPost<ImportBatchDto>(`/imports/${batchId}/undo`),
     onSuccess: () => refreshAfterImport(qc),
+  })
+}
+
+/**
+ * POST /imports/{id}/invites: makes sure the batch's never-signed-in staff have sign-in accounts, up to 100 per call after the cursor `after`
+ * (the previous call's `next`), and says how many are left. The browser sends the emails.
+ */
+export function useImportInvites() {
+  return useMutation({
+    mutationFn: ({ batchId, after }: { batchId: string; after?: string }) =>
+      apiPost<ImportInvitesDto>(`/imports/${batchId}/invites${after ? `?after=${encodeURIComponent(after)}` : ''}`),
   })
 }
 

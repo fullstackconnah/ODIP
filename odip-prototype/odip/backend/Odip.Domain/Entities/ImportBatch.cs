@@ -6,6 +6,7 @@ namespace Odip.Domain.Entities;
 public enum ImportKind
 {
     Participants = 0,
+    Staff = 1,
 }
 
 /// <summary>

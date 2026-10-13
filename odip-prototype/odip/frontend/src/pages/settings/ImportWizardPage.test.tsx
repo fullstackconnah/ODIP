@@ -5,8 +5,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ImportWizardPage from './ImportWizardPage'
 import type { ImportPreviewDto } from '@/api/types'
 
-const { preview, commit, undo, template } = vi.hoisted(() => ({
-  preview: vi.fn(), commit: vi.fn(), undo: vi.fn(), template: vi.fn(),
+const { preview, commit, undo, template, invites } = vi.hoisted(() => ({
+  preview: vi.fn(), commit: vi.fn(), undo: vi.fn(), template: vi.fn(), invites: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -14,6 +14,7 @@ vi.mock('@/api/hooks', () => ({
   useCommitImport: () => ({ mutateAsync: commit, isPending: false }),
   useUndoImport: () => ({ mutateAsync: undo, isPending: false }),
   useDownloadImportTemplate: () => ({ mutate: template, isPending: false }),
+  useImportInvites: () => ({ mutateAsync: invites, isPending: false }),
 }))
 
 const FIELDS = [
@@ -142,5 +143,30 @@ describe('ImportWizardPage', () => {
     await userEvent.click(await screen.findByRole('option', { name: "Don't import" }))
 
     expect(within(rail).getByRole('button', { name: /Preview/ })).toBeDisabled()
+  })
+
+  it('imports staff with no landing step, offers the invites, and says undo removes them', async () => {
+    commit.mockResolvedValue({ batchId: 'b1', createdCount: 1, skippedCount: 0, failedCount: 1, rows: previewOf(['firstName', 'lastName']).rows, replayed: false })
+    const router = createMemoryRouter([{ path: '/settings/import/:kind', element: <ImportWizardPage /> }], { initialEntries: ['/settings/import/staff'] })
+    render(<RouterProvider router={router} />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Import staff' })).toBeInTheDocument()
+    const file = await upload()
+    expect(preview).toHaveBeenCalledWith({ kind: 'staff', file, mapping: undefined })
+    await screen.findByRole('heading', { name: 'Match columns' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { name: 'Preview' })
+    expect(screen.queryByLabelText(/Already receiving services/)).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText(/Nobody is emailed yet/)).toBeInTheDocument()
+    expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of them has signed in or been rostered.')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Import 1 staff member' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+
+    expect(commit).toHaveBeenCalledWith({ kind: 'staff', file, mapping: ['firstName', 'lastName'], landing: undefined, idempotencyKey: expect.any(String) })
+    expect(await screen.findByText('Imported 1 staff member')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View staff' })).toHaveAttribute('href', '/staff')
+    expect(screen.getByRole('button', { name: 'Send sign-in invites (1)' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
+    expect(within(screen.getByRole('alertdialog')).getByText('The 1 staff member it created is removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
   })
 })

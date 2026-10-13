@@ -26,3 +26,9 @@ public record ImportBatchDto(Guid Id, ImportKind Kind, string FileName, string C
 
 /// <summary>A record that has changed since its import, so the batch cannot be undone.</summary>
 public record ImportUndoBlockerDto(Guid EntityId, string Name, string Reason);
+
+/// <summary>One staff member's sign-in invite: the account made or found (FirebaseAccountStatus), or why there is none.</summary>
+public record ImportInviteDto(Guid StaffId, string Name, string Email, string? FirebaseAccount, string? Error);
+
+/// <summary>One request's invites, how many never-signed-in staff are still after them, and the cursor to send again with (the last id done).</summary>
+public record ImportInvitesDto(List<ImportInviteDto> Invites, int Left, Guid? Next);

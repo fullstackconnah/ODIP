@@ -14,14 +14,30 @@ public static class ImportFields
     private const string Mismatch = "The column matches don't fit this file. Upload it again.";
 
     private static readonly IReadOnlyList<ImportField> Participants = BuildParticipants();
+    private static readonly IReadOnlyList<ImportField> Staff = BuildStaff();
+
+    private const string Payroll = "Won't be imported: your payroll system keeps employment details.";
+    private const string NoField = "Won't be imported: ODIP has no field for this yet.";
+    // Staff columns other platforms export that ODIP does not hold: shown as "won't be imported" so the Admin knows they were seen.
+    private static readonly Dictionary<string, string> StaffNotImported = new()
+    {
+        ["employmenttype"] = Payroll, ["employment"] = Payroll, ["startdate"] = Payroll, ["datestarted"] = Payroll,
+        ["wwcc"] = NoField, ["wwccnumber"] = NoField, ["workingwithchildrencheck"] = NoField,
+        ["policecheck"] = NoField, ["nationalpolicecheck"] = NoField, ["cpr"] = NoField, ["cprexpiry"] = NoField,
+    };
 
     public static IReadOnlyList<ImportField> For(ImportKind kind) => kind switch
     {
         ImportKind.Participants => Participants,
+        ImportKind.Staff => Staff,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
     public static string Normalise(string header) => new(header.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
+    /// <summary>Why a column ODIP sees is not imported, for the Match columns step; null when there is nothing to say.</summary>
+    public static string? NotImportedNote(ImportKind kind, string header) =>
+        kind == ImportKind.Staff && StaffNotImported.TryGetValue(Normalise(header), out var note) ? note : null;
 
     public static List<string?> AutoMatch(ImportKind kind, IReadOnlyList<string> headers)
     {
@@ -77,5 +93,32 @@ public static class ImportFields
             fields.Add(new($"contact{n}Email", $"Contact {n} email", false, [], "Their email address."));
         }
         return fields;
+    }
+
+    private static List<ImportField> BuildStaff()
+    {
+        const string yesNo = "Yes or no.";
+        const string date = "dd/mm/yyyy or yyyy-mm-dd.";
+        return
+        [
+            new("firstName", "First name", true, ["given name", "forename", "first"], "Required."),
+            new("lastName", "Last name", true, ["surname", "family name", "last"], "Required."),
+            new("email", "Email", true, ["email address", "e-mail", "work email"], "Required. Their sign-in address; it must not be used in another organisation."),
+            new("mobile", "Mobile", false, ["mobile number", "phone", "phone number", "contact number"], "Up to 20 characters."),
+            new("role", "Role", false, ["access", "access level", "user role"], "Support worker (the default), Coordinator or Read only. Admin can't be given through an import."),
+            new("position", "Position", false, ["job title", "title"], "Support worker, Senior support worker, Coordinator, Team leader or Other."),
+            new("region", "Region", false, ["area", "location", "team"], "Their region or team."),
+            new("driversLicence", "Driver's licence", false, ["drivers license", "licence", "license", "driver"], yesNo),
+            new("driversLicenceExpiry", "Driver's licence expiry", false, ["licence expiry", "license expiry"], date),
+            new("firstAid", "First aid", false, ["first aid certificate"], yesNo),
+            new("firstAidExpiry", "First aid expiry", false, [], date),
+            new("medication", "Medication competent", false, ["medication", "medication competency"], yesNo),
+            new("medicationExpiry", "Medication competency expiry", false, ["medication expiry"], date),
+            new("manualHandling", "Manual handling", false, [], yesNo),
+            new("manualHandlingExpiry", "Manual handling expiry", false, [], date),
+            new("overnight", "Overnight eligible", false, ["overnight", "sleepover", "sleepovers"], yesNo),
+            new("workerScreeningNumber", "NDIS worker screening number", false, ["worker screening number", "screening number", "nwsc", "nwsc number"], "Up to 50 characters."),
+            new("workerScreeningExpiry", "NDIS worker screening expiry", false, ["worker screening expiry", "screening expiry", "nwsc expiry"], date),
+        ];
     }
 }

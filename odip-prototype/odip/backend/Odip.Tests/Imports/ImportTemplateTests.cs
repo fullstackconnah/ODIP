@@ -42,4 +42,12 @@ public class ImportTemplateTests
         Assert.Equal(("First name", "Yes", "Required."), (notes.Cell(2, 1).GetString(), notes.Cell(2, 2).GetString(), notes.Cell(2, 3).GetString()));
         Assert.Equal("odip-participants-template.xlsx", ImportTemplate.FileName(ImportKind.Participants));
     }
+
+    [Fact]
+    public void The_staff_template_round_trips()
+    {
+        var table = ImportFileReader.Read(ImportTemplate.Build(ImportKind.Staff), ImportTemplate.FileName(ImportKind.Staff));
+        Assert.Equal(ImportFields.For(ImportKind.Staff).Select(f => f.Key), ImportFields.AutoMatch(ImportKind.Staff, table.Headers));
+        Assert.Equal("odip-staff-template.xlsx", ImportTemplate.FileName(ImportKind.Staff));
+    }
 }
