@@ -33,6 +33,7 @@ public class TenantFilterCoverageTests
         ["IncidentWitness"] = "through its incident, and own-row for the witness",
         ["TripClaim"] = "through its trip (Trip claims) or participant (Shift claims): ClaimsController.TenantClaims",
         ["ClaimLineItem"] = "through its claim",
+        ["ImportBatchItem"] = "through its batch (ImportBatch is filtered)",
         ["ServiceAgreementDraftBlock"] = "through its draft (ServiceAgreementDraft is filtered)",
         ["ServiceAgreementDraftLine"] = "through its draft (ServiceAgreementDraft is filtered)",
         ["AuditLog"] = "read only through AuditController, which checks the audited entity first",

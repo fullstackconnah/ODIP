@@ -125,6 +125,10 @@ public static class AuditedEntities
         typeof(FundingPool),
         typeof(FundingPeriod),
         typeof(BudgetSettings),
+
+        // Onboarding import: who imported which file, and who undid it (spec: both are audited).
+        typeof(ImportBatch),
+        typeof(ImportBatchItem),
     };
 
     private static readonly HashSet<string> ExcludedProperties = new()
