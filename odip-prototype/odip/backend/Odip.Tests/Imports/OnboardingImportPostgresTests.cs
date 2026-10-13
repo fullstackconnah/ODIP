@@ -112,4 +112,30 @@ public class OnboardingImportPostgresTests : IClassFixture<PostgresFixture>
 
         Assert.Equal(new[] { ImportRowStatus.Ready, ImportRowStatus.Skipped }, preview.Rows.Select(r => r.Status));
     }
+
+    [SkippableFact]
+    public async Task Undo_waits_for_a_note_being_added_to_an_imported_participant_and_then_refuses()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var tenantId = await NewOrganisationAsync();
+        await using var db = Context(tenantId);
+        var result = await Commit(db, tenantId, Csv(Header, "Ava,Stone,430000001"), "key-race");
+        var avaId = await db.Participants.Select(p => p.Id).SingleAsync();
+
+        // A coordinator's note, inserted but not yet committed when the undo starts.
+        await using var coordinator = Context(tenantId);
+        await using var noteTx = await coordinator.Database.BeginTransactionAsync();
+        coordinator.ParticipantNotes.Add(new ParticipantNote { Id = Guid.NewGuid(), ParticipantId = avaId, Title = "t", Description = "d", CreatedByName = "x" });
+        await coordinator.SaveChangesAsync();
+
+        await using var undoDb = Context(tenantId);
+        var undo = Service(undoDb, tenantId).UndoAsync(result.BatchId, Admin(), CancellationToken.None);
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Assert.False(undo.IsCompleted, "undo did not wait for the note's transaction");
+        await noteTx.CommitAsync();
+
+        Assert.Equal("has notes", (await undo).Blockers.Single().Reason);
+        await using var check = Context(tenantId);
+        Assert.True((await check.Participants.SingleAsync()).IsActive);
+    }
 }
