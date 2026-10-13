@@ -36,6 +36,12 @@ public record DraftVersionConflictDto
     public int CurrentVersion { get; init; }
 }
 
+/// <summary>The body of the 409 <c>agreement-pattern</c>: the revision whose approval made the pattern. A change to what the agreement set is made through that agreement (POST .../pattern-change).</summary>
+public record AgreementPatternConflictDto
+{
+    public Guid DraftId { get; init; }
+}
+
 /// <summary>One block of a revision: the block exactly as the pricing engine takes it, and what its shifts will ask of a worker.</summary>
 public record DraftBlockDto
 {

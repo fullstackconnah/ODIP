@@ -321,37 +321,6 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(new DateOnly(2026, 12, 11), await after.Shifts.MaxAsync(s => s.ServiceDate));
     }
 
-    // ── Editing an agreement pattern ──────────────────────────────────────────────
-
-    [SkippableFact]
-    public async Task MovingAnAgreementPatternToADayItsBlockAlreadyHas_MeetsTheKey_AndTheControllerAnswersWithAWordedConflict()
-    {
-        RequirePostgres();
-        var (cs, tenantId, participantId) = await SetUpAsync();
-        var draft = await StoreAsync(cs, tenantId, participantId, 1);
-        await ApproveAsync(cs, tenantId, participantId, draft.Id, FakeClock.AtUtc(2026, 10, 10, 2, 0));
-        await using var db = Open(cs, tenantId);
-        var monday = await db.ShiftPatterns.AsNoTracking().SingleAsync(p => p.SourceDraftId == draft.Id && p.DayOfWeek == DayOfWeek.Monday);
-        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
-        var toTuesday = new UpdateShiftPatternDto
-        {
-            ParticipantId = participantId, DayOfWeek = DayOfWeek.Tuesday, StartTime = monday.StartTime, EndTime = monday.EndTime, EndsNextDay = monday.EndsNextDay, Ratio = monday.Ratio,
-            NightType = monday.NightType, EffectiveFrom = monday.EffectiveFrom, EffectiveTo = monday.EffectiveTo, IsActive = true, Notes = monday.Notes,
-        };
-
-        var result = await controller.UpdatePattern(monday.Id, toTuesday, CancellationToken.None);
-
-        var body = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
-        Assert.Contains("already has a pattern for that block, day and worker", Assert.Single(body.Errors!));
-        await using var read = Open(cs, tenantId);
-        Assert.Equal(DayOfWeek.Monday, (await read.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == monday.Id)).DayOfWeek);       // not moved
-        // a day the block does not have is still a plain edit
-        var toSaturday = toTuesday with { DayOfWeek = DayOfWeek.Saturday };
-        await using var again = Open(cs, tenantId);
-        var saved = await new RosteringController(again, new StaffCompatibilityLinkService(again), new StaffUnavailabilityQuery(again)).UpdatePattern(monday.Id, toSaturday, CancellationToken.None);
-        Assert.IsType<OkObjectResult>(saved.Result);
-    }
-
     // ── Another generation holds the roster ───────────────────────────────────────
 
     [SkippableFact]

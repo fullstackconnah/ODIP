@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -1199,7 +1198,11 @@ public class RosteringController : ControllerBase
             ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
 
-    /// <summary>Update a pattern's definition. Does not touch shifts already generated from it.</summary>
+    /// <summary>
+    /// Update a pattern's definition. Does not touch shifts already generated from it. A pattern an approved agreement made keeps the agreement's participant, day, times, ratio, night type and
+    /// dates: a change to any of them is a 409 <c>agreement-pattern</c> naming the revision, because it is a change to the agreement (POST .../pattern-change saves it as a new revision for
+    /// approval). Its default staff, notes and active are the coordinator's own and save here.
+    /// </summary>
     [HttpPut("patterns/{id:guid}")]
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> UpdatePattern(
         Guid id, [FromBody] UpdateShiftPatternDto dto, CancellationToken ct)
@@ -1210,6 +1213,7 @@ public class RosteringController : ControllerBase
         // The rule is for times somebody is setting now, as for a shift: an edit that leaves the times alone (deactivating a pattern saved before the rule) is never refused.
         var timesChanged = dto.StartTime != pattern.StartTime || dto.EndTime != pattern.EndTime || dto.EndsNextDay != pattern.EndsNextDay;
         if (timesChanged && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
+        if (pattern.SourceDraftId is { } source && ChangesTheAgreement(pattern, dto)) return AgreementPatternConflict(source, AgreementPatternEditMessage);
 
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
@@ -1222,29 +1226,34 @@ public class RosteringController : ControllerBase
         pattern.EffectiveFrom = dto.EffectiveFrom; pattern.EffectiveTo = dto.EffectiveTo; pattern.IsActive = dto.IsActive;
         pattern.Notes = dto.Notes;
 
-        try
-        {
-            await _db.SaveChangesAsync(ct);
-        }
-        // An agreement pattern is one weekday of one block for one worker of one revision (a unique key: the approval can never make it twice). Moving it to a day that block already has meets that key.
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: AgreementPatternKey })
-        {
-            return Conflict(ApiResponse<ShiftPatternDto>.Fail(AgreementPatternTakenMessage));
-        }
+        await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
 
-    /// <summary>The unique index on (source revision, block, weekday, worker slot) that keeps an approval from making a pattern twice (<c>OdipDbContext</c>, the partial index on agreement patterns).</summary>
-    private const string AgreementPatternKey = "IX_ShiftPatterns_SourceDraft_Block_Day_Slot";
+    /// <summary>The code of the 409 that refuses a change only the agreement can make; the screen reads it with <c>data.draftId</c>.</summary>
+    public const string AgreementPatternCode = "agreement-pattern";
 
-    private const string AgreementPatternTakenMessage = "This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.";
+    private const string AgreementPatternEditMessage = "This pattern comes from a service agreement. Its day, times, ratio, night type, dates and participant are the agreement's: change it through the agreement, which saves a new revision for approval. Default staff, notes and active can be changed here.";
+    private const string AgreementPatternDeleteMessage = "This pattern comes from a service agreement, so it ends through the agreement: save a new revision without it and approve that. To stop it making shifts now, switch it off.";
 
-    /// <summary>Delete a pattern. Shifts already generated from it are left in place (provenance only, no cascade).</summary>
+    /// <summary>The fields an agreement sets on a pattern it made. A change to any of them is a change to the agreement.</summary>
+    private static bool ChangesTheAgreement(ShiftPattern pattern, CreateShiftPatternDto dto) =>
+        dto.ParticipantId != pattern.ParticipantId || dto.DayOfWeek != pattern.DayOfWeek || dto.StartTime != pattern.StartTime || dto.EndTime != pattern.EndTime
+        || dto.EndsNextDay != pattern.EndsNextDay || dto.Ratio != pattern.Ratio || dto.NightType != pattern.NightType || dto.EffectiveFrom != pattern.EffectiveFrom || dto.EffectiveTo != pattern.EffectiveTo;
+
+    /// <summary>The 409 for a change only the agreement can make: the revision whose approval made the pattern, for the screen to open.</summary>
+    private ConflictObjectResult AgreementPatternConflict(Guid draftId, string message) => Conflict(new ApiResponse<AgreementPatternConflictDto>
+    {
+        Success = false, Data = new AgreementPatternConflictDto { DraftId = draftId }, Errors = new List<string> { message }, Code = AgreementPatternCode,
+    });
+
+    /// <summary>Delete a pattern. Shifts already generated from it are left in place (provenance only, no cascade). A pattern an agreement made is refused (409 <c>agreement-pattern</c>): it ends through a revision.</summary>
     [HttpDelete("patterns/{id:guid}")]
     public async Task<ActionResult<ApiResponse<bool>>> DeletePattern(Guid id, CancellationToken ct)
     {
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<bool>.Fail("Pattern not found."));
+        if (pattern.SourceDraftId is { } source) return AgreementPatternConflict(source, AgreementPatternDeleteMessage);
 
         _db.ShiftPatterns.Remove(pattern);
         await _db.SaveChangesAsync(ct);
