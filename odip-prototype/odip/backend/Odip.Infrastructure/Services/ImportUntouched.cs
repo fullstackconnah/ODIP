@@ -61,7 +61,8 @@ public static class ImportUntouched
     /// <summary>
     /// The spec's rule (never signed in; no shifts, completions or leave) plus every record someone else can point at the account, because
     /// deleting it would cascade them away or null them out (availability, pairings, patterns, preferred staff, trip roles, incidents, tasks).
-    /// What only the person themselves can write needs a sign-in first. A foreign key missed here fails the undo (409) rather than deleting.
+    /// What only the person themselves can write needs a sign-in first. A Restrict or ClientSetNull foreign key missed here fails the undo (409)
+    /// rather than deleting; the one SetNull it does not list (TripClaim.AuthorisedByUserId) is only set by the person themselves authorising a claim, which "has signed in" covers.
     /// </summary>
     public static async Task<Dictionary<Guid, string>> StaffBlockersAsync(OdipDbContext db, IReadOnlyCollection<Guid> ids, CancellationToken ct)
     {
