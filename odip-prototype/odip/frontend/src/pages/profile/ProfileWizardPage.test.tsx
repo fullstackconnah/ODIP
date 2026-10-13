@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import ProfileWizardPage from './ProfileWizardPage'
 import { KeyIdentifiersStep } from './steps/KeyIdentifiersStep'
@@ -611,5 +611,46 @@ describe('ProfileWizardPage — wizard shell + history-aware back', () => {
     // onboarding screen renders and the fallback destination does not.
     expect(await screen.findByText('Onboarding screen')).toBeInTheDocument()
     expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
+  })
+})
+
+// NAV F4: Edit from a tab of the record (Funding) must come back to that tab, on Save and on Cancel, as the header Back does.
+describe('ProfileWizardPage — Save and Cancel return to where Edit was clicked', () => {
+  function Detail() {
+    const location = useLocation()
+    return <div data-testid="detail">{location.pathname + location.search}</div>
+  }
+  function renderFromFunding(participant = makeParticipant()) {
+    __testHooks.reset()
+    __testHooks.recordCurrentPath('/participants/participant-1?tab=funding')
+    __testHooks.recordCurrentPath('/participants/participant-1/profile')
+    mockUseParticipant.mockReturnValue({ data: participant, isLoading: false })
+    const router = createMemoryRouter(
+      [
+        { path: '/participants/:id/profile', element: <><Tracker /><ProfileWizardPage /></> },
+        { path: '/participants/:id', element: <Detail /> },
+      ],
+      { initialEntries: ['/participants/participant-1/profile'] },
+    )
+    return render(<RouterProvider router={router} />)
+  }
+
+  it('Cancel returns to the Funding tab', async () => {
+    const user = userEvent.setup()
+    renderFromFunding()
+    await user.click(await screen.findByRole('link', { name: 'Cancel' }))
+    expect(await screen.findByTestId('detail')).toHaveTextContent('/participants/participant-1?tab=funding')
+  })
+
+  it('Complete Profile for a participant who is already finalised returns to the Funding tab', async () => {
+    const user = userEvent.setup()
+    renderFromFunding()
+    await expectStep(/key identifiers/i)
+    for (let i = 1; i < 12 && !screen.queryByRole('button', { name: /complete profile/i }); i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+      await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(i))
+    }
+    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+    expect(await screen.findByTestId('detail')).toHaveTextContent('/participants/participant-1?tab=funding')
   })
 })
