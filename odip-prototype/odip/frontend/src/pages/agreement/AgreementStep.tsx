@@ -75,7 +75,7 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
               : <>No funding plan is recorded for this participant, so the NDIS plan is taken to run for the agreement&apos;s dates.</>}{' '}
             {recordBudget
               ? <Button variant="ghost" size="sm" onClick={recordBudget.onSelect}>{recordBudget.label}</Button>
-              : <Button variant="ghost" size="sm" to={fundingTab}>Record the plan</Button>} to compare the agreement with the budget.
+              : <Button variant="ghost" size="sm" to={fundingTab}>Record the plan</Button>} to compare the agreement with it.
           </p>
         )}
         <details className="group rounded-[var(--radius-md)] border border-[var(--color-border)]" open={!!details.planOverride}>

@@ -27,7 +27,9 @@ vi.mock('@/api/hooks', () => ({
 vi.mock('@/pages/funding/FundingPlanEditor', () => ({
   FundingPlanEditor: (props: { open: boolean; plan?: { id: string }; previousPlan?: { id: string }; defaultManagement: string; onClose: () => void; onSaved?: () => void }) => {
     editor(props)
-    // A save, as the real editor does it: onSaved, then onClose.
+    // A save, as the real editor does it: onSaved, then onClose. The marker returns no focus to its opener as the real SlideOver does (useDialogBehavior's cleanup); the page's
+    // effect still wins there because React runs a removed child's effect cleanups before its parent's effects in the same commit. The real editor needs the funding hooks, which
+    // this file mocks whole, so it is not mounted here.
     return props.open ? <div data-testid="editor" data-plan={props.plan?.id ?? 'new'} data-previous={props.previousPlan?.id ?? 'none'} data-management={props.defaultManagement}><button type="button" onClick={() => { props.onSaved?.(); props.onClose() }}>Save the plan</button></div> : null
   },
 }))
@@ -373,6 +375,7 @@ describe('ServiceAgreementDraftPage: recording the plan budget in place', () => 
     // Enter in the editor must never submit the agreement.
     expect(screen.getByRole('form', { name: 'Service agreement' })).not.toContainElement(opened)
     expect(screen.getByLabelText('Agreement starts')).toHaveValue('2026-10-01')
+    expect(screen.getByText(/No funding plan is recorded/).textContent).toMatch(/Record plan budget to compare the agreement with it\.$/)
   })
 
   it('opens the editor from the Check step for a new plan after the one that ended', async () => {
@@ -452,5 +455,10 @@ describe('ServiceAgreementDraftPage: recording the plan budget in place', () => 
       expect(screen.queryByRole('button', { name: /Record (plan budget|a new plan)/ })).not.toBeInTheDocument()
     }
     expect(editor).not.toHaveBeenCalled()
+    // What a viewer had before is what they keep: the Agreement step is the read-only facts, with no plan line and so no Record link (AgreementStep returns early when read only).
+    await user.click(stepButton('Agreement'))
+    expect(screen.getByText('NDIS plan')).toBeInTheDocument()
+    expect(screen.queryByText(/No funding plan is recorded/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Record the plan' })).not.toBeInTheDocument()
   })
 })

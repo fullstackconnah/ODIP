@@ -76,7 +76,7 @@ function DraftPage() {
   const drafts = useServiceAgreementDrafts(participantId)
   const create = useCreateServiceAgreementDraft()
   const download = useDownloadServiceAgreementDraftPdf()
-  const { canManageParticipantLifecycle: canEdit, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
+  const { canManageParticipantLifecycle: canEdit, canManageFunding, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const plans = useFundingPlans(participantId, canEdit)
   const today = useMemo(() => localIsoDate(), [])
 
@@ -105,9 +105,9 @@ function DraftPage() {
   const currentPlan = useMemo(() => (plans.data ? currentPlanOf(plans.data.plans ?? [], today) : undefined), [plans.data, today])
   const endedPlan = currentPlan && planStatus(currentPlan, today) === 'Ended' ? currentPlan : undefined
   const recorded = useMemo(() => (currentPlan && planStatus(currentPlan, today) !== 'Ended' ? { start: currentPlan.planStart, end: currentPlan.planEnd } : null), [currentPlan, today])
-  // The budget is recorded over the agreement in the Funding tab's own editor, by the people who may change the agreement (the same roles may record funding); a save refreshes the check.
+  // The budget is recorded over the agreement in the Funding tab's own editor, by the people the Funding tab lets record one (today the same roles that change the agreement); a save refreshes the check.
   const [recordingBudget, setRecordingBudget] = useState(false)
-  const recordBudget = canEdit ? { label: endedPlan ? 'Record a new plan' : 'Record plan budget', onSelect: () => setRecordingBudget(true) } : undefined
+  const recordBudget = canManageFunding ? { label: endedPlan ? 'Record a new plan' : 'Record plan budget', onSelect: () => setRecordingBudget(true) } : undefined
   const savedBudget = useRef(false)
   const planLineRef = useRef<HTMLParagraphElement>(null)
   const budgetHeadingRef = useRef<HTMLHeadingElement>(null)
@@ -405,7 +405,7 @@ function DraftPage() {
       </WizardShell>
     </form>
     {/* In a portal: inside the wizard's form, Enter in one of the editor's fields would submit the agreement. */}
-    {canEdit && createPortal(
+    {canManageFunding && createPortal(
       <FundingPlanEditor open={recordingBudget} onClose={() => setRecordingBudget(false)} onSaved={() => { savedBudget.current = true }} participantId={participantId} previousPlan={endedPlan} defaultManagement={participant.data.planType} />,
       document.body,
     )}
