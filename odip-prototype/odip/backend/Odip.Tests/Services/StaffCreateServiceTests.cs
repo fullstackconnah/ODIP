@@ -50,7 +50,7 @@ public class StaffCreateServiceTests
         using var _ = db;
         var result = await new StaffCreateService(db, null).StageAsync(Staff("Sam.Lee@gmail.com"), As("Admin"), tenantId, CancellationToken.None);
         Assert.True(result.IsConflict);
-        Assert.Equal(StaffCreateService.EmailTakenMessage, result.Error);
+        Assert.Equal("A user with this email already exists.", result.Error);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class StaffCreateServiceTests
         var (db, tenantId) = TwoOrganisations();
         using var _ = db;
         var result = await new StaffCreateService(db, null).StageAsync(Staff("jo@other.example.org"), As("Admin"), tenantId, CancellationToken.None);
-        Assert.Equal(StaffCreateService.OtherOrganisationMessage, result.Error);
+        Assert.Equal("That address belongs to another organisation on ODIP.", result.Error);
     }
 
     [Fact]
