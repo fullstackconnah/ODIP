@@ -51,7 +51,8 @@ public static class SignInAccounts
             // Deliberately broad (but a dropped request is not a Firebase failure: it stops the caller, unlogged), as in AdminUsersController.Create: an unusable service account is not a FirebaseAuthException, and the same call
             // with no Firebase app configured fails the same way. The address is not logged (the onboarding import logs no row values); the user
             // id finds it.
-            logger?.LogError("Failed to ensure a Firebase sign-in account for user {UserId} ({ExceptionType})", s.Id, ex.GetType().Name);
+            logger?.LogError("Failed to ensure a Firebase sign-in account for user {UserId} ({ExceptionType}, {AuthErrorCode})", s.Id, ex.GetType().Name,
+                (ex as FirebaseAdmin.Auth.FirebaseAuthException)?.AuthErrorCode);
             return new(null, "Unable to set up the staff member's sign-in account. If it keeps happening, ask whoever runs the Firebase project.", true);
         }
     }

@@ -111,4 +111,22 @@ public class ImportInvitesTests
         firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.DoesNotContain(logger.Entries, e => e.Level >= LogLevel.Warning);
     }
+
+    [Fact]
+    public async Task A_Firebase_failure_is_logged_with_its_code_and_never_the_address()
+    {
+        var (db, _, _, batchId, tenantId) = await StaffImportedAsync();
+        using var _ = db;
+        var firebase = new Mock<IFirebaseUserService>();
+        firebase.Setup(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(Odip.Tests.Controllers.FirebaseTestExceptions.WithCode(FirebaseAdmin.Auth.AuthErrorCode.EmailAlreadyExists));
+        var logger = new ListLogger<ImportsController>();
+
+        await Controller(db, tenantId, firebase.Object, logger).Invites(batchId, CancellationToken.None);
+
+        var errors = logger.Entries.Where(e => e.Level == LogLevel.Error).Select(e => e.Text).ToList();
+        Assert.Equal(2, errors.Count);
+        Assert.All(errors, text => Assert.Contains("EmailAlreadyExists", text));
+        Assert.All(errors, text => Assert.DoesNotContain("@example.com", text));
+    }
 }
