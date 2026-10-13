@@ -83,4 +83,19 @@ describe('ImportDataTab', () => {
     await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
     expect(screen.getByText('The 2 staff members it created are removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
   })
+
+  it('takes the invites results away once their batch is undone', async () => {
+    history.current = [batch({ id: 'b2', kind: 'Staff', fileName: 'staff.csv' })]
+    invites.mockResolvedValue({ invites: [], left: 0 })
+    undoMutate.mockImplementation((_id: string, options?: { onSuccess?: () => void; onSettled?: () => void }) => { options?.onSuccess?.(); options?.onSettled?.() })
+    renderTab()
+    const row = screen.getByRole('row', { name: /staff.csv/ })
+    await userEvent.click(within(row).getByRole('button', { name: 'Send sign-in invites (2)' }))
+    await screen.findByText(/no invites were sent/)
+
+    await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
+
+    expect(screen.queryByText(/no invites were sent/)).toBeNull()
+  })
 })

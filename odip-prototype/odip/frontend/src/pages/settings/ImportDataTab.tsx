@@ -28,7 +28,7 @@ export default function ImportDataTab() {
   const undo = useUndoImport()
   const template = useDownloadImportTemplate()
   const [undoing, setUndoing] = useState<ImportBatchDto | null>(null)
-  const [invited, setInvited] = useState<{ fileName: string; result: InviteResult } | null>(null)
+  const [invited, setInvited] = useState<{ batchId: string; fileName: string; result: InviteResult } | null>(null)
 
   const columns: Column<ImportBatchDto>[] = [
     { key: 'fileName', header: 'File', mobile: 'primary' },
@@ -47,7 +47,7 @@ export default function ImportDataTab() {
       render: b => !b.undoneAt && (
         <div className="flex flex-wrap justify-end gap-2">
           {/* The count is the batch's created staff; the server invites only those who have never signed in. */}
-          {b.kind === 'Staff' && <ImportInvites batchId={b.id} count={b.createdCount} onResult={result => setInvited({ fileName: b.fileName, result })} />}
+          {b.kind === 'Staff' && <ImportInvites batchId={b.id} count={b.createdCount} onResult={result => setInvited({ batchId: b.id, fileName: b.fileName, result })} />}
           <Button variant="secondary" size="sm" onClick={() => setUndoing(b)}>Undo</Button>
         </div>
       ),
@@ -110,7 +110,11 @@ export default function ImportDataTab() {
         variant="danger"
         loading={undo.isPending}
         onCancel={() => setUndoing(null)}
-        onConfirm={() => undoing && undo.mutate(undoing.id, { onSettled: () => setUndoing(null) })}
+        onConfirm={() => undoing && undo.mutate(undoing.id, {
+          // Its accounts are gone, so what the invites said about them no longer holds.
+          onSuccess: () => setInvited(i => (i?.batchId === undoing.id ? null : i)),
+          onSettled: () => setUndoing(null),
+        })}
       />
     </div>
   )
