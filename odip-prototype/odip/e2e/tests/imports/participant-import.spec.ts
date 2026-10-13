@@ -47,6 +47,8 @@ test('an Admin imports participants from a file, finds them listed, then undoes 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/settings?tab=import');
   await expect(page.getByRole('tab', { name: 'Import data', selected: true })).toBeVisible();
+  // Import history is GET /api/v1/imports with no trailing slash: nginx proxies it straight through, no 301 round trip first.
+  expect((await page.request.get('/api/v1/imports', { maxRedirects: 0 })).status()).not.toBe(301);
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download template' }).first().click()]);
   expect(download.suggestedFilename()).toBe('odip-participants-template.xlsx');
 
