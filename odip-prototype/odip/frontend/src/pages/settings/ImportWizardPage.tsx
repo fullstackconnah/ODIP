@@ -331,7 +331,7 @@ export default function ImportWizardPage() {
                 {data.skippedCount > 0 && <p>{`Skipped, already in ODIP: ${data.skippedCount}.`}</p>}
                 {data.invalidCount > 0 && <p>{`Can't be imported: ${data.invalidCount}. Fix them in the file and import it again afterwards.`}</p>}
                 {kind === 'staff' && <p>Nobody is emailed yet: send sign-in invites after the import, now or later from Import history.</p>}
-                <p>Every row is checked again as it is imported. You can undo the whole import while nothing has been added to its records.</p>
+                <p>{`Every row is checked again as it is imported. You can undo the whole import while ${kind === 'staff' ? KIND.staff.undoRule : 'nothing has been added to its records'}.`}</p>
               </div>
             )}
 

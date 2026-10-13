@@ -158,6 +158,7 @@ describe('ImportWizardPage', () => {
     expect(screen.queryByLabelText(/Already receiving services/)).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(screen.getByText(/Nobody is emailed yet/)).toBeInTheDocument()
+    expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of them has signed in or been rostered.')).toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: 'Import 1 staff member' }))
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
 
