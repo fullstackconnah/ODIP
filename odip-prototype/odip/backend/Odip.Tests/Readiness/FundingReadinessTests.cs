@@ -16,6 +16,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Medications;
+using Odip.Tests.Support;
 using Xunit;
 
 namespace Odip.Tests.Readiness;
@@ -224,15 +225,13 @@ public class FundingReadinessTests
     {
         using var db = CreateDb();
         var participant = SeedParticipant(db, funding: scenario == "other-funding" ? ParticipantFundingSource.Other : ParticipantFundingSource.Ndis);
-        db.ParticipantOnboardings.Add(new ParticipantOnboarding
-        {
-            Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = participant.Id,
-            ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow,
-        });
+        OnboardingSeeds.CompleteProfile(participant);
+        db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = participant.Id });
         var draft = new ServiceAgreementDraft
         {
             Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName,
             PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31),
+            Lines = { OnboardingSeeds.PricedLine() },
         };
         var snapshot = new ElectronicSigningSnapshot { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = participant.Id, DraftId = draft.Id, DraftVersion = 1, DocumentJson = "{}", DocumentHash = new string('a', 64) };
         db.AddRange(draft, snapshot, new ElectronicSigningEvidence
@@ -439,6 +438,8 @@ public class FundingReadinessTests
     private static ParticipantOnboardingDto Detail(ActionResult<ApiResponse<ParticipantOnboardingDto>> result) =>
         Assert.IsType<ApiResponse<ParticipantOnboardingDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
 
+    private static OnboardingChecklistItemDto? FundingItem(ParticipantOnboardingDto detail) => detail.Items.SingleOrDefault(i => i.Key == "funding");
+
     [Fact]
     public async Task TheOnboardingChecklist_ListsFundingAsMissing_ForAnNdisParticipantWithNoPlanBudget_AndNotOnceItIsRecorded()
     {
@@ -447,14 +448,14 @@ public class FundingReadinessTests
         var participant = SeedOnboarding(db);
         var inquiries = Inquiries(db, NoonUtc, TenantA);
 
-        var missing = Detail(await inquiries.GetOnboarding(participant.Id, default));
-        Assert.False(missing.FundingRecorded);
-        Assert.Contains(missing.Reasons, r => r.Contains("plan budget", StringComparison.OrdinalIgnoreCase) && r.Contains("Funding tab", StringComparison.Ordinal));
+        var missing = FundingItem(Detail(await inquiries.GetOnboarding(participant.Id, default)))!;
+        Assert.False(missing.Done);
+        Assert.Equal("No plan budget recorded.", missing.Missing);
 
         SeedPlan(db, participant, Today.AddDays(120));
-        var recorded = Detail(await inquiries.GetOnboarding(participant.Id, default));
-        Assert.True(recorded.FundingRecorded);
-        Assert.DoesNotContain(recorded.Reasons, r => r.Contains("plan budget", StringComparison.OrdinalIgnoreCase));
+        var recorded = FundingItem(Detail(await inquiries.GetOnboarding(participant.Id, default)))!;
+        Assert.True(recorded.Done);
+        Assert.Null(recorded.Missing);
     }
 
     [Fact]
@@ -466,8 +467,7 @@ public class FundingReadinessTests
 
         var detail = Detail(await Inquiries(db, NoonUtc, TenantA).GetOnboarding(participant.Id, default));
 
-        Assert.Null(detail.FundingRecorded);
-        Assert.DoesNotContain(detail.Reasons, r => r.Contains("plan budget", StringComparison.OrdinalIgnoreCase));
+        Assert.Null(FundingItem(detail));
     }
 
     [Fact]
@@ -483,35 +483,10 @@ public class FundingReadinessTests
         var result = await Inquiries(db, NoonUtc, TenantA).GetOnboardingWorklist(default);
 
         var rows = Assert.IsType<ApiResponse<List<ParticipantOnboardingWorklistDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
-        Assert.Equal(6, rows.Single(r => r.ParticipantId == ndis.Id).TotalSteps);
-        Assert.Equal(5, rows.Single(r => r.ParticipantId == other.Id).TotalSteps);
-        Assert.Equal(6, rows.Single(r => r.ParticipantId == recorded.Id).TotalSteps);
+        Assert.Equal(4, rows.Single(r => r.ParticipantId == ndis.Id).TotalSteps);
+        Assert.Equal(3, rows.Single(r => r.ParticipantId == other.Id).TotalSteps);
+        Assert.Equal(4, rows.Single(r => r.ParticipantId == recorded.Id).TotalSteps);
         Assert.Equal(rows.Single(r => r.ParticipantId == ndis.Id).CompletedSteps + 1, rows.Single(r => r.ParticipantId == recorded.Id).CompletedSteps);
-    }
-
-    // ── The schedule review is a step too, and the worklist counts it the way the checklist page does ──
-
-    [Fact]
-    public async Task TheOnboardingWorklist_CountsAnApprovedScheduleAsADoneStep_SoItSaysWhatTheChecklistPageSays()
-    {
-        using var db = CreateDb(tenantId: TenantA, superAdmin: false);
-        SetProvider(db);
-        var waiting = SeedOnboarding(db);
-        var approved = SeedOnboarding(db);
-        db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval
-        {
-            Id = Guid.NewGuid(), TenantId = TenantA, DraftId = Guid.NewGuid(), ParticipantId = approved.Id, DraftVersion = 2, ApprovedAt = new DateTime(2026, 10, 3, 3, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex",
-        });
-        db.SaveChanges();
-        var inquiries = Inquiries(db, NoonUtc, TenantA);
-
-        var rows = Assert.IsType<ApiResponse<List<ParticipantOnboardingWorklistDto>>>(Assert.IsType<OkObjectResult>((await inquiries.GetOnboardingWorklist(default)).Result).Value).Data!;
-
-        var waitingRow = rows.Single(r => r.ParticipantId == waiting.Id);
-        var approvedRow = rows.Single(r => r.ParticipantId == approved.Id);
-        Assert.Equal((6, 6), (waitingRow.TotalSteps, approvedRow.TotalSteps));                                // intake, profile, service needs, agreement evidence, funding, schedule review
-        Assert.Equal(waitingRow.CompletedSteps + 1, approvedRow.CompletedSteps);                              // the approved revision is the one more step done
-        Assert.Equal(2, Detail(await inquiries.GetOnboarding(approved.Id, default)).ScheduleApprovedVersion); // which the checklist page shows as its Schedule review gate being Complete
     }
 
     // ── An ended plan is not "not recorded" ─────────────────────────────────
@@ -526,14 +501,12 @@ public class FundingReadinessTests
         SeedPlan(db, ended, Today.AddDays(-30));
         var inquiries = Inquiries(db, NoonUtc, TenantA);
 
-        var withNone = Detail(await inquiries.GetOnboarding(none.Id, default));
-        var withEnded = Detail(await inquiries.GetOnboarding(ended.Id, default));
+        var withNone = FundingItem(Detail(await inquiries.GetOnboarding(none.Id, default)))!;
+        var withEnded = FundingItem(Detail(await inquiries.GetOnboarding(ended.Id, default)))!;
 
-        Assert.False(withNone.FundingRecorded);
-        Assert.Contains("Funding is not recorded: add the plan budget on the participant's Funding tab.", withNone.Reasons);
-        Assert.False(withEnded.FundingRecorded);   // an ended plan is still not a recorded budget for readiness
-        Assert.Contains("The plan budget has ended: record the new plan on the participant's Funding tab.", withEnded.Reasons);
-        Assert.DoesNotContain(withEnded.Reasons, r => r.Contains("not recorded", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal((false, "No plan budget recorded."), (withNone.Done, withNone.Missing));
+        // An ended plan is still not a recorded budget for readiness, and the line says it has ended.
+        Assert.Equal((false, "The plan budget has ended: record the new plan."), (withEnded.Done, withEnded.Missing));
     }
 
     [Fact]
@@ -548,35 +521,6 @@ public class FundingReadinessTests
 
         var detail = Detail(await Inquiries(db, NoonUtc, TenantA).GetOnboarding(mine.Id, default));
 
-        Assert.Contains("Funding is not recorded: add the plan budget on the participant's Funding tab.", detail.Reasons);
-    }
-
-    // ── The next action counts the funding gate ─────────────────────────────
-
-    private static ParticipantOnboardingDto Gates(bool intake = true, bool profile = true, bool service = true, bool agreement = true, bool? funding = null, int? scheduleApprovedVersion = null) => new()
-    {
-        IntakeComplete = intake, ProfileComplete = profile, ServiceTypeConfirmed = service, ServiceAgreementSigned = agreement, FundingRecorded = funding, ScheduleApprovedVersion = scheduleApprovedVersion,
-    };
-
-    [Theory]
-    [InlineData(false, true, true, true, null, "Complete intake")]
-    [InlineData(true, false, true, true, false, "Validate profile essentials")]
-    [InlineData(true, true, false, true, false, "Confirm service needs")]
-    [InlineData(true, true, true, false, false, "Review agreement evidence")]    // the agreement evidence still comes first
-    [InlineData(true, true, true, true, false, "Record plan budget")]            // an NDIS-funded participant whose only other open gate is the budget is told so
-    [InlineData(true, true, true, true, true, "Approve the agreement for rostering")]      // nothing else open: the last step is the schedule review, named as the checklist page names it
-    [InlineData(true, true, true, true, null, "Approve the agreement for rostering")]      // not NDIS-funded: no funding gate to name
-    public void TheWorklistsNextAction_IsTheFirstOpenGate_InTheOrderTheChecklistListsThem(bool intake, bool profile, bool service, bool agreement, bool? funding, string expected)
-    {
-        Assert.Equal(expected, ParticipantInquiriesController.NextActionOf(Gates(intake, profile, service, agreement, funding)));
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(null)]
-    public void OnceARevisionHasBeenApprovedForRostering_TheWorklistsLastWordIsToCheckTheRoster_AndAnOpenGateBeforeItStillComesFirst(bool? funding)
-    {
-        Assert.Equal("Check the roster", ParticipantInquiriesController.NextActionOf(Gates(funding: funding, scheduleApprovedVersion: 2)));
-        Assert.Equal("Review agreement evidence", ParticipantInquiriesController.NextActionOf(Gates(agreement: false, funding: funding, scheduleApprovedVersion: 2)));
+        Assert.Equal("No plan budget recorded.", FundingItem(detail)!.Missing);
     }
 }

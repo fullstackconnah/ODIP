@@ -67,6 +67,39 @@ public class ParticipantStagesSqlTests
         Assert.Contains("\"ServicesStartedAt\" IS NOT NULL", filter);
     }
 
+    [Fact]
+    public void TheChecklistsDerivedItems_TranslateToSql()
+    {
+        using var db = NpgsqlDb();
+
+        var profile = ParticipantReadinessGate.ProfileDetailsParticipants(db).ToQueryString();
+        var serviceNeeds = ParticipantReadinessGate.ServiceNeedsParticipants(db).ToQueryString();
+        var issuesFilter = ParticipantReadinessGate.ActivationEvidenceParticipantsForApprovedSourceForTesting(db).ToQueryString();
+
+        Assert.Contains("\"DateOfBirth\" IS NOT NULL", profile);
+        Assert.Contains("\"NdisNumber\"", profile);
+        Assert.DoesNotContain("\"Gender\"", profile[profile.IndexOf("WHERE", StringComparison.Ordinal)..]);
+        Assert.Contains("\"ServiceAgreementDraftLines\"", serviceNeeds);
+        Assert.Contains("\"Version\" >", serviceNeeds);
+        Assert.DoesNotContain("\"ProfileComplete\"", issuesFilter);
+        Assert.DoesNotContain("\"ServiceTypeConfirmed\"", issuesFilter);
+    }
+
+    [Theory]
+    [InlineData("A", "B", true, "431", true)]
+    [InlineData(" ", "B", true, "431", false)]
+    [InlineData("A", "", true, "431", false)]
+    [InlineData("A", "B", false, "431", false)]
+    [InlineData("A", "B", true, " ", false)]
+    [InlineData("A", "B", true, null, false)]
+    public void ProfileDetails_TheRuleAndTheMissingWordsAgree(string first, string last, bool dob, string? ndis, bool done)
+    {
+        var p = new Participant { FirstName = first, LastName = last, DateOfBirth = dob ? new DateOnly(1990, 1, 1) : null, NdisNumber = ndis, FundingSource = Odip.Domain.Enums.ParticipantFundingSource.Ndis };
+
+        Assert.Equal(done, new[] { p }.AsQueryable().Any(ParticipantReadinessGate.ProfileDetailsRule));
+        Assert.Equal(done, Odip.Api.Controllers.ParticipantInquiriesController.ProfileMissing(p).Count == 0);
+    }
+
     [Theory]
     [InlineData(false, true, false, true, true)]    // finalised and active
     [InlineData(false, false, false, false, true)]  // archived: past services, not active

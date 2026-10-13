@@ -111,10 +111,9 @@ public class ParticipantIntakeOnboardingTests
         var row = Assert.Single(await WorklistAsync(caller));
         Assert.Equal(id, row.ParticipantId);
         Assert.Equal("Ada Lovelace", row.FullName);
-        // Intake is done, so the stage is not "Intake incomplete"; the next gate is profile validation.
-        Assert.Equal("Onboarding incomplete", row.Stage);
-        Assert.Equal("Validate profile essentials", row.NextAction);
-        Assert.Equal(1, row.CompletedSteps);
+        // No date of birth was captured, so the first open item is the profile; nothing is done yet.
+        Assert.Equal("Profile details", row.FirstMissing);
+        Assert.Equal(0, row.CompletedSteps);
     }
 
     [Fact]
@@ -145,7 +144,7 @@ public class ParticipantIntakeOnboardingTests
         Assert.Equal(tenantId, onboarding.TenantId);
         var row = Assert.Single(await WorklistAsync(caller));
         Assert.Equal(id, row.ParticipantId);
-        Assert.Equal("Onboarding incomplete", row.Stage);
+        Assert.NotNull(row.FirstMissing);
     }
 
     [Fact]

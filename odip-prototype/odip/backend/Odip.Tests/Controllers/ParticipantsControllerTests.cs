@@ -59,6 +59,8 @@ public class ParticipantsControllerTests
     private static void SeedVerifiedAgreementEvidence(OdipDbContext db, Participant participant, Guid? evidenceTenantId = null, int draftVersion = 1)
     {
         var tenantId = evidenceTenantId ?? participant.TenantId;
+        // The strict predicate reads the checklist's derived items: a complete profile and a draft with a priced line.
+        OnboardingSeeds.CompleteProfile(participant);
         var onboarding = new ParticipantOnboarding
         {
             Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id,
@@ -73,6 +75,7 @@ public class ParticipantsControllerTests
             State = ProvisionalAgreementTemplate.State, ParticipantNameSnapshot = participant.FullName,
             PlanStartDate = new DateOnly(2026, 1, 1), PlanEndDate = new DateOnly(2026, 12, 31),
             AgreementStartDate = new DateOnly(2026, 1, 1), AgreementEndDate = new DateOnly(2026, 12, 31),
+            Lines = { OnboardingSeeds.PricedLine() },
         };
         var snapshot = new ElectronicSigningSnapshot
         {

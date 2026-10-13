@@ -74,8 +74,9 @@ public class RosteringControllerTests
         db.Participants.Add(participant);
         if (ready)
         {
-            var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId, ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow };
-            var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31) };
+            OnboardingSeeds.CompleteProfile(participant);
+            var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId };
+            var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31), Lines = { OnboardingSeeds.PricedLine() } };
             var snapshot = new ElectronicSigningSnapshot { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, DraftId = draft.Id, DraftVersion = 1, DocumentJson = "{\"immutable\":true}", DocumentHash = new string('a', 64) };
             var evidence = new ElectronicSigningEvidence { Id = Guid.NewGuid(), TenantId = participant.TenantId, SnapshotId = snapshot.Id, IdempotencyKey = Guid.NewGuid().ToString(), SignerName = "Fixture", SignerCapacity = "Representative", IsAuthorisedRepresentative = true, ConsentToElectronicMethod = true, IntendsToSign = true, DocumentWasDisplayed = true, EvidenceHash = new string('b', 64), PreviousEvidenceHash = "GENESIS", Status = "Verified" };
             db.AddRange(onboarding, draft, snapshot, evidence);
@@ -162,9 +163,8 @@ public class RosteringControllerTests
         EnforceReadiness(db);
         var staff = SeedStaff(db);
         var participant = SeedParticipant(db);
-        var onboarding = await db.ParticipantOnboardings.SingleAsync();
-        if (missing == "profile") onboarding.ProfileComplete = false;
-        if (missing == "service-type") onboarding.ServiceTypeConfirmed = false;
+        if (missing == "profile") participant.DateOfBirth = null;
+        if (missing == "service-type") (await db.ServiceAgreementDraftLines.SingleAsync()).UnitPrice = 0;
         if (missing == "agreement") (await db.ElectronicSigningEvidence.SingleAsync()).Status = "PendingVerification";
         await db.SaveChangesAsync();
 
@@ -183,8 +183,7 @@ public class RosteringControllerTests
         EnforceReadiness(db);
         var participant = SeedParticipant(db);
         db.Shifts.Add(new Shift { Id = Guid.NewGuid(), ParticipantId = participant.Id, ServiceDate = ServiceDate, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None });
-        var onboarding = await db.ParticipantOnboardings.SingleAsync();
-        onboarding.ProfileComplete = false;
+        participant.DateOfBirth = null;
         await db.SaveChangesAsync();
 
         var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db)).GetBoard(ServiceDate, "participant", CancellationToken.None);
@@ -241,7 +240,7 @@ public class RosteringControllerTests
         var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db)).GetBoard(ServiceDate, "participant", CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        var row = Assert.Single(body.Data!.ParticipantRows, r => r.ParticipantId == started.Id);
+        var row = Assert.Single(body.Data!.ParticipantRows!, r => r.ParticipantId == started.Id);
         Assert.True(row.InOnboarding);
         Assert.DoesNotContain(body.Data.ParticipantRows, r => r.ParticipantId == archived.Id);
     }

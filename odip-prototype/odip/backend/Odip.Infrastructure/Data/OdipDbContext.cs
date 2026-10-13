@@ -1540,6 +1540,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.ProfileCompletedBy).HasMaxLength(200);
             entity.Property(e => e.ServiceTypeConfirmedBy).HasMaxLength(200);
             entity.Property(e => e.ServiceAgreementSignedBy).HasMaxLength(200);
+            entity.Property(e => e.NoAgreementReason).HasMaxLength(500);
+            entity.Property(e => e.AgreementRecordedBy).HasMaxLength(200);
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.ParticipantId).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId }).IsUnique();

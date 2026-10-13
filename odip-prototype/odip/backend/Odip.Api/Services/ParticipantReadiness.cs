@@ -12,8 +12,8 @@ public enum ActivationBlock { None, EvidenceRequired, FundingNotRecorded }
 /// <summary>What a readiness check decided for one participant, and what is missing.</summary>
 /// <param name="Allowed">
 /// Whether a new placement (a shift, a pattern, a compatibility row, a trip booking) may be made.
-/// Always false for a participant who does not exist in the caller's tenant, is a draft, or is not
-/// active, in either mode. Otherwise: Warn allows it; Enforce allows it only when the strict
+/// Always false for a participant who does not exist in the caller's tenant or cannot receive services (inactive, or a draft whose
+/// services have not begun: <see cref="Participant.CanReceiveServicesRule"/>), in either mode. Otherwise: Warn allows it; Enforce allows it only when the strict
 /// <see cref="ParticipantReadinessGate"/> predicate accepts the participant.
 /// </param>
 /// <param name="Mode">The participant's organisation's readiness mode.</param>
@@ -184,7 +184,7 @@ public static class ParticipantReadiness
     /// <summary>
     /// What is missing for each participant, computed from data that exists today. One entry per
     /// participant found (an empty list when nothing is missing); ids that do not exist in the
-    /// caller's tenant are absent. Three queries however many participants there are. These are the issues every OPERATIONAL surface carries (the roster, the pickers, the register):
+    /// caller's tenant are absent. Five queries however many participants there are. These are the issues every OPERATIONAL surface carries (the roster, the pickers, the register):
     /// the activation checklist adds the plan budget on top, in <see cref="ActivationIssuesAsync"/>, and nothing here ever lists it.
     /// </summary>
     public static async Task<Dictionary<Guid, List<string>>> IssuesAsync(
@@ -202,12 +202,11 @@ public static class ParticipantReadiness
 
         var onboardings = await db.ParticipantOnboardings.AsNoTracking()
             .Where(o => ids.Contains(o.ParticipantId))
-            .Select(o => new
-            {
-                o.ParticipantId, o.TenantId, o.ProfileComplete, o.ProfileCompletedAt,
-                o.ServiceTypeConfirmed, o.ServiceTypeConfirmedAt,
-            })
+            .Select(o => new { o.ParticipantId, o.TenantId })
             .ToListAsync(ct);
+        // The checklist's derived items, as the checklist reads them (ParticipantReadinessGate).
+        var profileDone = (await ParticipantReadinessGate.ProfileDetailsParticipants(db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        var serviceNeedsDone = (await ParticipantReadinessGate.ServiceNeedsParticipants(db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
 
         var signed = (await SignedAgreementParticipants(db)
             .Where(p => ids.Contains(p.Id))
@@ -225,10 +224,8 @@ public static class ParticipantReadiness
             var onboarding = onboardings.FirstOrDefault(o => o.ParticipantId == person.Id && o.TenantId == person.TenantId);
             if (onboarding is not null)
             {
-                if (!(onboarding.ProfileComplete && onboarding.ProfileCompletedAt != null))
-                    issues.Add(OnboardingProfileNotComplete);
-                if (!(onboarding.ServiceTypeConfirmed && onboarding.ServiceTypeConfirmedAt != null))
-                    issues.Add(OnboardingServiceTypeNotComplete);
+                if (!profileDone.Contains(person.Id)) issues.Add(OnboardingProfileNotComplete);
+                if (!serviceNeedsDone.Contains(person.Id)) issues.Add(OnboardingServiceTypeNotComplete);
             }
 
             if (!signed.Contains(person.Id)) issues.Add(NoSignedServiceAgreement);

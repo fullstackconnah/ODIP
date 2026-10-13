@@ -714,12 +714,6 @@ public class ParticipantsController : ControllerBase
         // Saving never activates anyone (owner decision 2026-10-13): "Make active" on the onboarding checklist does, and the status
         // endpoint restores an archived participant. This used to activate here, which re-activated an archived participant on every save.
 
-        // A full profile submission can change identity, DOB, gender, or NDIS details. It never
-        // preserves a prior onboarding attestation: staff must re-run the separate server-side
-        // validation endpoint after saving corrected canonical data.
-        var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-        onboarding?.InvalidateProfileValidation(DateTime.UtcNow);
-
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
         // compatibility row, in the same transaction as the participant update. Draft state is
         // the derived state above, not the client-supplied flag.
@@ -817,7 +811,6 @@ public class ParticipantsController : ControllerBase
         }
 
         // ── Write ──
-        var identityBefore = IntakeIdentity(p);
         var previousSupportRatio = p.SupportRatio;
         ApplyIntakeScope(p, dto);
         p.UpdatedAt = DateTime.UtcNow;
@@ -842,14 +835,6 @@ public class ParticipantsController : ControllerBase
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 
-        // A correction to identity, DOB or NDIS details drops a stale onboarding "profile validated" attestation; re-saving the
-        // same values is inert.
-        if (identityBefore != IntakeIdentity(p))
-        {
-            var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-            onboarding?.InvalidateProfileValidation(p.UpdatedAt);
-        }
-
         // PD-5: the safety-critical auto-notes read behavioursOfConcern, the risks summary and the risk entries, all in this scope.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         if (p.SupportRatio != previousSupportRatio) await TripStaffing.RecalculateForParticipantAsync(_db, p.Id, ct);
@@ -871,10 +856,6 @@ public class ParticipantsController : ControllerBase
             UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = warning,
         }));
     }
-
-    /// <summary>The identity-bearing intake fields the onboarding "profile validated" attestation depends on.</summary>
-    private static (string, string, DateOnly?, string?, ParticipantFundingSource) IntakeIdentity(Participant p) =>
-        (p.FirstName?.Trim() ?? string.Empty, p.LastName?.Trim() ?? string.Empty, p.DateOfBirth, p.NdisNumber?.Trim(), p.FundingSource);
 
     /// <summary>
     /// Writes the intake scope, and only the intake scope, from a wizard payload. Keep in step with

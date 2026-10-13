@@ -48,13 +48,10 @@ public static class ParticipantReadinessGate
     private static IQueryable<Participant> ActivationEvidenceParticipantsForApprovedSource(OdipDbContext db) =>
         db.Participants.Where(p =>
             p.IntakeCompletedAt != null
-            && db.ParticipantOnboardings.Any(o =>
-                o.ParticipantId == p.Id
-                && o.TenantId == p.TenantId
-                && o.ProfileComplete
-                && o.ProfileCompletedAt != null
-                && o.ServiceTypeConfirmed
-                && o.ServiceTypeConfirmedAt != null)
+            && db.ParticipantOnboardings.Any(o => o.ParticipantId == p.Id && o.TenantId == p.TenantId)
+            // The checklist's derived items, read from the data (the stored "validated" and "confirmed" flags are retired).
+            && ProfileDetailsParticipants(db).Any(ready => ready.Id == p.Id)
+            && ServiceNeedsParticipants(db).Any(ready => ready.Id == p.Id)
             && db.ElectronicSigningSnapshots.Any(snapshot =>
                 snapshot.ParticipantId == p.Id
                 && snapshot.TenantId == p.TenantId
@@ -82,6 +79,36 @@ public static class ParticipantReadinessGate
                     && evidence.IntendsToSign
                     && evidence.DocumentWasDisplayed
                     && evidence.EvidenceHash != "")));
+
+    // ── The onboarding checklist's derived items (owner decision 2026-10-13) ───────────────────────────────────────────────────────────────
+    // Query-shaped, so the checklist, the roster issues and the strict predicate above ask the same question (ParticipantStagesSqlTests checks the
+    // Npgsql translation).
+
+    /// <summary>"Profile details": first and last name, date of birth, and an NDIS number for an NDIS-funded participant. Gender is not asked for.</summary>
+    public static readonly Expression<Func<Participant, bool>> ProfileDetailsRule = p =>
+        !string.IsNullOrWhiteSpace(p.FirstName) && !string.IsNullOrWhiteSpace(p.LastName) && p.DateOfBirth != null
+        && (p.FundingSource != ParticipantFundingSource.Ndis || !string.IsNullOrWhiteSpace(p.NdisNumber));
+
+    public static IQueryable<Participant> ProfileDetailsParticipants(OdipDbContext db) => db.Participants.Where(ProfileDetailsRule);
+
+    /// <summary>
+    /// "Service needs": the participant's NEWEST agreement draft (drafts are immutable revisions) has its plan and agreement dates, the agreement
+    /// inside the plan, and at least one line, every one with hours, a price, an item code and a catalogue version. A hand-typed line was priced on the
+    /// agreement's start date, so its catalogue row has to be valid on it. A line the plan builder generated (it names its block) is priced on the date
+    /// of each shift: when the plan crosses a catalogue price change its row starts after the agreement does.
+    /// </summary>
+    public static IQueryable<Participant> ServiceNeedsParticipants(OdipDbContext db) =>
+        db.Participants.Where(p => db.ServiceAgreementDrafts.Any(draft =>
+            draft.ParticipantId == p.Id && draft.TenantId == p.TenantId
+            && !db.ServiceAgreementDrafts.Any(newer => newer.ParticipantId == p.Id && newer.TenantId == p.TenantId && newer.Version > draft.Version)
+            && draft.PlanStartDate != default && draft.PlanEndDate != default && draft.AgreementStartDate != default && draft.AgreementEndDate != default
+            && draft.PlanEndDate >= draft.PlanStartDate && draft.AgreementEndDate >= draft.AgreementStartDate
+            && draft.AgreementStartDate >= draft.PlanStartDate && draft.AgreementEndDate <= draft.PlanEndDate
+            && draft.Lines.Any()
+            && !draft.Lines.Any(line => line.Hours <= 0 || line.UnitPrice <= 0 || string.IsNullOrWhiteSpace(line.ItemCode)
+                || string.IsNullOrWhiteSpace(line.CatalogueVersion)
+                || (string.IsNullOrEmpty(line.BlockKey)
+                    && (line.CatalogueEffectiveFrom > draft.AgreementStartDate || (line.CatalogueEffectiveTo != null && line.CatalogueEffectiveTo < draft.AgreementStartDate))))));
 
     public static Task<bool> IsActiveReadyAsync(OdipDbContext db, Guid participantId, CancellationToken ct) =>
         ActiveReadyParticipants(db).AnyAsync(p => p.Id == participantId, ct);
