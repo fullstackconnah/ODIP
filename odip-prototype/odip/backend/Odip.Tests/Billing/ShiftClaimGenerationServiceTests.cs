@@ -313,6 +313,33 @@ public class ShiftClaimGenerationServiceTests
             service.GenerateDraftClaimAsync(Guid.NewGuid(), new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 8)));
     }
 
+    // A participant whose services began before their profile was complete may have no NDIS number. Like trip claims, no line is built without one, and the
+    // shifts are not dropped silently: they are left out and the refusal names the participant and the reason (LIFE fix round 1, V10).
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task GenerateAndPreview_WithoutAnNdisNumber_LeaveEveryShiftOut_AndSaySo(string? ndisNumber)
+    {
+        using var db = CreateDb();
+        SeedProviderSettings(db);
+        var participant = SeedParticipant(db);
+        participant.NdisNumber = ndisNumber;
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
+        await db.SaveChangesAsync();
+        var service = new ShiftClaimGenerationService(db);
+
+        var generate = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+        var preview = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+
+        foreach (var message in new[] { generate.Message, preview.Message })
+        {
+            Assert.Contains("Jane Doe", message);
+            Assert.Contains("NDIS number missing", message);
+        }
+        Assert.Empty(db.TripClaims);
+    }
+
     // ── PreviewAsync ──────────────────────────────────────────────────
 
     [Fact]

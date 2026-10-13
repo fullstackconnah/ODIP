@@ -198,8 +198,18 @@ public class ShiftClaimGenerationService
 
         var lineItems = new List<ShiftLineCalc>();
         var leftOut = new List<ShiftClaimLeftOutDto>();
+        // No line without an NDIS number, as the trip claim does (ClaimGenerationService): services can begin before the profile is complete, so this
+        // is reachable. The shifts are left out with the reason, never dropped silently.
+        var noNdisNumber = string.IsNullOrWhiteSpace(participant.NdisNumber)
+            ? $"{participant.FullName}: NDIS number missing. Add it to the participant's profile, then generate the claim again."
+            : null;
         foreach (var shift in shifts)
         {
+            if (noNdisNumber is not null)
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = noNdisNumber });
+                continue;
+            }
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
             var outcome = ShiftPriceEstimator.Price(
                 catalogueItems, shift.ServiceDate, shift.DurationHours, shift.Ratio, shift.NightType, participant.IsIntensiveSupport, state, publicHolidays);
