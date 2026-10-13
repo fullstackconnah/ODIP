@@ -85,13 +85,15 @@ export function HomeRoute() {
   return <PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>
 }
 
-export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly, requiresParticipantLifecycleMutation }: {
+export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly, requiresParticipantLifecycleMutation, requiresDataImport }: {
   children: React.ReactNode
   page?: PageKey
   requiresWrite?: boolean
   /** The record's only read view is its edit form: ReadOnly opens it as a view (the form hides its writes when canWrite is false). */
   viewableByReadOnly?: boolean
   requiresParticipantLifecycleMutation?: boolean
+  /** Settings → Import data: an Admin, or a SuperAdmin viewing as an organisation (canImportData). */
+  requiresDataImport?: boolean
 }) {
   const token = localStorage.getItem('odip_token')
   const permissions = usePermissions()
@@ -99,6 +101,7 @@ export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly
   if (page && !permissions.canAccessPage(page)) return <Navigate to="/" replace />
   if (requiresWrite && !permissions.canWrite && !(viewableByReadOnly && permissions.isReadOnly)) return <Navigate to="/" replace />
   if (requiresParticipantLifecycleMutation && !permissions.canManageParticipantLifecycle) return <Navigate to="/" replace />
+  if (requiresDataImport && !permissions.canImportData) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
