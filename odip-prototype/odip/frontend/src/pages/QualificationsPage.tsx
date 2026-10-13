@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useStaff, useSettings, useUpdateStaff } from '@/api/hooks'
+import { useStaff, useSettings, useUpdateStaff, useProviderSettings } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
 import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -76,6 +76,7 @@ function buildGroups(staff: StaffListDto[], warningDays: number): StaffGroup[] {
 
 export default function QualificationsPage() {
   const { canWrite, canAccessPage } = usePermissions()
+  const staffFromPayroll = useProviderSettings(canWrite).data?.employmentHeroConnected === true
   const { data: settings } = useSettings()
   const { data: allStaff = [], isLoading, isError, refetch } = useStaff({ isActive: 'true' })
   const updateStaff = useUpdateStaff()
@@ -159,7 +160,7 @@ export default function QualificationsPage() {
           icon={UserCog}
           title="No staff members yet"
           description="This page tracks expiry dates for staff certifications like First Aid, driver licences, and manual handling. Add a staff member to start tracking theirs."
-          action={canWrite ? { label: 'New staff member', to: '/staff/new' } : undefined}
+          action={canWrite && !staffFromPayroll ? { label: 'New staff member', to: '/staff/new' } : undefined}
         />}
       </div>
     )

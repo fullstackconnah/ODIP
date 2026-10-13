@@ -5,15 +5,17 @@ import QualificationsPage from './QualificationsPage'
 import DashboardPage from './DashboardPage'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseStaff, mockUseSettings } = vi.hoisted(() => ({
+const { mockUseStaff, mockUseSettings, providerSettings } = vi.hoisted(() => ({
   mockUseStaff: vi.fn(),
   mockUseSettings: vi.fn(),
+  providerSettings: { current: undefined as { employmentHeroConnected?: boolean } | undefined },
 }))
 
 vi.mock('@/api/hooks', () => ({
   useStaff: mockUseStaff,
   useSettings: mockUseSettings,
   useUpdateStaff: () => ({ mutate: vi.fn(), isPending: false }),
+  useProviderSettings: () => ({ data: providerSettings.current }),
   // The dashboard's own request, answered with a real summary of zeros (the page no longer makes one up).
   useDashboard: () => ({
     data: {
@@ -190,5 +192,19 @@ describe('QualificationsPage: controls by role', () => {
     expect(screen.getByRole('link', { name: /Warning window/ })).toHaveAttribute('href', '/settings?tab=qualifications')
     expect(screen.getByRole('link', { name: 'Edit Dana Expired' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Edit' }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('QualificationsPage — staff from Employment Hero', () => {
+  afterEach(() => { providerSettings.current = undefined; localStorage.clear() })
+
+  it('has no New staff member action on the empty page when staff come from Employment Hero', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    providerSettings.current = { employmentHeroConnected: true }
+    mockUseStaff.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 30 } })
+    render(<MemoryRouter><QualificationsPage /></MemoryRouter>)
+    expect(screen.getByText('No staff members yet')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'New staff member' })).toBeNull()
   })
 })

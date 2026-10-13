@@ -4,7 +4,7 @@ import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
-import { useDownloadImportTemplate, useImportHistory, useUndoImport } from '@/api/hooks'
+import { useDownloadImportTemplate, useImportHistory, useProviderSettings, useUndoImport } from '@/api/hooks'
 import type { ImportBatchDto, ImportKind } from '@/api/types'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
@@ -27,6 +27,8 @@ export default function ImportDataTab() {
   const history = useImportHistory()
   const undo = useUndoImport()
   const template = useDownloadImportTemplate()
+  const staffFromPayroll = useProviderSettings().data?.employmentHeroConnected === true
+  const kinds = staffFromPayroll ? KINDS.filter(k => k.kind !== 'staff') : KINDS
   const [undoing, setUndoing] = useState<ImportBatchDto | null>(null)
   const [invited, setInvited] = useState<{ batchId: string; fileName: string; result: InviteResult } | null>(null)
 
@@ -62,7 +64,7 @@ export default function ImportDataTab() {
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Upload a .csv or .xlsx export from your old platform, up to 2,000 rows and 5 MB. Records already in ODIP are skipped and never changed.
         </p>
-        {KINDS.map(k => (
+        {kinds.map(k => (
           <section key={k.kind} aria-labelledby={`import-kind-${k.kind}`} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">
             {/* Grows beside the actions and wraps its own text, so a longer description never pushes the actions under it on a wide screen. */}
             <div className="min-w-0 flex-[1_1_20rem]">
@@ -75,6 +77,7 @@ export default function ImportDataTab() {
             </div>
           </section>
         ))}
+        {staffFromPayroll && <p className="text-sm text-[var(--color-muted-foreground)]">Staff come from Employment Hero for this organisation, so they are not imported here.</p>}
       </section>
 
       <section className="flex flex-col gap-3" aria-labelledby="import-history">
