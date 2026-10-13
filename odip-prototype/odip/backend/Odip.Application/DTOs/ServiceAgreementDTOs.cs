@@ -42,6 +42,29 @@ public record AgreementPatternConflictDto
     public Guid DraftId { get; init; }
 }
 
+/// <summary>
+/// The body of POST .../{id}/pattern-change: the day, times, ratio and night type one roster pattern of the approved revision <c>{id}</c> should have, and from when. The change is made to the
+/// pattern's block (every worker of it): to every day of it with <see cref="AllDays"/>, otherwise to the pattern's day only, which splits a block of several days. It is saved as the next revision,
+/// re-priced, for approval; the pattern and the roster change only when that is approved.
+/// </summary>
+public record AgreementPatternChangeDto
+{
+    public Guid PatternId { get; init; }
+    public DayOfWeek DayOfWeek { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    /// <summary>Must be what the times say: the end is on the next day exactly when it is not after the start.</summary>
+    public bool EndsNextDay { get; init; }
+    public Odip.Domain.Enums.SupportRatio Ratio { get; init; }
+    public Odip.Domain.Enums.SleepoverType NightType { get; init; }
+    /// <summary>Change every day of the block (no split). The day cannot change with it.</summary>
+    public bool AllDays { get; init; }
+    /// <summary>The first day of the change, and of the new revision. Absent: the provider's tomorrow, or the agreement's start when that is later.</summary>
+    public DateOnly? FromDate { get; init; }
+    /// <summary>Work out the revision and its price difference, and save nothing.</summary>
+    public bool Preview { get; init; }
+}
+
 /// <summary>One block of a revision: the block exactly as the pricing engine takes it, and what its shifts will ask of a worker.</summary>
 public record DraftBlockDto
 {
