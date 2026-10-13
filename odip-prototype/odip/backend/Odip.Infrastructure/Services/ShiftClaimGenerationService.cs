@@ -99,7 +99,8 @@ public class ShiftClaimGenerationService
         var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Provider settings are not configured.");
 
-        var gstCode = settings.GSTRegistered ? GSTCode.P1 : GSTCode.P2;
+        // shortcut: no per-item GST flag; P1 only via legacy lines; add a catalogue GST flag if a taxable support appears
+        var gstCode = GSTCode.P2;
 
         var claimId = Guid.NewGuid();
         var claim = new TripClaim

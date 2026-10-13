@@ -133,7 +133,6 @@ public class ClaimGenerationService
         };
         _db.TripClaims.Add(claim);
 
-        var gstCode = settings.GSTRegistered ? GSTCode.P1 : GSTCode.P2;
         var claimLineItems = new List<ClaimLineItem>();
 
         foreach (var calc in lineItems)
@@ -242,7 +241,8 @@ public class ClaimGenerationService
                 $"No catalogue row covers this trip's dates ({trip.StartDate:dd/MM/yyyy} to {tripEnd:dd/MM/yyyy}). Import the catalogue for that period first."));
 
         var confirmedStaffCount = trip.StaffAssignments.Count(s => s.Status == AssignmentStatus.Confirmed);
-        var gstCode = settings.GSTRegistered ? GSTCode.P1 : GSTCode.P2;
+        // shortcut: no per-item GST flag; P1 only via legacy lines; add a catalogue GST flag if a taxable support appears
+        var gstCode = GSTCode.P2;
 
         var context = new ClaimCalcContext
         {
