@@ -9,6 +9,9 @@ using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
 
+/// <summary>What an undo came to: the batch was not found, or these records changed since the import (nothing was undone), or the undone batch.</summary>
+public sealed record ImportUndoOutcome(bool NotFound, List<ImportUndoBlockerDto> Blockers, ImportBatchDto? Batch);
+
 /// <summary>
 /// Settings → Import data: an organisation's Admin brings participants (and staff) over from another platform's export. Preview reads the file in
 /// memory and writes nothing. Commit reads it again, re-checks every row (the preview is never trusted) and creates the ready rows through the
@@ -191,6 +194,52 @@ public sealed class OnboardingImportService
     // The attribution ParticipantsController gives an intake completed by hand (its CompletionActor).
     private static string CompletionActor(ClaimsPrincipal? caller) =>
         caller?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? caller?.FindFirst("sub")?.Value ?? "unknown";
+
+    public async Task<ImportUndoOutcome> UndoAsync(Guid batchId, ClaimsPrincipal? caller, CancellationToken ct)
+    {
+        var tenantId = TenantId();
+        await using var importLock = await AcquireLockAsync(tenantId, ct);
+        var batch = await _db.ImportBatches.FirstOrDefaultAsync(b => b.Id == batchId, ct);
+        if (batch is null) return new ImportUndoOutcome(true, [], null);
+        if (batch.UndoneAt != null) throw new ImportException("This import was already undone.");
+
+        var ids = await _db.ImportBatchItems.Where(i => i.BatchId == batch.Id).Select(i => i.EntityId).ToListAsync(ct);
+        var blockers = await ImportUntouched.ParticipantBlockersAsync(_db, ids, ct);
+        if (blockers.Count > 0)
+        {
+            var blockedIds = blockers.Keys.ToList();
+            var names = await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+            return new ImportUndoOutcome(false, blockers
+                .Select(b => new ImportUndoBlockerDto(b.Key, names.GetValueOrDefault(b.Key, ""), b.Value))
+                .OrderBy(b => b.Name).ToList(), null);
+        }
+
+        var now = DateTime.UtcNow;
+        // Archived, not deleted: the audit log keeps the import and the undo. A draft stays on the Onboarding tab whatever IsActive says
+        // (ParticipantStages), so an onboarding import's drafts are finalised as archived too: they leave that tab for the Archived view.
+        foreach (var participant in await _db.Participants.Where(p => ids.Contains(p.Id)).ToListAsync(ct))
+        {
+            participant.IsActive = false;
+            participant.IsDraft = false;
+            participant.UpdatedAt = now;
+        }
+        batch.UndoneAt = now;
+        batch.UndoneById = ActorId(caller);
+        batch.UndoneByName = ActorName(caller);
+        await _db.SaveChangesAsync(ct);
+        await importLock.CommitAsync(ct);
+        return new ImportUndoOutcome(false, [], ToDto(batch));
+    }
+
+    public async Task<List<ImportBatchDto>> HistoryAsync(CancellationToken ct)
+    {
+        TenantId();
+        var batches = await _db.ImportBatches.OrderByDescending(b => b.CreatedAt).ToListAsync(ct);
+        return batches.Select(ToDto).ToList();
+    }
+
+    private static ImportBatchDto ToDto(ImportBatch b) =>
+        new(b.Id, b.Kind, b.FileName, b.CreatedByName, b.CreatedAt, b.RowCount, b.CreatedCount, b.SkippedCount, b.FailedCount, b.UndoneAt, b.UndoneByName);
 
     private static string Sha256(byte[] content) => Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 }
