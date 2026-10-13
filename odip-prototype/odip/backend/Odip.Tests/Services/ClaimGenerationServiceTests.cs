@@ -563,33 +563,15 @@ public class ClaimGenerationServiceTests
         Assert.Equal(7m, updatedTrip.ActiveHoursPerDay);
     }
 
-    [Fact]
-    public async Task GenerateDraftClaimAsync_GSTRegistered_SetsP1GSTCode()
+    // Most NDIS supports are GST-free, and the catalogue carries no GST flag, so every new line is P2 whether or not the provider is GST-registered.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GenerateDraftClaimAsync_SetsP2GSTCode_WhateverTheRegistration(bool gstRegistered)
     {
         using var db = CreateDb();
         var group = SeedActivityGroup(db);
-        SeedProviderSettings(db, gstRegistered: true);
-        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
-        var participant = CreateParticipant();
-        db.Participants.Add(participant);
-
-        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, participant,
-            activityGroupId: group.Id);
-        await db.SaveChangesAsync();
-
-        var service = new ClaimGenerationService(db);
-        var claim = await service.GenerateDraftClaimAsync(trip.Id);
-
-        var lineItem = await db.ClaimLineItems.FirstAsync(l => l.TripClaimId == claim.Id);
-        Assert.Equal(GSTCode.P1, lineItem.GSTCode);
-    }
-
-    [Fact]
-    public async Task GenerateDraftClaimAsync_NotGSTRegistered_SetsP2GSTCode()
-    {
-        using var db = CreateDb();
-        var group = SeedActivityGroup(db);
-        SeedProviderSettings(db, gstRegistered: false);
+        SeedProviderSettings(db, gstRegistered: gstRegistered);
         SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
         var participant = CreateParticipant();
         db.Participants.Add(participant);
@@ -603,6 +585,28 @@ public class ClaimGenerationServiceTests
 
         var lineItem = await db.ClaimLineItems.FirstAsync(l => l.TripClaimId == claim.Id);
         Assert.Equal(GSTCode.P2, lineItem.GSTCode);
+    }
+
+    [Fact]
+    public async Task GenerateDraftClaimAsync_GSTRegistered_BprCsvSendsP2ForTheAgencyManagedLines()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db, gstRegistered: true);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
+        var participant = CreateParticipant();
+        db.Participants.Add(participant);
+
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, participant,
+            activityGroupId: group.Id);
+        await db.SaveChangesAsync();
+
+        var claim = await new ClaimGenerationService(db).GenerateDraftClaimAsync(trip.Id);
+        var (bytes, _) = await new BprCsvService(db).GenerateBprCsvAsync(claim.Id);
+
+        var rows = System.Text.Encoding.UTF8.GetString(bytes).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Skip(1).ToList();
+        Assert.NotEmpty(rows);
+        Assert.All(rows, row => Assert.Equal("P2", row.Split(',')[9]));
     }
 
     [Fact]

@@ -149,6 +149,25 @@ public class ShiftClaimGenerationServiceTests
         Assert.Equal(640m, claim.TotalAmount);
     }
 
+    // Most NDIS supports are GST-free, and the catalogue carries no GST flag, so every new line is P2 whether or not the provider is GST-registered.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GenerateDraftClaimAsync_SetsP2GSTCode_WhateverTheRegistration(bool gstRegistered)
+    {
+        using var db = CreateDb();
+        SeedProviderSettings(db, gstRegistered: gstRegistered);
+        var participant = SeedParticipant(db);
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
+        await db.SaveChangesAsync();
+
+        var claim = await new ShiftClaimGenerationService(db).GenerateDraftClaimAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7));
+
+        var line = await db.ClaimLineItems.SingleAsync(l => l.TripClaimId == claim.Id);
+        Assert.Equal(GSTCode.P2, line.GSTCode);
+    }
+
     [Fact]
     public async Task GenerateDraftClaimAsync_UsesRosteredHours_NotClockedTimes()
     {
