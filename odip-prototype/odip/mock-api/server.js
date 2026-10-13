@@ -99,17 +99,15 @@ const enquiryFeed = [
     createdAt: '2026-02-01T00:00:00Z', participantIsDraft: false, participantIsActive: true, participantIntakeCompletedAt: '2026-02-10T00:00:00Z' },
 ]
 
-// An NDIS-funded participant has a sixth gate, "Funding recorded" (budget phase 1): the real API counts it in totalSteps and adds this reason while no plan budget is recorded. The mock treats
-// everyone on the worklist as NDIS-funded, and Mei has no plan budget (funding.js holds plans for p-0002 and p-0004 only).
-const FUNDING_NOT_RECORDED_REASON = "Funding is not recorded: add the plan budget on the participant's Funding tab."
-const FUNDING_ENDED_REASON = "The plan budget has ended: record the new plan on the participant's Funding tab."
-const SCHEDULE_REASON = 'The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.'
-// Daniel has done everything but the plan budget, so his onboarding page recommends "Record plan budget" (the one step Warn mode lets wait).
-const ALL_BUT_FUNDING = new Set(['p-0104'])
+// The onboarding checklist (owner decision 2026-10-13): four items derived by the server, three for anyone not NDIS-funded. The mock treats everyone on the
+// worklist as NDIS-funded. Mei has every item open: no date of birth, no draft, no agreement record, no plan budget (funding.js holds plans
+// for p-0002 and p-0004 only). Daniel's services have started and only his plan budget is missing.
+const FUNDING_NOT_RECORDED = 'No plan budget recorded.'
+const FUNDING_ENDED = 'The plan budget has ended: record the new plan.'
+const SERVICES_STARTED = { 'p-0104': '2026-10-08T00:00:00Z' }
 const onboardingWorklist = [
-  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 6,
-    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', FUNDING_NOT_RECORDED_REASON] },
-  { participantId: 'p-0104', fullName: 'Daniel Osei', stage: 'Onboarding incomplete', nextAction: 'Record plan budget', completedSteps: 4, totalSteps: 6, reasons: [FUNDING_NOT_RECORDED_REASON] },
+  { participantId: 'p-0103', fullName: 'Mei Tanaka', servicesStartedAt: null, completedSteps: 0, totalSteps: 4, firstMissing: 'Profile details' },
+  { participantId: 'p-0104', fullName: 'Daniel Osei', servicesStartedAt: SERVICES_STARTED['p-0104'], completedSteps: 3, totalSteps: 4, firstMissing: 'Funding' },
 ]
 
 // Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
@@ -122,7 +120,7 @@ const draftParticipants = [
   { id: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', preferredName: null, fullName: 'Mei Tanaka', maskedNdisNumber: null, planType: 'SelfManaged', region: null,
     isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-29T05:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
   { id: 'p-0104', firstName: 'Daniel', lastName: 'Osei', preferredName: null, fullName: 'Daniel Osei', maskedNdisNumber: null, planType: 'PlanManaged', region: null,
-    isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-30T03:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
+    isRepeatClient: false, isActive: true, isDraft: true, intakeCompletedAt: '2026-09-30T03:00:00Z', servicesStartedAt: '2026-10-08T00:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
 ]
 
 const participantDetailExtras = {
@@ -1797,6 +1795,8 @@ function rosterBoard(searchParams) {
   const days = Array.from({ length: 7 }, (_, i) => planApproval.addDays(monday, i))
   const board = rosterBoardFixture()
   if (monday !== BOARD_FIXTURE_WEEK) { board.participantRows = []; board.exceptions = [] }
+  // Daniel's services have begun while he is still onboarding: he has a row every week, tagged as onboarding (the real board lists everyone who can receive services).
+  board.participantRows.push({ participantId: 'p-0104', fullName: 'Daniel Osei', supportRatio: 'SharedSupport', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: true, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 })
   board.weekStart = monday
   board.days = days
   for (const shift of rosterShifts.filter((s) => s.serviceDate >= days[0] && s.serviceDate <= days[6])) {
@@ -2332,21 +2332,18 @@ const routes = [
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
   ['inquiries/:id/onboarding', (id) => {
     const budget = funding.budgetStatus(id)
-    const fundingRecorded = budget.recorded
-    // p-0004 has every step, its plan budget included (funding.js gives it a plan), but for the schedule: its checklist shows the last step, before and after its agreement draft is approved for rostering
-    // (phase D). Like the server, the list says where the schedule is made until a revision is approved and nothing about it after (the checklist's row names the revision), and it is never ready while the schedule waits.
-    const scheduleOnly = id === 'p-0004'
-    const approved = (serviceAgreementDrafts[id] || []).filter((d) => d.approval).sort((a, b) => b.version - a.version)[0]
-    const schedule = approved ? { scheduleApprovedVersion: approved.version, scheduleApprovedAt: approved.approval.approvedAt } : {}
-    const done = ALL_BUT_FUNDING.has(id) || scheduleOnly
+    // Mei is the fresh case; everyone else on a checklist (Daniel, and p-0004 opened by URL) has everything but, perhaps, the plan budget.
+    const fresh = id === 'p-0103'
+    const item = (key, label, done, missing) => ({ key, label, done, missing: done ? null : missing })
+    const items = [
+      item('profile', 'Profile details', !fresh, 'Missing: date of birth.'),
+      item('serviceNeeds', 'Service needs', !fresh, 'No current agreement draft with dated, priced support lines.'),
+      item('agreement', 'Signed agreement', !fresh, 'Record the date it was signed, or why there is no written agreement.'),
+      item('funding', 'Funding', budget.recorded, budget.ended ? FUNDING_ENDED : FUNDING_NOT_RECORDED),
+    ]
     return {
-      participantId: id, intakeComplete: true, profileComplete: done, serviceTypeConfirmed: done, serviceAgreementSigned: done, fundingRecorded, isReady: done && fundingRecorded && !scheduleOnly,
-      reasons: [
-        ...(done ? [] : ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.']),
-        ...(fundingRecorded ? [] : [budget.ended ? FUNDING_ENDED_REASON : FUNDING_NOT_RECORDED_REASON]),
-        ...(scheduleOnly && !approved ? [SCHEDULE_REASON] : []),
-      ],
-      ...schedule,
+      participantId: id, items, isReady: items.every((i) => i.done), servicesStartedAt: SERVICES_STARTED[id] ?? null,
+      agreementSignedOn: fresh ? null : '2026-10-01', noAgreementReason: null,
     }
   }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],

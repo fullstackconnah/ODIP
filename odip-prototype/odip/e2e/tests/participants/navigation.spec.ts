@@ -53,7 +53,7 @@ async function hubRow(page: Page, search: string, token: string) {
 
 const back = (page: Page) => page.getByRole('link', { name: /^Back to / });
 const ACTIVE_SEARCH = 'Search participants...';
-const ONBOARDING_SEARCH = 'Search participants, stages or gates...';
+const ONBOARDING_SEARCH = 'Search participants or what is still to do...';
 const ENQUIRIES_SEARCH = 'Search enquiries...';
 
 test.describe('participant workflow navigation', () => {
@@ -87,7 +87,7 @@ test.describe('participant workflow navigation', () => {
     // Onboarding: by history through the checklist, then the checklist's own Back.
     await page.goto('/participants?tab=onboarding');
     await (await hubRow(page, ONBOARDING_SEARCH, onboarding.token)).getByRole('cell').nth(2).click();
-    await page.getByRole('link', { name: 'View participant record' }).click();
+    await page.getByRole('link', { name: 'View record' }).click();
     await expect(page).toHaveURL(new RegExp(`/participants/${onboarding.id}$`));
     await back(page).click();
     await expect(page).toHaveURL(new RegExp(`/onboarding/${onboarding.id}$`));
@@ -122,7 +122,7 @@ test.describe('participant workflow navigation', () => {
   test('onboarding checklist, Edit profile, Cancel returns to the checklist', async ({ page }) => {
     await page.goto(`/onboarding/${onboarding.id}`);
     await page.getByRole('link', { name: 'Edit profile' }).first().click();
-    await expect(page).toHaveURL(new RegExp(`/participants/${onboarding.id}/profile$`));
+    await expect(page).toHaveURL(new RegExp(`/participants/${onboarding.id}/profile\\?from=onboarding$`));
     await page.getByRole('link', { name: 'Cancel' }).click();
     await expect(page).toHaveURL(new RegExp(`/onboarding/${onboarding.id}$`));
   });

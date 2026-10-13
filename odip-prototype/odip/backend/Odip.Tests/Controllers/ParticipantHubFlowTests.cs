@@ -8,6 +8,7 @@ using Moq;
 using Npgsql;
 using Odip.Api.Controllers;
 using Odip.Api.Serialization;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -124,9 +125,8 @@ public class ParticipantHubFlowTests
 
         Assert.Equal(legacy.Id, row.ParticipantId);
         Assert.Equal("Lena Legacy", row.FullName);
-        Assert.Equal("Onboarding incomplete", row.Stage);
-        Assert.Equal("Validate profile essentials", row.NextAction);
-        Assert.Equal(1, row.CompletedSteps);
+        Assert.Equal("Profile details", row.FirstMissing);
+        Assert.Equal(0, row.CompletedSteps);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class ParticipantHubFlowTests
 
         var row = Assert.Single(await WorklistAsync(caller));
         Assert.Equal(participantId, row.ParticipantId);
-        Assert.Equal("Onboarding incomplete", row.Stage);
+        Assert.NotNull(row.FirstMissing);
     }
 
     [Fact]
@@ -217,8 +217,7 @@ public class ParticipantHubFlowTests
         var detail = Ok(await caller.Inquiries.GetOnboarding(legacy.Id, CancellationToken.None));
 
         Assert.Equal(legacy.Id, detail.ParticipantId);
-        Assert.True(detail.IntakeComplete);
-        Assert.False(detail.ProfileComplete);
+        Assert.False(detail.Items.Single(i => i.Key == "profile").Done);
         Assert.Empty(caller.Db.ParticipantOnboardings);
     }
 
@@ -234,7 +233,7 @@ public class ParticipantHubFlowTests
     }
 
     [Fact]
-    public async Task ValidateProfile_ForAnIntakeCompleteDraftWithoutARow_CreatesTheRowAndRecordsTheValidation()
+    public async Task RecordAgreement_ForAnIntakeCompleteDraftWithoutARow_CreatesTheRowAndRecordsIt()
     {
         var tenantId = Guid.NewGuid();
         using var caller = NewCaller(tenantId);
@@ -244,13 +243,13 @@ public class ParticipantHubFlowTests
         legacy.FundingSource = ParticipantFundingSource.Other;
         await caller.Db.SaveChangesAsync();
 
-        var detail = Ok(await caller.Inquiries.ValidateProfile(legacy.Id, CancellationToken.None));
+        var detail = Ok(await caller.Inquiries.RecordAgreement(legacy.Id, new RecordOnboardingAgreementDto { NoAgreementReason = "Participant chose not to" }, CancellationToken.None));
 
-        Assert.True(detail.ProfileComplete);
+        Assert.True(detail.Items.Single(i => i.Key == "agreement").Done);
         var onboarding = Assert.Single(caller.Db.ParticipantOnboardings);
         Assert.Equal(legacy.Id, onboarding.ParticipantId);
         Assert.Equal(tenantId, onboarding.TenantId);
-        Assert.True(onboarding.ProfileComplete);
+        Assert.Equal("Participant chose not to", onboarding.NoAgreementReason);
     }
 
     // ── Two requests for the same row-less participant ────────────────────────────────────────────────────
@@ -292,9 +291,9 @@ public class ParticipantHubFlowTests
     }
 
     [Fact]
-    public async Task ValidateProfile_WhenAConcurrentRequestStoredTheRowFirst_RecordsOnTheirRow_InsteadOfAnError()
+    public async Task RecordAgreement_WhenAConcurrentRequestStoredTheRowFirst_RecordsOnTheirRow_InsteadOfAnError()
     {
-        // Two coordinators validate the same row-less participant within milliseconds: both find no row and both insert; the unique index rejects the second.
+        // Two coordinators record the same row-less participant within milliseconds: both find no row and both insert; the unique index rejects the second.
         // That was an unhandled DbUpdateException (a generic 500 the screen showed as is). The row exists by then, so the loser records on it and succeeds.
         var tenantId = Guid.NewGuid();
         var (caller, race, winnerStores) = RacingCaller(tenantId);
@@ -307,40 +306,14 @@ public class ParticipantHubFlowTests
         await winnerStores(legacy.Id);
         race.Armed = true;
 
-        var detail = Ok(await caller.Inquiries.ValidateProfile(legacy.Id, CancellationToken.None));
+        var detail = Ok(await caller.Inquiries.RecordAgreement(legacy.Id, new RecordOnboardingAgreementDto { NoAgreementReason = "Participant chose not to" }, CancellationToken.None));
 
-        Assert.True(detail.ProfileComplete);
+        Assert.True(detail.Items.Single(i => i.Key == "agreement").Done);
         var onboarding = Assert.Single(await caller.Db.ParticipantOnboardings.ToListAsync());
         Assert.Equal(legacy.Id, onboarding.ParticipantId);
         Assert.Equal(tenantId, onboarding.TenantId);
-        Assert.True(onboarding.ProfileComplete);
-        Assert.NotNull(onboarding.ProfileCompletedAt);
-    }
-
-    [Fact]
-    public async Task ConfirmServiceNeeds_WhenAConcurrentRequestStoredTheRowFirst_RecordsOnTheirRow_InsteadOfAnError()
-    {
-        var tenantId = Guid.NewGuid();
-        var (caller, race, winnerStores) = RacingCaller(tenantId);
-        using var _ = caller;
-        var legacy = await SeedAsync(caller.Db, tenantId, "Lena", "Legacy", draft: true, intakeDone: true);
-        caller.Db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
-        {
-            Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = legacy.Id, Version = 1,
-            PlanStartDate = new DateOnly(2026, 1, 1), PlanEndDate = new DateOnly(2026, 12, 31),
-            AgreementStartDate = new DateOnly(2026, 2, 1), AgreementEndDate = new DateOnly(2026, 11, 30),
-            Lines = { new ServiceAgreementDraftLine { Id = Guid.NewGuid(), ServiceType = "Community access", Hours = 10, ItemCode = "04_104_0125_6_1", CatalogueVersion = "2026-27", CatalogueEffectiveFrom = new DateOnly(2026, 1, 1), UnitPrice = 70m } },
-        });
-        await caller.Db.SaveChangesAsync();
-        await winnerStores(legacy.Id);
-        race.Armed = true;
-
-        var detail = Ok(await caller.Inquiries.ConfirmServiceNeeds(legacy.Id, CancellationToken.None));
-
-        Assert.True(detail.ServiceTypeConfirmed);
-        var onboarding = Assert.Single(await caller.Db.ParticipantOnboardings.ToListAsync());
-        Assert.Equal(legacy.Id, onboarding.ParticipantId);
-        Assert.True(onboarding.ServiceTypeConfirmed);
+        Assert.Equal("Participant chose not to", onboarding.NoAgreementReason);
+        Assert.NotNull(onboarding.AgreementRecordedAt);
     }
 
     // ── The Enquiries tab's feed also carries drafts started without an enquiry ─────────────────────────
@@ -508,11 +481,11 @@ public class ParticipantHubFlowTests
         var row = Assert.Single(await WorklistAsync(caller));
 
         Assert.Equal(seeded.Id, row.ParticipantId);
-        Assert.Equal("Onboarding incomplete", row.Stage);
+        Assert.NotNull(row.FirstMissing);
     }
 
     [Fact]
-    public async Task Lifecycle_ADraftMarkedActive_IsOnATabAtEveryStep_AndCompletingTheProfileKeepsThemActive()
+    public async Task Lifecycle_ADraftMarkedActive_IsOnATabAtEveryStep_AndMakeActiveKeepsThemActive()
     {
         // The seeded demo draft: IsDraft with the entity's default IsActive=true, no enquiry, no onboarding row.
         var tenantId = Guid.NewGuid();
@@ -528,7 +501,7 @@ public class ParticipantHubFlowTests
         Assert.Equal(seeded.Id, Assert.Single(await WorklistAsync(caller)).ParticipantId);
 
         // Complete Profile finalises her; she was already active, so she is on the Active register.
-        var completed = Ok(await caller.Participants.CompleteProfile(seeded.Id, CancellationToken.None));
+        var completed = Ok(await caller.Participants.MakeActive(seeded.Id, CancellationToken.None));
         Assert.False(completed.IsDraft);
         Assert.True(completed.IsActive);
         Assert.Empty(await WorklistAsync(caller));
@@ -561,12 +534,19 @@ public class ParticipantHubFlowTests
         Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "Lovelace", complete: true), CancellationToken.None));
         var onboardingRow = Assert.Single(await WorklistAsync(caller));
         Assert.Equal(participantId, onboardingRow.ParticipantId);
-        Assert.Equal("Onboarding incomplete", onboardingRow.Stage);
+        Assert.NotNull(onboardingRow.FirstMissing);
         Assert.NotNull(Assert.Single(await EnquiriesAsync(caller)).ParticipantIntakeCompletedAt);
         Assert.Empty(await ActiveRegisterAsync(caller));
 
-        // 4. Complete the profile. Warn mode activates, so the participant leaves Onboarding for the Active tab.
-        var completed = Ok(await caller.Participants.CompleteProfile(participantId, CancellationToken.None));
+        // 3b. Begin services: they can be rostered, and stay on the Onboarding tab (not the Active register).
+        var begun = Ok(await caller.Participants.BeginServices(participantId, CancellationToken.None));
+        Assert.Equal((true, true), (begun.IsDraft, begun.IsActive));
+        Assert.True((await ParticipantReadiness.CheckAsync(caller.Db, participantId, CancellationToken.None)).Allowed);
+        Assert.Equal(begun.ServicesStartedAt, Assert.Single(await WorklistAsync(caller)).ServicesStartedAt);
+        Assert.Empty(await ActiveRegisterAsync(caller));
+
+        // 4. Make active, with checklist items still open: Warn mode allows it, and the participant leaves Onboarding for the Active tab.
+        var completed = Ok(await caller.Participants.MakeActive(participantId, CancellationToken.None));
         Assert.True(completed.IsActive);
         Assert.False(completed.IsDraft);
         Assert.Empty(await WorklistAsync(caller));
@@ -595,13 +575,13 @@ public class ParticipantHubFlowTests
         Assert.Empty(await EnquiriesAsync(caller));
         Assert.Equal(participantId, Assert.Single(await WorklistAsync(caller)).ParticipantId);
 
-        Ok(await caller.Participants.CompleteProfile(participantId, CancellationToken.None));
+        Ok(await caller.Participants.MakeActive(participantId, CancellationToken.None));
         Assert.Empty(await WorklistAsync(caller));
         Assert.Equal(participantId, Assert.Single(await ActiveRegisterAsync(caller)).Id);
     }
 
     [Fact]
-    public async Task Lifecycle_InEnforceMode_CompleteProfileIsRefusedWithTheEvidenceReason_AndTheParticipantStaysOnOnboarding()
+    public async Task Lifecycle_InEnforceMode_MakeActiveIsRefusedWithTheEvidenceReason_AndTheParticipantStaysOnOnboarding()
     {
         // Enforce keeps the fail-closed rule: activation needs verified signed-agreement evidence, which nobody has yet. Finalising without being able to
         // activate would leave the participant in no stage, so Complete Profile is refused and they stay a draft on Onboarding, where the agreement-evidence
@@ -614,7 +594,7 @@ public class ParticipantHubFlowTests
         Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "Lovelace", complete: true), CancellationToken.None));
         Assert.Equal(participantId, Assert.Single(await WorklistAsync(caller)).ParticipantId);
 
-        var refusal = await caller.Participants.CompleteProfile(participantId, CancellationToken.None);
+        var refusal = await caller.Participants.MakeActive(participantId, CancellationToken.None);
 
         var failure = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<BadRequestObjectResult>(refusal.Result).Value);
         Assert.Equal("This participant cannot be activated until their signed service agreement evidence is recorded.", Assert.Single(failure.Errors!));
@@ -625,40 +605,11 @@ public class ParticipantHubFlowTests
         Assert.Empty(await ActiveRegisterAsync(caller));
         Assert.Empty(await ArchivedAsync(caller));
         var checklist = Ok(await caller.Inquiries.GetOnboarding(participantId, CancellationToken.None));
-        Assert.Contains(checklist.Reasons, reason => reason.Contains("agreement evidence", StringComparison.OrdinalIgnoreCase));
-        // Plan builder phase D: an approved revision makes the patterns and the shifts, so the checklist no longer says that no shifts can be created; it says where they are made.
-        Assert.Contains(checklist.Reasons, reason => reason.Contains("approved for rostering", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(checklist.Reasons, reason => reason.Contains("no shifts are created", StringComparison.OrdinalIgnoreCase));
+        Assert.False(checklist.IsReady);
     }
 
     [Fact]
-    public async Task Lifecycle_TheChecklistNamesTheRevisionApprovedForRosteringOnceOneHasBeen_AndListsWhereTheScheduleIsMadeAsAGapUntilThen()
-    {
-        var tenantId = Guid.NewGuid();
-        using var caller = NewCaller(tenantId);
-        var enquiry = await CaptureEnquiryAsync(caller);
-        var participantId = Ok(await caller.Inquiries.Convert(enquiry.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
-
-        var before = Ok(await caller.Inquiries.GetOnboarding(participantId, CancellationToken.None));
-        // Revisions 1 and 2 were approved (the newest approved one is the one named), and another participant's approval is nobody's business here.
-        caller.Db.ServiceAgreementDraftApprovals.AddRange(
-            new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = tenantId, DraftId = Guid.NewGuid(), ParticipantId = participantId, DraftVersion = 1, ApprovedAt = new DateTime(2026, 10, 5, 3, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex" },
-            new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = tenantId, DraftId = Guid.NewGuid(), ParticipantId = participantId, DraftVersion = 2, ApprovedAt = new DateTime(2026, 10, 19, 3, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex" },
-            new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = tenantId, DraftId = Guid.NewGuid(), ParticipantId = Guid.NewGuid(), DraftVersion = 7, ApprovedAt = new DateTime(2026, 10, 20, 3, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex" });
-        await caller.Db.SaveChangesAsync();
-
-        var after = Ok(await caller.Inquiries.GetOnboarding(participantId, CancellationToken.None));
-
-        Assert.Equal((null, null), (before.ScheduleApprovedVersion, before.ScheduleApprovedAt));
-        Assert.Contains(before.Reasons, reason => reason.StartsWith("The schedule is made when an agreement revision is approved for rostering", StringComparison.Ordinal));
-        Assert.Equal((2, new DateTime(2026, 10, 19, 3, 0, 0, DateTimeKind.Utc)), (after.ScheduleApprovedVersion, after.ScheduleApprovedAt));
-        // Once a revision is approved nothing about the schedule is missing, so the "what is still missing" list does not mention it at all (the other lines stay).
-        Assert.DoesNotContain(after.Reasons, reason => reason.Contains("rostering", StringComparison.OrdinalIgnoreCase) || reason.Contains("schedule", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(before.Reasons.Count - 1, after.Reasons.Count);
-    }
-
-    [Fact]
-    public async Task Lifecycle_ADraftCannotBeActivatedThroughTheStatusEndpoint_SoOnboardingEndsWithCompleteProfile()
+    public async Task Lifecycle_ADraftCannotBeActivatedThroughTheStatusEndpoint_SoOnboardingEndsWithMakeActive()
     {
         // The status endpoint refuses a draft ("Complete their intake and profile first."), and a participant in onboarding is still a draft
         // until the Profile wizard's Complete Profile finalises it, applying the same Warn/Enforce activation rule. The Onboarding tab's way

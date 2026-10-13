@@ -17,7 +17,7 @@ using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
 namespace Odip.Tests.PlanPricing;
 
 /// <summary>
-/// The onboarding checklist's "service needs" step (<c>POST participants/{id}/onboarding/service-needs-confirmation</c>) asks for a current dated draft with valid catalogue-priced lines.
+/// The onboarding checklist's "Service needs" item (derived, <c>GET inquiries/{id}/onboarding</c>) asks for a current dated draft with valid catalogue-priced lines.
 /// A hand-typed line was priced on the agreement's start date, so its catalogue row had to be valid on that date. A line the plan builder generates is priced on the date of each shift, so a plan
 /// that crosses a catalogue price change has a line whose row starts AFTER the agreement does, and that is a correct draft, not an invalid one.
 /// </summary>
@@ -52,6 +52,12 @@ public class DraftServiceNeedsGateTests
         return participant;
     }
 
+    private static async Task<bool> ServiceNeedsDoneAsync(OdipDbContext db, Participant participant)
+    {
+        var ok = Assert.IsType<OkObjectResult>((await Controller(db).GetOnboarding(participant.Id, CancellationToken.None)).Result);
+        return Assert.IsType<ApiResponse<ParticipantOnboardingDto>>(ok.Value).Data!.Items.Single(i => i.Key == "serviceNeeds").Done;
+    }
+
     [Fact]
     public async Task A_plan_of_blocks_that_crosses_a_catalogue_price_change_passes_the_gate_although_a_line_starts_after_the_agreement()
     {
@@ -76,10 +82,7 @@ public class DraftServiceNeedsGateTests
         Assert.Contains(draft.Lines, l => l.CatalogueEffectiveFrom == new DateOnly(2026, 7, 1));
         Assert.All(draft.Lines, l => Assert.False(string.IsNullOrEmpty(l.BlockKey)));
 
-        var result = await Controller(db).ConfirmServiceNeeds(participant.Id, CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.True(Assert.IsType<ApiResponse<ParticipantOnboardingDto>>(ok.Value).Data!.ServiceTypeConfirmed);
+        Assert.True(await ServiceNeedsDoneAsync(db, participant));
     }
 
     [Fact]
@@ -102,8 +105,6 @@ public class DraftServiceNeedsGateTests
         });
         await db.SaveChangesAsync();
 
-        var result = await Controller(db).ConfirmServiceNeeds(participant.Id, CancellationToken.None);
-
-        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.False(await ServiceNeedsDoneAsync(db, participant));
     }
 }

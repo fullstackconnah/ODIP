@@ -105,10 +105,10 @@ public class ParticipantAlertsService
 
         var participantsQuery = _db.Participants.AsQueryable();
         if (participantId.HasValue) participantsQuery = participantsQuery.Where(p => p.Id == participantId.Value);
-        // INTAKE-08: the aggregate (activeOnly=true) also excludes drafts, same reasoning as the
+        // INTAKE-08: the aggregate (activeOnly=true) also excludes drafts whose services have not begun, same reasoning as the
         // archived-participant exclusion right above — a draft's incomplete data (e.g. no
         // PlanEndDate yet) shouldn't surface as a permanent alert on the participants table.
-        if (activeOnly) participantsQuery = participantsQuery.Where(p => p.IsActive && !p.IsDraft);
+        if (activeOnly) participantsQuery = participantsQuery.Where(Participant.CanReceiveServicesRule);
 
         var participants = await participantsQuery
             .Select(p => new

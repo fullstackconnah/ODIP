@@ -936,5 +936,6 @@
   "hasActiveMedications": false,
   "isDraft": false,
   "readinessIssues": null,
-  "intakeCompletedAt": null
+  "intakeCompletedAt": null,
+  "servicesStartedAt": null
 }

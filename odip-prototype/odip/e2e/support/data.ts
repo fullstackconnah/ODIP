@@ -14,19 +14,20 @@ export function uniqueToken(prefix = 'E2E'): string {
 
 export interface Created { id: string; token: string; [k: string]: any }
 
-/** Participant created through intake and completed, so it ends up active (readiness mode Warn). */
+/**
+ * Participant created through intake (finalised), then switched on through the status endpoint, as the Active tab does: saving a participant never
+ * activates them (owner decision 2026-10-13). Readiness mode Warn.
+ */
 export async function makeParticipant(coord: Session, token = uniqueToken()): Promise<Created> {
   const created = await expectStatus('create participant', 201, await call(coord, 'POST', '/participants', {
     firstName: 'Pw', lastName: token, isDraft: false, completeIntake: true,
   }));
   const id = created.data.id as string;
-  const done = await expectStatus('complete participant', 200, await call(coord, 'PUT', `/participants/${id}`, {
-    firstName: 'Pw', lastName: token, isDraft: false,
-  }));
+  const done = await expectStatus('activate participant', 200, await call(coord, 'POST', `/participants/${id}/status`, { isActive: true }));
   if (done.data.isActive !== true) {
-    throw new Error('participant not active after profile save: readiness gate is strict (is PR #169 / Warn mode missing?)');
+    throw new Error('participant not active after the status change: readiness gate is strict (is Warn mode missing?)');
   }
-  return { ...done.data, id, token };
+  return { ...created.data, ...done.data, id, token };
 }
 
 /**

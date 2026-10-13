@@ -15,11 +15,10 @@ import {
 } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
-const { mockUseParticipant, mockPatchMutateAsync, mockUpdateMutateAsync, mockCompleteMutateAsync, mockUpsertRiskItemMutateAsync } = vi.hoisted(() => ({
+const { mockUseParticipant, mockPatchMutateAsync, mockUpdateMutateAsync, mockUpsertRiskItemMutateAsync } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockPatchMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
-  mockCompleteMutateAsync: vi.fn(),
   mockUpsertRiskItemMutateAsync: vi.fn(),
 }))
 
@@ -27,7 +26,6 @@ vi.mock('@/api/hooks', () => ({
   useParticipant: mockUseParticipant,
   usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
   useUpdateParticipant: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
-  useCompleteParticipantProfile: () => ({ mutateAsync: mockCompleteMutateAsync, isPending: false }),
   useUpsertCommunityAccessRiskItem: () => ({ mutateAsync: mockUpsertRiskItemMutateAsync }),
   useStaff: () => ({ data: [{ id: 'staff-1', firstName: 'Alex', lastName: 'Rivera', fullName: 'Alex Rivera', isActive: true }] }),
   // The embedded Contacts editor (KeyIdentifiersStep) and the plan-type banner read the participant's contacts.
@@ -98,7 +96,6 @@ beforeEach(() => {
   mockUpsertRiskItemMutateAsync.mockReset()
   mockPatchMutateAsync.mockResolvedValue({ success: true })
   mockUpdateMutateAsync.mockResolvedValue({ success: true })
-  mockCompleteMutateAsync.mockReset().mockResolvedValue({ success: true })
   mockUpsertRiskItemMutateAsync.mockResolvedValue({ success: true })
 })
 
@@ -614,7 +611,7 @@ describe('ProfileWizardPage — wizard shell + history-aware back', () => {
   })
 })
 
-// NAV F4: Edit from a tab of the record (Funding) must come back to that tab, on Save and on Cancel, as the header Back does.
+// NAV F4: Edit from a tab of the record (Funding) must come back to that tab, on Save profile and on Cancel, as the header Back does.
 describe('ProfileWizardPage — Save and Cancel return to where Edit was clicked', () => {
   function Detail() {
     const location = useLocation()
@@ -642,15 +639,15 @@ describe('ProfileWizardPage — Save and Cancel return to where Edit was clicked
     expect(await screen.findByTestId('detail')).toHaveTextContent('/participants/participant-1?tab=funding')
   })
 
-  it('Complete Profile for a participant who is already finalised returns to the Funding tab', async () => {
+  it('Save profile returns to the Funding tab', async () => {
     const user = userEvent.setup()
     renderFromFunding()
     await expectStep(/key identifiers/i)
-    for (let i = 1; i < 12 && !screen.queryByRole('button', { name: /complete profile/i }); i++) {
+    for (let i = 1; i < 12 && !screen.queryByRole('button', { name: /save profile/i }); i++) {
       await user.click(screen.getByRole('button', { name: /^next$/i }))
       await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(i))
     }
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
     expect(await screen.findByTestId('detail')).toHaveTextContent('/participants/participant-1?tab=funding')
   })
 })

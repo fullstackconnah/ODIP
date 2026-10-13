@@ -29,7 +29,12 @@ export function useCreateServiceAgreementDraft() {
   return useMutation({
     mutationFn: ({ participantId, data }: { participantId: string; data: CreateServiceAgreementDraftDto }) =>
       apiPost<ServiceAgreementDraftDto>(path(participantId), data),
-    onSuccess: (_, { participantId }) => queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
+    onSuccess: (_, { participantId }) => {
+      queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] })
+      // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
+      queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
+      queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+    },
   })
 }
 

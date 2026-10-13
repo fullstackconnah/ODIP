@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import { Dropdown } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Modal } from '@/components/Modal'
@@ -81,7 +82,7 @@ export default function MarTab() {
   const [participantId, setParticipantId] = useState('')
   const { data: mar, isLoading, isError, refetch } = useMar(date, participantId || undefined)
   // INTAKE-08: the medication picker excludes drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
   const recordPrnOutcome = useRecordPrnOutcome()
 
   const [recordingSlot, setRecordingSlot] = useState<MarEntryDto | null>(null)

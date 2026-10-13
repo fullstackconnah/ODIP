@@ -12,7 +12,7 @@ vi.mock('../client', async () => {
 })
 
 import { apiClient } from '../client'
-import { APPROVE_TIMEOUT_MS, fileNameFromDisposition, useApprovalPreview, useApproveServiceAgreementDraft, useDownloadServiceAgreementDraftPdf } from './service-agreement-drafts'
+import { APPROVE_TIMEOUT_MS, fileNameFromDisposition, useApprovalPreview, useApproveServiceAgreementDraft, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf } from './service-agreement-drafts'
 
 const wrapper = (client: QueryClient) => function Wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -165,5 +165,19 @@ describe('useDownloadServiceAgreementDraftPdf', () => {
     await act(async () => { await result.current.mutateAsync({ participantId: 'p1', id: 'd1' }) })
 
     expect(names).toEqual(['service-agreement-draft-vd1.pdf'])
+  })
+})
+
+describe('useCreateServiceAgreementDraft', () => {
+  it('refreshes the onboarding checklist and the worklist too: their "Service needs" item reads the newest draft (V6)', async () => {
+    apiPost.mockResolvedValue({ id: 'd3', version: 3 })
+    const client = new QueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => useCreateServiceAgreementDraft(), { wrapper: wrapper(client) })
+
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', data: {} as never }) })
+
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
+    expect(keys).toEqual(expect.arrayContaining([['service-agreement-drafts', 'p1'], ['onboarding', 'p1'], ['participant-onboarding-worklist']]))
   })
 })

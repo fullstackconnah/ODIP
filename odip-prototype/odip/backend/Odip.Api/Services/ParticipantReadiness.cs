@@ -12,8 +12,8 @@ public enum ActivationBlock { None, EvidenceRequired, FundingNotRecorded }
 /// <summary>What a readiness check decided for one participant, and what is missing.</summary>
 /// <param name="Allowed">
 /// Whether a new placement (a shift, a pattern, a compatibility row, a trip booking) may be made.
-/// Always false for a participant who does not exist in the caller's tenant, is a draft, or is not
-/// active, in either mode. Otherwise: Warn allows it; Enforce allows it only when the strict
+/// Always false for a participant who does not exist in the caller's tenant or cannot receive services (inactive, or a draft whose
+/// services have not begun: <see cref="Participant.CanReceiveServicesRule"/>), in either mode. Otherwise: Warn allows it; Enforce allows it only when the strict
 /// <see cref="ParticipantReadinessGate"/> predicate accepts the participant.
 /// </param>
 /// <param name="Mode">The participant's organisation's readiness mode.</param>
@@ -112,7 +112,7 @@ public static class ParticipantReadiness
     {
         var participant = await db.Participants.AsNoTracking()
             .Where(p => p.Id == participantId)
-            .Select(p => new { p.TenantId, p.IsActive, p.IsDraft })
+            .Select(p => new { p.TenantId })
             .FirstOrDefaultAsync(ct);
         if (participant is null)
             return new ParticipantReadinessResult(false, ParticipantReadinessMode.Warn, Array.Empty<string>());
@@ -121,26 +121,22 @@ public static class ParticipantReadiness
         var issues = (await IssuesAsync(db, new[] { participantId }, ct)).GetValueOrDefault(participantId)
             ?? new List<string>();
 
-        // Enforce goes through the existing strict predicate, unchanged. Warn is that same rule
-        // minus the evidence requirement: the participant must still exist, be active, and not be a draft.
+        // Enforce goes through the existing strict predicate, unchanged. Warn needs only that the participant can receive services
+        // (Participant.CanReceiveServicesRule): active, and finalised or a draft whose services have begun.
         var allowed = enforced
             ? await ParticipantReadinessGate.IsActiveReadyAsync(db, participantId, ct)
-            : participant.IsActive && !participant.IsDraft;
+            : await db.Participants.Where(p => p.Id == participantId).AnyAsync(Participant.CanReceiveServicesRule, ct);
 
         return new ParticipantReadinessResult(
             allowed, enforced ? ParticipantReadinessMode.Enforce : ParticipantReadinessMode.Warn, issues);
     }
 
     /// <summary>
-    /// May an inactive, non-draft participant be activated? Warn: yes. Enforce: only when persisted, tenant-matched evidence exists
-    /// (<see cref="ParticipantReadinessGate.HasActivationEvidenceAsync"/>) AND, for an NDIS-funded participant, a plan budget is recorded that has not ended
-    /// (<see cref="ParticipantReadinessGate.HasFundingRecordedAsync"/>, judged on the provider's calendar date). The caller still decides draft state; this answers the
-    /// readiness question only. Activation is the ONLY place the plan budget is asked for: placement (<see cref="CheckAsync"/>) never is.
+    /// What stops this activation, for the refusal message: nothing (<see cref="ActivationBlock.None"/>), the missing agreement evidence, or the missing plan budget.
+    /// Warn never blocks. Enforce needs persisted, tenant-matched evidence (<see cref="ParticipantReadinessGate.HasActivationEvidenceAsync"/>) AND, for an NDIS-funded
+    /// participant, a plan budget that has not ended (provider's calendar date). The caller decides draft state. Activation is the ONLY place the plan budget is asked
+    /// for: placement (<see cref="CheckAsync"/>) never is.
     /// </summary>
-    public static async Task<bool> MayActivateAsync(OdipDbContext db, Participant participant, TimeProvider clock, CancellationToken ct) =>
-        await ActivationBlockAsync(db, participant, clock, ct) == ActivationBlock.None;
-
-    /// <summary>What stops this activation, for the refusal message: nothing (<see cref="ActivationBlock.None"/>), the missing agreement evidence, or the missing plan budget.</summary>
     public static async Task<ActivationBlock> ActivationBlockAsync(OdipDbContext db, Participant participant, TimeProvider clock, CancellationToken ct)
     {
         if (!await IsEnforcedAsync(db, participant.TenantId, ct)) return ActivationBlock.None;
@@ -188,7 +184,7 @@ public static class ParticipantReadiness
     /// <summary>
     /// What is missing for each participant, computed from data that exists today. One entry per
     /// participant found (an empty list when nothing is missing); ids that do not exist in the
-    /// caller's tenant are absent. Three queries however many participants there are. These are the issues every OPERATIONAL surface carries (the roster, the pickers, the register):
+    /// caller's tenant are absent. Five queries however many participants there are. These are the issues every OPERATIONAL surface carries (the roster, the pickers, the register):
     /// the activation checklist adds the plan budget on top, in <see cref="ActivationIssuesAsync"/>, and nothing here ever lists it.
     /// </summary>
     public static async Task<Dictionary<Guid, List<string>>> IssuesAsync(
@@ -206,12 +202,11 @@ public static class ParticipantReadiness
 
         var onboardings = await db.ParticipantOnboardings.AsNoTracking()
             .Where(o => ids.Contains(o.ParticipantId))
-            .Select(o => new
-            {
-                o.ParticipantId, o.TenantId, o.ProfileComplete, o.ProfileCompletedAt,
-                o.ServiceTypeConfirmed, o.ServiceTypeConfirmedAt,
-            })
+            .Select(o => new { o.ParticipantId, o.TenantId })
             .ToListAsync(ct);
+        // The checklist's derived items, as the checklist reads them (ParticipantReadinessGate).
+        var profileDone = (await ParticipantReadinessGate.ProfileDetailsParticipants(db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        var serviceNeedsDone = (await ParticipantReadinessGate.ServiceNeedsParticipants(db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
 
         var signed = (await SignedAgreementParticipants(db)
             .Where(p => ids.Contains(p.Id))
@@ -229,10 +224,8 @@ public static class ParticipantReadiness
             var onboarding = onboardings.FirstOrDefault(o => o.ParticipantId == person.Id && o.TenantId == person.TenantId);
             if (onboarding is not null)
             {
-                if (!(onboarding.ProfileComplete && onboarding.ProfileCompletedAt != null))
-                    issues.Add(OnboardingProfileNotComplete);
-                if (!(onboarding.ServiceTypeConfirmed && onboarding.ServiceTypeConfirmedAt != null))
-                    issues.Add(OnboardingServiceTypeNotComplete);
+                if (!profileDone.Contains(person.Id)) issues.Add(OnboardingProfileNotComplete);
+                if (!serviceNeedsDone.Contains(person.Id)) issues.Add(OnboardingServiceTypeNotComplete);
             }
 
             if (!signed.Contains(person.Id)) issues.Add(NoSignedServiceAgreement);

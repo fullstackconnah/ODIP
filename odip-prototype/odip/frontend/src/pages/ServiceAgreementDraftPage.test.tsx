@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, confirmPost, drafts, participant, plans, budget, check, refetchDrafts, previewFor } = vi.hoisted(() => ({
-  createMutate: vi.fn(), downloadMutate: vi.fn(), confirmPost: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
+const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor } = vi.hoisted(() => ({
+  createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -15,7 +15,6 @@ vi.mock('@/api/hooks', () => ({
   useCreateServiceAgreementDraft: () => ({ mutate: createMutate, isPending: false }),
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: downloadMutate, isPending: false, isError: false }),
   useFundingPlans: () => plans(),
-  useConfirmServiceNeeds: (participantId: string) => ({ mutate: () => confirmPost(participantId), isPending: false, isSuccess: false, isError: false }),
   useApprovalPreview: (_participantId: string, draftId: string) => previewFor(draftId) ?? { data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() },
   useApproveServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
   usePlanPricingSettings: () => ({ data: makeSettings() }),
@@ -54,7 +53,7 @@ beforeEach(() => {
   budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
   check.mockReturnValue({ data: agreementCheck(0), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
   refetchDrafts.mockResolvedValue({ data: [], isError: false })
-  createMutate.mockReset(); downloadMutate.mockReset(); confirmPost.mockReset(); previewFor.mockReset()
+  createMutate.mockReset(); downloadMutate.mockReset(); previewFor.mockReset()
 })
 afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
@@ -235,17 +234,12 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     expect(screen.getByRole('button', { name: 'Load their agreement' })).toBeInTheDocument()
   })
 
-  it('confirms the service needs from onboarding, and only from onboarding', async () => {
+  it('asks for no "Confirm service needs", even from onboarding: the checklist reads the saved agreement itself', async () => {
     drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
-    confirmPost.mockResolvedValue({})
     const user = userEvent.setup()
-    const { unmount } = renderPage('/participants/p-1/agreement-draft?from=onboarding')
+    renderPage('/participants/p-1/agreement-draft?from=onboarding')
     await user.click(stepButton('Save'))
-    await user.click(screen.getByRole('button', { name: 'Confirm service needs' }))
-    await waitFor(() => expect(confirmPost).toHaveBeenCalledWith('p-1'))
-    unmount()
-    renderPage()
-    await user.click(stepButton('Save'))
+    expect(screen.getByRole('button', { name: 'Download agreement PDF' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Confirm service needs' })).not.toBeInTheDocument()
   })
 
@@ -286,7 +280,7 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     expect(screen.getByText('Draft PDFs are informational only — not signed and not billing authority.')).toBeInTheDocument()
   })
 
-  it('acts on the version on screen, not on a newer one read since: the PDF, the approval and Confirm service needs', async () => {
+  it('acts on the version on screen, not on a newer one read since: the PDF and the approval', async () => {
     drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
     const user = userEvent.setup()
     renderPage('/participants/p-1/agreement-draft?from=onboarding')
@@ -296,7 +290,6 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     await user.click(stepButton('Save'))
     await user.click(screen.getByRole('button', { name: 'Download agreement PDF' }))
     expect(downloadMutate).toHaveBeenCalledWith({ participantId: 'p-1', id: 'd-2' })
-    expect(screen.queryByRole('button', { name: 'Confirm service needs' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Mark approved for rostering' }))
     expect(previewFor).toHaveBeenLastCalledWith('d-2')
   })

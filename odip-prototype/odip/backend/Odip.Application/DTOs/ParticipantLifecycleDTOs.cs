@@ -52,40 +52,53 @@ public record CreateParticipantInquiryDto
 public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto;
 public record ConvertParticipantInquiryDto { public Guid? ParticipantId { get; init; } }
 
-/// <summary>Read-only, server-derived onboarding state; clients cannot set any step status.</summary>
+/// <summary>
+/// The onboarding checklist (owner decision 2026-10-13), read-only and derived from data: clients cannot tick an item. Exactly four items,
+/// three for a participant who is not NDIS-funded (no "Funding" item), in this order.
+/// </summary>
 public record ParticipantOnboardingDto
 {
     public Guid ParticipantId { get; init; }
-    public bool IntakeComplete { get; init; }
-    public bool ProfileComplete { get; init; }
-    public DateTime? ProfileCompletedAt { get; init; }
-    public string? ProfileCompletedBy { get; init; }
-    public bool ServiceTypeConfirmed { get; init; }
-    public DateTime? ServiceTypeConfirmedAt { get; init; }
-    public string? ServiceTypeConfirmedBy { get; init; }
-    public bool ServiceAgreementSigned { get; init; }
-    /// <summary>
-    /// The "Funding recorded" step of the activation checklist: whether an NDIS-funded participant has a plan budget on record that has not ended (provider time). Null when the step
-    /// does not apply, because the participant is not NDIS-funded: the checklist does not show it. Money is not here, only whether a plan is recorded.
-    /// </summary>
-    public bool? FundingRecorded { get; init; }
+    public List<OnboardingChecklistItemDto> Items { get; init; } = [];
+    /// <summary>Every item is done.</summary>
     public bool IsReady { get; init; }
-    public List<string> Reasons { get; init; } = [];
-    /// <summary>The newest revision of the participant's service agreement that has been approved for rostering (plan builder, phase D), and when: the schedule review gate says so. Null until one has.</summary>
-    public int? ScheduleApprovedVersion { get; init; }
-    public DateTime? ScheduleApprovedAt { get; init; }
+    /// <summary>When "Begin services" was used; null until then.</summary>
+    public DateTime? ServicesStartedAt { get; init; }
+    /// <summary>The agreement record, for the form that edits it: a signed date or a reason there is no written agreement (at most one is set).</summary>
+    public DateOnly? AgreementSignedOn { get; init; }
+    public string? NoAgreementReason { get; init; }
 }
 
-/// <summary>Server-derived worklist row; clients cannot choose a lifecycle stage.</summary>
+/// <summary>
+/// One checklist item. <see cref="Key"/> names it and the screen's fix for it: <c>profile</c> (Edit profile), <c>serviceNeeds</c> (Open agreement
+/// draft), <c>agreement</c> (Record it: POST .../onboarding/agreement-record), <c>funding</c> (the Funding tab).
+/// </summary>
+public record OnboardingChecklistItemDto
+{
+    public string Key { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public bool Done { get; init; }
+    /// <summary>One line saying what is missing; null when the item is done.</summary>
+    public string? Missing { get; init; }
+}
+
+/// <summary>POST /inquiries/{id}/onboarding/agreement-record: exactly one of the two, validated by the server.</summary>
+public record RecordOnboardingAgreementDto
+{
+    public DateOnly? SignedOn { get; init; }
+    public string? NoAgreementReason { get; init; }
+}
+
+/// <summary>Server-derived worklist row (the Onboarding tab); clients cannot choose a lifecycle stage.</summary>
 public record ParticipantOnboardingWorklistDto
 {
     public Guid ParticipantId { get; init; }
     public string FullName { get; init; } = string.Empty;
-    public string Stage { get; init; } = string.Empty;
-    public string NextAction { get; init; } = string.Empty;
+    public DateTime? ServicesStartedAt { get; init; }
     public int CompletedSteps { get; init; }
-    public int TotalSteps { get; init; } = 5;
-    public List<string> Reasons { get; init; } = [];
+    public int TotalSteps { get; init; }
+    /// <summary>The label of the first item still open; null when every item is done.</summary>
+    public string? FirstMissing { get; init; }
 }
 
 /// <summary>

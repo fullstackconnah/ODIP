@@ -7,6 +7,12 @@ import type { ParticipantAdlAssessmentDto, CreateParticipantAdlAssessmentDto } f
 import type { ParticipantChecklistItemDto, CreateParticipantChecklistItemDto } from './checklist-items'
 import type { ParticipantCommunityAccessRiskItemDto, CreateParticipantCommunityAccessRiskItemDto } from './community-access-risk-items'
 
+/** The list filter of pickers about records that outlive services (incidents, the medication report): past the start of services (finalised, or a draft whose services have begun), archived participants KEPT. The server's ServicesBegunRule. */
+export const SERVICES_BEGUN = { servicesBegun: 'true' }
+
+/** The list filter of operational pickers (roster, patterns, compatibility, MAR, trip bookings): who can receive services, the server's one rule (active, and finalised or services started). Archived participants and drafts whose services have not begun are left out. */
+export const CAN_RECEIVE_SERVICES = { canReceiveServices: 'true' }
+
 export const GENDER_LABELS: Record<Gender, string> = {
   Male: 'Male',
   Female: 'Female',
@@ -262,6 +268,8 @@ export interface ParticipantListDto {
    * none of them assert on.
    */
   intakeCompletedAt?: string | null
+  /** When "Begin services" was used on the onboarding checklist: a draft that can receive services while still onboarding. Optional like `intakeCompletedAt`. */
+  servicesStartedAt?: string | null
   /**
    * What is still missing before this participant is fully ready to roster, book or activate (e.g. "Intake not complete",
    * "No signed service agreement"), shown verbatim as a quiet warning. Omitted by the server when nothing is missing.

@@ -9,6 +9,7 @@ import { Callout } from '@/components/Callout'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { useParticipants, useStaff, useUpsertCompatibility } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { CompatibilityLevel, CompatibilityRowDto } from '@/api/types'
 import { useCompatibilityMatrix } from './lib/useCompatibilityMatrix'
 
@@ -88,7 +89,7 @@ function CompatibilityMatrixSkeleton() {
 export default function CompatibilityPage() {
   const { canWrite } = usePermissions()
   // INTAKE-08: the compatibility matrix excludes drafts.
-  const { data: participants = [], isLoading: participantsLoading, isError: participantsError, refetch: refetchParticipants } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [], isLoading: participantsLoading, isError: participantsError, refetch: refetchParticipants } = useParticipants(CAN_RECEIVE_SERVICES)
   const { data: staff = [], isLoading: staffLoading, isError: staffError, refetch: refetchStaff } = useStaff()
 
   // PP-53: text filters on a matrix that can otherwise grow unbrowsably wide/tall.

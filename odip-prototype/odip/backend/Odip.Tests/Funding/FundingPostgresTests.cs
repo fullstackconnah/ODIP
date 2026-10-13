@@ -11,6 +11,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Postgres;
+using Odip.Tests.Support;
 using Xunit;
 using static Odip.Tests.Funding.FundingTestKit;
 
@@ -122,7 +123,7 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
         db.Tenants.Add(new Tenant { Id = tenantId, Name = "Live Provider", EmailDomain = $"{tenantId:N}.example.com" });
         db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Live Provider", State = "NSW", BSB = "062000", AccountNumber = "12345678" });
         db.Participants.Add(new Participant { Id = participantId, TenantId = tenantId, FirstName = "Live", LastName = "Participant", IsActive = true, PlanStartDate = D(2026, 7, 1), PlanEndDate = D(2027, 6, 30) });
-        await db.SaveChangesAsync();
+        await OlderSchemaSeeds.SaveWithLaterParticipantColumnsAsync(db);
 
         // 2. The migration applies without error and keeps every one of them as it was.
         await migrator.MigrateAsync();
