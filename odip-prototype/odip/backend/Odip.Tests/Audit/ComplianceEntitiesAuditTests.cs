@@ -267,4 +267,29 @@ public class ComplianceEntitiesAuditTests
         Assert.Contains("Status", updateLog.Changes);
         Assert.Contains("Completed", updateLog.Changes);
     }
+
+    // The checklist's "Signed agreement" record is a compliance record (Practice Standards: a signed copy, or why there is none). A new record replaces
+    // the last in place, so the history has to live in the audit trail (LIFE fix round 1, V8).
+    [Fact]
+    public async Task ParticipantOnboarding_AgreementRecordReplaced_KeepsBothVersionsInTheAuditTrail()
+    {
+        var actor = Guid.NewGuid();
+        using var db = CreateDb(actor);
+        var participant = NewParticipant();
+        var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = participant.Id };
+        db.AddRange(participant, onboarding);
+        await db.SaveChangesAsync();
+
+        onboarding.RecordAgreement(new DateOnly(2026, 10, 2), null, "coordinator-1", DateTime.UtcNow);
+        await db.SaveChangesAsync();
+        onboarding.RecordAgreement(null, "Participant chose not to have a written agreement.", "coordinator-1", DateTime.UtcNow);
+        await db.SaveChangesAsync();
+
+        var updates = await db.AuditLogs.Where(a => a.EntityType == nameof(ParticipantOnboarding) && a.EntityId == onboarding.Id && a.Action == AuditAction.Updated)
+            .OrderBy(a => a.ChangedAt).ToListAsync();
+        Assert.Equal(2, updates.Count);
+        var signedOn = System.Text.Json.JsonDocument.Parse(updates[1].Changes).RootElement.EnumerateArray().Single(c => c.GetProperty("Field").GetString() == "AgreementSignedOn");
+        Assert.False(string.IsNullOrEmpty(signedOn.GetProperty("Old").GetString()));   // the replaced date is kept
+        Assert.Contains("Participant chose not to have a written agreement.", updates[1].Changes);
+    }
 }

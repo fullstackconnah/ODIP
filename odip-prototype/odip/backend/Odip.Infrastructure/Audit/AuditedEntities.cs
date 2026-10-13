@@ -11,6 +11,8 @@ public static class AuditedEntities
     {
         typeof(TripInstance),
         typeof(Participant),
+        // Its "Signed agreement" record (a signed date, or why there is no written agreement) is a compliance record replaced in place, so its history lives here.
+        typeof(ParticipantOnboarding),
         typeof(ParticipantBooking),
         typeof(IncidentReport),
         typeof(User),

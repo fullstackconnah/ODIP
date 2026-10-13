@@ -242,7 +242,7 @@ public class RosteringControllerTests
         var body = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         var row = Assert.Single(body.Data!.ParticipantRows!, r => r.ParticipantId == started.Id);
         Assert.True(row.InOnboarding);
-        Assert.DoesNotContain(body.Data.ParticipantRows, r => r.ParticipantId == archived.Id);
+        Assert.DoesNotContain(body.Data.ParticipantRows!, r => r.ParticipantId == archived.Id);
     }
 
     // ── Blocking finding gate ────────────────────────────────────────────
