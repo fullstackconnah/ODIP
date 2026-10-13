@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
@@ -218,5 +219,128 @@ public class EmploymentHeroControllerTests
 
         Assert.Equal((false, 0, 0), (status.Connected, status.StaffLinked, status.StaffNotLinked));
         Assert.Empty(status.Attention);
+    }
+
+    private static async Task<(OdipDbContext Db, Guid Tenant, User Jane, EmploymentHeroAttention Item)> WaitingJaneAsync()
+    {
+        var (db, tenant) = await OrganisationAsync(connected: true);
+        var jane = EhFixture.Staff(tenant, "Jane", "Smith", "jane@gmail.com");
+        var item = new EmploymentHeroAttention
+        {
+            Id = Guid.NewGuid(), TenantId = tenant, Key = $"NotLinked:{jane.Id}", Kind = EmploymentHeroAttentionKind.NotLinked, UserId = jane.Id,
+            ExternalEmployeeId = "301", Name = "Jane Smith", Reason = "No Employment Hero employee has their email.",
+        };
+        db.Users.Add(jane);
+        db.EmploymentHeroAttentions.Add(item);
+        await db.SaveChangesAsync();
+        return (db, tenant, jane, item);
+    }
+
+    [Fact]
+    public async Task The_picker_lists_only_EH_employees_nobody_here_is_linked_to()
+    {
+        var (db, tenant, _, _) = await WaitingJaneAsync();
+        await using var __ = db;
+
+        var employees = Data(await Controller(db, tenant, Eh(Employee(301, "Jane", "Smith", "jane.smith@acme.org.au"))).UnlinkedEmployees(CancellationToken.None));
+
+        Assert.Equal(new[] { new EmploymentHeroEmployeeDto("301", "Jane Smith", "jane.smith@acme.org.au") }, employees);   // Ada (EH id 1) is linked
+    }
+
+    [Fact]
+    public async Task Link_ties_the_waiting_person_to_the_EH_employee_and_clears_the_item()
+    {
+        var (db, tenant, jane, item) = await WaitingJaneAsync();
+        await using var _ = db;
+        var eh = new StubHttpHandler().On("/api/v2/business/777/employee/301/details", HttpStatusCode.OK, Employee(301, "Jane", "Smith", "jane.smith@acme.org.au"));
+
+        var status = Data(await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("301"), CancellationToken.None));
+
+        Assert.Equal("301", jane.ExternalPayrollId);
+        Assert.Empty(status.Attention);
+        Assert.Empty(db.EmploymentHeroAttentions);
+    }
+
+    [Fact]
+    public async Task Link_refuses_an_EH_employee_already_linked_or_unknown_to_EH()
+    {
+        var (db, tenant, jane, item) = await WaitingJaneAsync();
+        await using var _ = db;
+        var eh = new StubHttpHandler();   // EH answers 404 for employee 999
+
+        var taken = await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("1"), CancellationToken.None);   // Ada's
+        var unknown = await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("999"), CancellationToken.None);
+
+        Assert.Equal((409, "That Employment Hero employee is already linked to someone in ODIP."), Refusal(taken));
+        Assert.Equal((400, "Employment Hero couldn't find that business or employee for this API key."), Refusal(unknown));
+        Assert.Null(jane.ExternalPayrollId);
+        Assert.Single(db.EmploymentHeroAttentions);
+    }
+
+    [Fact]
+    public async Task Leave_unlinked_hides_the_item_and_the_next_sync_keeps_it_hidden()
+    {
+        var (db, tenant, jane, item) = await WaitingJaneAsync();
+        await using var _ = db;
+
+        var dismissed = Data(await Controller(db, tenant, Eh()).Dismiss(item.Id, CancellationToken.None));
+        var afterSync = Data(await Controller(db, tenant, Eh()).SyncNow(CancellationToken.None));
+
+        Assert.Empty(dismissed.Attention);
+        Assert.Empty(afterSync.Attention);
+        Assert.Null(jane.ExternalPayrollId);
+        Assert.Equal(1, afterSync.StaffNotLinked);
+    }
+
+    [Fact]
+    public async Task Another_organisations_item_cannot_be_linked_or_dismissed()
+    {
+        var (db, _, _, item) = await WaitingJaneAsync();
+        await using var __ = db;
+        // Another organisation's Admin. The controller's own organisation check is under test here; in production the query filter is a second wall.
+        var stranger = Guid.NewGuid();
+
+        var link = await Controller(db, stranger, Eh()).Link(item.Id, new EmploymentHeroLinkDto("301"), CancellationToken.None);
+        var dismiss = await Controller(db, stranger, Eh()).Dismiss(item.Id, CancellationToken.None);
+
+        Assert.Equal(404, Refusal(link).Status);
+        Assert.Equal(404, Refusal(dismiss).Status);
+        Assert.Null((await db.EmploymentHeroAttentions.SingleAsync()).DismissedAt);
+    }
+
+    /// <summary>A save the database refuses, as the payroll-id index does when the sync linked the same EH employee a moment earlier.</summary>
+    private sealed class RefusingSave : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            throw new DbUpdateException("duplicate key value violates unique constraint \"IX_Users_TenantId_ExternalPayrollId\"");
+    }
+
+    [Fact]
+    public async Task A_link_that_loses_a_race_with_the_sync_answers_409_not_500()
+    {
+        var name = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        Guid itemId;
+        await using (var setup = Db(name, tenant))
+        {
+            await ConnectAsync(setup, tenant);
+            var jane = EhFixture.Staff(tenant, "Jane", "Smith", "jane@gmail.com");
+            var item = new EmploymentHeroAttention
+            {
+                Id = Guid.NewGuid(), TenantId = tenant, Key = $"NotLinked:{jane.Id}", Kind = EmploymentHeroAttentionKind.NotLinked, UserId = jane.Id,
+                Name = "Jane Smith", Reason = "No Employment Hero employee has their email.",
+            };
+            setup.Users.Add(jane);
+            setup.EmploymentHeroAttentions.Add(item);
+            await setup.SaveChangesAsync();
+            itemId = item.Id;
+        }
+        await using var racing = new OdipDbContext(
+            new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name).AddInterceptors(new RefusingSave()).Options, ImportTestSupport.Tenant(tenant));
+        var eh = new StubHttpHandler().On("/api/v2/business/777/employee/301/details", HttpStatusCode.OK, Employee(301, "Jane", "Smith", "jane.smith@acme.org.au"));
+
+        var result = await Controller(racing, tenant, eh).Link(itemId, new EmploymentHeroLinkDto("301"), CancellationToken.None);
+
+        Assert.Equal((409, "That Employment Hero employee is already linked to someone in ODIP."), Refusal(result));
     }
 }

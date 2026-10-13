@@ -140,6 +140,89 @@ public class EmploymentHeroController : ControllerBase
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
     }
 
+    /// <summary>The Link picker: the EH employees nobody in this organisation is linked to. Read live from EH; nothing is stored.</summary>
+    [HttpGet("employees")]
+    public async Task<ActionResult<ApiResponse<List<EmploymentHeroEmployeeDto>>>> UnlinkedEmployees(CancellationToken ct)
+    {
+        if (TenantId is not { } tenantId) return BadRequest(ApiResponse<List<EmploymentHeroEmployeeDto>>.Fail(ChooseOrganisation));
+        if (await SavedKeyAsync(tenantId, ct) is not { } saved) return Conflict(ApiResponse<List<EmploymentHeroEmployeeDto>>.Fail(EmploymentHeroStaffSync.KeyUnreadableMessage));
+        List<EhEmployee> employees;
+        try
+        {
+            employees = await _client.ListEmployeesAsync(saved.Key, saved.BusinessId, ct);
+        }
+        catch (EmploymentHeroException ex)
+        {
+            return Refused(ex);
+        }
+
+        var linked = (await _db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null).Select(u => u.ExternalPayrollId!).ToListAsync(ct)).ToHashSet();
+        return Ok(ApiResponse<List<EmploymentHeroEmployeeDto>>.Ok(employees
+            .Select(e => new EmploymentHeroEmployeeDto(e.Id.ToString(CultureInfo.InvariantCulture), $"{e.FirstName} {e.Surname}".Trim(), e.EmailAddress))
+            .Where(e => !linked.Contains(e.Id))
+            .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList()));
+    }
+
+    /// <summary>Links a waiting ODIP staff member (a NotLinked item) to an EH employee. The next sync brings EH's details over, since EH is the master. Audited as the Admin.</summary>
+    [HttpPost("attention/{id:guid}/link")]
+    public async Task<ActionResult<ApiResponse<EmploymentHeroStatusDto>>> Link(Guid id, [FromBody] EmploymentHeroLinkDto dto, CancellationToken ct)
+    {
+        if (TenantId is not { } tenantId) return BadRequest(ApiResponse<EmploymentHeroStatusDto>.Fail(ChooseOrganisation));
+        var employeeId = dto.EmployeeId?.Trim();
+        if (string.IsNullOrEmpty(employeeId)) return BadRequest(ApiResponse<EmploymentHeroStatusDto>.Fail("Choose the Employment Hero employee."));
+        var item = await _db.EmploymentHeroAttentions.FirstOrDefaultAsync(a => a.Id == id && a.TenantId == tenantId && a.Kind == EmploymentHeroAttentionKind.NotLinked, ct);
+        var person = item?.UserId is { } userId ? await _db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, ct) : null;
+        if (item is null || person is null) return NotFound(ApiResponse<EmploymentHeroStatusDto>.Fail("That item is no longer waiting. Refresh the page."));
+        if (person.ExternalPayrollId is not null) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail($"{person.FullName} is already linked."));
+        if (await _db.Users.AnyAsync(u => u.TenantId == tenantId && u.ExternalPayrollId == employeeId, ct))
+            return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in ODIP."));
+        if (await SavedKeyAsync(tenantId, ct) is not { } saved) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.KeyUnreadableMessage));
+        try
+        {
+            await _client.GetEmployeeAsync(saved.Key, saved.BusinessId, employeeId, ct);
+        }
+        catch (EmploymentHeroException ex)
+        {
+            return Refused(ex);
+        }
+
+        person.ExternalPayrollId = employeeId;
+        _db.EmploymentHeroAttentions.Remove(item);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // The sync linked this EH employee between the check above and this save, and the payroll-id index refused the second link.
+            return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in ODIP."));
+        }
+        return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
+    }
+
+    /// <summary>
+    /// Leave unlinked, or Dismiss. The item is hidden for as long as its problem lasts, and the sync keeps it dismissed. Once dismissed, an unlinked
+    /// person's namesake in EH is no longer held back, so it is created at the next sync.
+    /// </summary>
+    [HttpPost("attention/{id:guid}/dismiss")]
+    public async Task<ActionResult<ApiResponse<EmploymentHeroStatusDto>>> Dismiss(Guid id, CancellationToken ct)
+    {
+        if (TenantId is not { } tenantId) return BadRequest(ApiResponse<EmploymentHeroStatusDto>.Fail(ChooseOrganisation));
+        var item = await _db.EmploymentHeroAttentions.FirstOrDefaultAsync(a => a.Id == id && a.TenantId == tenantId, ct);
+        if (item is null) return NotFound(ApiResponse<EmploymentHeroStatusDto>.Fail("That item is no longer waiting. Refresh the page."));
+        item.DismissedAt ??= _clock.GetUtcNow().UtcDateTime;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
+    }
+
+    /// <summary>The organisation's business and its key, decrypted. Null when the organisation is not connected, or this server can't read the key.</summary>
+    private async Task<(string BusinessId, string Key)?> SavedKeyAsync(Guid tenantId, CancellationToken ct)
+    {
+        var conn = await _db.EmploymentHeroConnections.AsNoTracking().FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
+        var key = conn is null ? null : _keys.Unprotect(conn.ApiKeyCiphertext, conn.ApiKeyNonce, tenantId);
+        return conn is null || key is null ? null : (conn.BusinessId, key);
+    }
+
     /// <summary>Why this request can't use a pasted key: there is no organisation, the server has no master key, or no key was pasted.</summary>
     private ActionResult? KeyRefusal(string? apiKey)
     {
