@@ -678,6 +678,11 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        if (IsLockedForStaffChange(shift.Status))
+            return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
+        // A drop names who the board showed (nobody, or the person the prompt offered to replace): someone changed the shift since, so say so rather than replace them by surprise.
+        if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
+            return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
 
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail("Staff member not found."));
@@ -689,24 +694,14 @@ public class RosteringController : ControllerBase
             && !(await ParticipantReadiness.CheckAsync(_db, shift.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
-        var candidate = new Shift
-        {
-            Id = shift.Id, ParticipantId = shift.ParticipantId, UserId = dto.StaffId,
-            ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime,
-            EndsNextDay = shift.EndsNextDay, Ratio = shift.Ratio, NightType = shift.NightType
-        };
+        var candidate = WithWorker(shift, dto.StaffId);
 
         var findings = await CheckAsync(candidate, shift.Id, ct);
         var rejection = EvaluateFindings(findings, dto.OverrideReason);
         if (rejection != null) return UnprocessableEntity(rejection);
 
         var previousUserId = shift.UserId;
-        var previousReason = shift.OverrideReason;
-        var previousCodes = shift.AcknowledgedFindingCodes;
-        shift.UserId = dto.StaffId;
-        shift.UpdatedAt = DateTime.UtcNow;
-        // Assigning a worker is not a budget moment: the shift keeps the over-budget acknowledgement it already has.
-        ApplyOverride(shift, findings, ShiftBudgetGate.Decision.NoEmergency(findings), dto.OverrideReason, dto.AcknowledgedFindingCodes, previousReason, previousCodes);
+        ApplyStaff(shift, dto.StaffId, findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
 
         // Item 9 of the connection map: reassigning away from (or clearing) the on-leave staff
         // member closes the LeaveCoverage obligation raised against this shift.
@@ -1693,6 +1688,33 @@ public class RosteringController : ControllerBase
         var (reason, codes) = ShiftBudgetGate.ToStore(findings, budgetGate, overrideReason, acknowledgedCodes, previousReason, previousCodes);
         shift.OverrideReason = reason;
         shift.AcknowledgedFindingCodes = codes;
+    }
+
+    /// <summary>Roster drag and drop (2026-10-14), decision 8: a shift that has started, waits for review, is finished or is cancelled keeps its worker; only its completion endpoints move it on.</summary>
+    private static bool IsLockedForStaffChange(ShiftStatus status) =>
+        status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
+
+    private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
+
+    /// <summary>What a drop made on an out-of-date board is refused with (409): /assign with ExpectedStaffId, and move-staff.</summary>
+    private const string BoardChangedMessage = "This shift changed after the board was loaded. Refresh the board and try again.";
+
+    /// <summary>The shift as it would be with <paramref name="userId"/> on it: the candidate the roster check judges.</summary>
+    private static Shift WithWorker(Shift shift, Guid? userId) => new()
+    {
+        Id = shift.Id, ParticipantId = shift.ParticipantId, UserId = userId,
+        ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime,
+        EndsNextDay = shift.EndsNextDay, Ratio = shift.Ratio, NightType = shift.NightType
+    };
+
+    /// <summary>Puts <paramref name="userId"/> on the shift (null clears it) with the override fields the findings just approved. Assigning a worker is not a budget moment: the shift keeps the over-budget acknowledgement it already has.</summary>
+    private static void ApplyStaff(Shift shift, Guid? userId, List<RosterFinding> findings, string? overrideReason, List<string>? acknowledgedCodes)
+    {
+        var previousReason = shift.OverrideReason;
+        var previousCodes = shift.AcknowledgedFindingCodes;
+        shift.UserId = userId;
+        shift.UpdatedAt = DateTime.UtcNow;
+        ApplyOverride(shift, findings, ShiftBudgetGate.Decision.NoEmergency(findings), overrideReason, acknowledgedCodes, previousReason, previousCodes);
     }
 
     /// <summary>

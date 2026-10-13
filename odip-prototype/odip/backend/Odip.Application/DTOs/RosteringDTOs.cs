@@ -319,6 +319,15 @@ public record AssignShiftDto
     public Guid? StaffId { get; init; }
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
+
+    private readonly Guid? _expectedStaffId;
+    /// <summary>
+    /// Roster drag and drop (2026-10-14): who the board showed on the shift when the drop was made, null for nobody. When the request names it and the shift's worker is someone else
+    /// now, the assign is refused (409) instead of replacing them by surprise. A request that leaves it out (the menus, LeaveApprovalsPage) is not checked. Its setter runs only when
+    /// the JSON names the property, explicit null included, so <see cref="ExpectsStaff"/> tells "left out" from "null".
+    /// </summary>
+    public Guid? ExpectedStaffId { get => _expectedStaffId; init { _expectedStaffId = value; ExpectsStaff = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool ExpectsStaff { get; private init; }
 }
 
 /// <summary>Dry-run input for <c>POST /shifts/check</c> — the same shape as a candidate shift, minus persistence fields.</summary>
