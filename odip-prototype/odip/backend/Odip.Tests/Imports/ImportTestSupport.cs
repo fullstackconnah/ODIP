@@ -25,6 +25,7 @@ internal static class ImportTestSupport
     public static OnboardingImportService Service(OdipDbContext db, ICurrentTenant tenant) =>
         new(db, tenant,
             new ParticipantCreateService(db, new StaffCompatibilityLinkService(db), new SafetyNoteSyncService(db), new ParticipantIntakeSnapshotService(db), TimeProvider.System),
+            new StaffCreateService(db, null),
             TimeProvider.System);
 
     public static byte[] Csv(params string[] lines) => Encoding.UTF8.GetBytes(string.Join("\r\n", lines) + "\r\n");

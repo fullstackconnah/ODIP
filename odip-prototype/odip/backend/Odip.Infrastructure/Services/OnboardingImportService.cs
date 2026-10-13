@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
@@ -30,15 +31,17 @@ public sealed class OnboardingImportService
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
     private readonly ParticipantCreateService _participants;
+    private readonly StaffCreateService _staff;
     private readonly TimeProvider _clock;
     private readonly ILogger<OnboardingImportService>? _logger;
 
-    public OnboardingImportService(OdipDbContext db, ICurrentTenant tenant, ParticipantCreateService participants, TimeProvider clock,
+    public OnboardingImportService(OdipDbContext db, ICurrentTenant tenant, ParticipantCreateService participants, StaffCreateService staff, TimeProvider clock,
         ILogger<OnboardingImportService>? logger = null)
     {
         _db = db;
         _tenant = tenant;
         _participants = participants;
+        _staff = staff;
         _clock = clock;
         _logger = logger;
     }
@@ -49,14 +52,15 @@ public sealed class OnboardingImportService
     /// </summary>
     private Guid TenantId() => !_tenant.IsSuperAdmin && _tenant.TenantId is { } id ? id : throw new ImportException(ChooseOrganisation);
 
-    public async Task<ImportPreviewDto> PreviewAsync(ImportKind kind, byte[] content, string fileName, IReadOnlyList<string?>? mapping, CancellationToken ct)
+    public async Task<ImportPreviewDto> PreviewAsync(ImportKind kind, byte[] content, string fileName, IReadOnlyList<string?>? mapping, CancellationToken ct,
+        ClaimsPrincipal? caller = null)
     {
         TenantId();
         var table = ImportFileReader.Read(content, fileName);
         var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers);
         if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: false) is { } mappingError) throw new ImportException(mappingError);
 
-        var plans = await PlanAsync(kind, table, columns, ct);
+        var plans = await PlanAsync(kind, table, columns, caller, ct);
         var hash = Sha256(content);
         var previouslyImportedAt = await _db.ImportBatches
             .Where(b => b.FileSha256 == hash && b.UndoneAt == null)
@@ -75,8 +79,9 @@ public sealed class OnboardingImportService
     }
 
     /// <summary>Every row's status: the file's own rules, then people already in this organisation, then repeats within the file.</summary>
-    private async Task<List<ImportRowPlan>> PlanAsync(ImportKind kind, ImportTable table, IReadOnlyList<string?> mapping, CancellationToken ct)
+    private async Task<List<ImportRowPlan>> PlanAsync(ImportKind kind, ImportTable table, IReadOnlyList<string?> mapping, ClaimsPrincipal? caller, CancellationToken ct)
     {
+        if (kind == ImportKind.Staff) return await PlanStaffAsync(table, mapping, caller, ct);
         var asOf = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var plans = ImportParticipantRows.Build(table, mapping, asOf);
 
@@ -95,6 +100,61 @@ public sealed class OnboardingImportService
 
         ImportRowPlan.MarkFileDuplicates(plans, "NDIS number");
         return plans;
+    }
+
+    /// <summary>
+    /// Staff rows: emails are unique across ODIP, so every organisation's users are checked (only whether an address is taken elsewhere is said,
+    /// never by whom); then the staff form's address rules; then repeats within the file. Undone staff imports deleted their accounts, so every
+    /// user found here is real.
+    /// </summary>
+    private async Task<List<ImportRowPlan>> PlanStaffAsync(ImportTable table, IReadOnlyList<string?> mapping, ClaimsPrincipal? caller, CancellationToken ct)
+    {
+        var tenantId = TenantId();
+        var plans = ImportStaffRows.Build(table, mapping);
+        var emails = plans.Where(p => p.DuplicateKey != null).Select(p => p.DuplicateKey!).Distinct().ToList();
+        var users = (await _db.Users.IgnoreQueryFilters()
+                .Where(u => emails.Contains(u.Email.ToLower()))
+                .Select(u => new { Email = u.Email.ToLower(), u.TenantId, u.FirstName, u.LastName })
+                .ToListAsync(ct))
+            .GroupBy(u => u.Email)
+            .ToDictionary(g => g.Key, g => g.First());
+        var tenantDomain = await _staff.TenantEmailDomainAsync(tenantId, ct);
+
+        foreach (var plan in plans)
+        {
+            if (plan.DuplicateKey is not { } email || plan.Status == ImportRowStatus.Skipped) continue;
+            if (users.TryGetValue(email, out var user))
+            {
+                if (user.TenantId == tenantId) plan.Skip($"Already in ODIP as {user.FirstName} {user.LastName}.");
+                else plan.Refuse("This email belongs to another organisation.");
+                continue;
+            }
+            if (_staff.ReservedDomainError(caller, email) is { } reserved) plan.Refuse(reserved);
+            if (await _staff.OtherOrganisationAddressErrorAsync(caller, email, tenantId, ct) is { } elsewhere) plan.Refuse(elsewhere);
+            if (plan.Status == ImportRowStatus.Ready && tenantDomain is not null && AddressConfirmation.Needed(email, tenantDomain))
+                plan.Warnings.Add("This address is at neither your organisation's email domain nor a common provider. Check it before sending sign-in invites.");
+        }
+
+        ImportRowPlan.MarkFileDuplicates(plans, "email");
+        return plans;
+    }
+
+    /// <summary>
+    /// Creates one ready staff row through the staff form's service and saves it inside the import's transaction. The Import click is the
+    /// confirmation the form asks for an unusual address (the preview warned on those rows); every other rule is checked again here.
+    /// </summary>
+    private async Task<Guid?> CreateStaffAsync(ImportRowPlan plan, ClaimsPrincipal? caller, Guid tenantId, CancellationToken ct)
+    {
+        var staged = await _staff.StageAsync(plan.Staff! with { AddressConfirmed = true }, caller, tenantId, ct);
+        if (staged.User is null)
+        {
+            _db.ChangeTracker.Clear();
+            plan.Refuse(staged.Error!);
+            return null;
+        }
+        await _db.SaveChangesAsync(ct);
+        _db.ChangeTracker.Clear();
+        return staged.User.Id;
     }
 
     /// <summary>One advisory-lock key per organisation: imports and undos in one organisation queue, other organisations are not held up.</summary>
@@ -119,7 +179,7 @@ public sealed class OnboardingImportService
         // A request that waited behind its own twin finds the batch the twin made.
         if (await ReplayAsync(idempotencyKey, ct) is { } twin) return twin;
 
-        var plans = await PlanAsync(kind, table, columns, ct);
+        var plans = await PlanAsync(kind, table, columns, caller, ct);
         // The column holds 260 characters; a longer name would fail the final save after every row was written. The cut never splits an emoji.
         var name = Path.GetFileName(fileName);
         var batch = new ImportBatch
@@ -134,8 +194,11 @@ public sealed class OnboardingImportService
             foreach (var plan in plans.Where(p => p.Status == ImportRowStatus.Ready))
             {
                 rowNumber = plan.RowNumber;
-                if (await CreateAsync(plan, landing, caller, ct) is { } entityId)
-                    items.Add(new ImportBatchItem { Id = Guid.NewGuid(), BatchId = batch.Id, EntityType = nameof(Participant), EntityId = entityId });
+                var entityId = kind == ImportKind.Staff
+                    ? await CreateStaffAsync(plan, caller, tenantId, ct)
+                    : await CreateAsync(plan, landing, caller, ct);
+                if (entityId is { } id)
+                    items.Add(new ImportBatchItem { Id = Guid.NewGuid(), BatchId = batch.Id, EntityType = kind == ImportKind.Staff ? nameof(User) : nameof(Participant), EntityId = id });
             }
             batch.CreatedCount = items.Count;
             batch.SkippedCount = plans.Count(p => p.Status == ImportRowStatus.Skipped);

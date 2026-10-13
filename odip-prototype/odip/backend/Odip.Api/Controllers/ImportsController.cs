@@ -48,7 +48,7 @@ public class ImportsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ImportPreviewDto>>> Preview(string kind, IFormFile? file, [FromForm] string? mapping, CancellationToken ct)
     {
         if (Kind(kind) is not { } k) return NotFound(ApiResponse<ImportPreviewDto>.Fail("Unknown import type."));
-        return await Run(async () => await _imports.PreviewAsync(k, await ReadAsync(file, ct), file!.FileName, ParseMapping(mapping), ct));
+        return await Run(async () => await _imports.PreviewAsync(k, await ReadAsync(file, ct), file!.FileName, ParseMapping(mapping), ct, User));
     }
 
     [HttpPost("{kind}/commit")]
