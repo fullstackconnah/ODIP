@@ -10,8 +10,8 @@ import type { ParticipantOnboardingDto } from '@/api/types/inquiries'
 const { mockUseOnboarding, mockUseParticipant, beginServices, makeActive, recordAgreement } = vi.hoisted(() => ({
   mockUseOnboarding: vi.fn(),
   mockUseParticipant: vi.fn(),
-  beginServices: { mutate: vi.fn(), isPending: false, error: null as unknown },
-  makeActive: { mutate: vi.fn(), isPending: false, error: null as unknown },
+  beginServices: { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null as unknown },
+  makeActive: { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null as unknown },
   recordAgreement: { mutate: vi.fn(), isPending: false, error: null as unknown, reset: vi.fn() },
 }))
 vi.mock('@/api/hooks', () => ({
@@ -51,7 +51,7 @@ beforeEach(() => {
   asRole('Coordinator')
   mockUseOnboarding.mockReturnValue({ data: open, isLoading: false, isError: false })
   mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', preferredName: null, fullName: 'Jamie Rivers', isDraft: true, isActive: false }, isLoading: false })
-  for (const m of [beginServices, makeActive, recordAgreement]) { m.mutate.mockReset(); m.error = null; m.isPending = false }
+  for (const m of [beginServices, makeActive, recordAgreement]) { m.mutate.mockReset(); m.reset.mockReset(); m.error = null; m.isPending = false }
 })
 afterEach(() => localStorage.clear())
 
@@ -66,6 +66,8 @@ describe('OnboardingDetailPage: the header', () => {
 
   it('says "Services started" once services have begun, and shows the date in place of the Begin services button', () => {
     mockUseOnboarding.mockReturnValue({ data: { ...open, servicesStartedAt: '2026-10-10T01:00:00Z' }, isLoading: false, isError: false })
+    // Begin services switches the participant on (IsActive) and keeps the draft.
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: true, isActive: true }, isLoading: false })
     renderPage()
 
     expect(screen.getAllByText(/Services started/)[0]).toBeInTheDocument()
@@ -214,5 +216,50 @@ describe('OnboardingDetailPage — arrival from a completed intake', () => {
   it('shows no notice on an ordinary visit', () => {
     renderPage()
     expect(screen.queryByText(/intake complete —/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('OnboardingDetailPage: fix round 1', () => {
+  it('clears the last refusal before a new attempt, so the callout shows the latest one (V7)', async () => {
+    beginServices.error = { response: { status: 400, data: { errors: ['Begin refused.'] } } }
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Make active' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Make active' }))
+
+    expect(beginServices.reset).toHaveBeenCalled()
+    expect(makeActive.reset).toHaveBeenCalled()
+    expect(beginServices.reset.mock.invocationCallOrder[0]).toBeLessThan(makeActive.mutate.mock.invocationCallOrder[0])
+  })
+
+  it('offers no fixes once the participant is no longer in onboarding: the record is read-only (V23)', () => {
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: false, isActive: true }, isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('list', { name: '1 of 4 done' })).toBeInTheDocument()
+    for (const fix of ['Edit profile', 'Open agreement draft', 'Funding tab']) expect(screen.queryByRole('link', { name: fix })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record it' })).not.toBeInTheDocument()
+  })
+
+  it('holds both actions while either is in flight (V24)', async () => {
+    beginServices.isPending = true
+    const user = userEvent.setup()
+    renderPage()
+
+    const makeActiveButton = screen.getByRole('button', { name: 'Make active' })
+    expect(makeActiveButton).toHaveAttribute('aria-disabled', 'true')
+    await user.click(makeActiveButton)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('treats a services-started participant who was switched off as onboarding again, offering Begin services (V5)', () => {
+    mockUseOnboarding.mockReturnValue({ data: { ...open, servicesStartedAt: '2026-10-10T01:00:00Z' }, isLoading: false, isError: false })
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: true, isActive: false }, isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Onboarding')).toBeInTheDocument()
+    expect(screen.queryByText(/Services started/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Begin services' })).toBeInTheDocument()
   })
 })

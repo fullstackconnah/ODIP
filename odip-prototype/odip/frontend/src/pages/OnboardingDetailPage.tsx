@@ -47,7 +47,8 @@ export default function OnboardingDetailPage() {
   }
 
   const name = participant ? `${participant.preferredName?.trim() || participant.firstName} ${participant.lastName}`.trim() : ''
-  const startedOn = d.servicesStartedAt ? formatWithTimeZone(d.servicesStartedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null
+  // Services count as started only while the participant is switched on: one archived after Begin services is back to plain onboarding (Begin services again).
+  const startedOn = d.servicesStartedAt && participant?.isActive ? formatWithTimeZone(d.servicesStartedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null
   const stage = participant?.isDraft === false
     ? <StatusBadge status={participant.isActive ? 'Active' : 'Archived'} size="md" />
     : <StatusBadge tone={startedOn ? 'success' : 'info'} label={startedOn ? 'Services started' : 'Onboarding'} size="md" />
@@ -56,10 +57,15 @@ export default function OnboardingDetailPage() {
   const openItems = d.items.filter(item => !item.done)
   const doneCount = d.items.length - openItems.length
   const lifecycleError = beginServices.error ?? makeActive.error
+  // One lifecycle step at a time. aria-disabled, not disabled, so focus can return to the button when its dialog closes.
+  const pending = beginServices.isPending || makeActive.isPending
 
   const confirm = () => {
     const action = confirming
     setConfirming(null)
+    // The callout shows the latest attempt's refusal, never an older one.
+    beginServices.reset()
+    makeActive.reset()
     if (action === 'begin') beginServices.mutate({ id }, {})
     // Made active: they have left the Onboarding tab, so show them on the Active tab, as the hand-off there confirms once.
     else if (action === 'active') makeActive.mutate({ id }, { onSuccess: () => navigate(ACTIVE_TABLE_PATH, { state: participantActivatedState(id, name) }) })
@@ -86,8 +92,8 @@ export default function OnboardingDetailPage() {
             <div className="flex flex-wrap items-center gap-3">
               {startedOn
                 ? <span className="text-sm text-[var(--color-muted-foreground)]">Services started {startedOn}</span>
-                : <Button variant="secondary" disabled={beginServices.isPending} onClick={() => setConfirming('begin')}>Begin services</Button>}
-              <Button disabled={makeActive.isPending} onClick={() => setConfirming('active')}>Make active</Button>
+                : <Button variant="secondary" aria-disabled={pending} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" onClick={() => { if (!pending) setConfirming('begin') }}>Begin services</Button>}
+              <Button aria-disabled={pending} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" onClick={() => { if (!pending) setConfirming('active') }}>Make active</Button>
             </div>
           ) : undefined}
         />
@@ -112,7 +118,7 @@ export default function OnboardingDetailPage() {
                 {item.missing ? <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.missing}</p> : null}
               </div>
             </div>
-            <Fix item={item} participantId={id} canEdit={canManageParticipantLifecycle} canOpenDraft={canAccessPage('agreement-drafts')} canOpenFunding={canManageFunding} onRecord={() => setRecording(true)} />
+            <Fix item={item} participantId={id} canEdit={canAct} canOpenDraft={canAct && canAccessPage('agreement-drafts')} canOpenFunding={canAct && canManageFunding} onRecord={() => setRecording(true)} />
           </li>
         ))}
       </ul>
@@ -151,7 +157,7 @@ function Fix({ item, participantId, canEdit, canOpenDraft, canOpenFunding, onRec
   item: OnboardingChecklistItem; participantId: string; canEdit: boolean; canOpenDraft: boolean; canOpenFunding: boolean; onRecord: () => void
 }) {
   // An open item's fix carries the weight; a done item's stays reachable but quiet. On a phone the row stacks, so the button keeps its own width.
-  const look = { variant: item.done ? 'ghost' as const : 'secondary' as const, size: 'sm' as const, className: 'self-start sm:self-auto' }
+  const look = { variant: item.done ? 'ghost' as const : 'secondary' as const, size: 'sm' as const, className: 'self-start ml-[1.625rem] sm:ml-0 sm:self-auto' }
   if (item.key === 'profile') return canEdit ? <Button {...look} to={`/participants/${participantId}/profile?from=onboarding`}>Edit profile</Button> : null
   // The draft carries money, so only the roles the API admits to it are sent there.
   if (item.key === 'serviceNeeds') return canOpenDraft ? <Button {...look} to={`/participants/${participantId}/agreement-draft?from=onboarding`}>Open agreement draft</Button> : null

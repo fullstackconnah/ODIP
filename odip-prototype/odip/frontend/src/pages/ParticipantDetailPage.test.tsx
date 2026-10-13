@@ -575,6 +575,15 @@ describe('ParticipantDetailPage — PF-10.5 three-way resume banner', () => {
     expect(screen.getByRole('link', { name: /open checklist/i })).toHaveAttribute('href', '/onboarding/participant-1')
   })
 
+  it('services started but then switched off: the ordinary onboarding banner, not "they can be rostered" (V5)', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false, intakeCompletedAt: '2026-08-01T00:00:00Z', servicesStartedAt: '2026-10-10T01:00:00Z' }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('status')).not.toHaveTextContent(/Services have started/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/profile isn't finished yet/i)
+  })
+
   it('IsDraft false: no banner at all, regardless of IntakeCompletedAt', () => {
     setUserRole('Admin')
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: false, intakeCompletedAt: '2026-08-01T00:00:00Z' }), isLoading: false })
