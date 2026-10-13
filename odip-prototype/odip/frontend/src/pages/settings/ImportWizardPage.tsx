@@ -240,7 +240,7 @@ export default function ImportWizardPage() {
                   data={data.columns}
                   keyField="index"
                   columns={[
-                    { key: 'header', header: 'Column in your file', render: c => <span id={`import-col-${c.index}`}>{c.header}</span> },
+                    { key: 'header', header: 'Column in your file', mobile: 'primary', render: c => <span id={`import-col-${c.index}`}>{c.header}</span> },
                     {
                       key: 'field', header: 'ODIP field',
                       render: c => (
@@ -253,7 +253,7 @@ export default function ImportWizardPage() {
                         />
                       ),
                     },
-                    { key: 'note', header: '', render: c => c.note && <span className="text-sm text-[var(--color-muted-foreground)]">{c.note}</span> },
+                    { key: 'note', header: '', mobile: 'meta', render: c => c.note && <span className="text-sm text-[var(--color-muted-foreground)]">{c.note}</span> },
                   ]}
                 />
               </div>

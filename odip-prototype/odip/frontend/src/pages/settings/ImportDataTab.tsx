@@ -31,9 +31,9 @@ export default function ImportDataTab() {
 
   const columns: Column<ImportBatchDto>[] = [
     { key: 'fileName', header: 'File', mobile: 'primary' },
-    { key: 'kind', header: 'Type' },
-    { key: 'createdByName', header: 'Run by' },
-    { key: 'createdAt', header: 'When', render: b => formatDateTimeAu(b.createdAt) },
+    { key: 'kind', header: 'Type', mobile: 'meta' },
+    { key: 'createdByName', header: 'Run by', mobile: 'meta' },
+    { key: 'createdAt', header: 'When', mobile: 'meta', render: b => formatDateTimeAu(b.createdAt) },
     { key: 'createdCount', header: 'Created', align: 'right' },
     { key: 'skippedCount', header: 'Skipped', align: 'right' },
     { key: 'failedCount', header: "Couldn't import", align: 'right' },
