@@ -107,6 +107,8 @@ public class OnboardingImportPostgresTests : IClassFixture<PostgresFixture>
 
         Assert.Empty(outcome.Blockers);
         Assert.NotNull(outcome.Batch!.UndoneAt);
+        // The contact the import made goes with it, its role first: the role's foreign key to People is Restrict.
+        Assert.False(await db.People.AnyAsync(p => p.FirstName == "Kim"));
     }
 
     [SkippableFact]

@@ -326,6 +326,17 @@ public sealed class OnboardingImportService
                 participant.IsDraft = false;
                 participant.UpdatedAt = now;
             }
+            // The People the import made for its contacts go too, with their roles, while nothing else uses them: no role on another
+            // participant or added since, and neither the person nor the role edited since. Any other stays, linked to the archived participant.
+            var importedAt = batch.CreatedAt;
+            var people = _db.ParticipantContactRoles.Where(r => ids.Contains(r.ParticipantId) && r.CreatedAt <= importedAt).Select(r => r.PersonId);
+            var untouched = await _db.People
+                .Where(p => people.Contains(p.Id) && p.UpdatedAt <= importedAt
+                    && p.ContactRoles.All(r => ids.Contains(r.ParticipantId) && r.CreatedAt <= importedAt && r.UpdatedAt <= importedAt))
+                .Include(p => p.ContactRoles)
+                .ToListAsync(ct);
+            _db.ParticipantContactRoles.RemoveRange(untouched.SelectMany(p => p.ContactRoles));
+            _db.People.RemoveRange(untouched);
         }
         batch.UndoneAt = now;
         batch.UndoneById = ActorId(caller);

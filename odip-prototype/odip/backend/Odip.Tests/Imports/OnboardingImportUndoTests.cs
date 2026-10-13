@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -106,6 +107,43 @@ public class OnboardingImportUndoTests
         var outcome = await service.UndoAsync(second.BatchId, Admin(), CancellationToken.None);
 
         Assert.Equal(new ImportUndoBlockerDto(ben.Id, "Ben Lee", "has contacts added after the import"), outcome.Blockers.Single());
+    }
+
+    [Theory]
+    [InlineData("untouched", false)]
+    [InlineData("linked elsewhere", true)]
+    [InlineData("edited", true)]
+    [InlineData("role edited", true)]
+    public async Task Undo_removes_the_contacts_the_import_made_unless_they_were_used_or_edited_since(string change, bool kept)
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenantId);
+        var service = Service(db, tenantId);
+        var file = Csv("First name,Last name,NDIS number,Contact 1 name,Contact 1 relationship", "Ava,Stone,430000001,Kim Stone,Next of kin", "Ben,Lee,430000002,Sam Lee,Next of kin");
+        var result = await service.CommitAsync(ImportKind.Participants, file, "people.csv", null, ImportLanding.Active, "key-1", Admin(), CancellationToken.None);
+        var kim = await db.People.SingleAsync(p => p.FirstName == "Kim");
+        var later = DateTime.UtcNow.AddMinutes(1);
+        switch (change)
+        {
+            case "linked elsewhere":
+                db.ParticipantContactRoles.Add(new ParticipantContactRole { Id = Guid.NewGuid(), ParticipantId = Guid.NewGuid(), PersonId = kim.Id, RoleType = ContactRoleType.NextOfKin, CreatedAt = later });
+                break;
+            case "edited":
+                kim.UpdatedAt = later;
+                break;
+            case "role edited":
+                (await db.ParticipantContactRoles.SingleAsync(r => r.PersonId == kim.Id)).UpdatedAt = later;
+                break;
+        }
+        await db.SaveChangesAsync();
+
+        var outcome = await service.UndoAsync(result.BatchId, Admin(), CancellationToken.None);
+
+        Assert.Empty(outcome.Blockers);
+        Assert.NotNull(outcome.Batch!.UndoneAt);
+        Assert.Equal(kept, await db.People.AnyAsync(p => p.Id == kim.Id));
+        Assert.Equal(kept, await db.ParticipantContactRoles.AnyAsync(r => r.PersonId == kim.Id && r.CreatedAt < later));
+        Assert.False(await db.People.AnyAsync(p => p.FirstName == "Sam"));
     }
 
     [Fact]
