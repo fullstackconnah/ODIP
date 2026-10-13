@@ -235,7 +235,11 @@ export default function ImportWizardPage() {
                   <input
                     id="import-file" type="file" accept=".csv,.xlsx"
                     className="mt-1 block w-full rounded-[var(--radius-sm)] text-sm text-[var(--color-muted-foreground)] file:mr-3 file:h-[var(--control-h)] file:cursor-pointer file:rounded-[var(--radius-sm)] file:border file:border-solid file:border-[var(--color-border)] file:bg-[var(--color-card)] file:px-4 file:text-sm file:font-medium file:text-[var(--color-foreground)] hover:file:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-                    onChange={e => { setFile(e.target.files?.[0] ?? null); setData(null); idempotencyKey.current = newCompletionRequestId() }}
+                    onChange={e => {
+                      setFile(e.target.files?.[0] ?? null); setData(null); idempotencyKey.current = newCompletionRequestId()
+                      // A new file makes the later steps stale: they open again as Next reaches them.
+                      setVisited(new Set(['upload'])); setFilter('all')
+                    }}
                   />
                 </div>
                 <p className="text-sm text-[var(--color-muted-foreground)]">Up to 2,000 rows and 5 MB. The file is read to check it and is never stored.</p>
@@ -261,7 +265,11 @@ export default function ImportWizardPage() {
                           variant="form"
                           aria-labelledby={`import-col-${c.index}`}
                           value={mapping[c.index] ?? ''}
-                          onChange={value => setMapping(m => m.map((f, i) => (i === c.index ? value || null : f)))}
+                          onChange={value => {
+                            setMapping(m => m.map((f, i) => (i === c.index ? value || null : f)))
+                            // The preview shown so far was for the old matches.
+                            setVisited(new Set(['upload', 'match']))
+                          }}
                           items={[{ value: '', label: "Don't import" }, ...data.fields.map(f => ({ value: f.key, label: f.required ? `${f.label} *` : f.label }))]}
                         />
                       ),

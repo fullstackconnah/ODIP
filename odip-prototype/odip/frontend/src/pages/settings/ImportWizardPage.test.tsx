@@ -126,4 +126,21 @@ describe('ImportWizardPage', () => {
 
     expect(await screen.findByText('Ava Stone has shifts')).toBeInTheDocument()
   })
+
+  it('closes the later steps again when a column match changes', async () => {
+    renderWizard()
+    await upload()
+    await screen.findByRole('heading', { name: 'Match columns' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { name: 'Preview' })
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await screen.findByRole('heading', { name: 'Match columns' })
+    const rail = screen.getByRole('navigation', { name: 'Import steps' })
+    expect(within(rail).getByRole('button', { name: /Preview/ })).toBeEnabled()
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Surname' })[0])
+    await userEvent.click(await screen.findByRole('option', { name: "Don't import" }))
+
+    expect(within(rail).getByRole('button', { name: /Preview/ })).toBeDisabled()
+  })
 })
