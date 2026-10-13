@@ -51,15 +51,15 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
   const columns: Column<ImportRowDto>[] = [
     // Name first, so it pins and a sideways-scrolled row is never anonymous; the row number finds it in the spreadsheet.
     { key: 'name', header: 'Name', mobile: 'primary' },
-    { key: 'rowNumber', header: 'Row', align: 'right', mobile: 'meta' },
+    { key: 'rowNumber', header: 'Row', align: 'right', mobile: 'meta', render: r => <><span className="mr-1 md:hidden">Row</span>{r.rowNumber}</> },
     { key: 'status', header: 'Status', mobile: 'status', render: r => <StatusBadge tone={STATUS[r.status].tone} label={STATUS[r.status].label} /> },
     {
-      key: 'details', header: 'Details', wrap: true,
-      render: r => (
-        <ul className="text-sm">
-          {[...(r.skipReason ? [r.skipReason] : []), ...r.reasons, ...r.warnings].map(text => <li key={text}>{text}</li>)}
-        </ul>
-      ),
+      // meta on a phone card: one muted line, and a Ready row with nothing to say shows no empty Details label.
+      key: 'details', header: 'Details', wrap: true, mobile: 'meta',
+      render: r => {
+        const lines = [...(r.skipReason ? [r.skipReason] : []), ...r.reasons, ...r.warnings]
+        return lines.length > 0 && <ul className="text-sm">{lines.map(text => <li key={text}>{text}</li>)}</ul>
+      },
     },
   ]
   return <DataTable data={rows} columns={columns} keyField="rowNumber" emptyMessage="No rows with this status." />
@@ -279,6 +279,7 @@ export default function ImportWizardPage() {
                   </fieldset>
                 )}
                 <ToggleGroup
+                  className="flex-wrap [&>button]:whitespace-nowrap"
                   ariaLabel="Show rows"
                   value={filter}
                   onChange={key => setFilter(key as typeof filter)}
