@@ -26,7 +26,9 @@ public sealed class OnboardingImportService
     /// <summary>A commit's 409 can be its own twin still finishing (a retry that waited past the lock timeout), so it points at the history.</summary>
     public const string CommitLockBusy = LockBusy + " If you just pressed Import, check Import history in a minute.";
     public const string ChooseLanding = "Choose whether these participants are already receiving services or are new onboarding.";
-    public const string CommitFailed = "The import failed, so nothing was imported. Try again; if it keeps failing, contact support.";
+    public const string StaffRace = "Someone else added a staff member with the same name or email at the same moment. Nothing was imported; import again.";
+    public const string RecordRace = "Someone else added a record with the same details at the same moment. Nothing was imported; import again.";
+    public const string CommitFailed ="The import failed, so nothing was imported. Try again; if it keeps failing, contact support.";
 
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
@@ -209,6 +211,13 @@ public sealed class OnboardingImportService
             _db.ImportBatchItems.AddRange(items);
             await _db.SaveChangesAsync(ct);
             await importLock.CommitAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" or "40P01" })
+        {
+            // Usernames and emails are unique across ODIP, so another organisation (which this lock does not hold back) can take one between
+            // the plan and the insert, or deadlock with this import. Nothing is kept, and a retry plans again with that row visible.
+            _logger?.LogWarning("Import {BatchId} met a concurrent write at row {RowNumber}: {ExceptionType}", batch.Id, rowNumber, ex.InnerException.GetType().Name);
+            throw new ImportException(kind == ImportKind.Staff ? StaffRace : RecordRace, 409);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
