@@ -281,31 +281,54 @@ public sealed class OnboardingImportService
         // is seen by the checks below (an in-flight one is waited for). A write that starts after the lock waits for the undo to commit and then
         // still lands, on the now archived participant (archiving is an update, not a delete). SupportProfiles and ElectronicSigningSnapshots have
         // no foreign key to Participants, so their writes neither wait nor are guaranteed to be seen.
+        // Staff the same way: a shift, leave or pairing row's foreign key to Users conflicts with this lock too.
+        var staff = batch.Kind == ImportKind.Staff;
         if (_db.Database.IsNpgsql())
-            await _db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE", new object[] { ids.ToArray() }, ct);
-        var blockers = await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct);
+            await _db.Database.ExecuteSqlRawAsync(staff
+                ? "SELECT 1 FROM \"Users\" WHERE \"Id\" = ANY({0}) FOR UPDATE"
+                : "SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE", new object[] { ids.ToArray() }, ct);
+        var blockers = staff
+            ? await ImportUntouched.StaffBlockersAsync(_db, ids, ct)
+            : await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct);
         if (blockers.Count > 0)
         {
             var blockedIds = blockers.Keys.ToList();
-            var names = await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+            var names = staff
+                ? await _db.Users.Where(u => blockedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct)
+                : await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
             return new ImportUndoOutcome(false, blockers
                 .Select(b => new ImportUndoBlockerDto(b.Key, names.GetValueOrDefault(b.Key, ""), b.Value))
                 .OrderBy(b => b.Name).ToList(), null);
         }
 
         var now = DateTime.UtcNow;
-        // Archived, not deleted: the audit log keeps the import and the undo. A draft stays on the Onboarding tab whatever IsActive says
-        // (ParticipantStages), so an onboarding import's drafts are finalised as archived too: they leave that tab for the Archived view.
-        foreach (var participant in await _db.Participants.Where(p => ids.Contains(p.Id)).ToListAsync(ct))
+        if (staff)
         {
-            participant.IsActive = false;
-            participant.IsDraft = false;
-            participant.UpdatedAt = now;
+            // Deleted, not archived: the address must be free for a corrected re-import. The audit log keeps a Created and a Deleted row for each.
+            _db.Users.RemoveRange(await _db.Users.Where(u => ids.Contains(u.Id)).ToListAsync(ct));
+        }
+        else
+        {
+            // Archived, not deleted: the audit log keeps the import and the undo. A draft stays on the Onboarding tab whatever IsActive says
+            // (ParticipantStages), so an onboarding import's drafts are finalised as archived too: they leave that tab for the Archived view.
+            foreach (var participant in await _db.Participants.Where(p => ids.Contains(p.Id)).ToListAsync(ct))
+            {
+                participant.IsActive = false;
+                participant.IsDraft = false;
+                participant.UpdatedAt = now;
+            }
         }
         batch.UndoneAt = now;
         batch.UndoneById = ActorId(caller);
         batch.UndoneByName = ActorName(caller);
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateException ex)
+        {
+            // A reference StaffBlockersAsync does not know about: nothing is deleted (disposing the lock rolls its transaction back), and only
+            // the type is logged.
+            _logger?.LogError("Undo of import {BatchId} failed: {ExceptionType}", batch.Id, ex.GetType().Name);
+            throw new ImportException("Nothing was undone: one of its records is used elsewhere in ODIP.", 409);
+        }
         await importLock.CommitAsync(ct);
         return new ImportUndoOutcome(false, [], ToDto(batch));
     }

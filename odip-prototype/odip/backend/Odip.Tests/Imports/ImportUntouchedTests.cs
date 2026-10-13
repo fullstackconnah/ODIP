@@ -77,4 +77,38 @@ public class ImportUntouchedTests
 
         Assert.Equal(expected.OrderBy(e => e.Key), blockers.OrderBy(b => b.Key));
     }
+
+    [Fact]
+    public async Task A_staff_member_who_signed_in_or_is_referred_to_blocks_undo_and_a_fresh_one_does_not()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenantId);
+        var seeds = new (string Reason, Action<OdipDbContext, Guid> Seed)[]
+        {
+            ("has signed in", (d, id) => d.Users.Local.Single(u => u.Id == id).LastLoginAt = DateTime.UtcNow),
+            ("has shifts", (d, id) => d.Shifts.Add(new Shift { Id = Guid.NewGuid(), ParticipantId = Guid.NewGuid(), UserId = id, ServiceDate = new DateOnly(2026, 11, 2), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), Status = ShiftStatus.Published })),
+            ("is on a recurring shift pattern", (d, id) => d.ShiftPatterns.Add(new ShiftPattern { Id = Guid.NewGuid(), ParticipantId = Guid.NewGuid(), DefaultUserId = id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = new DateOnly(2026, 11, 2), IsActive = true })),
+            ("has leave", (d, id) => d.LeaveRequests.Add(new LeaveRequest { Id = Guid.NewGuid(), UserId = id, LeaveType = LeaveType.Annual, StartDate = new DateOnly(2026, 10, 1), EndDate = new DateOnly(2026, 10, 3), Status = LeaveStatus.Pending, RequestedByUserId = id, RequestedAt = DateTime.UtcNow })),
+            ("has availability", (d, id) => d.StaffAvailabilities.Add(new StaffAvailability { Id = Guid.NewGuid(), UserId = id, StartDateTime = new DateTime(2026, 9, 1), EndDateTime = new DateTime(2026, 9, 2), AvailabilityType = AvailabilityType.Unavailable })),
+            ("is a participant's preferred staff member", (d, id) => d.Participants.Add(new Participant { Id = Guid.NewGuid(), FirstName = "P", LastName = "Q", PreferredUserId = id })),
+            ("is named in an incident", (d, id) => d.IncidentReports.Add(new IncidentReport { Id = Guid.NewGuid(), ReportedByUserId = id })),
+            ("is a witness to an incident", (d, id) => d.IncidentWitnesses.Add(new IncidentWitness { Id = Guid.NewGuid(), IncidentReportId = Guid.NewGuid(), WitnessUserId = id, WitnessName = "W" })),
+            ("owns tasks", (d, id) => d.BookingTasks.Add(new BookingTask { Id = Guid.NewGuid(), Title = "Call", OwnerId = id })),
+        };
+        var expected = new Dictionary<Guid, string>();
+        foreach (var (reason, seed) in seeds)
+        {
+            var id = Guid.NewGuid();
+            db.Users.Add(new User { Id = id, FirstName = "S", LastName = reason, Username = id.ToString("N"), Email = $"{id:N}@own.example.com", Role = UserRole.SupportWorker });
+            seed(db, id);
+            expected[id] = reason;
+        }
+        var fresh = Guid.NewGuid();
+        db.Users.Add(new User { Id = fresh, FirstName = "F", LastName = "Resh", Username = fresh.ToString("N"), Email = $"{fresh:N}@own.example.com", Role = UserRole.SupportWorker });
+        await db.SaveChangesAsync();
+
+        var blockers = await ImportUntouched.StaffBlockersAsync(db, [.. expected.Keys, fresh], CancellationToken.None);
+
+        Assert.Equal(expected.OrderBy(e => e.Key), blockers.OrderBy(b => b.Key));
+    }
 }

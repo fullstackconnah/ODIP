@@ -85,4 +85,39 @@ public class OnboardingImportStaffTests
         Assert.Equal("This email belongs to another organisation.", result.Rows[1].Reasons.Single());
         Assert.Equal(1, await db.Users.IgnoreQueryFilters().CountAsync(u => u.Email.ToLower() == "sam.lee@gmail.com"));
     }
+
+    [Fact]
+    public async Task Undo_deletes_untouched_staff_so_their_emails_can_be_imported_again()
+    {
+        var (db, tenantId) = TwoOrganisations();
+        using var _ = db;
+        var service = Service(db, tenantId);
+        var file = Csv(Header, "Jo,Ng,jo@own.example.com", "Al,Wu,al@own.example.com");
+        var first = await service.CommitAsync(ImportKind.Staff, file, "staff.csv", null, null, "key-1", Admin(), CancellationToken.None);
+
+        var outcome = await service.UndoAsync(first.BatchId, Admin(), CancellationToken.None);
+
+        Assert.Empty(outcome.Blockers);
+        Assert.NotNull(outcome.Batch!.UndoneAt);
+        Assert.False(await db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email == "jo@own.example.com" || u.Email == "al@own.example.com"));
+        Assert.True(await db.Users.AnyAsync(u => u.Email == "kim@own.example.com"));
+        Assert.Equal(2, (await service.CommitAsync(ImportKind.Staff, file, "staff.csv", null, null, "key-2", Admin(), CancellationToken.None)).CreatedCount);
+    }
+
+    [Fact]
+    public async Task Staff_undo_is_refused_when_someone_signed_in_or_was_rostered()
+    {
+        var (db, tenantId) = TwoOrganisations();
+        using var _ = db;
+        var service = Service(db, tenantId);
+        var result = await service.CommitAsync(ImportKind.Staff, Csv(Header, "Jo,Ng,jo@own.example.com", "Al,Wu,al@own.example.com"), "staff.csv", null, null, "key-1", Admin(), CancellationToken.None);
+        (await db.Users.SingleAsync(u => u.Email == "jo@own.example.com")).LastLoginAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var outcome = await service.UndoAsync(result.BatchId, Admin(), CancellationToken.None);
+
+        Assert.Equal(("Jo Ng", "has signed in"), (outcome.Blockers.Single().Name, outcome.Blockers.Single().Reason));
+        Assert.Equal(2, await db.Users.CountAsync(u => u.Email.EndsWith("@own.example.com") && u.LastName != "Tan"));
+        Assert.Null((await db.ImportBatches.SingleAsync()).UndoneAt);
+    }
 }
