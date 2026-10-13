@@ -60,7 +60,7 @@ function Qualifications({ staff }: { staff: StaffListDto }) {
 }
 
 export default function StaffPage() {
-  const { canWrite, canAccessPage } = usePermissions()
+  const { canWrite, canAccessPage, canImportData } = usePermissions()
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
   const deleteStaff = useDeleteStaff()
   const updateStaff = useUpdateStaff()
@@ -179,10 +179,16 @@ export default function StaffPage() {
         <PageHeader
           title="Staff"
           subtitle={plural(staff.length, 'staff member')}
-          action={!showArchived && canWrite && (
-            <Button to="/staff/new" size="md">
-              <Plus className="w-4 h-4" /> New staff member
-            </Button>
+          action={!showArchived && (canWrite || canImportData) && (
+            // One cluster, as on the Participants hub: PageHeader dissolves its wrapper from md, and loose buttons would be spread apart.
+            <div className="flex shrink-0 items-center gap-2">
+              {canImportData && <Button to="/settings/import/staff" variant="secondary" size="md">Import</Button>}
+              {canWrite && (
+                <Button to="/staff/new" size="md">
+                  <Plus className="w-4 h-4" /> New staff member
+                </Button>
+              )}
+            </div>
           )}
         >
           {toggleButtons}

@@ -16,6 +16,7 @@ import type { ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, Impo
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
+import ImportInvites from './ImportInvites'
 import { undoBlockers } from './importUndoBlockers'
 
 const MAX_BYTES = 5 * 1024 * 1024
@@ -30,9 +31,17 @@ const STEPS: WizardStepDef<Record<string, never>>[] = [
 ]
 const ORDER = STEPS.map(s => s.key as StepKey)
 
-/** What each kind imports, as the page words it. */
-const KIND: Record<ImportKind, { noun: string; listTo: (landing: ImportLanding | null) => string }> = {
-  participants: { noun: 'participant', listTo: landing => landing === 'Onboarding' ? '/participants?tab=onboarding' : '/participants?tab=active' },
+/** What each kind imports, as the page words it. Staff is "Import staff", as the nav says, never "staff members"; an undone staff import deletes its accounts. */
+const KIND: Record<ImportKind, { noun: string; title: string; listNoun: string; listTo: (landing: ImportLanding | null) => string; undone: string; undoRule: string }> = {
+  participants: {
+    noun: 'participant', title: 'Import participants', listNoun: 'participants',
+    listTo: landing => landing === 'Onboarding' ? '/participants?tab=onboarding' : '/participants?tab=active',
+    undone: 'are archived', undoRule: 'none of them has changed since the import',
+  },
+  staff: {
+    noun: 'staff member', title: 'Import staff', listNoun: 'staff', listTo: () => '/staff',
+    undone: 'are removed', undoRule: 'none of them has signed in or been rostered',
+  },
 }
 
 const STATUS: Record<ImportRowStatus, { label: string; tone: 'info' | 'neutral' | 'danger' }> = {
@@ -68,7 +77,7 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
 
 export default function ImportWizardPage() {
   const { kind: param } = useParams()
-  const kind: ImportKind | null = param === 'participants' ? param : null
+  const kind: ImportKind | null = param === 'participants' || param === 'staff' ? param : null
   const preview = usePreviewImport()
   const commit = useCommitImport()
   const undo = useUndoImport()
@@ -90,8 +99,7 @@ export default function ImportWizardPage() {
   const idempotencyKey = useRef(newCompletionRequestId())
 
   if (!kind) return <Navigate to={BACK_TO} replace />
-  const { noun, listTo } = KIND[kind]
-  const title = `Import ${noun}s`
+  const { noun, title, listNoun, listTo, undone: undoneWord, undoRule } = KIND[kind]
 
   const go = (next: StepKey) => {
     setProblem(null)
@@ -170,19 +178,20 @@ export default function ImportWizardPage() {
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
         {header}
         {undone ? (
-          <Callout tone="info" title="Import undone">{`The ${plural(result.createdCount, noun)} it created are archived.`}</Callout>
+          <Callout tone="info" title="Import undone">{`The ${plural(result.createdCount, noun)} it created ${undoneWord}.`}</Callout>
         ) : (
           <Callout
             tone="success"
             title={`Imported ${plural(result.createdCount, noun)}`}
             actions={<>
-              <Button to={listTo(landing)} variant="secondary" size="sm">View {noun}s</Button>
+              <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>
               <Button variant="secondary" size="sm" onClick={() => setConfirmUndo(true)}>Undo import</Button>
             </>}
           >
             {`${result.skippedCount} skipped (already in ODIP), ${result.failedCount} couldn't be imported.`}
           </Callout>
         )}
+        {kind === 'staff' && !undone && <ImportInvites batchId={result.batchId} count={result.createdCount} />}
         {problem && (
           <Callout tone="error" title={problem}>
             {blockers.length > 0 && (
@@ -202,7 +211,7 @@ export default function ImportWizardPage() {
         <ConfirmDialog
           open={confirmUndo}
           title="Undo this import?"
-          message={`The ${plural(result.createdCount, noun)} it created are archived. This only works while none of them has changed since the import.`}
+          message={`The ${plural(result.createdCount, noun)} it created ${undoneWord}. This only works while ${undoRule}.`}
           confirmLabel="Undo import"
           variant="danger"
           loading={undo.isPending}
@@ -320,6 +329,7 @@ export default function ImportWizardPage() {
                 <p>{`${plural(data.readyCount, noun)} will be created${landing ? `, ${LANDINGS.find(l => l.value === landing)!.label.toLowerCase()}` : ''}.`}</p>
                 {data.skippedCount > 0 && <p>{`Skipped, already in ODIP: ${data.skippedCount}.`}</p>}
                 {data.invalidCount > 0 && <p>{`Can't be imported: ${data.invalidCount}. Fix them in the file and import it again afterwards.`}</p>}
+                {kind === 'staff' && <p>Nobody is emailed yet: send sign-in invites after the import, now or later from Import history.</p>}
                 <p>Every row is checked again as it is imported. You can undo the whole import while nothing has been added to its records.</p>
               </div>
             )}

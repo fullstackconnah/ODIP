@@ -1,5 +1,7 @@
 // Settings → Import data (ImportsController). Shapes follow Odip.Application/DTOs/ImportDTOs.cs.
-export type ImportKind = 'participants'
+import type { FirebaseAccountState } from './users'
+
+export type ImportKind = 'participants' | 'staff'
 export type ImportLanding = 'Active' | 'Onboarding'
 export type ImportRowStatus = 'Ready' | 'Skipped' | 'Invalid'
 
@@ -21,7 +23,7 @@ export interface ImportResultDto { batchId: string; createdCount: number; skippe
 
 export interface ImportBatchDto {
   id: string
-  kind: 'Participants'
+  kind: 'Participants' | 'Staff'
   fileName: string
   createdByName: string
   createdAt: string
@@ -34,3 +36,6 @@ export interface ImportBatchDto {
 }
 
 export interface ImportUndoBlockerDto { entityId: string; name: string; reason: string }
+
+/** One staff member's sign-in invite: the account made or found, or why there is none (the server's own sentence). */
+export interface ImportInviteDto { staffId: string; name: string; email: string; firebaseAccount: FirebaseAccountState | null; error: string | null }

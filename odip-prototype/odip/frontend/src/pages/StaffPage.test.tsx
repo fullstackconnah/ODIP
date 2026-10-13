@@ -434,3 +434,15 @@ describe('StaffPage — Qualifications chips and the phone card', () => {
     expect(screen.getByText('Driver').closest('td')).toHaveClass('max-md:basis-full')
   })
 })
+
+// Onboarding import (PR 3): the Staff page links to the staff import, as the Participants hub does to its own.
+describe('StaffPage — import', () => {
+  it('links an Admin to the staff import from the header, and not a Coordinator', () => {
+    const { unmount } = renderPage()
+    expect(screen.getByRole('link', { name: 'Import' })).toHaveAttribute('href', '/settings/import/staff')
+    unmount()
+    setUserRole('Coordinator')
+    renderPage()
+    expect(screen.queryByRole('link', { name: 'Import' })).toBeNull()
+  })
+})
