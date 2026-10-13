@@ -53,6 +53,7 @@ public static class ImportUntouched
         // Signing evidence hangs off its snapshot, which carries the participant.
         await Add(db.ElectronicSigningSnapshots.Where(s => list.Contains(s.ParticipantId)).Select(s => s.ParticipantId), "has e-signing records");
         await Add(db.TripClaims.Where(t => t.ParticipantId != null && list.Contains(t.ParticipantId.Value)).Select(t => t.ParticipantId!.Value), "has trip claims");
+        await Add(db.ParticipantInquiries.Where(q => q.ParticipantId != null && list.Contains(q.ParticipantId.Value)).Select(q => q.ParticipantId!.Value), "is linked to an inquiry");
         await Add(db.ParticipantContactRoles.Where(r => list.Contains(r.ParticipantId) && r.CreatedAt > importedAt).Select(r => r.ParticipantId), "has contacts added after the import");
         return reasons;
     }
