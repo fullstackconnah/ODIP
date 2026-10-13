@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useCaregiverSubmission, useAcceptCaregiverSubmission, useRejectCaregiverSubmission } from '@/api/hooks/caregiver'
 import { computeCaregiverDiff, type DiffRow } from '@/lib/caregiverDiff'
 import { usePermissions } from '@/lib/permissions'
@@ -69,7 +69,8 @@ export default function CaregiverSubmissionReviewPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-3">
-        <BackButton to="/caregiver-submissions" label="caregiver submissions" variant="icon" history={false} className="mt-0.5" />
+        {/* Reached from the list and from the participant's Documents menu, so Back returns to whichever it was. */}
+        <BackButton to="/caregiver-submissions" label="caregiver submissions" variant="icon" className="mt-0.5" />
         <div className="flex-1">
           <PageHeader
             title={s.participantName}
@@ -78,6 +79,8 @@ export default function CaregiverSubmissionReviewPage() {
                 Submitted by <strong>{s.caregiverName ?? '—'}</strong>
                 {s.caregiverRelationship ? ` (${s.caregiverRelationship})` : ''}
                 {s.submittedAt ? ` on ${formatDateAu(s.submittedAt)}` : ''} · {s.status}
+                {' · '}
+                <Link to={`/participants/${s.participantId}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant</Link>
               </>
             )}
             action={canAct && (

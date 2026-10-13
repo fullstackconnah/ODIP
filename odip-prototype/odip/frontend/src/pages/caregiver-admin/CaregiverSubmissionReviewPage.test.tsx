@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import CaregiverSubmissionReviewPage from './CaregiverSubmissionReviewPage'
 import type { CaregiverSubmissionDetailDto } from '@/api/types/caregiver'
+import { __testHooks } from '@/hooks/useBackNavigation'
 
 const {
   mockUseCaregiverSubmission, mockUseAcceptCaregiverSubmission, mockUseRejectCaregiverSubmission,
@@ -211,5 +212,21 @@ describe('CaregiverSubmissionReviewPage — a refused Accept or Reject', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText('This submission has already been reviewed.')).toBeInTheDocument()
     expect(refetch).toHaveBeenCalled()
+  })
+})
+
+// NAV F8: the review is reached from the list and from the participant's Documents menu.
+describe('CaregiverSubmissionReviewPage — links', () => {
+  it('links to the participant record', () => {
+    renderPage()
+    expect(screen.getByRole('link', { name: 'View participant' })).toHaveAttribute('href', '/participants/p1')
+  })
+
+  it('Back returns to the participant when the review was opened from there', () => {
+    __testHooks.recordCurrentPath('/participants/p1')
+    __testHooks.recordCurrentPath('/caregiver-submissions/sub-1')
+    renderPage()
+    expect(screen.getByRole('link', { name: /^Back to / })).toHaveAttribute('href', '/participants/p1')
+    __testHooks.reset()
   })
 })

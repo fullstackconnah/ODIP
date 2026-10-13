@@ -6,6 +6,7 @@ import ParticipantDetailPage from './ParticipantDetailPage'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
 import { TONE } from '@/lib/tone'
+import { __testHooks } from '@/hooks/useBackNavigation'
 
 const {
   mockUseParticipant, mockUseParticipantBookings, mockUseParticipantAlerts,
@@ -1260,5 +1261,69 @@ describe('ParticipantDetailPage — every tab visible from md up', () => {
     renderAt('participant-1')
     expect(screen.getAllByRole('tab')).toHaveLength(12)
     expect(screen.getByRole('tablist', { name: 'Participant detail sections' })).toHaveClass('md:flex-wrap')
+  })
+})
+
+// NAV F2: Back was pinned to /participants (Active), where a draft is never listed.
+describe('ParticipantDetailPage — Back returns to where the user came from, else to the stage list', () => {
+  afterEach(() => __testHooks.reset())
+  const back = () => screen.getByRole('link', { name: /^Back to / })
+
+  it('falls back to Enquiries for a draft whose intake is not complete', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false }), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/participants?tab=enquiries')
+  })
+
+  it('falls back to Onboarding for a draft whose intake is complete', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false, intakeCompletedAt: '2026-10-01T00:00:00Z' }), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/participants?tab=onboarding')
+  })
+
+  it('falls back to the Active list for a finalised participant', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/participants')
+  })
+
+  it('returns to the previous in-app screen when there is one', () => {
+    __testHooks.recordCurrentPath('/onboarding/participant-1')
+    __testHooks.recordCurrentPath('/participants/participant-1')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/onboarding/participant-1')
+  })
+})
+
+// NAV F8: a submitted caregiver form had no route to its review from the participant.
+describe('ParticipantDetailPage — Review caregiver form', () => {
+  it('offers the review of a submitted form in the Documents menu, and opens it', async () => {
+    setUserRole('Admin')
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
+      data: status === 'Submitted' ? [{ id: 'submission-1', participantId: 'participant-1', participantName: 'Sophie Brown', status: 'Submitted', caregiverName: 'Jane Doe', createdAt: '2026-08-01T00:00:00Z', expiresAt: '2026-09-17T00:00:00Z', submittedAt: '2026-08-02T00:00:00Z' }] : [],
+    }))
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    render(
+      <MemoryRouter initialEntries={['/participants/participant-1']}>
+        <Routes>
+          <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+          <Route path="/caregiver-submissions/:id" element={<div data-testid="review-route" />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await chooseFromDocuments('Review caregiver form')
+    expect(screen.getByTestId('review-route')).toBeInTheDocument()
+  })
+
+  it('does not offer it while the form is only a draft', async () => {
+    setUserRole('Admin')
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
+      data: status === 'Draft' ? [{ id: 'submission-2', participantId: 'participant-1', participantName: 'Sophie Brown', status: 'Draft', caregiverName: null, createdAt: '2026-08-01T00:00:00Z', expiresAt: '2026-09-17T00:00:00Z', submittedAt: null }] : [],
+    }))
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+    await openDocuments()
+    expect(screen.queryByRole('option', { name: 'Review caregiver form' })).not.toBeInTheDocument()
   })
 })
