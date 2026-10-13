@@ -22,7 +22,7 @@ async function importStaff(page: Page, token: string, shot: (name: string) => Pr
   await shot('staff-upload');
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByRole('heading', { name: 'Match columns' })).toBeVisible();
-  await expect(page.getByText("Won't be imported: Employment Hero will hold employment details.")).toBeVisible();
+  await expect(page.getByText("Won't be imported: your payroll system keeps employment details.")).toBeVisible();
   await shot('staff-match');
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByRole('heading', { name: 'Preview' })).toBeVisible();

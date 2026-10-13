@@ -16,12 +16,12 @@ public static class ImportFields
     private static readonly IReadOnlyList<ImportField> Participants = BuildParticipants();
     private static readonly IReadOnlyList<ImportField> Staff = BuildStaff();
 
-    private const string EmploymentHero = "Won't be imported: Employment Hero will hold employment details.";
+    private const string Payroll = "Won't be imported: your payroll system keeps employment details.";
     private const string NoField = "Won't be imported: ODIP has no field for this yet.";
     // Staff columns other platforms export that ODIP does not hold: shown as "won't be imported" so the Admin knows they were seen.
     private static readonly Dictionary<string, string> StaffNotImported = new()
     {
-        ["employmenttype"] = EmploymentHero, ["employment"] = EmploymentHero, ["startdate"] = EmploymentHero, ["datestarted"] = EmploymentHero,
+        ["employmenttype"] = Payroll, ["employment"] = Payroll, ["startdate"] = Payroll, ["datestarted"] = Payroll,
         ["wwcc"] = NoField, ["wwccnumber"] = NoField, ["workingwithchildrencheck"] = NoField,
         ["policecheck"] = NoField, ["nationalpolicecheck"] = NoField, ["cpr"] = NoField, ["cprexpiry"] = NoField,
     };
