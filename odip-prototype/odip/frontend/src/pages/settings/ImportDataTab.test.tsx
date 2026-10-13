@@ -107,5 +107,6 @@ describe('ImportDataTab', () => {
     expect(screen.getByRole('link', { name: 'Import participants' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Import staff' })).toBeNull()
     expect(screen.getByText('Staff come from Employment Hero for this organisation, so they are not imported here.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Integrations' })).toHaveAttribute('href', '/settings?tab=integrations')
   })
 })

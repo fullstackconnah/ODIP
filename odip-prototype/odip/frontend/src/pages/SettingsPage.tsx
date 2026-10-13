@@ -36,6 +36,7 @@ import { plural } from '@/lib/format'
 import { useTabParam } from '@/hooks/useTabParam'
 import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
 import ImportDataTab from '@/pages/settings/ImportDataTab'
+import IntegrationsTab from '@/pages/settings/IntegrationsTab'
 import { Callout } from '@/components/Callout'
 
 function QualificationSettingsTab() {
@@ -132,7 +133,7 @@ export default function SettingsPage() {
   const templatesEmpty = !templatesLoading && !templatesError && activeTemplates.length === 0
   const openNewTemplate = () => { setEditingTemplate(undefined); setPanelOpen(true) }
 
-  const { isSuperAdmin, isAdmin, canManageNotifications, canImportData } = usePermissions()
+  const { isSuperAdmin, isAdmin, canManageNotifications, canImportData, canManageIntegrations } = usePermissions()
 
   const [tenantPanelOpen, setTenantPanelOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<TenantSummaryDto | undefined>()
@@ -152,6 +153,7 @@ export default function SettingsPage() {
     { key: 'provider' as const, label: 'Provider settings' },
     // Settings → Import data: an Admin, or a SuperAdmin viewing as the organisation (ImportsController; an import belongs to one organisation).
     { key: 'import' as const, label: 'Import data', hidden: !canImportData },
+    { key: 'integrations' as const, label: 'Integrations', hidden: !canManageIntegrations },
     // The pricing engine's own answers (registration groups, crossing policy, travel rates): the provider's to set, so Admins and SuperAdmins only.
     { key: 'pricing' as const, label: 'Plan pricing', hidden: !(isAdmin || isSuperAdmin) },
     // What a budget check does about a one-off shift that would put a participant over budget, and when a participant counts as approaching it (budget phase 1 stores the choice): Admins and SuperAdmins only.
@@ -246,6 +248,7 @@ export default function SettingsPage() {
       {tab === 'appearance' && <AppearanceSettingsTab />}
       {tab === 'provider' && <ProviderSettingsTab />}
       {tab === 'import' && <ImportDataTab />}
+      {tab === 'integrations' && <IntegrationsTab />}
       {tab === 'pricing' && <PlanPricingSettingsTab />}
       {tab === 'budgets' && <BudgetSettingsTab />}
       {tab === 'catalogue' && <SupportCatalogueTab />}

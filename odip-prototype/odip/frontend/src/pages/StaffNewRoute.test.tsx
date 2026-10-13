@@ -21,5 +21,6 @@ describe('/staff/new', () => {
     expect(screen.queryByText('Staff form')).toBeNull()
     expect(screen.getByText('Staff come from Employment Hero for this organisation. Add them there; they appear here within 30 minutes.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to staff' })).toHaveAttribute('href', '/staff')
+    expect(screen.getByRole('heading', { level: 1, name: 'New staff member' })).toBeInTheDocument()
   })
 })

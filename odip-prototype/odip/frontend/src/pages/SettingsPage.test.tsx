@@ -839,3 +839,17 @@ describe('SettingsPage — Import data tab', () => {
     expect(screen.queryByRole('tab', { name: 'Import data' })).toBeNull()
   })
 })
+
+describe('SettingsPage — Integrations tab', () => {
+  it('shows the Integrations tab to someone who can manage integrations', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: true, canImportData: true, canManageIntegrations: true })
+    renderSettingsPage()
+    expect(screen.getByRole('tab', { name: 'Integrations' })).toBeInTheDocument()
+  })
+
+  it('hides the Integrations tab from a Coordinator', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isCoordinator: true, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false, canImportData: false, canManageIntegrations: false })
+    renderSettingsPage()
+    expect(screen.queryByRole('tab', { name: 'Integrations' })).toBeNull()
+  })
+})

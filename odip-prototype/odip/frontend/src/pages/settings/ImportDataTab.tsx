@@ -28,7 +28,6 @@ export default function ImportDataTab() {
   const undo = useUndoImport()
   const template = useDownloadImportTemplate()
   const staffFromPayroll = useProviderSettings().data?.employmentHeroConnected === true
-  const kinds = staffFromPayroll ? KINDS.filter(k => k.kind !== 'staff') : KINDS
   const [undoing, setUndoing] = useState<ImportBatchDto | null>(null)
   const [invited, setInvited] = useState<{ batchId: string; fileName: string; result: InviteResult } | null>(null)
 
@@ -64,20 +63,29 @@ export default function ImportDataTab() {
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Upload a .csv or .xlsx export from your old platform, up to 2,000 rows and 5 MB. Records already in ODIP are skipped and never changed.
         </p>
-        {kinds.map(k => (
-          <section key={k.kind} aria-labelledby={`import-kind-${k.kind}`} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">
-            {/* Grows beside the actions and wraps its own text, so a longer description never pushes the actions under it on a wide screen. */}
-            <div className="min-w-0 flex-[1_1_20rem]">
-              <h3 id={`import-kind-${k.kind}`} className="text-sm font-semibold">{k.title}</h3>
-              <p className="text-sm text-[var(--color-muted-foreground)]">{k.text}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => template.mutate(k.kind)}>Download template</Button>
-              <Button to={`/settings/import/${k.kind}`}>Import {k.title.toLowerCase()}</Button>
-            </div>
-          </section>
-        ))}
-        {staffFromPayroll && <p className="text-sm text-[var(--color-muted-foreground)]">Staff come from Employment Hero for this organisation, so they are not imported here.</p>}
+        {KINDS.map(k => {
+          // A connected organisation's staff come from Employment Hero: the staff card stays in its slot and says where they come from instead.
+          const fromPayroll = staffFromPayroll && k.kind === 'staff'
+          return (
+            <section key={k.kind} aria-labelledby={`import-kind-${k.kind}`} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">
+              {/* Grows beside the actions and wraps its own text, so a longer description never pushes the actions under it on a wide screen. */}
+              <div className="min-w-0 flex-[1_1_20rem]">
+                <h3 id={`import-kind-${k.kind}`} className="text-sm font-semibold">{k.title}</h3>
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  {fromPayroll ? 'Staff come from Employment Hero for this organisation, so they are not imported here.' : k.text}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {fromPayroll ? <Button variant="secondary" to="/settings?tab=integrations">Open Integrations</Button> : (
+                  <>
+                    <Button variant="secondary" onClick={() => template.mutate(k.kind)}>Download template</Button>
+                    <Button to={`/settings/import/${k.kind}`}>Import {k.title.toLowerCase()}</Button>
+                  </>
+                )}
+              </div>
+            </section>
+          )
+        })}
       </section>
 
       <section className="flex flex-col gap-3" aria-labelledby="import-history">
