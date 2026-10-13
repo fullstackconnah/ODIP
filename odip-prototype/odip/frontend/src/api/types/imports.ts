@@ -40,5 +40,5 @@ export interface ImportUndoBlockerDto { entityId: string; name: string; reason: 
 /** One staff member's sign-in invite: the account made or found, or why there is none (the server's own sentence). */
 export interface ImportInviteDto { staffId: string; name: string; email: string; firebaseAccount: FirebaseAccountState | null; error: string | null }
 
-/** One press of Send sign-in invites (at most 100 people) and how many never-signed-in staff are still after them. */
-export interface ImportInvitesDto { invites: ImportInviteDto[]; left: number }
+/** One press of Send sign-in invites (at most 100 people), how many never-signed-in staff are still after them, and the cursor for the next press. */
+export interface ImportInvitesDto { invites: ImportInviteDto[]; left: number; next: string | null }

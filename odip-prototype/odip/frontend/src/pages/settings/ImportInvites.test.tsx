@@ -24,7 +24,7 @@ describe('ImportInvites', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Send sign-in invites (2)' }))
 
-    expect(invites).toHaveBeenCalledWith({ batchId: 'b1', from: 0 })
+    expect(invites).toHaveBeenCalledWith({ batchId: 'b1' })
     expect(sendEmail).toHaveBeenCalledTimes(1)
     expect(sendEmail).toHaveBeenCalledWith('jo@example.com', 'created')
     expect(await screen.findByText('Sign-in invites: 1 sent, 1 not sent')).toBeInTheDocument()
@@ -56,7 +56,7 @@ describe('ImportInvites', () => {
 
   it('sends the rest from where the last press stopped, and says how many are left', async () => {
     sendEmail.mockImplementation(async (email: string) => ({ ok: true, email, account: 'created' }))
-    invites.mockResolvedValueOnce({ left: 50, invites: [{ staffId: 's1', name: 'Jo Ng', email: 'jo@example.com', firebaseAccount: 'created', error: null }] })
+    invites.mockResolvedValueOnce({ left: 50, next: 's1', invites: [{ staffId: 's1', name: 'Jo Ng', email: 'jo@example.com', firebaseAccount: 'created', error: null }] })
     render(<ImportInvites batchId="b1" count={51} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Send sign-in invites (51)' }))
@@ -64,7 +64,7 @@ describe('ImportInvites', () => {
 
     invites.mockResolvedValueOnce({ left: 0, invites: [{ staffId: 's2', name: 'Al Wu', email: 'al@example.com', firebaseAccount: 'existing', error: null }] })
     await userEvent.click(screen.getByRole('button', { name: 'Send sign-in invites (50)' }))
-    expect(invites).toHaveBeenLastCalledWith({ batchId: 'b1', from: 1 })
+    expect(invites).toHaveBeenLastCalledWith({ batchId: 'b1', after: 's1' })
     expect(await screen.findByText(/al@example.com/)).toBeInTheDocument()
     expect(screen.queryByText(/more still to invite/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Send sign-in invites (51)' })).toBeInTheDocument()

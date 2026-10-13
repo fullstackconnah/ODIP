@@ -131,7 +131,7 @@ public class ImportInvitesTests
     }
 
     [Fact]
-    public async Task One_request_invites_at_most_100_and_says_how_many_are_left()
+    public async Task One_request_invites_at_most_100_and_the_next_carries_on_after_the_last_one_without_skipping_anyone()
     {
         var tenantId = Guid.NewGuid();
         using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenantId);
@@ -141,15 +141,23 @@ public class ImportInvitesTests
         var firebase = new Mock<IFirebaseUserService>();
         firebase.Setup(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SignInAccountResult.Created);
         var controller = Controller(db, tenantId, firebase.Object);
-        async Task<ImportInvitesDto> Send(int? from) =>
-            Assert.IsType<ApiResponse<ImportInvitesDto>>(Assert.IsType<OkObjectResult>((await controller.Invites(batch.BatchId, from, CancellationToken.None)).Result).Value).Data!;
+        async Task<ImportInvitesDto> Send(Guid? after) =>
+            Assert.IsType<ApiResponse<ImportInvitesDto>>(Assert.IsType<OkObjectResult>((await controller.Invites(batch.BatchId, after, CancellationToken.None)).Result).Value).Data!;
 
         var first = await Send(null);
-        var second = await Send(100);
-
         Assert.Equal((100, 50), (first.Invites.Count, first.Left));
-        Assert.Equal((50, 0), (second.Invites.Count, second.Left));
-        Assert.Equal(150, first.Invites.Concat(second.Invites).Select(i => i.Email).Distinct().Count());
-        firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(150));
+        // Between presses one of the 50 still to come signs in, and so does one already invited: the cursor neither skips nor repeats anyone.
+        var done = first.Invites.Select(i => i.StaffId).ToHashSet();
+        var waiting = (await db.Users.Where(u => u.LastName == "Staff").ToListAsync()).Where(u => !done.Contains(u.Id)).ToList();
+        Assert.Equal(50, waiting.Count);
+        waiting[0].LastLoginAt = DateTime.UtcNow;
+        (await db.Users.SingleAsync(u => u.Id == first.Invites[0].StaffId)).LastLoginAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var second = await Send(first.Next);
+
+        Assert.Equal((49, 0), (second.Invites.Count, second.Left));
+        Assert.Equal(waiting.Skip(1).Select(u => u.Id).OrderBy(id => id), second.Invites.Select(i => i.StaffId).OrderBy(id => id));
+        firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(149));
     }
 }

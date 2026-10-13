@@ -51,12 +51,13 @@ export function useUndoImport() {
 }
 
 /**
- * POST /imports/{id}/invites: makes sure the batch's never-signed-in staff have sign-in accounts, up to 100 per call starting at `from`, and
- * says how many are left. The browser sends the emails.
+ * POST /imports/{id}/invites: makes sure the batch's never-signed-in staff have sign-in accounts, up to 100 per call after the cursor `after`
+ * (the previous call's `next`), and says how many are left. The browser sends the emails.
  */
 export function useImportInvites() {
   return useMutation({
-    mutationFn: ({ batchId, from }: { batchId: string; from: number }) => apiPost<ImportInvitesDto>(`/imports/${batchId}/invites?from=${from}`),
+    mutationFn: ({ batchId, after }: { batchId: string; after?: string }) =>
+      apiPost<ImportInvitesDto>(`/imports/${batchId}/invites${after ? `?after=${encodeURIComponent(after)}` : ''}`),
   })
 }
 

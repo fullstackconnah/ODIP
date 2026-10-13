@@ -77,7 +77,7 @@ describe('ImportDataTab', () => {
     const row = screen.getByRole('row', { name: /staff.csv/ })
     await userEvent.click(within(row).getByRole('button', { name: 'Send sign-in invites (2)' }))
 
-    expect(invites).toHaveBeenCalledWith({ batchId: 'b2', from: 0 })
+    expect(invites).toHaveBeenCalledWith({ batchId: 'b2' })
     const said = await screen.findByText('Everyone in this import has signed in already, so no invites were sent.')
     expect(row).not.toContainElement(said)
     await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))

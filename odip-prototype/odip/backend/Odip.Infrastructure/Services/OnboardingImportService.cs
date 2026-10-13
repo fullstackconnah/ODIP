@@ -342,14 +342,17 @@ public sealed class OnboardingImportService
         return new ImportUndoOutcome(false, [], ToDto(batch));
     }
 
-    /// <summary>The staff a sign-in invite goes to: this organisation's staff batch, not undone, its members who have never signed in. Null: no such batch.</summary>
+    /// <summary>
+    /// The staff a sign-in invite goes to: this organisation's staff batch, not undone, its members who have never signed in, in id order (the
+    /// invites' cursor; sorted here, not by the database, so the order is the same Guid comparison the cursor uses). Null: no such batch.
+    /// </summary>
     public async Task<List<User>?> StaffToInviteAsync(Guid batchId, CancellationToken ct)
     {
         TenantId();
         var batch = await _db.ImportBatches.FirstOrDefaultAsync(b => b.Id == batchId && b.Kind == ImportKind.Staff && b.UndoneAt == null, ct);
         if (batch is null) return null;
         var ids = _db.ImportBatchItems.Where(i => i.BatchId == batch.Id).Select(i => i.EntityId);
-        return await _db.Users.Where(u => ids.Contains(u.Id) && u.LastLoginAt == null).OrderBy(u => u.LastName).ThenBy(u => u.FirstName).ThenBy(u => u.Id).ToListAsync(ct);
+        return (await _db.Users.Where(u => ids.Contains(u.Id) && u.LastLoginAt == null).ToListAsync(ct)).OrderBy(u => u.Id).ToList();
     }
 
     public async Task<List<ImportBatchDto>> HistoryAsync(CancellationToken ct)
