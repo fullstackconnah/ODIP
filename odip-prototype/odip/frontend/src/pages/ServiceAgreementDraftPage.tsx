@@ -68,6 +68,8 @@ function DraftPage() {
   const { id: participantId } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const fromOnboarding = useSearchParams()[0].get('from') === 'onboarding'
+  // Close, Back and Cancel all leave to the same place: the checklist the wizard was opened from, else the participant.
+  const backHref = fromOnboarding ? `/onboarding/${participantId}` : `/participants/${participantId}`
   const participant = useParticipant(participantId)
   const drafts = useServiceAgreementDrafts(participantId)
   const create = useCreateServiceAgreementDraft()
@@ -287,7 +289,7 @@ function DraftPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (step !== 'save') next()
-    else if (readOnly) navigate(`/participants/${participantId}`)
+    else if (readOnly) navigate(backHref)
     else save()
   }
   const stepIndex = STEPS.findIndex(entry => entry.key === step)
@@ -316,7 +318,7 @@ function DraftPage() {
       />
     )}
     <div className="flex items-start gap-4">
-      <BackButton to={fromOnboarding ? `/onboarding/${participantId}` : `/participants/${participantId}`} label={fromOnboarding ? 'onboarding' : 'participant'} variant="icon" history={false} className="mt-1" />
+      <BackButton to={backHref} label={fromOnboarding ? 'onboarding' : 'participant'} variant="icon" history={false} className="mt-1" />
       <div className="flex-1"><PageHeader title="Service agreement" subtitle={participant.data.fullName} /></div>
     </div>
 
@@ -383,7 +385,8 @@ function DraftPage() {
           onNext={next}
           isReviewStep={step === 'save'}
           secondaryActions={[]}
-          cancelTo={fromOnboarding ? `/onboarding/${participantId}` : `/participants/${participantId}`}
+          cancelTo={backHref}
+          history={false}
           submitLabel={readOnly ? 'Close' : 'Save agreement'}
           isSubmitting={create.isPending || loadingNewest}
           summary={total}
