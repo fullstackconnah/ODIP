@@ -485,7 +485,7 @@ public class ParticipantHubFlowTests
     }
 
     [Fact]
-    public async Task Lifecycle_ADraftMarkedActive_IsOnATabAtEveryStep_AndCompletingTheProfileKeepsThemActive()
+    public async Task Lifecycle_ADraftMarkedActive_IsOnATabAtEveryStep_AndMakeActiveKeepsThemActive()
     {
         // The seeded demo draft: IsDraft with the entity's default IsActive=true, no enquiry, no onboarding row.
         var tenantId = Guid.NewGuid();

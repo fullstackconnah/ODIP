@@ -666,7 +666,7 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
-    public async Task Update_ADraftWithACompletedIntake_IsStillFinalisedByIsDraftFalse()
+    public async Task Update_ADraftWithACompletedIntake_IsNotFinalisedByIsDraftFalse_OnlyMakeActiveFinalises()
     {
         using var fx = Create();
         var draft = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-1));
@@ -675,7 +675,7 @@ public class ParticipantStatusEndpointTests
 
         var result = Ok(await fx.Controller.Update(draft.Id, FullUpdate(draft, isDraft: false), CancellationToken.None));
 
-        Assert.False(result.IsDraft);
+        Assert.True(result.IsDraft);
     }
 
     [Fact]

@@ -154,6 +154,8 @@ public class ParticipantInquiriesController : ControllerBase
         if (dto.SignedOn is null && reason is null) errors["signedOn"] = ["Enter the date it was signed, or why there is no written agreement."];
         else if (dto.SignedOn is not null && reason is not null) errors["noAgreementReason"] = ["Give a signed date or a reason, not both."];
         else if (dto.SignedOn > await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct)) errors["signedOn"] = ["The signed date cannot be in the future."];
+        // NDIS agreements start in 2013; anything before 1990 is a typo, not a date.
+        else if (dto.SignedOn < new DateOnly(1990, 1, 1)) errors["signedOn"] = ["Check the signed date: it is before 1990."];
         else if (reason?.Length > 500) errors["noAgreementReason"] = ["Keep the reason to 500 characters or fewer."];
         if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
         var saved = await RecordAndSaveAsync(participant, onboarding, row => row.RecordAgreement(dto.SignedOn, reason, Actor(), DateTime.UtcNow), ct);

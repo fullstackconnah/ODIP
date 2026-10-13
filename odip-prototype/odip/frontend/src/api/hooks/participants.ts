@@ -149,6 +149,8 @@ function useLifecycleAction(action: 'begin-services' | 'make-active') {
       qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
       qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+      // The board lists who can receive services and tags a services-started row.
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
 }

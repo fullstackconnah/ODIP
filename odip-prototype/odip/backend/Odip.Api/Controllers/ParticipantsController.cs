@@ -713,8 +713,7 @@ public class ParticipantsController : ControllerBase
         // Already-active legacy rows stay active (IsActive is never written here).
         // A finalised participant is never sent back to draft by an update (the rule above rejects an explicit isDraft: true), and a
         // legacy participant whose IntakeCompletedAt was never stamped is NOT a draft because of that: they stay finalised.
-        // Only a record that is still a draft can stay one (no completed intake, or the client says so).
-        p.IsDraft = p.IsDraft && (!p.IntakeCompletedAt.HasValue || dto.IsDraft);
+        // Nor is a draft finalised by one: IsDraft is never written here. Only "Make active" finishes onboarding (it applies the readiness rule this would skip).
         // Saving never activates anyone (owner decision 2026-10-13): "Make active" on the onboarding checklist does, and the status
         // endpoint restores an archived participant. This used to activate here, which re-activated an archived participant on every save.
 

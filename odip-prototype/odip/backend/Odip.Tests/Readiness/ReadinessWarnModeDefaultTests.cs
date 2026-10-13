@@ -303,7 +303,7 @@ public class ReadinessWarnModeDefaultTests
     }
 
     [Fact]
-    public async Task Update_DraftWithCompletedIntake_FinalisedByThePayload_DefaultMode_StaysInactive()
+    public async Task Update_DraftWithCompletedIntake_AskedToFinalise_DefaultMode_StaysAnInactiveDraft()
     {
         using var db = CreateDb();
         var participant = new Participant
@@ -323,6 +323,9 @@ public class ReadinessWarnModeDefaultTests
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.False(body.Data!.IsActive);
+        // Nor does it finalise: only Make active finishes onboarding (LIFE fix round 1, V11).
+        Assert.True(body.Data.IsDraft);
+        Assert.True((await db.Participants.SingleAsync()).IsDraft);
     }
 
     [Fact]

@@ -171,6 +171,7 @@ public class OnboardingChecklistTests
         { new RecordOnboardingAgreementDto { NoAgreementReason = "   " }, "signedOn" },
         { new RecordOnboardingAgreementDto { SignedOn = new DateOnly(2026, 10, 1), NoAgreementReason = "Both" }, "noAgreementReason" },
         { new RecordOnboardingAgreementDto { SignedOn = new DateOnly(2026, 10, 14) }, "signedOn" },
+        { new RecordOnboardingAgreementDto { SignedOn = new DateOnly(1989, 12, 31) }, "signedOn" },
         { new RecordOnboardingAgreementDto { NoAgreementReason = new string('x', 501) }, "noAgreementReason" },
     };
 
