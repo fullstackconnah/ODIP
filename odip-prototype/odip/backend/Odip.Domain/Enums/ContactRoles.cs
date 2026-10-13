@@ -263,7 +263,7 @@ public static class ContactRoleFieldRules
     /// <paramref name="role"/>'s CURRENT RoleType, regardless of what a stale payload (e.g. a
     /// client that switched RoleType without re-fetching the form) carried for that field. Call
     /// this AFTER copying every DTO field onto the entity (see
-    /// ParticipantContactRolesController.ApplyRoleFields), so it clears against the
+    /// ContactRoleFields.Apply), so it clears against the
     /// just-assigned RoleType — a Guardian -> NextOfKin RoleType change on Update nulls
     /// AppointingTribunal/OrderScopeDomains/OrderStartDate/OrderReviewDate/OrderEndDate; the
     /// reverse direction (NextOfKin -> Guardian) leaves those fields exactly as the incoming DTO

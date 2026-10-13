@@ -424,6 +424,41 @@ public static class ParticipantPatchApplier
     }
 
     /// <summary>
+    /// PF-10.2, CommunityAccessDailyLiving stream — upserts every Community Access Risk Assessment
+    /// row submitted with a create/update payload, keyed by
+    /// <see cref="Domain.Enums.CommunityAccessRiskItemType"/>. Copies UpsertChecklistItemsAsync's
+    /// documented pattern exactly, including the load-bearing empty/null guard below (same
+    /// reasoning: an Update caller that never mentions CommunityAccessRiskItems round-trips an
+    /// empty list, which must mean "leave existing rows alone", not "clear every rating"). Called
+    /// before SaveChangesAsync so every row lands in the same transaction as the participant
+    /// insert/update. Sparse on creation (see the guard inside the loop below): the wizard always
+    /// submits the full fixed twenty-two-row array with every hidden/unrated row already null (see
+    /// <see cref="CreateParticipantCommunityAccessRiskItemDto"/>'s doc), so a blank incoming row
+    /// must not become a permanent database row just because it was present in the payload.
+    /// </summary>
+    public static async Task UpsertCommunityAccessRiskItemsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantCommunityAccessRiskItemDto> items, CancellationToken ct)
+    {
+        if (items is null || items.Count == 0) return;
+        var existing = await db.ParticipantCommunityAccessRiskItems.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
+        var byType = existing.ToDictionary(a => a.ItemType);
+        foreach (var dto in items)
+        {
+            if (!byType.TryGetValue(dto.ItemType, out var row))
+            {
+                // Load-bearing skip — same reasoning as UpsertChecklistItemsAsync's: only skip
+                // when there is both no existing row for this type AND the incoming dto carries no
+                // answer whatsoever; a dto that clears an EXISTING row to null still falls through
+                // to ParticipantGridRules.ApplyAnswer below and keeps the row.
+                if (dto.Rating is null && string.IsNullOrWhiteSpace(dto.StrategyNotes)) continue;
+                row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
+                db.ParticipantCommunityAccessRiskItems.Add(row);
+                byType[dto.ItemType] = row;
+            }
+            ParticipantGridRules.ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
+        }
+    }
+
+    /// <summary>
     /// INTAKE-08: FirstName/LastName requiredness, gated on <see cref="CreateParticipantDto.IsDraft"/>.
     /// Moved verbatim from ParticipantsController.
     /// </summary>

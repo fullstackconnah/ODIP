@@ -27,7 +27,7 @@ public record ParticipantCommunityAccessRiskItemDto
 /// <summary>
 /// Shape used both by <see cref="CreateParticipantDto.CommunityAccessRiskItems"/> (rows submitted
 /// alongside a new or drafted participant — see
-/// ParticipantsController.UpsertCommunityAccessRiskItemsAsync) and by
+/// ParticipantPatchApplier.UpsertCommunityAccessRiskItemsAsync) and by
 /// ParticipantCommunityAccessRiskItemsController.Upsert's route-scoped single-row upsert. The
 /// wizard always submits all twenty-two <see cref="CommunityAccessRiskItemType"/> entries (a fixed
 /// enumerated set, not a repeatable add/remove list).
