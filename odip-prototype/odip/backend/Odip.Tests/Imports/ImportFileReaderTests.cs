@@ -152,4 +152,22 @@ public class ImportFileReaderTests
         var file = Xlsx(sheet => { sheet.Cell(1, 1).Value = "Postcode"; sheet.Cell(2, 1).FormulaA1 = "=1000+1000"; });
         Assert.Equal("2000", ImportFileReader.Read(file, "people.xlsx").Rows.Single().Cells[0]);
     }
+
+    [Theory]
+    [InlineData("=200+34", "0000", 0, "0234")]
+    [InlineData("=DATE(1990,4,3)", "", 14, "1990-04-03")]
+    [InlineData("=DATE(1990,4,3)", "dd/mm/yyyy", 0, "1990-04-03")]
+    [InlineData("=1000+1000", "", 0, "2000")]
+    public void A_formula_cell_shows_its_saved_value_in_the_cells_number_format(string formula, string format, int formatId, string expected)
+    {
+        var file = Xlsx(sheet =>
+        {
+            sheet.Cell(1, 1).Value = "Postcode";
+            var cell = sheet.Cell(2, 1);
+            cell.FormulaA1 = formula;
+            if (format.Length > 0) cell.Style.NumberFormat.Format = format;
+            if (formatId > 0) cell.Style.NumberFormat.NumberFormatId = formatId;
+        });
+        Assert.Equal(expected, ImportFileReader.Read(file, "people.xlsx").Rows.Single().Cells[0]);
+    }
 }

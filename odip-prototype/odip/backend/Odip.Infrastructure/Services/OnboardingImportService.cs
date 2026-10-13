@@ -326,6 +326,25 @@ public sealed class OnboardingImportService
                 participant.IsDraft = false;
                 participant.UpdatedAt = now;
             }
+            // The People the import made for its contacts go too, with their roles, while nothing else uses them: no role on another
+            // participant or added since, and neither the person nor the role edited since. Any other stays, linked to the archived participant.
+            // Locked first, like the participants above: an edit to one of these people or roles, or a new role linking one of the people
+            // (its foreign key takes FOR KEY SHARE on the person), committed or in flight, is waited for and then seen by the check below.
+            if (_db.Database.IsNpgsql())
+            {
+                await _db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"ParticipantContactRoles\" WHERE \"ParticipantId\" = ANY({0}) FOR UPDATE", new object[] { ids.ToArray() }, ct);
+                await _db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"People\" WHERE \"Id\" IN (SELECT \"PersonId\" FROM \"ParticipantContactRoles\" WHERE \"ParticipantId\" = ANY({0})) FOR UPDATE",
+                    new object[] { ids.ToArray() }, ct);
+            }
+            var importedAt = batch.CreatedAt;
+            var people = _db.ParticipantContactRoles.Where(r => ids.Contains(r.ParticipantId) && r.CreatedAt <= importedAt).Select(r => r.PersonId);
+            var untouched = await _db.People
+                .Where(p => people.Contains(p.Id) && p.UpdatedAt <= importedAt
+                    && p.ContactRoles.All(r => ids.Contains(r.ParticipantId) && r.CreatedAt <= importedAt && r.UpdatedAt <= importedAt))
+                .Include(p => p.ContactRoles)
+                .ToListAsync(ct);
+            _db.ParticipantContactRoles.RemoveRange(untouched.SelectMany(p => p.ContactRoles));
+            _db.People.RemoveRange(untouched);
         }
         batch.UndoneAt = now;
         batch.UndoneById = ActorId(caller);

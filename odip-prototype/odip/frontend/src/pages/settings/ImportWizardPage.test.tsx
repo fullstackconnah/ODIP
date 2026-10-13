@@ -76,6 +76,21 @@ describe('ImportWizardPage', () => {
     expect(screen.getByText('Last name is required.')).toBeInTheDocument()
   })
 
+  it.each([
+    [1, "Can't be imported: 1. Fix it in the file and import it again afterwards."],
+    [2, "Can't be imported: 2. Fix them in the file and import it again afterwards."],
+  ])('says "it" or "them" for %i row(s) that cannot be imported', async (invalidCount, sentence) => {
+    preview.mockResolvedValue({ ...previewOf(['firstName', 'lastName']), invalidCount })
+    renderWizard()
+    await upload()
+    await screen.findByRole('heading', { name: 'Match columns' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { name: 'Preview' })
+    await userEvent.click(screen.getByLabelText(/Already receiving services/))
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
+  })
+
   it('blocks Next on Match columns while a required field is unmatched', async () => {
     preview.mockResolvedValue(previewOf(['firstName', null]))
     renderWizard()

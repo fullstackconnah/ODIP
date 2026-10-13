@@ -107,6 +107,8 @@ public class OnboardingImportPostgresTests : IClassFixture<PostgresFixture>
 
         Assert.Empty(outcome.Blockers);
         Assert.NotNull(outcome.Batch!.UndoneAt);
+        // The contact the import made goes with it, its role first: the role's foreign key to People is Restrict.
+        Assert.False(await db.People.AnyAsync(p => p.FirstName == "Kim"));
     }
 
     [SkippableFact]
@@ -188,5 +190,36 @@ public class OnboardingImportPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal("has notes", (await undo).Blockers.Single().Reason);
         await using var check = Context(tenantId);
         Assert.True((await check.Participants.SingleAsync()).IsActive);
+    }
+
+    [SkippableFact]
+    public async Task Undo_waits_for_a_contact_being_linked_to_another_participant_and_then_keeps_it()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var tenantId = await NewOrganisationAsync();
+        await using var db = Context(tenantId);
+        await Commit(db, tenantId, Csv(Header, "Zed,Other,430000009"), "key-other");
+        var zedId = await db.Participants.Select(p => p.Id).SingleAsync();
+        var result = await Commit(db, tenantId, Csv(Header + ",Contact 1 name,Contact 1 relationship", "Ava,Stone,430000001,Kim Stone,Next of kin", "Ben,Lee,430000002,Sam Lee,Next of kin"), "key-link");
+        var kimId = await db.People.Where(p => p.FirstName == "Kim").Select(p => p.Id).SingleAsync();
+
+        // A coordinator links Kim to Zed, inserted but not yet committed when the undo starts.
+        await using var coordinator = Context(tenantId);
+        await using var linkTx = await coordinator.Database.BeginTransactionAsync();
+        coordinator.ParticipantContactRoles.Add(new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = zedId, PersonId = kimId, RoleType = Domain.Enums.ContactRoleType.NextOfKin });
+        await coordinator.SaveChangesAsync();
+
+        await using var undoDb = Context(tenantId);
+        var undo = Service(undoDb, tenantId).UndoAsync(result.BatchId, Admin(), CancellationToken.None);
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Assert.False(undo.IsCompleted, "undo did not wait for the link's transaction");
+        await linkTx.CommitAsync();
+
+        var outcome = await undo;
+        Assert.Empty(outcome.Blockers);
+        Assert.NotNull(outcome.Batch!.UndoneAt);
+        await using var check = Context(tenantId);
+        Assert.Equal(new[] { "Kim" }, await check.People.Select(p => p.FirstName).ToListAsync());
+        Assert.True(await check.ParticipantContactRoles.AnyAsync(r => r.PersonId == kimId && r.ParticipantId == zedId));
     }
 }
