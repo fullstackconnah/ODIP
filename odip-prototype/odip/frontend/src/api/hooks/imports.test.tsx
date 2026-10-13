@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
-  mockGet: vi.fn(async (_url: string) => ({ data: { data: [] } })),
-  mockPost: vi.fn(async (_url: string, _body: unknown, _config?: unknown) => ({ data: { data: { batchId: 'b1' } } })),
+  mockGet: vi.fn<(url: string) => Promise<{ data: { data: unknown } }>>(async () => ({ data: { data: [] } })),
+  mockPost: vi.fn<(url: string, body: unknown, config?: unknown) => Promise<{ data: { data: unknown } }>>(async () => ({ data: { data: { batchId: 'b1' } } })),
 }))
 
 vi.mock('../client', () => ({
