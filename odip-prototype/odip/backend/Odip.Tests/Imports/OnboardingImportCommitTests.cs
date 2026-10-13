@@ -70,6 +70,18 @@ public class OnboardingImportCommitTests
     }
 
     [Fact]
+    public async Task A_file_name_longer_than_the_column_is_cut_to_260_characters()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+        var name = new string('p', 300) + ".csv";
+
+        await Service(db, tenantId).CommitAsync(ImportKind.Participants, Csv(Header, "Ava,Stone,03/04/1990,430000001,,"), name, null, ImportLanding.Active, "key-long", Admin(), CancellationToken.None);
+
+        Assert.Equal(name[..260], (await db.ImportBatches.SingleAsync()).FileName);
+    }
+
+    [Fact]
     public async Task A_double_submitted_import_returns_the_first_batch()
     {
         var (db, tenantId) = Organisation();

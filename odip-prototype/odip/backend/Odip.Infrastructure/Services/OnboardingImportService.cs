@@ -22,6 +22,8 @@ public sealed class OnboardingImportService
 {
     public const string ChooseOrganisation = "Choose an organisation to view as before importing: an import belongs to one organisation.";
     public const string LockBusy = "Another import is running for this organisation; try again when it finishes.";
+    /// <summary>A commit's 409 can be its own twin still finishing (a retry that waited past the lock timeout), so it points at the history.</summary>
+    public const string CommitLockBusy = LockBusy + " If you just pressed Import, check Import history in a minute.";
     public const string ChooseLanding = "Choose whether these participants are already receiving services or are new onboarding.";
     public const string CommitFailed = "The import failed, so nothing was imported. Try again; if it keeps failing, contact support.";
 
@@ -110,7 +112,7 @@ public sealed class OnboardingImportService
         if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: true) is { } mappingError) throw new ImportException(mappingError);
         if (await ReplayAsync(idempotencyKey, ct) is { } earlier) return earlier;
 
-        await using var importLock = await AcquireLockAsync(tenantId, ct);
+        await using var importLock = await AcquireLockAsync(tenantId, CommitLockBusy, ct);
         // Once the lock is held the import runs to the end: a client or proxy that drops the request must not roll back a nearly finished
         // import. A retry with the same key replays the batch.
         ct = CancellationToken.None;
@@ -118,9 +120,11 @@ public sealed class OnboardingImportService
         if (await ReplayAsync(idempotencyKey, ct) is { } twin) return twin;
 
         var plans = await PlanAsync(kind, table, columns, ct);
+        // The column holds 260 characters; a longer name would fail the final save after every row was written.
+        var name = Path.GetFileName(fileName);
         var batch = new ImportBatch
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, FileName = Path.GetFileName(fileName), FileSha256 = Sha256(content),
+            Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, FileName = name.Length <= 260 ? name : name[..260], FileSha256 = Sha256(content),
             IdempotencyKey = idempotencyKey, RowCount = plans.Count, CreatedById = ActorId(caller), CreatedByName = ActorName(caller),
         };
         var items = new List<ImportBatchItem>();
@@ -153,10 +157,10 @@ public sealed class OnboardingImportService
         return new ImportResultDto(batch.Id, batch.CreatedCount, batch.SkippedCount, batch.FailedCount, plans.Select(p => p.ToDto()).ToList(), Replayed: false);
     }
 
-    private async Task<CatalogueImportLock> AcquireLockAsync(Guid tenantId, CancellationToken ct)
+    private async Task<CatalogueImportLock> AcquireLockAsync(Guid tenantId, string busy, CancellationToken ct)
     {
-        try { return await CatalogueImportLock.AcquireAsync(_db, LockKey(tenantId), LockBusy, ct); }
-        catch (InvalidOperationException ex) when (ex.Message == LockBusy) { throw new ImportException(LockBusy, 409); }
+        try { return await CatalogueImportLock.AcquireAsync(_db, LockKey(tenantId), busy, ct); }
+        catch (InvalidOperationException ex) when (ex.Message == busy) { throw new ImportException(busy, 409); }
     }
 
     private async Task<ImportResultDto?> ReplayAsync(string idempotencyKey, CancellationToken ct)
@@ -203,7 +207,7 @@ public sealed class OnboardingImportService
     public async Task<ImportUndoOutcome> UndoAsync(Guid batchId, ClaimsPrincipal? caller, CancellationToken ct)
     {
         var tenantId = TenantId();
-        await using var importLock = await AcquireLockAsync(tenantId, ct);
+        await using var importLock = await AcquireLockAsync(tenantId, LockBusy, ct);
         var batch = await _db.ImportBatches.FirstOrDefaultAsync(b => b.Id == batchId, ct);
         if (batch is null) return new ImportUndoOutcome(true, [], null);
         if (batch.UndoneAt != null) throw new ImportException("This import was already undone.");

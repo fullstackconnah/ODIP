@@ -121,7 +121,7 @@ public class OnboardingImportPostgresTests : IClassFixture<PostgresFixture>
         await using var db = Context(tenantId);
         var ex = await Assert.ThrowsAsync<ImportException>(() => Commit(db, tenantId, Csv(Header, "Ava,Stone,"), "key-busy"));
 
-        Assert.Equal((OnboardingImportService.LockBusy, 409), (ex.Message, ex.StatusCode));
+        Assert.Equal((OnboardingImportService.CommitLockBusy, 409), (ex.Message, ex.StatusCode));
     }
 
     [SkippableFact]
