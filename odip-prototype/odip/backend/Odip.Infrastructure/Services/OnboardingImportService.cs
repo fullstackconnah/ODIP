@@ -120,11 +120,11 @@ public sealed class OnboardingImportService
         if (await ReplayAsync(idempotencyKey, ct) is { } twin) return twin;
 
         var plans = await PlanAsync(kind, table, columns, ct);
-        // The column holds 260 characters; a longer name would fail the final save after every row was written.
+        // The column holds 260 characters; a longer name would fail the final save after every row was written. The cut never splits an emoji.
         var name = Path.GetFileName(fileName);
         var batch = new ImportBatch
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, FileName = name.Length <= 260 ? name : name[..260], FileSha256 = Sha256(content),
+            Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, FileName = name.Length <= 260 ? name : name[..(char.IsHighSurrogate(name[259]) ? 259 : 260)], FileSha256 = Sha256(content),
             IdempotencyKey = idempotencyKey, RowCount = plans.Count, CreatedById = ActorId(caller), CreatedByName = ActorName(caller),
         };
         var items = new List<ImportBatchItem>();

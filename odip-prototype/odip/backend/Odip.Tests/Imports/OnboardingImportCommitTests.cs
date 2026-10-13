@@ -82,6 +82,19 @@ public class OnboardingImportCommitTests
     }
 
     [Fact]
+    public async Task The_file_name_cut_does_not_split_an_emoji()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+        // The emoji's two UTF-16 halves are characters 260 and 261, so a cut at 260 would leave half of it.
+        var name = new string('p', 259) + "\U0001F600" + ".csv";
+
+        await Service(db, tenantId).CommitAsync(ImportKind.Participants, Csv(Header, "Ava,Stone,03/04/1990,430000001,,"), name, null, ImportLanding.Active, "key-emoji", Admin(), CancellationToken.None);
+
+        Assert.Equal(new string('p', 259), (await db.ImportBatches.SingleAsync()).FileName);
+    }
+
+    [Fact]
     public async Task A_double_submitted_import_returns_the_first_batch()
     {
         var (db, tenantId) = Organisation();
