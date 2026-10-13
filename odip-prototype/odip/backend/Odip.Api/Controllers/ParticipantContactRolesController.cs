@@ -96,7 +96,7 @@ public class ParticipantContactRolesController : ControllerBase
         }
 
         var role = new ParticipantContactRole { Id = Guid.NewGuid(), ParticipantId = participantId, PersonId = person.Id, Person = person };
-        ApplyRoleFields(role, dto);
+        ContactRoleFields.Apply(role, dto);
         _db.ParticipantContactRoles.Add(role);
         await _db.SaveChangesAsync(ct);
 
@@ -126,7 +126,7 @@ public class ParticipantContactRolesController : ControllerBase
             otherRoles.Select(r => (r.RoleType, r.IsPrimary, r.Status)));
         if (uniquenessError != null) return BadRequest(ApiResponse<ParticipantContactRoleDto>.Fail(uniquenessError));
 
-        ApplyRoleFields(role, dto);
+        ContactRoleFields.Apply(role, dto);
         role.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
@@ -150,85 +150,6 @@ public class ParticipantContactRolesController : ControllerBase
     }
 
     // ── Helpers ────────────────────────────────────────────────────
-
-    /// <summary>Applies every role-specific field from either DTO shape (Create/Update share the
-    /// same field set past the person-identifying fields) onto the entity — used by Create, Update,
-    /// and (see ParticipantsController.Create) the wizard-transactional path. Finishes by clearing
-    /// every field <see cref="ContactRoleFieldRules"/> says isn't relevant to the row's (just-set)
-    /// RoleType — see that type's doc for why (fix-round finding 2).</summary>
-    internal static void ApplyRoleFields(ParticipantContactRole role, CreateParticipantContactRoleDto dto)
-    {
-        role.RoleType = dto.RoleType;
-        role.RelationshipToParticipant = dto.RelationshipToParticipant;
-        role.IsPrimary = dto.IsPrimary;
-        role.PriorityOrder = dto.PriorityOrder;
-        role.AuthorisedForMedicalInfo = dto.AuthorisedForMedicalInfo;
-        role.AppointingTribunal = dto.AppointingTribunal;
-        role.OrderScopeDomains = dto.OrderScopeDomains;
-        role.OrderStartDate = dto.OrderStartDate;
-        role.OrderReviewDate = dto.OrderReviewDate;
-        role.OrderEndDate = dto.OrderEndDate;
-        role.NomineeScope = dto.NomineeScope;
-        role.AppointmentDate = dto.AppointmentDate;
-        role.ReasonForAppointment = dto.ReasonForAppointment;
-        role.AlternateRepresentativeName = dto.AlternateRepresentativeName;
-        role.FundingLineItemType = dto.FundingLineItemType;
-        role.OrganisationName = dto.OrganisationName;
-        role.RegistrationNumber = dto.RegistrationNumber;
-        role.LastVisitDate = dto.LastVisitDate;
-        role.ConsentToShare = dto.ConsentToShare;
-        role.Discipline = dto.Discipline;
-        role.FrequencyOfContact = dto.FrequencyOfContact;
-        role.WebsterPackFlag = dto.WebsterPackFlag;
-        role.RoleTitle = dto.RoleTitle;
-        role.RegisteredProviderFlag = dto.RegisteredProviderFlag;
-        role.ScopeNotes = dto.ScopeNotes;
-        role.AuthorisationDocumentReference = dto.AuthorisationDocumentReference;
-        role.PreferredLanguage = dto.PreferredLanguage;
-        role.StartDate = dto.StartDate;
-        role.EndDate = dto.EndDate;
-        role.Status = dto.Status;
-        role.Notes = dto.Notes;
-        ContactRoleFieldRules.ClearIrrelevantFields(role);
-    }
-
-    /// <summary>Overload for <see cref="UpdateParticipantContactRoleDto"/>, which carries the same
-    /// field set minus the person-identifying fields Create's DTO also has.</summary>
-    internal static void ApplyRoleFields(ParticipantContactRole role, UpdateParticipantContactRoleDto dto)
-    {
-        role.RoleType = dto.RoleType;
-        role.RelationshipToParticipant = dto.RelationshipToParticipant;
-        role.IsPrimary = dto.IsPrimary;
-        role.PriorityOrder = dto.PriorityOrder;
-        role.AuthorisedForMedicalInfo = dto.AuthorisedForMedicalInfo;
-        role.AppointingTribunal = dto.AppointingTribunal;
-        role.OrderScopeDomains = dto.OrderScopeDomains;
-        role.OrderStartDate = dto.OrderStartDate;
-        role.OrderReviewDate = dto.OrderReviewDate;
-        role.OrderEndDate = dto.OrderEndDate;
-        role.NomineeScope = dto.NomineeScope;
-        role.AppointmentDate = dto.AppointmentDate;
-        role.ReasonForAppointment = dto.ReasonForAppointment;
-        role.AlternateRepresentativeName = dto.AlternateRepresentativeName;
-        role.FundingLineItemType = dto.FundingLineItemType;
-        role.OrganisationName = dto.OrganisationName;
-        role.RegistrationNumber = dto.RegistrationNumber;
-        role.LastVisitDate = dto.LastVisitDate;
-        role.ConsentToShare = dto.ConsentToShare;
-        role.Discipline = dto.Discipline;
-        role.FrequencyOfContact = dto.FrequencyOfContact;
-        role.WebsterPackFlag = dto.WebsterPackFlag;
-        role.RoleTitle = dto.RoleTitle;
-        role.RegisteredProviderFlag = dto.RegisteredProviderFlag;
-        role.ScopeNotes = dto.ScopeNotes;
-        role.AuthorisationDocumentReference = dto.AuthorisationDocumentReference;
-        role.PreferredLanguage = dto.PreferredLanguage;
-        role.StartDate = dto.StartDate;
-        role.EndDate = dto.EndDate;
-        role.Status = dto.Status;
-        role.Notes = dto.Notes;
-        ContactRoleFieldRules.ClearIrrelevantFields(role);
-    }
 
     internal static ParticipantContactRoleDto ToDto(ParticipantContactRole r) => new()
     {

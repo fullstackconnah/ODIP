@@ -604,7 +604,7 @@ public record CreateParticipantDto
     /// CommunityAccessDailyLiving stream — the structured Community Access Risk Assessment matrix
     /// grid, upserted transactionally with the participant on both create and update (same
     /// read-on-both-paths convention as ChecklistItems above) — see
-    /// ParticipantsController.UpsertCommunityAccessRiskItemsAsync.
+    /// ParticipantPatchApplier.UpsertCommunityAccessRiskItemsAsync.
     /// </summary>
     public List<CreateParticipantCommunityAccessRiskItemDto> CommunityAccessRiskItems { get; init; } = new();
 

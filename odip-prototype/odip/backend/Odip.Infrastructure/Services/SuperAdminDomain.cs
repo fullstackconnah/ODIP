@@ -1,4 +1,6 @@
-namespace Odip.Api.Services;
+using Microsoft.Extensions.Configuration;
+
+namespace Odip.Infrastructure.Services;
 
 /// <summary>
 /// The email domain whose addresses sign in as SuperAdmin whatever their user row's Role: <c>AuthController.Exchange</c> sends a token on

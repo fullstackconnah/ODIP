@@ -17,7 +17,7 @@ namespace Odip.Api.Controllers;
 /// Get (always all twenty-two, synthesizing an unrated placeholder for any type with no row yet)
 /// and an upsert-by-type endpoint. This is the write path for ongoing edits from the participant
 /// detail page; the wizard's initial/draft submissions instead go through
-/// <see cref="ParticipantsController.UpsertCommunityAccessRiskItemsAsync"/>, sharing the same
+/// <see cref="ParticipantPatchApplier.UpsertCommunityAccessRiskItemsAsync"/>, sharing the same
 /// upsert semantics via <see cref="ParticipantGridRules"/>.
 /// </summary>
 [ApiController]
