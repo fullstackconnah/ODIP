@@ -93,6 +93,7 @@ internal static class ParticipantDetailMapper
                 : null,
             IsDraft = p.IsDraft,
             IntakeCompletedAt = p.IntakeCompletedAt,
+            ServicesStartedAt = p.ServicesStartedAt,
             // INTAKE sub-wave B — Cultural & Consent step.
             IsCald = p.IsCald, IsLgbtqi = p.IsLgbtqi, IsFamilyCommunity = p.IsFamilyCommunity,
             IsAboriginalOrTorresStraitIslander = p.IsAboriginalOrTorresStraitIslander,

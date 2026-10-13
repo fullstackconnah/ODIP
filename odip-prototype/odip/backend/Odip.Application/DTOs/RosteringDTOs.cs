@@ -187,6 +187,8 @@ public record RosterParticipantRowDto
 {
     public Guid ParticipantId { get; init; }
     public string FullName { get; init; } = string.Empty;
+    /// <summary>Still in onboarding: services have begun ("Begin services") but the participant has not been made active. The board tags the row.</summary>
+    public bool InOnboarding { get; init; }
     public SupportRatio SupportRatio { get; init; }
     public OvernightSupportType OvernightSupport { get; init; }
     public bool HasRestrictivePractice { get; init; }

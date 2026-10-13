@@ -54,6 +54,36 @@ public class ParticipantStagesSqlTests
         Assert.Contains("\"ParticipantInquiries\"", sql);
     }
 
+    [Fact]
+    public void CanReceiveServices_TranslatesToAFilterOnActiveDraftAndServicesStarted()
+    {
+        using var db = NpgsqlDb();
+
+        var sql = db.Participants.Where(Participant.CanReceiveServicesRule).ToQueryString();
+        var filter = sql[sql.IndexOf("WHERE", StringComparison.Ordinal)..];
+
+        Assert.Contains("\"IsActive\"", filter);
+        Assert.Contains("\"IsDraft\"", filter);
+        Assert.Contains("\"ServicesStartedAt\" IS NOT NULL", filter);
+    }
+
+    [Theory]
+    [InlineData(false, true, false, true, true)]    // finalised and active
+    [InlineData(false, false, false, false, true)]  // archived: past services, not active
+    [InlineData(true, true, true, true, true)]      // services started, still onboarding
+    [InlineData(true, true, false, false, false)]   // a draft (marked active) whose services have not started
+    [InlineData(true, false, true, false, true)]    // services started, then switched off
+    public void CanReceiveServices_AgreesBetweenTheQueryAndTheInMemoryCheck(bool isDraft, bool isActive, bool started, bool canReceive, bool begun)
+    {
+        var participant = new Participant { Id = Guid.NewGuid(), IsDraft = isDraft, IsActive = isActive, ServicesStartedAt = started ? DateTime.UtcNow : null };
+        var asQuery = new[] { participant }.AsQueryable();
+
+        Assert.Equal(canReceive, Participant.CanReceiveServices(participant));
+        Assert.Equal(canReceive, asQuery.Any(Participant.CanReceiveServicesRule));
+        Assert.Equal(begun, Participant.ServicesBegun(participant));
+        Assert.Equal(begun, asQuery.Any(Participant.ServicesBegunRule));
+    }
+
     /// <summary>The in-memory check and the query predicate are one rule; this holds the two forms together over every flag combination.</summary>
     [Theory]
     [InlineData(true, false, true, true)]    // draft, intake complete: in onboarding

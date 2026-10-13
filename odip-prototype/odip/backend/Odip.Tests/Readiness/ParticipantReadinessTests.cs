@@ -335,6 +335,25 @@ public class ParticipantReadinessTests
         Assert.Equal(ParticipantReadinessMode.Warn, warn.Mode);
     }
 
+    [Theory]
+    [InlineData(true, true, true, true)]    // services started: still a draft, may be placed
+    [InlineData(true, true, false, false)]  // a draft whose services have not started
+    [InlineData(false, false, false, false)] // archived
+    [InlineData(false, true, true, false)]  // a services-started draft that was then switched off
+    [InlineData(true, false, false, true)]  // active
+    public async Task Warn_CheckAsync_PlacesWhoCanReceiveServices(bool active, bool draft, bool servicesStarted, bool allowed)
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db, active: active, draft: draft);
+        participant.ServicesStartedAt = servicesStarted ? DateTime.UtcNow : null;
+        db.SaveChanges();
+
+        var check = await ParticipantReadiness.CheckAsync(db, participant.Id, CancellationToken.None);
+
+        Assert.Equal(allowed, check.Allowed);
+        Assert.Equal(allowed, await new RosterPlacementGate().MayPlaceAsync(db, participant.Id, CancellationToken.None));
+    }
+
     [Fact]
     public async Task Mode_NoProviderSettingsRow_IsWarn_AndANewRowDefaultsToWarn()
     {

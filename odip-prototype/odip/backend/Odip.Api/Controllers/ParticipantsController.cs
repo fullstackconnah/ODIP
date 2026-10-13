@@ -239,6 +239,7 @@ public class ParticipantsController : ControllerBase
                 HasActiveMedications = _db.ParticipantMedications.Any(m => m.ParticipantId == p.Id && m.Status != MedicationStatus.Ceased),
                 IsDraft = p.IsDraft,
                 IntakeCompletedAt = p.IntakeCompletedAt,
+                ServicesStartedAt = p.ServicesStartedAt,
             });
 
         var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -1084,8 +1085,9 @@ public class ParticipantsController : ControllerBase
         {
             if (!p.IntakeCompletedAt.HasValue)
                 return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before making them active."));
-            // The activation rule the full PUT applied to a record that has just been finalised: Warn (the default) activates, Enforce needs evidence.
-            if (!p.IsActive && await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct) is var block && block != ActivationBlock.None)
+            // Warn (the default) activates, Enforce needs evidence. A draft whose services started is active already but has never been
+            // through this rule, so it is asked too.
+            if ((!p.IsActive || p.ServicesStartedAt != null) && await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct) is var block && block != ActivationBlock.None)
                 return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(ActivationRefusal(block)));
             p.IsDraft = false;
             p.UpdatedAt = DateTime.UtcNow;
@@ -1093,12 +1095,44 @@ public class ParticipantsController : ControllerBase
             await _db.SaveChangesAsync(ct);
         }
 
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
-        {
-            Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
-            IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, UpdatedAt = p.UpdatedAt,
-        }));
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(LifecycleBody(p)));
     }
+
+    /// <summary>
+    /// "Begin services" on the onboarding checklist (owner decision 2026-10-13): a participant in onboarding (a draft, intake complete) can receive
+    /// services (the roster board, shifts and patterns, the support-worker portal, medications, budgets and alerts: see
+    /// <see cref="Participant.CanReceiveServicesRule"/>) while staying on the Onboarding tab until "Make active". Sets <see cref="Participant.ServicesStartedAt"/>
+    /// and <see cref="Participant.IsActive"/> and keeps the draft. Idempotent: a second call changes nothing. An organisation that enforces readiness keeps its
+    /// placement rule (<see cref="ParticipantReadiness.CheckAsync"/>, which <c>MayPlaceAsync</c> uses) and is refused with its reason.
+    /// </summary>
+    [HttpPost("{id:guid}/begin-services")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> BeginServices(Guid id, CancellationToken ct)
+    {
+        var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+
+        if (p.ServicesStartedAt == null)
+        {
+            if (!p.IsDraft) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Services can only begin for a participant in onboarding."));
+            if (!p.IntakeCompletedAt.HasValue) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before services begin."));
+            if (await ParticipantReadiness.IsEnforcedAsync(_db, p.TenantId, ct) && await ParticipantReadiness.CheckAsync(_db, p.Id, ct) is { Allowed: false } check)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(check.Rejection!));
+            p.ServicesStartedAt = DateTime.UtcNow;
+            p.IsActive = true;
+            p.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(LifecycleBody(p)));
+    }
+
+    /// <summary>What make-active and begin-services answer: the participant's lifecycle state.</summary>
+    private static ParticipantDetailDto LifecycleBody(Participant p) => new()
+    {
+        Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
+        IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, ServicesStartedAt = p.ServicesStartedAt, UpdatedAt = p.UpdatedAt,
+    };
 
     /// <summary>
     /// CORE-02: partial save. Patches only the semantic field groups present in <paramref name="dto"/>

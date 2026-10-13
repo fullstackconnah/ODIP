@@ -108,18 +108,17 @@ public class PortalController : ControllerBase
 
         var start = from ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var end = to ?? start.AddDays(13);
-
+        // INTAKE-08: a draft whose services have not begun ("Begin services") can't have a real shift going forward (Rostering's
         // INTAKE-08: a draft participant can't have a real shift going forward (Rostering's
         // ValidateRefsAsync gates that at creation) — this filter is defence in depth for the
         // edge case of a participant later flipped back to draft mid-edit while an old shift
         // still references them, so the portal never shows it.
         var shifts = await _db.Shifts
             .Include(s => s.Participant)
-            .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end
-                        && !s.Participant!.IsDraft)
+            .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
             .ToListAsync(ct);
-        var shiftDtos = shifts.Select(ToSummaryDto).ToList();
+        var shiftDtos = shifts.Where(s => Participant.ServicesBegun(s.Participant!)).Select(ToSummaryDto).ToList();
 
         // Trip staffing is optional per the brief — included here since it's a single cheap
         // query against the already-resolved staffId, scoped the same way the shifts are.
@@ -280,7 +279,7 @@ public class PortalController : ControllerBase
         var shift = await _db.Shifts
             .Include(s => s.Participant)
             .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        if (shift?.Participant is null || shift.Participant.IsDraft)
+        if (shift?.Participant is null || !Participant.ServicesBegun(shift.Participant))
             return (null, NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found.")));
 
         return (shift, null);
@@ -593,7 +592,7 @@ public class PortalController : ControllerBase
 
         var shift = await _db.Shifts.Include(s => s.Participant)
             .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
-        if (shift?.Participant is null || shift.Participant.IsDraft)
+        if (shift?.Participant is null || !Participant.ServicesBegun(shift.Participant))
             return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
 
         if (shift.Status != ShiftStatus.InProgress)

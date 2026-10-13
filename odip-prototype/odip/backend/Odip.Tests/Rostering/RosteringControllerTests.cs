@@ -229,6 +229,23 @@ public class RosteringControllerTests
         Assert.DoesNotContain(body.Data.ParticipantRows, r => r.ParticipantId == draft.Id);
     }
 
+    [Fact]
+    public async Task GetBoard_ParticipantMode_ListsADraftWhoseServicesStarted_FlaggedAsOnboarding_ButNotAnArchivedOne()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var started = new Participant { Id = Guid.NewGuid(), FirstName = "Sam", LastName = "Started", IsDraft = true, IsActive = true, IntakeCompletedAt = DateTime.UtcNow, ServicesStartedAt = DateTime.UtcNow };
+        var archived = new Participant { Id = Guid.NewGuid(), FirstName = "Ari", LastName = "Archived", IsDraft = false, IsActive = false };
+        db.Participants.AddRange(started, archived);
+        db.SaveChanges();
+
+        var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db)).GetBoard(ServiceDate, "participant", CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var row = Assert.Single(body.Data!.ParticipantRows, r => r.ParticipantId == started.Id);
+        Assert.True(row.InOnboarding);
+        Assert.DoesNotContain(body.Data.ParticipantRows, r => r.ParticipantId == archived.Id);
+    }
+
     // ── Blocking finding gate ────────────────────────────────────────────
 
     [Fact]

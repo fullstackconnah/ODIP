@@ -112,7 +112,7 @@ public static class ParticipantReadiness
     {
         var participant = await db.Participants.AsNoTracking()
             .Where(p => p.Id == participantId)
-            .Select(p => new { p.TenantId, p.IsActive, p.IsDraft })
+            .Select(p => new { p.TenantId })
             .FirstOrDefaultAsync(ct);
         if (participant is null)
             return new ParticipantReadinessResult(false, ParticipantReadinessMode.Warn, Array.Empty<string>());
@@ -121,11 +121,11 @@ public static class ParticipantReadiness
         var issues = (await IssuesAsync(db, new[] { participantId }, ct)).GetValueOrDefault(participantId)
             ?? new List<string>();
 
-        // Enforce goes through the existing strict predicate, unchanged. Warn is that same rule
-        // minus the evidence requirement: the participant must still exist, be active, and not be a draft.
+        // Enforce goes through the existing strict predicate, unchanged. Warn needs only that the participant can receive services
+        // (Participant.CanReceiveServicesRule): active, and finalised or a draft whose services have begun.
         var allowed = enforced
             ? await ParticipantReadinessGate.IsActiveReadyAsync(db, participantId, ct)
-            : participant.IsActive && !participant.IsDraft;
+            : await db.Participants.Where(p => p.Id == participantId).AnyAsync(Participant.CanReceiveServicesRule, ct);
 
         return new ParticipantReadinessResult(
             allowed, enforced ? ParticipantReadinessMode.Enforce : ParticipantReadinessMode.Warn, issues);

@@ -1650,6 +1650,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("ServiceStreams")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("ServicesStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<string>("SignsHappyAndSettled")
                         .HasColumnType("text");
 
