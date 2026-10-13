@@ -8,7 +8,10 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
+using Odip.Domain.Notifications;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Notifications;
+using Odip.Infrastructure.Notifications.Templates;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Infrastructure.Integrations;
@@ -38,6 +41,7 @@ public sealed class EmploymentHeroStaffSync
     public const string ActorName = "Employment Hero sync";
     public const string StaffFromEmploymentHeroMessage = "Staff come from Employment Hero for this organisation. Add them there; they appear here within 30 minutes.";
     public const string KeyUnreadableMessage = "ODIP can't read the saved API key (this server's integrations key changed or is missing). Connect again with the API key.";
+    public const string BusyMessage = "A sync for this organisation is already running. Try again in a minute.";
     private const string OtherOrganisationEmail = "Their email in Employment Hero belongs to another organisation on ODIP.";
     private const string CouldNotSave = "ODIP couldn't save their details this time; the next sync tries again.";
     private const string ArchivedButCurrent = "Employment Hero has them as current, but their ODIP account is archived. Restore them on their staff page.";
@@ -64,15 +68,85 @@ public sealed class EmploymentHeroStaffSync
     public static Task<bool> IsConnectedAsync(OdipDbContext db, Guid? tenantId, CancellationToken ct) =>
         tenantId is { } id ? db.EmploymentHeroConnections.AnyAsync(c => c.TenantId == id, ct) : Task.FromResult(false);
 
+    /// <summary>
+    /// One organisation's sync.
+    /// - A key ODIP can't read, or EH failing (even midway through paging), records a failed run and changes nobody.
+    /// - Admins are alerted when the connection starts failing, and when a run finds new problems.
+    /// - The changes run under a per-organisation advisory lock, held to the end of the run's transaction. Sync now and the half-hourly run therefore never
+    ///   create the same person twice: the second waits for the first, then finds everyone linked, or after 20 s answers Busy.
+    /// </summary>
     public async Task<EmploymentHeroSyncResult> RunAsync(OdipDbContext db, Guid tenantId, CancellationToken ct)
     {
         var conn = await db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
         if (conn is null) return new(EmploymentHeroSyncOutcome.NotConnected, null);
         var log = new EmploymentHeroSyncLog { Id = Guid.NewGuid(), TenantId = tenantId, BusinessId = conn.BusinessId, StartedAt = Now() };
-        var key = _keys.Unprotect(conn.ApiKeyCiphertext, conn.ApiKeyNonce, tenantId) ?? throw new InvalidOperationException(KeyUnreadableMessage);
-        var employees = await _client.ListEmployeesAsync(key, conn.BusinessId, ct);
-        await ApplyAndRecordAsync(db, tenantId, employees, log, ct);
+
+        var key = _keys.Unprotect(conn.ApiKeyCiphertext, conn.ApiKeyNonce, tenantId);
+        if (key is null) return await FailAsync(db, conn, log, "KeyUnreadable", KeyUnreadableMessage, ct);
+        List<EhEmployee> employees;
+        try
+        {
+            employees = await _client.ListEmployeesAsync(key, conn.BusinessId, ct);
+        }
+        catch (EmploymentHeroException ex)
+        {
+            return await FailAsync(db, conn, log, ex.Failure.ToString(), ex.Message, ct);
+        }
+
+        await using var runLock = await TryLockAsync(db, tenantId, ct);
+        if (runLock is null) return new(EmploymentHeroSyncOutcome.Busy, null);
+        var added = await ApplyAndRecordAsync(db, tenantId, employees, log, ct);
+        if (added > 0)
+        {
+            // Its own entity (this run's log row), so NotificationRaiser's 5-minute dedupe never swallows it behind a recent failure alert.
+            await AlertAdminsAsync(db, tenantId, nameof(EmploymentHeroSyncLog), log.Id, $"{added} staff {(added == 1 ? "member needs" : "members need")} attention after the Employment Hero sync.", ct);
+            await db.SaveChangesAsync(ct);
+        }
+        await runLock.CommitAsync(ct);
         return new(EmploymentHeroSyncOutcome.Done, log);
+    }
+
+    /// <summary>The advisory-lock key for one organisation's sync. It is the import's per-organisation key with "EHSYNC" mixed in, so the two never share a lock.</summary>
+    public static long LockKey(Guid tenantId) => OnboardingImportService.LockKey(tenantId) ^ 0x4548_5359_4E43;
+
+    private static async Task<CatalogueImportLock?> TryLockAsync(OdipDbContext db, Guid tenantId, CancellationToken ct)
+    {
+        try
+        {
+            return await CatalogueImportLock.AcquireAsync(db, LockKey(tenantId), BusyMessage, ct);
+        }
+        catch (InvalidOperationException ex) when (ex.Message == BusyMessage)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Records a run that couldn't read EH's list, on the connection and in the log; nobody's details change. Admins hear once, when it starts failing.</summary>
+    private async Task<EmploymentHeroSyncResult> FailAsync(OdipDbContext db, EmploymentHeroConnection conn, EmploymentHeroSyncLog log, string errorClass, string message, CancellationToken ct)
+    {
+        var wasFailing = conn.LastSyncError is not null;
+        conn.LastSyncAt = log.FinishedAt = Now();
+        conn.LastSyncError = message;
+        log.ErrorClass = errorClass;
+        db.EmploymentHeroSyncLogs.Add(log);
+        await PruneLogAsync(db, conn.TenantId, ct);
+        if (!wasFailing) await AlertAdminsAsync(db, conn.TenantId, nameof(EmploymentHeroConnection), conn.Id, $"The Employment Hero sync stopped working: {message}", ct);
+        await db.SaveChangesAsync(ct);
+        _logger.LogWarning("Employment Hero sync failed for organisation {TenantId} ({ErrorClass}); the next run tries again", conn.TenantId, errorClass);
+        return new(EmploymentHeroSyncOutcome.Failed, log);
+    }
+
+    /// <summary>
+    /// Raises one IntegrationDegraded email per active Admin of this organisation (named explicitly, as every query here is: a SuperAdmin context would
+    /// otherwise reach every organisation's Admins). It goes into the caller's SaveChanges, because NotificationRaiser never saves.
+    /// </summary>
+    private static async Task AlertAdminsAsync(OdipDbContext db, Guid tenantId, string entityType, Guid entityId, string problem, CancellationToken ct)
+    {
+        var admins = await db.Users.Where(u => u.TenantId == tenantId && u.IsActive && u.Role == UserRole.Admin).Select(u => new { u.Id, u.Email }).ToListAsync(ct);
+        var raiser = new NotificationRaiser(db);
+        foreach (var admin in admins)
+            await raiser.RaiseAsync(NotificationEventType.IntegrationDegraded, entityType, entityId, new[] { admin.Id },
+                new IntegrationDegradedPayload(admin.Email, "Employment Hero", problem), ct);
     }
 
     /// <summary>Applies EH's list, rewrites the Needs-attention items and records the run. Returns how many items are new.</summary>

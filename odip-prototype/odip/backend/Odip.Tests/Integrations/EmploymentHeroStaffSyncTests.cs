@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
+using Odip.Domain.Notifications;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
+using Odip.Tests.EarlyAccess;
 using Xunit;
 using static Odip.Tests.Integrations.EhFixture;
 using static Odip.Tests.Integrations.StubHttpHandler;
@@ -313,5 +315,116 @@ public class EmploymentHeroStaffSyncTests
         // The clock is 14 October 2026, 01:00 UTC: 1 July is past 90 days, 1 August is not, and the run adds its own row.
         Assert.Equal(new[] { new DateTime(2026, 8, 1), new DateTime(2026, 10, 14, 1, 0, 0) },
             await db.EmploymentHeroSyncLogs.OrderBy(l => l.StartedAt).Select(l => l.StartedAt).ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task A_refused_key_fails_the_run_changes_nobody_and_alerts_Admins_once_until_it_works_again()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Sam", "Lee", "sam@acme.org.au", "101"));
+        await using var _ = db;
+        var refused = new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.Unauthorized);
+
+        var result = await RunAsync(db, tenant, refused);
+
+        Assert.Equal((EmploymentHeroSyncOutcome.Failed, "KeyRefused"), (result.Outcome, result.Log!.ErrorClass));
+        Assert.Equal("Employment Hero didn't accept the API key. Check it in Employment Hero and connect again.", (await db.EmploymentHeroConnections.SingleAsync()).LastSyncError);
+        var alert = await db.NotificationOutbox.SingleAsync();   // Ada is the one Admin
+        Assert.Equal(NotificationEventType.IntegrationDegraded, alert.EventType);
+        Assert.Contains("stopped working", alert.PayloadJson);
+        Assert.DoesNotContain(ApiKey, alert.PayloadJson);
+
+        // Outside NotificationRaiser's own 5-minute dedupe, so only the "already failing" rule can hold a second alert back.
+        alert.CreatedAt = alert.CreatedAt.AddHours(-1);
+        await db.SaveChangesAsync();
+        await RunAsync(db, tenant, refused);
+        Assert.Single(db.NotificationOutbox);
+        Assert.Equal(2, await db.EmploymentHeroSyncLogs.CountAsync());
+
+        var ok = await RunAsync(db, tenant, Eh(Employee(101, "Sam", "Lee", "sam@acme.org.au")));
+        Assert.Equal(EmploymentHeroSyncOutcome.Done, ok.Outcome);
+        Assert.Null((await db.EmploymentHeroConnections.SingleAsync()).LastSyncError);
+    }
+
+    [Fact]
+    public async Task A_list_cut_short_changes_nobody()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Sam", "Lee", "sam@acme.org.au", "101"));
+        await using var _ = db;
+        // A full first page (without Ada), then EH throttles: a partial list must neither rename Sam nor treat Ada as gone.
+        var firstPage = new[] { Employee(101, "Samuel", "Lee", "sam@acme.org.au") }.Concat(Enumerable.Range(1000, 99).Select(i => Employee(i, "P", $"{i}", $"p{i}@gmail.com"))).ToArray();
+        var eh = new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.OK, firstPage).On(EmployeesPage(Business, 100), HttpStatusCode.TooManyRequests);
+
+        var result = await RunAsync(db, tenant, eh);
+
+        Assert.Equal((EmploymentHeroSyncOutcome.Failed, "RateLimited"), (result.Outcome, result.Log!.ErrorClass));
+        Assert.Equal("Sam", (await db.Users.SingleAsync(u => u.ExternalPayrollId == "101")).FirstName);
+        Assert.Equal(2, await db.Users.CountAsync());
+        Assert.Empty(db.EmploymentHeroAttentions);
+    }
+
+    [Fact]
+    public async Task A_saved_key_the_master_key_cannot_read_fails_that_organisation_and_calls_nobody()
+    {
+        var tenant = Guid.NewGuid();
+        await using var db = Db(Guid.NewGuid().ToString(), tenant);
+        await ConnectAsync(db, tenant, IntegrationKeyProtectorTests.Protector(IntegrationKeyProtectorTests.NewMasterKey()));   // saved under a master key this server no longer has
+        var eh = Eh();
+
+        var result = await RunAsync(db, tenant, eh);
+
+        Assert.Equal((EmploymentHeroSyncOutcome.Failed, "KeyUnreadable"), (result.Outcome, result.Log!.ErrorClass));
+        Assert.Empty(eh.Requests);
+        Assert.Equal(EmploymentHeroStaffSync.KeyUnreadableMessage, (await db.EmploymentHeroConnections.SingleAsync()).LastSyncError);
+    }
+
+    [Fact]
+    public async Task New_problems_alert_Admins_once_and_the_same_problems_do_not_alert_again()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Jane", "Smith", "jane@gmail.com"));
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh());
+
+        var alert = await db.NotificationOutbox.SingleAsync();
+        Assert.Contains("1 staff member needs attention after the Employment Hero sync.", alert.PayloadJson);
+        alert.CreatedAt = alert.CreatedAt.AddHours(-1);
+        await db.SaveChangesAsync();
+        await RunAsync(db, tenant, Eh());
+        Assert.Single(db.NotificationOutbox);
+    }
+
+    [Fact]
+    public async Task The_key_and_staff_details_never_reach_the_log()
+    {
+        var logger = new CapturingLogger<EmploymentHeroStaffSync>();
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+
+        await Sync(new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.Unauthorized), logger: logger).RunAsync(db, tenant, CancellationToken.None);
+        await Sync(Eh(Employee(701, "Lia", "Moe", "lia@gmail.com")), logger: logger).RunAsync(db, tenant, CancellationToken.None);
+
+        Assert.Equal(2, logger.Entries.Count);
+        Assert.All(logger.Entries, e =>
+        {
+            Assert.DoesNotContain(ApiKey, e.Message);
+            Assert.DoesNotContain("lia@gmail.com", e.Message);
+            Assert.DoesNotContain("Lia", e.Message);
+        });
+    }
+
+    [Fact]
+    public async Task A_new_problem_alert_is_not_swallowed_by_a_recent_failure_alert()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Jane", "Smith", "jane@gmail.com"));
+        await using var _ = db;
+
+        await RunAsync(db, tenant, new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.Unauthorized));   // raises the failure alert
+        await RunAsync(db, tenant, Eh());                                                                               // Jane is a new item
+
+        // Both within NotificationRaiser's 5-minute dedupe window, but about different things: each kind has its own entity.
+        var alerts = await db.NotificationOutbox.ToListAsync();
+        Assert.Equal(2, alerts.Count);
+        Assert.Contains(alerts, a => a.PayloadJson.Contains("stopped working"));
+        Assert.Contains(alerts, a => a.PayloadJson.Contains("1 staff member needs attention"));
     }
 }
