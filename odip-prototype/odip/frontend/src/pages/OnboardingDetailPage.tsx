@@ -1,69 +1,42 @@
-import type React from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost } from '@/api/client'
-import { useConfirmServiceNeeds, useParticipant, useProviderSettings } from '@/api/hooks'
-import { Button } from '@/components/Button'
+import { useState, type FormEvent } from 'react'
+import { useNavigate, useParams, Link } from 'react-router-dom'
+import { CheckCircle2, Circle } from 'lucide-react'
+import { useBeginServices, useMakeParticipantActive, useOnboarding, useParticipant, useRecordOnboardingAgreement } from '@/api/hooks'
+import type { OnboardingChecklistItem, ParticipantOnboardingDto } from '@/api/types/inquiries'
 import { BackButton } from '@/components/BackButton'
-import { PageState } from '@/components/PageState'
-import { isNotFoundError } from '@/lib/httpStatus'
+import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { Card } from '@/components/Card'
-import { PageHeader } from '@/components/PageHeader'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Modal } from '@/components/Modal'
+import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
-import type { ParticipantReadinessMode } from '@/api/types'
+import { TextAreaField } from '@/components/TextAreaField'
+import { TextField } from '@/components/TextField'
+import { ToggleGroup } from '@/components/ToggleGroup'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { useIntakeCompleteNotice } from './intake/intakeComplete'
 import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
+import { ACTIVE_TABLE_PATH, participantActivatedState } from './profile/participantActivated'
 
-type Detail = {
-  participantId: string
-  intakeComplete: boolean
-  profileComplete: boolean
-  profileCompletedAt?: string
-  profileCompletedBy?: string
-  serviceTypeConfirmed: boolean
-  serviceTypeConfirmedAt?: string
-  serviceTypeConfirmedBy?: string
-  serviceAgreementSigned: boolean
-  /** Whether an NDIS-funded participant has a current plan budget on their Funding tab. Left out, or null, for anyone funded another way: they are not asked for one. */
-  fundingRecorded?: boolean | null
-  isReady: boolean
-  reasons: string[]
-  /** The newest revision of the agreement that has been approved for rostering, and when (plan builder, phase D). Absent until one has. */
-  scheduleApprovedVersion?: number
-  scheduleApprovedAt?: string
-}
-
-type Gate = { label: string; state: 'Needs attention' | 'Blocked' | 'Complete'; context?: React.ReactNode; fixRoute?: { to: string; label: string } }
-
-function gateState(complete: boolean): Gate['state'] {
-  return complete ? 'Complete' : 'Needs attention'
-}
-
-/** Whether activation waits for the plan budget, in the words of the organisation's readiness mode. Warn lists it and lets activation go ahead, so it can wait; Enforce makes activation wait for it; an unknown mode says only that the rule decides. */
-function fundingWaitSentence(mode: ParticipantReadinessMode | undefined): string {
-  if (mode === 'Warn') return 'If the plan has not been shared yet, this can wait.'
-  if (mode === 'Enforce') return 'Your organisation’s readiness rule is Enforce, so activation waits for it.'
-  return 'Your organisation’s readiness rule decides whether activation waits for it.'
-}
-
+/**
+ * The onboarding checklist of one participant (owner decisions 2026-10-13): a header (name, stage, View record), one action bar (Begin
+ * services, Make active) and one list of the items the server derives from data. Every item is fixed on its own screen; the agreement record is
+ * the one thing recorded here. Roles that cannot change the lifecycle see the list read-only.
+ */
 export default function OnboardingDetailPage() {
-  const { id } = useParams<{ id: string }>()
+  const { id = '' } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   // Complete intake started from this checklist comes back here with the confirmation the Onboarding table shows.
   const completed = useIntakeCompleteNotice()
-  const qc = useQueryClient()
   const { canManageParticipantLifecycle, canAccessPage, canManageFunding } = usePermissions()
-  const detail = useQuery({ queryKey: ['onboarding', id], enabled: !!id, queryFn: () => apiGet<Detail>(`/inquiries/${id}/onboarding`) })
-  // Participant identity for the heading — the onboarding gate payload above only carries the
-  // participantId (a raw GUID), never a name, so the display name is fetched separately.
+  const detail = useOnboarding(id)
   const { data: participant, isLoading: participantLoading } = useParticipant(id)
-  // How strictly the organisation applies readiness: "the plan budget can wait" is true in Warn mode only, so the card says it only when it KNOWS the mode is Warn. The settings are for the roles
-  // that manage funding; for anyone else (and while they load) the mode is unknown and the card does not guess.
-  const readinessMode = useProviderSettings(canManageFunding).data?.participantReadinessMode
-  // These retain the existing server endpoints and empty payloads: server-side saved-record validation remains authoritative.
-  const profile = useMutation({ mutationFn: () => apiPost<Detail>(`/inquiries/${id}/onboarding/profile-validation`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding', id] }) })
-  const services = useConfirmServiceNeeds(id)
+  const beginServices = useBeginServices()
+  const makeActive = useMakeParticipantActive()
+  const [confirming, setConfirming] = useState<'begin' | 'active' | null>(null)
+  const [recording, setRecording] = useState(false)
   const d = detail.data
 
   if (detail.isLoading) return <PageState kind="loading" noun="onboarding record" />
@@ -73,181 +46,166 @@ export default function OnboardingDetailPage() {
       : <PageState kind="not-found" noun="onboarding record" backTo="/participants?tab=onboarding" backLabel="onboarding" />
   }
 
-  const participantName = participant
-    ? `${participant.preferredName?.trim() || participant.firstName} ${participant.lastName}`.trim()
-    : undefined
-  const headingTitle = participantLoading ? 'Loading…' : (participantName ?? 'Participant')
+  const name = participant ? `${participant.preferredName?.trim() || participant.firstName} ${participant.lastName}`.trim() : ''
+  // Services count as started only while the participant is switched on: one archived after Begin services is back to plain onboarding (Begin services again).
+  const startedOn = d.servicesStartedAt && participant?.isActive ? formatWithTimeZone(d.servicesStartedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null
+  const stage = participant?.isDraft === false
+    ? <StatusBadge status={participant.isActive ? 'Active' : 'Archived'} size="md" />
+    : <StatusBadge tone={startedOn ? 'success' : 'info'} label={startedOn ? 'Services started' : 'Onboarding'} size="md" />
+  // Only a participant still in onboarding has a lifecycle step left here.
+  const canAct = canManageParticipantLifecycle && participant?.isDraft === true
+  const openItems = d.items.filter(item => !item.done)
+  const doneCount = d.items.length - openItems.length
+  const lifecycleError = beginServices.error ?? makeActive.error
+  // One lifecycle step at a time. aria-disabled, not disabled, so focus can return to the button when its dialog closes.
+  const pending = beginServices.isPending || makeActive.isPending
 
-  const scheduleApproved = d.scheduleApprovedVersion !== undefined
-  // The agreement wizard knows it was opened from here: its Save step offers "Confirm service needs", and Back and Cancel return to this record.
-  const agreementHref = `/participants/${id}/agreement-draft?from=onboarding`
-  const approvedOn = d.scheduleApprovedAt ? formatWithTimeZone(d.scheduleApprovedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : undefined
-  const recommended = !d.intakeComplete
-    ? {
-        label: 'Complete intake',
-        reason: 'Complete the saved draft intake. Completing intake puts the participant in onboarding; completing their profile activates them.',
-        action: <Button to={`/participants/${id}/intake`}>Complete intake</Button>,
-      }
-    : !d.profileComplete
-      ? {
-          label: 'Validate profile data',
-          reason: 'Checks the saved profile has a name, date of birth, gender and (for NDIS-funded participants) an NDIS number before marking this step done.',
-          action: (
-            <div className="flex flex-wrap items-center gap-3">
-              <Button disabled={profile.isPending} onClick={() => profile.mutate()}>Validate profile data</Button>
-              <Button variant="secondary" to={`/participants/${id}/profile`}>Edit profile</Button>
-            </div>
-          ),
-        }
-      : !d.serviceTypeConfirmed
-        ? {
-            label: 'Confirm saved service needs',
-            reason: 'Confirms the current draft service plan has valid, correctly priced support lines before marking this step done.',
-            action: (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button disabled={services.isPending} onClick={() => services.mutate()}>Confirm saved service needs</Button>
-                <Button variant="secondary" to={canAccessPage('agreement-drafts') ? agreementHref : `/participants/${id}?tab=support`}>Edit service needs</Button>
-              </div>
-            ),
-          }
-        : !d.serviceAgreementSigned
-          ? {
-              label: 'Review agreement evidence',
-              reason: 'Open the agreement draft to check its signing evidence. Agreements are signed and approved there, not on this screen.',
-              action: <Button to={agreementHref}>Review agreement evidence</Button>,
-            }
-          : d.fundingRecorded === false
-            ? {
-                label: 'Record plan budget',
-                reason: `The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. ${fundingWaitSentence(readinessMode)}`,
-                action: canManageFunding ? <Button to={`/participants/${id}?tab=funding`}>Open Funding tab</Button> : null,
-              }
-            : scheduleApproved
-              ? {
-                  // A revision has been approved for rostering: what is left is to look at what it made.
-                  label: 'Check the roster',
-                  reason: `Version ${d.scheduleApprovedVersion} was approved for rostering${approvedOn ? ` on ${approvedOn}` : ''}: its weekly patterns and unfilled shifts are made. Check them under Shift patterns and on the roster. Nothing is created from this page.`,
-                  action: canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
-                }
-              : {
-                  label: 'Approve the agreement for rostering',
-                  // What to do, not why again: that the schedule is made by approving a revision, and not from here, is said once, in the list of what is still missing below.
-                  reason: 'Open the agreement draft and approve its newest revision for rostering. That makes the weekly patterns and unfilled shifts, which you can then check under Shift patterns.',
-                  // The draft carries money, so only the roles the API admits to it are sent there.
-                  action: canAccessPage('agreement-drafts')
-                    ? <Button to={agreementHref}>Open agreement draft</Button>
-                    : canAccessPage('rostering') ? <Button to="/rostering/patterns">Open shift patterns</Button> : null,
-                }
+  const confirm = () => {
+    const action = confirming
+    setConfirming(null)
+    // The callout shows the latest attempt's refusal, never an older one.
+    beginServices.reset()
+    makeActive.reset()
+    if (action === 'begin') beginServices.mutate({ id }, {})
+    // Made active: they have left the Onboarding tab, so show them on the Active tab, as the hand-off there confirms once.
+    else if (action === 'active') makeActive.mutate({ id }, { onSuccess: () => navigate(ACTIVE_TABLE_PATH, { state: participantActivatedState(id, name) }) })
+  }
 
-  const gates: Gate[] = [
-    { label: 'Intake completed', state: gateState(d.intakeComplete) },
-    { label: 'Participant profile', state: gateState(d.profileComplete), fixRoute: canManageParticipantLifecycle ? { to: `/participants/${id}/profile`, label: 'Edit profile' } : undefined },
-    { label: 'Service needs and provisional lines', state: gateState(d.serviceTypeConfirmed), fixRoute: { to: canAccessPage('agreement-drafts') ? agreementHref : `/participants/${id}?tab=support`, label: canManageParticipantLifecycle ? 'Edit service needs' : 'Open service needs' } },
-    // The draft carries money, so only the roles the API admits to it are sent there (a ReadOnly or SupportWorker who can read this page would only meet a redirect or a 403).
-    { label: 'Current agreement evidence', state: gateState(d.serviceAgreementSigned), context: 'Agreements are signed and approved elsewhere.', fixRoute: canAccessPage('agreement-drafts') ? { to: agreementHref, label: 'Open agreement draft' } : undefined },
-    // Only an NDIS-funded participant is asked for a plan budget: the server sends fundingRecorded for them alone, and counts it in the worklist's "of 6 gates", so this list shows the
-    // same six. The Funding tab holds money, so it is offered only to the roles that may open it.
-    ...(typeof d.fundingRecorded === 'boolean'
-      ? [{
-          label: 'Funding recorded', state: gateState(d.fundingRecorded),
-          context: "The plan budget, taken from the plan the participant shares or from their plan manager. Your organisation's readiness rule decides whether activation waits for it.",
-          // It only opens the tab (where "Record plan budget" is the button), so it says so, like its sibling "Open agreement draft".
-          fixRoute: canManageFunding ? { to: `/participants/${id}?tab=funding`, label: 'Open Funding tab' } : undefined,
-        } satisfies Gate]
-      : []),
-    {
-      label: 'Schedule review',
-      // Complete once a revision has been approved for rostering (it made the patterns and the shifts), and the row says which one. Until then it is Blocked and says no more than that and where to go: what the
-      // schedule needs is said once, by the next action above and the list below, not a third time here.
-      state: scheduleApproved ? 'Complete' : 'Blocked',
-      context: scheduleApproved ? `Approved for rostering: version ${d.scheduleApprovedVersion}${approvedOn ? `, on ${approvedOn}` : ''}.` : undefined,
-      // The schedule is made on the agreement draft: the shift patterns page has nothing to show before a revision is approved, so it is only the way for a role the API does not admit to the draft.
-      fixRoute: canAccessPage('agreement-drafts')
-        ? { to: agreementHref, label: 'Open agreement draft' }
-        : canAccessPage('rostering') ? { to: '/rostering/patterns', label: 'Open shift patterns' } : undefined },
-  ]
-  const completedGateCount = gates.filter(gate => gate.state === 'Complete').length
-  // Finishing onboarding is the Profile wizard's Complete Profile: it finalises the participant, and when the organisation's readiness rule allows it they
-  // become active and move to Active participants. It is offered whenever the participant is a draft with the intake complete, whichever gate is open: the
-  // gate actions above only edit or validate data, and "Edit profile" disappears once the profile gate is complete, which left nothing that ends onboarding.
-  const canCompleteProfile = canManageParticipantLifecycle && d.intakeComplete && participant?.isDraft === true
-  // Back is pinned to the hub's Onboarding tab, the one list this checklist belongs to (history={false}): it does not follow history.
+  const openList = openItems.length > 0
+    ? <ul className="mt-2 list-disc space-y-0.5 pl-5">{openItems.map(item => <li key={item.key}>{item.label}</li>)}</ul>
+    : null
 
   return <div className="flex flex-col gap-[var(--section-gap)]">
-    <div className="flex flex-col gap-[var(--section-gap)]">
-      <div className="flex items-start gap-2">
-        <BackButton to="/participants?tab=onboarding" label="onboarding" variant="icon" history={false} className="mt-1" />
-        <div className="flex-1 min-w-0">
-          <PageHeader
-            title={headingTitle}
-            subtitle={<Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant record</Link>}
-          />
-        </div>
-      </div>
-      {completed && <Callout tone="success">Intake complete — {completed.name} is now in onboarding.</Callout>}
-      {/* min(26rem,100%) is what collapses this to one column on a phone (a bare 26rem floor
-          overflows a 390px viewport), so the old max-md:grid-cols-1 override is redundant. */}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
-        <Card title="Current stage">
-          <p className="font-semibold">{d.isReady ? 'Complete' : 'Onboarding in progress'}</p>
-          <p className="mt-1 text-sm tabular-nums">Progress: {completedGateCount} of {gates.length} gates complete</p>
-        </Card>
-        <section
-          aria-labelledby="recommended-action-heading"
-          className="!border-2 !border-[var(--color-primary)] !bg-[var(--color-accent)] bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]"
-        >
-          <p className="text-sm font-medium text-[var(--color-muted-foreground)]">Recommended next action</p>
-          <h2 id="recommended-action-heading" className="mt-1 text-base font-semibold">{recommended.label}</h2>
-          <p className="mt-1 text-sm">{recommended.reason}</p>
-          <div className="mt-2">
-            {canManageParticipantLifecycle ? recommended.action : <p className="text-sm font-medium">Read-only access: lifecycle changes are unavailable for this role.</p>}
-          </div>
-        </section>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        {/* "Listed below" only while there is a list: with nothing missing the page says so, and what finishing onboarding looks like. */}
-        <p className="text-sm text-[var(--color-muted-foreground)]">
-          {d.reasons.length > 0
-            ? "Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it. What is still missing is listed below."
-            : "Nothing else is missing. Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it."}
-        </p>
-        {canCompleteProfile && <Button to={`/participants/${id}/profile`}>Complete profile</Button>}
+    <div className="flex items-start gap-2">
+      <BackButton to="/participants?tab=onboarding" label="onboarding" variant="icon" history={false} className="mt-1.5" />
+      <div className="min-w-0 flex-1">
+        <PageHeader
+          variant="detail"
+          title={participantLoading ? 'Loading…' : (name || 'Participant')}
+          subtitle={(
+            <PageHeaderMeta>
+              {stage}
+              <Link to={`/participants/${id}`} className="font-medium text-[var(--color-primary)] hover:underline">View record</Link>
+            </PageHeaderMeta>
+          )}
+          action={canAct ? (
+            <div className="flex flex-wrap items-center gap-3">
+              {startedOn
+                ? <span className="text-sm text-[var(--color-muted-foreground)]">Services started {startedOn}</span>
+                : <Button variant="secondary" aria-disabled={pending} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" onClick={() => { if (!pending) setConfirming('begin') }}>Begin services</Button>}
+              <Button aria-disabled={pending} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" onClick={() => { if (!pending) setConfirming('active') }}>Make active</Button>
+            </div>
+          ) : undefined}
+        />
       </div>
     </div>
 
-    {profile.error || services.error ? (
-      <Callout tone="error">
-        {profile.error
-          ? extractErrorMessage(profile.error, 'Profile is incomplete — edit the profile, then validate again.')
-          : extractErrorMessage(services.error, 'Service needs are incomplete — edit the service needs, then confirm again.')}
-      </Callout>
-    ) : null}
+    {completed && <Callout tone="success">Intake complete — {completed.name} is now in onboarding.</Callout>}
+    {lifecycleError ? <Callout tone="error">{extractErrorMessage(lifecycleError, 'That did not go through. Please try again.')}</Callout> : null}
 
-    <section aria-labelledby="onboarding-gates-heading" className="flex flex-col gap-2">
-      <h2 id="onboarding-gates-heading" className="text-base font-semibold">Onboarding gates</h2>
-      {gates.map(gate => (
-        <article key={gate.label} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold">{gate.label}</h3>
-            <div className="flex flex-wrap items-center gap-3">
-              <StatusBadge status={gate.state} />
-              {gate.state !== 'Complete' && gate.fixRoute && (
-                <Button variant="secondary" size="sm" to={gate.fixRoute.to}>{gate.fixRoute.label}</Button>
-              )}
+    <section className="bg-[var(--color-card)] rounded-md border border-[var(--color-border)]">
+      <h2 id="checklist-heading" className="px-[var(--card-pad)] pt-[var(--card-pad)] pb-2 text-base font-semibold tabular-nums">{doneCount} of {d.items.length} done</h2>
+      <ul aria-labelledby="checklist-heading" className="divide-y divide-[var(--color-border)]">
+        {d.items.map(item => (
+          <li key={item.key} className="flex flex-col gap-2 px-[var(--card-pad)] py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-2.5">
+              {item.done
+                ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-success)]" aria-hidden="true" />
+                : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />}
+              <span className="sr-only">{item.done ? 'Done' : 'To do'}</span>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold">{item.label}</h3>
+                {item.missing ? <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.missing}</p> : null}
+              </div>
             </div>
-          </div>
-          {gate.context ? <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{gate.context}</p> : null}
-        </article>
-      ))}
+            <Fix item={item} participantId={id} canEdit={canAct} canOpenDraft={canAct && canAccessPage('agreement-drafts')} canOpenFunding={canAct && canManageFunding} onRecord={() => setRecording(true)} />
+          </li>
+        ))}
+      </ul>
     </section>
 
-    {d.reasons.length > 0
-      ? (
-        <Card aria-labelledby="readiness-reasons-heading">
-          <h2 id="readiness-reasons-heading" className="font-semibold">What's still missing</h2>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5">{d.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
-        </Card>
-      )
-      : null}
+    <ConfirmDialog
+      open={confirming === 'begin'}
+      onCancel={() => setConfirming(null)}
+      onConfirm={confirm}
+      title={`Begin services for ${name}?`}
+      confirmLabel="Begin services"
+      message={<>
+        <p>They can be rostered and supported from now on: the roster board, shifts, the support worker app, medications and claims. They stay in onboarding until you make them active.</p>
+        {d.servicesStartedAt && participant?.isActive === false && <p className="mt-2">This brings an archived participant back onto the rostering board.</p>}
+        {openList && <p className="mt-2">Still open on the checklist:</p>}
+        {openList}
+      </>}
+    />
+    <ConfirmDialog
+      open={confirming === 'active'}
+      onCancel={() => setConfirming(null)}
+      onConfirm={confirm}
+      title={`Make ${name} active?`}
+      confirmLabel="Make active"
+      message={<>
+        <p>This finishes onboarding and moves them to Active participants.</p>
+        {openList && <p className="mt-2 font-medium">{openItems.length === 1 ? '1 checklist item is still open:' : `${openItems.length} checklist items are still open:`}</p>}
+        {openList}
+      </>}
+    />
+    {recording && <AgreementRecordDialog participantId={id} detail={d} onClose={() => setRecording(false)} />}
   </div>
+}
+
+/** The one fix for an item, for the roles that may open where it is fixed. */
+function Fix({ item, participantId, canEdit, canOpenDraft, canOpenFunding, onRecord }: {
+  item: OnboardingChecklistItem; participantId: string; canEdit: boolean; canOpenDraft: boolean; canOpenFunding: boolean; onRecord: () => void
+}) {
+  // An open item's fix carries the weight; a done item's stays reachable but quiet. On a phone the row stacks, so the button keeps its own width.
+  const look = { variant: item.done ? 'ghost' as const : 'secondary' as const, size: 'sm' as const, className: 'self-start ml-[1.625rem] sm:ml-0 sm:self-auto' }
+  if (item.key === 'profile') return canEdit ? <Button {...look} to={`/participants/${participantId}/profile?from=onboarding`}>Edit profile</Button> : null
+  // The draft carries money, so only the roles the API admits to it are sent there.
+  if (item.key === 'serviceNeeds') return canOpenDraft ? <Button {...look} to={`/participants/${participantId}/agreement-draft?from=onboarding`}>Open agreement draft</Button> : null
+  if (item.key === 'agreement') return canEdit ? <Button {...look} onClick={onRecord}>Record it</Button> : null
+  return canOpenFunding ? <Button {...look} to={`/participants/${participantId}?tab=funding`}>Funding tab</Button> : null
+}
+
+/** The field errors of a ValidationProblemDetails answer, keyed by field ("signedOn", "noAgreementReason"). */
+function fieldErrors(error: unknown): Record<string, string | undefined> {
+  const errors = (error as { response?: { data?: { errors?: unknown } } } | null)?.response?.data?.errors
+  if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return {}
+  return Object.fromEntries(Object.entries(errors as Record<string, string[]>).map(([key, messages]) => [key, messages?.[0]]))
+}
+
+/** "Signed on <date>" or "No written agreement: <reason>". Exactly one is sent; the server validates it and names the field that is wrong. */
+function AgreementRecordDialog({ participantId, detail, onClose }: { participantId: string; detail: ParticipantOnboardingDto; onClose: () => void }) {
+  const record = useRecordOnboardingAgreement(participantId)
+  const [mode, setMode] = useState<'signed' | 'none'>(detail.noAgreementReason ? 'none' : 'signed')
+  const [signedOn, setSignedOn] = useState(detail.agreementSignedOn ?? '')
+  const [reason, setReason] = useState(detail.noAgreementReason ?? '')
+  const errors = fieldErrors(record.error)
+  // A "say one or the other" refusal is keyed to signedOn: show whichever message there is under the field on screen.
+  const shownError = mode === 'signed' ? errors.signedOn ?? errors.noAgreementReason : errors.noAgreementReason ?? errors.signedOn
+  const formError = record.error && !shownError ? extractErrorMessage(record.error, 'Could not save. Please try again.') : null
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    record.mutate(mode === 'signed' ? { signedOn } : { noAgreementReason: reason }, { onSuccess: onClose })
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Signed agreement" size="sm" footer={<>
+      <Button variant="secondary" onClick={onClose}>Cancel</Button>
+      <Button type="submit" form="agreement-record" disabled={record.isPending}>Save</Button>
+    </>}>
+      <form id="agreement-record" onSubmit={submit} className="flex flex-col gap-[var(--field-gap-y)]">
+        <ToggleGroup
+          ariaLabel="Agreement"
+          value={mode}
+          onChange={key => setMode(key as 'signed' | 'none')}
+          options={[{ key: 'signed', label: 'Signed' }, { key: 'none', label: 'No written agreement' }]}
+        />
+        {mode === 'signed'
+          ? <TextField label="Signed on" type="date" required value={signedOn} onChange={e => setSignedOn(e.target.value)} error={shownError} />
+          : <TextAreaField label="Reason there is no written agreement" required rows={3} maxLength={500} value={reason} onChange={e => setReason(e.target.value)} error={shownError} />}
+        {formError && <Callout tone="error">{formError}</Callout>}
+      </form>
+    </Modal>
+  )
 }

@@ -1,588 +1,208 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within, waitFor } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, MemoryRouter, Route, Routes, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import OnboardingDetailPage from './OnboardingDetailPage'
-import { __testHooks } from '@/hooks/useBackNavigation'
+import type { ParticipantOnboardingDto } from '@/api/types/inquiries'
 
-const { mockUseQuery, mockUseMutation, mockInvalidate, mockUseParticipant, mockUseProviderSettings, mockConfirmNeeds } = vi.hoisted(() => ({
-  mockUseQuery: vi.fn(), mockUseMutation: vi.fn(), mockInvalidate: vi.fn(), mockUseParticipant: vi.fn(), mockUseProviderSettings: vi.fn(), mockConfirmNeeds: vi.fn(() => ({ mutate: vi.fn(), error: null, isPending: false })),
+// The checklist page as the owner approved it on 2026-10-13: a header (name, stage badge, View record), one action bar (Begin services, Make
+// active) and one list of the four derived items. Hooks are mocked at the module seam; the payloads are the API's own shapes.
+const { mockUseOnboarding, mockUseParticipant, beginServices, makeActive, recordAgreement } = vi.hoisted(() => ({
+  mockUseOnboarding: vi.fn(),
+  mockUseParticipant: vi.fn(),
+  beginServices: { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null as unknown },
+  makeActive: { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null as unknown },
+  recordAgreement: { mutate: vi.fn(), isPending: false, error: null as unknown, reset: vi.fn() },
 }))
-vi.mock('@tanstack/react-query', () => ({
-  useQuery: mockUseQuery,
-  useMutation: mockUseMutation,
-  useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
+vi.mock('@/api/hooks', () => ({
+  useOnboarding: mockUseOnboarding,
+  useParticipant: mockUseParticipant,
+  useBeginServices: () => beginServices,
+  useMakeParticipantActive: () => makeActive,
+  useRecordOnboardingAgreement: () => recordAgreement,
 }))
-vi.mock('@/api/client', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
-vi.mock('@/api/hooks', () => ({ useParticipant: mockUseParticipant, useProviderSettings: mockUseProviderSettings, useConfirmServiceNeeds: () => mockConfirmNeeds() }))
 
-const incomplete = {
-  participantId: 'p-1', intakeComplete: true, profileComplete: false,
-  serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
-  reasons: ['Profile requires date of birth.', 'A current draft is required.'],
+const open: ParticipantOnboardingDto = {
+  participantId: 'p-1', isReady: false, servicesStartedAt: null, agreementSignedOn: null, noAgreementReason: null,
+  items: [
+    { key: 'profile', label: 'Profile details', done: true, missing: null },
+    { key: 'serviceNeeds', label: 'Service needs', done: false, missing: 'No current agreement draft with dated, priced support lines.' },
+    { key: 'agreement', label: 'Signed agreement', done: false, missing: 'Record the date it was signed, or why there is no written agreement.' },
+    { key: 'funding', label: 'Funding', done: false, missing: 'No plan budget recorded.' },
+  ],
 }
 
-const readyForSchedule = {
-  participantId: 'p-1', intakeComplete: true, profileComplete: true,
-  serviceTypeConfirmed: true, serviceAgreementSigned: true, isReady: false,
-  reasons: [],
+function Arrival() {
+  const { pathname, search, state } = useLocation()
+  return <p>Arrived at {pathname}{search} {JSON.stringify(state)}</p>
 }
 
-// The previous-path tracker is module state: no test may leave its path behind for the next one.
-afterEach(() => __testHooks.reset())
-
-// The organisation's readiness mode is a request of its own: unknown (still loading, or a role that may not read it) unless a test says Warn or Enforce.
-beforeEach(() => { mockUseProviderSettings.mockReturnValue({ data: undefined }) })
-const readinessMode = (participantReadinessMode: 'Warn' | 'Enforce') => mockUseProviderSettings.mockReturnValue({ data: { participantReadinessMode } })
-
-function renderDetail() {
-  return render(<MemoryRouter initialEntries={['/onboarding/p-1']}><Routes><Route path="/onboarding/:id" element={<OnboardingDetailPage />} /></Routes></MemoryRouter>)
+function renderPage() {
+  const router = createMemoryRouter([
+    { path: '/onboarding/:id', element: <OnboardingDetailPage /> },
+    { path: '/participants', element: <Arrival /> },
+  ], { initialEntries: ['/onboarding/p-1'] })
+  return render(<RouterProvider router={router} />)
 }
 
-describe('OnboardingDetailPage', () => {
-  beforeEach(() => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
-    mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
-    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
-    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
-  })
+const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role }))
 
-  it('shows the participant\'s name in the heading, never the raw participantId GUID', () => {
-    renderDetail()
+beforeEach(() => {
+  asRole('Coordinator')
+  mockUseOnboarding.mockReturnValue({ data: open, isLoading: false, isError: false })
+  mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', preferredName: null, fullName: 'Jamie Rivers', isDraft: true, isActive: false }, isLoading: false })
+  for (const m of [beginServices, makeActive, recordAgreement]) { m.mutate.mockReset(); m.reset.mockReset(); m.error = null; m.isPending = false }
+})
+afterEach(() => localStorage.clear())
+
+describe('OnboardingDetailPage: the header', () => {
+  it('names the participant, says the stage and links to the record', () => {
+    renderPage()
 
     expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
-    expect(screen.queryByText('Participant p-1')).not.toBeInTheDocument()
-    expect(screen.queryByText(/^p-1$/)).not.toBeInTheDocument()
+    expect(screen.getByText('Onboarding')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View record' })).toHaveAttribute('href', '/participants/p-1')
   })
 
-  it('shows a Loading… placeholder in the heading while the participant is still loading, never the GUID', () => {
-    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: true })
-    renderDetail()
+  it('says "Services started" once services have begun, and shows the date in place of the Begin services button', () => {
+    mockUseOnboarding.mockReturnValue({ data: { ...open, servicesStartedAt: '2026-10-10T01:00:00Z' }, isLoading: false, isError: false })
+    // Begin services switches the participant on (IsActive) and keeps the draft.
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: true, isActive: true }, isLoading: false })
+    renderPage()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Loading…' })).toBeInTheDocument()
-    expect(screen.queryByText('Participant p-1')).not.toBeInTheDocument()
-  })
-
-  it('leads with identity, current stage, compact progress and exactly one recommended primary action plus its edit link', () => {
-    renderDetail()
-
-    expect(screen.getByText('Onboarding in progress')).toBeInTheDocument()
-    expect(screen.getByText('Progress: 1 of 5 gates complete')).toBeInTheDocument()
-    const recommendation = screen.getByRole('heading', { name: 'Validate profile data' }).closest('section')!
-    expect(recommendation.querySelectorAll('button')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: 'Validate profile data' })).toBeInTheDocument()
-    expect(within(recommendation).getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/participants/p-1/profile')
-  })
-
-  it('collapses the stage / next-action grid to one column on a phone through a min(26rem,100%) track floor, with no max-md override left to maintain', () => {
-    renderDetail()
-
-    // jsdom has no layout, so the class is the only observable proof: a bare minmax(26rem,1fr)
-    // floor (416px) overflows a 390px viewport.
-    const grid = screen.getByText('Onboarding in progress').closest('.rounded-md')!.parentElement!
-    expect(grid).toHaveClass('grid', 'items-start', 'grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))]')
-    expect(grid).not.toHaveClass('max-md:grid-cols-1')
-  })
-
-  it('renders complete, needs-attention and blocked gates via StatusBadge without fabricating reason associations', () => {
-    renderDetail()
-
-    expect(screen.getByText('Intake completed').parentElement).toHaveTextContent('Complete')
-    expect(screen.getByText('Participant profile').parentElement).toHaveTextContent('Needs attention')
-    expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
-    // approving an agreement revision for rostering makes the patterns and shifts, so nothing says that none can be made; and what the schedule needs is not said a third time on its own row
-    expect(screen.queryByText(/The schedule is made when/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/no shifts are created/)).not.toBeInTheDocument()
-    expect(screen.getByText("What's still missing")).toBeInTheDocument()
-    expect(screen.getByText('Profile requires date of birth.')).toBeInTheDocument()
-  })
-
-  it('gives a Needs-attention profile gate row an Edit profile link', () => {
-    renderDetail()
-
-    const profileGate = screen.getByText('Participant profile').closest('article')!
-    const editLink = within(profileGate).getByRole('link', { name: 'Edit profile' })
-    expect(editLink).toHaveAttribute('href', '/participants/p-1/profile')
-  })
-
-  it('uses the existing validation endpoint only when the lifecycle capability is present, and gives a remediation hint on failure', async () => {
-    const profileMutate = vi.fn()
-    mockUseMutation.mockReturnValue({ mutate: profileMutate, error: new Error('validation failed'), isPending: false })
-    const user = userEvent.setup()
-    renderDetail()
-
-    await user.click(screen.getByRole('button', { name: 'Validate profile data' }))
-    expect(profileMutate).toHaveBeenCalledOnce()
-    expect(screen.getByRole('alert')).toHaveTextContent(/edit the profile, then validate again/i)
-  })
-
-  it('gives a secondary "Edit service needs" link alongside the confirm button once the profile gate is complete', () => {
-    mockUseQuery.mockReturnValue({ data: { ...incomplete, profileComplete: true }, isLoading: false })
-    renderDetail()
-
-    const recommendation = screen.getByRole('heading', { name: 'Confirm saved service needs' }).closest('section')!
-    expect(within(recommendation).getByRole('button', { name: 'Confirm saved service needs' })).toBeInTheDocument()
-    expect(within(recommendation).getByRole('link', { name: 'Edit service needs' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
-  })
-
-  it('sends the last step to where the schedule is made, the agreement draft, and says what approving does there', () => {
-    mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
-    renderDetail()
-
-    const recommendation = screen.getByRole('heading', { name: 'Approve the agreement for rostering' }).closest('section')!
-    expect(within(recommendation).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
-    expect(within(recommendation).getByText('Open the agreement draft and approve its newest revision for rostering. That makes the weekly patterns and unfilled shifts, which you can then check under Shift patterns.')).toBeInTheDocument()
-    expect(within(recommendation).queryByText(/proposal-only|no shifts are created here/)).not.toBeInTheDocument()
-    expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Blocked')
-    // The Blocked row sends people to the draft, where the schedule is made, not to a patterns page with nothing on it yet.
-    const gateRow = screen.getByText('Schedule review').closest('article')!
-    expect(within(gateRow).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
-    expect(within(gateRow).queryByRole('link', { name: 'Open shift patterns' })).not.toBeInTheDocument()
-    expect(within(gateRow).queryByText(/./, { selector: 'p' })).not.toBeInTheDocument()                // and says nothing more: the next action above says what approving does
-  })
-
-  it('says what the schedule needs once on a Blocked page: the line the server sends stays in the list, and the next action does not repeat it', () => {
-    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, reasons: ['The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.'] }, isLoading: false })
-    renderDetail()
-
-    expect(screen.getAllByText(/schedule is made when/i)).toHaveLength(1)
-    expect(screen.getByText("What's still missing")).toBeInTheDocument()
-  })
-
-  it('offers a role the API admits to neither the draft nor the roster no way on from the Blocked row', () => {
-    for (const role of ['ReadOnly', 'SupportWorker']) {
-      localStorage.setItem('odip_user', JSON.stringify({ role }))
-      mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
-      const { unmount } = renderDetail()
-
-      const gateRow = screen.getByText('Schedule review').closest('article')!
-      expect(within(gateRow).queryByRole('link'), role).not.toBeInTheDocument()
-      unmount()
-    }
-  })
-
-  it('says so once a revision has been approved for rostering: the gate is complete, and the next thing is to check the roster it made', () => {
-    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
-    renderDetail()
-
-    expect(screen.getByText('Schedule review').parentElement).toHaveTextContent('Complete')
-    expect(screen.getByText('Approved for rostering: version 2, on 5 Oct 2026.')).toBeInTheDocument()
-    expect(screen.getByText('Progress: 5 of 5 gates complete')).toBeInTheDocument()
-    const recommendation = screen.getByRole('heading', { name: 'Check the roster' }).closest('section')!
-    expect(within(recommendation).getByText('Version 2 was approved for rostering on 5 Oct 2026: its weekly patterns and unfilled shifts are made. Check them under Shift patterns and on the roster. Nothing is created from this page.')).toBeInTheDocument()
-    expect(within(recommendation).getByRole('link', { name: 'Open shift patterns' })).toHaveAttribute('href', '/rostering/patterns')
-    expect(screen.queryByRole('heading', { name: 'Approve the agreement for rostering' })).not.toBeInTheDocument()
-  })
-
-  it('says "listed below" only while there is a list, and says what finishing onboarding looks like when nothing is missing', () => {
-    const { unmount } = renderDetail()
-    expect(screen.getByText(/What is still missing is listed below./)).toBeInTheDocument()            // reasons exist: a list is on the page
-    expect(screen.getByText("What's still missing")).toBeInTheDocument()
-    unmount()
-
-    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
-    renderDetail()
-    expect(screen.queryByText(/listed below/)).not.toBeInTheDocument()
-    expect(screen.queryByText("What's still missing")).not.toBeInTheDocument()                       // nothing under it, so no heading either
-    expect(screen.getByText("Nothing else is missing. Completing the participant's profile finishes onboarding: they move to Active participants once your organisation's readiness rule allows it.")).toBeInTheDocument()
-  })
-
-  it('does not send a role that may not open agreement drafts to one, where it would meet a redirect or a 403', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
-    mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
-    renderDetail()
-
-    expect(screen.queryByRole('link', { name: 'Open agreement draft' })).not.toBeInTheDocument()
-  })
-
-  it('preserves readable status but suppresses mutation controls when lifecycle capability is absent', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
-    renderDetail()
-
-    expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
-    expect(screen.getByText('Read-only access: lifecycle changes are unavailable for this role.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Validate profile data' })).not.toBeInTheDocument()
-  })
-
-  // An agreement draft carries money, and the API admits only Admin, Coordinator and SuperAdmin to it: a role that can read this page is not sent to a page it would meet a redirect or a 403 on.
-  it('offers the agreement draft to the roles the API admits to it, in the gate list and as the next action', () => {
-    mockUseQuery.mockReturnValue({ data: { ...incomplete, profileComplete: true, serviceTypeConfirmed: true }, isLoading: false })     // the agreement is the next thing to do
-    for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
-      localStorage.setItem('odip_user', JSON.stringify({ role }))
-      const { unmount } = renderDetail()
-      // The two gate rows that are not done and are decided on the draft: the evidence, and (Blocked until a revision is approved) the schedule.
-      for (const gate of ['Current agreement evidence', 'Schedule review']) {
-        expect(within(screen.getByText(gate).closest('article')!).getByRole('link', { name: 'Open agreement draft' }), `${role}: ${gate}`).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
-      }
-      expect(screen.getByRole('link', { name: 'Review agreement evidence' }), role).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
-      unmount()
-    }
-  })
-
-  // Q2 fix round (Should 1): the profile wizard sends ReadOnly and SupportWorker away, so their profile gate offers no Edit profile, and the service-needs gate only opens the tab.
-  it('offers a ReadOnly or SupportWorker reader no Edit profile, and "Open service needs" instead of "Edit service needs"', () => {
-    for (const role of ['ReadOnly', 'SupportWorker']) {
-      localStorage.setItem('odip_user', JSON.stringify({ role }))
-      const { unmount } = renderDetail()
-      const profileGate = screen.getByText('Participant profile').closest('article')!
-      expect(within(profileGate).queryByRole('link', { name: 'Edit profile' }), role).not.toBeInTheDocument()
-      const needsGate = screen.getByText('Service needs and provisional lines').closest('article')!
-      expect(within(needsGate).getByRole('link', { name: 'Open service needs' }), role).toHaveAttribute('href', '/participants/p-1?tab=support')
-      unmount()
-    }
-  })
-
-  it('does not send a ReadOnly or SupportWorker reader of the page to the agreement draft', () => {
-    mockUseQuery.mockReturnValue({ data: { ...incomplete, profileComplete: true, serviceTypeConfirmed: true }, isLoading: false })
-    for (const role of ['ReadOnly', 'SupportWorker']) {
-      localStorage.setItem('odip_user', JSON.stringify({ role }))
-      const { unmount } = renderDetail()
-      expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' }), role).toBeInTheDocument()
-      expect(screen.queryByRole('link', { name: /agreement draft/i }), role).not.toBeInTheDocument()
-      expect(screen.queryByRole('link', { name: 'Review agreement evidence' }), role).not.toBeInTheDocument()
-      unmount()
-    }
-  })
-
-  it('routes the Back control to the Participants hub Onboarding tab on direct deep-link', async () => {
-    // Deep-link entry — no prior history. The Back control must fall back to the hub's
-    // Onboarding tab (a real, current route) rather than the removed /onboarding list screen.
-    const router = createMemoryRouter(
-      [
-        { path: '/participants', element: <div>Hub placeholder</div> },
-        { path: '/onboarding/:id', element: <OnboardingDetailPage /> },
-      ],
-      { initialEntries: ['/onboarding/p-1'] },
-    )
-    render(<RouterProvider router={router} />)
-
-    // A real link now (it was a button that called navigate), so it has a destination to open or copy.
-    const back = screen.getByRole('link', { name: /Back to/i })
-    expect(back).toHaveAccessibleName('Back to onboarding')
-    expect(back).toHaveAttribute('href', '/participants?tab=onboarding')
-
-    await userEvent.setup().click(back)
-    expect(router.state.location.pathname).toBe('/participants')
-    expect(router.state.location.search).toBe('?tab=onboarding')
-  })
-
-  // L5-01: history-aware Back keeps ONE previous path, not a stack. Hub > Onboarding > Open > "Complete intake" > wizard Back lands here with the
-  // wizard as the previous path, so Back on THIS page went back into the wizard, whose Back came back here, forever: the Onboarding table
-  // was unreachable with Back. This page is a hub child like every other detail page: its Back is always the hub tab.
-  it('always goes to the hub Onboarding tab, never back into the wizard the user has just left', async () => {
-    __testHooks.reset()
-    __testHooks.recordCurrentPath('/participants/p-1/intake')
-    __testHooks.recordCurrentPath('/onboarding/p-1')
-    const router = createMemoryRouter(
-      [
-        { path: '/participants', element: <div>Hub placeholder</div> },
-        { path: '/onboarding/:id', element: <OnboardingDetailPage /> },
-      ],
-      { initialEntries: ['/onboarding/p-1'] },
-    )
-    render(<RouterProvider router={router} />)
-
-    const back = screen.getByRole('link', { name: /Back to|Go back/i })
-    expect(back).toHaveAttribute('href', '/participants?tab=onboarding')
-    expect(back).toHaveAccessibleName('Back to onboarding')
-
-    await userEvent.setup().click(back)
-    expect(router.state.location.pathname).toBe('/participants')
+    expect(screen.getAllByText(/Services started/)[0]).toBeInTheDocument()
+    expect(screen.getByText('Services started 10 Oct 2026')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Begin services' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Make active' })).toBeInTheDocument()
   })
 })
 
-// "Funding recorded" is a step of the activation checklist for an NDIS-funded participant (budget phase 1). The server sends fundingRecorded only for them, and counts it in the
-// worklist's total ("N of 6 gates"), so this page has to show the same gate or the two disagree about how many there are.
-describe('OnboardingDetailPage — the funding gate', () => {
-  const everythingElseDone = { ...readyForSchedule, reasons: ["Funding is not recorded: add the plan budget on the participant's Funding tab."] }
+describe('OnboardingDetailPage: the list', () => {
+  it('heads the list "N of M done" and gives each item a mark, one line of what is missing, and one fix link', () => {
+    renderPage()
 
-  beforeEach(() => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
-    mockUseQuery.mockReturnValue({ data: { ...everythingElseDone, fundingRecorded: false }, isLoading: false })
-    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
-    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
+    const list = screen.getByRole('list', { name: '1 of 4 done' })
+    const rows = within(list).getAllByRole('listitem')
+    expect(rows.map(r => within(r).getByRole('heading').textContent)).toEqual(['Profile details', 'Service needs', 'Signed agreement', 'Funding'])
+    expect(within(rows[0]).getByText('Done')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('To do')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('No current agreement draft with dated, priced support lines.')).toBeInTheDocument()
+    expect(within(rows[0]).getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/participants/p-1/profile?from=onboarding')
+    expect(within(rows[1]).getByRole('link', { name: 'Open agreement draft' })).toHaveAttribute('href', '/participants/p-1/agreement-draft?from=onboarding')
+    expect(within(rows[2]).getByRole('button', { name: 'Record it' })).toBeInTheDocument()
+    expect(within(rows[3]).getByRole('link', { name: 'Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
   })
 
-  it('adds a Funding recorded gate that needs attention, counts it among the gates, and links to the Funding tab', () => {
-    renderDetail()
+  it('has nothing else: no stage card, no recommended action, no "what is still missing", no manual ticks, no intake or schedule rows', () => {
+    renderPage()
 
-    const gate = screen.getByText('Funding recorded').closest('article')!
-    expect(gate).toHaveTextContent('Needs attention')
-    expect(within(gate).getByRole('link', { name: 'Open Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')   // it only opens the tab, where "Record plan budget" is the button
-    expect(screen.getByText('Progress: 4 of 6 gates complete')).toBeInTheDocument()
-    expect(screen.getByText("Funding is not recorded: add the plan budget on the participant's Funding tab.")).toBeInTheDocument()
+    for (const gone of ['Current stage', 'Recommended next action', "What's still missing", 'Intake completed', 'Schedule review', 'Complete profile'])
+      expect(screen.queryByText(gone)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /validate profile|confirm saved service needs/i })).not.toBeInTheDocument()
   })
 
-  it('puts it before the schedule review, the gate that stays last', () => {
-    renderDetail()
+  it('shows a read-only role the list without the action bar or the edit fixes', () => {
+    asRole('ReadOnly')
+    renderPage()
 
-    const labels = screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)
-    expect(labels.indexOf('Funding recorded')).toBe(labels.indexOf('Current agreement evidence') + 1)
-    expect(labels[labels.length - 1]).toBe('Schedule review')
-  })
-
-  it('shows it complete, without a link, once the plan budget is recorded', () => {
-    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, fundingRecorded: true }, isLoading: false })
-    renderDetail()
-
-    const gate = screen.getByText('Funding recorded').closest('article')!
-    expect(gate).toHaveTextContent('Complete')
-    expect(within(gate).queryByRole('link')).not.toBeInTheDocument()
-    expect(screen.getByText('Progress: 5 of 6 gates complete')).toBeInTheDocument()
-  })
-
-  // The budget gate and the schedule gate on one page (the two features meet here): six gates for an NDIS-funded participant, the schedule counted once a revision is approved, and the budget still first.
-  it('counts the approved schedule among the six: six of six when the plan budget is recorded too, and the next action is to check the roster', () => {
-    mockUseQuery.mockReturnValue({ data: { ...readyForSchedule, fundingRecorded: true, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
-    renderDetail()
-
-    expect(screen.getByText('Progress: 6 of 6 gates complete')).toBeInTheDocument()
-    expect(screen.getByText('Schedule review').closest('article')).toHaveTextContent('Complete')
-    expect(screen.getByText('Funding recorded').closest('article')).toHaveTextContent('Complete')
-    expect(screen.getByRole('heading', { name: 'Check the roster' })).toBeInTheDocument()
-  })
-
-  it('still asks for the plan budget first when a revision has been approved but the budget has not been recorded: five of six, and the budget is the next action', () => {
-    mockUseQuery.mockReturnValue({ data: { ...everythingElseDone, fundingRecorded: false, scheduleApprovedVersion: 2, scheduleApprovedAt: '2026-10-05T03:00:00Z' }, isLoading: false })
-    renderDetail()
-
-    expect(screen.getByText('Progress: 5 of 6 gates complete')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Record plan budget' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Check the roster' })).not.toBeInTheDocument()
-    expect(screen.getByText('Funding recorded').closest('article')).toHaveTextContent('Needs attention')
-    expect(screen.getByText('Schedule review').closest('article')).toHaveTextContent('Complete')
-  })
-
-  it('keeps the five gates, and shows no funding gate, when the server says nothing about funding (a participant who is not NDIS-funded)', () => {
-    for (const data of [{ ...readyForSchedule }, { ...readyForSchedule, fundingRecorded: null }]) {
-      mockUseQuery.mockReturnValue({ data, isLoading: false })
-      const { unmount } = renderDetail()
-      expect(screen.queryByText('Funding recorded')).not.toBeInTheDocument()
-      expect(screen.getByText('Progress: 4 of 5 gates complete')).toBeInTheDocument()
-      unmount()
-    }
-  })
-
-  it('offers the Funding tab to the roles that may manage funding (in the gate and as the next action), and keeps the gate but not the link for a ReadOnly or SupportWorker reader', () => {
-    for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
-      localStorage.setItem('odip_user', JSON.stringify({ role }))
-      const { unmount } = renderDetail()
-      const links = screen.getAllByRole('link', { name: 'Open Funding tab' })
-      expect(links, role).toHaveLength(2)   // the gate's, and the recommended action's: everything before it is done
-      links.forEach(link => expect(link, role).toHaveAttribute('href', '/participants/p-1?tab=funding'))
-      unmount()
-    }
-    for (const role of ['ReadOnly', 'SupportWorker']) {
-      localStorage.setItem('odip_user', JSON.stringify({ role }))
-      const { unmount } = renderDetail()
-      expect(screen.getByText('Funding recorded'), role).toBeInTheDocument()
-      expect(screen.queryByRole('link', { name: 'Open Funding tab' }), role).not.toBeInTheDocument()
-      unmount()
-    }
-  })
-
-  it('recommends recording the plan budget once everything before it is done, and the agreement evidence while that is still open', () => {
-    readinessMode('Warn')
-    const first = renderDetail()
-    const recommendation = screen.getByRole('heading', { name: 'Record plan budget' }).closest('section')!
-    expect(within(recommendation).getByRole('link', { name: 'Open Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
-    // In Warn mode nothing blocks activation, so the card says there is a way out for a plan that has not been shared yet (as the intake card's "Plan not shared yet" does).
-    expect(within(recommendation).getByText('The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. If the plan has not been shared yet, this can wait.')).toBeInTheDocument()
-    first.unmount()
-
-    mockUseQuery.mockReturnValue({ data: { ...everythingElseDone, serviceAgreementSigned: false, fundingRecorded: false }, isLoading: false })
-    renderDetail()
-    expect(screen.getByRole('heading', { name: 'Review agreement evidence' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Record plan budget' })).not.toBeInTheDocument()
-  })
-
-  // Q5 (budget 2a): "this can wait" is true only in Warn mode. In Enforce mode activation waits for the plan budget, so the card must never say otherwise; and while the mode is not known
-  // (loading, or a role that may not read the organisation's settings) it does not guess.
-  it('never says the plan budget can wait in Enforce mode: activation waits for it', () => {
-    readinessMode('Enforce')
-    renderDetail()
-
-    const recommendation = screen.getByRole('heading', { name: 'Record plan budget' }).closest('section')!
-    expect(recommendation).not.toHaveTextContent(/can wait/)
-    expect(within(recommendation).getByText('The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. Your organisation’s readiness rule is Enforce, so activation waits for it.')).toBeInTheDocument()
-  })
-
-  it('does not claim it can wait while the mode is not known either: it says the readiness rule decides', () => {
-    renderDetail()
-
-    const recommendation = screen.getByRole('heading', { name: 'Record plan budget' }).closest('section')!
-    expect(recommendation).not.toHaveTextContent(/can wait/)
-    expect(within(recommendation).getByText('The plan budget is recorded on the participant’s Funding tab, from the plan the participant shares or from their plan manager. Your organisation’s readiness rule decides whether activation waits for it.')).toBeInTheDocument()
-  })
-
-  it('asks for the organisation\'s readiness mode only for the roles that may read it', () => {
-    renderDetail()
-    expect(mockUseProviderSettings).toHaveBeenLastCalledWith(true)   // Coordinator: the roles that manage funding may read the settings
-
-    for (const role of ['ReadOnly', 'SupportWorker']) {
-      localStorage.setItem('odip_user', JSON.stringify({ role }))
-      const { unmount } = renderDetail()
-      expect(mockUseProviderSettings, role).toHaveBeenLastCalledWith(false)
-      unmount()
-    }
-  })
-
-  it('goes on to the schedule step (approving the agreement for rostering) once the plan budget is recorded, and never names the budget for a participant who is not NDIS-funded', () => {
-    for (const data of [{ ...readyForSchedule, fundingRecorded: true }, { ...readyForSchedule }]) {
-      mockUseQuery.mockReturnValue({ data, isLoading: false })
-      const { unmount } = renderDetail()
-      expect(screen.getByRole('heading', { name: 'Approve the agreement for rostering' })).toBeInTheDocument()
-      expect(screen.queryByRole('heading', { name: 'Record plan budget' })).not.toBeInTheDocument()
-      unmount()
-    }
-  })
-})
-
-// Finishing onboarding is the Profile wizard's Complete Profile: it finalises the participant, and when the organisation's readiness rule allows it
-// they become active and move to Active participants. The checklist used to offer the wizard (as "Edit profile") only while the profile gate was open,
-// so a coordinator who had validated the profile data and confirmed the service needs found the participant stuck on Onboarding with nothing that ends it.
-describe('OnboardingDetailPage — finishing onboarding', () => {
-  const draft = (overrides: Record<string, unknown> = {}) => ({ firstName: 'Jamie', lastName: 'Rivers', preferredName: null, isDraft: true, ...overrides })
-  const explanation = () => screen.getByText(/finishes onboarding/i)
-
-  beforeEach(() => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
-    mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
-    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
-    mockUseParticipant.mockReturnValue({ data: draft(), isLoading: false })
-  })
-
-  it('offers Complete profile beside the explanation, as a link to the Profile wizard, for a draft whose intake is complete', () => {
-    renderDetail()
-
-    const complete = within(explanation().parentElement as HTMLElement).getByRole('link', { name: 'Complete profile' })
-    expect(complete).toHaveAttribute('href', '/participants/p-1/profile')
-  })
-
-  it('still offers it once the profile data is validated and every later gate has moved on: the case where nothing else on the page finished onboarding', () => {
-    mockUseQuery.mockReturnValue({ data: readyForSchedule, isLoading: false })
-    renderDetail()
-
+    expect(screen.getByRole('list', { name: '1 of 4 done' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Begin services' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Make active' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Edit profile' })).not.toBeInTheDocument()
-    expect(within(explanation().parentElement as HTMLElement).getByRole('link', { name: 'Complete profile' })).toHaveAttribute('href', '/participants/p-1/profile')
-  })
-
-  it('is not offered once the participant is finalised: there is no onboarding left to finish', () => {
-    mockUseParticipant.mockReturnValue({ data: draft({ isDraft: false }), isLoading: false })
-    renderDetail()
-
-    expect(screen.queryByRole('link', { name: 'Complete profile' })).not.toBeInTheDocument()
-  })
-
-  it('is not offered before the intake is complete: the next step is the intake', () => {
-    mockUseQuery.mockReturnValue({ data: { ...incomplete, intakeComplete: false }, isLoading: false })
-    renderDetail()
-
-    expect(screen.queryByRole('link', { name: 'Complete profile' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Complete intake' })).toBeInTheDocument()
-  })
-
-  it('is not offered while the participant is still loading, or to a role without the lifecycle capability', () => {
-    mockUseParticipant.mockReturnValue({ data: undefined, isLoading: true })
-    const loading = renderDetail()
-    expect(screen.queryByRole('link', { name: 'Complete profile' })).not.toBeInTheDocument()
-    loading.unmount()
-
-    mockUseParticipant.mockReturnValue({ data: draft(), isLoading: false })
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
-    renderDetail()
-    expect(screen.queryByRole('link', { name: 'Complete profile' })).not.toBeInTheDocument()
-  })
-
-  it('calls the gate action "Validate profile data", so it is not mistaken for the Profile wizard\'s Complete Profile', () => {
-    renderDetail()
-
-    expect(screen.getByRole('heading', { name: 'Validate profile data' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Validate profile data' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /validate saved profile/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record it' })).not.toBeInTheDocument()
   })
 })
 
-// Regression (2026-09-29, found in live QA after the hub-back change): the page's
-// useBackTarget hook originally sat AFTER the `if (detail.isLoading) return` early return.
-// Every other test here renders with isLoading:false, so that path was never exercised and the
-// whole suite stayed green while the deployed page crashed with React error #310
-// ("rendered fewer hooks than expected") the moment the async detail query resolved in the real
-// app. This test drives the loading -> loaded transition, which is what the real app does.
-describe('OnboardingDetailPage — hook ordering across the loading transition', () => {
-  it('survives the loading -> loaded transition without a hooks-order crash', async () => {
-    // React only *warns* on a hooks-order change, so a bare render would still "pass" while the
-    // deployed app crashes with error #310. Fail loudly on that specific console.error instead.
-    const consoleError = vi.spyOn(console, 'error').mockImplementation((...args) => {
-      void args
-    })
-    const orderWarning = () =>
-      consoleError.mock.calls.some(c => String(c[0]).includes('order of Hooks'))
-    try {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
-    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
-    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
+describe('OnboardingDetailPage: Begin services and Make active', () => {
+  it('Begin services confirms first, naming the open items, then posts for this participant', async () => {
+    const user = userEvent.setup()
+    renderPage()
 
-    // First render: the query is still in flight, so the page takes its early return.
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: true })
-    const { rerender } = renderDetail()
-    expect(screen.getByText('Loading onboarding record\u2026')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Begin services' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Begin services for Jamie Rivers?' })
+    expect(within(dialog).getByText('Service needs')).toBeInTheDocument()
+    expect(within(dialog).getByText('Funding')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Profile details')).not.toBeInTheDocument()
+    expect(beginServices.mutate).not.toHaveBeenCalled()
 
-    // Then the real transition: the query resolves and the full page renders.
-    mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
-    rerender(
-      <MemoryRouter initialEntries={['/onboarding/p-1']}>
-        <Routes><Route path="/onboarding/:id" element={<OnboardingDetailPage />} /></Routes>
-      </MemoryRouter>,
-    )
+    await user.click(within(dialog).getByRole('button', { name: 'Begin services' }))
+    expect(beginServices.mutate).toHaveBeenCalledWith({ id: 'p-1' }, expect.anything())
+  })
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: 'Jamie Rivers' })).toBeInTheDocument()
-    })
-    expect(screen.queryByText('Loading onboarding record\u2026')).not.toBeInTheDocument()
-    expect(screen.getByText('Participant profile')).toBeInTheDocument()
-    expect(orderWarning()).toBe(false)
-    } finally {
-      consoleError.mockRestore()
-    }
+  it('Make active warns with the open items, and on success shows the participant on the Active tab', async () => {
+    makeActive.mutate.mockImplementation((_vars, options: { onSuccess: () => void }) => options.onSuccess())
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Make active' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Make Jamie Rivers active?' })
+    expect(within(dialog).getByText(/3 checklist items are still open/)).toBeInTheDocument()
+    expect(within(dialog).getByText('Signed agreement')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Make active' }))
+
+    expect(makeActive.mutate).toHaveBeenCalledWith({ id: 'p-1' }, expect.anything())
+    expect(await screen.findByText(/Arrived at \/participants\?tab=active/)).toHaveTextContent('{"participantActivated":{"participantId":"p-1","name":"Jamie Rivers"}}')
+  })
+
+  it('shows the server\'s own reason when Enforce refuses', () => {
+    makeActive.error = { response: { status: 400, data: { success: false, errors: ['This participant cannot be activated until their signed service agreement evidence is recorded.'] } } }
+    renderPage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('This participant cannot be activated until their signed service agreement evidence is recorded.')
+  })
+
+  it('offers no lifecycle actions for a participant who is no longer in onboarding', () => {
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: false, isActive: true }, isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Active')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Make active' })).not.toBeInTheDocument()
   })
 })
 
-describe('OnboardingDetailPage — failed request vs. missing record (PageState)', () => {
-  beforeEach(() => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
-    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
-    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
+describe('OnboardingDetailPage: the agreement record', () => {
+  it('records a reason there is no written agreement, sending only that', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Record it' }))
+    const dialog = screen.getByRole('dialog', { name: 'Signed agreement' })
+    await user.click(within(dialog).getByRole('radio', { name: 'No written agreement' }))
+    await user.type(within(dialog).getByLabelText(/Reason/), 'The participant chose not to have one.')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(recordAgreement.mutate).toHaveBeenCalledWith({ noAgreementReason: 'The participant chose not to have one.' }, expect.anything())
   })
 
-  it('names a failed request as a failure, with a retry, not "Onboarding record not found"', () => {
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
-    renderDetail()
+  it('records a signed date, sending only that', async () => {
+    const user = userEvent.setup()
+    renderPage()
 
-    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this onboarding record")
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
-    expect(screen.queryByText('Onboarding record not found')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Record it' }))
+    const dialog = screen.getByRole('dialog', { name: 'Signed agreement' })
+    await user.type(within(dialog).getByLabelText(/Signed on/), '2026-10-02')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(recordAgreement.mutate).toHaveBeenCalledWith({ signedOn: '2026-10-02' }, expect.anything())
   })
 
-  it('shows "Onboarding record not found" with a Back link to the hub for a 404', () => {
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
-    renderDetail()
+  it('shows the server\'s field error on the field and keeps what was typed', async () => {
+    recordAgreement.error = { response: { status: 400, data: { errors: { signedOn: ['The signed date cannot be in the future.'] } } } }
+    const user = userEvent.setup()
+    renderPage()
 
-    expect(screen.getByText('Onboarding record not found')).toBeInTheDocument()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to onboarding' })).toHaveAttribute('href', '/participants?tab=onboarding')
+    await user.click(screen.getByRole('button', { name: 'Record it' }))
+    const dialog = screen.getByRole('dialog', { name: 'Signed agreement' })
+    const date = within(dialog).getByLabelText(/Signed on/)
+    await user.type(date, '2099-01-01')
+
+    expect(within(dialog).getByText('The signed date cannot be in the future.')).toBeInTheDocument()
+    expect(date).toHaveValue('2099-01-01')
   })
 })
 
 // NAV F5: Complete intake started from this checklist comes back here, with the notice the Onboarding table shows.
 describe('OnboardingDetailPage — arrival from a completed intake', () => {
-  beforeEach(() => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
-    mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
-    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
-    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
-  })
-
   it('confirms the completed intake once', () => {
     const router = createMemoryRouter([{ path: '/onboarding/:id', element: <OnboardingDetailPage /> }], {
       initialEntries: [{ pathname: '/onboarding/p-1', state: { intakeComplete: { participantId: 'p-1', name: 'Jamie Rivers' } } }],
@@ -594,7 +214,74 @@ describe('OnboardingDetailPage — arrival from a completed intake', () => {
   })
 
   it('shows no notice on an ordinary visit', () => {
-    renderDetail()
+    renderPage()
     expect(screen.queryByText(/intake complete —/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('OnboardingDetailPage: fix round 1', () => {
+  it('clears the last refusal before a new attempt, so the callout shows the latest one (V7)', async () => {
+    beginServices.error = { response: { status: 400, data: { errors: ['Begin refused.'] } } }
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Make active' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Make active' }))
+
+    expect(beginServices.reset).toHaveBeenCalled()
+    expect(makeActive.reset).toHaveBeenCalled()
+    expect(beginServices.reset.mock.invocationCallOrder[0]).toBeLessThan(makeActive.mutate.mock.invocationCallOrder[0])
+  })
+
+  it('offers no fixes once the participant is no longer in onboarding: the record is read-only (V23)', () => {
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: false, isActive: true }, isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('list', { name: '1 of 4 done' })).toBeInTheDocument()
+    for (const fix of ['Edit profile', 'Open agreement draft', 'Funding tab']) expect(screen.queryByRole('link', { name: fix })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record it' })).not.toBeInTheDocument()
+  })
+
+  it('holds both actions while either is in flight (V24)', async () => {
+    beginServices.isPending = true
+    const user = userEvent.setup()
+    renderPage()
+
+    const makeActiveButton = screen.getByRole('button', { name: 'Make active' })
+    expect(makeActiveButton).toHaveAttribute('aria-disabled', 'true')
+    await user.click(makeActiveButton)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('treats a services-started participant who was switched off as onboarding again, offering Begin services (V5)', () => {
+    mockUseOnboarding.mockReturnValue({ data: { ...open, servicesStartedAt: '2026-10-10T01:00:00Z' }, isLoading: false, isError: false })
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: true, isActive: false }, isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Onboarding')).toBeInTheDocument()
+    expect(screen.queryByText(/Services started/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Begin services' })).toBeInTheDocument()
+  })
+})
+
+describe('OnboardingDetailPage: fix round 2', () => {
+  it('says Begin services brings an archived participant back, when their services had started before (N4)', async () => {
+    mockUseOnboarding.mockReturnValue({ data: { ...open, servicesStartedAt: '2026-10-10T01:00:00Z' }, isLoading: false, isError: false })
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: true, isActive: false }, isLoading: false })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Begin services' }))
+
+    expect(within(screen.getByRole('alertdialog')).getByText('This brings an archived participant back onto the rostering board.')).toBeInTheDocument()
+  })
+
+  it('does not say so for a first Begin services', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Begin services' }))
+
+    expect(within(screen.getByRole('alertdialog')).queryByText(/archived participant/)).not.toBeInTheDocument()
   })
 })

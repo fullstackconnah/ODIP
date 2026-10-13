@@ -56,13 +56,14 @@ function ParticipantsArrival() {
   )
 }
 
-function renderWizard() {
+function renderWizard(entry = '/participants/participant-1/profile') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const router = createMemoryRouter([
     { path: '/participants/:id/profile', element: <ProfileWizardPage /> },
     { path: '/participants/:id', element: <p>Participant detail</p> },
+    { path: '/onboarding/:id', element: <p>Onboarding checklist</p> },
     { path: '/participants', element: <ParticipantsArrival /> },
-  ], { initialEntries: ['/participants/participant-1/profile'] })
+  ], { initialEntries: [entry] })
   return render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
 }
 
@@ -90,85 +91,37 @@ async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
   await expectStep(/review/i)
 }
 
-describe('ProfileWizardPage (wire) — completing the profile', () => {
-  it('finalises through POST /participants/{id}/complete-profile with an empty body, never the full-record PUT', async () => {
+// Owner decision 2026-10-13: finishing the Profile wizard saves the profile and nothing else. Completing a profile never makes anyone Active
+// (that is "Make active" on the onboarding checklist), so there is no lifecycle call and no hand-off to the Active tab.
+describe('ProfileWizardPage (wire) — saving the profile', () => {
+  it('saves and returns to the record, with no lifecycle call and never the full-record PUT', async () => {
     const user = userEvent.setup()
     renderWizard()
     await walkToReview(user)
 
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
 
-    await waitFor(() => expect(mockApiPostRaw).toHaveBeenCalledTimes(1))
-    expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/participant-1/complete-profile', {})
+    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
+    expect(mockApiPostRaw).not.toHaveBeenCalled()
     expect(mockApiPutRaw).not.toHaveBeenCalled()
-    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
   })
 
-  // The end of onboarding: completing the profile finalises the participant, and the organisation's readiness mode decides whether that also
-  // activates them (Warn does; Enforce waits for signed-agreement evidence). An activated participant has left the Onboarding tab, so go and show
-  // them on the Active participants tab, carrying who it was for the tab's one-off confirmation.
-  it('goes to the Active participants tab, naming who is now active, when completing the profile of a participant in onboarding activates them', async () => {
-    mockApiPostRaw.mockResolvedValue({ success: true, data: { id: 'participant-1', fullName: 'Jamie Rivers', isDraft: false, isActive: true } })
+  it('returns to the onboarding checklist when it was opened from there', async () => {
     const user = userEvent.setup()
-    renderWizard()
+    renderWizard('/participants/participant-1/profile?from=onboarding')
     await walkToReview(user)
 
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
 
-    expect(await screen.findByText('Participants list')).toBeInTheDocument()
-    expect(screen.getByTestId('arrival-search')).toHaveTextContent('?tab=active')
-    expect(JSON.parse(screen.getByTestId('arrival-state').textContent!)).toEqual({
-      participantActivated: { participantId: 'participant-1', name: 'Jamie Rivers' },
-    })
-    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
-  })
-
-  it('shows the server\'s evidence reason and stays on the wizard when readiness will not activate the participant yet (Enforce): they stay in onboarding', async () => {
-    // The server refuses Complete Profile for a draft it cannot activate (ParticipantsController.CompleteProfile) and leaves them a draft on Onboarding.
-    mockApiPostRaw.mockRejectedValue(apiError(400, 'This participant cannot be activated until their signed service agreement evidence is recorded.'))
-    const user = userEvent.setup()
-    renderWizard()
-    await walkToReview(user)
-
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('This participant cannot be activated until their signed service agreement evidence is recorded.')
-    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
-    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
-    // Still usable: the button is back, so the coordinator can retry once the evidence is recorded.
-    expect(screen.getByRole('button', { name: /complete profile/i })).toBeEnabled()
-  })
-
-  it('returns to the record, not the Active tab, when the participant was already finalised: this edit did not finish an onboarding', async () => {
-    serve({ isDraft: false, isActive: true })
-    mockApiPostRaw.mockResolvedValue({ success: true, data: { id: 'participant-1', fullName: 'Jamie Rivers', isDraft: false, isActive: true } })
-    const user = userEvent.setup()
-    renderWizard()
-    await walkToReview(user)
-
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
-
-    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
-    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
-  })
-
-  it('shows the server\'s own reason when completing is refused, and stays on the wizard', async () => {
-    mockApiPostRaw.mockRejectedValue(apiError(400, "Complete the participant's intake before completing their profile."))
-    const user = userEvent.setup()
-    renderWizard()
-    await walkToReview(user)
-
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent("Complete the participant's intake before completing their profile.")
-    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
+    expect(await screen.findByText('Onboarding checklist')).toBeInTheDocument()
+    expect(mockApiPostRaw).not.toHaveBeenCalled()
   })
 })
 
 // Review F-5: Complete Profile used to PATCH every step whenever the form was dirty. One edited field meant up to seven PATCHes, a refusal in
 // a step nobody touched blocked completion, and untouched sections were rewritten from the form's copy. Now only a step whose fields differ from
 // what was last known to match the server is saved.
-describe('ProfileWizardPage (wire) — Complete Profile saves only the steps that changed (review F-5)', () => {
+describe('ProfileWizardPage (wire) — Save profile saves only the steps that changed (review F-5)', () => {
   const railTo = (name: RegExp) => within(stepNav()).getByRole('button', { name })
 
   /** Reaches Review with every step saved by its own Next, then edits the Medical step through the rail (which does not save the step it leaves). */
@@ -187,24 +140,23 @@ describe('ProfileWizardPage (wire) — Complete Profile saves only the steps tha
     await walkToReview(user)
     mockApiPatchRaw.mockClear()
 
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
 
-    await waitFor(() => expect(mockApiPostRaw).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
     expect(mockApiPatchRaw).not.toHaveBeenCalled()
   })
 
-  it('saves only the step that was edited after its save, then finalises', async () => {
+  it('saves only the step that was edited after its save, then leaves the wizard', async () => {
     const user = userEvent.setup()
     renderWizard()
     await editMedicalFromReview(user)
     mockApiPatchRaw.mockClear()
 
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
 
-    await waitFor(() => expect(mockApiPostRaw).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
     expect(mockApiPatchRaw).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(mockApiPatchRaw.mock.calls[0][1])).toContain('Allergic to peanuts, carries an EpiPen')
-    expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/participant-1/complete-profile', {})
   })
 
   it('is not blocked by a refusal in a step the user never touched', async () => {
@@ -218,9 +170,9 @@ describe('ProfileWizardPage (wire) — Complete Profile saves only the steps tha
       return { success: true, data: { id: 'participant-1' } }
     })
 
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
 
-    await waitFor(() => expect(mockApiPostRaw).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
     expect(screen.queryByText('Some other section was refused.')).not.toBeInTheDocument()
   })
 
@@ -231,10 +183,10 @@ describe('ProfileWizardPage (wire) — Complete Profile saves only the steps tha
     mockApiPatchRaw.mockReset()
     mockApiPatchRaw.mockRejectedValue(apiError(400, 'Medical summary is too long.'))
 
-    await user.click(screen.getByRole('button', { name: /complete profile/i }))
+    await user.click(screen.getByRole('button', { name: /save profile/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Medical summary is too long.')
-    expect(mockApiPostRaw).not.toHaveBeenCalled()
+    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
   })
 })
 

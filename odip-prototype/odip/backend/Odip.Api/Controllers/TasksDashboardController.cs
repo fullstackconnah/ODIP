@@ -546,7 +546,8 @@ public class DashboardController : ControllerBase
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(new DashboardSummaryDto
         {
             UpcomingTripCount = upcomingTrips.Count,
-            ActiveParticipantCount = await _db.Participants.CountAsync(p => p.IsActive, ct),
+            // The Active tab's rule: a draft is not counted, even one marked active (Participant.IsActive defaults to true) or whose services have begun.
+            ActiveParticipantCount = await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft, ct),
             OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => (mayReview || t.TaskType != TaskType.BudgetEmergencyReview) && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
             OverdueTaskCount = overdueTasks.Count,
             ConflictCount = conflictCount,

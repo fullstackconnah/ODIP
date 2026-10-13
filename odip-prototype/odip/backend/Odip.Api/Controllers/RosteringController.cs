@@ -157,7 +157,7 @@ public class RosteringController : ControllerBase
         // organisation's readiness mode (ParticipantReadiness.CheckAsync), and what is missing is
         // reported on each row and shift below (ReadinessIssues).
         var activeParticipants = await _db.Participants
-            .Where(p => p.IsActive && !p.IsDraft)
+            .Where(Participant.CanReceiveServicesRule)
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .ToListAsync(ct);
         var participantById = activeParticipants.ToDictionary(p => p.Id);
@@ -172,7 +172,7 @@ public class RosteringController : ControllerBase
         }
         var allParticipantIds = participantById.Keys.ToList();
         var displayParticipants = participantById.Values
-            .Where(p => p.IsActive && !p.IsDraft)
+            .Where(Participant.CanReceiveServices)
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .ToList();
 
@@ -339,6 +339,7 @@ public class RosteringController : ControllerBase
                     ParticipantId = participant.Id, FullName = participant.FullName,
                     SupportRatio = participant.SupportRatio, OvernightSupport = participant.OvernightSupport,
                     HasRestrictivePractice = participant.HasRestrictivePracticeFlag,
+                    InOnboarding = participant.IsDraft,
                     Shifts = shiftDtos, TripBars = myTripBars,
                     ScheduledHours = scheduledHours, DaysWithoutCover = daysWithoutCover,
                     ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssuesById, participant.Id)

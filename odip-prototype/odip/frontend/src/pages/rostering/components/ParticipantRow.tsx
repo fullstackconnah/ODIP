@@ -79,6 +79,11 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {row.inOnboarding && (
+            <span title="Services started; onboarding is still open" className="inline-flex h-5 items-center rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
+              Onboarding
+            </span>
+          )}
           <span
             role="img"
             aria-label={`${ratioLabel} support`}

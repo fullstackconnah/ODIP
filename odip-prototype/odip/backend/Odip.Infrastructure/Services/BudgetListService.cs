@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Infrastructure.Data;
@@ -33,7 +34,8 @@ public sealed class BudgetListService
     public async Task<BudgetListDto> GetAsync(Guid tenantId, CancellationToken ct)
     {
         var people = await _db.Participants.AsNoTracking()
-            .Where(p => p.TenantId == tenantId && p.IsActive && !p.IsDraft)
+            .Where(p => p.TenantId == tenantId)
+            .Where(Participant.CanReceiveServicesRule)
             .Select(p => new { p.Id, p.FundingSource })
             .ToListAsync(ct);
         var ledgers = await _ledger.ComputeAsync(tenantId, people.Select(p => p.Id).ToList(), ct);

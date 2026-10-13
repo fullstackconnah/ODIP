@@ -332,42 +332,6 @@ public class DraftPruningTests
         Assert.Equal(new[] { 1, 4 }, await VersionsAsync(f.Db, f.Participant.Id));
     }
 
-    // ── Onboarding's "service needs" step ─────────────────────────────────────────
-
-    [Fact]
-    public async Task Every_save_is_a_new_row_with_a_later_CreatedAt_so_a_confirmation_of_service_needs_still_goes_stale_on_the_next_save()
-    {
-        await using var f = await SetUpAsync();
-        var clock = FakeClock.AtUtc(2026, 10, 5, 9, 0);
-        var service = new ServiceAgreementDraftService(f.Db, clock: clock);
-        f.Participant.IntakeCompletedAt = new DateTime(2026, 10, 1, 3, 0, 0, DateTimeKind.Utc);
-        var onboarding = f.Db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = f.TenantId, ParticipantId = f.Participant.Id }).Entity;
-        await f.Db.SaveChangesAsync();
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns(f.TenantId);
-        var controller = new ParticipantInquiriesController(f.Db, tenant.Object, clock);
-        async Task<ParticipantOnboardingDto> OnboardingAsync() =>
-            Assert.IsType<ApiResponse<ParticipantOnboardingDto>>(Assert.IsType<OkObjectResult>((await controller.GetOnboarding(f.Participant.Id, CancellationToken.None)).Result).Value).Data!;
-
-        var first = Assert.IsType<ServiceAgreementDraft>((await service.SaveAsync(f.TenantId, f.Participant.Id, Request(), "actor", CancellationToken.None)).Draft);        // 09:00
-        onboarding.RecordServiceNeedsConfirmation("coordinator", new DateTime(2026, 10, 5, 10, 0, 0, DateTimeKind.Utc));
-        await f.Db.SaveChangesAsync();
-        Assert.True((await OnboardingAsync()).ServiceTypeConfirmed);
-
-        clock.Set(new DateTimeOffset(2026, 10, 5, 11, 0, 0, TimeSpan.Zero));
-        var second = Assert.IsType<ServiceAgreementDraft>((await service.SaveAsync(f.TenantId, f.Participant.Id, Request(), "actor", CancellationToken.None)).Draft);       // 11:00, replacing the first
-
-        Assert.Equal((new DateTime(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc), new DateTime(2026, 10, 5, 11, 0, 0, DateTimeKind.Utc)), (first.CreatedAt, second.CreatedAt));
-        Assert.Equal(new[] { 2 }, await VersionsAsync(f.Db, f.Participant.Id));
-        var stale = await OnboardingAsync();
-        Assert.False(stale.ServiceTypeConfirmed);                                                                                          // confirmed at 10:00, before the 11:00 revision
-        Assert.Contains(stale.Reasons, reason => reason.Contains("Service needs require server confirmation for the current draft revision."));
-
-        onboarding.RecordServiceNeedsConfirmation("coordinator", new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc));
-        await f.Db.SaveChangesAsync();
-        Assert.True((await OnboardingAsync()).ServiceTypeConfirmed);
-    }
-
     // ── A revision that gains a use while a save is replacing it ──────────────────
 
     [Fact]

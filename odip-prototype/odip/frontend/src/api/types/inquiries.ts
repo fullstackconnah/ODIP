@@ -35,3 +35,41 @@ export interface CreateParticipantInquiryDto {
   source: InquirySource
   provenance?: string | null
 }
+
+/** One onboarding checklist item. `key` names the item and its fix: profile (Edit profile), serviceNeeds (the agreement draft), agreement (Record it), funding (the Funding tab). */
+export interface OnboardingChecklistItem {
+  key: 'profile' | 'serviceNeeds' | 'agreement' | 'funding'
+  label: string
+  done: boolean
+  /** One line saying what is missing; null when the item is done. */
+  missing?: string | null
+}
+
+/** GET /inquiries/{participantId}/onboarding: the checklist, derived by the server (owner decision 2026-10-13). */
+export interface ParticipantOnboardingDto {
+  participantId: string
+  /** Four items, three for a participant who is not NDIS-funded. */
+  items: OnboardingChecklistItem[]
+  isReady: boolean
+  servicesStartedAt?: string | null
+  /** The agreement record: a signed date (yyyy-MM-dd) or a reason there is no written agreement, at most one. */
+  agreementSignedOn?: string | null
+  noAgreementReason?: string | null
+}
+
+/** A row of GET /inquiries/onboarding-worklist (the Onboarding tab). */
+export interface OnboardingWorklistRow {
+  participantId: string
+  fullName: string
+  servicesStartedAt?: string | null
+  completedSteps: number
+  totalSteps: number
+  /** The label of the first item still open; null when every item is done. */
+  firstMissing?: string | null
+}
+
+/** POST /inquiries/{participantId}/onboarding/agreement-record: exactly one of the two. */
+export interface RecordOnboardingAgreementDto {
+  signedOn?: string | null
+  noAgreementReason?: string | null
+}

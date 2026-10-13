@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useCreateParticipant, usePatchParticipant, useParticipants } from './participants'
+import { useBeginServices, useCreateParticipant, useMakeParticipantActive, usePatchParticipant, useParticipants } from './participants'
 import type { PatchParticipantDto } from '../types'
 
 // CORE-02: usePatchParticipant is a thin TanStack Query mutation wrapper around apiPatchRaw — only
@@ -175,5 +175,24 @@ describe('useParticipants', () => {
     expect(mia.readinessIssues).toEqual(['Intake not complete', 'No signed service agreement'])
     expect(noah).not.toHaveProperty('readinessIssues')
     expect([...(result.current.data ?? [])]).toEqual(items)
+  })
+})
+
+describe('useBeginServices / useMakeParticipantActive', () => {
+  it.each([
+    ['begin-services', useBeginServices],
+    ['make-active', useMakeParticipantActive],
+  ] as const)('posts %s with an empty body, and refreshes the checklist, the lists and the roster board', async (action, useAction) => {
+    mockApiPostRaw.mockReset().mockResolvedValue({ success: true, data: { id: 'p7' } })
+    const queryClient = new QueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useAction(), { wrapper: createWrapper(queryClient) })
+
+    result.current.mutate({ id: 'p7' })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mockApiPostRaw).toHaveBeenCalledWith(`/participants/p7/${action}`, {})
+    for (const key of [['onboarding', 'p7'], ['participant-onboarding-worklist'], ['participants'], ['roster-board']])
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: key })
   })
 })

@@ -64,4 +64,20 @@ public class CrossTenantDashboardTests
 
         Assert.Equal((3, 1, 1), (summary.ConflictCount, summary.OpenIncidentCount, summary.QscOverdueCount));
     }
+
+    [Fact]
+    public async Task Summary_ActiveParticipants_CountsTheActiveTabOnly_NotDraftsMarkedActiveOrWhoseServicesStarted()
+    {
+        using var db = Db();
+        db.Participants.AddRange(
+            new Participant { Id = Guid.NewGuid(), TenantId = A, FirstName = "Active", LastName = "One", IsActive = true, IsDraft = false },
+            new Participant { Id = Guid.NewGuid(), TenantId = A, FirstName = "Legacy", LastName = "Draft", IsActive = true, IsDraft = true },
+            new Participant { Id = Guid.NewGuid(), TenantId = A, FirstName = "Services", LastName = "Started", IsActive = true, IsDraft = true, ServicesStartedAt = DateTime.UtcNow },
+            new Participant { Id = Guid.NewGuid(), TenantId = A, FirstName = "Archived", LastName = "One", IsActive = false, IsDraft = false });
+        db.SaveChanges();
+
+        var summary = await SummaryAsync(db);
+
+        Assert.Equal(1, summary.ActiveParticipantCount);
+    }
 }

@@ -130,7 +130,7 @@ describe('ParticipantsHubPage (wire) — the register has its controls back', ()
 
   it('lists a participant whose intake is complete on the Onboarding tab, with their checklist one click away', async () => {
     serve({
-      worklist: [{ participantId: 'w2', fullName: 'Ira Intake', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 5, reasons: ['Profile requires date of birth.'] }],
+      worklist: [{ participantId: 'w2', fullName: 'Ira Intake', servicesStartedAt: null, completedSteps: 0, totalSteps: 4, firstMissing: 'Profile details' }],
       enquiries: [{ id: 'e2', participantId: 'w2', firstName: 'Ira', lastName: 'Intake', phone: null, email: null, source: 'Phone', provenance: null, createdAt: '2026-09-02', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-20T03:00:00' }],
     })
     const user = userEvent.setup()
@@ -188,11 +188,11 @@ describe('ParticipantsHubPage (wire) — the register has its controls back', ()
 
 describe('ParticipantsHubPage (wire) — the other two tabs have their search and filter back', () => {
   it('shows the onboarding search once the worklist has rows', async () => {
-    serve({ worklist: [{ participantId: 'w1', fullName: 'Wren Worklist', stage: 'Intake incomplete', nextAction: 'Complete intake', completedSteps: 0, totalSteps: 5, reasons: ['Intake PDF completion is required.'] }] })
+    serve({ worklist: [{ participantId: 'w1', fullName: 'Wren Worklist', servicesStartedAt: null, completedSteps: 0, totalSteps: 4, firstMissing: 'Profile details' }] })
     renderHub('/participants?tab=onboarding')
 
     await screen.findByText('Wren Worklist')
-    expect(screen.getByRole('textbox', { name: /search participants, stages or gates/i })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /search participants or what is still to do/i })).toBeInTheDocument()
   })
 
   it('shows loading, not "No participants in onboarding", while the browser reports offline and the worklist has not loaded (review F-1, same class)', async () => {

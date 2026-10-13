@@ -135,66 +135,6 @@ public class ParticipantProfileCorrectionTests
         Assert.Contains(entry.GetProperty("Changes").EnumerateArray(), c => c.GetProperty("Field").GetString() == "LastName" && c.GetProperty("New").GetString() == "Rivera");
     }
 
-    // ── Onboarding attestation ───────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Patch_EchoingUnchangedValues_KeepsTheOnboardingProfileAttestation()
-    {
-        using var caller = new Caller();
-        var (participant, onboarding) = await caller.SeedValidatedParticipantAsync();
-
-        // What the wizard's Key Identifiers "Next" sends when nothing on the step was touched.
-        await PatchOkAsync(caller, participant.Id, new PatchParticipantDto { PersonalDetails = Details(), NdisPlan = Plan() });
-
-        Assert.True(onboarding.ProfileComplete);
-        Assert.NotNull(onboarding.ProfileCompletedAt);
-    }
-
-    [Fact]
-    public async Task Patch_CorrectingSomethingTheGateDoesNotValidate_KeepsTheOnboardingProfileAttestation()
-    {
-        using var caller = new Caller();
-        var (participant, onboarding) = await caller.SeedValidatedParticipantAsync();
-
-        await PatchOkAsync(caller, participant.Id, new PatchParticipantDto
-        {
-            Address = new PatchAddressDto { AddressStreet = "2 Corrected St", AddressSuburb = "Brisbane", AddressState = "QLD", AddressPostcode = "4000" },
-            CulturalBackground = new PatchCulturalBackgroundDto { IsCald = true },
-        });
-
-        Assert.True(onboarding.ProfileComplete);
-    }
-
-    [Theory]
-    [InlineData("firstName")]
-    [InlineData("lastName")]
-    [InlineData("dateOfBirth")]
-    [InlineData("gender")]
-    [InlineData("ndisNumber")]
-    [InlineData("fundingSource")]
-    public async Task Patch_CorrectingAValueTheOnboardingGateValidates_DropsTheStaleAttestation(string field)
-    {
-        using var caller = new Caller();
-        var (participant, onboarding) = await caller.SeedValidatedParticipantAsync();
-
-        var dto = field switch
-        {
-            "firstName" => new PatchParticipantDto { PersonalDetails = Details(first: "James") },
-            "lastName" => new PatchParticipantDto { PersonalDetails = Details(last: "Rivera") },
-            "dateOfBirth" => new PatchParticipantDto { PersonalDetails = Details(dob: new DateOnly(1991, 5, 17)) },
-            "gender" => new PatchParticipantDto { PersonalDetails = Details(gender: Gender.NonBinary) },
-            "ndisNumber" => new PatchParticipantDto { NdisPlan = Plan(ndis: "431999999") },
-            "fundingSource" => new PatchParticipantDto { NdisPlan = Plan(funding: ParticipantFundingSource.Other, organisation: "Plan Partners") },
-            _ => throw new ArgumentOutOfRangeException(nameof(field)),
-        };
-
-        await PatchOkAsync(caller, participant.Id, dto);
-
-        Assert.False(onboarding.ProfileComplete);
-        Assert.Null(onboarding.ProfileCompletedAt);
-        Assert.Null(onboarding.ProfileCompletedBy);
-    }
-
     [Fact]
     public async Task Patch_WithNoOnboardingRow_StillAppliesTheCorrection()
     {

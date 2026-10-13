@@ -335,6 +335,25 @@ public class ParticipantReadinessTests
         Assert.Equal(ParticipantReadinessMode.Warn, warn.Mode);
     }
 
+    [Theory]
+    [InlineData(true, true, true, true)]    // services started: still a draft, may be placed
+    [InlineData(true, true, false, false)]  // a draft whose services have not started
+    [InlineData(false, false, false, false)] // archived
+    [InlineData(false, true, true, false)]  // a services-started draft that was then switched off
+    [InlineData(true, false, false, true)]  // active
+    public async Task Warn_CheckAsync_PlacesWhoCanReceiveServices(bool active, bool draft, bool servicesStarted, bool allowed)
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db, active: active, draft: draft);
+        participant.ServicesStartedAt = servicesStarted ? DateTime.UtcNow : null;
+        db.SaveChanges();
+
+        var check = await ParticipantReadiness.CheckAsync(db, participant.Id, CancellationToken.None);
+
+        Assert.Equal(allowed, check.Allowed);
+        Assert.Equal(allowed, await new RosterPlacementGate().MayPlaceAsync(db, participant.Id, CancellationToken.None));
+    }
+
     [Fact]
     public async Task Mode_NoProviderSettingsRow_IsWarn_AndANewRowDefaultsToWarn()
     {
@@ -367,15 +386,15 @@ public class ParticipantReadinessTests
         var legacy = SeedParticipant(db, tenant, first: "Legacy", last: "Complete");                       // intake done, no onboarding row
         var noIntake = SeedParticipant(db, tenant, intakeDone: false, first: "No", last: "Intake");           // intake missing
         var incomplete = SeedParticipant(db, tenant, first: "Onboarding", last: "Incomplete");               // onboarding row, nothing done
-        var profileOnly = SeedParticipant(db, tenant, first: "Service", last: "Missing");                    // profile done, service type not
+        var profileOnly = SeedParticipant(db, tenant, first: "Service", last: "Missing");                    // profile details filled in, no agreement draft
+        OnboardingSeeds.CompleteProfile(profileOnly);
         var foreignOnboarding = SeedParticipant(db, tenant, first: "Foreign", last: "Row");                  // a COMPLETE row, but another tenant's
         db.ParticipantOnboardings.AddRange(
             new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenant, ParticipantId = incomplete.Id },
-            new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenant, ParticipantId = profileOnly.Id, ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow },
+            new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenant, ParticipantId = profileOnly.Id },
             new ParticipantOnboarding
             {
                 Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), ParticipantId = foreignOnboarding.Id,
-                ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow,
             });
         db.SaveChanges();
 
@@ -411,6 +430,7 @@ public class ParticipantReadinessTests
             Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Version = 1, State = "Approved",
             ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31),
             AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31),
+            Lines = { OnboardingSeeds.PricedLine() },
         };
         var snapshot = new ElectronicSigningSnapshot
         {
@@ -447,12 +467,9 @@ public class ParticipantReadinessTests
         using var db = CreateDb();
         var tenant = Guid.NewGuid();
         var participant = SeedParticipant(db, tenant, intakeDone: scenario != "no-intake");
+        OnboardingSeeds.CompleteProfile(participant);
         if (scenario != "no-onboarding")
-            db.ParticipantOnboardings.Add(new ParticipantOnboarding
-            {
-                Id = Guid.NewGuid(), TenantId = tenant, ParticipantId = participant.Id,
-                ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow,
-            });
+            db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenant, ParticipantId = participant.Id });
         db.SaveChanges();
         if (scenario != "no-evidence")
         {
@@ -473,7 +490,9 @@ public class ParticipantReadinessTests
 
         var strict = await ParticipantReadinessGate.ActivationEvidenceParticipantsForApprovedSourceForTesting(db).AnyAsync(p => p.Id == participant.Id);
         var signed = await ParticipantReadiness.SignedAgreementParticipantsForApprovedSourceForTesting(db).AnyAsync(p => p.Id == participant.Id);
-        var onboarding = await db.ParticipantOnboardings.AnyAsync(o => o.ParticipantId == participant.Id && o.TenantId == tenant && o.ProfileComplete && o.ServiceTypeConfirmed);
+        var onboarding = await db.ParticipantOnboardings.AnyAsync(o => o.ParticipantId == participant.Id && o.TenantId == tenant)
+            && await ParticipantReadinessGate.ProfileDetailsParticipants(db).AnyAsync(p => p.Id == participant.Id)
+            && await ParticipantReadinessGate.ServiceNeedsParticipants(db).AnyAsync(p => p.Id == participant.Id);
         var conjunction = participant.IntakeCompletedAt != null && onboarding && signed;
 
         Assert.Equal(expectReady, strict);

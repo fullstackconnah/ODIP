@@ -11,6 +11,7 @@ import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { usePatterns, useUpdatePattern, useParticipants, useStaff } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftPatternDto, CreateShiftPatternDto } from '@/api/types'
 import { PatternSlideOver, GeneratePatternDialog, type PatternSlideOverTarget } from './components'
 import { PatternSource } from './components/PatternSource'
@@ -115,7 +116,7 @@ export default function PatternsPage() {
   const { canWrite } = usePermissions()
   const { data: patterns = [], isLoading, isError, refetch } = usePatterns()
   // INTAKE-08: the shift pattern participant picker excludes drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
   const { data: staff = [] } = useStaff()
   const updatePattern = useUpdatePattern()
 

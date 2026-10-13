@@ -197,7 +197,7 @@ public class ParticipantsController : ControllerBase
         [FromQuery] string? search, [FromQuery] string? region, [FromQuery] bool? isActive,
         [FromQuery] bool? wheelchairRequired, [FromQuery] bool? isHighSupport, [FromQuery] bool? isDraft,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default,
-        [FromQuery] bool operationalOnly = false)
+        [FromQuery] bool operationalOnly = false, [FromQuery] bool canReceiveServices = false, [FromQuery] bool servicesBegun = false)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
@@ -210,6 +210,10 @@ public class ParticipantsController : ControllerBase
         if (isHighSupport.HasValue) query = query.Where(p => p.IsHighSupport == isHighSupport.Value);
         // A caller can still explicitly select drafts for back-office work.
         if (isDraft.HasValue) query = query.Where(p => p.IsDraft == isDraft.Value);
+        // The pickers of operational screens: who can receive services (active, finalised or services started), never an archived participant.
+        if (canReceiveServices) query = query.Where(Participant.CanReceiveServicesRule);
+        // Pickers of records about the past as well (incidents, the medication report): past the start of services, archived participants kept.
+        if (servicesBegun) query = query.Where(Participant.ServicesBegunRule);
         if (operationalOnly)
         {
             // The register is a stage boundary, not a presentation-only draft filter. A record
@@ -239,6 +243,7 @@ public class ParticipantsController : ControllerBase
                 HasActiveMedications = _db.ParticipantMedications.Any(m => m.ParticipantId == p.Id && m.Status != MedicationStatus.Ceased),
                 IsDraft = p.IsDraft,
                 IntakeCompletedAt = p.IntakeCompletedAt,
+                ServicesStartedAt = p.ServicesStartedAt,
             });
 
         var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -688,7 +693,7 @@ public class ParticipantsController : ControllerBase
         // "ignored by Update" doc note (PF-10.3): that was written before this resume path existed.
         // Never overwrites an already-set value (set once, never cleared — see
         // Participant.IntakeCompletedAt's doc) and never touches IsDraft — resuming Intake alone
-        // does not finalise the participant; only a subsequent Profile completion does that.
+        // does not finalise the participant; only "Make active" on the onboarding checklist does that.
         p.UpdatedAt = DateTime.UtcNow;
 
         if (dto.CompleteIntake)
@@ -704,27 +709,13 @@ public class ParticipantsController : ControllerBase
         }
 
         // A full-profile PUT may edit profile data, but it cannot promote an intake-incomplete
-        // participant. More importantly, neither CompleteIntake nor raw IsActive/IsDraft values
-        // can bypass tenant-matched persisted onboarding and verified immutable agreement evidence.
-        // Preserve already-active legacy rows instead of mass-deactivating them. Intake must be
-        // complete in every mode (a draft is never activated). Beyond that the organisation's
-        // readiness mode decides: Warn (the default) activates a non-draft participant and the
-        // gaps show as readiness issues; Enforce keeps the fail-closed rule, activating only on
-        // persisted, tenant-matched, verified agreement evidence.
+        // participant, and neither CompleteIntake nor raw IsActive/IsDraft values activate anyone.
+        // Already-active legacy rows stay active (IsActive is never written here).
         // A finalised participant is never sent back to draft by an update (the rule above rejects an explicit isDraft: true), and a
         // legacy participant whose IntakeCompletedAt was never stamped is NOT a draft because of that: they stay finalised.
-        // Only a record that is still a draft can stay one (no completed intake, or the client says so).
-        p.IsDraft = p.IsDraft && (!p.IntakeCompletedAt.HasValue || dto.IsDraft);
-        // Intake must be complete in every mode. It used to be implied by IsDraft (an intake-incomplete record was always a draft);
-        // now that a legacy non-draft record stays non-draft, it is stated here, so editing one never activates it by the side.
-        if (!p.IsActive)
-            p.IsActive = !p.IsDraft && p.IntakeCompletedAt.HasValue && await ParticipantReadiness.MayActivateAsync(_db, p, _clock, ct);
-
-        // A full profile submission can change identity, DOB, gender, or NDIS details. It never
-        // preserves a prior onboarding attestation: staff must re-run the separate server-side
-        // validation endpoint after saving corrected canonical data.
-        var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-        onboarding?.InvalidateProfileValidation(DateTime.UtcNow);
+        // Nor is a draft finalised by one: IsDraft is never written here. Only "Make active" finishes onboarding (it applies the readiness rule this would skip).
+        // Saving never activates anyone (owner decision 2026-10-13): "Make active" on the onboarding checklist does, and the status
+        // endpoint restores an archived participant. This used to activate here, which re-activated an archived participant on every save.
 
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
         // compatibility row, in the same transaction as the participant update. Draft state is
@@ -823,7 +814,6 @@ public class ParticipantsController : ControllerBase
         }
 
         // ── Write ──
-        var identityBefore = IntakeIdentity(p);
         var previousSupportRatio = p.SupportRatio;
         ApplyIntakeScope(p, dto);
         p.UpdatedAt = DateTime.UtcNow;
@@ -848,14 +838,6 @@ public class ParticipantsController : ControllerBase
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 
-        // A correction to identity, DOB or NDIS details drops a stale onboarding "profile validated" attestation; re-saving the
-        // same values is inert.
-        if (identityBefore != IntakeIdentity(p))
-        {
-            var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-            onboarding?.InvalidateProfileValidation(p.UpdatedAt);
-        }
-
         // PD-5: the safety-critical auto-notes read behavioursOfConcern, the risks summary and the risk entries, all in this scope.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         if (p.SupportRatio != previousSupportRatio) await TripStaffing.RecalculateForParticipantAsync(_db, p.Id, ct);
@@ -877,10 +859,6 @@ public class ParticipantsController : ControllerBase
             UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = warning,
         }));
     }
-
-    /// <summary>The identity-bearing intake fields the onboarding "profile validated" attestation depends on.</summary>
-    private static (string, string, DateOnly?, string?, ParticipantFundingSource) IntakeIdentity(Participant p) =>
-        (p.FirstName?.Trim() ?? string.Empty, p.LastName?.Trim() ?? string.Empty, p.DateOfBirth, p.NdisNumber?.Trim(), p.FundingSource);
 
     /// <summary>
     /// Writes the intake scope, and only the intake scope, from a wizard payload. Keep in step with
@@ -976,6 +954,7 @@ public class ParticipantsController : ControllerBase
     private const string DraftCannotBeActivated = "A draft participant cannot be activated. Complete their intake and profile first.";
     private const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
     private const string ActivationFundingRequired = "This participant cannot be activated until their plan budget is recorded on the Funding tab.";
+    private const string BeginServicesEnforced = "Your organisation enforces readiness, so services begin when the participant is made active.";
 
     /// <summary>The 400 message for an activation the organisation's readiness rule refuses.</summary>
     private static string ActivationRefusal(ActivationBlock block) =>
@@ -1073,17 +1052,16 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
-    /// Finalises a participant whose intake is complete: the Profile wizard's "Complete Profile". It carries no profile field (each
-    /// step is saved by its own PATCH), so it cannot wipe one. Idempotent; and it only ever finalises a DRAFT, so completing the
-    /// profile of an archived participant does not bring them back (the full PUT it replaces did).
-    /// Finalising a draft is also what activates them, under the organisation's readiness rule (the status endpoint refuses a draft). Where that rule
-    /// does not let them be activated (Enforce, no verified signed-agreement evidence) the step is refused with the same message the status endpoint gives
-    /// and they stay a draft on the Onboarding tab, where the agreement-evidence gate says why: finalised but not activated would leave them in no stage.
-    /// A draft that is already marked active has nothing to activate and is finalised as before.
+    /// "Make active" on the onboarding checklist: finalises a participant whose intake is complete and moves them to the Active tab. It carries no
+    /// profile field, so it cannot wipe one. Open checklist items do not stop it (the screen lists them in its confirm step; owner decision 2026-10-13).
+    /// Idempotent; it only ever finalises a DRAFT, so an archived participant is not brought back (the status endpoint restores them).
+    /// The organisation's readiness rule applies (the status endpoint refuses a draft). Where it does not let them be activated (Enforce, no verified
+    /// signed-agreement evidence) the step is refused with the same message the status endpoint gives and they stay a draft on the Onboarding tab:
+    /// finalised but not activated would leave them in no stage. A legacy draft already marked active has nothing to activate and is finalised as before.
     /// </summary>
-    [HttpPost("{id:guid}/complete-profile")]
+    [HttpPost("{id:guid}/make-active")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> CompleteProfile(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> MakeActive(Guid id, CancellationToken ct)
     {
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
@@ -1091,9 +1069,10 @@ public class ParticipantsController : ControllerBase
         if (p.IsDraft)
         {
             if (!p.IntakeCompletedAt.HasValue)
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before completing their profile."));
-            // The activation rule the full PUT applied to a record that has just been finalised: Warn (the default) activates, Enforce needs evidence.
-            if (!p.IsActive && await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct) is var block && block != ActivationBlock.None)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before making them active."));
+            // Warn (the default) activates, Enforce needs evidence. A draft whose services started is active already but has never been
+            // through this rule, so it is asked too.
+            if ((!p.IsActive || p.ServicesStartedAt != null) && await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct) is var block && block != ActivationBlock.None)
                 return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(ActivationRefusal(block)));
             p.IsDraft = false;
             p.UpdatedAt = DateTime.UtcNow;
@@ -1101,12 +1080,48 @@ public class ParticipantsController : ControllerBase
             await _db.SaveChangesAsync(ct);
         }
 
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
-        {
-            Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
-            IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, UpdatedAt = p.UpdatedAt,
-        }));
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(LifecycleBody(p)));
     }
+
+    /// <summary>
+    /// "Begin services" on the onboarding checklist (owner decision 2026-10-13): a participant in onboarding (a draft, intake complete) can receive
+    /// services (the roster board, shifts and patterns, the support-worker portal, medications, budgets and alerts: see
+    /// <see cref="Participant.CanReceiveServicesRule"/>) while staying on the Onboarding tab until "Make active". Sets <see cref="Participant.ServicesStartedAt"/>
+    /// and <see cref="Participant.IsActive"/> and keeps the draft. Idempotent: a second call changes nothing, except that a services-started draft which was
+    /// archived is switched back on (the first date kept). An organisation that enforces readiness keeps its placement rule
+    /// (<see cref="ParticipantReadiness.CheckAsync"/>, which <c>MayPlaceAsync</c> uses), which refuses a draft: there, services begin when the participant is made active.
+    /// </summary>
+    [HttpPost("{id:guid}/begin-services")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> BeginServices(Guid id, CancellationToken ct)
+    {
+        var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+
+        // Nothing to do once services run (or the participant was made active). A services-started draft that was archived is switched back on,
+        // keeping the first date.
+        if (p.ServicesStartedAt == null || (p.IsDraft && !p.IsActive))
+        {
+            if (!p.IsDraft) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Services can only begin for a participant in onboarding."));
+            if (!p.IntakeCompletedAt.HasValue) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before services begin."));
+            // Enforce keeps its strict placement rule (owner decision): it refuses until verified signed-agreement evidence exists.
+            if (await ParticipantReadiness.IsEnforcedAsync(_db, p.TenantId, ct) && !(await ParticipantReadiness.CheckAsync(_db, p.Id, ct)).Allowed)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(BeginServicesEnforced));
+            p.ServicesStartedAt ??= DateTime.UtcNow;
+            p.IsActive = true;
+            p.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(LifecycleBody(p)));
+    }
+
+    /// <summary>What make-active and begin-services answer: the participant's lifecycle state.</summary>
+    private static ParticipantDetailDto LifecycleBody(Participant p) => new()
+    {
+        Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
+        IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, ServicesStartedAt = p.ServicesStartedAt, UpdatedAt = p.UpdatedAt,
+    };
 
     /// <summary>
     /// CORE-02: partial save. Patches only the semantic field groups present in <paramref name="dto"/>

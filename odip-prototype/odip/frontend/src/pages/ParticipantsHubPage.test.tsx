@@ -23,6 +23,7 @@ vi.mock('@/api/hooks', () => ({
   useCreateParticipantInquiry: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useUpdateParticipantInquiry: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useConvertParticipantInquiry: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useOnboardingWorklist: () => ({ data: [], isLoading: false, isError: false, isPending: false, fetchStatus: 'idle', status: 'success' }),
 }))
 
 /** Exposes the router's live location so tests can assert the tab is reflected in the URL. */

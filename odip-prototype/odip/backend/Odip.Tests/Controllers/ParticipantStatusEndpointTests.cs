@@ -344,7 +344,8 @@ public class ParticipantStatusEndpointTests
     [Theory]
     [InlineData(nameof(ParticipantsController.ChangeStatus))]
     [InlineData(nameof(ParticipantsController.Restore))]
-    [InlineData(nameof(ParticipantsController.CompleteProfile))]
+    [InlineData(nameof(ParticipantsController.MakeActive))]
+    [InlineData(nameof(ParticipantsController.BeginServices))]
     [InlineData(nameof(ParticipantsController.SaveIntake))]
     public void LifecycleWrites_AreRestrictedToAdminCoordinatorAndSuperAdmin(string action)
     {
@@ -413,10 +414,10 @@ public class ParticipantStatusEndpointTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
-    // ── POST /participants/{id}/complete-profile ───────────────────────────────────────────
+    // ── POST /participants/{id}/make-active ───────────────────────────────────────────
 
     [Fact]
-    public async Task CompleteProfile_FinalisesADraftWhoseIntakeIsComplete_AndLeavesEveryProfileFieldAlone()
+    public async Task MakeActive_FinalisesADraftWhoseIntakeIsComplete_AndLeavesEveryProfileFieldAlone()
     {
         using var fx = Create();
         var participant = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
@@ -424,7 +425,7 @@ public class ParticipantStatusEndpointTests
         await fx.Db.SaveChangesAsync();
         var before = Scalars(participant);
 
-        var result = Ok(await fx.Controller.CompleteProfile(participant.Id, CancellationToken.None));
+        var result = Ok(await fx.Controller.MakeActive(participant.Id, CancellationToken.None));
 
         Assert.False(result.IsDraft);
         var saved = await fx.Db.Participants.SingleAsync();
@@ -437,21 +438,21 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
-    public async Task CompleteProfile_WithoutACompletedIntake_Returns400_AndStaysADraft()
+    public async Task MakeActive_WithoutACompletedIntake_Returns400_AndStaysADraft()
     {
         using var fx = Create();
         var participant = RichParticipant(isActive: false, isDraft: true);
         fx.Db.Participants.Add(participant);
         await fx.Db.SaveChangesAsync();
 
-        var message = BadRequest(await fx.Controller.CompleteProfile(participant.Id, CancellationToken.None));
+        var message = BadRequest(await fx.Controller.MakeActive(participant.Id, CancellationToken.None));
 
-        Assert.Equal("Complete the participant's intake before completing their profile.", message);
+        Assert.Equal("Complete the participant's intake before making them active.", message);
         Assert.True((await fx.Db.Participants.SingleAsync()).IsDraft);
     }
 
     [Fact]
-    public async Task CompleteProfile_UnderEnforce_WithoutEvidence_Returns400WithTheEvidenceWording_AndLeavesTheDraftExactlyAsItWas()
+    public async Task MakeActive_UnderEnforce_WithoutEvidence_Returns400WithTheEvidenceWording_AndLeavesTheDraftExactlyAsItWas()
     {
         // Finalising is also what activates a participant, and Enforce needs verified signed-agreement evidence. A participant finalised but not
         // activated would sit in no stage (not Onboarding, not Active, and "Archived" is wrong for someone never activated), so the step is refused.
@@ -462,7 +463,7 @@ public class ParticipantStatusEndpointTests
         await fx.Db.SaveChangesAsync();
         var before = Scalars(participant);
 
-        var message = BadRequest(await fx.Controller.CompleteProfile(participant.Id, CancellationToken.None));
+        var message = BadRequest(await fx.Controller.MakeActive(participant.Id, CancellationToken.None));
 
         Assert.Equal("This participant cannot be activated until their signed service agreement evidence is recorded.", message);
         var saved = await fx.Db.Participants.SingleAsync();
@@ -473,7 +474,7 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
-    public async Task CompleteProfile_UnderEnforce_ForADraftThatIsAlreadyActive_StillFinalises_BecauseThereIsNothingToActivate()
+    public async Task MakeActive_UnderEnforce_ForADraftThatIsAlreadyActive_StillFinalises_BecauseThereIsNothingToActivate()
     {
         // A draft marked active (an older draft: Participant.IsActive defaults to true) needs no activation, so the evidence rule has nothing to refuse.
         using var fx = Create();
@@ -482,14 +483,14 @@ public class ParticipantStatusEndpointTests
         fx.Db.Participants.Add(participant);
         await fx.Db.SaveChangesAsync();
 
-        var result = Ok(await fx.Controller.CompleteProfile(participant.Id, CancellationToken.None));
+        var result = Ok(await fx.Controller.MakeActive(participant.Id, CancellationToken.None));
 
         Assert.False(result.IsDraft);
         Assert.True(result.IsActive);
     }
 
     [Fact]
-    public async Task CompleteProfile_OnAnAlreadyFinalisedParticipant_ChangesNothing_AndNeverReactivatesAnArchivedOne()
+    public async Task MakeActive_OnAnAlreadyFinalisedParticipant_ChangesNothing_AndNeverReactivatesAnArchivedOne()
     {
         using var fx = Create();
         var archived = RichParticipant(isActive: false, isDraft: false);
@@ -497,8 +498,8 @@ public class ParticipantStatusEndpointTests
         await fx.Db.SaveChangesAsync();
         var before = Scalars(archived);
 
-        var first = Ok(await fx.Controller.CompleteProfile(archived.Id, CancellationToken.None));
-        var second = Ok(await fx.Controller.CompleteProfile(archived.Id, CancellationToken.None));
+        var first = Ok(await fx.Controller.MakeActive(archived.Id, CancellationToken.None));
+        var second = Ok(await fx.Controller.MakeActive(archived.Id, CancellationToken.None));
 
         Assert.False(first.IsDraft);
         Assert.False(second.IsDraft);
@@ -506,6 +507,137 @@ public class ParticipantStatusEndpointTests
         // Editing an archived participant's profile must not bring them back: the old full PUT re-activated them.
         Assert.False(saved.IsActive);
         Assert.Equal(before, Scalars(saved));
+    }
+
+    [Fact]
+    public async Task MakeActive_UnderEnforce_ForADraftWhoseServicesStarted_StillAppliesTheActivationBlock()
+    {
+        // Begin services sets IsActive early, so "already active" must not skip Enforce's activation rule for them.
+        using var fx = Create();
+        fx.Db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantReadinessMode = ParticipantReadinessMode.Enforce });
+        var participant = RichParticipant(isActive: true, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        participant.ServicesStartedAt = DateTime.UtcNow.AddDays(-1);
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+
+        var message = BadRequest(await fx.Controller.MakeActive(participant.Id, CancellationToken.None));
+
+        Assert.Equal("This participant cannot be activated until their signed service agreement evidence is recorded.", message);
+        Assert.True((await fx.Db.Participants.SingleAsync()).IsDraft);
+    }
+
+    // ── POST /participants/{id}/begin-services ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task BeginServices_InWarnMode_StampsServicesStarted_ActivatesButKeepsTheDraft_AndWritesOneAuditRow()
+    {
+        using var fx = Create();
+        var participant = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+        var before = Scalars(participant);
+
+        var result = Ok(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+
+        Assert.True(result.IsDraft);
+        Assert.True(result.IsActive);
+        Assert.NotNull(result.ServicesStartedAt);
+        var saved = await fx.Db.Participants.SingleAsync();
+        Assert.True(saved.IsDraft);
+        Assert.True(saved.IsActive);
+        var after = Scalars(saved);
+        Assert.Equal(["IsActive", "ServicesStartedAt", "UpdatedAt"], after.Keys.Where(k => before[k] != after[k]).OrderBy(k => k).ToList());
+        Assert.Single(UpdatedAuditRows(fx.Db, participant.Id));
+    }
+
+    [Fact]
+    public async Task BeginServices_Twice_KeepsTheFirstDate_AndWritesNoSecondAuditRow()
+    {
+        using var fx = Create();
+        var participant = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+
+        var first = Ok(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+        var second = Ok(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+
+        Assert.Equal(first.ServicesStartedAt, second.ServicesStartedAt);
+        Assert.Single(UpdatedAuditRows(fx.Db, participant.Id));
+    }
+
+    [Fact]
+    public async Task BeginServices_AgainAfterTheServicesStartedDraftWasArchived_SwitchesThemBackOn_AndKeepsTheFirstDate()
+    {
+        using var fx = Create();
+        var participant = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+        var first = Ok(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+        Assert.IsType<OkObjectResult>((await fx.Controller.Delete(participant.Id, CancellationToken.None)).Result);
+        Assert.False((await fx.Db.Participants.SingleAsync()).IsActive);
+
+        var again = Ok(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+
+        Assert.True(again.IsActive);
+        Assert.True(again.IsDraft);
+        Assert.Equal(first.ServicesStartedAt, again.ServicesStartedAt);
+        Assert.True((await fx.Db.Participants.SingleAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task BeginServices_ForAParticipantWhoIsNotADraft_Returns400_AndChangesNothing()
+    {
+        using var fx = Create();
+        var archived = RichParticipant(isActive: false, isDraft: false);
+        fx.Db.Participants.Add(archived);
+        await fx.Db.SaveChangesAsync();
+        var before = Scalars(archived);
+
+        var message = BadRequest(await fx.Controller.BeginServices(archived.Id, CancellationToken.None));
+
+        Assert.Equal("Services can only begin for a participant in onboarding.", message);
+        Assert.Equal(before, Scalars(await fx.Db.Participants.SingleAsync()));
+    }
+
+    [Fact]
+    public async Task BeginServices_WithoutACompletedIntake_Returns400()
+    {
+        using var fx = Create();
+        var participant = RichParticipant(isActive: false, isDraft: true);
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+
+        var message = BadRequest(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+
+        Assert.Equal("Complete the participant's intake before services begin.", message);
+        Assert.Null((await fx.Db.Participants.SingleAsync()).ServicesStartedAt);
+    }
+
+    [Fact]
+    public async Task BeginServices_UnderEnforce_IsRefusedWithTheEnforceMessage_AndChangesNothing()
+    {
+        using var fx = Create();
+        fx.Db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantReadinessMode = ParticipantReadinessMode.Enforce });
+        var participant = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+        var before = Scalars(participant);
+
+        var message = BadRequest(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+
+        Assert.Equal("Your organisation enforces readiness, so services begin when the participant is made active.", message);
+        Assert.Equal(before, Scalars(await fx.Db.Participants.SingleAsync()));
+        Assert.Empty(UpdatedAuditRows(fx.Db, participant.Id));
+    }
+
+    [Fact]
+    public async Task BeginServices_UnknownParticipant_Returns404()
+    {
+        using var fx = Create();
+
+        var result = await fx.Controller.BeginServices(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
     // ── PUT /participants/{id}: a finalised participant is never demoted ───────────────────
@@ -534,7 +666,7 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
-    public async Task Update_ADraftWithACompletedIntake_IsStillFinalisedByIsDraftFalse()
+    public async Task Update_ADraftWithACompletedIntake_IsNotFinalisedByIsDraftFalse_OnlyMakeActiveFinalises()
     {
         using var fx = Create();
         var draft = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-1));
@@ -543,7 +675,7 @@ public class ParticipantStatusEndpointTests
 
         var result = Ok(await fx.Controller.Update(draft.Id, FullUpdate(draft, isDraft: false), CancellationToken.None));
 
-        Assert.False(result.IsDraft);
+        Assert.True(result.IsDraft);
     }
 
     [Fact]
@@ -592,5 +724,40 @@ public class ParticipantStatusEndpointTests
         var result = Ok(await fx.Controller.GetAll(term, null, null, null, null, null, 1, 50, CancellationToken.None, false));
 
         Assert.Equal(jamie.Id, Assert.Single(result.Items).Id);
+    }
+
+    [Fact]
+    public async Task GetAll_CanReceiveServices_ListsActiveAndServicesStarted_NotArchivedOrPreServicesDrafts()
+    {
+        using var fx = Create();
+        var active = RichParticipant();
+        var started = RichParticipant(isActive: true, isDraft: true, intakeCompletedAt: DateTime.UtcNow);
+        started.ServicesStartedAt = DateTime.UtcNow;
+        var archived = RichParticipant(isActive: false);
+        var draft = RichParticipant(isActive: true, isDraft: true, intakeCompletedAt: DateTime.UtcNow);
+        fx.Db.Participants.AddRange(active, started, archived, draft);
+        await fx.Db.SaveChangesAsync();
+
+        var result = Ok(await fx.Controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None, false, canReceiveServices: true));
+
+        Assert.Equal(new[] { active.Id, started.Id }.OrderBy(i => i), result.Items.Select(p => p.Id).OrderBy(i => i));
+        Assert.NotNull(result.Items.Single(p => p.Id == started.Id).ServicesStartedAt);
+    }
+
+    [Fact]
+    public async Task GetAll_ServicesBegun_KeepsArchivedParticipants_AndServicesStartedDrafts_ButNotPreServicesDrafts()
+    {
+        using var fx = Create();
+        var active = RichParticipant();
+        var archived = RichParticipant(isActive: false);
+        var started = RichParticipant(isActive: true, isDraft: true, intakeCompletedAt: DateTime.UtcNow);
+        started.ServicesStartedAt = DateTime.UtcNow;
+        var draft = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow);
+        fx.Db.Participants.AddRange(active, archived, started, draft);
+        await fx.Db.SaveChangesAsync();
+
+        var result = Ok(await fx.Controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None, false, servicesBegun: true));
+
+        Assert.Equal(new[] { active.Id, archived.Id, started.Id }.OrderBy(i => i), result.Items.Select(p => p.Id).OrderBy(i => i));
     }
 }

@@ -27,8 +27,8 @@ public class ParticipantOnboarding : ITenantEntity
     public Guid TenantId { get; set; }
     public Guid ParticipantId { get; set; }
     public Participant? Participant { get; set; }
-    // Persistence/test-visible only; no request DTO or API endpoint binds these values. Production
-    // transitions must call the server-owned Record*/Invalidate* methods below.
+    // Retired 2026-10-13: the checklist derives "Profile details" and "Service needs" from the participant's data, so no code reads or writes
+    // these four any more. The columns stay (no data is dropped).
     public bool ProfileComplete { get; set; }
     public DateTime? ProfileCompletedAt { get; set; }
     public string? ProfileCompletedBy { get; set; }
@@ -39,22 +39,18 @@ public class ParticipantOnboarding : ITenantEntity
     public bool ServiceAgreementSigned { get; private set; }
     public DateTime? ServiceAgreementSignedAt { get; private set; }
     public string? ServiceAgreementSignedBy { get; private set; }
-    public bool IsReady => ProfileComplete && ServiceTypeConfirmed && ServiceAgreementSigned;
+    // The checklist's "Signed agreement" item, recorded by hand: the date the written agreement was signed, OR why there is none (NDIS Practice
+    // Standards: a signed copy, or a record of why not). Exactly one is set. Separate from the e-sign evidence above, which stays closed.
+    public DateOnly? AgreementSignedOn { get; private set; }
+    public string? NoAgreementReason { get; private set; }
+    public DateTime? AgreementRecordedAt { get; private set; }
+    public string? AgreementRecordedBy { get; private set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    public void RecordProfileValidation(string actor, DateTime atUtc)
+    /// <summary>Records the agreement item; the caller has checked that exactly one of <paramref name="signedOn"/> and <paramref name="reason"/> is given.</summary>
+    public void RecordAgreement(DateOnly? signedOn, string? reason, string actor, DateTime atUtc)
     {
-        ProfileComplete = true; ProfileCompletedBy = actor; ProfileCompletedAt = atUtc; UpdatedAt = atUtc;
-    }
-
-    public void InvalidateProfileValidation(DateTime atUtc)
-    {
-        ProfileComplete = false; ProfileCompletedBy = null; ProfileCompletedAt = null; UpdatedAt = atUtc;
-    }
-
-    public void RecordServiceNeedsConfirmation(string actor, DateTime atUtc)
-    {
-        ServiceTypeConfirmed = true; ServiceTypeConfirmedBy = actor; ServiceTypeConfirmedAt = atUtc; UpdatedAt = atUtc;
+        AgreementSignedOn = signedOn; NoAgreementReason = reason; AgreementRecordedBy = actor; AgreementRecordedAt = atUtc; UpdatedAt = atUtc;
     }
 }

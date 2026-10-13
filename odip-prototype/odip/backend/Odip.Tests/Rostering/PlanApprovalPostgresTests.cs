@@ -21,6 +21,7 @@ using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Medications;
 using Odip.Tests.Postgres;
+using Odip.Tests.Support;
 using Xunit;
 using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
 using static Odip.Tests.Rostering.ApprovalTestSupport;
@@ -118,7 +119,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
             Id = draftId, TenantId = tenantId, ParticipantId = participantId, Version = 1, State = "NSW", ParticipantNameSnapshot = "Live Participant",
             PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30), AgreementStartDate = new DateOnly(2026, 10, 1), AgreementEndDate = new DateOnly(2026, 12, 31),
         });
-        await db.SaveChangesAsync();
+        await OlderSchemaSeeds.SaveWithLaterParticipantColumnsAsync(db);
         await ExecuteAsync(connectionString,
             $"INSERT INTO \"ShiftPatterns\" (\"Id\",\"TenantId\",\"ParticipantId\",\"DayOfWeek\",\"StartTime\",\"EndTime\",\"EndsNextDay\",\"Ratio\",\"NightType\",\"EffectiveFrom\",\"IsActive\",\"Notes\") " +
             $"VALUES ('{patternId}','{tenantId}','{participantId}',1,'09:00','13:00',false,0,0,'2026-10-01',true,'Hand-made')");

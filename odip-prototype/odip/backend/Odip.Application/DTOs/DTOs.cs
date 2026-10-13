@@ -42,6 +42,8 @@ public record ParticipantListDto
     public List<string>? ReadinessIssues { get; init; }
     /// <summary>SPEC-05 PF-10.5. See <see cref="Odip.Domain.Entities.Participant.IntakeCompletedAt"/>.</summary>
     public DateTime? IntakeCompletedAt { get; init; }
+    /// <summary>When "Begin services" was used. See <see cref="Odip.Domain.Entities.Participant.ServicesStartedAt"/>.</summary>
+    public DateTime? ServicesStartedAt { get; init; }
 }
 
 public record ParticipantDetailDto : ParticipantListDto

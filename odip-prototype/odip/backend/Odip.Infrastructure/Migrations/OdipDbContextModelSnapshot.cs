@@ -1650,6 +1650,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("ServiceStreams")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("ServicesStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<string>("SignsHappyAndSettled")
                         .HasColumnType("text");
 
@@ -2557,8 +2560,22 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AgreementRecordedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("AgreementRecordedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("AgreementSignedOn")
+                        .HasColumnType("date");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("NoAgreementReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<Guid>("ParticipantId")
                         .HasColumnType("uuid");

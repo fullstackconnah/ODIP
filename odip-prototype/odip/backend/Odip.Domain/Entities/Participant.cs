@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 
@@ -254,6 +255,33 @@ public class Participant : ITenantEntity
     /// introduction.
     /// </summary>
     public DateTime? IntakeCompletedAt { get; set; }
+
+    /// <summary>
+    /// When "Begin services" was used on the onboarding checklist (UTC; owner decision 2026-10-13). Set once, on a draft in onboarding, together with
+    /// <see cref="IsActive"/>; the participant stays a draft (the Onboarding tab) but can receive services until "Make active" finalises them.
+    /// </summary>
+    public DateTime? ServicesStartedAt { get; set; }
+
+    // ── Who can receive services ──────────────────────────────────────────────────────────
+    // Query-shaped so they compose into SQL (ParticipantStagesSqlTests checks the Npgsql translation). They live on the entity, not in the API's
+    // ParticipantStages, because Infrastructure services (budgets, alerts) read them too.
+
+    /// <summary>Past the start of services: finalised, or a draft whose services have begun. The portal and medications ask only this (an archived participant's records stay).</summary>
+    public static readonly Expression<Func<Participant, bool>> ServicesBegunRule = p => !p.IsDraft || p.ServicesStartedAt != null;
+    private static readonly Func<Participant, bool> ServicesBegunCheck = ServicesBegunRule.Compile();
+
+    /// <summary>
+    /// The one "can receive services" rule every operational surface uses (roster board, placement, budgets, alerts): active, and past the start of
+    /// services. KEEP IN STEP with <see cref="ServicesBegunRule"/> (it is that rule plus IsActive).
+    /// </summary>
+    public static readonly Expression<Func<Participant, bool>> CanReceiveServicesRule = p => p.IsActive && (!p.IsDraft || p.ServicesStartedAt != null);
+    private static readonly Func<Participant, bool> CanReceiveServicesCheck = CanReceiveServicesRule.Compile();
+
+    /// <summary><see cref="ServicesBegunRule"/> for a participant already in memory.</summary>
+    public static bool ServicesBegun(Participant participant) => ServicesBegunCheck(participant);
+
+    /// <summary><see cref="CanReceiveServicesRule"/> for a participant already in memory.</summary>
+    public static bool CanReceiveServices(Participant participant) => CanReceiveServicesCheck(participant);
 
     // ── Key Identifiers (INTAKE sub-wave A, Master Data Dictionary CARD-*, PHY-*) ──────────
     // Wizard step "Key Identifiers", placed after "NDIS & Funding" — see
