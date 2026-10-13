@@ -25,9 +25,10 @@ vi.mock('@/api/hooks', () => ({
 
 // The editor has its own tests: here it is a marker that says how the agreement opened it.
 vi.mock('@/pages/funding/FundingPlanEditor', () => ({
-  FundingPlanEditor: (props: { open: boolean; plan?: { id: string }; previousPlan?: { id: string }; defaultManagement: string }) => {
+  FundingPlanEditor: (props: { open: boolean; plan?: { id: string }; previousPlan?: { id: string }; defaultManagement: string; onClose: () => void; onSaved?: () => void }) => {
     editor(props)
-    return props.open ? <div data-testid="editor" data-plan={props.plan?.id ?? 'new'} data-previous={props.previousPlan?.id ?? 'none'} data-management={props.defaultManagement} /> : null
+    // A save, as the real editor does it: onSaved, then onClose.
+    return props.open ? <div data-testid="editor" data-plan={props.plan?.id ?? 'new'} data-previous={props.previousPlan?.id ?? 'none'} data-management={props.defaultManagement}><button type="button" onClick={() => { props.onSaved?.(); props.onClose() }}>Save the plan</button></div> : null
   },
 }))
 
@@ -387,6 +388,43 @@ describe('ServiceAgreementDraftPage: recording the plan budget in place', () => 
     expect(screen.getByTestId('editor')).toHaveAttribute('data-previous', 'f-0')
     expect(screen.getByTestId('editor')).toHaveAttribute('data-plan', 'new')
     expect(screen.getByRole('heading', { level: 2, name: 'Check' })).toBeInTheDocument()
+  })
+
+  // The Record button goes once the check refreshes with the new plan, so focus is not left to fall to the page: it goes to what the save changed.
+  it('puts focus on the budget comparison after a save from the Check step', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    check.mockReturnValue({ data: noBudgetCheck(), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+    await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
+
+    await user.click(screen.getByRole('button', { name: 'Save the plan' }))
+
+    expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+    expect(document.activeElement).not.toBe(document.body)
+    expect(screen.getByRole('heading', { name: /Against the participant's budget/ })).toHaveFocus()
+  })
+
+  it('puts focus on the plan line after a save from the Agreement step', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
+    await user.click(screen.getByRole('button', { name: 'Save the plan' }))
+
+    expect(screen.getByText(/No funding plan is recorded for this participant/)).toHaveFocus()
+  })
+
+  it('says when the recorded plan ended on the Agreement step, beside Record a new plan', () => {
+    plans.mockReturnValue({ data: { plans: [ended] }, isLoading: false, isError: false })
+    renderPage()
+
+    const line = screen.getByText(/The recorded NDIS plan ended on/)
+    expect(line.textContent?.replace(/\s/g, ' ')).toMatch(/^The recorded NDIS plan ended on 30 Jun 2026\. /)
+    expect(screen.queryByText(/No funding plan is recorded/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Record a new plan' })).toBeInTheDocument()
   })
 
   it('offers it on an approved agreement too, which the person may still price', async () => {

@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { AgreementState, PlanPriceZone } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -25,10 +26,14 @@ type AgreementStepProps = {
   fundingTab: string
   /** Opens the editor to record the plan over the agreement, for a person who may; without it the button goes to the Funding tab. */
   recordBudget?: { label: string; onSelect: () => void }
+  /** The day the participant's last recorded plan ended, when it has and none is running or about to. */
+  endedOn?: string
+  /** The line that says where the NDIS plan dates come from: focus goes to it after a budget is recorded from this step, since the button that opened the editor goes. */
+  planLineRef?: Ref<HTMLParagraphElement>
 }
 
 /** Step 1: when the agreement runs and where it is delivered. The NDIS plan dates come from the participant's funding plan and are only asked for when there is none or they differ. */
-export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnly, fundingTab, recordBudget }: AgreementStepProps) {
+export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnly, fundingTab, recordBudget, endedOn, planLineRef }: AgreementStepProps) {
   if (readOnly) {
     return (
       <FactList items={[
@@ -60,12 +65,14 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
 
       <div className="flex flex-col gap-2 text-sm">
         {recorded && !details.planOverride ? (
-          <p>NDIS plan: {writtenSpan(recorded.start, recorded.end)}, from the Funding tab. A new agreement is given these dates to begin with.</p>
+          <p ref={planLineRef} tabIndex={-1} className="focus:outline-none">NDIS plan: {writtenSpan(recorded.start, recorded.end)}, from the Funding tab. A new agreement is given these dates to begin with.</p>
         ) : details.planOverride ? (
-          <p>NDIS plan: {writtenSpan(details.planOverride.start, details.planOverride.end)}, as you set it below.</p>
+          <p ref={planLineRef} tabIndex={-1} className="focus:outline-none">NDIS plan: {writtenSpan(details.planOverride.start, details.planOverride.end)}, as you set it below.</p>
         ) : (
-          <p className="max-w-prose">
-            No funding plan is recorded for this participant, so the NDIS plan is taken to run for the agreement&apos;s dates.{' '}
+          <p ref={planLineRef} tabIndex={-1} className="max-w-prose focus:outline-none">
+            {endedOn
+              ? <>The recorded NDIS plan ended on {writtenDay(endedOn)}. Until a new one is recorded, the NDIS plan is taken to run for the agreement&apos;s dates.</>
+              : <>No funding plan is recorded for this participant, so the NDIS plan is taken to run for the agreement&apos;s dates.</>}{' '}
             {recordBudget
               ? <Button variant="ghost" size="sm" onClick={recordBudget.onSelect}>{recordBudget.label}</Button>
               : <Button variant="ghost" size="sm" to={fundingTab}>Record the plan</Button>} to compare the agreement with the budget.

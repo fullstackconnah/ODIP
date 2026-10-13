@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
@@ -108,6 +108,16 @@ function DraftPage() {
   // The budget is recorded over the agreement in the Funding tab's own editor, by the people who may change the agreement (the same roles may record funding); a save refreshes the check.
   const [recordingBudget, setRecordingBudget] = useState(false)
   const recordBudget = canEdit ? { label: endedPlan ? 'Record a new plan' : 'Record plan budget', onSelect: () => setRecordingBudget(true) } : undefined
+  const savedBudget = useRef(false)
+  const planLineRef = useRef<HTMLParagraphElement>(null)
+  const budgetHeadingRef = useRef<HTMLHeadingElement>(null)
+  // After a save the Record button goes (once the plans and the check refresh), so focus would fall to the page: it goes to what the save changes on the step it was opened from. This runs
+  // after the editor's own return of focus to the button (a child's cleanup runs before a parent's effect); a cancel leaves focus on the button.
+  useEffect(() => {
+    if (recordingBudget || !savedBudget.current) return
+    savedBudget.current = false
+    ;(step === 'check' ? budgetHeadingRef : planLineRef).current?.focus()
+  }, [recordingBudget, step])
 
   const loaded = drafts.data !== undefined && (!canEdit || !plans.isLoading)
   const newest = drafts.data?.[0]
@@ -350,7 +360,7 @@ function DraftPage() {
                 <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
               </Callout>
               <AgreementStep
-                details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`} recordBudget={recordBudget}
+                details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`} recordBudget={recordBudget} endedOn={endedPlan?.planEnd} planLineRef={planLineRef}
                 errors={attempted ? { start: dates.start, end: dates.end } : {}}
               />
             </div>
@@ -366,7 +376,7 @@ function DraftPage() {
           )}
           {step === 'check' && (
             <CheckStep
-              pricing={pricing} issues={issues} readOnly={readOnly} onFix={fix} onChangeHolidays={selectShiftsOf}
+              pricing={pricing} issues={issues} readOnly={readOnly} onFix={fix} onChangeHolidays={selectShiftsOf} budgetHeadingRef={budgetHeadingRef}
               anySkipped={shifts.some(shift => shift.block.onPublicHoliday === 'Skip')}
             />
           )}
@@ -396,7 +406,7 @@ function DraftPage() {
     </form>
     {/* In a portal: inside the wizard's form, Enter in one of the editor's fields would submit the agreement. */}
     {canEdit && createPortal(
-      <FundingPlanEditor open={recordingBudget} onClose={() => setRecordingBudget(false)} participantId={participantId} previousPlan={endedPlan} defaultManagement={participant.data.planType} />,
+      <FundingPlanEditor open={recordingBudget} onClose={() => setRecordingBudget(false)} onSaved={() => { savedBudget.current = true }} participantId={participantId} previousPlan={endedPlan} defaultManagement={participant.data.planType} />,
       document.body,
     )}
   </div>

@@ -33,7 +33,7 @@ export function agreementBudgetView(participantId: string, state: AgreementCheck
   const { data } = state
   if (!data) return state.failed ? { ...empty, status: 'failed', onRetry: state.onRetry } : { ...empty, status: 'loading' }
 
-  // No plan is running: nothing to compare against, never a warning. The Funding tab is where a budget is recorded. An ended plan is told apart from none recorded (the Funding tab shows that plan), and
+  // No plan is running: nothing to compare against, never a warning. A person who may record a budget does it in place (the page's `onRecord` opens the editor over the agreement); for anyone else the way on is the Funding tab. An ended plan is told apart from none recorded (the Funding tab shows that plan), and
   // its way on is to record a new one; a plan recorded for later says when it starts; an answer from an older server that gives no reason reads as nothing recorded.
   if (!data.hasBudget) {
     const ended = data.noBudgetReason === 'PlanEnded'
