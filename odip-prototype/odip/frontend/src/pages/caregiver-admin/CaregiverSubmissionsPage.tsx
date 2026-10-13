@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { PageHeader } from '@/components/PageHeader'
@@ -10,8 +10,8 @@ import type { CaregiverSubmissionListItemDto, CaregiverSubmissionStatus } from '
 
 /**
  * cg04 Task 10 (design §5) — the caregiver submissions list, a `DataTable` filtered to Submitted
- * by default, with a status-pill filter (matching the DOC/incident-page pill idiom) and a Review
- * action that navigates to the diff page (Task 11).
+ * by default, with a status-pill filter (matching the DOC/incident-page pill idiom). A row, and its Review
+ * link, open the diff page (Task 11); the participant name links to their record.
  */
 
 const STATUS_ITEMS = (['Submitted', 'Draft', 'Accepted', 'Rejected', 'Revoked'] as CaregiverSubmissionStatus[]).map((s) => ({
@@ -27,7 +27,10 @@ export default function CaregiverSubmissionsPage() {
   const navigate = useNavigate()
 
   const columns: Column<CaregiverSubmissionListItemDto>[] = [
-    { key: 'participantName', header: 'Participant', sortable: true },
+    {
+      key: 'participantName', header: 'Participant', sortable: true,
+      render: (r) => <Link to={`/participants/${r.participantId}`} className="font-medium hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm">{r.participantName}</Link>,
+    },
     { key: 'caregiverName', header: 'Caregiver', render: (r) => r.caregiverName ?? '—' },
     { key: 'status', header: 'Status', type: 'badge' },
     { key: 'submittedAt', header: 'Submitted', type: 'date', sortable: true },
@@ -36,9 +39,9 @@ export default function CaregiverSubmissionsPage() {
       key: 'actions',
       header: '',
       render: (r) => (
-        <button type="button" className="underline text-sm" onClick={() => navigate(`/caregiver-submissions/${r.id}`)}>
+        <Link to={`/caregiver-submissions/${r.id}`} className="underline text-sm">
           Review
-        </button>
+        </Link>
       ),
     },
   ]
@@ -59,6 +62,7 @@ export default function CaregiverSubmissionsPage() {
           columns={columns}
           keyField="id"
           sortable
+          onRowClick={(r) => navigate(`/caregiver-submissions/${r.id}`)}
           emptyMessage={`No ${status.toLowerCase()} caregiver forms.`}
         />
       )}
