@@ -107,7 +107,8 @@ export function Callout({ tone, title, children, icon, actions, className, annou
       {Icon && (
         <Icon className={clsx('w-4 h-4 mt-0.5 shrink-0', style.iconClass)} aria-hidden="true" />
       )}
-      <div className="flex-1 min-w-0 space-y-1">
+      {/* Grows from 16rem (less the icon, so it never drops below it): with actions, the actions wrap under the text instead of squeezing it. */}
+      <div className="min-w-0 flex-[1_1_min(16rem,calc(100%_-_1.75rem))] space-y-1">
         {title && <p className="font-medium leading-snug">{title}</p>}
         {children && <div className="leading-snug">{children}</div>}
       </div>

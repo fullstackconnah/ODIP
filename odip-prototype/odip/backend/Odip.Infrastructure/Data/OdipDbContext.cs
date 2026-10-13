@@ -125,6 +125,10 @@ public class OdipDbContext : DbContext
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
 
+    /// <summary>Onboarding import batches (Settings → Import data) and the records each created: see <see cref="Entities.ImportBatch"/>.</summary>
+    public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
+    public DbSet<ImportBatchItem> ImportBatchItems => Set<ImportBatchItem>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -1737,6 +1741,28 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.Email).IsUnique();
         });
 
+        // ── Onboarding import batches ──────────────────────────────
+        modelBuilder.Entity<ImportBatch>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FileName).HasMaxLength(260).IsRequired();
+            entity.Property(e => e.FileSha256).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.CreatedByName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.UndoneByName).HasMaxLength(200);
+            // A double-submitted import finds the first batch by this key (OnboardingImportService); the index is the backstop when two arrive together.
+            entity.HasIndex(e => new { e.TenantId, e.IdempotencyKey }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+            entity.HasMany(e => e.Items).WithOne(i => i.Batch).HasForeignKey(i => i.BatchId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ImportBatchItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EntityType).HasMaxLength(50).IsRequired();
+            entity.HasIndex(e => e.BatchId);
+            entity.HasIndex(e => e.EntityId);
+        });
+
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────
         // Applied to all root aggregate entities. SuperAdmin bypasses all filters.
 
@@ -1965,6 +1991,9 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantContactRole>()
             .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ImportBatch>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

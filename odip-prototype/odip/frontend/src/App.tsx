@@ -44,6 +44,7 @@ const IncidentDetailPage = React.lazy(() => import('./pages/IncidentDetailPage')
 const BookingsPage = React.lazy(() => import('./pages/BookingsPage'))
 const SchedulePage = React.lazy(() => import('./pages/SchedulePage'))
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage'))
+const ImportWizardPage = React.lazy(() => import('@/pages/settings/ImportWizardPage'))
 const QualificationsPage = React.lazy(() => import('./pages/QualificationsPage'))
 const ClaimDetailPage = React.lazy(() => import('./pages/ClaimDetailPage'))
 const BudgetsPage = React.lazy(() => import('@/pages/BudgetsPage'))
@@ -85,13 +86,15 @@ export function HomeRoute() {
   return <PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>
 }
 
-export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly, requiresParticipantLifecycleMutation }: {
+export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly, requiresParticipantLifecycleMutation, requiresDataImport }: {
   children: React.ReactNode
   page?: PageKey
   requiresWrite?: boolean
   /** The record's only read view is its edit form: ReadOnly opens it as a view (the form hides its writes when canWrite is false). */
   viewableByReadOnly?: boolean
   requiresParticipantLifecycleMutation?: boolean
+  /** Settings → Import data: an Admin, or a SuperAdmin viewing as an organisation (canImportData). */
+  requiresDataImport?: boolean
 }) {
   const token = localStorage.getItem('odip_token')
   const permissions = usePermissions()
@@ -99,6 +102,7 @@ export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly
   if (page && !permissions.canAccessPage(page)) return <Navigate to="/" replace />
   if (requiresWrite && !permissions.canWrite && !(viewableByReadOnly && permissions.isReadOnly)) return <Navigate to="/" replace />
   if (requiresParticipantLifecycleMutation && !permissions.canManageParticipantLifecycle) return <Navigate to="/" replace />
+  if (requiresDataImport && !permissions.canImportData) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -155,6 +159,7 @@ const router = createBrowserRouter(
         <Route path="/incidents/:id" element={<PrivateRoute page="incidents"><IncidentDetailPage /></PrivateRoute>} />
         <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
+        <Route path="/settings/import/:kind" element={<PrivateRoute page="settings" requiresDataImport><ImportWizardPage /></PrivateRoute>} />
         <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
         <Route path="/claims/:id" element={<PrivateRoute page="claims"><ClaimDetailPage /></PrivateRoute>} />
         <Route path="/budgets" element={<PrivateRoute page="budgets"><BudgetsPage /></PrivateRoute>} />

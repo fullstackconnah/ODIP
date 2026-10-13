@@ -390,6 +390,22 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
+    public async Task Restore_ParticipantFromAnUndoneImport_Returns400()
+    {
+        using var fx = Create();
+        var participant = RichParticipant(isActive: false);
+        var batch = new ImportBatch { Id = Guid.NewGuid(), FileName = "people.csv", FileSha256 = "x", IdempotencyKey = "k", CreatedByName = "A", UndoneAt = DateTime.UtcNow };
+        batch.Items.Add(new ImportBatchItem { Id = Guid.NewGuid(), EntityType = nameof(Participant), EntityId = participant.Id });
+        fx.Db.AddRange(participant, batch);
+        await fx.Db.SaveChangesAsync();
+
+        var message = BadRequest(await fx.Controller.Restore(participant.Id, CancellationToken.None));
+
+        Assert.Equal("This person came from an import that was undone. Import them again.", message);
+        Assert.False((await fx.Db.Participants.SingleAsync()).IsActive);
+    }
+
+    [Fact]
     public async Task Restore_AnActiveParticipant_IsAnUnchangedSuccess()
     {
         using var fx = Create();

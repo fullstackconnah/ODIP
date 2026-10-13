@@ -881,6 +881,102 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("EventTemplates");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("CreatedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("FileSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SkippedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UndoneAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("UndoneById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UndoneByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.ToTable("ImportBatches");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ImportBatchItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("EntityId");
+
+                    b.ToTable("ImportBatchItems");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.IncidentInjury", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5536,6 +5632,17 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ImportBatchItem", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ImportBatch", "Batch")
+                        .WithMany("Items")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.IncidentInjury", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.IncidentReport", "IncidentReport")
@@ -6571,6 +6678,11 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Activities");
 
                     b.Navigation("TripInstances");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ImportBatch", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.IncidentReport", b =>

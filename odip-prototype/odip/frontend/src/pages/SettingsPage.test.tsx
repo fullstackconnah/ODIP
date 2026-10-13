@@ -825,3 +825,17 @@ describe('SettingsPage — Budgets tab and the one-row tab strip', () => {
     }
   })
 })
+
+describe('SettingsPage — Import data tab', () => {
+  it('shows the Import data tab only to someone who can import (an Admin, or a SuperAdmin viewing as an organisation)', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: true, canImportData: true })
+    renderSettingsPage()
+    expect(screen.getByRole('tab', { name: 'Import data' })).toBeInTheDocument()
+  })
+
+  it('hides the Import data tab from a Coordinator', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isCoordinator: true, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false, canImportData: false })
+    renderSettingsPage()
+    expect(screen.queryByRole('tab', { name: 'Import data' })).toBeNull()
+  })
+})

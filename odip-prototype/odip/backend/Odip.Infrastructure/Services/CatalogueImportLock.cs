@@ -32,7 +32,11 @@ internal sealed class CatalogueImportLock : IAsyncDisposable
 
     private CatalogueImportLock(IDbContextTransaction? owned) => _owned = owned;
 
-    public static async Task<CatalogueImportLock> AcquireAsync(OdipDbContext db, CancellationToken ct)
+    public static Task<CatalogueImportLock> AcquireAsync(OdipDbContext db, CancellationToken ct) =>
+        AcquireAsync(db, Key, "Another catalogue import is still running. Wait for it to finish, then preview the file again.", ct);
+
+    /// <summary>The same lock on another key, for another kind of import: the onboarding import takes one per organisation (OnboardingImportService.LockKey).</summary>
+    public static async Task<CatalogueImportLock> AcquireAsync(OdipDbContext db, long key, string busyMessage, CancellationToken ct)
     {
         if (!db.Database.IsNpgsql()) return new CatalogueImportLock(null);
 
@@ -42,13 +46,13 @@ internal sealed class CatalogueImportLock : IAsyncDisposable
             // One round trip: bound the wait, take the lock, then hand the setting back to the server's own value for the rest of the transaction.
             var sql = string.Create(System.Globalization.CultureInfo.InvariantCulture,
                 $"SET LOCAL lock_timeout = {(int)Wait.TotalMilliseconds}; SELECT pg_advisory_xact_lock({{0}}); SET LOCAL lock_timeout TO DEFAULT");
-            await db.Database.ExecuteSqlRawAsync(sql, new object[] { Key }, ct);
+            await db.Database.ExecuteSqlRawAsync(sql, new object[] { key }, ct);
             return new CatalogueImportLock(owned);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
         {
             await ReleaseAfterFailureAsync(owned);
-            throw new InvalidOperationException("Another catalogue import is still running. Wait for it to finish, then preview the file again.");
+            throw new InvalidOperationException(busyMessage);
         }
         catch
         {

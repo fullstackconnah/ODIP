@@ -601,6 +601,7 @@ public class ParticipantsController : ControllerBase
     private const string DraftCannotBeActivated = "A draft participant cannot be activated. Complete their intake and profile first.";
     private const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
     private const string ActivationFundingRequired = "This participant cannot be activated until their plan budget is recorded on the Funding tab.";
+    private const string FromUndoneImport = "This person came from an import that was undone. Import them again.";
     private const string BeginServicesEnforced = "Your organisation enforces readiness, so services begin when the participant is made active.";
 
     /// <summary>The 400 message for an activation the organisation's readiness rule refuses.</summary>
@@ -643,6 +644,9 @@ public class ParticipantsController : ControllerBase
         if (activate)
         {
             if (p.IsDraft) return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(DraftCannotBeActivated));
+            // Undo archives an onboarding import's drafts as finalised, so restoring one would make them Active without onboarding.
+            if (await _db.ImportBatchItems.AnyAsync(i => i.EntityId == p.Id && i.Batch!.UndoneAt != null, ct))
+                return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(FromUndoneImport));
             var block = await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct);
             if (block != ActivationBlock.None)
                 return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(ActivationRefusal(block)));

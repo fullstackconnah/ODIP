@@ -265,6 +265,12 @@ export function usePermissions() {
     canManageNotifications: isSuperAdmin || isAdmin,
 
     /**
+     * Settings → Import data and the Import buttons. ImportsController admits Admin and SuperAdmin, and the import refuses a SuperAdmin who is
+     * not viewing an organisation (an import belongs to one), so: an Admin, or a SuperAdmin viewing as an organisation.
+     */
+    canImportData: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+
+    /**
      * A participant's plan budget (the Funding tab, and the budget card on Intake and the Profile wizard). It is money, and money is never visible to SupportWorker or ReadOnly:
      * mirrors ParticipantFundingController's class-wide [Authorize(Roles = "SuperAdmin,Admin,Coordinator")], reads included. Deliberately NOT canWrite, which ReadOnly satisfies.
      */

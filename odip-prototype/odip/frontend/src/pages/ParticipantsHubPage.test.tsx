@@ -226,3 +226,16 @@ describe('ParticipantsHubPage — query params it does not know', () => {
     expect(hub.location.current).toBe('/participants?view=drafts')
   })
 })
+
+describe('ParticipantsHubPage — Import', () => {
+  it('links an Admin to the participant import from the header', () => {
+    renderHub()
+    expect(screen.getByRole('link', { name: 'Import' })).toHaveAttribute('href', '/settings/import/participants')
+  })
+
+  it('offers no Import to a Coordinator', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderHub()
+    expect(screen.queryByRole('link', { name: 'Import' })).toBeNull()
+  })
+})

@@ -57,6 +57,7 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
 
 /** C# enums called `*Status` that are never printed through a status pill, and why. */
 const NOT_A_PILL: Record<string, string> = {
+  ImportRowStatus: `the state of a row in an import preview; ImportWizardPage gives each value its own word and tone (Ready info, Skipped neutral, Invalid printed as "Can't import", danger), never this word through STATUS_TONE`,
   AmbulantStatus: 'a mobility level, chosen from a list and printed as a plain label',
   MedicationCompetencyStatus: 'the result of the competency gate; the UI sees error codes and a flag, never the word',
   DemoTickStatus: 'the outcome of one demo-data top-up tick, read from logs and tests; no API sends it and no screen shows it',
