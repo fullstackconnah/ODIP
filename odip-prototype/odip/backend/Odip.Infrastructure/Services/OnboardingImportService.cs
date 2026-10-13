@@ -118,7 +118,7 @@ public sealed class OnboardingImportService
         var batch = new ImportBatch
         {
             Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, FileName = Path.GetFileName(fileName), FileSha256 = Sha256(content),
-            IdempotencyKey = idempotencyKey, RowCount = plans.Count, CreatedById = ActorId(caller), CreatedByName = ActorName(caller), CreatedAt = DateTime.UtcNow,
+            IdempotencyKey = idempotencyKey, RowCount = plans.Count, CreatedById = ActorId(caller), CreatedByName = ActorName(caller),
         };
         var items = new List<ImportBatchItem>();
         var rowNumber = 0;
@@ -133,6 +133,8 @@ public sealed class OnboardingImportService
             batch.CreatedCount = items.Count;
             batch.SkippedCount = plans.Count(p => p.Status == ImportRowStatus.Skipped);
             batch.FailedCount = plans.Count(p => p.Status == ImportRowStatus.Invalid);
+            // Stamped after the rows, so undo can tell the contact roles this import made from ones added later (ImportUntouched).
+            batch.CreatedAt = DateTime.UtcNow;
             _db.ImportBatches.Add(batch);
             _db.ImportBatchItems.AddRange(items);
             await _db.SaveChangesAsync(ct);
@@ -204,7 +206,7 @@ public sealed class OnboardingImportService
         if (batch.UndoneAt != null) throw new ImportException("This import was already undone.");
 
         var ids = await _db.ImportBatchItems.Where(i => i.BatchId == batch.Id).Select(i => i.EntityId).ToListAsync(ct);
-        var blockers = await ImportUntouched.ParticipantBlockersAsync(_db, ids, ct);
+        var blockers = await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct);
         if (blockers.Count > 0)
         {
             var blockedIds = blockers.Keys.ToList();
