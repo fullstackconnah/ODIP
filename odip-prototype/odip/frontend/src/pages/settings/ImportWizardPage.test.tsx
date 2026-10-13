@@ -106,4 +106,24 @@ describe('ImportWizardPage', () => {
     await upload('empty.csv')
     expect(await screen.findByText('The file has a header row but no data rows.')).toBeInTheDocument()
   })
+
+  it('lists who changed when the server refuses to undo the import', async () => {
+    commit.mockResolvedValue({ batchId: 'b1', createdCount: 1, skippedCount: 0, failedCount: 0, rows: [], replayed: false })
+    undo.mockRejectedValue({
+      response: { status: 409, data: { success: false, errors: ['Nothing was undone: these records changed since the import.'], data: [{ entityId: 'p1', name: 'Ava Stone', reason: 'has shifts' }] } },
+    })
+    renderWizard()
+    await upload()
+    await screen.findByRole('heading', { name: 'Match columns' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { name: 'Preview' })
+    await userEvent.click(screen.getByLabelText(/Already receiving services/))
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Import 1 participant' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Undo import' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Undo import' }))
+
+    expect(await screen.findByText('Ava Stone has shifts')).toBeInTheDocument()
+  })
 })

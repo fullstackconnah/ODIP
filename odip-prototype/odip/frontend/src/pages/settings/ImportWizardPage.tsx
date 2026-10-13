@@ -12,10 +12,11 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { WizardNavFooter, WizardShell, WizardStepHeading, WizardStepRail, type WizardStepDef } from '@/components/wizard'
 import { useCommitImport, useDownloadImportTemplate, usePreviewImport, useUndoImport } from '@/api/hooks'
-import type { ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, ImportRowDto, ImportRowStatus } from '@/api/types'
+import type { ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, ImportRowDto, ImportRowStatus, ImportUndoBlockerDto } from '@/api/types'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
+import { undoBlockers } from './importUndoBlockers'
 
 const MAX_BYTES = 5 * 1024 * 1024
 const BACK_TO = '/settings?tab=import'
@@ -84,6 +85,7 @@ export default function ImportWizardPage() {
   const [result, setResult] = useState<ImportResultDto | null>(null)
   const [confirmUndo, setConfirmUndo] = useState(false)
   const [undone, setUndone] = useState(false)
+  const [blockers, setBlockers] = useState<ImportUndoBlockerDto[]>([])
   // One key per file: a retry after a lost response sends the same key and gets the same batch back, never a second import.
   const idempotencyKey = useRef(newCompletionRequestId())
 
@@ -144,11 +146,14 @@ export default function ImportWizardPage() {
 
   async function runUndo() {
     setConfirmUndo(false)
+    setProblem(null)
+    setBlockers([])
     try {
       await undo.mutateAsync(result!.batchId)
       setUndone(true)
     } catch (err) {
       setProblem(extractErrorMessage(err, 'The import could not be undone.'))
+      setBlockers(undoBlockers(err))
     }
   }
 
@@ -178,7 +183,15 @@ export default function ImportWizardPage() {
             {`${result.skippedCount} skipped (already in ODIP), ${result.failedCount} couldn't be imported.`}
           </Callout>
         )}
-        {problem && <Callout tone="error">{problem}</Callout>}
+        {problem && (
+          <Callout tone="error" title={problem}>
+            {blockers.length > 0 && (
+              <ul className="list-disc pl-5">
+                {blockers.map(b => <li key={b.entityId}>{b.name} {b.reason}</li>)}
+              </ul>
+            )}
+          </Callout>
+        )}
         {failed.length > 0 && (
           <section className="flex flex-col gap-2" aria-labelledby="import-failed">
             <h2 id="import-failed" className="text-base font-semibold">Rows that couldn't be imported</h2>

@@ -5,9 +5,10 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useDownloadImportTemplate, useImportHistory, useUndoImport } from '@/api/hooks'
-import type { ImportBatchDto, ImportKind, ImportUndoBlockerDto } from '@/api/types'
+import type { ImportBatchDto, ImportKind } from '@/api/types'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
+import { undoBlockers } from './importUndoBlockers'
 
 /** What the tab offers to import, in order. Each opens the wizard at /settings/import/{kind}. */
 const KINDS: { kind: ImportKind; title: string; text: string; noun: string }[] = [
@@ -16,12 +17,6 @@ const KINDS: { kind: ImportKind; title: string; text: string; noun: string }[] =
     text: 'Core profile, contacts and caregivers. Plans, budgets, medications and goals are added in ODIP afterwards.',
   },
 ]
-
-/** A 409 from POST /imports/{id}/undo carries the records that changed since the import in its `data`. */
-function undoBlockers(err: unknown): ImportUndoBlockerDto[] {
-  const data = (err as { response?: { data?: { data?: unknown } } } | null)?.response?.data?.data
-  return Array.isArray(data) ? (data as ImportUndoBlockerDto[]) : []
-}
 
 export default function ImportDataTab() {
   const history = useImportHistory()
