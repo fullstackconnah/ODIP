@@ -1,0 +1,317 @@
+using System.Net;
+using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Entities;
+using Odip.Domain.Enums;
+using Odip.Domain.Integrations;
+using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
+using Xunit;
+using static Odip.Tests.Integrations.EhFixture;
+using static Odip.Tests.Integrations.StubHttpHandler;
+
+namespace Odip.Tests.Integrations;
+
+/// <summary>EH is the master staff list: link by email, hold a same-name match, create, update, archive leavers, and turn every problem into a per-person item.</summary>
+public class EmploymentHeroStaffSyncTests
+{
+    private static async Task<(OdipDbContext Db, Guid Tenant)> OrganisationAsync(params Func<Guid, User>[] staff)
+    {
+        var tenant = Guid.NewGuid();
+        var db = Db(Guid.NewGuid().ToString(), tenant);
+        await ConnectAsync(db, tenant);
+        foreach (var person in staff) db.Users.Add(person(tenant));
+        await db.SaveChangesAsync();
+        return (db, tenant);
+    }
+
+    private static Task<EmploymentHeroSyncResult> RunAsync(OdipDbContext db, Guid tenant, StubHttpHandler eh) => Sync(eh).RunAsync(db, tenant, CancellationToken.None);
+
+    private static User Archived(User person)
+    {
+        person.IsActive = false;
+        return person;
+    }
+
+    [Fact]
+    public async Task First_connect_links_by_email_in_any_case_and_creates_the_rest_as_support_workers_with_no_invite()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Sam", "Lee", "sam@acme.org.au"));
+        await using var _ = db;
+        var sam = await db.Users.SingleAsync(u => u.FirstName == "Sam");
+
+        var result = await RunAsync(db, tenant, Eh(Employee(101, "Sam", "Lee", " SAM@Acme.org.au"), Employee(102, "Ana", "Ruiz", "ana@gmail.com", "0400 111 222")));
+
+        Assert.Equal(EmploymentHeroSyncOutcome.Done, result.Outcome);
+        Assert.Equal("101", sam.ExternalPayrollId);
+        var ana = await db.Users.SingleAsync(u => u.ExternalPayrollId == "102");
+        Assert.Equal(("Ana", "Ruiz", "ana@gmail.com", "0400 111 222", UserRole.SupportWorker, (Position?)Position.SupportWorker, true, (DateTime?)null, tenant),
+            (ana.FirstName, ana.LastName, ana.Email, ana.Mobile, ana.Role, ana.Position, ana.IsActive, ana.LastLoginAt, ana.TenantId));
+        Assert.Equal((1, 1, 0), (result.Log!.Linked, result.Log.Created, result.Log.NeedsAttention));
+        Assert.Empty(db.EmploymentHeroAttentions);
+        Assert.Empty(db.NotificationOutbox);
+        Assert.Single(db.EmploymentHeroSyncLogs);
+    }
+
+    [Fact]
+    public async Task Every_run_updates_name_email_and_mobile_archives_a_leaver_and_names_itself_in_the_audit()
+    {
+        var (db, tenant) = await OrganisationAsync(
+            t => EhFixture.Staff(t, "Sam", "Lee", "sam@acme.org.au", "101"), t => EhFixture.Staff(t, "Ana", "Ruiz", "ana@gmail.com", "102"), t => EhFixture.Staff(t, "Bo", "Chan", "bo@gmail.com", "103"));
+        await using var _ = db;
+
+        var result = await RunAsync(db, tenant, Eh(
+            Employee(101, "Samuel", "Lee", "samuel@acme.org.au", "0411 222 333"),
+            Employee(102, "Ana", "Ruiz", "ana@gmail.com", null, "2026-10-13T00:00:00"),   // last day yesterday
+            Employee(103, "Bo", "Chan", "bo@gmail.com", null, "2026-10-14T00:00:00")));    // last day today
+
+        var sam = await db.Users.SingleAsync(u => u.ExternalPayrollId == "101");
+        Assert.Equal(("Samuel", "samuel@acme.org.au", "0411 222 333"), (sam.FirstName, sam.Email, sam.Mobile));
+        Assert.False((await db.Users.SingleAsync(u => u.ExternalPayrollId == "102")).IsActive);
+        Assert.True((await db.Users.SingleAsync(u => u.ExternalPayrollId == "103")).IsActive);
+        Assert.Equal((1, 1), (result.Log!.Updated, result.Log.Archived));
+        var update = await db.AuditLogs.SingleAsync(a => a.EntityId == sam.Id && a.Action == AuditAction.Updated);
+        Assert.Equal(("Employment Hero sync", (Guid?)null), (update.ChangedByName, update.ChangedById));
+    }
+
+    [Fact]
+    public async Task Problems_become_items_for_that_person_and_everyone_else_still_syncs()
+    {
+        var (db, tenant) = await OrganisationAsync(_ => EhFixture.Staff(Guid.NewGuid(), "Gus", "Ng", "gus@other.org"));   // Gus works for another organisation
+        await using var _ = db;
+
+        var result = await RunAsync(db, tenant, Eh(
+            Employee(201, "Nia", "Ko", null),
+            Employee(202, "Gus", "Ng", "gus@other.org"),
+            Employee(203, "Ivy", "Lo", "ivy@gmail.com", "0400 000 000 000 000 000 00"),
+            Employee(204, "Jo", null, "jo@gmail.com"),
+            Employee(205, "Kim", "Wu", "kim@gmail.com")));
+
+        Assert.Equal(EmploymentHeroSyncOutcome.Done, result.Outcome);
+        Assert.Null((await db.EmploymentHeroConnections.SingleAsync()).LastSyncError);
+        Assert.True(await db.Users.AnyAsync(u => u.ExternalPayrollId == "205"));
+        var items = await db.EmploymentHeroAttentions.ToDictionaryAsync(a => a.ExternalEmployeeId!, a => (a.Kind, a.Reason));
+        Assert.Equal(4, items.Count);
+        Assert.All(items.Values, i => Assert.Equal(EmploymentHeroAttentionKind.FixInEmploymentHero, i.Kind));
+        Assert.Equal("They have no email in Employment Hero, and ODIP needs one to add them.", items["201"].Reason);
+        Assert.Equal("Their email in Employment Hero belongs to another organisation on ODIP.", items["202"].Reason);
+        Assert.Equal("Their mobile in Employment Hero is longer than 20 characters.", items["203"].Reason);
+        Assert.Equal("Their first name or surname is missing in Employment Hero.", items["204"].Reason);
+    }
+
+    [Fact]
+    public async Task A_same_name_EH_employee_is_held_for_the_unlinked_ODIP_person_and_created_after_Leave_unlinked()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Jane", "Smith", "jane@gmail.com"));
+        await using var _ = db;
+        var jane = await db.Users.SingleAsync(u => u.FirstName == "Jane");
+        var eh = Eh(Employee(301, "Jane", "Smith", "jane.smith@acme.org.au"));
+
+        await RunAsync(db, tenant, eh);
+
+        Assert.Equal(2, await db.Users.CountAsync());   // Ada and the one Jane: no second Jane
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal((EmploymentHeroAttentionKind.NotLinked, (Guid?)jane.Id, "301"), (item.Kind, item.UserId, item.ExternalEmployeeId));
+        Assert.Equal("No Employment Hero employee has their email. Jane Smith in Employment Hero has the same name and may be the same person.", item.Reason);
+
+        item.DismissedAt = DateTime.UtcNow;   // the Admin chose "Leave unlinked"
+        await db.SaveChangesAsync();
+        await RunAsync(db, tenant, eh);
+
+        Assert.True(await db.Users.AnyAsync(u => u.ExternalPayrollId == "301" && u.Email == "jane.smith@acme.org.au"));
+        Assert.NotNull((await db.EmploymentHeroAttentions.SingleAsync(a => a.UserId == jane.Id)).DismissedAt);
+    }
+
+    [Fact]
+    public async Task Leavers_are_not_created_a_rehire_links_to_the_current_record_and_the_last_day_is_still_active()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Bo", "Chan", "bo@gmail.com"), t => EhFixture.Staff(t, "Ed", "Fox", "ed@gmail.com", "405"));
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(
+            Employee(401, "Bo", "Chan", "bo@gmail.com", null, "2025-03-31T00:00:00"),   // Bo's old record
+            Employee(402, "Bo", "Chan", "bo@gmail.com"),                                  // Bo, rehired
+            Employee(403, "Cy", "Park", "cy@gmail.com", null, "2026-06-30T00:00:00"),     // left before the connect
+            Employee(404, "Di", "Vu", "di@gmail.com", null, "2026-10-14T00:00:00"),       // last day today
+            Employee(405, "Ed", "Fox", "ed@gmail.com", null, "2025-01-31T00:00:00"),      // Ed's old record, still linked
+            Employee(406, "Ed", "Fox", "ed@gmail.com")));                                 // Ed, rehired
+
+        var bo = await db.Users.SingleAsync(u => u.FirstName == "Bo");
+        var ed = await db.Users.SingleAsync(u => u.FirstName == "Ed");
+        Assert.Equal(("402", true), (bo.ExternalPayrollId, bo.IsActive));
+        Assert.Equal(("406", true), (ed.ExternalPayrollId, ed.IsActive));
+        Assert.False(await db.Users.AnyAsync(u => u.Email == "cy@gmail.com"));
+        Assert.True((await db.Users.SingleAsync(u => u.ExternalPayrollId == "404")).IsActive);
+        Assert.Empty(db.EmploymentHeroAttentions);
+    }
+
+    [Fact]
+    public async Task A_current_EH_employee_linked_to_an_archived_account_is_shown_for_restoring()
+    {
+        var (db, tenant) = await OrganisationAsync(
+            t => Archived(EhFixture.Staff(t, "Ed", "Fox", "ed@gmail.com", "405")),   // archived when their old record ended
+            t => Archived(EhFixture.Staff(t, "Fay", "Ong", "fay@gmail.com")));        // archived by hand, never linked
+        await using var _ = db;
+
+        var eh = Eh(
+            Employee(405, "Ed", "Fox", "ed@gmail.com", null, "2025-01-31T00:00:00"), Employee(406, "Ed", "Fox", "ed@gmail.com"),
+            Employee(501, "Fay", "Ong", "fay@gmail.com"));
+
+        await RunAsync(db, tenant, eh);
+        await RunAsync(db, tenant, eh);   // already linked now: the items must last as long as the accounts stay archived
+
+        var items = await db.EmploymentHeroAttentions.ToListAsync();
+        Assert.Equal(2, items.Count);
+        Assert.All(items, i => Assert.Equal(
+            (EmploymentHeroAttentionKind.FixInOdip, "Employment Hero has them as current, but their ODIP account is archived. Restore them on their staff page."), (i.Kind, i.Reason)));
+        var people = await db.Users.Where(u => u.FirstName == "Ed" || u.FirstName == "Fay").OrderBy(u => u.FirstName).ToListAsync();
+        Assert.Equal(new[] { ("406", false), ("501", false) }, people.Select(u => (u.ExternalPayrollId!, u.IsActive)));   // linked, never restored by the sync
+    }
+
+    [Fact]
+    public async Task A_linked_person_missing_from_EHs_list_is_never_archived()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Sam", "Lee", "sam@acme.org.au", "101"));
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh());
+
+        var sam = await db.Users.SingleAsync(u => u.FirstName == "Sam");
+        Assert.True(sam.IsActive);
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal((EmploymentHeroAttentionKind.MissingFromEmploymentHero, (Guid?)sam.Id), (item.Kind, item.UserId));
+    }
+
+    [Fact]
+    public async Task An_email_change_for_someone_who_has_signed_in_is_left_for_an_Admin()
+    {
+        var (db, tenant) = await OrganisationAsync(
+            t => EhFixture.Staff(t, "Sam", "Lee", "sam@acme.org.au", "101", lastLogin: new DateTime(2026, 10, 1)), t => EhFixture.Staff(t, "Tom", "Ito", "tom@gmail.com", "102"));
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(Employee(101, "Sam", "Lee", "sam.lee@acme.org.au"), Employee(102, "Tom", "Ito", "tom.ito@gmail.com")));
+
+        var sam = await db.Users.SingleAsync(u => u.FirstName == "Sam");
+        Assert.Equal("sam@acme.org.au", sam.Email);
+        Assert.Equal("tom.ito@gmail.com", (await db.Users.SingleAsync(u => u.FirstName == "Tom")).Email);
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal((EmploymentHeroAttentionKind.FixInOdip, (Guid?)sam.Id), (item.Kind, item.UserId));
+        Assert.Contains("sam.lee@acme.org.au", item.Reason);
+    }
+
+    [Fact]
+    public async Task Two_new_people_with_the_same_name_get_different_usernames()
+    {
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(Employee(601, "Jo", "Smith", "jo1@gmail.com"), Employee(602, "Jo", "Smith", "jo2@gmail.com")));
+
+        var usernames = await db.Users.Where(u => u.FirstName == "Jo").Select(u => u.Username).ToListAsync();
+        Assert.Equal(2, usernames.Count);
+        Assert.NotEqual(usernames[0], usernames[1]);
+    }
+
+    [Fact]
+    public async Task A_second_run_with_nothing_new_changes_nothing()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Sam", "Lee", "sam@acme.org.au"));
+        await using var _ = db;
+        var eh = Eh(Employee(101, "Sam", "Lee", "sam@acme.org.au"), Employee(102, "Ana", "Ruiz", "ana@gmail.com"));
+        await RunAsync(db, tenant, eh);
+        var audited = await db.AuditLogs.CountAsync();
+
+        var second = await RunAsync(db, tenant, eh);
+
+        Assert.Equal((0, 0, 0, 0), (second.Log!.Linked, second.Log.Created, second.Log.Updated, second.Log.Archived));
+        Assert.Equal(3, await db.Users.CountAsync());
+        Assert.Equal(audited, await db.AuditLogs.CountAsync());
+    }
+
+    [Fact]
+    public async Task The_only_Admin_is_never_archived_and_is_shown_instead()
+    {
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+        // EH ends the employment of Ada, the organisation's one Admin (EH id 1).
+        var eh = new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.OK, new[] { Employee(1, "Ada", "Admin", "ada@acme.org.au", null, "2026-10-01T00:00:00") });
+
+        var result = await RunAsync(db, tenant, eh);
+
+        var ada = await db.Users.SingleAsync(u => u.FirstName == "Ada");
+        Assert.True(ada.IsActive);
+        Assert.Equal(0, result.Log!.Archived);
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal((EmploymentHeroAttentionKind.FixInOdip, (Guid?)ada.Id), (item.Kind, item.UserId));
+        Assert.Equal("Employment Hero has ended their employment; they are the only Admin. Add another Admin first, then archive them.", item.Reason);
+    }
+
+    [Fact]
+    public async Task Too_many_leavers_in_one_run_archives_nobody_and_shows_each_one()
+    {
+        // Four of the five linked staff end at once: more than max(3, a quarter of 5), so it reads as bad EH data, not resignations.
+        var (db, tenant) = await OrganisationAsync(
+            t => EhFixture.Staff(t, "Sam", "Lee", "sam@gmail.com", "101"), t => EhFixture.Staff(t, "Ana", "Ruiz", "ana@gmail.com", "102"),
+            t => EhFixture.Staff(t, "Bo", "Chan", "bo@gmail.com", "103"), t => EhFixture.Staff(t, "Cy", "Park", "cy@gmail.com", "104"));
+        await using var _ = db;
+        const string ended = "2026-10-01T00:00:00";
+
+        var result = await RunAsync(db, tenant, Eh(
+            Employee(101, "Sam", "Lee", "sam@gmail.com", null, ended), Employee(102, "Ana", "Ruiz", "ana@gmail.com", null, ended),
+            Employee(103, "Bo", "Chan", "bo@gmail.com", null, ended), Employee(104, "Cy", "Park", "cy@gmail.com", null, ended)));
+
+        Assert.Equal(0, result.Log!.Archived);
+        Assert.True(await db.Users.AllAsync(u => u.IsActive));
+        var items = await db.EmploymentHeroAttentions.ToListAsync();
+        Assert.Equal(4, items.Count);
+        Assert.All(items, i => Assert.Equal(EmploymentHeroAttentionKind.FixInOdip, i.Kind));
+        Assert.All(items, i => Assert.StartsWith("Employment Hero has ended the employment of 4 staff in one sync, so ODIP archived nobody", i.Reason));
+    }
+
+    [Fact]
+    public async Task An_empty_EH_mobile_keeps_the_ODIP_one()
+    {
+        var (db, tenant) = await OrganisationAsync(t =>
+        {
+            var person = EhFixture.Staff(t, "Sam", "Lee", "sam@acme.org.au");
+            person.Mobile = "0400 111 222";
+            return person;
+        });
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(Employee(101, "Sam", "Lee", "sam@acme.org.au")));
+
+        var sam = await db.Users.SingleAsync(u => u.FirstName == "Sam");
+        Assert.Equal(("101", "0400 111 222"), (sam.ExternalPayrollId, sam.Mobile));
+    }
+
+    [Fact]
+    public async Task An_email_change_for_a_pending_Coordinator_is_left_for_an_Admin()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Cal", "Ray", "cal@acme.org.au", "103", UserRole.Coordinator));   // invited, never signed in
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(Employee(103, "Cal", "Ray", "cal.ray@gmail.com")));
+
+        Assert.Equal("cal@acme.org.au", (await db.Users.SingleAsync(u => u.FirstName == "Cal")).Email);
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal(EmploymentHeroAttentionKind.FixInOdip, item.Kind);
+        Assert.Contains("cal.ray@gmail.com", item.Reason);
+    }
+
+    [Fact]
+    public async Task Sync_log_rows_older_than_90_days_are_deleted()
+    {
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+        db.EmploymentHeroSyncLogs.AddRange(
+            new EmploymentHeroSyncLog { Id = Guid.NewGuid(), TenantId = tenant, BusinessId = Business, StartedAt = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new EmploymentHeroSyncLog { Id = Guid.NewGuid(), TenantId = tenant, BusinessId = Business, StartedAt = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc) });
+        await db.SaveChangesAsync();
+
+        await RunAsync(db, tenant, Eh());
+
+        // The clock is 14 October 2026, 01:00 UTC: 1 July is past 90 days, 1 August is not, and the run adds its own row.
+        Assert.Equal(new[] { new DateTime(2026, 8, 1), new DateTime(2026, 10, 14, 1, 0, 0) },
+            await db.EmploymentHeroSyncLogs.OrderBy(l => l.StartedAt).Select(l => l.StartedAt).ToArrayAsync());
+    }
+}
