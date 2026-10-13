@@ -337,7 +337,7 @@ public sealed class OnboardingImportService
                     new object[] { ids.ToArray() }, ct);
             }
             var importedAt = batch.CreatedAt;
-            var people =_db.ParticipantContactRoles.Where(r => ids.Contains(r.ParticipantId) && r.CreatedAt <= importedAt).Select(r => r.PersonId);
+            var people = _db.ParticipantContactRoles.Where(r => ids.Contains(r.ParticipantId) && r.CreatedAt <= importedAt).Select(r => r.PersonId);
             var untouched = await _db.People
                 .Where(p => people.Contains(p.Id) && p.UpdatedAt <= importedAt
                     && p.ContactRoles.All(r => ids.Contains(r.ParticipantId) && r.CreatedAt <= importedAt && r.UpdatedAt <= importedAt))
