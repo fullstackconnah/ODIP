@@ -17,6 +17,17 @@ export const RESTRICTIVE_PRACTICE_TYPE_LABELS: Record<RestrictivePracticeType, s
   Unclassified: 'Unclassified (legacy)',
 }
 
+/** Plain-language explanations shown under each option in the Type picker so a coordinator
+ * unfamiliar with NDIS restrictive-practice terminology can tell the five categories apart. */
+export const RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS: Record<RestrictivePracticeType, string> = {
+  Seclusion: 'Confining the person alone in a room or area they can’t freely leave',
+  ChemicalRestraint: 'Medication used to control behaviour, not to treat a diagnosed condition',
+  MechanicalRestraint: 'A device or equipment that restricts the person’s movement',
+  PhysicalRestraint: 'Holding or physically restraining part of the person’s body',
+  EnvironmentalRestraint: 'Restricting access to parts of the environment, e.g. locked doors or gates',
+  Unclassified: 'Type not yet recorded — reclassify this entry when you next review it',
+}
+
 export interface RestrictivePracticeDto {
   id: string
   participantId: string

@@ -31,7 +31,10 @@ import {
   buildShiftNoteIncidentDescriptionSkeleton,
   buildShiftNoteIncidentDateTime,
   suggestedIncidentTypeForShiftNote,
+  previewRpAuthorisation,
+  editedRpAuthorisation,
 } from '@/lib/incidentPrefill'
+import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
 import { extractErrorMessage, formatDateAu } from '@/lib/utils'
@@ -105,6 +108,8 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
       restrictivePracticeType: i.restrictivePracticeType ?? '',
       restrictivePracticeId: i.restrictivePracticeId ?? '',
       unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? '',
+      // Stored unauthorised with a practice linked: that is what "This use was not authorised" records.
+      usedWithoutAuthorisation: !!i.restrictivePracticeId && i.isRestrictivePracticeAuthorised === false,
       severity: i.severity ?? 'Medium',
       title: i.title ?? '',
       description: i.description ?? '',
@@ -239,6 +244,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const restrictivePracticeType = useWatch({ control, name: 'restrictivePracticeType' })
   const restrictivePracticeId = useWatch({ control, name: 'restrictivePracticeId' })
   const unapprovedRestrictivePracticeDetails = useWatch({ control, name: 'unapprovedRestrictivePracticeDetails' })
+  const usedWithoutAuthorisation = useWatch({ control, name: 'usedWithoutAuthorisation' })
+  const description = useWatch({ control, name: 'description' })
   const witnesses = useWatch({ control, name: 'witnesses' })
   // UX-01: reportedByStaffId/involvedStaffId/reviewedByStaffId are SearchableSelect, which isn't
   // a native input register() can bind to, so it's tracked the same way: watched here, written
@@ -258,6 +265,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       setValue('restrictivePracticeType', '')
       setValue('restrictivePracticeId', '')
       setValue('unapprovedRestrictivePracticeDetails', '')
+      setValue('usedWithoutAuthorisation', false)
     }
   }, [incidentType, setValue])
 
@@ -366,6 +374,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       // unapproved-practice field only when nothing was linked. Never both at once.
       restrictivePracticeId: isRp && !data.unapprovedRestrictivePracticeDetails?.trim() ? data.restrictivePracticeId || undefined : undefined,
       unapprovedRestrictivePracticeDetails: isRp ? data.unapprovedRestrictivePracticeDetails?.trim() || undefined : undefined,
+      // "This use was not authorised": only with a linked practice. The server also stores a Not authorised entry's use as unauthorised.
+      usedWithoutAuthorisation: isRp && !data.unapprovedRestrictivePracticeDetails?.trim() && !!data.restrictivePracticeId && !!data.usedWithoutAuthorisation,
       severity: data.severity as IncidentSeverity,
       title: data.title,
       description: data.description,
@@ -452,6 +462,17 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       ? existingIncident.restrictivePracticeDescription
       : allRestrictivePractices.find((p) => p.id === practiceId)?.description) ?? '—'
 
+  // The same state the Restrictive practice step shows: the live preview when reporting, the stored determination when editing (which
+  // "This use was not authorised" can only lower).
+  const editedAuthorisation = editedRpAuthorisation(existingIncident?.isRestrictivePracticeAuthorised, !!existingIncident?.unapprovedRestrictivePracticeDetails?.trim(), {
+    restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation,
+  })
+  const rpAuthorisation = isEdit
+    ? editedAuthorisation === null ? '—' : editedAuthorisation ? 'Authorised' : 'Not authorised'
+    : { authorised: 'Authorised', unauthorised: 'Not authorised', unknown: '—' }[previewRpAuthorisation(involvedParticipantId, restrictivePracticeType, allRestrictivePractices, {
+      restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation: !!restrictivePracticeId && !!usedWithoutAuthorisation,
+    })]
+
   const reviewGroups: ReviewGroup[] = [
     {
       stepKey: 'basics',
@@ -472,6 +493,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         { label: 'Restrictive Practice Type', value: restrictivePracticeType ? (RESTRICTIVE_PRACTICE_TYPE_LABELS[restrictivePracticeType as keyof typeof RESTRICTIVE_PRACTICE_TYPE_LABELS] ?? restrictivePracticeType) : '—' },
         { label: 'Linked Practice', value: restrictivePracticeId ? practiceLabel(restrictivePracticeId) : 'Not linked' },
         { label: 'Unapproved Practice Details', value: unapprovedRestrictivePracticeDetails || '—' },
+        { label: 'Authorisation', value: rpAuthorisation },
       ],
     }] : []),
     {
@@ -599,6 +621,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             restrictivePracticeType={restrictivePracticeType}
             restrictivePracticeId={restrictivePracticeId}
             unapprovedRestrictivePracticeDetails={unapprovedRestrictivePracticeDetails}
+            usedWithoutAuthorisation={usedWithoutAuthorisation}
+            description={description}
             isEdit={isEdit}
             existingIncident={existingIncident}
           />
@@ -643,6 +667,14 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             groups={reviewGroups}
             steps={steps}
             onEdit={wizard.goToStep}
+            renderRow={(row) => (
+              <div key={row.label} className="flex justify-between gap-4">
+                <dt className="text-[var(--color-muted-foreground)]">{row.label}</dt>
+                <dd className="font-medium text-right min-w-0 break-words">
+                  {row.label === 'Authorisation' && row.value !== '—' ? <RpAuthorisationBadge authorised={row.value === 'Authorised'} /> : row.value}
+                </dd>
+              </div>
+            )}
           />
         )}
 

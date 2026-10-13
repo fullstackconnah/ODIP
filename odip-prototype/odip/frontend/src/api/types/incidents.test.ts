@@ -24,7 +24,7 @@ describe('toUpdateIncidentDto', () => {
     expect(toUpdateIncidentDto(stored, { status: 'Draft' })).toEqual({
       serviceType: 'Trip', tripInstanceId: 'trip-1', participantBookingId: 'booking-1', involvedParticipantId: 'p-1', reportedByStaffId: 'staff-1', incidentType: 'Injury',
       severity: 'High', title: 'Slip in kitchen', description: 'Slipped on a wet floor and hit a knee on the bench.', incidentDateTime: '2026-08-01T09:30:00', location: 'Kitchen',
-      immediateActionsTaken: 'Ice and rest', wereEmergencyServicesCalled: false,
+      immediateActionsTaken: 'Ice and rest', wereEmergencyServicesCalled: false, usedWithoutAuthorisation: false,
       injuries: [{ region: 'Knee', injuryType: 'Bruise', description: 'Bruised knee' }],
       witnesses: [{ id: 'w-1', witnessUserId: 'staff-2', witnessName: 'Pat Lee' }],
       medicationAdministrationId: 'mar-1', shiftId: 'shift-1',

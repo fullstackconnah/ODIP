@@ -5,6 +5,8 @@ import {
   buildIncidentTitleSkeleton,
   suggestedIncidentSeverity,
   previewRpAuthorisation,
+  isRpAuthorised,
+  editedRpAuthorisation,
   buildRpIncidentDescriptionSkeleton,
   buildMarIncidentPrefill,
   type MarIncidentPrefillState,
@@ -123,28 +125,69 @@ describe('buildMarIncidentPrefill', () => {
   })
 })
 
-// INC-04: mirrors IncidentsController.DetermineRestrictivePracticeAuthorisationAsync — the list
-// passed in is assumed to already be the participant's ACTIVE practices (that's what
-// useRestrictivePractices returns by default), so this only needs to filter by type.
+// The one "Authorised" rule (owner decision 2026-10-14), the frontend twin of the backend's RestrictivePracticeAuthorisation.IsAuthorised:
+// active, with who authorised it and when.
+describe('isRpAuthorised', () => {
+  const entry = { isActive: true, authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01' }
+
+  it('is true for an active entry with who authorised it and when', () => {
+    expect(isRpAuthorised(entry)).toBe(true)
+  })
+
+  it('is false for an inactive entry', () => {
+    expect(isRpAuthorised({ ...entry, isActive: false })).toBe(false)
+  })
+
+  it.each([null, '', '   '])('is false when "Authorised by" is %j', (authorisedBy) => {
+    expect(isRpAuthorised({ ...entry, authorisedBy })).toBe(false)
+  })
+
+  it('is false with no authorisation date', () => {
+    expect(isRpAuthorised({ ...entry, authorisationDate: null })).toBe(false)
+  })
+})
+
+// INC-04: mirrors IncidentsController.DetermineRestrictivePracticeAuthorisationAsync step for step, so the banner shows what the server will store.
 describe('previewRpAuthorisation', () => {
+  const authorised = { id: 'rp-a', type: 'Seclusion' as const, isActive: true, authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01' }
+  const notAuthorised = { id: 'rp-n', type: 'Seclusion' as const, isActive: true, authorisedBy: null, authorisationDate: null }
+  const otherType = { ...authorised, id: 'rp-o', type: 'PhysicalRestraint' as const }
+
   it('is "unknown" when no participant is selected', () => {
-    expect(previewRpAuthorisation(undefined, 'Seclusion', [{ type: 'Seclusion' }])).toBe('unknown')
+    expect(previewRpAuthorisation(undefined, 'Seclusion', [authorised])).toBe('unknown')
   })
 
   it('is "unknown" when no type is selected', () => {
-    expect(previewRpAuthorisation('participant-1', undefined, [{ type: 'Seclusion' }])).toBe('unknown')
+    expect(previewRpAuthorisation('participant-1', undefined, [authorised])).toBe('unknown')
   })
 
-  it('is "authorised" when an active practice of the matching type is present', () => {
-    expect(previewRpAuthorisation('participant-1', 'Seclusion', [{ type: 'Seclusion' }, { type: 'PhysicalRestraint' }])).toBe('authorised')
+  it('is "authorised" when nothing is chosen yet and an Authorised entry of the type is present', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [authorised, otherType])).toBe('authorised')
   })
 
-  it('is "unauthorised" when no active practice matches the type', () => {
-    expect(previewRpAuthorisation('participant-1', 'Seclusion', [{ type: 'PhysicalRestraint' }])).toBe('unauthorised')
+  it('is "unauthorised" when the only entry of the type is active but has no authorisation details', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [notAuthorised])).toBe('unauthorised')
   })
 
-  it('is "unauthorised" when the participant has no active practices at all', () => {
+  it('is "unauthorised" when no entry matches the type', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [otherType])).toBe('unauthorised')
+  })
+
+  it('is "unauthorised" when the participant has no entries at all', () => {
     expect(previewRpAuthorisation('participant-1', 'Seclusion', [])).toBe('unauthorised')
+  })
+
+  it('follows the linked entry, not the rest of the type', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [authorised, notAuthorised], { restrictivePracticeId: 'rp-n' })).toBe('unauthorised')
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [authorised, notAuthorised], { restrictivePracticeId: 'rp-a' })).toBe('authorised')
+  })
+
+  it('is "unauthorised" for "None of these", whatever is on the register', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [authorised], { unapproved: true })).toBe('unauthorised')
+  })
+
+  it('is "unauthorised" when the use was not authorised, even with an Authorised entry linked', () => {
+    expect(previewRpAuthorisation('participant-1', 'Seclusion', [authorised], { restrictivePracticeId: 'rp-a', usedWithoutAuthorisation: true })).toBe('unauthorised')
   })
 })
 
@@ -159,5 +202,22 @@ describe('buildRpIncidentDescriptionSkeleton', () => {
     const skeleton = buildRpIncidentDescriptionSkeleton({ description: 'Locked room during acute crisis.', reviewDate: null })
     expect(skeleton).not.toContain('review due')
     expect(skeleton).toContain('Locked room during acute crisis.')
+  })
+})
+
+// Review N1/M1: what an edit will store, mirroring IncidentsController.Update: it only ever lowers the stored flag.
+describe('editedRpAuthorisation', () => {
+  it('keeps the stored value when nothing lowers it', () => {
+    expect(editedRpAuthorisation(true, false, { restrictivePracticeId: 'rp-a' })).toBe(true)
+    expect(editedRpAuthorisation(undefined, false, { restrictivePracticeId: 'rp-a' })).toBeNull()
+  })
+
+  it('lowers to false for a ticked "This use was not authorised" with a link', () => {
+    expect(editedRpAuthorisation(true, false, { restrictivePracticeId: 'rp-a', usedWithoutAuthorisation: true })).toBe(false)
+  })
+
+  it('lowers to false on the switch to "None of these", but not for an incident that already described one', () => {
+    expect(editedRpAuthorisation(true, false, { unapproved: true })).toBe(false)
+    expect(editedRpAuthorisation(true, true, { unapproved: true })).toBe(true)
   })
 })

@@ -17,11 +17,12 @@ public class TaskTypeAppendOnlyTests
             "AccommodationRequest", "AccommodationConfirmation", "VehicleRequest", "VehicleConfirmation", "ParticipantConfirmation", "FamilyContact", "InvoiceOop", "StaffingAllocation",
             "RiskReview", "MedicationCheck", "PreDeparture", "PostTrip", "InsuranceConfirmation", "GenerateNdisClaims", "Other",
             "LeaveCoverage", "IncidentQscReport", "MedicationWitness", "FlaggedNoteFollowUp",
-            "BudgetEmergencyReview",
+            "BudgetEmergencyReview", "RestrictivePracticeRegisterAddition",
         };
 
         Assert.Equal(expected, Enum.GetNames<TaskType>());
         Assert.Equal(Enumerable.Range(0, expected.Length), Enum.GetValues<TaskType>().Select(v => (int)v));
         Assert.Equal(19, (int)TaskType.BudgetEmergencyReview);
+        Assert.Equal(20, (int)TaskType.RestrictivePracticeRegisterAddition);
     }
 }
