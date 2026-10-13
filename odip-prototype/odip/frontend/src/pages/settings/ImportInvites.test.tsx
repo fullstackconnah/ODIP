@@ -69,4 +69,12 @@ describe('ImportInvites', () => {
     expect(screen.queryByText(/more still to invite/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Send sign-in invites (51)' })).toBeInTheDocument()
   })
+
+  it('says all of them were sent when every link went', async () => {
+    invites.mockResolvedValue({ left: 0, invites: [{ staffId: 's1', name: 'Jo Ng', email: 'jo@example.com', firebaseAccount: 'created', error: null }] })
+    sendEmail.mockResolvedValue({ ok: true, email: 'jo@example.com', account: 'created' })
+    render(<ImportInvites batchId="b1" count={1} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Send sign-in invites (1)' }))
+    expect(await screen.findByText('Sign-in invites: all 1 sent')).toBeInTheDocument()
+  })
 })

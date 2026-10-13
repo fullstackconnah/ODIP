@@ -18,7 +18,7 @@ export function InviteResults({ result, fileName }: { result: InviteResult; file
   const failed = outcomes.filter(o => !o.ok)
   const sent = outcomes.filter(o => o.ok)
   return (
-    <Callout tone={failed.length > 0 ? 'warning' : 'success'} title={`${lead}: ${sent.length} sent${failed.length > 0 ? `, ${failed.length} not sent` : ''}`}>
+    <Callout tone={failed.length > 0 ? 'warning' : 'success'} title={failed.length > 0 ? `${lead}: ${sent.length} sent, ${failed.length} not sent` : `${lead}: all ${sent.length} sent`}>
       <ul className="list-disc pl-5">
         {[...failed, ...sent].map(o => <li key={o.email} className="break-words">{describeEmailOutcome(o, 'use Send sign-in invites again').message}</li>)}
       </ul>
