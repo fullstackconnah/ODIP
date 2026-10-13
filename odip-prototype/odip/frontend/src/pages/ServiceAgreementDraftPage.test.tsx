@@ -375,7 +375,10 @@ describe('ServiceAgreementDraftPage: recording the plan budget in place', () => 
     // Enter in the editor must never submit the agreement.
     expect(screen.getByRole('form', { name: 'Service agreement' })).not.toContainElement(opened)
     expect(screen.getByLabelText('Agreement starts')).toHaveValue('2026-10-01')
-    expect(screen.getByText(/No funding plan is recorded/).textContent).toMatch(/Record plan budget to compare the agreement with it\.$/)
+    // The sentence ends in words, then the action after it.
+    const line = screen.getByText(/No funding plan is recorded/)
+    expect(line.textContent?.replace(/\s/g, ' ')).toBe("No funding plan is recorded for this participant, so the NDIS plan is taken to run for the agreement's dates, and there is no budget to compare the agreement with. Record plan budget")
+    expect(within(line).getByRole('button', { name: 'Record plan budget' })).toBeInTheDocument()
   })
 
   it('opens the editor from the Check step for a new plan after the one that ended', async () => {
@@ -425,7 +428,8 @@ describe('ServiceAgreementDraftPage: recording the plan budget in place', () => 
     renderPage()
 
     const line = screen.getByText(/The recorded NDIS plan ended on/)
-    expect(line.textContent?.replace(/\s/g, ' ')).toMatch(/^The recorded NDIS plan ended on 30 Jun 2026\. /)
+    expect(line.textContent?.replace(/\s/g, ' ')).toBe("The recorded NDIS plan ended on 30 Jun 2026. Until a new one is recorded, the NDIS plan is taken to run for the agreement's dates, and there is no budget to compare the agreement with. Record a new plan")
+    expect(within(line).getByRole('button', { name: 'Record a new plan' })).toBeInTheDocument()
     expect(screen.queryByText(/No funding plan is recorded/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Record a new plan' })).toBeInTheDocument()
   })

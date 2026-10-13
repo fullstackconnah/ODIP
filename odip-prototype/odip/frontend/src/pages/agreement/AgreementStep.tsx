@@ -71,11 +71,11 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
         ) : (
           <p ref={planLineRef} tabIndex={-1} className="max-w-prose focus:outline-none">
             {endedOn
-              ? <>The recorded NDIS plan ended on {writtenDay(endedOn)}. Until a new one is recorded, the NDIS plan is taken to run for the agreement&apos;s dates.</>
-              : <>No funding plan is recorded for this participant, so the NDIS plan is taken to run for the agreement&apos;s dates.</>}{' '}
+              ? <>The recorded NDIS plan ended on {writtenDay(endedOn)}. Until a new one is recorded, the NDIS plan is taken to run for the agreement&apos;s dates, and there is no budget to compare the agreement with.</>
+              : <>No funding plan is recorded for this participant, so the NDIS plan is taken to run for the agreement&apos;s dates, and there is no budget to compare the agreement with.</>}{' '}
             {recordBudget
-              ? <Button variant="ghost" size="sm" onClick={recordBudget.onSelect}>{recordBudget.label}</Button>
-              : <Button variant="ghost" size="sm" to={fundingTab}>Record the plan</Button>} to compare the agreement with it.
+              ? <Button variant="secondary" size="sm" onClick={recordBudget.onSelect}>{recordBudget.label}</Button>
+              : <Button variant="secondary" size="sm" to={fundingTab}>Record the plan</Button>}
           </p>
         )}
         <details className="group rounded-[var(--radius-md)] border border-[var(--color-border)]" open={!!details.planOverride}>
