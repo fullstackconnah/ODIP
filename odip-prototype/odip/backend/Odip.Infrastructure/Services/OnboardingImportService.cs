@@ -213,9 +213,11 @@ public sealed class OnboardingImportService
         if (batch.UndoneAt != null) throw new ImportException("This import was already undone.");
 
         var ids = await _db.ImportBatchItems.Where(i => i.BatchId == batch.Id).Select(i => i.EntityId).ToListAsync(ct);
-        // The import lock does not stop a coordinator adding a shift or a note meanwhile. Locking the participant rows does: a child row's
-        // foreign key takes FOR KEY SHARE on its participant, which waits for this FOR UPDATE, so a write either lands before the checks below see
-        // it or waits until the undo has committed.
+        // The import lock does not stop a coordinator adding a shift or a note meanwhile. Locking the participant rows narrows that: a child row's
+        // foreign key takes FOR KEY SHARE on its participant, which conflicts with this FOR UPDATE. So a write committed or in flight before the lock
+        // is seen by the checks below (an in-flight one is waited for). A write that starts after the lock waits for the undo to commit and then
+        // still lands, on the now archived participant (archiving is an update, not a delete). SupportProfiles and ElectronicSigningSnapshots have
+        // no foreign key to Participants, so their writes neither wait nor are guaranteed to be seen.
         if (_db.Database.IsNpgsql())
             await _db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE", new object[] { ids.ToArray() }, ct);
         var blockers = await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct);
