@@ -68,6 +68,19 @@ public class ParticipantStagesSqlTests
     }
 
     [Fact]
+    public void ServicesBegun_TranslatesToAFilterOnDraftAndServicesStarted_NeverOnIsActive()
+    {
+        using var db = NpgsqlDb();
+
+        var sql = db.Participants.Where(Participant.ServicesBegunRule).ToQueryString();
+        var filter = sql[sql.IndexOf("WHERE", StringComparison.Ordinal)..];
+
+        Assert.Contains("\"IsDraft\"", filter);
+        Assert.Contains("\"ServicesStartedAt\" IS NOT NULL", filter);
+        Assert.DoesNotContain("\"IsActive\"", filter);
+    }
+
+    [Fact]
     public void TheChecklistsDerivedItems_TranslateToSql()
     {
         using var db = NpgsqlDb();

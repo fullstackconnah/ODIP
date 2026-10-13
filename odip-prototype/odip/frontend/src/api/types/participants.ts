@@ -7,6 +7,9 @@ import type { ParticipantAdlAssessmentDto, CreateParticipantAdlAssessmentDto } f
 import type { ParticipantChecklistItemDto, CreateParticipantChecklistItemDto } from './checklist-items'
 import type { ParticipantCommunityAccessRiskItemDto, CreateParticipantCommunityAccessRiskItemDto } from './community-access-risk-items'
 
+/** The list filter of pickers about records that outlive services (incidents, the medication report): past the start of services (finalised, or a draft whose services have begun), archived participants KEPT. The server's ServicesBegunRule. */
+export const SERVICES_BEGUN = { servicesBegun: 'true' }
+
 /** The list filter of operational pickers (roster, patterns, compatibility, MAR, trip bookings): who can receive services, the server's one rule (active, and finalised or services started). Archived participants and drafts whose services have not begun are left out. */
 export const CAN_RECEIVE_SERVICES = { canReceiveServices: 'true' }
 

@@ -724,4 +724,21 @@ public class ParticipantStatusEndpointTests
         Assert.Equal(new[] { active.Id, started.Id }.OrderBy(i => i), result.Items.Select(p => p.Id).OrderBy(i => i));
         Assert.NotNull(result.Items.Single(p => p.Id == started.Id).ServicesStartedAt);
     }
+
+    [Fact]
+    public async Task GetAll_ServicesBegun_KeepsArchivedParticipants_AndServicesStartedDrafts_ButNotPreServicesDrafts()
+    {
+        using var fx = Create();
+        var active = RichParticipant();
+        var archived = RichParticipant(isActive: false);
+        var started = RichParticipant(isActive: true, isDraft: true, intakeCompletedAt: DateTime.UtcNow);
+        started.ServicesStartedAt = DateTime.UtcNow;
+        var draft = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow);
+        fx.Db.Participants.AddRange(active, archived, started, draft);
+        await fx.Db.SaveChangesAsync();
+
+        var result = Ok(await fx.Controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None, false, servicesBegun: true));
+
+        Assert.Equal(new[] { active.Id, archived.Id, started.Id }.OrderBy(i => i), result.Items.Select(p => p.Id).OrderBy(i => i));
+    }
 }
