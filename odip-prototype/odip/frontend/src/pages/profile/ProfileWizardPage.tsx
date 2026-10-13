@@ -42,6 +42,7 @@ import {
   type WizardStepDef, type WizardValidate, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import { BackButton } from '@/components/BackButton'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   type ParticipantFormData, PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY, PROFILE_STEP_SHARED_FIELDS, PROFILE_CONDITIONAL_SECTIONS,
@@ -110,14 +111,16 @@ const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
 export default function ProfileWizardPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  // Back to the onboarding checklist when the wizard was opened from it, else the participant's record: the fallback when there is no in-app history.
+  const [searchParams] = useSearchParams()
+  const returnTo = searchParams.get('from') === 'onboarding' ? `/onboarding/${id}` : `/participants/${id}`
+  // Where the header Back goes: Save returns there too, tab included.
+  const back = useBackTarget(returnTo)
   const { data: participant, isLoading, isError, error, refetch } = useParticipant(id)
   // Its own h1 shell, not a PageHeader, so it names the tab itself.
   const heading = participant ? `Profile — ${participant.firstName} ${participant.lastName}` : 'Profile'
   useDocumentTitle(heading)
   const patchParticipant = usePatchParticipant()
-  // Back to the onboarding checklist when the wizard was opened from it, else the participant's record.
-  const [searchParams] = useSearchParams()
-  const returnTo = searchParams.get('from') === 'onboarding' ? `/onboarding/${id}` : `/participants/${id}`
   const upsertRiskItem = useUpsertCommunityAccessRiskItem()
   const { data: staffList = [] } = useStaff()
   const activeStaff = staffList.filter((s) => s.isActive)
@@ -417,7 +420,8 @@ export default function ProfileWizardPage() {
       // wizard does): the per-step saves never reset the form, so without this a finished wizard that had any
       // edit in it asks "Leave without saving?" on its way out.
       flushSync(() => reset(getValues()))
-      navigate(returnTo)
+      // Back where Save was reached from (history first: the checklist, the record and its tab), else the checklist or record by `?from=`.
+      navigate(back.to)
     } catch (err) {
       setSaveError(extractErrorMessage(err, 'Failed to save the profile. Please try again.'))
     } finally {
@@ -446,7 +450,7 @@ export default function ProfileWizardPage() {
       return { stepKey: step.key, rows }
     })
 
-  const fallbackBack = `/participants/${id}`
+  const fallbackBack = returnTo
 
   // Three different facts, three different states: still loading, the load failed, and there is no such participant. A failed or
   // missing record used to leave this page on "Loading..." for ever (L2-06 = L5-02).

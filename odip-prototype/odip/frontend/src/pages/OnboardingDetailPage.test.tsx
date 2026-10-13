@@ -198,3 +198,21 @@ describe('OnboardingDetailPage: the agreement record', () => {
     expect(date).toHaveValue('2099-01-01')
   })
 })
+
+// NAV F5: Complete intake started from this checklist comes back here, with the notice the Onboarding table shows.
+describe('OnboardingDetailPage — arrival from a completed intake', () => {
+  it('confirms the completed intake once', () => {
+    const router = createMemoryRouter([{ path: '/onboarding/:id', element: <OnboardingDetailPage /> }], {
+      initialEntries: [{ pathname: '/onboarding/p-1', state: { intakeComplete: { participantId: 'p-1', name: 'Jamie Rivers' } } }],
+    })
+    render(<RouterProvider router={router} />)
+    expect(screen.getByText('Intake complete — Jamie Rivers is now in onboarding.')).toBeInTheDocument()
+    // Cleared from history, so a reload or a later visit does not replay it.
+    expect(router.state.location.state).toBeNull()
+  })
+
+  it('shows no notice on an ordinary visit', () => {
+    renderPage()
+    expect(screen.queryByText(/intake complete —/i)).not.toBeInTheDocument()
+  })
+})

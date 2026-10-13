@@ -16,6 +16,7 @@ import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
+import { useIntakeCompleteNotice } from './intake/intakeComplete'
 import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
 import { ACTIVE_TABLE_PATH, participantActivatedState } from './profile/participantActivated'
 
@@ -27,6 +28,8 @@ import { ACTIVE_TABLE_PATH, participantActivatedState } from './profile/particip
 export default function OnboardingDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  // Complete intake started from this checklist comes back here with the confirmation the Onboarding table shows.
+  const completed = useIntakeCompleteNotice()
   const { canManageParticipantLifecycle, canAccessPage, canManageFunding } = usePermissions()
   const detail = useOnboarding(id)
   const { data: participant, isLoading: participantLoading } = useParticipant(id)
@@ -91,6 +94,7 @@ export default function OnboardingDetailPage() {
       </div>
     </div>
 
+    {completed && <Callout tone="success">Intake complete — {completed.name} is now in onboarding.</Callout>}
     {lifecycleError ? <Callout tone="error">{extractErrorMessage(lifecycleError, 'That did not go through. Please try again.')}</Callout> : null}
 
     <section className="bg-[var(--color-card)] rounded-md border border-[var(--color-border)]">

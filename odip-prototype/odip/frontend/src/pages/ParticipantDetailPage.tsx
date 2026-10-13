@@ -16,7 +16,7 @@ import { BackButton } from '@/components/BackButton'
 import { useTabParam } from '@/hooks/useTabParam'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
-import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, Link2Off, FileText, CalendarRange, Wallet } from 'lucide-react'
+import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, Link2Off, FileText, ClipboardCheck, CalendarRange, Wallet } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
@@ -102,6 +102,10 @@ export default function ParticipantDetailPage() {
     { title: 'About Me', has: hasAboutMe(p), card: <ParticipantAboutMeSection key="about" {...edit} /> },
     { title: 'Risks & Hazards Summary', has: hasRisksHazardsSummary(p), card: <ParticipantRisksHazardsSummarySection key="risks" {...edit} /> },
   ]
+  // Back goes where the user came from; with no history (a deep link) it falls back to the list this participant is on. A draft is never on
+  // Active participants: before intake is complete it is a Draft intake row on Enquiries, after it a row on Onboarding.
+  const [backTo, backLabel] = !p.isDraft ? ['/participants', 'participants']
+    : p.intakeCompletedAt ? ['/participants?tab=onboarding', 'onboarding'] : ['/participants?tab=enquiries', 'enquiries']
   const recordedCards = shortCards.filter(c => c.has)
   const emptyCards = shortCards.filter(c => !c.has)
 
@@ -110,7 +114,7 @@ export default function ParticipantDetailPage() {
       <div className="flex items-start gap-2">
         {/* The icon variant is a --control-h-sm square (36px on a coarse pointer); its --tap-min floor lifts it to
             44 there and is 0 — no change — on a mouse. */}
-        <BackButton to="/participants" label="participants" variant="icon" history={false} className="mt-1" />
+        <BackButton to={backTo} label={backLabel} variant="icon" className="mt-1" />
         <div className="flex-1 min-w-0">
           <PageHeader
             title={p.fullName}
@@ -409,6 +413,7 @@ type CaregiverLink = { items: DropdownItem[]; onSelect: (value: string) => void;
  */
 function useCaregiverLink(participantId: string): CaregiverLink {
   const { canWriteParticipantDetails } = usePermissions()
+  const navigate = useNavigate()
   const generate = useGenerateCaregiverLink()
   const revoke = useRevokeCaregiverLink()
   const [issued, setIssued] = useState<{ url: string; expiresAt: string } | null>(null)
@@ -422,8 +427,11 @@ function useCaregiverLink(participantId: string): CaregiverLink {
   if (!canWriteParticipantDetails) return { items: [], onSelect: () => {}, panel: null }
 
   const active = [...(submitted.data ?? []), ...(drafts.data ?? [])].find((s) => s.participantId === participantId)
+  const toReview = submitted.data?.find((s) => s.participantId === participantId)
 
   const items: DropdownItem[] = [
+    // A submitted form waits for review; this is its one door from the participant (the list is the other).
+    ...(toReview ? [{ value: 'caregiver-review', label: 'Review caregiver form', icon: <span className={MENU_ITEM_ICON}><ClipboardCheck className="w-4 h-4" /></span> }] : []),
     {
       value: 'caregiver-generate',
       label: active ? 'Regenerate caregiver link' : 'Generate caregiver link',
@@ -441,7 +449,8 @@ function useCaregiverLink(participantId: string): CaregiverLink {
     setIssued({ url: `${window.location.origin}/caregiver/${res.data!.token}`, expiresAt: res.data!.expiresAt })
   }
   const onSelect = (value: string) => {
-    if (value === 'caregiver-revoke') setConfirmingRevoke(true)
+    if (value === 'caregiver-review' && toReview) navigate(`/caregiver-submissions/${toReview.id}`)
+    else if (value === 'caregiver-revoke') setConfirmingRevoke(true)
     else if (value === 'caregiver-generate') void generateLink()
   }
 

@@ -20,6 +20,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { usePermissions } from '@/lib/permissions'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import { plural } from '@/lib/format'
 import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
@@ -138,6 +139,9 @@ export default function MedicationFormPage() {
   const updateMedication = useUpdateMedication()
   const { data: existing, isLoading: isLoadingExisting } = useMedication(isEdit ? id : undefined)
   const participantId = isEdit ? existing?.participantId : participantIdParam
+  // Back, Cancel and Save return to where the form was opened: the /medications register or the participant's Medications tab, which is
+  // also the fallback for a deep link.
+  const back = useBackTarget(`/participants/${participantId}?tab=medications`)
   const { data: participant } = useParticipant(participantId ?? undefined)
   const mutation = isEdit ? updateMedication : createMedication
 
@@ -267,13 +271,13 @@ export default function MedicationFormPage() {
         const res = await updateMedication.mutateAsync({ id: id!, data: updatePayload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(`/participants/${existing?.participantId}?tab=medications`)
+          navigate(back.to)
         }
       } else if (participantId) {
         const res = await createMedication.mutateAsync({ participantId, data: payload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(`/participants/${participantId}?tab=medications`)
+          navigate(back.to)
         }
       }
     } catch {
@@ -286,13 +290,11 @@ export default function MedicationFormPage() {
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   if (!isEdit && !participantIdParam) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">A participant is required to add a medication. Go to a participant's Medications tab to add one.</div>
 
-  const backTo = isEdit ? `/participants/${existing?.participantId}?tab=medications` : `/participants/${participantIdParam}?tab=medications`
-
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-center gap-4">
-        <BackButton to={backTo} label="medications" variant="icon" history={false} />
+        <BackButton to={`/participants/${participantId}?tab=medications`} label="medications" variant="icon" />
         <div className="flex-1">
           <PageHeader title={viewOnly ? 'View medication' : isEdit ? 'Edit medication' : 'New medication'} subtitle={participant?.fullName} />
         </div>
@@ -681,7 +683,7 @@ export default function MedicationFormPage() {
 
         {/* Submit */}
         {!viewOnly && <div className="flex justify-end gap-2">
-          <Button to={backTo} variant="secondary">Cancel</Button>
+          <Button to={back.to} variant="secondary">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create medication')}
           </Button>

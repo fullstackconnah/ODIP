@@ -539,7 +539,12 @@ export function DataTable<T>({
               <Fragment key={rowKey}>
                 <tr
                   className={`group/row ${bodyRowHeight} hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
-                  onClick={isClickable ? () => onRowClick(row) : undefined}
+                  onClick={isClickable ? (e) => {
+                    // A link or button in the row does its own job: a link that navigated and a row that navigated too
+                    // pushed two history entries, or sent the user to the row's target instead of the link's.
+                    if ((e.target as Element).closest('a, button, input, select, textarea, label')) return
+                    onRowClick(row)
+                  } : undefined}
                   onKeyDown={isClickable ? (e) => {
                     // Only the row itself activates it. Enter/Space on a control inside the row (a
                     // row action, a status pill, a checkbox) bubbles up here too, and must keep doing

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button } from '@/components/Button'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import type { WizardSecondaryAction } from './types'
 
 export type WizardNavFooterProps = {
@@ -11,8 +12,13 @@ export type WizardNavFooterProps = {
    * ("Save as draft" and PF-1's "Save changes" are exact complements), but the shell doesn't
    * enforce that; it just maps over whatever it's given. */
   secondaryActions: WizardSecondaryAction[]
-  /** Destination for "Cancel": the Review step's, and the first step's (where Back would be). */
+  /** Where "Cancel" goes (the Review step's, and the first step's, where Back would be) when there is no in-app history. */
   cancelTo: string
+  /**
+   * Default `true`, like `BackButton`: Cancel returns to the previous in-app screen, the same place as the page's header Back, and
+   * `cancelTo` is the fallback. `false` pins Cancel to `cancelTo`, for a wizard whose header Back is pinned.
+   */
+  history?: boolean
   submitLabel: string
   isSubmitting: boolean
   /** Shown between the actions (above them on a phone): the agreement wizard's running total. */
@@ -36,10 +42,14 @@ export function WizardNavFooter({
   isReviewStep,
   secondaryActions,
   cancelTo,
+  history = true,
   submitLabel,
   isSubmitting,
   summary,
 }: WizardNavFooterProps) {
+  const back = useBackTarget(cancelTo)
+  // A router link either way, so the unsaved-changes blocker still asks before leaving.
+  const cancelHref = history ? back.to : cancelTo
   return (
     <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-row flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]`}>
       <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -47,7 +57,7 @@ export function WizardNavFooter({
         {showBack ? (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
         ) : !isReviewStep && (
-          <Button variant="secondary" to={cancelTo}>Cancel</Button>
+          <Button variant="secondary" to={cancelHref}>Cancel</Button>
         )}
         {secondaryActions.map((action) => (
           <Button
@@ -68,7 +78,7 @@ export function WizardNavFooter({
         )}
         {isReviewStep && (
           <>
-            <Button variant="secondary" to={cancelTo}>Cancel</Button>
+            <Button variant="secondary" to={cancelHref}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>{submitLabel}</Button>
           </>
         )}

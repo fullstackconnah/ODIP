@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { ClipboardCheck } from 'lucide-react'
 import { useOnboardingWorklist } from '@/api/hooks'
 import type { OnboardingWorklistRow as WorklistRow } from '@/api/types/inquiries'
@@ -13,7 +13,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase } from '@/lib/queryPhase'
-import { readIntakeCompleteNotice } from './intake/intakeComplete'
+import { useIntakeCompleteNotice } from './intake/intakeComplete'
 
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
@@ -32,16 +32,8 @@ export function OnboardingTable() {
 
 function useOnboardingScreen() {
   const navigate = useNavigate()
-  const location = useLocation()
-  // A one-off confirmation from the Intake wizard ("Intake complete — {name} is now in onboarding."), carried by
-  // navigation state. Held in state so it survives the history-state clear below, and cleared from history so a
-  // reload or coming back to this URL later does not replay it.
-  const [completed] = useState(() => readIntakeCompleteNotice(location.state))
-  useEffect(() => {
-    if (completed) navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
-    // Only the arrival matters: run once for the notice this screen mounted with.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // A one-off confirmation from the Intake wizard ("Intake complete — {name} is now in onboarding."), carried by navigation state.
+  const completed = useIntakeCompleteNotice()
   const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
   // The API scopes this query to the current tenant; this page does not add a client-side tenant filter.
   const worklist = useOnboardingWorklist()
@@ -65,7 +57,8 @@ function useOnboardingScreen() {
       key: 'fullName', header: 'Participant', sortable: true, wrap: true, minWidth: '9rem',
       render: row => (
         <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-          {row.fullName}
+          {/* A real link to the same place as the row and its Open button, so it can open in a new tab. */}
+          <Link to={`/onboarding/${row.participantId}`} className="font-medium text-[var(--color-foreground)] group-hover/row:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm">{row.fullName}</Link>
           {row.servicesStartedAt && <StatusBadge tone="success" label="Services started" />}
         </span>
       ),
@@ -115,7 +108,7 @@ function useOnboardingScreen() {
           action={canAccessPage('participants') ? { label: 'View enquiries', to: '/participants?tab=enquiries' } : undefined}
         />
       ) : (
-        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklistLoading} sortable emptyMessage="No incomplete onboarding work." rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
+        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklistLoading} sortable emptyMessage="No incomplete onboarding work." onRowClick={row => navigate(`/onboarding/${row.participantId}`)} rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
       ))}
     </>
   )
