@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO.Compression;
 using System.Text;
 using ClosedXML.Excel;
 using Odip.Infrastructure.Services;
@@ -66,4 +68,51 @@ public class ImportFileReaderTests
     [Fact]
     public void Refuses_an_xlsx_that_is_not_a_workbook() =>
         Assert.Equal("The file could not be read as an Excel (.xlsx) workbook.", Refusal(Utf8("not a zip"), "people.xlsx"));
+
+    private static byte[] Xlsx(Action<IXLWorksheet> fill)
+    {
+        using var workbook = new XLWorkbook();
+        fill(workbook.Worksheets.Add("People"));
+        using var stream = new MemoryStream();
+        // Saved with the formulas worked out, as Excel saves them, so a formula cell carries its value.
+        workbook.SaveAs(stream, new SaveOptions { EvaluateFormulasBeforeSaving = true });
+        return stream.ToArray();
+    }
+
+    [Fact]
+    public void Refuses_a_sparse_xlsx_whose_last_cell_is_far_away_without_reading_every_cell()
+    {
+        var file = Xlsx(sheet => { sheet.Cell(1, 1).Value = "First name"; sheet.Cell(1048576, 16384).Value = "x"; });
+        var watch = Stopwatch.StartNew();
+        var refusal = Refusal(file, "people.xlsx");
+        watch.Stop();
+        Assert.Equal("The file has 1,048,575 rows. Import at most 2,000 at a time: split the file and import each part.", refusal);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"took {watch.Elapsed.TotalSeconds:0.0} s");
+    }
+
+    [Fact]
+    public void Refuses_more_than_200_columns_in_an_xlsx_or_a_csv()
+    {
+        const string tooWide = "This file has more than 200 columns. Remove the extra columns and try again.";
+        Assert.Equal(tooWide, Refusal(Xlsx(sheet => { sheet.Cell(1, 1).Value = "First name"; sheet.Cell(2, 201).Value = "x"; }), "people.xlsx"));
+        Assert.Equal(tooWide, Refusal(Utf8(string.Join(",", Enumerable.Range(1, 201).Select(i => $"C{i}")) + "\na\n"), "people.csv"));
+        Assert.Equal(200, ImportFileReader.Read(Utf8(string.Join(",", Enumerable.Range(1, 200).Select(i => $"C{i}")) + "\na\n"), "people.csv").Headers.Count);
+    }
+
+    [Fact]
+    public void Refuses_an_xlsx_that_unpacks_to_more_than_50_MB()
+    {
+        using var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        using (var entry = zip.CreateEntry("xl/worksheets/sheet1.xml").Open())
+            entry.Write(new byte[51 * 1024 * 1024]);
+        Assert.Equal("This file is too large once unpacked.", Refusal(stream.ToArray(), "people.xlsx"));
+    }
+
+    [Fact]
+    public void Reads_a_formula_cell_as_its_saved_value_without_working_it_out()
+    {
+        var file = Xlsx(sheet => { sheet.Cell(1, 1).Value = "Postcode"; sheet.Cell(2, 1).FormulaA1 = "=1000+1000"; });
+        Assert.Equal("2000", ImportFileReader.Read(file, "people.xlsx").Rows.Single().Cells[0]);
+    }
 }
