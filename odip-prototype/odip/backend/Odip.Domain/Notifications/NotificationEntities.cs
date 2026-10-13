@@ -23,6 +23,7 @@ public enum NotificationEventType
     ServiceAgreementSent = 8,           // reserved — docs/specs/2026-09-08-service-agreements-and-budgets-design.md
     ServiceAgreementSigned = 9,         // reserved — docs/specs/2026-09-08-service-agreements-and-budgets-design.md
     IntegrationDegraded = 10,           // reserved — docs/specs/2026-09-08-integration-framework-design.md
+    ShiftUnassigned = 11,               // roster drag and drop (2026-10-14): someone taken off a Published shift
 }
 
 public enum NotificationChannelKind { Email = 0, Sms = 1 }

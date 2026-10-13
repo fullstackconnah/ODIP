@@ -22,6 +22,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'ServiceAgreementSent',
   'ServiceAgreementSigned',
   'IntegrationDegraded',
+  'ShiftUnassigned',
 ] as const
 export type NotificationEventType = typeof NOTIFICATION_EVENT_TYPES[number]
 
@@ -38,6 +39,7 @@ export const NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, strin
   ServiceAgreementSent: 'Service agreement sent',
   ServiceAgreementSigned: 'Service agreement signed',
   IntegrationDegraded: 'Integration degraded',
+  ShiftUnassigned: 'Taken off a shift',
 }
 
 /**
@@ -48,11 +50,11 @@ export const NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, strin
  * ServiceAgreement(Sent/Signed) and IntegrationDegraded are enum values reserved for later specs)
  * — so the grid still needs a place to show every
  * value. Agreements/Integrations aren't named in §6's example list; grouped here rather than
- * omitted so the grid always accounts for all 11 values the backend can return.
+ * omitted so the grid always accounts for all 12 values the backend can return.
  */
 export const NOTIFICATION_EVENT_TYPE_GROUPS: { label: string; eventTypes: NotificationEventType[] }[] = [
   { label: 'Leave', eventTypes: ['LeaveRequestSubmitted', 'LeaveRequestDecided'] },
-  { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
+  { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftUnassigned', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
   { label: 'Medications', eventTypes: ['WitnessRequested'] },
   { label: 'Caregiver', eventTypes: ['CaregiverSubmissionReceived'] },
   { label: 'Incidents', eventTypes: ['IncidentReported'] },

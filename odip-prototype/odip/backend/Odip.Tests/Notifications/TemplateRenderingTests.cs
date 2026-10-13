@@ -152,4 +152,18 @@ public class TemplateRenderingTests
         // compile-time guarantee, not just a runtime string check, but the runtime check above
         // documents the intent for anyone reading the test.
     }
+
+    [Fact]
+    public void ShiftUnassignedTemplate_RendersExactSubjectAndBody()
+    {
+        var payload = new ShiftUnassignedPayload("worker@example.com", "Alice Participant", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(15, 0));
+        var message = ShiftUnassignedTemplate.Render(payload, BaseUrl);
+
+        Assert.Equal("worker@example.com", message.RecipientAddress);
+        Assert.Equal("Shift change: Alice Participant on 15 Sep 2026", message.Subject);
+        Assert.Equal(
+            "You've been taken off Alice Participant, 15 Sep 2026 9:00 AM to 3:00 PM.\n\nView your shifts: https://odip.test/portal",
+            message.PlainTextBody);
+        Assert.Contains("https://odip.test/portal", message.HtmlBody);
+    }
 }

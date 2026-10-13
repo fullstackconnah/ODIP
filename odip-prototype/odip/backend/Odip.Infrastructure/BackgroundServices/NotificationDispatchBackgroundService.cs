@@ -226,6 +226,8 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 LeaveRequestDecidedTemplate.Render(Deserialize<LeaveRequestDecidedPayload>(payloadJson), baseUrl),
             NotificationEventType.ShiftAssigned =>
                 ShiftAssignedTemplate.Render(Deserialize<ShiftAssignedPayload>(payloadJson), baseUrl),
+            NotificationEventType.ShiftUnassigned =>
+                ShiftUnassignedTemplate.Render(Deserialize<ShiftUnassignedPayload>(payloadJson), baseUrl),
             NotificationEventType.ShiftCompletionPendingReview =>
                 ShiftCompletionPendingReviewTemplate.Render(Deserialize<ShiftCompletionPendingReviewPayload>(payloadJson), baseUrl),
             NotificationEventType.ShiftCompletionReturned =>
