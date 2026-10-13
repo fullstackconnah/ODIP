@@ -98,14 +98,11 @@ public static class ImportFileReader
     }
 
     // A date cell becomes yyyy-MM-dd, which ImportValues reads; any other cell is the text Excel shows, so a number formatted to keep its leading
-    // zero (a postcode, a phone) keeps it. A formula cell gives the value Excel saved with it: working a formula out could read the whole sheet.
+    // zero (a postcode, a phone) keeps it. A formula cell gives the value Excel saved with it, in the same way: working a formula out could read
+    // the whole sheet, and GetFormattedString would, so the saved value replaces the formula first (the workbook is a throwaway in-memory copy).
     private static string CellText(IXLCell cell)
     {
-        if (cell.HasFormula)
-        {
-            var saved = cell.CachedValue;
-            return saved.IsDateTime ? saved.GetDateTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : saved.ToString(CultureInfo.InvariantCulture);
-        }
+        if (cell.HasFormula) cell.Value = cell.CachedValue;
         return cell.DataType == XLDataType.DateTime
             ? cell.GetDateTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
             : cell.GetFormattedString();
