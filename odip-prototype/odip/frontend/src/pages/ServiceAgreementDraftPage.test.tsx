@@ -3,11 +3,12 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
+import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor } = vi.hoisted(() => ({
-  createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
+const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor } = vi.hoisted(() => ({
+  editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -20,6 +21,17 @@ vi.mock('@/api/hooks', () => ({
   usePlanPricingSettings: () => ({ data: makeSettings() }),
   usePlanBudget: () => budget(),
   useAgreementCheck: () => check(),
+}))
+
+// The editor has its own tests: here it is a marker that says how the agreement opened it.
+vi.mock('@/pages/funding/FundingPlanEditor', () => ({
+  FundingPlanEditor: (props: { open: boolean; plan?: { id: string }; previousPlan?: { id: string }; defaultManagement: string; onClose: () => void; onSaved?: () => void }) => {
+    editor(props)
+    // A save, as the real editor does it: onSaved, then onClose. The marker returns no focus to its opener as the real SlideOver does (useDialogBehavior's cleanup); the page's
+    // effect still wins there because React runs a removed child's effect cleanups before its parent's effects in the same commit. The real editor needs the funding hooks, which
+    // this file mocks whole, so it is not mounted here.
+    return props.open ? <div data-testid="editor" data-plan={props.plan?.id ?? 'new'} data-previous={props.previousPlan?.id ?? 'none'} data-management={props.defaultManagement}><button type="button" onClick={() => { props.onSaved?.(); props.onClose() }}>Save the plan</button></div> : null
+  },
 }))
 
 const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role, id: 'u-1' }))
@@ -48,12 +60,12 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-12T10:00:00') })
   asRole('Admin')
   drafts.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: refetchDrafts })
-  participant.mockReturnValue({ data: { id: 'p-1', fullName: 'Marcus Tran', addressState: 'VIC' }, isLoading: false, isError: false, refetch: vi.fn() })
+  participant.mockReturnValue({ data: { id: 'p-1', fullName: 'Marcus Tran', addressState: 'VIC', planType: 'PlanManaged' }, isLoading: false, isError: false, refetch: vi.fn() })
   plans.mockReturnValue({ data: { plans: [{ id: 'f-1', participantId: 'p-1', planStart: '2026-07-01', planEnd: '2027-06-30' }] }, isLoading: false, isError: false })
   budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
   check.mockReturnValue({ data: agreementCheck(0), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
   refetchDrafts.mockResolvedValue({ data: [], isError: false })
-  createMutate.mockReset(); downloadMutate.mockReset(); previewFor.mockReset()
+  createMutate.mockReset(); downloadMutate.mockReset(); previewFor.mockReset(); editor.mockReset()
 })
 afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
@@ -340,5 +352,117 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     await user.click(stepButton('Check'))
     expect(screen.getByText('The whole agreement')).toBeInTheDocument()
     expect(screen.queryByText('The agreement is shorter than a week.')).not.toBeInTheDocument()
+  })
+})
+
+// The budget is recorded over the agreement, in the Funding tab's own editor: the person never leaves, and what they typed stays.
+describe('ServiceAgreementDraftPage: recording the plan budget in place', () => {
+  const ended = { id: 'f-0', participantId: 'p-1', planStart: '2025-07-01', planEnd: '2026-06-30' }
+
+  it('opens the editor from the Agreement step, outside the agreement form, with the participant\'s plan type', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    const user = userEvent.setup()
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '2026-10-01' } })
+    expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
+
+    const opened = screen.getByTestId('editor')
+    expect(opened).toHaveAttribute('data-plan', 'new')
+    expect(opened).toHaveAttribute('data-previous', 'none')
+    expect(opened).toHaveAttribute('data-management', 'PlanManaged')
+    // Enter in the editor must never submit the agreement.
+    expect(screen.getByRole('form', { name: 'Service agreement' })).not.toContainElement(opened)
+    expect(screen.getByLabelText('Agreement starts')).toHaveValue('2026-10-01')
+    // The sentence ends in words, then the action after it.
+    const line = screen.getByText(/No funding plan is recorded/)
+    expect(line.textContent?.replace(/\s/g, ' ')).toBe("No funding plan is recorded for this participant, so the NDIS plan is taken to run for the agreement's dates, and there is no budget to compare the agreement with. Record plan budget")
+    expect(within(line).getByRole('button', { name: 'Record plan budget' })).toBeInTheDocument()
+  })
+
+  it('opens the editor from the Check step for a new plan after the one that ended', async () => {
+    plans.mockReturnValue({ data: { plans: [ended] }, isLoading: false, isError: false })
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    check.mockReturnValue({ data: noBudgetCheck({ noBudgetReason: 'PlanEnded', planEnd: '2026-06-30' }), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+
+    await user.click(screen.getByRole('button', { name: 'Record a new plan' }))
+
+    expect(screen.getByTestId('editor')).toHaveAttribute('data-previous', 'f-0')
+    expect(screen.getByTestId('editor')).toHaveAttribute('data-plan', 'new')
+    expect(screen.getByRole('heading', { level: 2, name: 'Check' })).toBeInTheDocument()
+  })
+
+  // The Record button goes once the check refreshes with the new plan, so focus is not left to fall to the page: it goes to what the save changed.
+  it('puts focus on the budget comparison after a save from the Check step', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    check.mockReturnValue({ data: noBudgetCheck(), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+    await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
+
+    await user.click(screen.getByRole('button', { name: 'Save the plan' }))
+
+    expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+    expect(document.activeElement).not.toBe(document.body)
+    expect(screen.getByRole('heading', { name: /Against the participant's budget/ })).toHaveFocus()
+  })
+
+  it('puts focus on the plan line after a save from the Agreement step', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
+    await user.click(screen.getByRole('button', { name: 'Save the plan' }))
+
+    expect(screen.getByText(/No funding plan is recorded for this participant/)).toHaveFocus()
+  })
+
+  it('says when the recorded plan ended on the Agreement step, beside Record a new plan', () => {
+    plans.mockReturnValue({ data: { plans: [ended] }, isLoading: false, isError: false })
+    renderPage()
+
+    const line = screen.getByText(/The recorded NDIS plan ended on/)
+    expect(line.textContent?.replace(/\s/g, ' ')).toBe("The recorded NDIS plan ended on 30 Jun 2026. Until a new one is recorded, the NDIS plan is taken to run for the agreement's dates, and there is no budget to compare the agreement with. Record a new plan")
+    expect(within(line).getByRole('button', { name: 'Record a new plan' })).toBeInTheDocument()
+    expect(screen.queryByText(/No funding plan is recorded/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Record a new plan' })).toBeInTheDocument()
+  })
+
+  it('offers it on an approved agreement too, which the person may still price', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
+    check.mockReturnValue({ data: noBudgetCheck(), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+
+    await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
+
+    expect(screen.getByTestId('editor')).toBeInTheDocument()
+  })
+
+  it('offers nothing to record to a person who only reads the agreement', async () => {
+    asRole('ReadOnly')
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    check.mockReturnValue({ data: noBudgetCheck(), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+    for (const key of ['Agreement', 'Check']) {
+      await user.click(stepButton(key))
+      expect(screen.queryByRole('button', { name: /Record (plan budget|a new plan)/ })).not.toBeInTheDocument()
+    }
+    expect(editor).not.toHaveBeenCalled()
+    // What a viewer had before is what they keep: the Agreement step is the read-only facts, with no plan line and so no Record link (AgreementStep returns early when read only).
+    await user.click(stepButton('Agreement'))
+    expect(screen.getByText('NDIS plan')).toBeInTheDocument()
+    expect(screen.queryByText(/No funding plan is recorded/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Record the plan' })).not.toBeInTheDocument()
   })
 })

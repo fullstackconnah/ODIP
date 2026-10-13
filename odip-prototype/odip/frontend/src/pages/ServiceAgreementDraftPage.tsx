@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
 import {
@@ -30,6 +31,7 @@ import { RunningTotal } from './agreement/RunningTotal'
 import { SaveStep } from './agreement/SaveStep'
 import { useAgreementPricing } from './agreement/useAgreementPricing'
 import { WeekStep } from './agreement/WeekStep'
+import { FundingPlanEditor } from './funding/FundingPlanEditor'
 
 type StepKey = 'agreement' | 'week' | 'check' | 'save'
 const STEPS: WizardStepDef<Details>[] = [
@@ -74,7 +76,7 @@ function DraftPage() {
   const drafts = useServiceAgreementDrafts(participantId)
   const create = useCreateServiceAgreementDraft()
   const download = useDownloadServiceAgreementDraftPdf()
-  const { canManageParticipantLifecycle: canEdit, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
+  const { canManageParticipantLifecycle: canEdit, canManageFunding, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const plans = useFundingPlans(participantId, canEdit)
   const today = useMemo(() => localIsoDate(), [])
 
@@ -100,10 +102,22 @@ function DraftPage() {
   // The save whose "Start a new revision" was pressed: an approved agreement is what the roster was made from, so it is read only until somebody says they mean to change it.
   const [revisingFrom, setRevisingFrom] = useState<string | null>(null)
 
-  const recorded = useMemo(() => {
-    const plan = plans.data ? currentPlanOf(plans.data.plans ?? [], today) : undefined
-    return plan && planStatus(plan, today) !== 'Ended' ? { start: plan.planStart, end: plan.planEnd } : null
-  }, [plans.data, today])
+  const currentPlan = useMemo(() => (plans.data ? currentPlanOf(plans.data.plans ?? [], today) : undefined), [plans.data, today])
+  const endedPlan = currentPlan && planStatus(currentPlan, today) === 'Ended' ? currentPlan : undefined
+  const recorded = useMemo(() => (currentPlan && planStatus(currentPlan, today) !== 'Ended' ? { start: currentPlan.planStart, end: currentPlan.planEnd } : null), [currentPlan, today])
+  // The budget is recorded over the agreement in the Funding tab's own editor, by the people the Funding tab lets record one (today the same roles that change the agreement); a save refreshes the check.
+  const [recordingBudget, setRecordingBudget] = useState(false)
+  const recordBudget = canManageFunding ? { label: endedPlan ? 'Record a new plan' : 'Record plan budget', onSelect: () => setRecordingBudget(true) } : undefined
+  const savedBudget = useRef(false)
+  const planLineRef = useRef<HTMLParagraphElement>(null)
+  const budgetHeadingRef = useRef<HTMLHeadingElement>(null)
+  // After a save the Record button goes (once the plans and the check refresh), so focus would fall to the page: it goes to what the save changes on the step it was opened from. This runs
+  // after the editor's own return of focus to the button (a child's cleanup runs before a parent's effect); a cancel leaves focus on the button.
+  useEffect(() => {
+    if (recordingBudget || !savedBudget.current) return
+    savedBudget.current = false
+    ;(step === 'check' ? budgetHeadingRef : planLineRef).current?.focus()
+  }, [recordingBudget, step])
 
   const loaded = drafts.data !== undefined && (!canEdit || !plans.isLoading)
   const newest = drafts.data?.[0]
@@ -145,7 +159,7 @@ function DraftPage() {
 
   const pricing = useAgreementPricing({
     participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, from: details.agreementStartDate, to: details.agreementEndDate,
-    canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined,
+    canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined, onRecordBudget: recordBudget?.onSelect,
   })
   const issues = useMemo<AgreementIssue[]>(() => {
     const list: AgreementIssue[] = []
@@ -346,7 +360,7 @@ function DraftPage() {
                 <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
               </Callout>
               <AgreementStep
-                details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`}
+                details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`} recordBudget={recordBudget} endedOn={endedPlan?.planEnd} planLineRef={planLineRef}
                 errors={attempted ? { start: dates.start, end: dates.end } : {}}
               />
             </div>
@@ -362,7 +376,7 @@ function DraftPage() {
           )}
           {step === 'check' && (
             <CheckStep
-              pricing={pricing} issues={issues} readOnly={readOnly} onFix={fix} onChangeHolidays={selectShiftsOf}
+              pricing={pricing} issues={issues} readOnly={readOnly} onFix={fix} onChangeHolidays={selectShiftsOf} budgetHeadingRef={budgetHeadingRef}
               anySkipped={shifts.some(shift => shift.block.onPublicHoliday === 'Skip')}
             />
           )}
@@ -390,5 +404,10 @@ function DraftPage() {
         />
       </WizardShell>
     </form>
+    {/* In a portal: inside the wizard's form, Enter in one of the editor's fields would submit the agreement. */}
+    {canManageFunding && createPortal(
+      <FundingPlanEditor open={recordingBudget} onClose={() => setRecordingBudget(false)} onSaved={() => { savedBudget.current = true }} participantId={participantId} previousPlan={endedPlan} defaultManagement={participant.data.planType} />,
+      document.body,
+    )}
   </div>
 }
