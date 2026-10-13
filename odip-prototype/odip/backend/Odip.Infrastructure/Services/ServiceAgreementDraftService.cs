@@ -26,7 +26,7 @@ public sealed record DraftSaveResult(ServiceAgreementDraft? Draft, IReadOnlyList
 public sealed class ServiceAgreementDraftService
 {
     /// <summary>The refusals that mean the engine priced nothing from a block (a rule it breaks, a registration group the provider does not hold, the STA legacy items). They stop a save: a revision whose lines left a block out would claim a total that is not the plan's. Everything else the engine flags (an unpriced band, a holiday nobody has ruled on, a provisional rate) is saved and shown.</summary>
-    private static readonly PlanFailureReason[] SaveRefusals = { PlanFailureReason.InvalidInput, PlanFailureReason.RegistrationGroupNotHeld, PlanFailureReason.StaLegacyNotSupported };
+    internal static readonly PlanFailureReason[] SaveRefusals = { PlanFailureReason.InvalidInput, PlanFailureReason.RegistrationGroupNotHeld, PlanFailureReason.StaLegacyNotSupported };
 
     private readonly OdipDbContext _db;
     private readonly PlanPricingService _pricing;

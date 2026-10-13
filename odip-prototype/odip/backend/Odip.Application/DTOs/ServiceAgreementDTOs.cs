@@ -65,6 +65,25 @@ public record AgreementPatternChangeDto
     public bool Preview { get; init; }
 }
 
+/// <summary>
+/// What a pattern change saved (or, on a preview, would save): the revision and its dates, and what its period costs before and after. <see cref="OldTotal"/> is the revision it was made from, priced
+/// over the same dates with the catalogue as it is now; <see cref="NewTotal"/> is the new revision's lines (on a preview, the same quote of its blocks). Same dates and prices, so the difference is the
+/// change alone.
+/// </summary>
+public record PatternChangeResultDto
+{
+    /// <summary>The revision saved; absent on a preview, which saves nothing.</summary>
+    public Guid? DraftId { get; init; }
+    public int Version { get; init; }
+    public DateOnly AgreementStartDate { get; init; }
+    public DateOnly AgreementEndDate { get; init; }
+    public decimal OldTotal { get; init; }
+    public decimal NewTotal { get; init; }
+    public decimal Difference { get; init; }
+    /// <summary>The new revision's pricing needs a person before it can be approved (an issue, a public holiday to decide, a line to review).</summary>
+    public bool NeedsReview { get; init; }
+}
+
 /// <summary>One block of a revision: the block exactly as the pricing engine takes it, and what its shifts will ask of a worker.</summary>
 public record DraftBlockDto
 {
