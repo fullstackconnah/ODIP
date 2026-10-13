@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Api.Services;
@@ -16,6 +17,15 @@ namespace Odip.Tests.Imports;
 
 public class ImportInvitesTests
 {
+    private sealed class ListLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Text)> Entries { get; } = new();
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception)));
+    }
+
     private static async Task<(OdipDbContext Db, ImportsController Controller, Mock<IFirebaseUserService> Firebase, Guid BatchId, Guid TenantId)> StaffImportedAsync(string? dbName = null)
     {
         var tenantId = Guid.NewGuid();
@@ -31,8 +41,8 @@ public class ImportInvitesTests
         return (db, Controller(db, tenantId, firebase.Object), firebase, result.BatchId, tenantId);
     }
 
-    private static ImportsController Controller(OdipDbContext db, Guid tenantId, IFirebaseUserService firebase) =>
-        new(Service(db, tenantId), firebase)
+    private static ImportsController Controller(OdipDbContext db, Guid tenantId, IFirebaseUserService firebase, ILogger<ImportsController>? logger = null) =>
+        new(Service(db, tenantId), firebase, null, logger)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = Admin() } },
         };
@@ -82,5 +92,23 @@ public class ImportInvitesTests
 
         Assert.IsType<NotFoundObjectResult>((await Controller(otherDb, otherTenant, firebase.Object).Invites(batchId, CancellationToken.None)).Result);
         firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_dropped_request_stops_the_invites_quietly()
+    {
+        var (db, _, _, batchId, tenantId) = await StaffImportedAsync();
+        using var _ = db;
+        using var dropped = new CancellationTokenSource();
+        var firebase = new Mock<IFirebaseUserService>();
+        // The first Firebase call is where the request is dropped.
+        firebase.Setup(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(() => { dropped.Cancel(); return Task.FromException<SignInAccountResult>(new OperationCanceledException(dropped.Token)); });
+        var logger = new ListLogger<ImportsController>();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Controller(db, tenantId, firebase.Object, logger).Invites(batchId, dropped.Token));
+
+        firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.DoesNotContain(logger.Entries, e => e.Level >= LogLevel.Warning);
     }
 }

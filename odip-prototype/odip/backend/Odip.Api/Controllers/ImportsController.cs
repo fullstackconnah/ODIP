@@ -106,6 +106,8 @@ public class ImportsController : ControllerBase
         var invites = new List<ImportInviteDto>(staff.Count);
         foreach (var s in staff)
         {
+            // A dropped request (nginx's timeout, a closed tab) stops here rather than failing every remaining person.
+            ct.ThrowIfCancellationRequested();
             var outcome = await SignInAccounts.EnsureAsync(s, User, _config, _firebase, _logger, ct);
             invites.Add(new ImportInviteDto(s.Id, s.FullName, s.Email, outcome.Account?.FirebaseAccount, outcome.Error));
         }

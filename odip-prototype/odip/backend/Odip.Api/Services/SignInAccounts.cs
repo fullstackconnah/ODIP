@@ -46,9 +46,9 @@ public static class SignInAccounts
             logger?.LogWarning("Firebase refused the address of staff member {UserId} as invalid", s.Id);
             return new(null, "That doesn't look like a valid email address. Correct it first.", false);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Deliberately broad, as in AdminUsersController.Create: an unusable service account is not a FirebaseAuthException, and the same call
+            // Deliberately broad (but a dropped request is not a Firebase failure: it stops the caller, unlogged), as in AdminUsersController.Create: an unusable service account is not a FirebaseAuthException, and the same call
             // with no Firebase app configured fails the same way. The address is not logged (the onboarding import logs no row values); the user
             // id finds it.
             logger?.LogError("Failed to ensure a Firebase sign-in account for user {UserId} ({ExceptionType})", s.Id, ex.GetType().Name);
