@@ -214,7 +214,10 @@ public enum TaskType
     FlaggedNoteFollowUp,
     // An Admin's review of a shift a Coordinator booked as an emergency or safety need past a participant's budget
     // (budget phase 3). Persisted as an integer (19): append-only, never renumber.
-    BudgetEmergencyReview
+    BudgetEmergencyReview,
+    // A coordinator adding to a participant’s restrictive practice register a practice a support worker reported as "None of these" on an incident.
+    // Persisted as an integer (20): append-only, never renumber.
+    RestrictivePracticeRegisterAddition
 }
 
 public enum TaskPriority

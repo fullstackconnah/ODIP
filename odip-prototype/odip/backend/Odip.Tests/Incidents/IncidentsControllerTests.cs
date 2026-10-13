@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -50,12 +52,15 @@ public class IncidentsControllerTests
 
     private static RestrictivePractice SeedPractice(
         OdipDbContext db, Guid participantId, Guid? tenantId = null,
-        RestrictivePracticeType type = RestrictivePracticeType.Seclusion, bool isActive = true, string description = "Seclusion room, acute crisis only.")
+        RestrictivePracticeType type = RestrictivePracticeType.Seclusion, bool isActive = true, string description = "Seclusion room, acute crisis only.",
+        bool authorised = true)
     {
+        // authorised: who and when are recorded, so an active entry reads Authorised under RestrictivePracticeAuthorisation.
         var practice = new RestrictivePractice
         {
             Id = Guid.NewGuid(), TenantId = tenantId ?? Guid.NewGuid(), ParticipantId = participantId,
             Type = type, Description = description, IsActive = isActive,
+            AuthorisedBy = authorised ? "Dr Chen" : null, AuthorisationDate = authorised ? new DateOnly(2026, 9, 1) : null,
         };
         db.RestrictivePractices.Add(practice);
         db.SaveChanges();
@@ -232,6 +237,63 @@ public class IncidentsControllerTests
         Assert.Equal(participant.Id, body.Data!.InvolvedParticipantId);
         var saved = await db.IncidentReports.SingleAsync();
         Assert.True(saved.IsRestrictivePracticeAuthorised);
+    }
+
+    /// <summary>Owner decision 2026-10-14: an active entry is not enough — with no AuthorisedBy and no AuthorisationDate it reads Not authorised, and so does the incident.</summary>
+    [Fact]
+    public async Task Create_ActiveMatchingPracticeWithoutAuthorisationDetails_DeterminesUnauthorised()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion, isActive: true, authorised: false);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id);
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.False(saved.IsRestrictivePracticeAuthorised);
+        Assert.Equal(QscReportingStatus.Required, saved.QscReportingStatus);
+    }
+
+    [Fact]
+    public async Task Create_LinkedEntryNotAuthorised_DeterminesUnauthorised_EvenWithAnAuthorisedEntryOfTheSameType()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion, description: "Authorised seclusion");
+        var unauthorised = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion, description: "Seclusion with no authorisation on file", authorised: false);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id, restrictivePracticeId: unauthorised.Id);
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(unauthorised.Id, saved.RestrictivePracticeId);
+        Assert.False(saved.IsRestrictivePracticeAuthorised);
+    }
+
+    [Fact]
+    public async Task Create_UnapprovedDetails_WhileAnAuthorisedEntryOfTheTypeExists_DeterminesUnauthorised()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id) with
+        {
+            UnapprovedRestrictivePracticeDetails = "Locked the back door, which is not on the register.",
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False((await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
     }
 
     [Fact]
@@ -481,6 +543,124 @@ public class IncidentsControllerTests
         // Frozen: still true from creation, despite the new participant/type combination having
         // no matching active register entry.
         Assert.True(saved.IsRestrictivePracticeAuthorised);
+    }
+
+    // ── "This use was not authorised" (UsedWithoutAuthorisation) ─────────────
+
+    /// <summary>An RP edit of an existing incident: everything the wizard sends back, with the link and the flag given.</summary>
+    private static UpdateIncidentDto RpUpdateDto(Guid reporterId, Guid participantId, Guid? restrictivePracticeId, bool usedWithoutAuthorisation) => new()
+    {
+        ReportedByStaffId = reporterId,
+        IncidentType = IncidentType.RestrictivePracticeUse,
+        RestrictivePracticeType = RestrictivePracticeType.Seclusion,
+        InvolvedParticipantId = participantId,
+        RestrictivePracticeId = restrictivePracticeId,
+        UsedWithoutAuthorisation = usedWithoutAuthorisation,
+        Severity = IncidentSeverity.Medium,
+        Title = "Updated title",
+        Description = "Updated description.",
+        IncidentDateTime = new DateTime(2026, 8, 30, 11, 0, 0, DateTimeKind.Utc),
+        Status = IncidentStatus.Draft,
+        QscReportingStatus = QscReportingStatus.Required,
+    };
+
+    [Fact]
+    public async Task Create_UsedWithoutAuthorisation_WithAnAuthorisedLinkedEntry_StoresUnauthorised_AndKeepsTheLink()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var practice = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+        var controller = new IncidentsController(db);
+
+        var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.Seclusion, involvedParticipantId: participant.Id, restrictivePracticeId: practice.Id) with
+        {
+            UsedWithoutAuthorisation = true,
+        };
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(practice.Id, saved.RestrictivePracticeId);
+        Assert.False(saved.IsRestrictivePracticeAuthorised);
+        Assert.Equal(QscReportingStatus.Required, saved.QscReportingStatus);
+    }
+
+    [Fact]
+    public async Task Update_UsedWithoutAuthorisation_LowersAFrozenAuthorisedToUnauthorised()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var practice = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+        var controller = new IncidentsController(db);
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id, restrictivePracticeId: practice.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.True(incident.IsRestrictivePracticeAuthorised);
+
+        var result = await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, practice.Id, usedWithoutAuthorisation: true), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False((await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
+    }
+
+    [Fact]
+    public async Task Update_NeverRaisesAFrozenUnauthorised_EvenWhenRelinkedToAnAuthorisedEntry()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.False(incident.IsRestrictivePracticeAuthorised);
+        var authorisedLater = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+
+        var result = await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, authorisedLater.Id, usedWithoutAuthorisation: false), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False((await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
+    }
+
+    /// <summary>The "None of these" then "Add to restrictive practice register" path on an edit: the incident is relinked to the new entry, which is saved without authorisation details.</summary>
+    [Fact]
+    public async Task Update_RelinkToANotAuthorisedEntry_LowersToUnauthorised()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var authorised = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+        var controller = new IncidentsController(db);
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id, restrictivePracticeId: authorised.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        var added = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion, description: "Added from the incident", authorised: false);
+
+        var result = await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, added.Id, usedWithoutAuthorisation: false), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(added.Id, saved.RestrictivePracticeId);
+        Assert.False(saved.IsRestrictivePracticeAuthorised);
+    }
+
+    /// <summary>No migration of past data: an incident reported under the old rule keeps its flag when edited, even if its entry now reads Not authorised.</summary>
+    [Fact]
+    public async Task Update_UnchangedLink_ToAnEntryThatNowReadsNotAuthorised_KeepsTheFrozenFlag()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var practice = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+        var controller = new IncidentsController(db);
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id, restrictivePracticeId: practice.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        practice.AuthorisedBy = null;
+        db.SaveChanges();
+
+        var result = await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, practice.Id, usedWithoutAuthorisation: false), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.True((await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
     }
 
     // ── IN-5: injuries ────────────────────────────────────────────────────
@@ -1793,5 +1973,87 @@ public class IncidentsControllerTests
 
         var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.FlaggedNoteFollowUp);
         Assert.Equal(TaskItemStatus.Completed, task.Status);
+    }
+
+    // ── "None of these" from a support worker: a coordinator task to add it to the register ──
+
+    private static IncidentsController AsRole(IncidentsController controller, string role)
+    {
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "Test")) },
+        };
+        return controller;
+    }
+
+    private static CreateIncidentDto NoneOfTheseDto(Guid reporterId, Guid? participantId) =>
+        CreateDto(reporterId, rpType: RestrictivePracticeType.PhysicalRestraint, involvedParticipantId: participantId) with
+        {
+            UnapprovedRestrictivePracticeDetails = "Held both arms to stop him running onto the road.",
+        };
+
+    [Fact]
+    public async Task Create_SupportWorkerNoneOfThese_RaisesOneCoordinatorTask_AndNeverWritesTheRegister()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db, firstName: "Sophie", lastName: "Brown");
+        var controller = AsRole(new IncidentsController(db), "SupportWorker");
+
+        var result = await controller.Create(NoneOfTheseDto(reporter.Id, participant.Id), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var incident = await db.IncidentReports.SingleAsync();
+        var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.RestrictivePracticeRegisterAddition);
+        Assert.Equal("Add physical restraint to Sophie Brown's restrictive practice register", task.Title);
+        Assert.Equal($"incident-rp-register:{incident.Id}", task.SourceKey);
+        Assert.Equal(incident.Id, task.IncidentReportId);
+        Assert.Equal($"/incidents/{incident.Id}", task.LinkTo);
+        Assert.Equal(TaskItemStatus.NotStarted, task.Status);
+        // The QSC task is unchanged alongside it.
+        Assert.Single(await db.BookingTasks.Where(t => t.TaskType == TaskType.IncidentQscReport).ToListAsync());
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("Coordinator")]
+    [InlineData("Admin")]
+    [InlineData("SuperAdmin")]
+    public async Task Create_RegisterWriterNoneOfThese_RaisesNoRegisterTask(string role)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = AsRole(new IncidentsController(db), role);
+
+        await controller.Create(NoneOfTheseDto(reporter.Id, participant.Id), CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.Where(t => t.TaskType == TaskType.RestrictivePracticeRegisterAddition).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_SupportWorkerNoneOfThese_WithNoParticipant_RaisesNoRegisterTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = AsRole(new IncidentsController(db), "SupportWorker");
+
+        await controller.Create(NoneOfTheseDto(reporter.Id, participantId: null), CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.Where(t => t.TaskType == TaskType.RestrictivePracticeRegisterAddition).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_SupportWorkerLinkingARegisteredPractice_RaisesNoRegisterTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var practice = SeedPractice(db, participant.Id, type: RestrictivePracticeType.PhysicalRestraint, authorised: false);
+        var controller = AsRole(new IncidentsController(db), "SupportWorker");
+
+        await controller.Create(CreateDto(reporter.Id, rpType: RestrictivePracticeType.PhysicalRestraint, involvedParticipantId: participant.Id, restrictivePracticeId: practice.Id), CancellationToken.None);
+
+        Assert.Empty(await db.BookingTasks.Where(t => t.TaskType == TaskType.RestrictivePracticeRegisterAddition).ToListAsync());
     }
 }

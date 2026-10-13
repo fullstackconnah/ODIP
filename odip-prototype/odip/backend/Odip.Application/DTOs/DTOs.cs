@@ -2213,6 +2213,13 @@ public record CreateIncidentDto
     /// </summary>
     [StringLength(2000)]
     public string? UnapprovedRestrictivePracticeDetails { get; init; }
+    /// <summary>
+    /// "This use was not authorised": the linked register entry was used without (or outside) its authorisation. When true the incident is
+    /// stored Unauthorised (<see cref="Entities.IncidentReport.IsRestrictivePracticeAuthorised"/> = false) and keeps its link. Create also
+    /// stores Unauthorised whenever the linked entry is Not authorised, whatever this says. On Update it can only ever lower the frozen
+    /// determination to false, never raise it.
+    /// </summary>
+    public bool UsedWithoutAuthorisation { get; init; }
     public IncidentSeverity Severity { get; init; }
     [Required, StringLength(300, MinimumLength = 1)]
     public string Title { get; init; } = string.Empty;
