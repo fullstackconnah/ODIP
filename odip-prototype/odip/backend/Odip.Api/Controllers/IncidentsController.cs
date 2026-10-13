@@ -630,11 +630,17 @@ public class IncidentsController : ControllerBase
         // Create computed (see the entity field's XML doc). Editing the participant or type here
         // does NOT silently re-run the authorised/unauthorised finding against today's register.
         // The one exception only ever LOWERS it to false: the editor said this use was not authorised,
-        // or relinked the incident to an entry that is Not authorised (e.g. one just added from it).
+        // relinked the incident to an entry that is Not authorised (e.g. one just added from it), or
+        // switched it to "None of these" (only on that switch, so an old incident saved with its own
+        // text unchanged keeps what it was stored with).
         if (dto.IncidentType == IncidentType.RestrictivePracticeUse && (dto.UsedWithoutAuthorisation
+            || (string.IsNullOrWhiteSpace(i.UnapprovedRestrictivePracticeDetails) && !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails))
             || (dto.RestrictivePracticeId.HasValue && dto.RestrictivePracticeId != i.RestrictivePracticeId
                 && !RestrictivePracticeAuthorisation.IsAuthorised(await _db.RestrictivePractices.SingleAsync(rp => rp.Id == dto.RestrictivePracticeId.Value, ct)))))
             i.IsRestrictivePracticeAuthorised = false;
+        // Linked to a register entry now, so the coordinator's "add it to the register" task is done (a no-op when there is none).
+        if (dto.RestrictivePracticeId.HasValue)
+            await _obligationTasks.CompleteAsync($"incident-rp-register:{i.Id}", ct);
         i.RestrictivePracticeType = dto.RestrictivePracticeType;
         i.RestrictivePracticeId = dto.RestrictivePracticeId;
         // IN-4: same trim/empty->null rule as Create — still frozen against ever creating a

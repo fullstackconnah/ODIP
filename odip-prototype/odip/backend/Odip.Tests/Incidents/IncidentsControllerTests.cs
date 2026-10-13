@@ -663,6 +663,75 @@ public class IncidentsControllerTests
         Assert.True((await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
     }
 
+    /// <summary>Review M1: switching an edit to "None of these" is the third unauthorised signal, so it lowers the flag like the other two.</summary>
+    [Fact]
+    public async Task Update_FromAnAuthorisedLinkToNoneOfThese_LowersToUnauthorised()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var practice = SeedPractice(db, participant.Id, type: RestrictivePracticeType.Seclusion);
+        var controller = new IncidentsController(db);
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id, restrictivePracticeId: practice.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.True(incident.IsRestrictivePracticeAuthorised);
+
+        var result = await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, null, usedWithoutAuthorisation: false) with
+        {
+            UnapprovedRestrictivePracticeDetails = "Locked the back door, which is not on the register.",
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Null(saved.RestrictivePracticeId);
+        Assert.False(saved.IsRestrictivePracticeAuthorised);
+    }
+
+    /// <summary>Must-keep 2 (no migration of past data): an old incident already describing an unregistered practice, stored true under the old rule, keeps it when saved with the same text.</summary>
+    [Fact]
+    public async Task Update_OldNoneOfTheseIncidentSavedWithTheSameText_KeepsTheFrozenFlag()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var controller = new IncidentsController(db);
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        incident.UnapprovedRestrictivePracticeDetails = "Locked the back door.";
+        incident.IsRestrictivePracticeAuthorised = true;
+        db.SaveChanges();
+
+        var result = await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, null, usedWithoutAuthorisation: false) with
+        {
+            UnapprovedRestrictivePracticeDetails = "Locked the back door.",
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.True((await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
+    }
+
+    /// <summary>Review S2: once the incident links a register entry (e.g. the one just added from it), the "add it to the register" task is done.</summary>
+    [Fact]
+    public async Task Update_LinkingARegisterEntry_CompletesTheAddToRegisterTask()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var worker = AsRole(new IncidentsController(db), "SupportWorker");
+        await worker.Create(NoneOfTheseDto(reporter.Id, participant.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.RestrictivePracticeRegisterAddition)).Status);
+        var added = SeedPractice(db, participant.Id, type: RestrictivePracticeType.PhysicalRestraint, description: "Held both arms at the kerb.", authorised: false);
+
+        var result = await AsRole(new IncidentsController(db), "Coordinator").Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, added.Id, usedWithoutAuthorisation: true) with
+        {
+            RestrictivePracticeType = RestrictivePracticeType.PhysicalRestraint,
+        }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(TaskItemStatus.Completed, (await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.RestrictivePracticeRegisterAddition)).Status);
+    }
+
     // ── IN-5: injuries ────────────────────────────────────────────────────
 
     [Fact]
