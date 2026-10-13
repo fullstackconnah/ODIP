@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Tests.Postgres;
 using Xunit;
@@ -24,14 +26,16 @@ public class ImportTimingPostgresTests : IClassFixture<PostgresFixture>
     [SkippableTheory]
     [InlineData(ImportLanding.Active)]
     [InlineData(ImportLanding.Onboarding)]
-    public async Task Two_thousand_rows_commit_in_under_30_seconds(ImportLanding landing)
+    public async Task Two_thousand_rows_commit_within_the_time_limit_with_audit(ImportLanding landing)
     {
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
         var (setup, tenantId) = await _pg.NewTenantContextAsync();
         await setup.DisposeAsync();
         var lines = new List<string> { "First name,Last name,Date of birth,NDIS number,Contact 1 name,Contact 1 relationship" };
         for (var i = 0; i < 2000; i++) lines.Add($"Person{i},Timing{i},01/02/1980,9{i:D8},Kin Timing{i},Next of kin");
-        await using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString).Options, Tenant(tenantId));
+        await using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString)
+            // Production audits every created row with every property, so the timing includes it.
+            .AddInterceptors(new AuditInterceptor(new HttpContextAccessor())).Options, Tenant(tenantId));
 
         var managedBefore = GC.GetTotalMemory(forceFullCollection: true);
         var watch = Stopwatch.StartNew();
@@ -40,6 +44,10 @@ public class ImportTimingPostgresTests : IClassFixture<PostgresFixture>
 
         _output.WriteLine($"{landing}: {result.CreatedCount} participants in {watch.Elapsed.TotalSeconds:0.0} s; peak working set {Process.GetCurrentProcess().PeakWorkingSet64 / 1048576} MB; managed heap {managedBefore / 1048576} MB before, {GC.GetTotalMemory(false) / 1048576} MB after");
         Assert.Equal(2000, result.CreatedCount);
+        var imported = await db.ImportBatchItems.Where(i => i.BatchId == result.BatchId).Select(i => i.EntityId).ToListAsync();
+        var audited = await db.AuditLogs.CountAsync(a => a.EntityType == nameof(Participant) && imported.Contains(a.EntityId));
+        _output.WriteLine($"{landing}: {audited} audit rows");
+        Assert.True(audited >= 2000, $"{audited} audit rows");
         if (landing == ImportLanding.Onboarding)
         {
             // Each row is saved and untracked on its own (OnboardingImportService.CreateAsync), so one intake PDF is held at a time, not 2,000.
