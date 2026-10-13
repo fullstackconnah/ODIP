@@ -64,7 +64,8 @@ export default function ImportDataTab() {
         </p>
         {KINDS.map(k => (
           <section key={k.kind} aria-labelledby={`import-kind-${k.kind}`} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">
-            <div className="min-w-0">
+            {/* Grows beside the actions and wraps its own text, so a longer description never pushes the actions under it on a wide screen. */}
+            <div className="min-w-0 flex-[1_1_20rem]">
               <h3 id={`import-kind-${k.kind}`} className="text-sm font-semibold">{k.title}</h3>
               <p className="text-sm text-[var(--color-muted-foreground)]">{k.text}</p>
             </div>
