@@ -82,13 +82,25 @@ describe('CaregiverSubmissionsPage', () => {
     expect(mockUseCaregiverSubmissions).toHaveBeenLastCalledWith('Draft')
   })
 
-  it('the Review action navigates to /caregiver-submissions/:id', async () => {
+  it('Review is a link to /caregiver-submissions/:id, so it opens in a new tab too', () => {
+    renderPage()
+
+    expect(screen.getByRole('link', { name: /review/i })).toHaveAttribute('href', '/caregiver-submissions/sub-1')
+  })
+
+  it('opens the submission from a click anywhere on the row', async () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /review/i }))
+    await user.click(screen.getByText('Jane Doe'))
 
     expect(mockNavigate).toHaveBeenCalledWith('/caregiver-submissions/sub-1')
+  })
+
+  it('links the participant name to their record', () => {
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Sophie Brown' })).toHaveAttribute('href', '/participants/p1')
   })
 
   it('renders an empty state naming the current filter when there are no rows', () => {

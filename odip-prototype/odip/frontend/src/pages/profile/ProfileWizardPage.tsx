@@ -43,6 +43,7 @@ import {
   type WizardStepDef, type WizardValidate, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import { BackButton } from '@/components/BackButton'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   type ParticipantFormData, PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY, PROFILE_STEP_SHARED_FIELDS, PROFILE_CONDITIONAL_SECTIONS,
@@ -112,6 +113,8 @@ const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
 export default function ProfileWizardPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  // Where the header Back goes: Save (when the participant is not being activated) returns there too, tab included.
+  const back = useBackTarget(`/participants/${id}`)
   const { data: participant, isLoading, isError, error, refetch } = useParticipant(id)
   // Its own h1 shell, not a PageHeader, so it names the tab itself.
   const heading = participant ? `Profile — ${participant.firstName} ${participant.lastName}` : 'Profile'
@@ -425,11 +428,11 @@ export default function ProfileWizardPage() {
         // Completing the profile ends the onboarding of a participant who was in it, and activates them (Warn does; under Enforce the server refuses
         // while there is no signed-agreement evidence, which lands in the catch below with its reason and leaves them in onboarding). They are an active
         // participant and have left the Onboarding tab, so show them on the Active participants tab. Anyone else (an edit to a participant who was
-        // already finalised) goes back to their own record.
+        // already finalised) goes back to where Edit was clicked, on the same tab.
         if (wasInOnboarding && res.data?.isActive) {
           navigate(ACTIVE_TABLE_PATH, { state: participantActivatedState(id, res.data.fullName || participant.fullName) })
         } else {
-          navigate(`/participants/${id}`)
+          navigate(back.to)
         }
       }
     } catch (err) {

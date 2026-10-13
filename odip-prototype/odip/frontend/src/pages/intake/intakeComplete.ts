@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+
 /**
  * Hand-off between the Intake wizard and the Onboarding table. Completing Intake puts the participant
  * on the onboarding worklist (the server creates their onboarding record in the same save), so the
@@ -7,6 +10,9 @@
 
 /** The Onboarding tab of the Participants hub (`/onboarding` redirects here too). */
 export const ONBOARDING_TABLE_PATH = '/participants?tab=onboarding'
+
+/** The Enquiries tab, where a saved draft intake is listed (as a Draft intake row). */
+export const ENQUIRIES_TABLE_PATH = '/participants?tab=enquiries'
 
 export type IntakeCompleteNotice = { participantId: string; name: string }
 
@@ -22,4 +28,21 @@ export function readIntakeCompleteNotice(state: unknown): IntakeCompleteNotice |
   if (typeof notice !== 'object' || notice === null) return null
   const { participantId, name } = notice as Record<string, unknown>
   return typeof participantId === 'string' && typeof name === 'string' ? { participantId, name } : null
+}
+
+/**
+ * The notice the current screen was opened with, read once. Held in state so it survives the history-state clear, and cleared from history so a
+ * reload or coming back to this URL later does not replay it. Used by the Onboarding table and the onboarding checklist, the two places
+ * Complete intake lands.
+ */
+export function useIntakeCompleteNotice(): IntakeCompleteNotice | null {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [completed] = useState(() => readIntakeCompleteNotice(location.state))
+  useEffect(() => {
+    if (completed) navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+    // Only the arrival matters: run once for the notice this screen mounted with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return completed
 }

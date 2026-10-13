@@ -653,6 +653,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           isReviewStep={isReviewStep}
           secondaryActions={[]}
           cancelTo="/incidents"
+          history={false}
           submitLabel={mutation.isPending ? (isEdit ? 'Saving…' : 'Submitting…') : (isEdit ? 'Save' : 'Submit incident report')}
           isSubmitting={mutation.isPending}
         />

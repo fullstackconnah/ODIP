@@ -573,3 +573,28 @@ describe('OnboardingDetailPage — failed request vs. missing record (PageState)
     expect(screen.getByRole('link', { name: 'Back to onboarding' })).toHaveAttribute('href', '/participants?tab=onboarding')
   })
 })
+
+// NAV F5: Complete intake started from this checklist comes back here, with the notice the Onboarding table shows.
+describe('OnboardingDetailPage — arrival from a completed intake', () => {
+  beforeEach(() => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseQuery.mockReturnValue({ data: incomplete, isLoading: false })
+    mockUseMutation.mockReturnValue({ mutate: vi.fn(), error: null, isPending: false })
+    mockUseParticipant.mockReturnValue({ data: { firstName: 'Jamie', lastName: 'Rivers', preferredName: null }, isLoading: false })
+  })
+
+  it('confirms the completed intake once', () => {
+    const router = createMemoryRouter([{ path: '/onboarding/:id', element: <OnboardingDetailPage /> }], {
+      initialEntries: [{ pathname: '/onboarding/p-1', state: { intakeComplete: { participantId: 'p-1', name: 'Jamie Rivers' } } }],
+    })
+    render(<RouterProvider router={router} />)
+    expect(screen.getByText('Intake complete — Jamie Rivers is now in onboarding.')).toBeInTheDocument()
+    // Cleared from history, so a reload or a later visit does not replay it.
+    expect(router.state.location.state).toBeNull()
+  })
+
+  it('shows no notice on an ordinary visit', () => {
+    renderDetail()
+    expect(screen.queryByText(/intake complete —/i)).not.toBeInTheDocument()
+  })
+})

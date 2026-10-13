@@ -18,7 +18,7 @@
  * bypasses the blocker), and an accessible name derived from the previous screen.
  */
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
 // --- module state (re-initialised on every fresh full page load) ---------------------------
 
@@ -53,8 +53,15 @@ const pathnameOf = (path: string): string => path.split('?')[0]
 
 /** Records a new current pathname and rolls the previous one forward. Module-state mutation
  *  only — no React state — so the react-hooks/set-state-in-effect rule doesn't apply. */
-function recordCurrentPath(nextPath: string): void {
+function recordCurrentPath(nextPath: string, replaced = false): void {
   if (nextPath === curPath) return
+  // A replace (a <Navigate replace> redirect such as /participants/:id/edit) took the screen it replaced out of the history, so it
+  // is not somewhere the user came FROM: recording it made Back go to the redirect, which bounced straight back here.
+  if (replaced && curPath !== '') {
+    curPath = nextPath
+    for (const listener of listeners) listener()
+    return
+  }
   // First navigation after a fresh page load: there is no meaningful "previous" path, so the
   // first thing we observe becomes curPath with prevPath still null. After that, the path we
   // were just on becomes prevPath.
@@ -92,12 +99,13 @@ export const __testHooks = {
  *  same value — but only one instance is the convention. */
 export function usePreviousAppPathTracker(): null {
   const location = useLocation()
+  const navigationType = useNavigationType()
   useEffect(() => {
     // Record pathname + search, NOT pathname alone: the Participants hub keeps its active
     // lifecycle tab in `?tab=…`, so a pathname-only record made "Back to Participants" drop the
     // user on the default (Active participants) tab instead of the Onboarding tab they left.
-    recordCurrentPath(location.pathname + location.search)
-  }, [location.pathname, location.search])
+    recordCurrentPath(location.pathname + location.search, navigationType === 'REPLACE')
+  }, [location.pathname, location.search, navigationType])
   return null
 }
 
@@ -138,6 +146,7 @@ const KNOWN_SCREEN_LABELS: Record<string, string> = {
   '/': 'Dashboard',
   '/participants': 'Participants',
   '/trips': 'Trips',
+  '/medications': 'Medications',
 }
 
 /**
@@ -157,12 +166,12 @@ function hubTabLabel(targetPath: string): string | null {
 
 function buildAriaLabel(targetPath: string, currentPath: string): string {
   if (targetPath === currentPath) return 'Go back'
-  // Exact known screen.
-  const known = KNOWN_SCREEN_LABELS[targetPath]
-  if (known) return `Back to ${known}`
   // Hub tab on /participants?tab=… → use the stage name.
   const tabLabel = hubTabLabel(targetPath)
   if (tabLabel) return `Back to ${tabLabel}`
+  // A known screen, on any of its tabs (/medications?tab=register is still Medications).
+  const known = KNOWN_SCREEN_LABELS[pathnameOf(targetPath)]
+  if (known) return `Back to ${known}`
   // Detail page patterns like /participants/5 or /onboarding/5 — we don't try to fetch the
   // record name from a hook here (that would couple this primitive to every page's data
   // fetching), so fall back to the resource noun.

@@ -1,9 +1,10 @@
 import type { ComponentProps } from 'react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { WizardNavFooter } from './WizardNavFooter'
+import { __testHooks } from '@/hooks/useBackNavigation'
 
 function renderFooter(overrides: Partial<ComponentProps<typeof WizardNavFooter>> = {}) {
   return render(
@@ -96,5 +97,48 @@ describe('WizardNavFooter — the first step', () => {
     unmount()
     renderFooter({ showBack: true })
     expect(screen.queryByRole('link', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+})
+
+// NAV F3: the header Back is history-aware, so Cancel goes to the same place (the house rule: Cancel = Back).
+describe('WizardNavFooter — Cancel goes where Back goes', () => {
+  afterEach(() => __testHooks.reset())
+  function fromChecklist() {
+    __testHooks.recordCurrentPath('/onboarding/p1')
+    __testHooks.recordCurrentPath('/wizard')
+  }
+
+  it('returns to the previous in-app screen, on the first step and on the review step', () => {
+    fromChecklist()
+    const { unmount } = renderFooter({ showBack: false })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/onboarding/p1')
+    unmount()
+    renderFooter({ isReviewStep: true })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/onboarding/p1')
+  })
+
+  it('stays on cancelTo with history={false}, for a wizard whose header Back is pinned', () => {
+    fromChecklist()
+    renderFooter({ showBack: false, history: false })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/participants')
+  })
+
+  it('still trips the unsaved-changes blocker: Cancel is a router link, not a hard navigation', async () => {
+    const { createMemoryRouter, RouterProvider, useBlocker } = await import('react-router-dom')
+    fromChecklist()
+    function Wizard() {
+      const blocker = useBlocker(true)
+      return (
+        <>
+          {blocker.state === 'blocked' && <p>Leave without saving?</p>}
+          <WizardNavFooter showBack={false} onBack={vi.fn()} onNext={vi.fn()} isReviewStep={false} secondaryActions={[]} cancelTo="/participants" submitLabel="Save" isSubmitting={false} />
+        </>
+      )
+    }
+    const router = createMemoryRouter([{ path: '/wizard', element: <Wizard /> }, { path: '*', element: <p>Elsewhere</p> }], { initialEntries: ['/wizard'] })
+    render(<RouterProvider router={router} />)
+    await userEvent.setup().click(screen.getByRole('link', { name: 'Cancel' }))
+    expect(screen.getByText('Leave without saving?')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/wizard')
   })
 })

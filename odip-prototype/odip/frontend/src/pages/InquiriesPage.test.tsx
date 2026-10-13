@@ -61,6 +61,23 @@ describe('InquiriesPage lifecycle handoff', () => {
     expect(screen.getByText('Draft intake destination')).toBeInTheDocument()
   })
 
+  it('opens a New row on its enquiry form from a click anywhere on the row', async () => {
+    const user = userEvent.setup()
+    mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
+    page()
+    await user.click(screen.getByText('Referral'))
+    expect(screen.getByText('New inquiry form')).toBeInTheDocument()
+    expect(mocks.convert).not.toHaveBeenCalled()
+  })
+
+  it('opens a Draft intake row on its intake from a click anywhere on the row', async () => {
+    const user = userEvent.setup()
+    mocks.inquiries.mockReturnValue({ data: [inquiry({ participantId: 'draft-3' })], isLoading: false })
+    page()
+    await user.click(screen.getByText('Referral'))
+    expect(screen.getByText('Draft intake destination')).toBeInTheDocument()
+  })
+
   it('uses the named lifecycle capability to suppress all mutation controls for unavailable roles', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })

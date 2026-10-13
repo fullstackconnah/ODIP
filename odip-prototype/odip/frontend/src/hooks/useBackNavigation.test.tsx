@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import type { ReactElement } from 'react'
 import { act, render, renderHook, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useNavigate, useLocation } from 'react-router-dom'
+import { MemoryRouter, Navigate, Route, Routes, useNavigate, useLocation } from 'react-router-dom'
 import {
   __testHooks,
   useBackTarget,
@@ -163,6 +163,17 @@ describe('useBackNavigation — useBackTarget', () => {
     withRouter(['/participants/new'], () => <Page />)
     expect(screen.getByTestId('aria').textContent).toBe('Back to Participants')
   })
+
+  it('names a known screen on one of its tabs (?tab=) too', () => {
+    function Page() {
+      const back = useBackTarget('/participants')
+      return <span data-testid="aria">{back.ariaLabel}</span>
+    }
+    __testHooks.recordCurrentPath('/medications?tab=register')
+    __testHooks.recordCurrentPath('/medications/m-1/edit')
+    withRouter(['/medications/m-1/edit'], () => <Page />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to Medications')
+  })
 })
 
 describe('usePreviousAppPath — renderHook', () => {
@@ -266,5 +277,32 @@ describe('useBackNavigation — a query change on the same screen is not a prede
       </MemoryRouter>,
     )
     expect(screen.getByTestId('to').textContent).toBe('/schedule')
+  })
+})
+
+describe('useBackNavigation — a redirect is not a predecessor', () => {
+  it('a <Navigate replace> hop (the old /participants/:id/edit link) leaves the screen the user clicked from as the Back target', async () => {
+    const user = userEvent.setup()
+    function EditLink() {
+      const navigate = useNavigate()
+      return <button type="button" onClick={() => navigate('/participants/7/edit')}>Edit</button>
+    }
+    function Target() {
+      const { to } = useBackTarget('/participants/7')
+      return <span data-testid="to">{to}</span>
+    }
+    render(
+      <MemoryRouter initialEntries={['/participants/7?tab=funding']}>
+        <TrackerHarness />
+        <Routes>
+          <Route path="/participants/:id" element={<EditLink />} />
+          <Route path="/participants/:id/edit" element={<Navigate to="/participants/7/profile" replace />} />
+          <Route path="/participants/:id/profile" element={<Target />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    // Recording the redirect's own URL made Back (and Cancel) go to /edit, which redirected straight back to the form.
+    expect(await screen.findByTestId('to')).toHaveTextContent(/^\/participants\/7\?tab=funding$/)
   })
 })

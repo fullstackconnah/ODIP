@@ -27,6 +27,16 @@ describe('OnboardingPage', () => {
     expect(screen.getByText('Checklist route')).toBeInTheDocument()
   })
 
+  it('opens the checklist from a click anywhere on the row, and names the participant as a link to it', async () => {
+    mockUseQuery.mockReturnValue({ data: [{ participantId: 'p-1', fullName: 'Jamie Rivers', stage: 'Onboarding incomplete', completedSteps: 2, totalSteps: 5, nextAction: 'Confirm service needs' }], isLoading: false })
+    const user = userEvent.setup()
+    render(<MemoryRouter initialEntries={['/onboarding']}><Routes><Route path="/onboarding" element={<OnboardingTable />} /><Route path="/onboarding/:id" element={<div>Checklist route</div>} /></Routes></MemoryRouter>)
+
+    expect(screen.getByRole('link', { name: 'Jamie Rivers' })).toHaveAttribute('href', '/onboarding/p-1')
+    await user.click(screen.getByText('Confirm service needs'))
+    expect(screen.getByText('Checklist route')).toBeInTheDocument()
+  })
+
   it('keeps the readable worklist but does not promise a lifecycle mutation to ReadOnly', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     mockUseQuery.mockReturnValue({ data: [{ participantId: 'p-2', fullName: 'Avery Lee', stage: 'Intake incomplete', completedSteps: 0, totalSteps: 5, nextAction: 'Complete intake' }], isLoading: false })

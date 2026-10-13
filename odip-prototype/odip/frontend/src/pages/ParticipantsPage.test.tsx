@@ -442,7 +442,7 @@ describe('ParticipantsPage — status change safety', () => {
     expect(mockStatusMutate).toHaveBeenCalledWith({ id: 'p2', isActive: false }, expect.any(Object))
   })
 
-  it('no longer navigates when clicking the Status cell itself (row click target is the Name link, not the whole row)', async () => {
+  it('opens the participant from a click anywhere on the row, like its name link (owner decision 2026-10-13, reversing PR 144)', async () => {
     const user = userEvent.setup()
     mockUseParticipants.mockReturnValue({
       data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
@@ -450,13 +450,26 @@ describe('ParticipantsPage — status change safety', () => {
     })
     renderPage()
 
-    // Clicking the Status cell (the read-only pill) must not navigate nor mutate.
-    const rows3 = screen.getAllByRole('row')
-    const jamieRow3 = rows3.find(r => r.textContent?.includes('Jamie Smith'))!
-    await user.click(within(jamieRow3).getByText('Active'))
+    // The Status cell holds a read-only pill: a click on it is a click on the row.
+    const jamieRow = screen.getAllByRole('row').find(r => r.textContent?.includes('Jamie Smith'))!
+    await user.click(within(jamieRow).getByText('Active'))
 
-    expect(screen.queryByText('Participant detail page')).not.toBeInTheDocument()
+    expect(screen.getByText('Participant detail page')).toBeInTheDocument()
     expect(mockStatusMutate).not.toHaveBeenCalled()
+  })
+
+  it('opens the participant from the keyboard on the row (Enter)', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    screen.getAllByRole('row').find(r => r.textContent?.includes('Jamie Smith'))!.focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.getByText('Participant detail page')).toBeInTheDocument()
   })
 })
 

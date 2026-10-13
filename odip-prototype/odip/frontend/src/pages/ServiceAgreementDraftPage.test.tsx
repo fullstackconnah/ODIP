@@ -259,6 +259,20 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     expect(screen.queryByRole('button', { name: 'Save agreement' })).not.toBeInTheDocument()
   })
 
+  it('NAV F6: Close goes where Back and Cancel go: back to the onboarding checklist when opened from it', async () => {
+    asRole('ReadOnly')
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    const user = userEvent.setup()
+    const router = createMemoryRouter([
+      { path: '/participants/:id/agreement-draft', element: <ServiceAgreementDraftPage /> },
+      { path: '*', element: <p>elsewhere</p> },
+    ], { initialEntries: ['/participants/p-1/agreement-draft?from=onboarding'] })
+    render(<RouterProvider router={router} />)
+    await user.click(stepButton('Save'))
+    await user.click(within(screen.getByRole('form', { name: 'Service agreement' })).getByRole('button', { name: 'Close' }))
+    expect(router.state.location.pathname).toBe('/onboarding/p-1')
+  })
+
   it('keeps the draft-only notice and the participant identifiers on the Agreement step, and the PDF caveat on the Save step, in the words they always had', async () => {
     drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
     const user = userEvent.setup()

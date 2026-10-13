@@ -409,6 +409,7 @@ function useParticipantsScreen() {
           sortable
           loading={isLoading}
           emptyMessage="No participants found"
+          onRowClick={p => navigate(`/participants/${p.id}`)}
           rowClassName={p => (arrival && p.id === arrival.participantId ? ARRIVAL_ROW : '')}
         />
       )}

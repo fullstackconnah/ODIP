@@ -91,6 +91,8 @@ function useInquiriesScreen() {
     ? <StatusBadge status="new" label="New" />
     : <StatusBadge status="draftintake" label="Draft intake" />
   // The one next step that is real for each stage. Resuming an intake that is complete led to the L2-03 data loss, which is why such a row is not listed.
+  // A row opens where its own buttons lead: a New enquiry's form, or a Draft intake's intake (starting an intake converts, so the row never does that).
+  const openRow = (row: ParticipantInquiryDto) => stageOf(row) === 'new' ? editExisting(row) : navigate(`/participants/${row.participantId}/intake`)
   const primaryAction = (row: ParticipantInquiryDto) => stageOf(row) === 'new'
     ? <Button size="sm" disabled={convert.isPending} onClick={() => startIntake(row.id)}>Start intake</Button>
     : <Button size="sm" onClick={() => navigate(`/participants/${row.participantId}/intake`)}>Resume intake</Button>
@@ -147,7 +149,7 @@ function useInquiriesScreen() {
       {showEmptyState && <EmptyState icon={ClipboardPlus} title="No open enquiries" description="Capture an enquiry when someone first contacts the service, then start their intake. Once an intake is complete, the participant moves to the Onboarding tab." />}
       {showTable && !isLoading && filtered.length === 0
         ? <EmptyState icon={Search} title="No enquiries match your search" description="Try a different search term, or clear the search to see every open enquiry." action={{ label: 'Clear search', onClick: () => setSearch('') }} />
-        : showTable && <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." />}
+        : showTable && <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={canManageParticipantLifecycle ? openRow : undefined} />}
     </>
   )
 
