@@ -156,7 +156,7 @@ function createServer(mode: Mode, extra: FakeParticipant[] = []) {
       const participant = find(lifecycle[1])
       if (lifecycle[2] === 'begin-services' && !participant.servicesStartedAt) {
         if (!participant.isDraft) throw httpError(400, 'Services can only begin for a participant in onboarding.')
-        if (mode === 'Enforce') throw httpError(400, 'Your organisation enforces readiness: services can begin once the signed agreement evidence is recorded.')
+        if (mode === 'Enforce') throw httpError(400, 'Your organisation enforces readiness, so services begin when the participant is made active.')
         participant.servicesStartedAt = '2026-10-13T01:00:00Z'
         participant.isActive = true
       }

@@ -693,7 +693,7 @@ public class ParticipantsController : ControllerBase
         // "ignored by Update" doc note (PF-10.3): that was written before this resume path existed.
         // Never overwrites an already-set value (set once, never cleared — see
         // Participant.IntakeCompletedAt's doc) and never touches IsDraft — resuming Intake alone
-        // does not finalise the participant; only a subsequent Profile completion does that.
+        // does not finalise the participant; only "Make active" on the onboarding checklist does that.
         p.UpdatedAt = DateTime.UtcNow;
 
         if (dto.CompleteIntake)
@@ -954,7 +954,7 @@ public class ParticipantsController : ControllerBase
     private const string DraftCannotBeActivated = "A draft participant cannot be activated. Complete their intake and profile first.";
     private const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
     private const string ActivationFundingRequired = "This participant cannot be activated until their plan budget is recorded on the Funding tab.";
-    private const string BeginServicesEnforced = "Your organisation enforces readiness: services can begin once the signed agreement evidence is recorded.";
+    private const string BeginServicesEnforced = "Your organisation enforces readiness, so services begin when the participant is made active.";
 
     /// <summary>The 400 message for an activation the organisation's readiness rule refuses.</summary>
     private static string ActivationRefusal(ActivationBlock block) =>
@@ -1089,7 +1089,7 @@ public class ParticipantsController : ControllerBase
     /// <see cref="Participant.CanReceiveServicesRule"/>) while staying on the Onboarding tab until "Make active". Sets <see cref="Participant.ServicesStartedAt"/>
     /// and <see cref="Participant.IsActive"/> and keeps the draft. Idempotent: a second call changes nothing, except that a services-started draft which was
     /// archived is switched back on (the first date kept). An organisation that enforces readiness keeps its placement rule
-    /// (<see cref="ParticipantReadiness.CheckAsync"/>, which <c>MayPlaceAsync</c> uses), which refuses until signed-agreement evidence exists.
+    /// (<see cref="ParticipantReadiness.CheckAsync"/>, which <c>MayPlaceAsync</c> uses), which refuses a draft: there, services begin when the participant is made active.
     /// </summary>
     [HttpPost("{id:guid}/begin-services")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]

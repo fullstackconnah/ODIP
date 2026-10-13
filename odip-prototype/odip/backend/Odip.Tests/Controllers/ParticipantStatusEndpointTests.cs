@@ -625,7 +625,7 @@ public class ParticipantStatusEndpointTests
 
         var message = BadRequest(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
 
-        Assert.Equal("Your organisation enforces readiness: services can begin once the signed agreement evidence is recorded.", message);
+        Assert.Equal("Your organisation enforces readiness, so services begin when the participant is made active.", message);
         Assert.Equal(before, Scalars(await fx.Db.Participants.SingleAsync()));
         Assert.Empty(UpdatedAuditRows(fx.Db, participant.Id));
     }

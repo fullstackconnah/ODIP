@@ -263,3 +263,25 @@ describe('OnboardingDetailPage: fix round 1', () => {
     expect(screen.getByRole('button', { name: 'Begin services' })).toBeInTheDocument()
   })
 })
+
+describe('OnboardingDetailPage: fix round 2', () => {
+  it('says Begin services brings an archived participant back, when their services had started before (N4)', async () => {
+    mockUseOnboarding.mockReturnValue({ data: { ...open, servicesStartedAt: '2026-10-10T01:00:00Z' }, isLoading: false, isError: false })
+    mockUseParticipant.mockReturnValue({ data: { id: 'p-1', firstName: 'Jamie', lastName: 'Rivers', fullName: 'Jamie Rivers', isDraft: true, isActive: false }, isLoading: false })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Begin services' }))
+
+    expect(within(screen.getByRole('alertdialog')).getByText('This brings an archived participant back onto the rostering board.')).toBeInTheDocument()
+  })
+
+  it('does not say so for a first Begin services', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Begin services' }))
+
+    expect(within(screen.getByRole('alertdialog')).queryByText(/archived participant/)).not.toBeInTheDocument()
+  })
+})

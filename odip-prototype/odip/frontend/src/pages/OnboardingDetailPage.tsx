@@ -132,6 +132,7 @@ export default function OnboardingDetailPage() {
       confirmLabel="Begin services"
       message={<>
         <p>They can be rostered and supported from now on: the roster board, shifts, the support worker app, medications and claims. They stay in onboarding until you make them active.</p>
+        {d.servicesStartedAt && participant?.isActive === false && <p className="mt-2">This brings an archived participant back onto the rostering board.</p>}
         {openList && <p className="mt-2">Still open on the checklist:</p>}
         {openList}
       </>}

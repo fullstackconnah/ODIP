@@ -108,7 +108,7 @@ public class PortalController : ControllerBase
 
         var start = from ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var end = to ?? start.AddDays(13);
-        // INTAKE-08: a draft participant can't have a real shift going forward (Rostering's
+        // INTAKE-08: a draft whose services have not begun ("Begin services") can't have a real shift going forward (Rostering's
         // ValidateRefsAsync gates that at creation) — this filter is defence in depth for the
         // edge case of a participant later flipped back to draft mid-edit while an old shift
         // still references them, so the portal never shows it.
