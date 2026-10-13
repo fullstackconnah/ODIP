@@ -103,7 +103,9 @@ export default function ImportDataTab() {
       <ConfirmDialog
         open={undoing != null}
         title="Undo this import?"
-        message={undoing && `The ${plural(undoing.createdCount, KINDS.find(k => k.title === undoing.kind)?.noun ?? 'record')} that ${undoing.fileName} created ${undoing.kind === 'Participants' ? 'are archived. This only works while none of them has changed since the import.' : 'are removed. This only works while none of them has signed in or been rostered.'}`}
+        message={undoing && (undoing.kind === 'Participants'
+          ? `The ${plural(undoing.createdCount, 'participant')} that ${undoing.fileName} created ${undoing.createdCount === 1 ? 'is' : 'are'} archived. This only works while none of them has changed since the import.`
+          : `The ${plural(undoing.createdCount, 'staff member')} it created ${undoing.createdCount === 1 ? 'is' : 'are'} removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.`)}
         confirmLabel="Undo import"
         variant="danger"
         loading={undo.isPending}

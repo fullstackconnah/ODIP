@@ -81,6 +81,6 @@ describe('ImportDataTab', () => {
     const said = await screen.findByText('Everyone in this import has signed in already, so no invites were sent.')
     expect(row).not.toContainElement(said)
     await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
-    expect(screen.getByText(/The 2 staff members that staff.csv created are removed. This only works while none of them has signed in or been rostered./)).toBeInTheDocument()
+    expect(screen.getByText('The 2 staff members it created are removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
   })
 })

@@ -166,6 +166,6 @@ describe('ImportWizardPage', () => {
     expect(screen.getByRole('link', { name: 'View staff' })).toHaveAttribute('href', '/staff')
     expect(screen.getByRole('button', { name: 'Send sign-in invites (1)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
-    expect(within(screen.getByRole('alertdialog')).getByText(/are removed. This only works while none of them has signed in or been rostered./)).toBeInTheDocument()
+    expect(within(screen.getByRole('alertdialog')).getByText('The 1 staff member it created is removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
   })
 })

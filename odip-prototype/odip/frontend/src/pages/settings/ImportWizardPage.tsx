@@ -32,15 +32,16 @@ const STEPS: WizardStepDef<Record<string, never>>[] = [
 const ORDER = STEPS.map(s => s.key as StepKey)
 
 /** What each kind imports, as the page words it. Staff is "Import staff", as the nav says, never "staff members"; an undone staff import deletes its accounts. */
-const KIND: Record<ImportKind, { noun: string; title: string; listNoun: string; listTo: (landing: ImportLanding | null) => string; undone: string; undoRule: string }> = {
+const KIND: Record<ImportKind, { noun: string; title: string; listNoun: string; listTo: (landing: ImportLanding | null) => string; undone: string; undoRule: string; undoNote: string }> = {
   participants: {
     noun: 'participant', title: 'Import participants', listNoun: 'participants',
     listTo: landing => landing === 'Onboarding' ? '/participants?tab=onboarding' : '/participants?tab=active',
-    undone: 'are archived', undoRule: 'none of them has changed since the import',
+    undone: 'archived', undoRule: 'none of them has changed since the import', undoNote: '',
   },
   staff: {
     noun: 'staff member', title: 'Import staff', listNoun: 'staff', listTo: () => '/staff',
-    undone: 'are removed', undoRule: 'none of them has signed in or been rostered',
+    undone: 'removed', undoRule: 'none of them has signed in or been rostered',
+    undoNote: ' Anyone already sent a sign-in invite will find it no longer works until they are imported again.',
   },
 }
 
@@ -99,7 +100,7 @@ export default function ImportWizardPage() {
   const idempotencyKey = useRef(newCompletionRequestId())
 
   if (!kind) return <Navigate to={BACK_TO} replace />
-  const { noun, title, listNoun, listTo, undone: undoneWord, undoRule } = KIND[kind]
+  const { noun, title, listNoun, listTo, undone: undoneWord, undoRule, undoNote } = KIND[kind]
 
   const go = (next: StepKey) => {
     setProblem(null)
@@ -178,7 +179,7 @@ export default function ImportWizardPage() {
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
         {header}
         {undone ? (
-          <Callout tone="info" title="Import undone">{`The ${plural(result.createdCount, noun)} it created ${undoneWord}.`}</Callout>
+          <Callout tone="info" title="Import undone">{`The ${plural(result.createdCount, noun)} it created ${result.createdCount === 1 ? 'is' : 'are'} ${undoneWord}.`}</Callout>
         ) : (
           <Callout
             tone="success"
@@ -211,7 +212,7 @@ export default function ImportWizardPage() {
         <ConfirmDialog
           open={confirmUndo}
           title="Undo this import?"
-          message={`The ${plural(result.createdCount, noun)} it created ${undoneWord}. This only works while ${undoRule}.`}
+          message={`The ${plural(result.createdCount, noun)} it created ${result.createdCount === 1 ? 'is' : 'are'} ${undoneWord}. This only works while ${undoRule}.${undoNote}`}
           confirmLabel="Undo import"
           variant="danger"
           loading={undo.isPending}
