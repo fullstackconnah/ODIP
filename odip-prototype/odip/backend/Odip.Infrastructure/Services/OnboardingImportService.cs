@@ -111,6 +111,9 @@ public sealed class OnboardingImportService
         if (await ReplayAsync(idempotencyKey, ct) is { } earlier) return earlier;
 
         await using var importLock = await AcquireLockAsync(tenantId, ct);
+        // Once the lock is held the import runs to the end: a client or proxy that drops the request must not roll back a nearly finished
+        // import. A retry with the same key replays the batch.
+        ct = CancellationToken.None;
         // A request that waited behind its own twin finds the batch the twin made.
         if (await ReplayAsync(idempotencyKey, ct) is { } twin) return twin;
 

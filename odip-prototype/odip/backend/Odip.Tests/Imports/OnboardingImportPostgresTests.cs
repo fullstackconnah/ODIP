@@ -36,6 +36,16 @@ public class OnboardingImportPostgresTests : IClassFixture<PostgresFixture>
         }
     }
 
+    /// <summary>Cancels the request the moment the first participant is saved, the way nginx dropping a slow request would.</summary>
+    private sealed class CancelOnFirstParticipant(CancellationTokenSource request) : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<Participant>().Any(e => e.State == EntityState.Added)) request.Cancel();
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
     private async Task<Guid> NewOrganisationAsync()
     {
         var (db, tenantId) = await _pg.NewTenantContextAsync();
@@ -56,6 +66,24 @@ public class OnboardingImportPostgresTests : IClassFixture<PostgresFixture>
         await using var check = Context(tenantId);
         Assert.Equal(0, await check.Participants.CountAsync());
         Assert.Equal(0, await check.ImportBatches.CountAsync());
+    }
+
+    [SkippableFact]
+    public async Task A_request_dropped_once_the_import_has_started_does_not_roll_it_back()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var tenantId = await NewOrganisationAsync();
+        using var request = new CancellationTokenSource();
+        await using (var db = Context(tenantId, new CancelOnFirstParticipant(request)))
+        {
+            var result = await Service(db, tenantId).CommitAsync(ImportKind.Participants, Csv(Header, "Ava,Stone,", "Ben,Lee,", "Cal,Wu,"), "people.csv", null,
+                ImportLanding.Active, "key-dropped", Admin(), request.Token);
+            Assert.Equal(3, result.CreatedCount);
+        }
+        Assert.True(request.IsCancellationRequested);
+        await using var check = Context(tenantId);
+        Assert.Equal(3, await check.Participants.CountAsync());
+        Assert.Equal(1, await check.ImportBatches.CountAsync());
     }
 
     [SkippableFact]
