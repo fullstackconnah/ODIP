@@ -109,6 +109,43 @@ public class ImportFileReaderTests
         Assert.Equal("This file is too large once unpacked.", Refusal(stream.ToArray(), "people.xlsx"));
     }
 
+    /// <summary>A zip whose headers say its 21 MB sheet is 1 KB: the unpacked-size check reads the headers, so it must be .NET's zip reader
+    /// (which ClosedXML's package reader also uses) that refuses to inflate past the declared size.</summary>
+    private static byte[] ZipThatUnderstatesItsSize()
+    {
+        using var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        using (var entry = zip.CreateEntry("xl/worksheets/sheet1.xml").Open())
+            entry.Write(new byte[21 * 1024 * 1024]);
+        var bytes = stream.ToArray();
+        // Uncompressed size: offset 22 in the local header (PK 3 4), offset 24 in the central directory header (PK 1 2).
+        for (var i = 0; i < bytes.Length - 4; i++)
+        {
+            if (bytes[i] != 0x50 || bytes[i + 1] != 0x4B) continue;
+            if (bytes[i + 2] == 3 && bytes[i + 3] == 4) BitConverter.GetBytes(1024).CopyTo(bytes, i + 22);
+            if (bytes[i + 2] == 1 && bytes[i + 3] == 2) BitConverter.GetBytes(1024).CopyTo(bytes, i + 24);
+        }
+        return bytes;
+    }
+
+    [Fact]
+    public void A_zip_that_understates_its_size_is_not_inflated_past_what_it_declares()
+    {
+        var file = ZipThatUnderstatesItsSize();
+        using var zip = new ZipArchive(new MemoryStream(file), ZipArchiveMode.Read);
+        Assert.Equal(1024, zip.Entries.Single().Length);
+        long read = 0;
+        try
+        {
+            using var entry = zip.Entries.Single().Open();
+            var buffer = new byte[81920];
+            for (int n; (n = entry.Read(buffer)) > 0;) read += n;
+        }
+        catch (InvalidDataException) { }
+        Assert.True(read <= 1024, $"inflated {read:N0} bytes");
+        Assert.Throws<ImportException>(() => ImportFileReader.Read(file, "people.xlsx"));
+    }
+
     [Fact]
     public void Reads_a_formula_cell_as_its_saved_value_without_working_it_out()
     {
