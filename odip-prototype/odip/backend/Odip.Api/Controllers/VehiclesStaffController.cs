@@ -355,36 +355,14 @@ public class StaffController : ControllerBase
     // The tenant this request writes to (the caller's own, or the one a SuperAdmin is viewing as). Null when there is none: a SuperAdmin
     // with no tenant selected, and a test that does not care.
     private readonly ICurrentTenant? _currentTenant;
+    private readonly StaffCreateService _staffCreator;
 
-    private const string OtherOrganisationMessage = "That address belongs to another organisation on ODIP.";
+    /// <summary>See StaffCreateService.OtherOrganisationAddressErrorAsync.</summary>
+    private Task<string?> OtherOrganisationAddressErrorAsync(string normalisedEmail, Guid? ownTenantId, CancellationToken ct) =>
+        _staffCreator.OtherOrganisationAddressErrorAsync(User, normalisedEmail, ownTenantId, ct);
 
-    /// <summary>
-    /// Global uniqueness of an address makes a squat permanent (the first tenant to type an address owns it, and an archived row keeps it), so a
-    /// caller who is not a SuperAdmin may not give staff an address at ANOTHER tenant's own email domain: it would block that tenant from ever adding
-    /// the person, and send the person into this tenant's workspace. Returns the refusal, or null. It is a refusal, not a question: it cannot be
-    /// confirmed away. The match is on the whole domain, so a subdomain is only unusual (AddressConfirmation), not another organisation's. A shared
-    /// provider (gmail.com) is nobody's own, even if a tenant was given it as its domain, so it is never another organisation's either.
-    /// </summary>
-    private async Task<string?> OtherOrganisationAddressErrorAsync(string normalisedEmail, Guid? ownTenantId, CancellationToken ct)
-    {
-        if (User?.IsInRole("SuperAdmin") ?? false) return null;
-        var at = normalisedEmail.LastIndexOf('@');
-        if (at < 0) return null;
-
-        var domain = normalisedEmail[(at + 1)..];
-        if (CommonEmailProviders.Covers(domain)) return null;
-        var own = ownTenantId ?? Guid.Empty;
-        // Tenants are written with their domain tidied (EmailIdentity.NormaliseDomain), but a row from before that rule may hold " Acme.com" or "@acme.com"
-        // and must keep protecting its tenant, so the stored side is tidied the same way here. There are few tenants, so they are compared in memory
-        // rather than by an expression the database has to translate.
-        var otherDomains = await _db.Tenants.Where(t => t.Id != own).Select(t => t.EmailDomain).ToListAsync(ct);
-        var belongsToAnother = otherDomains.Any(other => EmailIdentity.NormaliseDomain(other) == domain);
-        return belongsToAnother ? OtherOrganisationMessage : null;
-    }
-
-    /// <summary>The email domain of a tenant, or null when none is given or it cannot be found. Tenants have no query filter, so any tenant is readable.</summary>
-    private async Task<string?> TenantEmailDomainAsync(Guid? tenantId, CancellationToken ct) =>
-        tenantId is null ? null : await _db.Tenants.Where(t => t.Id == tenantId).Select(t => t.EmailDomain).FirstOrDefaultAsync(ct);
+    /// <summary>See StaffCreateService.TenantEmailDomainAsync.</summary>
+    private Task<string?> TenantEmailDomainAsync(Guid? tenantId, CancellationToken ct) => _staffCreator.TenantEmailDomainAsync(tenantId, ct);
 
     // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to the
     // parameter's default, so production needs no DI change while a unit test injects a mock.
@@ -400,6 +378,7 @@ public class StaffController : ControllerBase
         _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
         _logger = logger;
         _currentTenant = currentTenant;
+        _staffCreator = new StaffCreateService(db, config);
     }
 
     /// <summary>Same default as RosteringController's own VarianceReviewMinutes — kept independent
@@ -424,39 +403,12 @@ public class StaffController : ControllerBase
         HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
     };
 
-    /// <summary>
-    /// §4.1 role-change guardrails. SuperAdmin actors are unrestricted. Anyone else: cannot touch
-    /// (grant or edit) a SuperAdmin account, and cannot assign the Admin role unless they are
-    /// themselves an Admin. <paramref name="existingRole"/> is null on create (there is no prior
-    /// row to protect yet). Returns the rejection message, or null when the change is allowed.
-    /// </summary>
-    private string? ValidateRoleGuardrails(UserRole targetRole, UserRole? existingRole = null)
-    {
-        // User?.IsInRole(...) (not User.IsInRole(...)): ControllerBase.User is null when no
-        // ControllerContext/HttpContext has been set (e.g. a unit test constructing this
-        // controller directly with no simulated request) — defensive null-conditional, same idiom
-        // MedicationsController/PortalController already use for the same reason. Treating an
-        // absent context as "no elevated role" is the conservative default and never wrongly
-        // allows a restricted write, since every real request IS authenticated ([Authorize]).
-        bool IsInRole(string role) => User?.IsInRole(role) ?? false;
+    /// <summary>See StaffCreateService.RoleGuardrailError.</summary>
+    private string? ValidateRoleGuardrails(UserRole targetRole, UserRole? existingRole = null) =>
+        StaffCreateService.RoleGuardrailError(User, targetRole, existingRole);
 
-        if (IsInRole("SuperAdmin")) return null;
-        if (existingRole == UserRole.SuperAdmin) return "Cannot edit a SuperAdmin account.";
-        if (targetRole == UserRole.SuperAdmin) return "Cannot grant the SuperAdmin role.";
-        if (targetRole == UserRole.Admin && !IsInRole("Admin")) return "Only an Admin can assign the Admin role.";
-        return null;
-    }
-
-    /// <summary>
-    /// An address on <c>Auth:SuperAdminDomain</c> signs in as SuperAdmin whatever the user's Role (AuthController.Exchange), so only a
-    /// SuperAdmin may enter one. Returns the refusal, or null when <paramref name="normalisedEmail"/> is allowed for this caller.
-    /// </summary>
-    private string? ReservedDomainError(string normalisedEmail)
-    {
-        if (User?.IsInRole("SuperAdmin") ?? false) return null;
-        var domain = SuperAdminDomain.From(_config);
-        return SuperAdminDomain.Covers(normalisedEmail, domain) ? SuperAdminDomain.ReservedMessage(domain) : null;
-    }
+    /// <summary>See StaffCreateService.ReservedDomainError.</summary>
+    private string? ReservedDomainError(string normalisedEmail) => _staffCreator.ReservedDomainError(User, normalisedEmail);
 
     /// <summary>
     /// A row that already holds an address on <c>Auth:SuperAdminDomain</c> is a SuperAdmin session whatever its Role, whenever it is active
@@ -540,55 +492,11 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> Create([FromBody] CreateStaffDto dto, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(dto.Email))
-            return BadRequest(ApiResponse<StaffDetailDto>.Fail("Email is required."));
-
-        var guardError = ValidateRoleGuardrails(dto.Role);
-        if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
-
-        // Username/Email uniqueness is GLOBAL across tenants (design spec §2/§7) — IgnoreQueryFilters
-        // so the check sees every tenant's users, not just the caller's own (matches AdminUsersController).
-        var emailLower = EmailIdentity.Normalise(dto.Email);
-        var reservedError = ReservedDomainError(emailLower);
-        if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
-
-        var otherOrganisationError = await OtherOrganisationAddressErrorAsync(emailLower, _currentTenant?.TenantId, ct);
-        if (otherOrganisationError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(otherOrganisationError));
-
-        var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
-        if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
-
-        // Any address can sign in, so one at neither the tenant's own domain nor a common provider (a typo, another organisation's) is a live
-        // login for whoever owns it: ask for a confirmation first (see AddressConfirmation).
-        var tenantDomain = await TenantEmailDomainAsync(_currentTenant?.TenantId, ct);
-        if (tenantDomain is not null && !dto.AddressConfirmed && AddressConfirmation.Needed(emailLower, tenantDomain))
-            return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, tenantDomain), AddressConfirmation.Code));
-
-        // Collision-safe username handling: reuses the migration's own algorithm (Task 1's
-        // StaffUserUnificationMapping.ResolveUsername) rather than duplicating a second,
-        // divergent suffixing implementation here.
-        var existingUsernamesList = await _db.Users.IgnoreQueryFilters()
-            .Select(u => u.Username.ToLower()).ToListAsync(ct);
-        var existingUsernames = existingUsernamesList.ToHashSet();
-        var username = StaffUserUnificationMapping.ResolveUsername(dto.FirstName, dto.LastName, existingUsernames);
-
-        var s = new User
-        {
-            Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName,
-            Username = username, Email = emailLower,
-            Role = dto.Role, Position = dto.Position,
-            Mobile = dto.Mobile, Region = dto.Region,
-            IsDriverEligible = dto.IsDriverEligible, IsFirstAidQualified = dto.IsFirstAidQualified,
-            IsMedicationCompetent = dto.IsMedicationCompetent, IsManualHandlingCompetent = dto.IsManualHandlingCompetent,
-            IsOvernightEligible = dto.IsOvernightEligible, IsActive = dto.IsActive, Notes = dto.Notes,
-            FirstAidExpiryDate = dto.FirstAidExpiryDate,
-            DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate,
-            ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate,
-            MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate,
-            WorkerScreeningNumber = dto.WorkerScreeningNumber,
-            WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate
-        };
-        _db.Users.Add(s);
+        var staged = await _staffCreator.StageAsync(dto, User, _currentTenant?.TenantId, ct);
+        if (staged.IsConflict) return Conflict(ApiResponse<StaffDetailDto>.Fail(staged.Error!));
+        if (staged.ErrorCode is { } code) return BadRequest(ApiResponse<StaffDetailDto>.Fail(staged.Error!, code));
+        if (staged.Error != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(staged.Error));
+        var s = staged.User!;
         await _db.SaveChangesAsync(ct);
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
