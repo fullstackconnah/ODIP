@@ -66,7 +66,7 @@ public sealed class OnboardingImportService
 
         return new ImportPreviewDto(
             ImportFields.For(kind).Select(f => new ImportFieldDto(f.Key, f.Label, f.Required)).ToList(),
-            table.Headers.Select((header, i) => new ImportColumnDto(i, header, columns[i], null)).ToList(),
+            table.Headers.Select((header, i) => new ImportColumnDto(i, header, columns[i], ImportFields.NotImportedNote(kind, header))).ToList(),
             plans.Select(p => p.ToDto()).ToList(),
             plans.Count(p => p.Status == ImportRowStatus.Ready),
             plans.Count(p => p.Status == ImportRowStatus.Skipped),

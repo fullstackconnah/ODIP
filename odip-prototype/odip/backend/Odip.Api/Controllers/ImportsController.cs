@@ -29,6 +29,7 @@ public class ImportsController : ControllerBase
     private static ImportKind? Kind(string kind) => kind switch
     {
         "participants" => ImportKind.Participants,
+        "staff" => ImportKind.Staff,
         _ => null,
     };
 
