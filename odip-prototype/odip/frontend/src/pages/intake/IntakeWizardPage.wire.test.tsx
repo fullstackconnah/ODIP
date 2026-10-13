@@ -81,7 +81,8 @@ describe('IntakeWizardPage (wire) — resuming a draft', () => {
     expect(body).toHaveProperty('riskEntries', [])
     expect(body).not.toHaveProperty('completionRequestId')
     expect(mockApiPutRaw.mock.calls.map(([u]) => u)).not.toContain('/participants/draft-1')
-    expect(await screen.findByText('Participant detail')).toBeInTheDocument()
+    // NAV F2: the saved draft is listed on the Enquiries tab, so that is where Save as draft lands.
+    expect(await screen.findByText('Participants list')).toBeInTheDocument()
   })
 
   it('sends the contact and the risk entry added while resuming, instead of silently dropping them', async () => {

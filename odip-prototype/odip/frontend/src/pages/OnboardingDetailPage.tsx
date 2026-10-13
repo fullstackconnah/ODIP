@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import type { ParticipantReadinessMode } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
+import { useIntakeCompleteNotice } from './intake/intakeComplete'
 import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
 
 type Detail = {
@@ -49,6 +50,8 @@ function fundingWaitSentence(mode: ParticipantReadinessMode | undefined): string
 
 export default function OnboardingDetailPage() {
   const { id } = useParams<{ id: string }>()
+  // Complete intake started from this checklist comes back here with the confirmation the Onboarding table shows.
+  const completed = useIntakeCompleteNotice()
   const qc = useQueryClient()
   const { canManageParticipantLifecycle, canAccessPage, canManageFunding } = usePermissions()
   const detail = useQuery({ queryKey: ['onboarding', id], enabled: !!id, queryFn: () => apiGet<Detail>(`/inquiries/${id}/onboarding`) })
@@ -168,9 +171,7 @@ export default function OnboardingDetailPage() {
   // become active and move to Active participants. It is offered whenever the participant is a draft with the intake complete, whichever gate is open: the
   // gate actions above only edit or validate data, and "Edit profile" disappears once the profile gate is complete, which left nothing that ends onboarding.
   const canCompleteProfile = canManageParticipantLifecycle && d.intakeComplete && participant?.isDraft === true
-  // The onboarding checklist is reached from the Participants hub's Onboarding tab. Honour real
-  // in-app history when the user got here via a non-hub route, and otherwise fall back to the
-  // hub's Onboarding tab so the user always lands on the right stage.
+  // Back is pinned to the hub's Onboarding tab, the one list this checklist belongs to (history={false}): it does not follow history.
 
   return <div className="flex flex-col gap-[var(--section-gap)]">
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -183,6 +184,7 @@ export default function OnboardingDetailPage() {
           />
         </div>
       </div>
+      {completed && <Callout tone="success">Intake complete — {completed.name} is now in onboarding.</Callout>}
       {/* min(26rem,100%) is what collapses this to one column on a phone (a bare 26rem floor
           overflows a 390px viewport), so the old max-md:grid-cols-1 override is redundant. */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
