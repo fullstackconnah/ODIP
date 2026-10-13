@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Postgres;
@@ -84,6 +86,27 @@ public class OnboardingImportPostgresTests : IClassFixture<PostgresFixture>
         await using var check = Context(tenantId);
         Assert.Equal(3, await check.Participants.CountAsync());
         Assert.Equal(1, await check.ImportBatches.CountAsync());
+    }
+
+    [SkippableTheory]
+    [InlineData(ImportLanding.Onboarding)]
+    [InlineData(ImportLanding.Active)]
+    public async Task An_untouched_import_can_be_undone_with_production_auditing(ImportLanding landing)
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var tenantId = await NewOrganisationAsync();
+        // Production audits every save; the import must not write a Participant Updated row that would read as "edited after the import".
+        await using var db = Context(tenantId, new AuditInterceptor(new HttpContextAccessor()));
+        var service = Service(db, tenantId);
+        var file = Csv("First name,Last name,NDIS number,Contact 1 name,Contact 1 relationship", "Ava,Stone,430000001,Kim Stone,Next of kin", "Ben,Lee,430000002,,", "Cal,Wu,430000003,,");
+        var result = await service.CommitAsync(ImportKind.Participants, file, "people.csv", null, landing, $"key-audit-{landing}", Admin(), CancellationToken.None);
+        Assert.Equal(3, result.CreatedCount);
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.EntityType == nameof(Participant) && a.Action == Domain.Enums.AuditAction.Created));
+
+        var outcome = await service.UndoAsync(result.BatchId, Admin(), CancellationToken.None);
+
+        Assert.Empty(outcome.Blockers);
+        Assert.NotNull(outcome.Batch!.UndoneAt);
     }
 
     [SkippableFact]
