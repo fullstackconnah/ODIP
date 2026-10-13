@@ -10,6 +10,11 @@ using static Odip.Tests.Imports.ImportTestSupport;
 
 namespace Odip.Tests.Imports;
 
+/// <summary>Runs alone, after the parallel classes: beside the whole suite the same commit took three times as long (gates run 20261013-175242-45aa).</summary>
+[CollectionDefinition(nameof(ImportTimingPostgresTests), DisableParallelization = true)]
+public class ImportTimingCollection;
+
+[Collection(nameof(ImportTimingPostgresTests))]
 public class ImportTimingPostgresTests : IClassFixture<PostgresFixture>
 {
     private readonly PostgresFixture _pg;
