@@ -29,7 +29,7 @@ export default function CaregiverSubmissionsPage() {
   const columns: Column<CaregiverSubmissionListItemDto>[] = [
     {
       key: 'participantName', header: 'Participant', sortable: true,
-      render: (r) => <Link to={`/participants/${r.participantId}`} className="font-medium hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm">{r.participantName}</Link>,
+      render: (r) => <Link to={`/participants/${r.participantId}`} className="font-medium text-[var(--color-primary)] hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm">{r.participantName}</Link>,
     },
     { key: 'caregiverName', header: 'Caregiver', render: (r) => r.caregiverName ?? '—' },
     { key: 'status', header: 'Status', type: 'badge' },
@@ -39,7 +39,7 @@ export default function CaregiverSubmissionsPage() {
       key: 'actions',
       header: '',
       render: (r) => (
-        <Link to={`/caregiver-submissions/${r.id}`} className="underline text-sm">
+        <Link to={`/caregiver-submissions/${r.id}`} className="underline text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm">
           Review
         </Link>
       ),

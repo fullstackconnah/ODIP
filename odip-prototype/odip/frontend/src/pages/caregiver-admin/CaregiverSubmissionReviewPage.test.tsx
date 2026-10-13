@@ -219,7 +219,7 @@ describe('CaregiverSubmissionReviewPage — a refused Accept or Reject', () => {
 describe('CaregiverSubmissionReviewPage — links', () => {
   it('links to the participant record', () => {
     renderPage()
-    expect(screen.getByRole('link', { name: 'View participant' })).toHaveAttribute('href', '/participants/p1')
+    expect(screen.getByRole('link', { name: 'View participant record' })).toHaveAttribute('href', '/participants/p1')
   })
 
   it('Back returns to the participant when the review was opened from there', () => {

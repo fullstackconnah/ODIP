@@ -8,6 +8,7 @@ import { Modal } from '@/components/Modal'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { TAP_AREA } from '@/components/tapArea'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { Callout } from '@/components/Callout'
@@ -80,7 +81,7 @@ export default function CaregiverSubmissionReviewPage() {
                 {s.caregiverRelationship ? ` (${s.caregiverRelationship})` : ''}
                 {s.submittedAt ? ` on ${formatDateAu(s.submittedAt)}` : ''} · {s.status}
                 {' · '}
-                <Link to={`/participants/${s.participantId}`} className="font-medium text-[var(--color-primary)] hover:underline">View participant</Link>
+                <Link to={`/participants/${s.participantId}`} className={`${TAP_AREA} font-medium text-[var(--color-primary)] hover:underline`}>View participant record</Link>
               </>
             )}
             action={canAct && (
