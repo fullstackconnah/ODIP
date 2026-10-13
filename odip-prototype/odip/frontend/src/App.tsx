@@ -44,6 +44,7 @@ const IncidentDetailPage = React.lazy(() => import('./pages/IncidentDetailPage')
 const BookingsPage = React.lazy(() => import('./pages/BookingsPage'))
 const SchedulePage = React.lazy(() => import('./pages/SchedulePage'))
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage'))
+const ImportWizardPage = React.lazy(() => import('@/pages/settings/ImportWizardPage'))
 const QualificationsPage = React.lazy(() => import('./pages/QualificationsPage'))
 const ClaimDetailPage = React.lazy(() => import('./pages/ClaimDetailPage'))
 const BudgetsPage = React.lazy(() => import('@/pages/BudgetsPage'))
@@ -158,6 +159,7 @@ const router = createBrowserRouter(
         <Route path="/incidents/:id" element={<PrivateRoute page="incidents"><IncidentDetailPage /></PrivateRoute>} />
         <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
+        <Route path="/settings/import/:kind" element={<PrivateRoute page="settings" requiresDataImport><ImportWizardPage /></PrivateRoute>} />
         <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
         <Route path="/claims/:id" element={<PrivateRoute page="claims"><ClaimDetailPage /></PrivateRoute>} />
         <Route path="/budgets" element={<PrivateRoute page="budgets"><BudgetsPage /></PrivateRoute>} />
