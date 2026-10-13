@@ -92,5 +92,105 @@ public sealed class OnboardingImportService
         return plans;
     }
 
+    /// <summary>One advisory-lock key per organisation: imports and undos in one organisation queue, other organisations are not held up.</summary>
+    public static long LockKey(Guid tenantId) => BitConverter.ToInt64(tenantId.ToByteArray(), 0);
+
+    public async Task<ImportResultDto> CommitAsync(ImportKind kind, byte[] content, string fileName, IReadOnlyList<string?>? mapping,
+        ImportLanding? landing, string idempotencyKey, ClaimsPrincipal? caller, CancellationToken ct)
+    {
+        var tenantId = TenantId();
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 100)
+            throw new ImportException("The import request has no key. Reload the page and try again.");
+        if (kind == ImportKind.Participants && landing is null) throw new ImportException(ChooseLanding);
+        var table = ImportFileReader.Read(content, fileName);
+        var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers);
+        if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: true) is { } mappingError) throw new ImportException(mappingError);
+        if (await ReplayAsync(idempotencyKey, ct) is { } earlier) return earlier;
+
+        await using var importLock = await AcquireLockAsync(tenantId, ct);
+        // A request that waited behind its own twin finds the batch the twin made.
+        if (await ReplayAsync(idempotencyKey, ct) is { } twin) return twin;
+
+        var plans = await PlanAsync(kind, table, columns, ct);
+        var batch = new ImportBatch
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, FileName = Path.GetFileName(fileName), FileSha256 = Sha256(content),
+            IdempotencyKey = idempotencyKey, RowCount = plans.Count, CreatedById = ActorId(caller), CreatedByName = ActorName(caller), CreatedAt = DateTime.UtcNow,
+        };
+        var items = new List<ImportBatchItem>();
+        var rowNumber = 0;
+        try
+        {
+            foreach (var plan in plans.Where(p => p.Status == ImportRowStatus.Ready))
+            {
+                rowNumber = plan.RowNumber;
+                if (await CreateAsync(plan, landing, caller, ct) is { } entityId)
+                    items.Add(new ImportBatchItem { Id = Guid.NewGuid(), BatchId = batch.Id, EntityType = nameof(Participant), EntityId = entityId });
+            }
+            batch.CreatedCount = items.Count;
+            batch.SkippedCount = plans.Count(p => p.Status == ImportRowStatus.Skipped);
+            batch.FailedCount = plans.Count(p => p.Status == ImportRowStatus.Invalid);
+            _db.ImportBatches.Add(batch);
+            _db.ImportBatchItems.AddRange(items);
+            await _db.SaveChangesAsync(ct);
+            await importLock.CommitAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Disposing the lock rolls the whole transaction back. Only the row number and the exception's type are logged: a database
+            // error's own text can quote a value from the file.
+            _logger?.LogError("Import {BatchId} failed at row {RowNumber}: {ExceptionType}", batch.Id, rowNumber, ex.GetType().Name);
+            throw new ImportException(CommitFailed, 500);
+        }
+        return new ImportResultDto(batch.Id, batch.CreatedCount, batch.SkippedCount, batch.FailedCount, plans.Select(p => p.ToDto()).ToList(), Replayed: false);
+    }
+
+    private async Task<CatalogueImportLock> AcquireLockAsync(Guid tenantId, CancellationToken ct)
+    {
+        try { return await CatalogueImportLock.AcquireAsync(_db, LockKey(tenantId), LockBusy, ct); }
+        catch (InvalidOperationException ex) when (ex.Message == LockBusy) { throw new ImportException(LockBusy, 409); }
+    }
+
+    private async Task<ImportResultDto?> ReplayAsync(string idempotencyKey, CancellationToken ct)
+    {
+        var earlier = await _db.ImportBatches.Where(b => b.IdempotencyKey == idempotencyKey)
+            .Select(b => new { b.Id, b.CreatedCount, b.SkippedCount, b.FailedCount })
+            .FirstOrDefaultAsync(ct);
+        return earlier is null ? null : new ImportResultDto(earlier.Id, earlier.CreatedCount, earlier.SkippedCount, earlier.FailedCount, [], Replayed: true);
+    }
+
+    /// <summary>
+    /// Creates one ready row through the manual-entry service and saves it inside the import's transaction. A row the service refuses now (it
+    /// changed since the preview) is marked Can't import and left out.
+    /// </summary>
+    private async Task<Guid?> CreateAsync(ImportRowPlan plan, ImportLanding? landing, ClaimsPrincipal? caller, CancellationToken ct)
+    {
+        // New onboarding: a draft whose intake is completed by the Intake wizard's own path (snapshot and onboarding row included).
+        // Already receiving services: finalised and active, like a participant from before onboarding existed, so no onboarding row.
+        var onboarding = landing == ImportLanding.Onboarding;
+        var (participant, error) = await _participants.StageAsync(plan.Participant! with { IsDraft = onboarding, CompleteIntake = onboarding }, CompletionActor(caller), ct);
+        if (participant is null)
+        {
+            _db.ChangeTracker.Clear();
+            plan.Refuse(error!);
+            return null;
+        }
+        if (!onboarding) participant.IsActive = true;
+        await _db.SaveChangesAsync(ct);
+        // A saved row's entities are not needed again, and 2,000 rows kept tracked would make every later save slower.
+        _db.ChangeTracker.Clear();
+        return participant.Id;
+    }
+
+    private static Guid? ActorId(ClaimsPrincipal? caller) =>
+        Guid.TryParse(caller?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
+
+    private static string ActorName(ClaimsPrincipal? caller) =>
+        caller?.FindFirst("fullName")?.Value ?? caller?.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown";
+
+    // The attribution ParticipantsController gives an intake completed by hand (its CompletionActor).
+    private static string CompletionActor(ClaimsPrincipal? caller) =>
+        caller?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? caller?.FindFirst("sub")?.Value ?? "unknown";
+
     private static string Sha256(byte[] content) => Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 }
