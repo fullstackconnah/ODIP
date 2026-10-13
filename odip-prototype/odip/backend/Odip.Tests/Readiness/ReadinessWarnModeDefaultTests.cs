@@ -276,8 +276,10 @@ public class ReadinessWarnModeDefaultTests
     private static ParticipantsController Participants(OdipDbContext db) =>
         new(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
+    // Owner decision 2026-10-13: saving a participant never makes them Active ("Make active" on the onboarding checklist does). This PUT used
+    // to activate, which also brought an ARCHIVED participant (non-draft, inactive) back whenever their record was saved.
     [Fact]
-    public async Task Update_NonDraftParticipantWithCompletedIntake_DefaultMode_Activates()
+    public async Task Update_ArchivedParticipantWithCompletedIntake_DefaultMode_StaysInactive()
     {
         using var db = CreateDb();
         var participant = new Participant
@@ -296,7 +298,31 @@ public class ReadinessWarnModeDefaultTests
         }, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.True(body.Data!.IsActive);
+        Assert.False(body.Data!.IsActive);
+        Assert.False((await db.Participants.SingleAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task Update_DraftWithCompletedIntake_FinalisedByThePayload_DefaultMode_StaysInactive()
+    {
+        using var db = CreateDb();
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), FirstName = "Still", LastName = "Onboarding",
+            IsActive = false, IsDraft = true, IntakeCompletedAt = DateTime.UtcNow,
+        };
+        db.Participants.Add(participant);
+        await db.SaveChangesAsync();
+
+        var result = await Participants(db).Update(participant.Id, new UpdateParticipantDto
+        {
+            FirstName = participant.FirstName, LastName = participant.LastName, PlanType = PlanType.SelfManaged,
+            OvernightSupport = OvernightSupportType.None, OvernightRatio = SupportRatio.OneToOne,
+            SupportRatio = SupportRatio.OneToOne, IsActive = true, IsDraft = false,
+        }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.False(body.Data!.IsActive);
     }
 
     [Fact]

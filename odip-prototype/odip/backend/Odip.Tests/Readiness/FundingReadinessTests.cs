@@ -201,7 +201,7 @@ public class FundingReadinessTests
         SeedPlan(db, participant, Today.AddDays(100));
 
         Assert.Equal(ActivationBlock.EvidenceRequired, await ParticipantReadiness.ActivationBlockAsync(db, participant, NoonUtc, default));
-        Assert.False(await ParticipantReadiness.MayActivateAsync(db, participant, NoonUtc, default));
+        Assert.False(await ParticipantReadiness.ActivationBlockAsync(db, participant, NoonUtc, default) == ActivationBlock.None);
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public class FundingReadinessTests
         var participant = SeedParticipant(db, active: false);
 
         Assert.Equal(ActivationBlock.None, await ParticipantReadiness.ActivationBlockAsync(db, participant, NoonUtc, default));
-        Assert.True(await ParticipantReadiness.MayActivateAsync(db, participant, NoonUtc, default));
+        Assert.True(await ParticipantReadiness.ActivationBlockAsync(db, participant, NoonUtc, default) == ActivationBlock.None);
     }
 
     [Theory]
@@ -318,7 +318,7 @@ public class FundingReadinessTests
         SetProvider(db);
         var participant = SeedParticipant(db, active: false, draft: true);
 
-        var result = await Participants(db, NoonUtc).CompleteProfile(participant.Id, default);
+        var result = await Participants(db, NoonUtc).MakeActive(participant.Id, default);
 
         var detail = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
         Assert.True(detail.IsActive);

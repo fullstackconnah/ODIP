@@ -132,15 +132,11 @@ public static class ParticipantReadiness
     }
 
     /// <summary>
-    /// May an inactive, non-draft participant be activated? Warn: yes. Enforce: only when persisted, tenant-matched evidence exists
-    /// (<see cref="ParticipantReadinessGate.HasActivationEvidenceAsync"/>) AND, for an NDIS-funded participant, a plan budget is recorded that has not ended
-    /// (<see cref="ParticipantReadinessGate.HasFundingRecordedAsync"/>, judged on the provider's calendar date). The caller still decides draft state; this answers the
-    /// readiness question only. Activation is the ONLY place the plan budget is asked for: placement (<see cref="CheckAsync"/>) never is.
+    /// What stops this activation, for the refusal message: nothing (<see cref="ActivationBlock.None"/>), the missing agreement evidence, or the missing plan budget.
+    /// Warn never blocks. Enforce needs persisted, tenant-matched evidence (<see cref="ParticipantReadinessGate.HasActivationEvidenceAsync"/>) AND, for an NDIS-funded
+    /// participant, a plan budget that has not ended (provider's calendar date). The caller decides draft state. Activation is the ONLY place the plan budget is asked
+    /// for: placement (<see cref="CheckAsync"/>) never is.
     /// </summary>
-    public static async Task<bool> MayActivateAsync(OdipDbContext db, Participant participant, TimeProvider clock, CancellationToken ct) =>
-        await ActivationBlockAsync(db, participant, clock, ct) == ActivationBlock.None;
-
-    /// <summary>What stops this activation, for the refusal message: nothing (<see cref="ActivationBlock.None"/>), the missing agreement evidence, or the missing plan budget.</summary>
     public static async Task<ActivationBlock> ActivationBlockAsync(OdipDbContext db, Participant participant, TimeProvider clock, CancellationToken ct)
     {
         if (!await IsEnforcedAsync(db, participant.TenantId, ct)) return ActivationBlock.None;

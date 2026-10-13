@@ -528,7 +528,7 @@ public class ParticipantHubFlowTests
         Assert.Equal(seeded.Id, Assert.Single(await WorklistAsync(caller)).ParticipantId);
 
         // Complete Profile finalises her; she was already active, so she is on the Active register.
-        var completed = Ok(await caller.Participants.CompleteProfile(seeded.Id, CancellationToken.None));
+        var completed = Ok(await caller.Participants.MakeActive(seeded.Id, CancellationToken.None));
         Assert.False(completed.IsDraft);
         Assert.True(completed.IsActive);
         Assert.Empty(await WorklistAsync(caller));
@@ -566,7 +566,7 @@ public class ParticipantHubFlowTests
         Assert.Empty(await ActiveRegisterAsync(caller));
 
         // 4. Complete the profile. Warn mode activates, so the participant leaves Onboarding for the Active tab.
-        var completed = Ok(await caller.Participants.CompleteProfile(participantId, CancellationToken.None));
+        var completed = Ok(await caller.Participants.MakeActive(participantId, CancellationToken.None));
         Assert.True(completed.IsActive);
         Assert.False(completed.IsDraft);
         Assert.Empty(await WorklistAsync(caller));
@@ -595,13 +595,13 @@ public class ParticipantHubFlowTests
         Assert.Empty(await EnquiriesAsync(caller));
         Assert.Equal(participantId, Assert.Single(await WorklistAsync(caller)).ParticipantId);
 
-        Ok(await caller.Participants.CompleteProfile(participantId, CancellationToken.None));
+        Ok(await caller.Participants.MakeActive(participantId, CancellationToken.None));
         Assert.Empty(await WorklistAsync(caller));
         Assert.Equal(participantId, Assert.Single(await ActiveRegisterAsync(caller)).Id);
     }
 
     [Fact]
-    public async Task Lifecycle_InEnforceMode_CompleteProfileIsRefusedWithTheEvidenceReason_AndTheParticipantStaysOnOnboarding()
+    public async Task Lifecycle_InEnforceMode_MakeActiveIsRefusedWithTheEvidenceReason_AndTheParticipantStaysOnOnboarding()
     {
         // Enforce keeps the fail-closed rule: activation needs verified signed-agreement evidence, which nobody has yet. Finalising without being able to
         // activate would leave the participant in no stage, so Complete Profile is refused and they stay a draft on Onboarding, where the agreement-evidence
@@ -614,7 +614,7 @@ public class ParticipantHubFlowTests
         Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "Lovelace", complete: true), CancellationToken.None));
         Assert.Equal(participantId, Assert.Single(await WorklistAsync(caller)).ParticipantId);
 
-        var refusal = await caller.Participants.CompleteProfile(participantId, CancellationToken.None);
+        var refusal = await caller.Participants.MakeActive(participantId, CancellationToken.None);
 
         var failure = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<BadRequestObjectResult>(refusal.Result).Value);
         Assert.Equal("This participant cannot be activated until their signed service agreement evidence is recorded.", Assert.Single(failure.Errors!));
@@ -658,7 +658,7 @@ public class ParticipantHubFlowTests
     }
 
     [Fact]
-    public async Task Lifecycle_ADraftCannotBeActivatedThroughTheStatusEndpoint_SoOnboardingEndsWithCompleteProfile()
+    public async Task Lifecycle_ADraftCannotBeActivatedThroughTheStatusEndpoint_SoOnboardingEndsWithMakeActive()
     {
         // The status endpoint refuses a draft ("Complete their intake and profile first."), and a participant in onboarding is still a draft
         // until the Profile wizard's Complete Profile finalises it, applying the same Warn/Enforce activation rule. The Onboarding tab's way
