@@ -53,8 +53,8 @@ public class ImportInvitesTests
         var (db, controller, firebase, batchId, _) = await StaffImportedAsync();
         using var _ = db;
 
-        var answer = Assert.IsType<OkObjectResult>((await controller.Invites(batchId, CancellationToken.None)).Result);
-        var invites = Assert.IsType<ApiResponse<List<ImportInviteDto>>>(answer.Value).Data!.OrderBy(i => i.Email).ToList();
+        var answer = Assert.IsType<OkObjectResult>((await controller.Invites(batchId, null, CancellationToken.None)).Result);
+        var invites = Assert.IsType<ApiResponse<ImportInvitesDto>>(answer.Value).Data!.Invites.OrderBy(i => i.Email).ToList();
 
         Assert.Equal(new[] { "al@example.com", "jo@example.com" }, invites.Select(i => i.Email));
         Assert.Equal(((string?)null, "Unable to set up the staff member's sign-in account. If it keeps happening, ask whoever runs the Firebase project."), (invites[0].FirebaseAccount, invites[0].Error));
@@ -67,16 +67,16 @@ public class ImportInvitesTests
     {
         var (db, controller, firebase, batchId, tenantId) = await StaffImportedAsync();
         using var _ = db;
-        Assert.IsType<NotFoundObjectResult>((await controller.Invites(Guid.NewGuid(), CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await controller.Invites(Guid.NewGuid(), null, CancellationToken.None)).Result);
 
         // A participant batch, and the staff batch once undone.
         var participants = await Service(db, tenantId).CommitAsync(ImportKind.Participants, Csv("First name,Last name", "Ava,Stone"), "people.csv", null,
             ImportLanding.Active, "key-2", Admin(), CancellationToken.None);
-        Assert.IsType<NotFoundObjectResult>((await controller.Invites(participants.BatchId, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await controller.Invites(participants.BatchId, null, CancellationToken.None)).Result);
         (await db.Users.SingleAsync(u => u.Email == "bo@example.com")).LastLoginAt = null;
         await db.SaveChangesAsync();
         Assert.Empty((await Service(db, tenantId).UndoAsync(batchId, Admin(), CancellationToken.None)).Blockers);
-        Assert.IsType<NotFoundObjectResult>((await controller.Invites(batchId, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await controller.Invites(batchId, null, CancellationToken.None)).Result);
 
         firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -90,7 +90,7 @@ public class ImportInvitesTests
         var otherTenant = Guid.NewGuid();
         using var otherDb = TestDb.ForTenant(shared, otherTenant);
 
-        Assert.IsType<NotFoundObjectResult>((await Controller(otherDb, otherTenant, firebase.Object).Invites(batchId, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await Controller(otherDb, otherTenant, firebase.Object).Invites(batchId, null, CancellationToken.None)).Result);
         firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -106,7 +106,7 @@ public class ImportInvitesTests
             .Returns(() => { dropped.Cancel(); return Task.FromException<SignInAccountResult>(new OperationCanceledException(dropped.Token)); });
         var logger = new ListLogger<ImportsController>();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Controller(db, tenantId, firebase.Object, logger).Invites(batchId, dropped.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Controller(db, tenantId, firebase.Object, logger).Invites(batchId, null, dropped.Token));
 
         firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.DoesNotContain(logger.Entries, e => e.Level >= LogLevel.Warning);
@@ -122,11 +122,34 @@ public class ImportInvitesTests
             .ThrowsAsync(Odip.Tests.Controllers.FirebaseTestExceptions.WithCode(FirebaseAdmin.Auth.AuthErrorCode.EmailAlreadyExists));
         var logger = new ListLogger<ImportsController>();
 
-        await Controller(db, tenantId, firebase.Object, logger).Invites(batchId, CancellationToken.None);
+        await Controller(db, tenantId, firebase.Object, logger).Invites(batchId, null, CancellationToken.None);
 
         var errors = logger.Entries.Where(e => e.Level == LogLevel.Error).Select(e => e.Text).ToList();
         Assert.Equal(2, errors.Count);
         Assert.All(errors, text => Assert.Contains("EmailAlreadyExists", text));
         Assert.All(errors, text => Assert.DoesNotContain("@example.com", text));
+    }
+
+    [Fact]
+    public async Task One_request_invites_at_most_100_and_says_how_many_are_left()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenantId);
+        var rows = Enumerable.Range(1, 150).Select(n => $"P{n:000},Staff,p{n:000}@example.com").Prepend("First name,Last name,Email").ToArray();
+        var batch = await Service(db, tenantId).CommitAsync(ImportKind.Staff, Csv(rows), "staff.csv", null, null, "key-1", Admin(), CancellationToken.None);
+        Assert.Equal(150, batch.CreatedCount);
+        var firebase = new Mock<IFirebaseUserService>();
+        firebase.Setup(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SignInAccountResult.Created);
+        var controller = Controller(db, tenantId, firebase.Object);
+        async Task<ImportInvitesDto> Send(int? from) =>
+            Assert.IsType<ApiResponse<ImportInvitesDto>>(Assert.IsType<OkObjectResult>((await controller.Invites(batch.BatchId, from, CancellationToken.None)).Result).Value).Data!;
+
+        var first = await Send(null);
+        var second = await Send(100);
+
+        Assert.Equal((100, 50), (first.Invites.Count, first.Left));
+        Assert.Equal((50, 0), (second.Invites.Count, second.Left));
+        Assert.Equal(150, first.Invites.Concat(second.Invites).Select(i => i.Email).Distinct().Count());
+        firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(150));
     }
 }

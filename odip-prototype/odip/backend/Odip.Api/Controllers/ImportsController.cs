@@ -21,6 +21,7 @@ public class ImportsController : ControllerBase
 {
     /// <summary>The 5 MB file plus the form around it. The 5 MB rule itself, with its message, is ImportFileReader's.</summary>
     private const int MaxRequestBytes = 6 * 1024 * 1024;
+    private const int MaxInvitesPerRequest = 100;
     private const string Mismatch = "The column matches don't fit this file. Upload it again.";
 
     private readonly OnboardingImportService _imports;
@@ -96,22 +97,27 @@ public class ImportsController : ControllerBase
     /// says per person what happened. The browser then sends each set-password email, as the Staff page does.
     /// </summary>
     [HttpPost("{batchId:guid}/invites")]
-    public async Task<ActionResult<ApiResponse<List<ImportInviteDto>>>> Invites(Guid batchId, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ImportInvitesDto>>> Invites(Guid batchId, [FromQuery] int? from, CancellationToken ct)
     {
         List<User>? staff;
         try { staff = await _imports.StaffToInviteAsync(batchId, ct); }
-        catch (ImportException ex) { return StatusCode(ex.StatusCode, ApiResponse<List<ImportInviteDto>>.Fail(ex.Message)); }
-        if (staff is null) return NotFound(ApiResponse<List<ImportInviteDto>>.Fail("Staff import not found."));
+        catch (ImportException ex) { return StatusCode(ex.StatusCode, ApiResponse<ImportInvitesDto>.Fail(ex.Message)); }
+        if (staff is null) return NotFound(ApiResponse<ImportInvitesDto>.Fail("Staff import not found."));
 
-        var invites = new List<ImportInviteDto>(staff.Count);
-        foreach (var s in staff)
+        // At most 100 per request, so one press stays well inside the proxy's 180 s; the browser sends again from where this stopped.
+        // shortcut: the position is an offset into the current never-signed-in list, so someone signing in between presses can shift who is
+        // next by one; a stored "invited at" per batch item would fix that if it ever matters.
+        var skip = Math.Max(0, from ?? 0);
+        var page = staff.Skip(skip).Take(MaxInvitesPerRequest).ToList();
+        var invites = new List<ImportInviteDto>(page.Count);
+        foreach (var s in page)
         {
             // A dropped request (nginx's timeout, a closed tab) stops here rather than failing every remaining person.
             ct.ThrowIfCancellationRequested();
             var outcome = await SignInAccounts.EnsureAsync(s, User, _config, _firebase, _logger, ct);
             invites.Add(new ImportInviteDto(s.Id, s.FullName, s.Email, outcome.Account?.FirebaseAccount, outcome.Error));
         }
-        return Ok(ApiResponse<List<ImportInviteDto>>.Ok(invites));
+        return Ok(ApiResponse<ImportInvitesDto>.Ok(new ImportInvitesDto(invites, Math.Max(0, staff.Count - skip - page.Count))));
     }
 
     /// <summary>Runs an import call; a refusal the Admin can act on answers with its own status and message.</summary>

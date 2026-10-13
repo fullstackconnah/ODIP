@@ -6,13 +6,14 @@ import { describeEmailOutcome, sendSetPasswordEmailFor, type EmailOutcome } from
 import { extractErrorMessage } from '@/lib/utils'
 
 /** What a press of "Send sign-in invites" came to: one outcome per person, or the request's own refusal. */
-export type InviteResult = { outcomes: EmailOutcome[] } | { problem: string }
+export type InviteResult = { outcomes: EmailOutcome[]; left: number } | { problem: string }
 
 /** The invites' results as one Callout: failures first, each line naming the address (lib/signInEmail words it). */
 export function InviteResults({ result, fileName }: { result: InviteResult; fileName?: string }) {
   const lead = fileName ? `Sign-in invites for ${fileName}` : 'Sign-in invites'
   if ('problem' in result) return <Callout tone="error" title={`${lead}: not sent`}>{result.problem}</Callout>
-  const { outcomes } = result
+  const { outcomes, left } = result
+  const more = left > 0 && <p>{`${left} more still to invite: press Send sign-in invites again.`}</p>
   if (outcomes.length === 0) return <Callout tone="info">Everyone in this import has signed in already, so no invites were sent.</Callout>
   const failed = outcomes.filter(o => !o.ok)
   const sent = outcomes.filter(o => o.ok)
@@ -21,6 +22,7 @@ export function InviteResults({ result, fileName }: { result: InviteResult; file
       <ul className="list-disc pl-5">
         {[...failed, ...sent].map(o => <li key={o.email} className="break-words">{describeEmailOutcome(o, 'use Send sign-in invites again').message}</li>)}
       </ul>
+      {more}
     </Callout>
   )
 }
@@ -34,13 +36,16 @@ export default function ImportInvites({ batchId, count, onResult }: { batchId: s
   const invites = useImportInvites()
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<InviteResult | null>(null)
+  // Where the next press starts and how many are left, while a batch is being sent 100 at a time. Null: the next press starts at the top.
+  const [next, setNext] = useState<{ from: number; left: number } | null>(null)
 
   async function send() {
     if (sending) return
     setSending(true)
-    let next: InviteResult
+    let answer: InviteResult
     try {
-      const people = await invites.mutateAsync(batchId)
+      const from = next?.from ?? 0
+      const { invites: people, left } = await invites.mutateAsync({ batchId, from })
       const outcomes: EmailOutcome[] = []
       // One at a time: Firebase limits how fast one browser may ask for emails, and the outcome says when it does.
       for (const person of people) {
@@ -48,13 +53,14 @@ export default function ImportInvites({ batchId, count, onResult }: { batchId: s
           ? await sendSetPasswordEmailFor(person.email, person.firebaseAccount)
           : { ok: false, email: person.email, reason: 'account', detail: person.error ?? undefined })
       }
-      next = { outcomes }
+      setNext(left > 0 ? { from: from + people.length, left } : null)
+      answer = { outcomes, left }
     } catch (err) {
-      next = { problem: extractErrorMessage(err, 'The invites could not be sent.') }
+      answer = { problem: extractErrorMessage(err, 'The invites could not be sent.') }
     }
     setSending(false)
-    if (onResult) onResult(next)
-    else setResult(next)
+    if (onResult) onResult(answer)
+    else setResult(answer)
   }
 
   return (
@@ -65,11 +71,11 @@ export default function ImportInvites({ batchId, count, onResult }: { batchId: s
           variant="secondary"
           size="sm"
           onClick={send}
-          disabled={count === 0}
+          disabled={(next?.left ?? count) === 0}
           aria-disabled={sending || undefined}
           className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
         >
-          {sending ? 'Sending invites...' : `Send sign-in invites (${count})`}
+          {sending ? 'Sending invites...' : `Send sign-in invites (${next?.left ?? count})`}
         </Button>
       </div>
       {result && <InviteResults result={result} />}

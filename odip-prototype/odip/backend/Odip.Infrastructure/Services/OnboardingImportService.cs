@@ -349,7 +349,7 @@ public sealed class OnboardingImportService
         var batch = await _db.ImportBatches.FirstOrDefaultAsync(b => b.Id == batchId && b.Kind == ImportKind.Staff && b.UndoneAt == null, ct);
         if (batch is null) return null;
         var ids = _db.ImportBatchItems.Where(i => i.BatchId == batch.Id).Select(i => i.EntityId);
-        return await _db.Users.Where(u => ids.Contains(u.Id) && u.LastLoginAt == null).OrderBy(u => u.LastName).ThenBy(u => u.FirstName).ToListAsync(ct);
+        return await _db.Users.Where(u => ids.Contains(u.Id) && u.LastLoginAt == null).OrderBy(u => u.LastName).ThenBy(u => u.FirstName).ThenBy(u => u.Id).ToListAsync(ct);
     }
 
     public async Task<List<ImportBatchDto>> HistoryAsync(CancellationToken ct)

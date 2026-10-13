@@ -69,7 +69,7 @@ describe('ImportDataTab', () => {
 
   it('offers a staff import, and invites for a staff batch with the results above the history', async () => {
     history.current = [batch({ id: 'b2', kind: 'Staff', fileName: 'staff.csv' }), batch()]
-    invites.mockResolvedValue([])
+    invites.mockResolvedValue({ invites: [], left: 0 })
     renderTab()
     expect(screen.getByRole('link', { name: 'Import staff' })).toHaveAttribute('href', '/settings/import/staff')
     expect(within(screen.getByRole('row', { name: /people.csv/ })).queryByRole('button', { name: /Send sign-in invites/ })).toBeNull()
@@ -77,7 +77,7 @@ describe('ImportDataTab', () => {
     const row = screen.getByRole('row', { name: /staff.csv/ })
     await userEvent.click(within(row).getByRole('button', { name: 'Send sign-in invites (2)' }))
 
-    expect(invites).toHaveBeenCalledWith('b2')
+    expect(invites).toHaveBeenCalledWith({ batchId: 'b2', from: 0 })
     const said = await screen.findByText('Everyone in this import has signed in already, so no invites were sent.')
     expect(row).not.toContainElement(said)
     await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
