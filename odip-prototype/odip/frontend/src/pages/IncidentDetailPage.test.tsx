@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 import IncidentDetailPage from './IncidentDetailPage'
@@ -205,5 +205,51 @@ describe('IncidentDetailPage — Edit by role', () => {
     expect(screen.getByRole('heading', { name: 'Missed evening medication dose' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Edit' }) !== null).toBe(offered)
     localStorage.clear()
+  })
+})
+
+// A read-only "Restrictive practice" block: the type, the linked practice or the text of one not on the register, and the stored determination.
+describe('IncidentDetailPage — restrictive practice', () => {
+  function block() {
+    // The Card: its title row, then the card itself.
+    return screen.getByRole('heading', { name: 'Restrictive practice' }).parentElement!.parentElement!
+  }
+
+  it('shows no restrictive practice block for another incident type', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    renderPage()
+    expect(screen.queryByRole('heading', { name: 'Restrictive practice' })).not.toBeInTheDocument()
+  })
+
+  it('shows the type, the linked practice and Not authorised for a use that was not authorised', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({
+      incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'PhysicalRestraint', restrictivePracticeId: 'rp-1',
+      restrictivePracticeDescription: 'Two-person hold during transfers.', isRestrictivePracticeAuthorised: false,
+    }), isLoading: false })
+    renderPage()
+
+    const card = block()
+    expect(within(card).getByText('Physical restraint')).toBeInTheDocument()
+    expect(within(card).getByText('Linked practice')).toBeInTheDocument()
+    expect(within(card).getByText('Two-person hold during transfers.')).toBeInTheDocument()
+    expect(within(card).getByText('Not authorised')).toBeInTheDocument()
+  })
+
+  it('shows the text of a practice not on the register, and Authorised when it was', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({
+      incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Seclusion', restrictivePracticeId: null,
+      unapprovedRestrictivePracticeDetails: 'Locked the back door.', isRestrictivePracticeAuthorised: false,
+    }), isLoading: false })
+    const { unmount } = renderPage()
+    expect(within(block()).getByText('Practice not on the register')).toBeInTheDocument()
+    expect(within(block()).getByText('Locked the back door.')).toBeInTheDocument()
+    unmount()
+
+    mockUseIncident.mockReturnValue({ data: baseIncident({
+      incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Seclusion', restrictivePracticeId: 'rp-2',
+      restrictivePracticeDescription: 'Seclusion room.', isRestrictivePracticeAuthorised: true,
+    }), isLoading: false })
+    renderPage()
+    expect(within(block()).getByText('Authorised')).toBeInTheDocument()
   })
 })

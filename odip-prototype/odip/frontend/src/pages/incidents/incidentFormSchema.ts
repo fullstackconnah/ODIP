@@ -26,6 +26,8 @@ export const incidentBaseSchema = z.object({
   restrictivePracticeId: z.string().optional(),
   /** IN-4: mutually exclusive with restrictivePracticeId — see incidentRpRefine. */
   unapprovedRestrictivePracticeDetails: z.string().optional(),
+  /** "This use was not authorised": only meaningful with restrictivePracticeId. The step ticks it, and locks it, for a Not authorised entry. */
+  usedWithoutAuthorisation: z.boolean().optional(),
 
   // Step 2 — Incident Details (IN-6), plus IN-5's injuries (conditional on incidentType === 'Injury')
   incidentDateTime: z.string().min(1, 'Date/time is required'),
@@ -84,7 +86,7 @@ export const STEP_BASICS_FIELDS = [
 ] as const satisfies readonly (keyof IncidentFormData)[]
 
 export const STEP_RESTRICTIVE_PRACTICE_FIELDS = [
-  'restrictivePracticeType', 'restrictivePracticeId', 'unapprovedRestrictivePracticeDetails',
+  'restrictivePracticeType', 'restrictivePracticeId', 'unapprovedRestrictivePracticeDetails', 'usedWithoutAuthorisation',
 ] as const satisfies readonly (keyof IncidentFormData)[]
 
 export const STEP_DETAILS_FIELDS = [
@@ -122,7 +124,7 @@ function basicsRefine(data: Pick<IncidentFormData, 'serviceType' | 'tripInstance
  * and incidentSchema below), since a non-RP incident has nothing here to validate.
  */
 function restrictivePracticeRefine(
-  data: Pick<IncidentFormData, 'restrictivePracticeType' | 'restrictivePracticeId' | 'unapprovedRestrictivePracticeDetails'>,
+  data: Pick<IncidentFormData, 'restrictivePracticeType' | 'restrictivePracticeId' | 'unapprovedRestrictivePracticeDetails' | 'usedWithoutAuthorisation'> & { description?: string },
   ctx: z.RefinementCtx,
 ) {
   if (!data.restrictivePracticeType) {
@@ -140,6 +142,11 @@ function restrictivePracticeRefine(
       code: z.ZodIssueCode.custom, path: ['unapprovedRestrictivePracticeDetails'],
       message: 'Link an approved practice, or describe the unapproved practice that was used.',
     })
+  }
+  // A use that was not authorised follows the "None of these" path, which always describes what was done: here that is the incident's own
+  // description (the link is kept, so the unapproved-practice text cannot carry it), asked for on this step.
+  if (hasLinked && data.usedWithoutAuthorisation && !data.description?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'Describe what was actually done.' })
   }
 }
 
@@ -161,6 +168,8 @@ export const basicsSchema = incidentBaseSchema.pick(pickShape(STEP_BASICS_FIELDS
 // with detailsSchema's own equivalent addition below costs nothing.
 export const restrictivePracticeSchema = incidentBaseSchema
   .pick({ ...pickShape(STEP_RESTRICTIVE_PRACTICE_FIELDS), incidentType: true })
+  // The description belongs to Incident Details (required there); this step reads it only for a use that was not authorised.
+  .extend({ description: z.string().optional() })
   .superRefine(restrictivePracticeRefine)
 
 export const detailsSchema = incidentBaseSchema

@@ -182,6 +182,8 @@ export interface CreateIncidentDto {
    * 400). Never results in a RestrictivePractice register row being created.
    */
   unapprovedRestrictivePracticeDetails?: string
+  /** "This use was not authorised": the linked practice was used without, or outside, its authorisation, so the incident is stored unauthorised (link kept). On an edit it can only lower the stored determination. */
+  usedWithoutAuthorisation?: boolean
   severity: IncidentSeverity
   title: string
   description: string
@@ -240,6 +242,8 @@ export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateI
     restrictivePracticeType: i.restrictivePracticeType ?? undefined,
     restrictivePracticeId: i.restrictivePracticeId ?? undefined,
     unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? undefined,
+    // Only ever lowers the stored determination, so an update made from the record itself leaves it as it is.
+    usedWithoutAuthorisation: false,
     severity: i.severity,
     title: i.title,
     description: i.description,

@@ -14,6 +14,8 @@ import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { formatWallClock } from '@/lib/wallClock'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
+import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
+import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS } from '@/api/types/enums'
 
 /**
@@ -84,6 +86,21 @@ export default function IncidentDetailPage() {
           ]}
         />
       </Card>
+
+      {/* Read-only: the practice as the incident recorded it, and the authorisation determined when it was reported (or lowered since). */}
+      {incident.incidentType === 'RestrictivePracticeUse' && (
+        <Card title="Restrictive practice">
+          <FactList
+            items={[
+              { label: 'Type', value: incident.restrictivePracticeType ? RESTRICTIVE_PRACTICE_TYPE_LABELS[incident.restrictivePracticeType] : '—' },
+              incident.restrictivePracticeId
+                ? { label: 'Linked practice', value: incident.restrictivePracticeDescription || '—' }
+                : { label: 'Practice not on the register', value: <span className="whitespace-pre-wrap">{incident.unapprovedRestrictivePracticeDetails || '—'}</span> },
+              { label: 'Authorisation', value: incident.isRestrictivePracticeAuthorised === null ? 'Not determined' : <RpAuthorisationBadge authorised={incident.isRestrictivePracticeAuthorised} /> },
+            ]}
+          />
+        </Card>
+      )}
 
       {/* Connection map: only rendered when the incident is actually linked to a medication
           administration, a shift, or a shift note — a bare incident (the common case) shows no
