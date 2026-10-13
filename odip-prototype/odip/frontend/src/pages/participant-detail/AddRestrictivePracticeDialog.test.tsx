@@ -65,3 +65,11 @@ describe('AddRestrictivePracticeDialog with a default type (from an incident)', 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
+
+// Finish review: in the DataTable phone card the cell shrank to the input's own width, so a prefilled description could not be read.
+describe('AddRestrictivePracticeDialog on a phone', () => {
+  it('gives the description cell the full row below md', () => {
+    render(<AddRestrictivePracticeDialog open participantId="participant-1" defaultType="PhysicalRestraint" defaultDescription="Held both arms at the kerb." onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.getByLabelText('Description, row 1').closest('td')).toHaveClass('max-md:basis-full')
+  })
+})

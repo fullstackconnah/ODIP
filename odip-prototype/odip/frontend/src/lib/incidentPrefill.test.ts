@@ -6,6 +6,7 @@ import {
   suggestedIncidentSeverity,
   previewRpAuthorisation,
   isRpAuthorised,
+  editedRpAuthorisation,
   buildRpIncidentDescriptionSkeleton,
   buildMarIncidentPrefill,
   type MarIncidentPrefillState,
@@ -201,5 +202,22 @@ describe('buildRpIncidentDescriptionSkeleton', () => {
     const skeleton = buildRpIncidentDescriptionSkeleton({ description: 'Locked room during acute crisis.', reviewDate: null })
     expect(skeleton).not.toContain('review due')
     expect(skeleton).toContain('Locked room during acute crisis.')
+  })
+})
+
+// Review N1/M1: what an edit will store, mirroring IncidentsController.Update: it only ever lowers the stored flag.
+describe('editedRpAuthorisation', () => {
+  it('keeps the stored value when nothing lowers it', () => {
+    expect(editedRpAuthorisation(true, false, { restrictivePracticeId: 'rp-a' })).toBe(true)
+    expect(editedRpAuthorisation(undefined, false, { restrictivePracticeId: 'rp-a' })).toBeNull()
+  })
+
+  it('lowers to false for a ticked "This use was not authorised" with a link', () => {
+    expect(editedRpAuthorisation(true, false, { restrictivePracticeId: 'rp-a', usedWithoutAuthorisation: true })).toBe(false)
+  })
+
+  it('lowers to false on the switch to "None of these", but not for an incident that already described one', () => {
+    expect(editedRpAuthorisation(true, false, { unapproved: true })).toBe(false)
+    expect(editedRpAuthorisation(true, true, { unapproved: true })).toBe(true)
   })
 })

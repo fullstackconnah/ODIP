@@ -185,6 +185,20 @@ export function previewRpAuthorisation(
     ? 'authorised' : 'unauthorised'
 }
 
+/**
+ * What an edit will store, mirroring IncidentsController.Update: the stored determination stays frozen, except that it is LOWERED to false
+ * by a ticked "This use was not authorised" with a link, or by switching to "None of these" (`wasUnapproved`: the incident did not already
+ * describe one). A relink to a Not authorised entry ticks the box, so it is covered too. Null (or the key left out) is "not determined".
+ */
+export function editedRpAuthorisation(
+  stored: boolean | null | undefined,
+  wasUnapproved: boolean,
+  selection: { restrictivePracticeId?: string; unapproved?: boolean; usedWithoutAuthorisation?: boolean },
+): boolean | null {
+  if ((selection.restrictivePracticeId && selection.usedWithoutAuthorisation) || (!wasUnapproved && selection.unapproved)) return false
+  return stored ?? null
+}
+
 /** INC-05: prepopulation skeleton once the coordinator links a specific register entry — saves
  * re-typing what's already on record, same "skeleton the reporter still edits" idiom as
  * buildIncidentDescriptionSkeleton (INC-03). */

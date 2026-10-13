@@ -52,7 +52,12 @@ export function BasicsStep({
               allowNone
               noneLabel="None"
               value={involvedParticipantId ?? ''}
-              onChange={(v) => setValue('involvedParticipantId', v, { shouldDirty: true })}
+              onChange={(v) => {
+                setValue('involvedParticipantId', v, { shouldDirty: true })
+                // A register entry belongs to one participant: a link kept across a change would only be refused on submit.
+                setValue('restrictivePracticeId', '', { shouldDirty: true })
+                setValue('usedWithoutAuthorisation', false, { shouldDirty: true })
+              }}
             />
           </FormField>
 

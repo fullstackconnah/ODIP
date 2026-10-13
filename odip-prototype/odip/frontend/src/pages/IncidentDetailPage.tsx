@@ -96,7 +96,7 @@ export default function IncidentDetailPage() {
               incident.restrictivePracticeId
                 ? { label: 'Linked practice', value: incident.restrictivePracticeDescription || '—' }
                 : { label: 'Practice not on the register', value: <span className="whitespace-pre-wrap">{incident.unapprovedRestrictivePracticeDetails || '—'}</span> },
-              { label: 'Authorisation', value: incident.isRestrictivePracticeAuthorised === null ? 'Not determined' : <RpAuthorisationBadge authorised={incident.isRestrictivePracticeAuthorised} /> },
+              { label: 'Authorisation', value: incident.isRestrictivePracticeAuthorised == null ? 'Not determined' : <RpAuthorisationBadge authorised={incident.isRestrictivePracticeAuthorised} /> },
             ]}
           />
         </Card>

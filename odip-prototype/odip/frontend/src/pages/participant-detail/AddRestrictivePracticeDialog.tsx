@@ -170,9 +170,10 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
 
   const inputClass = 'w-full min-h-[44px] px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]'
 
-  const textColumn = (key: 'description' | 'authorisedBy', header: string, placeholder: string): Column<BulkRowState> => ({
+  const textColumn = (key: 'description' | 'authorisedBy', header: string, placeholder: string, className?: string): Column<BulkRowState> => ({
     key,
     header,
+    className,
     editable: {
       render: (row, onChange, ctx) => {
         const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
@@ -263,7 +264,8 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
   // Type is picked once per batch, so a "Linked medication" column only makes sense — and only appears — when the whole batch's type is
   // ChemicalRestraint. Adding a single entry from an incident asks nothing about its authorisation, and has no rows to remove.
   const bulkColumns: Column<BulkRowState>[] = [
-    textColumn('description', 'Description', 'What the restrictive practice involves...'),
+    // The full row on a phone card: otherwise the cell shrinks to the input and a prefilled description can't be read.
+    textColumn('description', 'Description', 'What the restrictive practice involves...', 'max-md:basis-full'),
     ...(single ? [] : [textColumn('authorisedBy', 'Authorised by', 'e.g. Dr. Chen'), dateColumn('authorisationDate', 'Authorisation date')]),
     dateColumn('reviewDate', 'Review date'),
     ...(bulkType === 'ChemicalRestraint' ? [medicationColumn] : []),

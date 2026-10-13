@@ -104,7 +104,8 @@ export interface IncidentDetailDto extends IncidentListDto {
    * territory), null = not determinable (not an RP incident, or no participant was selected).
    * Frozen at creation — editing the incident afterwards never recomputes this.
    */
-  isRestrictivePracticeAuthorised: boolean | null
+  /** Left out of the JSON when null (not determined): the API writes no null fields. */
+  isRestrictivePracticeAuthorised?: boolean | null
   description: string
   immediateActionsTaken: string | null
   wereEmergencyServicesCalled: boolean

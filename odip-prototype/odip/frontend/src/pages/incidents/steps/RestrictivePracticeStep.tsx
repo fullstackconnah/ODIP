@@ -10,7 +10,7 @@ import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
 import type { RestrictivePracticeDto, RestrictivePracticeType } from '@/api/types/restrictive-practices'
-import { previewRpAuthorisation, buildRpIncidentDescriptionSkeleton, isRpAuthorised } from '@/lib/incidentPrefill'
+import { previewRpAuthorisation, buildRpIncidentDescriptionSkeleton, isRpAuthorised, editedRpAuthorisation } from '@/lib/incidentPrefill'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 import type { IncidentFormData } from '../incidentFormSchema'
@@ -100,6 +100,11 @@ export function RestrictivePracticeStep({
   // banner below reads the frozen existingIncident.isRestrictivePracticeAuthorised instead.
   const rpAuthorisationPreview = previewRpAuthorisation(involvedParticipantId, restrictivePracticeType, matchingActivePractices, {
     restrictivePracticeId, unapproved: linkedChoice === 'unapproved', usedWithoutAuthorisation: !!restrictivePracticeId && !!usedWithoutAuthorisation,
+  })
+
+  // Edit mode: the stored determination as the save will leave it (it can only be lowered).
+  const editedAuthorisation = editedRpAuthorisation(existingIncident?.isRestrictivePracticeAuthorised, !!existingIncident?.unapprovedRestrictivePracticeDetails?.trim(), {
+    restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation,
   })
 
   function handleSelectLinkedPractice(practice: RestrictivePracticeDto) {
@@ -232,7 +237,7 @@ export function RestrictivePracticeStep({
                   setValue('usedWithoutAuthorisation', e.target.checked, { shouldDirty: true, shouldValidate: true })
                 }}
                 hint={lockedNotAuthorised
-                  ? "This practice has no record of who authorised it and when, so this use can't be recorded as authorised."
+                  ? "This practice's register entry is missing who authorised it or when, so this use can't be recorded as authorised."
                   : 'Tick this if the practice was used outside its authorisation.'}
               />
               {(lockedNotAuthorised || usedWithoutAuthorisation) && (
@@ -267,13 +272,13 @@ export function RestrictivePracticeStep({
                   placeholder="Describe what was actually done, since it wasn't one of the registered practices above"
                 />
               </FormField>
-              {involvedParticipantId && (canWriteRestrictivePractices ? (
+              {involvedParticipantId && <div>{canWriteRestrictivePractices ? (
                 <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
                   Add to restrictive practice register
                 </Button>
               ) : (
                 <p className="text-sm text-[var(--color-muted-foreground)]">A coordinator will be asked to add this to the register.</p>
-              ))}
+              )}</div>}
             </>
           )}
 
@@ -318,29 +323,31 @@ export function RestrictivePracticeStep({
 
       {/* INC-04: the authorised/unauthorised determination. On create this is a live preview that
           updates as the choices above change; on edit it shows the value frozen at creation
-          (see IncidentReport.IsRestrictivePracticeAuthorised) and never recomputes, even if the
-          fields above are changed in this edit session. */}
+          (see IncidentReport.IsRestrictivePracticeAuthorised) and never recomputes against today's
+          register — it only shows the lowered state the save will store (editedRpAuthorisation). */}
       {isEdit ? (
-        existingIncident && existingIncident.isRestrictivePracticeAuthorised !== null ? (
+        editedAuthorisation != null ? (
           <div
             role="status"
             className={`flex items-start gap-3 p-3 rounded-[var(--radius-sm)] text-sm border ${
-              existingIncident.isRestrictivePracticeAuthorised
+              editedAuthorisation
                 ? 'bg-[var(--color-success)]/10 text-[var(--color-success)] border-[var(--color-success)]/20'
                 : 'bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] border-[var(--color-destructive)]/20'
             }`}
           >
-            {existingIncident.isRestrictivePracticeAuthorised
+            {editedAuthorisation
               ? <ShieldCheck className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />
               : <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" aria-hidden="true" />}
             <p>
               <strong className="font-medium">
-                {existingIncident.isRestrictivePracticeAuthorised
+                {editedAuthorisation
                   ? 'Authorised at the time this was reported.'
-                  : 'No matching authorised practice — this may be a reportable incident.'}
+                  : 'Not authorised — this may be a reportable incident.'}
               </strong>{' '}
-              Determined when this incident was created and fixed from then on — changing the participant or
-              type above won't re-check it against today's register.
+              {editedAuthorisation === existingIncident?.isRestrictivePracticeAuthorised
+                ? <>Determined when this incident was created and fixed from then on — changing the participant or
+                  type above won't re-check it against today's register.</>
+                : 'Saving records this use as not authorised.'}
             </p>
           </div>
         ) : (
@@ -368,7 +375,7 @@ export function RestrictivePracticeStep({
               <strong className="font-medium">Authorised — matches an authorised practice on this participant's register.</strong>
             )}
             {rpAuthorisationPreview === 'unauthorised' && (
-              <strong className="font-medium">No matching authorised practice — this may be a reportable incident.</strong>
+              <strong className="font-medium">Not authorised — this may be a reportable incident.</strong>
             )}
             {rpAuthorisationPreview === 'unknown' && (
               <>Select the involved participant and restrictive practice type to check this against their authorised practices.</>

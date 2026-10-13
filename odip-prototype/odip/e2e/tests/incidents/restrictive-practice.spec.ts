@@ -48,7 +48,7 @@ test('a coordinator sees which practices are authorised, adds a "None of these" 
   const notAuthorised = page.getByRole('checkbox', { name: 'This use was not authorised' });
   await expect(notAuthorised).toBeChecked();
   await expect(notAuthorised).toBeDisabled();
-  await expect(page.getByText('No matching authorised practice — this may be a reportable incident.')).toBeVisible();
+  await expect(page.getByText('Not authorised — this may be a reportable incident.')).toBeVisible();
   await desk('rp-step-locked');
 
   await page.getByRole('radio', { name: /None of these — the practice used is not on this participant's register/ }).check();

@@ -253,3 +253,20 @@ describe('IncidentDetailPage — restrictive practice', () => {
     expect(within(block()).getByText('Authorised')).toBeInTheDocument()
   })
 })
+
+// Review S1: the API leaves a null flag out of the JSON, so "not determined" arrives as a missing key, not null.
+describe('IncidentDetailPage — restrictive practice not determined', () => {
+  it('shows "Not determined", not a Not authorised badge, when the flag is missing from the payload', () => {
+    const { isRestrictivePracticeAuthorised: _omitted, ...incident } = baseIncident({
+      incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Seclusion', restrictivePracticeId: null,
+      unapprovedRestrictivePracticeDetails: 'Locked the back door.',
+    })
+    void _omitted
+    mockUseIncident.mockReturnValue({ data: incident, isLoading: false })
+    renderPage()
+
+    const card = screen.getByRole('heading', { name: 'Restrictive practice' }).parentElement!.parentElement!
+    expect(within(card).getByText('Not determined')).toBeInTheDocument()
+    expect(within(card).queryByText('Not authorised')).not.toBeInTheDocument()
+  })
+})

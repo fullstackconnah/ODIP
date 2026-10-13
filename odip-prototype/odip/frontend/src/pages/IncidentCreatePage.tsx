@@ -32,6 +32,7 @@ import {
   buildShiftNoteIncidentDateTime,
   suggestedIncidentTypeForShiftNote,
   previewRpAuthorisation,
+  editedRpAuthorisation,
 } from '@/lib/incidentPrefill'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
@@ -463,9 +464,11 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
 
   // The same state the Restrictive practice step shows: the live preview when reporting, the stored determination when editing (which
   // "This use was not authorised" can only lower).
+  const editedAuthorisation = editedRpAuthorisation(existingIncident?.isRestrictivePracticeAuthorised, !!existingIncident?.unapprovedRestrictivePracticeDetails?.trim(), {
+    restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation,
+  })
   const rpAuthorisation = isEdit
-    ? (usedWithoutAuthorisation && restrictivePracticeId) || existingIncident?.isRestrictivePracticeAuthorised === false ? 'Not authorised'
-      : existingIncident?.isRestrictivePracticeAuthorised ? 'Authorised' : '—'
+    ? editedAuthorisation === null ? '—' : editedAuthorisation ? 'Authorised' : 'Not authorised'
     : { authorised: 'Authorised', unauthorised: 'Not authorised', unknown: '—' }[previewRpAuthorisation(involvedParticipantId, restrictivePracticeType, allRestrictivePractices, {
       restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation: !!restrictivePracticeId && !!usedWithoutAuthorisation,
     })]

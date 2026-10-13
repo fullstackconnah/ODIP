@@ -743,7 +743,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
     await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
 
-    expect(await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(await screen.findByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
   })
 
   // IN-4: with no participant selected there is nothing to link, so reaching Review requires
@@ -901,7 +901,7 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
 
     await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
 
-    expect(await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(await screen.findByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
     expect(screen.getByText(/determined when this incident was created/i)).toBeInTheDocument()
   })
 
@@ -921,6 +921,37 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     expect(box).toBeEnabled()
   })
 
+  // Review N1: the banner agrees with the Review row and with what the server stores on save.
+  it('shows the lowered state in the edit banner once "This use was not authorised" is ticked', async () => {
+    mockUseIncident.mockReturnValue({ data: { ...existingRpIncident, isRestrictivePracticeAuthorised: true } })
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
+    expect(await screen.findByText('Authorised at the time this was reported.')).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'This use was not authorised' }))
+
+    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(screen.getByText('Saving records this use as not authorised.')).toBeInTheDocument()
+    expect(screen.queryByText('Authorised at the time this was reported.')).not.toBeInTheDocument()
+  })
+
+  // Review S1: the API leaves a null flag out of the JSON, so "not determined" arrives as a missing key.
+  it('shows "no determination on record" when the flag is missing from the payload', async () => {
+    const { isRestrictivePracticeAuthorised: _omitted, ...withoutFlag } = existingRpIncident
+    void _omitted
+    mockUseIncident.mockReturnValue({ data: withoutFlag })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
+
+    expect(await screen.findByText('No authorisation determination on record for this incident.')).toBeInTheDocument()
+  })
+
   it('keeps showing the frozen determination even after changing the RP type in the edit form', async () => {
     mockUseIncident.mockReturnValue({ data: existingRpIncident })
     mockUseRestrictivePractices.mockReturnValue({ data: [
@@ -930,10 +961,10 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
-    await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)
+    await screen.findByText(/not authorised — this may be a reportable incident/i)
     await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
 
-    expect(screen.getByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
   })
 })
 
@@ -1429,8 +1460,8 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     const locked = screen.getByRole('checkbox', { name: 'This use was not authorised' })
     expect(locked).toBeChecked()
     expect(locked).toBeDisabled()
-    expect(screen.getByText(/has no record of who authorised it and when/i)).toBeInTheDocument()
-    expect(screen.getByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(screen.getByText(/register entry is missing who authorised it or when/i)).toBeInTheDocument()
+    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
     const optional = screen.getByRole('checkbox', { name: 'This use was not authorised' })
@@ -1439,7 +1470,7 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     expect(screen.getByText(/matches an authorised practice/i)).toBeInTheDocument()
 
     await user.click(optional)
-    expect(screen.getByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
   })
 
   it('requires a description of what was done when the use was not authorised, and submits it with the link kept', async () => {
@@ -1503,6 +1534,24 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     await user.type(screen.getByLabelText(/Describe what was actually done/), 'Held him past the agreed two minutes.')
     await clickNext(user)
     expect(screen.getByPlaceholderText('Detailed description of the incident...')).toHaveValue('Held him past the agreed two minutes.')
+  })
+
+  // Review N3: a link to another participant's register entry would only fail on submit.
+  it('clears the linked practice and "This use was not authorised" when the involved participant changes', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [notAuthorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Hand-over-hand/ }))
+    expect(screen.getByRole('checkbox', { name: 'This use was not authorised' })).toBeChecked()
+
+    await clickBack(user)
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'None' }))
+    await clickNext(user)
+
+    expect(screen.queryByRole('checkbox', { name: 'This use was not authorised' })).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('radio').filter((r) => (r as HTMLInputElement).checked)).toEqual([])
   })
 
   it('offers "Add to restrictive practice register" for "None of these" to a coordinator', async () => {
