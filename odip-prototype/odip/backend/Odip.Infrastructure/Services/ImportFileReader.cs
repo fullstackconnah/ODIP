@@ -16,7 +16,7 @@ public sealed record ImportTable(IReadOnlyList<string> Headers, IReadOnlyList<Im
 
 /// <summary>
 /// Reads an onboarding-import upload in memory (it is never written to disk) and applies the file-level rules before any matching: .csv or .xlsx,
-/// not empty, at most 5 MB (and 50 MB unpacked), a header row in the first row, at most 200 columns, at least one and at most 2,000 data rows.
+/// not empty, at most 5 MB (and 20 MB unpacked), a header row in the first row, at most 200 columns, at least one and at most 2,000 data rows.
 /// Wholly blank rows are dropped.
 /// </summary>
 public static class ImportFileReader
@@ -24,7 +24,7 @@ public static class ImportFileReader
     public const int MaxRows = 2000;
     public const int MaxBytes = 5 * 1024 * 1024;
     public const int MaxColumns = 200;
-    private const long MaxUnpackedBytes = 50 * 1024 * 1024;
+    private const long MaxUnpackedBytes = 20 * 1024 * 1024;
     private const string TooManyColumns = "This file has more than 200 columns. Remove the extra columns and try again.";
 
     public static ImportTable Read(byte[] content, string fileName)

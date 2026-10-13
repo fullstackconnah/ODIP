@@ -100,12 +100,12 @@ public class ImportFileReaderTests
     }
 
     [Fact]
-    public void Refuses_an_xlsx_that_unpacks_to_more_than_50_MB()
+    public void Refuses_an_xlsx_that_unpacks_to_more_than_20_MB()
     {
         using var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         using (var entry = zip.CreateEntry("xl/worksheets/sheet1.xml").Open())
-            entry.Write(new byte[51 * 1024 * 1024]);
+            entry.Write(new byte[21 * 1024 * 1024]);
         Assert.Equal("This file is too large once unpacked.", Refusal(stream.ToArray(), "people.xlsx"));
     }
 
