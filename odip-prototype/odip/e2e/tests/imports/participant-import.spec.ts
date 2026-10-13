@@ -29,6 +29,9 @@ async function walkToReview(page: Page, token: string, shot: (name: string) => P
   await shot('wizard-review');
 }
 
+/** Waits until no animation or transition is running, so a capture is not taken mid-fade or with a step pill half changed. */
+const settled = (p: Page) => p.waitForFunction(() => document.getAnimations().every(a => a.playState !== 'running'));
+
 async function importIt(page: Page) {
   await page.getByRole('button', { name: 'Import 2 participants' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Import' }).click();
@@ -38,7 +41,7 @@ async function importIt(page: Page) {
 test('an Admin imports participants from a file, finds them listed, then undoes the import @imports', async ({ page }, testInfo) => {
   const token = uniqueToken('IMP');
   const fileName = `people-${token}.csv`;
-  const desk = (name: string) => page.screenshot({ path: testInfo.outputPath(`${name}-1440.png`), fullPage: true }).then(() => undefined);
+  const desk = (name: string) => settled(page).then(() => page.screenshot({ path: testInfo.outputPath(`${name}-1440.png`), fullPage: true })).then(() => undefined);
 
   // As in the earlier captures, so the resize measurement below compares like with like.
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -78,7 +81,9 @@ test('an Admin imports participants from a file, finds them listed, then undoes 
   // so the history shows one Imported and one Undone row.
   const phone = await page.context().newPage();
   await phone.setViewportSize({ width: 390, height: 844 });
+  await phone.emulateMedia({ reducedMotion: 'reduce' });
   const narrow = async (name: string) => {
+    await settled(phone);
     const wide = await phone.evaluate(() => [...document.querySelectorAll('body *')]
       .filter(e => e.getBoundingClientRect().right > 391).slice(0, 5)
       .map(e => `${e.tagName.toLowerCase()}.${String(e.className).slice(0, 80)} right=${Math.round(e.getBoundingClientRect().right)}`));
