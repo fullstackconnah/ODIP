@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
 import {
@@ -30,6 +31,7 @@ import { RunningTotal } from './agreement/RunningTotal'
 import { SaveStep } from './agreement/SaveStep'
 import { useAgreementPricing } from './agreement/useAgreementPricing'
 import { WeekStep } from './agreement/WeekStep'
+import { FundingPlanEditor } from './funding/FundingPlanEditor'
 
 type StepKey = 'agreement' | 'week' | 'check' | 'save'
 const STEPS: WizardStepDef<Details>[] = [
@@ -100,10 +102,12 @@ function DraftPage() {
   // The save whose "Start a new revision" was pressed: an approved agreement is what the roster was made from, so it is read only until somebody says they mean to change it.
   const [revisingFrom, setRevisingFrom] = useState<string | null>(null)
 
-  const recorded = useMemo(() => {
-    const plan = plans.data ? currentPlanOf(plans.data.plans ?? [], today) : undefined
-    return plan && planStatus(plan, today) !== 'Ended' ? { start: plan.planStart, end: plan.planEnd } : null
-  }, [plans.data, today])
+  const currentPlan = useMemo(() => (plans.data ? currentPlanOf(plans.data.plans ?? [], today) : undefined), [plans.data, today])
+  const endedPlan = currentPlan && planStatus(currentPlan, today) === 'Ended' ? currentPlan : undefined
+  const recorded = useMemo(() => (currentPlan && planStatus(currentPlan, today) !== 'Ended' ? { start: currentPlan.planStart, end: currentPlan.planEnd } : null), [currentPlan, today])
+  // The budget is recorded over the agreement in the Funding tab's own editor, by the people who may change the agreement (the same roles may record funding); a save refreshes the check.
+  const [recordingBudget, setRecordingBudget] = useState(false)
+  const recordBudget = canEdit ? { label: endedPlan ? 'Record a new plan' : 'Record plan budget', onSelect: () => setRecordingBudget(true) } : undefined
 
   const loaded = drafts.data !== undefined && (!canEdit || !plans.isLoading)
   const newest = drafts.data?.[0]
@@ -145,7 +149,7 @@ function DraftPage() {
 
   const pricing = useAgreementPricing({
     participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, from: details.agreementStartDate, to: details.agreementEndDate,
-    canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined,
+    canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined, onRecordBudget: recordBudget?.onSelect,
   })
   const issues = useMemo<AgreementIssue[]>(() => {
     const list: AgreementIssue[] = []
@@ -346,7 +350,7 @@ function DraftPage() {
                 <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
               </Callout>
               <AgreementStep
-                details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`}
+                details={details} onEdit={edit} recorded={recorded} plan={plan} readOnly={readOnly} fundingTab={`/participants/${participantId}?tab=funding`} recordBudget={recordBudget}
                 errors={attempted ? { start: dates.start, end: dates.end } : {}}
               />
             </div>
@@ -390,5 +394,10 @@ function DraftPage() {
         />
       </WizardShell>
     </form>
+    {/* In a portal: inside the wizard's form, Enter in one of the editor's fields would submit the agreement. */}
+    {canEdit && createPortal(
+      <FundingPlanEditor open={recordingBudget} onClose={() => setRecordingBudget(false)} participantId={participantId} previousPlan={endedPlan} defaultManagement={participant.data.planType} />,
+      document.body,
+    )}
   </div>
 }

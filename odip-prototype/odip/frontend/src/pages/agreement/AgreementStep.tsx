@@ -23,10 +23,12 @@ type AgreementStepProps = {
   errors: { start?: string; end?: string }
   readOnly: boolean
   fundingTab: string
+  /** Opens the editor to record the plan over the agreement, for a person who may; without it the button goes to the Funding tab. */
+  recordBudget?: { label: string; onSelect: () => void }
 }
 
 /** Step 1: when the agreement runs and where it is delivered. The NDIS plan dates come from the participant's funding plan and are only asked for when there is none or they differ. */
-export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnly, fundingTab }: AgreementStepProps) {
+export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnly, fundingTab, recordBudget }: AgreementStepProps) {
   if (readOnly) {
     return (
       <FactList items={[
@@ -64,7 +66,9 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
         ) : (
           <p className="max-w-prose">
             No funding plan is recorded for this participant, so the NDIS plan is taken to run for the agreement&apos;s dates.{' '}
-            <Button variant="ghost" size="sm" to={fundingTab}>Record the plan</Button> to compare the agreement with the budget.
+            {recordBudget
+              ? <Button variant="ghost" size="sm" onClick={recordBudget.onSelect}>{recordBudget.label}</Button>
+              : <Button variant="ghost" size="sm" to={fundingTab}>Record the plan</Button>} to compare the agreement with the budget.
           </p>
         )}
         <details className="group rounded-[var(--radius-md)] border border-[var(--color-border)]" open={!!details.planOverride}>

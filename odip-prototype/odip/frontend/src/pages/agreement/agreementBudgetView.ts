@@ -20,6 +20,8 @@ export interface AgreementCheckState {
   pending: boolean
   /** Asks again after a failure. */
   onRetry: () => void
+  /** Opens the editor to record a budget over the agreement; given only to a person who may record one. Without it the way on is the Funding tab. */
+  onRecord?: () => void
 }
 
 const SHOWN = { visible: true } as const
@@ -40,7 +42,9 @@ export function agreementBudgetView(participantId: string, state: AgreementCheck
     return {
       ...empty, status: 'none', refreshing: state.pending, noBudgetReason: notStarted ? 'NotStarted' : ended ? 'PlanEnded' : 'NotRecorded',
       ...(ended && data.planEnd ? { planEnd: data.planEnd } : {}), ...(notStarted && data.planStart ? { planStart: data.planStart } : {}),
-      noBudgetAction: { label: ended ? 'Record a new plan' : 'Open the Funding tab', to: fundingTabPath(participantId) },
+      noBudgetAction: state.onRecord && !notStarted
+        ? { label: ended ? 'Record a new plan' : 'Record plan budget', onSelect: state.onRecord }
+        : { label: ended ? 'Record a new plan' : 'Open the Funding tab', to: fundingTabPath(participantId) },
     }
   }
 

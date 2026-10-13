@@ -3,11 +3,12 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
+import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor } = vi.hoisted(() => ({
-  createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
+const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor } = vi.hoisted(() => ({
+  editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -20,6 +21,14 @@ vi.mock('@/api/hooks', () => ({
   usePlanPricingSettings: () => ({ data: makeSettings() }),
   usePlanBudget: () => budget(),
   useAgreementCheck: () => check(),
+}))
+
+// The editor has its own tests: here it is a marker that says how the agreement opened it.
+vi.mock('@/pages/funding/FundingPlanEditor', () => ({
+  FundingPlanEditor: (props: { open: boolean; plan?: { id: string }; previousPlan?: { id: string }; defaultManagement: string }) => {
+    editor(props)
+    return props.open ? <div data-testid="editor" data-plan={props.plan?.id ?? 'new'} data-previous={props.previousPlan?.id ?? 'none'} data-management={props.defaultManagement} /> : null
+  },
 }))
 
 const asRole = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role, id: 'u-1' }))
@@ -48,12 +57,12 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-12T10:00:00') })
   asRole('Admin')
   drafts.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: refetchDrafts })
-  participant.mockReturnValue({ data: { id: 'p-1', fullName: 'Marcus Tran', addressState: 'VIC' }, isLoading: false, isError: false, refetch: vi.fn() })
+  participant.mockReturnValue({ data: { id: 'p-1', fullName: 'Marcus Tran', addressState: 'VIC', planType: 'PlanManaged' }, isLoading: false, isError: false, refetch: vi.fn() })
   plans.mockReturnValue({ data: { plans: [{ id: 'f-1', participantId: 'p-1', planStart: '2026-07-01', planEnd: '2027-06-30' }] }, isLoading: false, isError: false })
   budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
   check.mockReturnValue({ data: agreementCheck(0), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
   refetchDrafts.mockResolvedValue({ data: [], isError: false })
-  createMutate.mockReset(); downloadMutate.mockReset(); previewFor.mockReset()
+  createMutate.mockReset(); downloadMutate.mockReset(); previewFor.mockReset(); editor.mockReset()
 })
 afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
@@ -340,5 +349,70 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     await user.click(stepButton('Check'))
     expect(screen.getByText('The whole agreement')).toBeInTheDocument()
     expect(screen.queryByText('The agreement is shorter than a week.')).not.toBeInTheDocument()
+  })
+})
+
+// The budget is recorded over the agreement, in the Funding tab's own editor: the person never leaves, and what they typed stays.
+describe('ServiceAgreementDraftPage: recording the plan budget in place', () => {
+  const ended = { id: 'f-0', participantId: 'p-1', planStart: '2025-07-01', planEnd: '2026-06-30' }
+
+  it('opens the editor from the Agreement step, outside the agreement form, with the participant\'s plan type', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    const user = userEvent.setup()
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Agreement starts'), { target: { value: '2026-10-01' } })
+    expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
+
+    const opened = screen.getByTestId('editor')
+    expect(opened).toHaveAttribute('data-plan', 'new')
+    expect(opened).toHaveAttribute('data-previous', 'none')
+    expect(opened).toHaveAttribute('data-management', 'PlanManaged')
+    // Enter in the editor must never submit the agreement.
+    expect(screen.getByRole('form', { name: 'Service agreement' })).not.toContainElement(opened)
+    expect(screen.getByLabelText('Agreement starts')).toHaveValue('2026-10-01')
+  })
+
+  it('opens the editor from the Check step for a new plan after the one that ended', async () => {
+    plans.mockReturnValue({ data: { plans: [ended] }, isLoading: false, isError: false })
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    check.mockReturnValue({ data: noBudgetCheck({ noBudgetReason: 'PlanEnded', planEnd: '2026-06-30' }), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+
+    await user.click(screen.getByRole('button', { name: 'Record a new plan' }))
+
+    expect(screen.getByTestId('editor')).toHaveAttribute('data-previous', 'f-0')
+    expect(screen.getByTestId('editor')).toHaveAttribute('data-plan', 'new')
+    expect(screen.getByRole('heading', { level: 2, name: 'Check' })).toBeInTheDocument()
+  })
+
+  it('offers it on an approved agreement too, which the person may still price', async () => {
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
+    check.mockReturnValue({ data: noBudgetCheck(), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Check'))
+
+    await user.click(screen.getByRole('button', { name: 'Record plan budget' }))
+
+    expect(screen.getByTestId('editor')).toBeInTheDocument()
+  })
+
+  it('offers nothing to record to a person who only reads the agreement', async () => {
+    asRole('ReadOnly')
+    plans.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false })
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    check.mockReturnValue({ data: noBudgetCheck(), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+    for (const key of ['Agreement', 'Check']) {
+      await user.click(stepButton(key))
+      expect(screen.queryByRole('button', { name: /Record (plan budget|a new plan)/ })).not.toBeInTheDocument()
+    }
+    expect(editor).not.toHaveBeenCalled()
   })
 })
