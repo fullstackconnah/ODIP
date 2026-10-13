@@ -33,10 +33,10 @@ describe('ParticipantPicker', () => {
     expect(options.map(o => o.textContent)).toEqual(['Sophie Brown', 'Marcus Lee'])
   })
 
-  it('requests participants excluding drafts by default (INTAKE-08 convention)', () => {
+  it('requests only participants who can receive services by default: no drafts before services, no archived participants', () => {
     render(<ParticipantPicker value="" onChange={vi.fn()} />)
 
-    expect(mockUseParticipants).toHaveBeenCalledWith({ isDraft: 'false' })
+    expect(mockUseParticipants).toHaveBeenCalledWith({ canReceiveServices: 'true' })
   })
 
   it('requests every participant, including drafts, when excludeDrafts is false', () => {

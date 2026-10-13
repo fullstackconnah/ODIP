@@ -706,4 +706,22 @@ public class ParticipantStatusEndpointTests
 
         Assert.Equal(jamie.Id, Assert.Single(result.Items).Id);
     }
+
+    [Fact]
+    public async Task GetAll_CanReceiveServices_ListsActiveAndServicesStarted_NotArchivedOrPreServicesDrafts()
+    {
+        using var fx = Create();
+        var active = RichParticipant();
+        var started = RichParticipant(isActive: true, isDraft: true, intakeCompletedAt: DateTime.UtcNow);
+        started.ServicesStartedAt = DateTime.UtcNow;
+        var archived = RichParticipant(isActive: false);
+        var draft = RichParticipant(isActive: true, isDraft: true, intakeCompletedAt: DateTime.UtcNow);
+        fx.Db.Participants.AddRange(active, started, archived, draft);
+        await fx.Db.SaveChangesAsync();
+
+        var result = Ok(await fx.Controller.GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None, false, canReceiveServices: true));
+
+        Assert.Equal(new[] { active.Id, started.Id }.OrderBy(i => i), result.Items.Select(p => p.Id).OrderBy(i => i));
+        Assert.NotNull(result.Items.Single(p => p.Id == started.Id).ServicesStartedAt);
+    }
 }

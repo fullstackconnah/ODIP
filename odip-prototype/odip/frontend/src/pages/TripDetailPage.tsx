@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import { formatDateRange } from '@/lib/dateRange'
 import { Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -79,7 +80,7 @@ export default function TripDetailPage() {
   const activeList: { isError: boolean; data?: unknown[]; refetch: () => unknown } | undefined = tabLists[activeTab as keyof typeof tabLists]
   const activeListFailed = !!activeList?.isError && !activeList.data?.length
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
 
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 

@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { useRosterBoard, useAssignShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto } from '@/api/types'
 import {
   WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer,
@@ -80,7 +81,7 @@ export default function RosterBoardPage() {
   const { data: board, isLoading, isError, refetch } = useRosterBoard(weekStart, groupBy)
   // INTAKE-08: the board's participant filter/assignment picker excludes drafts (the board
   // query itself already excludes them server-side; this keeps the filter dropdown in sync).
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
   const { data: staff = [] } = useStaff()
   const assignShift = useAssignShift()
   const deleteShift = useDeleteShift()

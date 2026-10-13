@@ -197,7 +197,7 @@ public class ParticipantsController : ControllerBase
         [FromQuery] string? search, [FromQuery] string? region, [FromQuery] bool? isActive,
         [FromQuery] bool? wheelchairRequired, [FromQuery] bool? isHighSupport, [FromQuery] bool? isDraft,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default,
-        [FromQuery] bool operationalOnly = false)
+        [FromQuery] bool operationalOnly = false, [FromQuery] bool canReceiveServices = false)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
@@ -210,6 +210,8 @@ public class ParticipantsController : ControllerBase
         if (isHighSupport.HasValue) query = query.Where(p => p.IsHighSupport == isHighSupport.Value);
         // A caller can still explicitly select drafts for back-office work.
         if (isDraft.HasValue) query = query.Where(p => p.IsDraft == isDraft.Value);
+        // The pickers of operational screens: who can receive services (active, finalised or services started), never an archived participant.
+        if (canReceiveServices) query = query.Where(Participant.CanReceiveServicesRule);
         if (operationalOnly)
         {
             // The register is a stage boundary, not a presentation-only draft filter. A record

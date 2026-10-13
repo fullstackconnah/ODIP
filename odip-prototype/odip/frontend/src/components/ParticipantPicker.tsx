@@ -1,4 +1,5 @@
 import { useParticipants } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import { SearchableSelect, type SearchableSelectItem } from '@/components/SearchableSelect'
 import type { ParticipantListDto } from '@/api/types/participants'
@@ -52,7 +53,7 @@ export function ParticipantPicker({
   'aria-invalid': ariaInvalid,
   'aria-describedby': ariaDescribedBy,
 }: ParticipantPickerProps) {
-  const { data: participants = [], isLoading } = useParticipants(excludeDrafts ? { isDraft: 'false' } : undefined)
+  const { data: participants = [], isLoading } = useParticipants(excludeDrafts ? CAN_RECEIVE_SERVICES : undefined)
   // `participants` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without those extra fields — read them as optional.
   const { isTruncated = false, totalCount = 0 } = participants as Partial<TruncatableList<ParticipantListDto>>
