@@ -198,9 +198,9 @@ public class ShiftClaimGenerationService
 
         var lineItems = new List<ShiftLineCalc>();
         var leftOut = new List<ShiftClaimLeftOutDto>();
-        // No line without an NDIS number, as the trip claim does (ClaimGenerationService): services can begin before the profile is complete, so this
-        // is reachable. The shifts are left out with the reason, never dropped silently.
-        var noNdisNumber = string.IsNullOrWhiteSpace(participant.NdisNumber)
+        // No line for an NDIS-funded participant without an NDIS number: services can begin before the profile is complete, so this is reachable. The
+        // shifts are left out with the reason, never dropped silently. A participant funded another way has no NDIS number by design and is claimed as before.
+        var noNdisNumber = participant.FundingSource == ParticipantFundingSource.Ndis && string.IsNullOrWhiteSpace(participant.NdisNumber)
             ? $"{participant.FullName}: NDIS number missing. Add it to the participant's profile, then generate the claim again."
             : null;
         foreach (var shift in shifts)

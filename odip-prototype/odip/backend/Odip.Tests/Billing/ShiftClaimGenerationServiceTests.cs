@@ -324,6 +324,7 @@ public class ShiftClaimGenerationServiceTests
         SeedProviderSettings(db);
         var participant = SeedParticipant(db);
         participant.NdisNumber = ndisNumber;
+        participant.FundingSource = ParticipantFundingSource.Ndis;
         SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
         SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
         await db.SaveChangesAsync();
@@ -338,6 +339,25 @@ public class ShiftClaimGenerationServiceTests
             Assert.Contains("NDIS number missing", message);
         }
         Assert.Empty(db.TripClaims);
+    }
+
+    // A participant funded another way has no NDIS number by design: their shifts are claimable as before (only an NDIS-funded participant is skipped).
+    [Fact]
+    public async Task Generate_ForAParticipantFundedAnotherWay_WithoutAnNdisNumber_StillBuildsLines()
+    {
+        using var db = CreateDb();
+        SeedProviderSettings(db);
+        var participant = SeedParticipant(db);
+        participant.NdisNumber = null;
+        participant.FundingSource = ParticipantFundingSource.Other;
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
+        await db.SaveChangesAsync();
+
+        var generated = await new ShiftClaimGenerationService(db).GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7));
+
+        Assert.Single(db.ClaimLineItems.Where(l => l.TripClaimId == generated.Claim.Id));
+        Assert.Empty(generated.LeftOut);
     }
 
     // ── PreviewAsync ──────────────────────────────────────────────────

@@ -33,7 +33,8 @@ public sealed record ParticipantLedger(Guid ParticipantId, string Name, DateOnly
 /// <item><b>Tenancy.</b> TripClaim and ClaimLineItem have no tenant filter, so nothing here is reached by a caller's id alone: the participants are read first, inside the tenant, and every
 ///   claim line, shift and booking is reached only through those participants' ids. An id from another organisation is simply absent from the answer.</item>
 /// <item><b>Priced as ODIP will claim.</b> A shift is priced by <see cref="ShiftPriceEstimator"/> and a trip booking by <see cref="TripPriceEstimator"/>, the same code the claim engines
-///   run, so an estimate and the claim made from it are the same figure. The shift engine claims community access only, so the ledger prices it only.</item>
+///   run, so an estimate and the claim made from it are the same figure. The shift engine claims community access only, so the ledger prices it only. A shift for an
+///   NDIS-funded participant with no NDIS number is forecast in full, but it is not claimable until the number is added (ShiftClaimGenerationService leaves it out).</item>
 /// <item><b>By service date.</b> A claim line counts in the period of its SupportsDeliveredFrom, a shift in the period of its ServiceDate, a trip booking in the period of the trip's
 ///   start. "Today" is the provider's calendar date, from the injected clock, so a test fixes it.</item>
 /// <item><b>Windowed.</b> Items dated before the current plan started belong to an earlier plan and are not this ledger's; items after it ends are kept and shown as "Outside the plan dates".</item>
