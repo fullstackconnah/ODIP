@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -23,8 +24,19 @@ public class ImportsController : ControllerBase
     private const string Mismatch = "The column matches don't fit this file. Upload it again.";
 
     private readonly OnboardingImportService _imports;
+    private readonly IFirebaseUserService _firebase;
+    private readonly IConfiguration? _config;
+    private readonly ILogger<ImportsController>? _logger;
 
-    public ImportsController(OnboardingImportService imports) => _imports = imports;
+    // IFirebaseUserService is deliberately not registered in DI (see StaffController): ActivatorUtilities falls back to the default, a test injects a mock.
+    public ImportsController(OnboardingImportService imports, IFirebaseUserService? firebaseUserService = null, IConfiguration? config = null,
+        ILogger<ImportsController>? logger = null)
+    {
+        _imports = imports;
+        _firebase = firebaseUserService ?? new FirebaseUserService();
+        _config = config;
+        _logger = logger;
+    }
 
     private static ImportKind? Kind(string kind) => kind switch
     {
@@ -77,6 +89,27 @@ public class ImportsController : ControllerBase
                 [$"Nothing was undone: {n} {(n == 1 ? "record has" : "records have")} changed since the import."]));
         }
         return Ok(ApiResponse<ImportBatchDto>.Ok(outcome.Batch!));
+    }
+
+    /// <summary>
+    /// Makes sure each never-signed-in staff member of a staff import has a sign-in account, one by one through the staff route's own step, and
+    /// says per person what happened. The browser then sends each set-password email, as the Staff page does.
+    /// </summary>
+    [HttpPost("{batchId:guid}/invites")]
+    public async Task<ActionResult<ApiResponse<List<ImportInviteDto>>>> Invites(Guid batchId, CancellationToken ct)
+    {
+        List<User>? staff;
+        try { staff = await _imports.StaffToInviteAsync(batchId, ct); }
+        catch (ImportException ex) { return StatusCode(ex.StatusCode, ApiResponse<List<ImportInviteDto>>.Fail(ex.Message)); }
+        if (staff is null) return NotFound(ApiResponse<List<ImportInviteDto>>.Fail("Staff import not found."));
+
+        var invites = new List<ImportInviteDto>(staff.Count);
+        foreach (var s in staff)
+        {
+            var outcome = await SignInAccounts.EnsureAsync(s, User, _config, _firebase, _logger, ct);
+            invites.Add(new ImportInviteDto(s.Id, s.FullName, s.Email, outcome.Account?.FirebaseAccount, outcome.Error));
+        }
+        return Ok(ApiResponse<List<ImportInviteDto>>.Ok(invites));
     }
 
     /// <summary>Runs an import call; a refusal the Admin can act on answers with its own status and message.</summary>

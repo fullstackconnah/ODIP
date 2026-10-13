@@ -635,49 +635,10 @@ public class StaffController : ControllerBase
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<SignInAccountDto>.Fail("Staff not found"));
 
-        // The same §4.1 guardrail as every other staff write: only a SuperAdmin touches a SuperAdmin account.
-        if (s.Role == UserRole.SuperAdmin && !(User?.IsInRole("SuperAdmin") ?? false))
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail("Cannot edit a SuperAdmin account."));
-
-        if (!s.IsActive)
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member is inactive, so they cannot be given a sign-in account."));
-
-        if (string.IsNullOrWhiteSpace(s.Email))
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member has no email address."));
-
-        var email = EmailIdentity.Normalise(s.Email);
-
-        // An address the app invented for a row that had none (see PlaceholderEmail) can never receive the link, so no account is made for it.
-        if (PlaceholderEmail.Covers(email))
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail(PlaceholderEmail.Message(s.FullName)));
-
-        var reservedError = ReservedDomainError(email);
-        if (reservedError != null) return BadRequest(ApiResponse<SignInAccountDto>.Fail(reservedError));
-
-        try
-        {
-            var result = await _firebaseUserService.EnsureSignInAccountAsync(email, s.FullName, ct);
-            var account = result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing;
-            // No audit record exists yet (the email itself goes from the browser to Firebase), so this line is the only trace of who asked for it.
-            _logger?.LogInformation("Sign-in account for user {TargetUserId} was {Account}, as asked by {ActorUserId}", s.Id, account, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
-            return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(account)));
-        }
-        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
-        {
-            // Firebase refused the address itself (a legacy row with a typo). Retrying cannot fix that and correcting the address can, so it is the
-            // admin's to act on (400), not a fault on our side (502).
-            _logger?.LogWarning("Firebase refused the address of staff member {UserId} as invalid", s.Id);
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail("That doesn't look like a valid email address. Correct it first."));
-        }
-        catch (Exception ex)
-        {
-            // Deliberately broad, as in AdminUsersController.Create: an unusable service account is not a FirebaseAuthException, and the
-            // same call with no Firebase app configured fails the same way, so it is the same 502. The line says where to turn rather than
-            // promising a retry will help: an unusable service account stays unusable.
-            _logger?.LogError(ex, "Failed to ensure a Firebase sign-in account for {Email}", email);
-            return StatusCode(StatusCodes.Status502BadGateway,
-                ApiResponse<SignInAccountDto>.Fail("Unable to set up the staff member's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
-        }
+        var outcome = await SignInAccounts.EnsureAsync(s, User, _config, _firebaseUserService, _logger, ct);
+        if (outcome.Account is { } account) return Ok(ApiResponse<SignInAccountDto>.Ok(account));
+        if (outcome.BadGateway) return StatusCode(StatusCodes.Status502BadGateway, ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
+        return BadRequest(ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
     }
 
     /// <summary>
