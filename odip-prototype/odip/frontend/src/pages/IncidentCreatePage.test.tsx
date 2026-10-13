@@ -1487,6 +1487,24 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ restrictivePracticeId: 'rp-a', usedWithoutAuthorisation: false })
   })
 
+  it('clears the prefilled skeleton when "This use was not authorised" is ticked, and blocks Next until the reporter writes what was done', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ })) // prefills the skeleton into the empty description
+    await user.click(screen.getByRole('checkbox', { name: 'This use was not authorised' }))
+
+    expect(screen.getByLabelText(/Describe what was actually done/)).toHaveValue('')
+    await clickNext(user)
+    expect(await screen.findByText('Describe what was actually done.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Describe what was actually done/)).toBeInTheDocument() // still on this step
+
+    await user.type(screen.getByLabelText(/Describe what was actually done/), 'Held him past the agreed two minutes.')
+    await clickNext(user)
+    expect(screen.getByPlaceholderText('Detailed description of the incident...')).toHaveValue('Held him past the agreed two minutes.')
+  })
+
   it('offers "Add to restrictive practice register" for "None of these" to a coordinator', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', role: 'Coordinator' }))
     const user = userEvent.setup()

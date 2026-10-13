@@ -110,12 +110,21 @@ export function RestrictivePracticeStep({
     setValue('unapprovedRestrictivePracticeDetails', '', { shouldDirty: true, shouldValidate: true })
     const authorised = isRpAuthorised(practice)
     setValue('usedWithoutAuthorisation', !authorised, { shouldDirty: true })
+    if (!authorised) clearUntouchedSkeleton()
     // Only prepopulate Description when it's still empty — never clobber what the reporter has
     // already typed (the same "skeleton, don't overwrite" rule INC-03's MAR prefill follows). Not
     // for a Not authorised entry: there the reporter must describe what was actually done.
     if (authorised && !getValues('description')?.trim()) {
-      setValue('description', buildRpIncidentDescriptionSkeleton(practice), { shouldDirty: true })
+      const skeleton = buildRpIncidentDescriptionSkeleton(practice)
+      setValue('description', skeleton, { shouldDirty: true })
+      setValue('rpDescriptionSkeleton', skeleton)
     }
+  }
+
+  // The unauthorised-use path needs the reporter's own words, so an untouched skeleton goes (the schema also treats one as no description).
+  function clearUntouchedSkeleton() {
+    const skeleton = getValues('rpDescriptionSkeleton')?.trim()
+    if (skeleton && getValues('description')?.trim() === skeleton) setValue('description', '', { shouldDirty: true })
   }
 
   function handleSelectUnapproved() {
@@ -125,6 +134,7 @@ export function RestrictivePracticeStep({
     // link and focuses the reporter on the textarea below.
     setValue('restrictivePracticeId', '', { shouldDirty: true, shouldValidate: true })
     setValue('usedWithoutAuthorisation', false, { shouldDirty: true })
+    clearUntouchedSkeleton()
   }
 
   // The new entry is linked in place of "None of these": its text moves into the incident's description (the link and the text are mutually
@@ -217,7 +227,10 @@ export function RestrictivePracticeStep({
                 label="This use was not authorised"
                 checked={lockedNotAuthorised || !!usedWithoutAuthorisation}
                 disabled={lockedNotAuthorised}
-                onChange={(e) => setValue('usedWithoutAuthorisation', e.target.checked, { shouldDirty: true, shouldValidate: true })}
+                onChange={(e) => {
+                  if (e.target.checked) clearUntouchedSkeleton()
+                  setValue('usedWithoutAuthorisation', e.target.checked, { shouldDirty: true, shouldValidate: true })
+                }}
                 hint={lockedNotAuthorised
                   ? "This practice has no record of who authorised it and when, so this use can't be recorded as authorised."
                   : 'Tick this if the practice was used outside its authorisation.'}
