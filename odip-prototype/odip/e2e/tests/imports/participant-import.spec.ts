@@ -58,11 +58,11 @@ test('an Admin imports participants from a file, finds them listed, then undoes 
   await importIt(page);
   await desk('wizard-result');
 
-  // The finish review found 523 px wide phone captures taken by resizing this page. Recorded, not asserted: the fresh 390 px load below is the gate.
+  // A desktop page narrowed to a phone keeps no desktop width once the resize has settled. (The 523 px the finish review saw was read in the
+  // same instant as the resize, before the page had laid itself out again at 390.)
   await page.setViewportSize({ width: 390, height: 844 });
-  const resized = await page.evaluate(() => document.documentElement.scrollWidth);
-  testInfo.annotations.push({ type: 'scrollWidth after resizing to 390', description: String(resized) });
-  console.log(`scrollWidth after resizing a 1440 px page to 390: ${resized}`);
+  await settled(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.getByRole('link', { name: 'View participants' }).click();
