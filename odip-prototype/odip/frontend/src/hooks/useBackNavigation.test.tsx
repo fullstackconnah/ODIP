@@ -163,6 +163,17 @@ describe('useBackNavigation — useBackTarget', () => {
     withRouter(['/participants/new'], () => <Page />)
     expect(screen.getByTestId('aria').textContent).toBe('Back to Participants')
   })
+
+  it('names a known screen on one of its tabs (?tab=) too', () => {
+    function Page() {
+      const back = useBackTarget('/participants')
+      return <span data-testid="aria">{back.ariaLabel}</span>
+    }
+    __testHooks.recordCurrentPath('/medications?tab=register')
+    __testHooks.recordCurrentPath('/medications/m-1/edit')
+    withRouter(['/medications/m-1/edit'], () => <Page />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to Medications')
+  })
 })
 
 describe('usePreviousAppPath — renderHook', () => {

@@ -166,12 +166,12 @@ function hubTabLabel(targetPath: string): string | null {
 
 function buildAriaLabel(targetPath: string, currentPath: string): string {
   if (targetPath === currentPath) return 'Go back'
-  // Exact known screen.
-  const known = KNOWN_SCREEN_LABELS[targetPath]
-  if (known) return `Back to ${known}`
   // Hub tab on /participants?tab=… → use the stage name.
   const tabLabel = hubTabLabel(targetPath)
   if (tabLabel) return `Back to ${tabLabel}`
+  // A known screen, on any of its tabs (/medications?tab=register is still Medications).
+  const known = KNOWN_SCREEN_LABELS[pathnameOf(targetPath)]
+  if (known) return `Back to ${known}`
   // Detail page patterns like /participants/5 or /onboarding/5 — we don't try to fetch the
   // record name from a hook here (that would couple this primitive to every page's data
   // fetching), so fall back to the resource noun.
