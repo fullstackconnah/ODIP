@@ -15,11 +15,10 @@ import {
 } from '@/lib/participantSchema'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
-const { mockUseParticipant, mockPatchMutateAsync, mockUpdateMutateAsync, mockCompleteMutateAsync, mockUpsertRiskItemMutateAsync } = vi.hoisted(() => ({
+const { mockUseParticipant, mockPatchMutateAsync, mockUpdateMutateAsync, mockUpsertRiskItemMutateAsync } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockPatchMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
-  mockCompleteMutateAsync: vi.fn(),
   mockUpsertRiskItemMutateAsync: vi.fn(),
 }))
 
@@ -27,7 +26,6 @@ vi.mock('@/api/hooks', () => ({
   useParticipant: mockUseParticipant,
   usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
   useUpdateParticipant: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
-  useCompleteParticipantProfile: () => ({ mutateAsync: mockCompleteMutateAsync, isPending: false }),
   useUpsertCommunityAccessRiskItem: () => ({ mutateAsync: mockUpsertRiskItemMutateAsync }),
   useStaff: () => ({ data: [{ id: 'staff-1', firstName: 'Alex', lastName: 'Rivera', fullName: 'Alex Rivera', isActive: true }] }),
   // The embedded Contacts editor (KeyIdentifiersStep) and the plan-type banner read the participant's contacts.
@@ -98,7 +96,6 @@ beforeEach(() => {
   mockUpsertRiskItemMutateAsync.mockReset()
   mockPatchMutateAsync.mockResolvedValue({ success: true })
   mockUpdateMutateAsync.mockResolvedValue({ success: true })
-  mockCompleteMutateAsync.mockReset().mockResolvedValue({ success: true })
   mockUpsertRiskItemMutateAsync.mockResolvedValue({ success: true })
 })
 

@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
 import {
-  useConfirmServiceNeeds, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useFundingPlans, useParticipant, useServiceAgreementDrafts,
+  useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useFundingPlans, useParticipant, useServiceAgreementDrafts,
 } from '@/api/hooks'
 import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
@@ -75,7 +75,6 @@ function DraftPage() {
   const { canManageParticipantLifecycle: canEdit, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const plans = useFundingPlans(participantId, canEdit)
   const today = useMemo(() => localIsoDate(), [])
-  const confirmNeeds = useConfirmServiceNeeds(participantId)
 
   // The working copy: the agreement's details and its shifts. It starts as the newest save's (a save is never edited: saving again replaces it) and is saved as a whole. `baseline` is what it
   // looked like when it was loaded or last saved, to know whether there is anything to lose.
@@ -106,9 +105,8 @@ function DraftPage() {
 
   const loaded = drafts.data !== undefined && (!canEdit || !plans.isLoading)
   const newest = drafts.data?.[0]
-  // What is on screen is the save this working copy was loaded from or last saved as, not whatever has been read since: the PDF, the approval and the onboarding confirmation are of that one.
+  // What is on screen is the save this working copy was loaded from or last saved as, not whatever has been read since: the PDF and the approval are of that one.
   const onScreen = drafts.data?.find(entry => entry.version === baseVersion)
-  const behind = !!newest && !!onScreen && newest.id !== onScreen.id
   if (loaded && baseline === null && participant.data) {
     setBaseVersion(newest?.version ?? 0)
     // A save with a block that can no longer be read is not loaded: an empty shift would look like a schedule nobody made, and saving over it would lose it for good.
@@ -373,7 +371,6 @@ function DraftPage() {
               onDownload={() => { if (onScreen) download.mutate({ participantId, id: onScreen.id }) }}
               downloading={download.isPending} downloadFailed={download.isError}
               approval={approvable ? { mayApprove, approverRoles, notReady: onScreen?.pricing?.needsReview === true, onOpen: () => setApproving(true) } : undefined}
-              onboarding={fromOnboarding && canEdit && !behind ? { onConfirm: () => confirmNeeds.mutate(), pending: confirmNeeds.isPending, done: confirmNeeds.isSuccess, failed: confirmNeeds.isError } : undefined}
             />
           )}
         </div>

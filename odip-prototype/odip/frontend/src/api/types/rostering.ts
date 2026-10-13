@@ -350,6 +350,8 @@ export interface RosterStaffRowDto {
 export interface RosterParticipantRowDto {
   participantId: string
   fullName: string
+  /** Services have begun but the participant is still onboarding (not yet made active): the board tags the row. */
+  inOnboarding?: boolean
   supportRatio: SupportRatio
   overnightSupport: SleepoverType
   hasRestrictivePractice: boolean

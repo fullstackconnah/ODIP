@@ -26,8 +26,6 @@ type SaveStepProps = {
   downloadFailed: boolean
   /** Undefined when the agreement cannot be approved from here (nothing saved, already approved, a role that may not). */
   approval?: { mayApprove: boolean; approverRoles?: string[]; notReady: boolean; onOpen: () => void }
-  /** From onboarding: confirms the saved service needs. Undefined anywhere else. */
-  onboarding?: { onConfirm: () => void; pending: boolean; done: boolean; failed: boolean }
 }
 
 const SECTION = 'flex flex-col gap-2'
@@ -36,7 +34,7 @@ const SECTION = 'flex flex-col gap-2'
  * Step 4: save, get the one PDF, hand the agreement to rostering. The footer holds Save; this step says what saving did and what comes next. Approval is "Mark approved for rostering" (its
  * dialog carries the budget warnings of phase 3); it needs a saved agreement with no unsaved changes. Nothing here signs anything.
  */
-export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, blocking, onGoToCheck, history, onDownload, downloading, downloadFailed, approval, onboarding }: SaveStepProps) {
+export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, blocking, onGoToCheck, history, onDownload, downloading, downloadFailed, approval }: SaveStepProps) {
   return (
     <div className="flex max-w-4xl flex-col gap-[var(--section-gap)]">
       {notices}
@@ -80,17 +78,6 @@ export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, bl
           ) : approval.approverRoles && (
             <p className="text-sm text-[var(--color-muted-foreground)]">Your organisation lets only {joinList(approval.approverRoles)} approve agreements.</p>
           )}
-        </section>
-      )}
-
-      {onboarding && !readOnly && hasSaved && (
-        <section aria-labelledby="save-onboarding" className={SECTION}>
-          <h3 id="save-onboarding" className="text-sm font-semibold">Onboarding</h3>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={onboarding.onConfirm} disabled={onboarding.pending || dirty}>{onboarding.pending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}Confirm service needs</Button>
-            {onboarding.done && <p role="status" className="text-sm font-medium">Service needs confirmed.</p>}
-            {onboarding.failed && <p role="alert" className="text-sm text-[var(--color-destructive)]">Could not confirm. Check that the saved agreement sits inside the NDIS plan dates, then try again.</p>}
-          </div>
         </section>
       )}
 

@@ -262,3 +262,16 @@ describe('ParticipantRow header — readiness chip', () => {
     expect(tail.textContent).not.toMatch(/not ready/i)
   })
 })
+
+describe('ParticipantRow: a participant whose services have started but who is still onboarding', () => {
+  it('carries a small "Onboarding" tag beside the ratio chip, and none for an active participant', () => {
+    renderRow({ fullName: 'Sam Started', inOnboarding: true })
+    const tag = within(headerOf('Sam Started')).getByText('Onboarding')
+    expect(tag).toHaveAttribute('title', 'Services started; onboarding is still open')
+  })
+
+  it('shows no tag for a participant who has been made active', () => {
+    renderRow({ fullName: 'Amy Active' })
+    expect(within(headerOf('Amy Active')).queryByText('Onboarding')).not.toBeInTheDocument()
+  })
+})
