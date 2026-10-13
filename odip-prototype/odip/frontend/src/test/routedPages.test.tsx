@@ -32,7 +32,7 @@ const DETAIL = new RegExp(`/(trips|participants|staff|accommodation|vehicles|tas
 // Reads that wrap the record.
 const WRAPPED: [RegExp, unknown][] = [
   [new RegExp(`/staff/${ID}/overview$`), { staff: RECORD, availability: [], recentCompletions: [], recentIncidents: [] }],
-  [new RegExp(`/inquiries/${ID}/onboarding$`), RECORD],
+  [new RegExp(`/inquiries/${ID}/onboarding$`), { ...RECORD, items: [] }],
 ]
 
 function answer(url: string): unknown {
