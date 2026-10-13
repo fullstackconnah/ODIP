@@ -965,6 +965,26 @@ describe('DataTable — keyboard activation of a clickable row', () => {
     expect(onRowClick).toHaveBeenCalledTimes(2)
     expect(onRowClick).toHaveBeenCalledWith(rows[0])
   })
+
+  it('leaves a click on a link or button inside the row to that control, even when it does not stop the click', async () => {
+    const user = userEvent.setup()
+    const onRowClick = vi.fn()
+    const onButton = vi.fn()
+    const plainColumns: Column<Row>[] = [
+      { key: 'name', header: 'Name', render: r => <a href={`#/people/${r.id}`}><span>{r.name}</span></a> },
+      { key: 'age', header: 'Age', render: r => <button type="button" onClick={onButton}>Open {r.name}</button> },
+    ]
+    render(<DataTable data={rows} columns={plainColumns} keyField="id" onRowClick={onRowClick} />)
+
+    // A link that navigates and a row that navigates too pushed two history entries, or the row overrode the link's target.
+    await user.click(screen.getByText('Bianca'))
+    await user.click(screen.getByRole('button', { name: 'Open Bianca' }))
+    expect(onButton).toHaveBeenCalledTimes(1)
+    expect(onRowClick).not.toHaveBeenCalled()
+
+    await user.click(screen.getAllByRole('row')[1])
+    expect(onRowClick).toHaveBeenCalledWith(rows[0])
+  })
 })
 
 // Density polish (touch): a 19px name link in a table cell was a 19px tap target on a phone. DataTable puts
