@@ -424,38 +424,43 @@ public class ServiceAgreementApprovalServiceTests
     // ── Ending the revision before ────────────────────────────────────────────────
 
     [Fact]
-    public async Task Approving_the_next_revision_ends_the_old_patterns_the_day_before_it_starts_and_touches_no_shift_assigned_or_open()
+    public async Task Approving_the_next_revision_ends_the_old_patterns_removes_their_unfilled_drafts_from_its_start_and_keeps_and_lists_the_assigned_ones()
     {
         await using var f = await SetUpAsync(audited: true);
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);
+        await ApproveAsync(f, v1);                                                                          // 40 shifts, 12 October to 4 December
         var staff = Guid.NewGuid();
         f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
         var assigned = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).OrderBy(s => s.ServiceDate).Take(2).ToListAsync();      // Monday 2 and Tuesday 3 November
         foreach (var shift in assigned) shift.UserId = staff;
         await f.Db.SaveChangesAsync();
-        var shiftsBefore = (await f.Db.Shifts.AsNoTracking().ToListAsync()).ToDictionary(s => s.Id, s => (s.ShiftPatternId, s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime));
-        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));       // starts on Monday 2 November
+        var before = (await f.Db.Shifts.AsNoTracking().Where(s => s.ServiceDate < new DateOnly(2026, 11, 2)).ToListAsync())
+            .ToDictionary(s => s.Id, s => (s.ShiftPatternId, s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime));
+        // v2 changes the support (an hour longer), so no shift of v1 is a shift of v2
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
 
         var outcome = await ApproveAsync(f, v2);
 
-        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
-        Assert.Equal(5, outcome.Approval!.PatternsEnded);
-        var old = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync();
-        Assert.All(old, p => Assert.Equal((new DateOnly(2026, 11, 1), true), (p.EffectiveTo!.Value, p.IsActive)));              // the day before v2 starts; still active, ending
-        Assert.All(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).ToListAsync(), p => Assert.Equal((new DateOnly(2026, 11, 2), true), (p.EffectiveFrom, p.IsActive)));
-        // every shift of v1 is as it was: not changed, cancelled or deleted, assigned or not
-        var shiftsAfter = (await f.Db.Shifts.AsNoTracking().Where(s => shiftsBefore.Keys.Contains(s.Id)).ToListAsync()).ToDictionary(s => s.Id, s => (s.ShiftPatternId, s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime));
-        Assert.Equal(shiftsBefore, shiftsAfter);
-        Assert.Equal(2, shiftsAfter.Values.Count(s => s.UserId == staff));
-        // each old pattern is one Updated audit row (the first approval only created patterns), by the person who approved
-        var updates = (await f.Db.AuditLogs.ToListAsync()).Where(l => l.EntityType == "ShiftPattern" && l.Action == AuditAction.Updated).ToList();
-        Assert.Equal(5, updates.Count);
-        Assert.All(updates, l => Assert.Equal("Alex Admin", l.ChangedByName));
+
+        Assert.Equal((ApprovalStatus.Approved, 5, 25), (outcome.Status, outcome.Approval!.PatternsEnded, outcome.Approval.ShiftsCreated));
+        Assert.All(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync(), p => Assert.Equal((new DateOnly(2026, 11, 1), true), (p.EffectiveTo!.Value, p.IsActive)));
+        var v1Ids = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).Select(p => p.Id).ToListAsync();
+        var v1Shifts = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && v1Ids.Contains(s.ShiftPatternId.Value)).ToListAsync();
+        // before 2 November nothing is touched; from it, only the two with a worker are left
+        Assert.Equal(before, v1Shifts.Where(s => s.ServiceDate < new DateOnly(2026, 11, 2)).ToDictionary(s => s.Id, s => (s.ShiftPatternId, s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime)));
+        Assert.Equal(assigned.Select(s => s.Id).OrderBy(id => id), v1Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).Select(s => s.Id).OrderBy(id => id));
+        var old = outcome.OldShifts!;
+        Assert.Equal((0, 2, 23, (DateOnly?)new DateOnly(2026, 11, 2), (int?)1), (old.Open, old.Assigned, old.Removed, old.FirstDate, old.FromVersion));
+        Assert.Equal(new[] { (new DateOnly(2026, 11, 2), "Ben Turner", ShiftStatus.Draft), (new DateOnly(2026, 11, 3), "Ben Turner", ShiftStatus.Draft) },
+            old.Shifts.Select(s => (s.ServiceDate, s.WorkerName!, s.Status)));
+        // each removal is one Deleted audit row by the person who approved, as each ended pattern is one Updated row
+        var logs = await f.Db.AuditLogs.ToListAsync();
+        Assert.Equal(23, logs.Count(l => l.EntityType == "Shift" && l.Action == AuditAction.Deleted && l.ChangedByName == "Alex Admin"));
+        Assert.Equal(5, logs.Count(l => l.EntityType == "ShiftPattern" && l.Action == AuditAction.Updated));
     }
 
     [Fact]
-    public async Task The_result_counts_the_old_versions_shifts_on_or_after_the_new_start_open_and_assigned_separately_and_says_which_day_they_begin()
+    public async Task The_preview_and_the_result_count_what_approval_removes_and_keeps_and_say_which_day_they_begin()
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
@@ -466,15 +471,34 @@ public class ServiceAgreementApprovalServiceTests
         for (var i = 0; i < 3; i++) onOrAfter[i].UserId = staff;                         // three assigned
         onOrAfter[3].Status = ShiftStatus.Cancelled;                                     // a cancelled one is not a shift that stands
         await f.Db.SaveChangesAsync();
-        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
-        var expectedOpen = onOrAfter.Count - 3 - 1;
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+        var expectedRemoved = onOrAfter.Count - 3 - 1;                                   // all but the three assigned and the cancelled one
 
         var preview = (await PreviewAsync(f, v2)).Preview!;
         var outcome = await ApproveAsync(f, v2);
 
         foreach (var counted in new[] { preview.OldShiftsRemaining, outcome.OldShifts! })
-            Assert.Equal((expectedOpen, 3, (DateOnly?)new DateOnly(2026, 11, 2), (int?)1), (counted.Open, counted.Assigned, counted.FirstDate, counted.FromVersion));
+            Assert.Equal((0, 3, expectedRemoved, (DateOnly?)new DateOnly(2026, 11, 2), (int?)1), (counted.Open, counted.Assigned, counted.Removed, counted.FirstDate, counted.FromVersion));
+        Assert.Equal(3, preview.OldShiftsRemaining.Shifts.Count);
         Assert.Equal((5, 1, new DateOnly(2026, 11, 1)), (preview.PatternsToEnd, preview.EndsFromVersion, preview.EndsOn));
+    }
+
+    [Fact]
+    public async Task An_unfilled_draft_a_coordinator_wrote_notes_on_is_kept_and_listed_not_removed()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        var noted = await f.Db.Shifts.SingleAsync(s => s.ServiceDate == new DateOnly(2026, 11, 4));       // Wednesday 4 November, unfilled
+        noted.Notes = "Bring the hoist";
+        await f.Db.SaveChangesAsync();
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+
+        var outcome = await ApproveAsync(f, v2);
+
+        Assert.Equal((24, 1, 0), (outcome.OldShifts!.Removed, outcome.OldShifts.Open, outcome.OldShifts.Assigned));
+        Assert.Equal(noted.Id, Assert.Single(outcome.OldShifts.Shifts).Id);
+        Assert.True(await f.Db.Shifts.AnyAsync(s => s.Id == noted.Id));
     }
 
     [Fact]
@@ -765,12 +789,12 @@ public class ServiceAgreementApprovalServiceTests
         var published = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2) && s.Status == ShiftStatus.Draft).OrderBy(s => s.ServiceDate).ThenBy(s => s.Id).Take(2).ToListAsync();
         published[0].Status = ShiftStatus.Published; published[1].UserId = Guid.NewGuid();                         // one published, one assigned
         await f.Db.SaveChangesAsync();
-        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 1), end: new DateOnly(2026, 12, 20));      // starts in the past
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 10, 1), end: new DateOnly(2026, 12, 20));      // starts in the past
 
         var counted = (await PreviewAsync(f, v2)).Preview!.OldShiftsRemaining;
 
-        // 12 October to 4 December is 40 shifts and the one on the 8th; none of those on or after 12 October is cancelled; three are not tidy-able, and the 8th is past
-        Assert.Equal((40 - 3 - 1, 1), (counted.Open, counted.Assigned));
+        // 37 can be tidied (40 less the three under way, handed in or finished; the 8th is past): the published one nobody is on is kept and open, the assigned one kept, the other 35 removed
+        Assert.Equal((1, 1, 40 - 3 - 2), (counted.Open, counted.Assigned, counted.Removed));
         Assert.Equal(new DateOnly(2026, 10, 12), counted.FirstDate);                                              // from today on, not from the day v2 starts
     }
 

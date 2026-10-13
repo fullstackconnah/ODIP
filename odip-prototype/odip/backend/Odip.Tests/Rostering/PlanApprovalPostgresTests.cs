@@ -12,7 +12,9 @@ using Odip.Api.Controllers;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.BackgroundServices;
@@ -67,10 +69,10 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         }
     }
 
-    private static async Task<ServiceAgreementDraft> StoreAsync(string connectionString, Guid tenantId, Guid participantId, int version, DateOnly? start = null, DateOnly? end = null)
+    private static async Task<ServiceAgreementDraft> StoreAsync(string connectionString, Guid tenantId, Guid participantId, int version, DateOnly? start = null, DateOnly? end = null, IReadOnlyList<PlanBlock>? blocks = null)
     {
         await using var db = Open(connectionString, tenantId);
-        var draft = BuildRevision(tenantId, participantId, version, new[] { WeekdayBlock() }, start, end, requirements: new Application.DTOs.DraftBlockRequirementsDto { WorkerGender = "Female", Driver = true, Skills = new List<string> { "FirstAid" } });
+        var draft = BuildRevision(tenantId, participantId, version, blocks ?? new[] { WeekdayBlock() }, start, end, requirements: new Application.DTOs.DraftBlockRequirementsDto { WorkerGender = "Female", Driver = true, Skills = new List<string> { "FirstAid" } });
         db.ServiceAgreementDrafts.Add(draft);
         await db.SaveChangesAsync();
         return draft;
@@ -285,23 +287,23 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task ApprovingTheNextRevision_EndsTheOldPatterns_LeavesTheirShifts_AndTheTopUpThenWorksOnlyForTheLivePatterns()
+    public async Task ApprovingTheNextRevision_EndsTheOldPatterns_RemovesTheirUnfilledShiftsFromItsStart_AndTheTopUpThenWorksOnlyForTheLivePatterns()
     {
         RequirePostgres();
         var (cs, tenantId, participantId) = await SetUpAsync();
         var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
         var v1 = await StoreAsync(cs, tenantId, participantId, 1);
         await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
-        var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), end: new DateOnly(2026, 12, 20));
+        var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), end: new DateOnly(2026, 12, 20), blocks: new[] { WeekdayBlock(change: b => b with { End = T(14) }) });
 
         var outcome = await ApproveAsync(cs, tenantId, participantId, v2.Id, clock);
 
         Assert.Equal((ApprovalStatus.Approved, 5, 5), (outcome.Status, outcome.Approval!.PatternsCreated, outcome.Approval.PatternsEnded));
-        Assert.Equal((0, 25), (outcome.OldShifts!.Assigned, outcome.OldShifts.Open));              // v1's open shifts from Monday 2 November to Friday 4 December: 25, and all of them stay
+        Assert.Equal((0, 0, 25), (outcome.OldShifts!.Assigned, outcome.OldShifts.Open, outcome.OldShifts.Removed));    // v1's unfilled shifts from Monday 2 November to Friday 4 December: 25, all removed
         await using (var read = Open(cs, tenantId))
         {
             Assert.All(await read.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == v1.Id).ToListAsync(), p => Assert.Equal((new DateOnly(2026, 11, 1), true), (p.EffectiveTo!.Value, p.IsActive)));
-            Assert.Equal(40, await read.Shifts.CountAsync(s => read.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v1.Id)));
+            Assert.Equal(15, await read.Shifts.CountAsync(s => read.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v1.Id)));
         }
 
         // A week later the horizon has moved. v1's patterns still run to 1 November (they are read) but already have every shift they will; v2's are topped up with the five weekdays of 7 to 11 December.
@@ -317,8 +319,80 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
 
         Assert.Equal((1, 10, 5, 0), (run.Tenants, run.Patterns, run.ShiftsCreated, run.Failures));
         await using var after = Open(cs, tenantId);
-        Assert.Equal(40, await after.Shifts.CountAsync(s => after.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v1.Id)));      // v1's shifts: no more
+        Assert.Equal(15, await after.Shifts.CountAsync(s => after.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v1.Id)));      // v1's shifts: no more
         Assert.Equal(new DateOnly(2026, 12, 11), await after.Shifts.MaxAsync(s => s.ServiceDate));
+    }
+
+    [SkippableFact]
+    public async Task ApprovingASuccessor_RemovesTheUnfilledDrafts_ButKeepsOneWithANote_AndCommits()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
+        var v1 = await StoreAsync(cs, tenantId, participantId, 1);
+        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        Guid noted;
+        await using (var db = Open(cs, tenantId))
+        {
+            var author = db.Users.Add(new User { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ben", LastName = "Turner", Username = $"ben{Guid.NewGuid():N}", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true }).Entity;
+            var shift = await db.Shifts.SingleAsync(s => s.ServiceDate == new DateOnly(2026, 11, 4));        // Wednesday 4 November: an unfilled Draft of v1
+            noted = shift.Id;
+            // A note restricts the delete of its shift: removing this one would roll the whole approval back with a foreign-key violation.
+            db.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), TenantId = tenantId, ShiftId = shift.Id, AuthorUserId = author.Id, AuthorName = "Ben Turner", Body = "Asked to come at ten." });
+            await db.SaveChangesAsync();
+        }
+        var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), blocks: new[] { WeekdayBlock(change: b => b with { End = T(14) }) });
+
+        var outcome = await ApproveAsync(cs, tenantId, participantId, v2.Id, clock);
+
+        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
+        Assert.Equal((24, 1, 0), (outcome.OldShifts!.Removed, outcome.OldShifts.Open, outcome.OldShifts.Assigned));
+        Assert.Equal(noted, Assert.Single(outcome.OldShifts.Shifts).Id);
+        await using var read = Open(cs, tenantId);
+        Assert.True(await read.Shifts.AnyAsync(s => s.Id == noted));
+        Assert.Equal(15 + 1, await read.Shifts.CountAsync(s => read.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v1.Id)));
+    }
+
+    [SkippableFact]
+    public async Task AnAssignmentNotYetCommittedWhenTheApprovalReachesTheShift_IsWaitedFor_AndTheShiftIsKeptNotRemoved()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
+        var v1 = await StoreAsync(cs, tenantId, participantId, 1);
+        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), blocks: new[] { WeekdayBlock(change: b => b with { End = T(14) }) });
+        var staff = Guid.NewGuid();
+        Guid target;
+        await using (var db = Open(cs, tenantId))
+        {
+            db.Users.Add(new User { Id = staff, TenantId = tenantId, FirstName = "Ben", LastName = "Turner", Username = $"ben{Guid.NewGuid():N}", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
+            await db.SaveChangesAsync();
+            target = await db.Shifts.Where(s => s.ServiceDate == new DateOnly(2026, 11, 4)).Select(s => s.Id).SingleAsync();     // Wednesday 4 November: an unfilled Draft of v1
+        }
+
+        // Another request assigns a worker to that shift and has not committed when the approval reaches it.
+        await using var other = new NpgsqlConnection(cs);
+        await other.OpenAsync();
+        await using var assigning = await other.BeginTransactionAsync();
+        await using (var assign = new NpgsqlCommand(@"UPDATE ""Shifts"" SET ""UserId"" = @staff WHERE ""Id"" = @id", other, assigning))
+        {
+            assign.Parameters.AddWithValue("staff", staff);
+            assign.Parameters.AddWithValue("id", target);
+            await assign.ExecuteNonQueryAsync();
+        }
+        var approving = ApproveAsync(cs, tenantId, participantId, v2.Id, clock);
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Assert.False(approving.IsCompleted);                                                     // it waits on that shift's row
+        await assigning.CommitAsync();
+
+        var outcome = await approving;
+
+        // Without the row lock the approval read the shift as unfilled, its DELETE waited for the assignment and then removed the assigned shift.
+        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
+        Assert.Equal((1, 24), (outcome.OldShifts!.Assigned, outcome.OldShifts.Removed));
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(staff, (await read.Shifts.AsNoTracking().SingleAsync(s => s.Id == target)).UserId);
     }
 
     // ── Another generation holds the roster ───────────────────────────────────────

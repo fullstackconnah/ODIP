@@ -156,10 +156,7 @@ public record ServiceAgreementDraftDto
     /// revision) and it is not a signature: approval makes the weekly roster patterns, nothing more.
     /// </summary>
     public DraftApprovalDto? Approval { get; init; }
-    /// <summary>
-    /// Only in the answer to an approval: the shifts of the revision before this one that are dated on or after this one starts and still stand, which approval leaves exactly as they are for a
-    /// coordinator to tidy by hand.
-    /// </summary>
+    /// <summary>Only in the answer to an approval: the shifts of the revision before this one dated on or after this one starts (or today), which approval removed when nobody was on them and otherwise left for a coordinator to move or cancel.</summary>
     public OldShiftsRemainingDto? OldShiftsRemaining { get; init; }
 }
 
@@ -189,15 +186,39 @@ public record DraftApprovalDto
     public bool TopUpEnabled { get; init; } = true;
 }
 
-/// <summary>Shifts of the previous approved revision on or after the new one starts: left alone by approval, counted so they can be tidied. Open means nobody is assigned.</summary>
+/// <summary>
+/// The shifts of the earlier approved revisions dated from the day the new one starts (or today, when that is later) that a coordinator can still tidy: Draft or Published. Approval removes the
+/// unfilled Draft ones (<see cref="Removed"/>), except one something is recorded against; the rest stay, counted here (open when nobody is assigned) and listed in <see cref="Shifts"/> for a
+/// coordinator to move or cancel.
+/// </summary>
 public record OldShiftsRemainingDto
 {
+    /// <summary>The most kept shifts <see cref="Shifts"/> lists; <see cref="Open"/> and <see cref="Assigned"/> count them all.</summary>
+    public const int MaxListed = 50;
+
     public int Open { get; init; }
     public int Assigned { get; init; }
-    /// <summary>The first day of them; absent when there are none.</summary>
+    /// <summary>The unfilled Draft shifts approval removes (in a preview) or removed (in the answer to an approval): nobody on them, no notes written on them, nothing recorded against them.</summary>
+    public int Removed { get; init; }
+    /// <summary>The first day of them, removed or kept; absent when there are none.</summary>
     public DateOnly? FirstDate { get; init; }
     /// <summary>The version of the revision they came from (the one whose patterns this approval ends); absent when there is none.</summary>
     public int? FromVersion { get; init; }
+    /// <summary>The kept ones, by day and time.</summary>
+    public List<OldShiftDto> Shifts { get; init; } = [];
+}
+
+/// <summary>A shift of a replaced revision that approval leaves for a coordinator: when, its state, and who is on it.</summary>
+public record OldShiftDto
+{
+    public Guid Id { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public Odip.Domain.Rostering.ShiftStatus Status { get; init; }
+    /// <summary>Who is on it; absent when nobody is.</summary>
+    public string? WorkerName { get; init; }
 }
 
 /// <summary>One reason an approval is refused, in plain words. <see cref="Code"/> is the pricing engine's reason name (NoItem, BlocksOverlap, ...) or one of this feature's own (HolidayUndecided, ReviewFlag, HandTyped, TimeZoneMismatch, ...).</summary>

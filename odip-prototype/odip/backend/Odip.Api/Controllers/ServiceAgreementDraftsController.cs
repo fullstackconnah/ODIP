@@ -134,8 +134,8 @@ public class ServiceAgreementDraftsController : ControllerBase
 
     /// <summary>
     /// Approves the NEWEST revision for rostering (phase D), in one transaction: records who and when, makes the weekly roster patterns of its blocks, ends the patterns of the revision before it the
-    /// day before this one starts, and generates the open shifts up to the horizon (<c>RosterTopUp:HorizonDays</c>, 56 days by default) when the participant may be rostered. No shift that exists is changed. 200 with
-    /// the revision (its <c>approval</c> and the <c>oldShiftsRemaining</c> counts); 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 409 when a newer revision exists
+    /// day before this one starts, and generates the open shifts up to the horizon (<c>RosterTopUp:HorizonDays</c>, 56 days by default) when the participant may be rostered. The revision before's unfilled Draft shifts from this one's start are removed in the same transaction; the rest are listed (<c>oldShiftsRemaining</c>) and left for a coordinator. 200 with
+    /// the revision (its <c>approval</c> and <c>oldShiftsRemaining</c>); 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 409 when a newer revision exists
     /// (<c>draft-superseded</c>) or another change to the participant's roster was still running (<c>roster-busy</c>; nothing was changed, try again). Approving an approved revision again is a 200 with
     /// the existing approval and writes nothing.
     /// </summary>

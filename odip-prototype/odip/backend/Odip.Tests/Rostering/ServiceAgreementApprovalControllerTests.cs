@@ -130,7 +130,7 @@ public class ServiceAgreementApprovalControllerTests
         Assert.Single(dto.Blocks);
         var json = JsonSerializer.Serialize(Assert.IsType<ApiResponse<ServiceAgreementDraftDto>>(Assert.IsType<OkObjectResult>(result.Result).Value), ApiOptions());
         Assert.Contains("\"approval\":{\"approvedAt\":\"2026-10-10T02:00:00Z\",\"approvedByName\":\"Alex Admin\",\"patternsCreated\":5,\"patternsEnded\":0,\"shiftsCreated\":40,\"horizonEnd\":\"2026-12-05\",\"firstShiftDate\":\"2026-10-12\",\"topUpEnabled\":true}", json);
-        Assert.Contains("\"oldShiftsRemaining\":{\"open\":0,\"assigned\":0}", json);
+        Assert.Contains("\"oldShiftsRemaining\":{\"open\":0,\"assigned\":0,\"removed\":0,\"shifts\":[]}", json);
     }
 
     [Fact]
