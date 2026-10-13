@@ -146,11 +146,13 @@ export default function OnboardingDetailPage() {
 function Fix({ item, participantId, canEdit, canOpenDraft, canOpenFunding, onRecord }: {
   item: OnboardingChecklistItem; participantId: string; canEdit: boolean; canOpenDraft: boolean; canOpenFunding: boolean; onRecord: () => void
 }) {
-  if (item.key === 'profile') return canEdit ? <Button variant="secondary" size="sm" to={`/participants/${participantId}/profile?from=onboarding`}>Edit profile</Button> : null
+  // An open item's fix carries the weight; a done item's stays reachable but quiet. On a phone the row stacks, so the button keeps its own width.
+  const look = { variant: item.done ? 'ghost' as const : 'secondary' as const, size: 'sm' as const, className: 'self-start sm:self-auto' }
+  if (item.key === 'profile') return canEdit ? <Button {...look} to={`/participants/${participantId}/profile?from=onboarding`}>Edit profile</Button> : null
   // The draft carries money, so only the roles the API admits to it are sent there.
-  if (item.key === 'serviceNeeds') return canOpenDraft ? <Button variant="secondary" size="sm" to={`/participants/${participantId}/agreement-draft?from=onboarding`}>Open agreement draft</Button> : null
-  if (item.key === 'agreement') return canEdit ? <Button variant="secondary" size="sm" onClick={onRecord}>Record it</Button> : null
-  return canOpenFunding ? <Button variant="secondary" size="sm" to={`/participants/${participantId}?tab=funding`}>Funding tab</Button> : null
+  if (item.key === 'serviceNeeds') return canOpenDraft ? <Button {...look} to={`/participants/${participantId}/agreement-draft?from=onboarding`}>Open agreement draft</Button> : null
+  if (item.key === 'agreement') return canEdit ? <Button {...look} onClick={onRecord}>Record it</Button> : null
+  return canOpenFunding ? <Button {...look} to={`/participants/${participantId}?tab=funding`}>Funding tab</Button> : null
 }
 
 /** The field errors of a ValidationProblemDetails answer, keyed by field ("signedOn", "noAgreementReason"). */
