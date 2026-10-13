@@ -566,6 +566,25 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
+    public async Task BeginServices_AgainAfterTheServicesStartedDraftWasArchived_SwitchesThemBackOn_AndKeepsTheFirstDate()
+    {
+        using var fx = Create();
+        var participant = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        fx.Db.Participants.Add(participant);
+        await fx.Db.SaveChangesAsync();
+        var first = Ok(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+        Assert.IsType<OkObjectResult>((await fx.Controller.Delete(participant.Id, CancellationToken.None)).Result);
+        Assert.False((await fx.Db.Participants.SingleAsync()).IsActive);
+
+        var again = Ok(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+
+        Assert.True(again.IsActive);
+        Assert.True(again.IsDraft);
+        Assert.Equal(first.ServicesStartedAt, again.ServicesStartedAt);
+        Assert.True((await fx.Db.Participants.SingleAsync()).IsActive);
+    }
+
+    [Fact]
     public async Task BeginServices_ForAParticipantWhoIsNotADraft_Returns400_AndChangesNothing()
     {
         using var fx = Create();
@@ -595,7 +614,7 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
-    public async Task BeginServices_UnderEnforce_IsRefusedWithThePlacementReason_AndChangesNothing()
+    public async Task BeginServices_UnderEnforce_IsRefusedWithTheEnforceMessage_AndChangesNothing()
     {
         using var fx = Create();
         fx.Db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantReadinessMode = ParticipantReadinessMode.Enforce });
@@ -606,7 +625,7 @@ public class ParticipantStatusEndpointTests
 
         var message = BadRequest(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
 
-        Assert.Equal(ParticipantReadinessGate.NotReadyMessage, message);
+        Assert.Equal("Your organisation enforces readiness: services can begin once the signed agreement evidence is recorded.", message);
         Assert.Equal(before, Scalars(await fx.Db.Participants.SingleAsync()));
         Assert.Empty(UpdatedAuditRows(fx.Db, participant.Id));
     }

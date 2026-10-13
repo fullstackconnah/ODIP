@@ -955,6 +955,7 @@ public class ParticipantsController : ControllerBase
     private const string DraftCannotBeActivated = "A draft participant cannot be activated. Complete their intake and profile first.";
     private const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
     private const string ActivationFundingRequired = "This participant cannot be activated until their plan budget is recorded on the Funding tab.";
+    private const string BeginServicesEnforced = "Your organisation enforces readiness: services can begin once the signed agreement evidence is recorded.";
 
     /// <summary>The 400 message for an activation the organisation's readiness rule refuses.</summary>
     private static string ActivationRefusal(ActivationBlock block) =>
@@ -1087,8 +1088,9 @@ public class ParticipantsController : ControllerBase
     /// "Begin services" on the onboarding checklist (owner decision 2026-10-13): a participant in onboarding (a draft, intake complete) can receive
     /// services (the roster board, shifts and patterns, the support-worker portal, medications, budgets and alerts: see
     /// <see cref="Participant.CanReceiveServicesRule"/>) while staying on the Onboarding tab until "Make active". Sets <see cref="Participant.ServicesStartedAt"/>
-    /// and <see cref="Participant.IsActive"/> and keeps the draft. Idempotent: a second call changes nothing. An organisation that enforces readiness keeps its
-    /// placement rule (<see cref="ParticipantReadiness.CheckAsync"/>, which <c>MayPlaceAsync</c> uses) and is refused with its reason.
+    /// and <see cref="Participant.IsActive"/> and keeps the draft. Idempotent: a second call changes nothing, except that a services-started draft which was
+    /// archived is switched back on (the first date kept). An organisation that enforces readiness keeps its placement rule
+    /// (<see cref="ParticipantReadiness.CheckAsync"/>, which <c>MayPlaceAsync</c> uses), which refuses until signed-agreement evidence exists.
     /// </summary>
     [HttpPost("{id:guid}/begin-services")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -1097,13 +1099,16 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
-        if (p.ServicesStartedAt == null)
+        // Nothing to do once services run (or the participant was made active). A services-started draft that was archived is switched back on,
+        // keeping the first date.
+        if (p.ServicesStartedAt == null || (p.IsDraft && !p.IsActive))
         {
             if (!p.IsDraft) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Services can only begin for a participant in onboarding."));
             if (!p.IntakeCompletedAt.HasValue) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before services begin."));
-            if (await ParticipantReadiness.IsEnforcedAsync(_db, p.TenantId, ct) && await ParticipantReadiness.CheckAsync(_db, p.Id, ct) is { Allowed: false } check)
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(check.Rejection!));
-            p.ServicesStartedAt = DateTime.UtcNow;
+            // Enforce keeps its strict placement rule (owner decision): it refuses until verified signed-agreement evidence exists.
+            if (await ParticipantReadiness.IsEnforcedAsync(_db, p.TenantId, ct) && !(await ParticipantReadiness.CheckAsync(_db, p.Id, ct)).Allowed)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(BeginServicesEnforced));
+            p.ServicesStartedAt ??= DateTime.UtcNow;
             p.IsActive = true;
             p.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
