@@ -121,6 +121,8 @@ export interface DraftApprovalPreviewDto {
   patternsToEnd: number
   /** The new patterns no ended pattern matches (a changed support): they start with no default staff. Absent from an older server. */
   changedPatterns?: number
+  /** Ended patterns a coordinator edited by hand (their times, ratio or night type are not their block's) that approving puts back to the agreement's times. Absent from an older server. */
+  handEditedPatterns?: number
   /** The version whose patterns would end, and the day they would end (the day before this revision starts). */
   endsFromVersion?: number
   endsOn?: string

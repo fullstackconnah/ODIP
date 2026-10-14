@@ -10,6 +10,7 @@ import { CheckboxField } from '@/components/CheckboxField'
 import { Modal } from '@/components/Modal'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { plural } from '@/lib/format'
 import { httpStatusOf } from '@/lib/httpStatus'
 import { shiftWords, type ShiftGroup } from '@/lib/agreementShifts'
@@ -186,9 +187,10 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
         {makesShifts && <p>{`Makes ${plural(preview.shiftsToCreate, 'unfilled shift')} up to ${formatServiceDate(preview.horizonEnd!)}.${keepsGoing ? ' After that, unfilled shifts are added each day until the agreement ends.' : ''}`}</p>}
         {ends && <p>{ends}</p>}
         {removed > 0 && old.firstDate && <p>{`Removes ${plural(removed, 'unfilled shift')} of the agreement it replaces, from ${formatServiceDate(old.firstDate)} on.`}</p>}
-        {carried > 0 && <p>{carried === 1 ? "Keeps 1 shift that doesn't change, as it is." : `Keeps ${carried} shifts that don't change, as they are.`}</p>}
+        {carried > 0 && <p>{carried === 1 ? "Carries over 1 shift that doesn't change." : `Carries over ${carried} shifts that don't change.`}</p>}
         {/* A matched support keeps its default worker (D10): only the changed ones start without one. */}
         {(preview.changedPatterns ?? 0) > 0 && <p>{preview.changedPatterns === 1 ? 'The changed pattern starts with no default staff.' : 'The changed patterns start with no default staff.'}</p>}
+        {(preview.handEditedPatterns ?? 0) > 0 && <p>{preview.handEditedPatterns === 1 ? "1 pattern edited by hand goes back to the agreement's times." : `${preview.handEditedPatterns} patterns edited by hand go back to the agreement's times.`}</p>}
       </div>
       {preview.shiftsToCreate === 0 && (preview.shiftsNote
         ? <p>{preview.shiftsNote}</p>
@@ -211,7 +213,7 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
           </ul>
           {keptCount > kept.length && <p>{`And ${keptCount - kept.length} more.`}</p>}
           {/* A new tab: the person can look at the roster and come back to approve, instead of losing the dialog and its preview. */}
-          <Link className="font-medium underline" to={rosterLink(kept[0]?.serviceDate ?? old.firstDate ?? draft.agreementStartDate, participantId)} target="_blank" rel="noopener noreferrer">
+          <Link className={`${TAP_FLOOR} self-start font-medium underline`} to={rosterLink(kept[0]?.serviceDate ?? old.firstDate ?? draft.agreementStartDate, participantId)} target="_blank" rel="noopener noreferrer">
             {oneKept ? 'See it on the roster' : 'See them on the roster'}<span className="sr-only"> (opens in a new tab)</span>
           </Link>
         </section>

@@ -400,6 +400,30 @@ describe('PatternSlideOver — a pattern an agreement made', () => {
     data: { patternId: 'pattern-1', dayOfWeek: 'Monday', startTime: '10:00', endTime: '17:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', allDays, fromDate: '2026-10-19', preview },
   })
 
+  it('opens the agreement in a new tab, so the change being typed is not lost', () => {
+    open(agreementPattern())
+
+    startLater()
+
+    const link = screen.getByRole('link', { name: /Open the agreement/ })
+    expect(link).toHaveAttribute('href', '/participants/participant-1/agreement-draft')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('says where a new default staff is saved when it is changed with the times, and says nothing when only the times change', async () => {
+    const user = userEvent.setup()
+    open(agreementPattern())
+    const line = 'Default staff is saved on the current pattern now. After approval, set it on the changed pattern.'
+
+    startLater()
+    expect(screen.queryByText(line)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Default staff' }))
+    await user.click(screen.getByRole('option', { name: 'Jordan Smith' }))
+
+    expect(screen.getByText(line)).toBeInTheDocument()
+  })
+
   it('opens with a quiet line that says where it came from, its dates read-only and no Delete: it ends through the agreement', () => {
     open(agreementPattern())
 

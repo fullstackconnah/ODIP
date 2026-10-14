@@ -120,6 +120,22 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect(screen.getByText(/Ends 5 patterns from the agreement it replaces the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
+  it("says how many patterns edited by hand go back to the agreement's times, in the singular for one, and nothing when none", () => {
+    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', handEditedPatterns: 2 }))
+    const { unmount } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+    expect(screen.getByText("2 patterns edited by hand go back to the agreement's times.")).toBeInTheDocument()
+    unmount()
+
+    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', handEditedPatterns: 1 }))
+    const { unmount: unmountOne } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+    expect(screen.getByText("1 pattern edited by hand goes back to the agreement's times.")).toBeInTheDocument()
+    unmountOne()
+
+    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', handEditedPatterns: 0 }))
+    render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+    expect(screen.queryByText(/edited by hand/)).not.toBeInTheDocument()
+  })
+
   it('says the changed patterns start with no default staff, and nothing of it when none changed: a matched support keeps its worker', () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', changedPatterns: 2 }))
     const { unmount } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
@@ -150,7 +166,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     setUp()
 
     expect(screen.getByText('Removes 21 unfilled shifts of the agreement it replaces, from Mon 2 Nov 2026 on.')).toBeInTheDocument()
-    expect(screen.getByText("Keeps 25 shifts that don't change, as they are.")).toBeInTheDocument()
+    expect(screen.getByText("Carries over 25 shifts that don't change.")).toBeInTheDocument()
     const kept = within(screen.getByRole('region', { name: '2 shifts of the agreement it replaces stay on the roster' }))
     expect(kept.getByText('They have a worker, are published, or have a note or completion recorded, so approval leaves them as they are. Move or cancel each one.')).toBeInTheDocument()
     expect(kept.getByText('Wed 4 Nov 2026 9am–1pm · Ben Turner')).toBeInTheDocument()
@@ -171,7 +187,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     setUp()
 
     expect(screen.getByText('Removes 1 unfilled shift of the agreement it replaces, from Wed 4 Nov 2026 on.')).toBeInTheDocument()
-    expect(screen.getByText("Keeps 1 shift that doesn't change, as it is.")).toBeInTheDocument()
+    expect(screen.getByText("Carries over 1 shift that doesn't change.")).toBeInTheDocument()
     expect(screen.getByText('The changed pattern starts with no default staff.')).toBeInTheDocument()
     const kept = within(screen.getByRole('region', { name: '1 shift of the agreement it replaces stays on the roster' }))
     expect(kept.getByText('It has a worker, is published, or has a note or completion recorded, so approval leaves it as it is. Move it or cancel it.')).toBeInTheDocument()
@@ -192,7 +208,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     setUp()
 
     expect(screen.queryByText(/stay on the roster/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/^Removes|^Keeps/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Removes|^Carries over/)).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /on the roster/ })).not.toBeInTheDocument()
   })
 

@@ -7,7 +7,9 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useCreatePattern, useUpdatePattern, useDeletePattern, usePatternChange } from '@/api/hooks'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
+import { buttonClasses } from '@/components/buttonClasses'
 import { Callout } from '@/components/Callout'
 import { RequirementChips } from '@/components/RequirementChips'
 import { SlideOver } from '@/components/SlideOver'
@@ -249,10 +251,17 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           </Callout>
         ) : isAgreement && (changing ? (
           <div ref={noticeRef} className="flex flex-col gap-[var(--field-gap-y)]">
-            <Callout tone="info" actions={<Button variant="secondary" size="sm" to={`/participants/${participantId}/agreement-draft`}>Open the agreement</Button>}>
+            <Callout tone="info" actions={
+              // A new tab: the change being typed here is not lost (the panel has no route guard), as the approval dialog's roster link does it.
+              <Link to={`/participants/${participantId}/agreement-draft`} target="_blank" rel="noopener noreferrer" className={buttonClasses('secondary', 'sm')}>
+                Open the agreement<span className="sr-only"> (opens in a new tab)</span>
+              </Link>
+            }>
               <p>{`This changes the service agreement. Saving creates ${nextRevision} from ${formatServiceDate(preview?.agreementStartDate ?? fromDate)}, re-priced, for approval.`}</p>
               {preview && <p>{priceLine(preview)}</p>}
               {preview?.needsReview && <p>The revision needs a look in the agreement before it can be approved.</p>}
+              {/* Default staff saves on this pattern now (handleCreate); the changed pattern the approval makes starts with none (D10). */}
+              {defaultStaffId !== (existing?.defaultStaffId ?? null) && <p>Default staff is saved on the current pattern now. After approval, set it on the changed pattern.</p>}
             </Callout>
             <div className={modalGrid}>
               <FormField label="Change starts" required hint="The new revision runs from this day to the end of the agreement.">
