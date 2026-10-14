@@ -312,7 +312,7 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
 
 
     [SkippableFact]
-    public async Task PublishWeek_NeverWritesPublishedOverAConcurrentCancel()   // N8: a PUT does not take the roster-board lock
+    public async Task PublishWeek_NeverWritesPublishedOverAConcurrentCancel()   // N8: a writer holding the row (here raw SQL, standing in for any write that skips the board lock) makes the publish wait
     {
         RequirePostgres();
         var tenantId = await NewOrganisationAsync();

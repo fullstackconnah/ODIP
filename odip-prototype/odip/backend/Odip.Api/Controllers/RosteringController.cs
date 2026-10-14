@@ -811,7 +811,7 @@ public class RosteringController : ControllerBase
         try
         {
             await using var held = await RosterBoardLockAsync(ct);
-            // Lock order (shared with the agreement approval): the organisation's board lock, then the shift rows by Id. A PUT takes neither, so this holds both rows until the save.
+            // Lock order (shared with the agreement approval): the organisation's board lock, then the shift rows by Id, as /assign, the PUT and the moving create take them; both rows are held until the save.
             await LockShiftRowsAsync("\"Id\" IN ({0}, {1})", new object[] { dto.FromShiftId, dto.ToShiftId }, ct);
             var from = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.FromShiftId, ct);
             var to = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.ToShiftId, ct);
@@ -874,8 +874,8 @@ public class RosteringController : ControllerBase
         try
         {
             await using var held = await RosterBoardLockAsync(ct);
-            // Hold the week's Draft rows until this commits, then read them. A PUT never takes the roster-board lock: one that cancels a draft now waits for the publish, and one that
-            // committed first is read below as it is, so a publish never writes Published over it.
+            // Hold the week's Draft rows until this commits, then read them. A PUT takes the board lock too, so it waits for the publish; any other writer of a draft row (a
+            // completion endpoint, the generator) either waits here or committed first and is read below as it is, so a publish never writes Published over it.
             await LockShiftRowsAsync("\"TenantId\" = {0} AND \"Status\" = {1} AND \"ServiceDate\" >= {2} AND \"ServiceDate\" <= {3}",
                 new object[] { tenantId, (int)ShiftStatus.Draft, start, end }, ct);
             var shown = _db.Participants.Where(Participant.CanReceiveServicesRule).Select(p => p.Id);
