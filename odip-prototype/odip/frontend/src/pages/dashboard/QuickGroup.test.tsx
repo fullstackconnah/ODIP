@@ -115,6 +115,15 @@ describe('QuickGroup — waiting and failed', () => {
     expect(refetch).toHaveBeenCalled()
     expect(screen.getByRole('link', { name: 'Open Leave' })).toBeInTheDocument()
   })
+
+  // A group of two requests (leave and unavailability) can hold one list while the other waits or failed: the rows it holds are not the group, so the
+  // group shows only its one line until every request has answered (SHAPE §6: "no rows" while waiting, "one row" when it failed).
+  it.each(['loading', 'error'] as const)('draws no rows while it is %s, even when one of its requests has answered', (phase) => {
+    render(<Harness model={model({ phase, rows: [row('a')], count: 0 })} />)
+
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
+    expect(screen.queryByText('Person a')).not.toBeInTheDocument()
+  })
 })
 
 describe('QuickGroup — one tap', () => {

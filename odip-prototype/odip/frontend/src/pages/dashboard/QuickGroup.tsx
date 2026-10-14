@@ -192,9 +192,11 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const headingId = useId()
   const linkRef = useRef<HTMLAnchorElement>(null)
   const rows = visibleRows(model, state.gone)
-  const shown = rows.slice(0, SHOWN_ROWS)
+  // Rows only once every request has answered: a group whose other list is still waiting or failed shows its one line, not half its rows (SHAPE §6).
+  const ready = model.phase === 'ready'
+  const shown = ready ? rows.slice(0, SHOWN_ROWS) : []
   const count = shownCount(model, state.gone)
-  const cut = count > shown.length
+  const cut = ready && count > shown.length
   const notices = state.notices.filter((notice) => notice.subject === model.key)
 
   function finish(row: QuickRow, outcome: ActionOutcome, rowEl: HTMLElement) {
