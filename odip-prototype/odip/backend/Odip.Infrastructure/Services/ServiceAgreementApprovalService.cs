@@ -425,13 +425,18 @@ public sealed class ServiceAgreementApprovalService
         // A default worker is carried only while that user is active: an archived one leaves the support with no default staff.
         var defaults = plan.ToEnd.Where(p => p.DefaultUserId is not null).Select(p => p.DefaultUserId!.Value).Distinct().ToList();
         var active = defaults.Count == 0 ? new HashSet<Guid>() : (await _db.Users.Where(u => defaults.Contains(u.Id) && u.IsActive).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
-        // plan.ToEnd runs oldest revision first, so when two ended generations are the same support, the newest revision's default worker is the one kept.
+        // plan.ToEnd runs oldest revision first, so when two ended generations are the same support, the newest revision's default worker and switch are the ones kept. Within one generation each new
+        // pattern is matched once: the block ids are not compared (the agreement builder renumbers them on every save), so the day, worker slot, times and asks are what pair them.
+        var taken = new HashSet<(Guid Made, Guid Source)>();
         foreach (var old in plan.ToEnd)
         {
-            if (plan.NewPatterns.FirstOrDefault(made => SameSupport(old, made)) is not { } same) continue;
+            if (plan.NewPatterns.FirstOrDefault(made => !taken.Contains((made.Id, old.SourceDraftId!.Value)) && SameSupport(old, made)) is not { } same) continue;
+            taken.Add((same.Id, old.SourceDraftId!.Value));
             plan.CarryTo[old.Id] = same;
             // The same support keeps its default worker too (a coordinator's own choice, not the agreement's); only a changed support starts with none.
             same.DefaultUserId = old.DefaultUserId is { } user && active.Contains(user) ? user : null;
+            // And stays switched off when a coordinator switched it off (the delete refusal tells them to). A pattern an approval switched off because it ended before it began is not that choice.
+            if (old.EffectiveTo is not { } to || to >= old.EffectiveFrom) same.IsActive = old.IsActive;
         }
         if (plan.CarryTo.Count == 0) return;
 
@@ -446,9 +451,10 @@ public sealed class ServiceAgreementApprovalService
         plan.Carried = plan.ToCarry.Select(s => (plan.CarryTo[s.ShiftPatternId!.Value].Id, s.ServiceDate)).ToHashSet();
     }
 
-    /// <summary>The same weekly support: the same block, weekday and worker of it, the same times, ratio and kind of night, and the same asks of a worker. A shift of the one is a shift of the other.</summary>
+    /// <summary>The same weekly support: the same weekday and worker slot, the same times, ratio and kind of night, and the same asks of a worker. A shift of the one is a shift of the other. The block id is not
+    /// compared: the builder renumbers blocks on every save, and two blocks on one day at the same times would overlap, which the engine refuses.</summary>
     private static bool SameSupport(ShiftPattern a, ShiftPattern b) =>
-        a.SourceBlockKey == b.SourceBlockKey && a.DayOfWeek == b.DayOfWeek && a.WorkerSlot == b.WorkerSlot && a.StartTime == b.StartTime && a.EndTime == b.EndTime
+        a.DayOfWeek == b.DayOfWeek && a.WorkerSlot == b.WorkerSlot && a.StartTime == b.StartTime && a.EndTime == b.EndTime
         && a.EndsNextDay == b.EndsNextDay && a.Ratio == b.Ratio && a.NightType == b.NightType && SameAsks(a.RequirementsJson, b.RequirementsJson);
 
     /// <summary>The same asks of a worker, read as what they mean: PostgreSQL stores them as jsonb, which reads back with its own key order and spacing, so the stored text never equals the mapper's.</summary>
