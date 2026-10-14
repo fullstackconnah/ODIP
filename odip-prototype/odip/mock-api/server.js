@@ -2493,7 +2493,11 @@ const routes = [
   // every other "GET routes don't filter by query string" route noted elsewhere in this file.
   ['incidents', (searchParams) => {
     const involvedUserId = searchParams.get('involvedUserId')
-    return paged(involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents)
+    let list = involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents
+    // The dashboard's Incidents group reads these two filters (IncidentsController.GetAll): QSC overdue, and open or QSC overdue.
+    if (searchParams.get('isOverdueQsc') === 'true') list = list.filter((i) => i.isOverdue24h)
+    if (searchParams.get('needsAttention') === 'true') list = list.filter((i) => i.isOverdue24h || (i.status !== 'Resolved' && i.status !== 'Closed'))
+    return paged(list)
   }],
   ['incidents/:id', (id) => {
     const i = incidents.find((x) => x.id === id) || incidents[0]

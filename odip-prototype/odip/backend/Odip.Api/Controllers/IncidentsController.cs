@@ -241,7 +241,9 @@ public class IncidentsController : ControllerBase
         [FromQuery] IncidentSeverity? severity, [FromQuery] QscReportingStatus? qscStatus,
         [FromQuery] bool? isActive, [FromQuery] bool? isOverdueQsc,
         [FromQuery] Guid? shiftId, [FromQuery] Guid? involvedUserId,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default,
+        // Last, so every existing caller keeps compiling; bound by name like the others.
+        [FromQuery] bool? needsAttention = null)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
@@ -259,7 +261,7 @@ public class IncidentsController : ControllerBase
         // status — e.g. the Archived tab's explicit ?status=Closed keeps working unchanged. Not in
         // overdue mode: a closed incident still owes its Commission report, and the banner and the
         // dashboard count it, so the overdue list must show it.
-        if (!status.HasValue && isOverdueQsc != true)
+        if (!status.HasValue && isOverdueQsc != true && needsAttention != true)
             query = query.Where(i => i.Status != IncidentStatus.Closed);
 
         if (tripId.HasValue) query = query.Where(i => i.TripInstanceId == tripId.Value);
@@ -277,6 +279,16 @@ public class IncidentsController : ControllerBase
         // applied as a Where instead of a Select so it participates in TotalCount/paging correctly.
         if (isOverdueQsc == true)
             query = query.Where(QscReporting.IsOverdueExpr(DateTime.UtcNow));
+
+        // The dashboard's Incidents group: what still needs somebody. Open (the summary's rule: not Resolved or Closed), or a QSC report overdue, which a
+        // resolved or closed incident can still owe (QscReporting, the one definition). Scoped like the summary's count (Users is tenant-filtered), so the
+        // group's total is the summary's set.
+        if (needsAttention == true)
+        {
+            var qscOverdue = _db.IncidentReports.Where(QscReporting.IsOverdueExpr(DateTime.UtcNow)).Select(o => o.Id);
+            query = query.Where(i => _db.Users.Any(u => u.Id == i.ReportedByUserId)
+                && ((i.Status != IncidentStatus.Resolved && i.Status != IncidentStatus.Closed) || qscOverdue.Contains(i.Id)));
+        }
 
         // Correctness fix: IncidentDateTime is user-entered (picked in the report form) and
         // trivially collision-prone — two incidents can share the exact same value. With no
