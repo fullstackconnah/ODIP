@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, AlertTriangle, Plus } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { StatusBadge } from '@/components/StatusBadge'
 import { formatWeekRange } from '../lib/roster'
 import type { BoardViewMode } from '../lib/useBoardViewMode'
 import { plural } from '@/lib/format'
@@ -25,6 +26,10 @@ export type WeekToolbarProps = {
   onOpenExceptions: () => void
   canWrite: boolean
   onNewShift: () => void
+  /** Draft shifts in the loaded week (all participants), or null for an empty week: the badge beside the range, and whether Publish week shows. */
+  draftCount?: number | null
+  /** Opens Publish week's confirm. Offered to writers while the week has drafts, in both views: it acts on the week, not on a drag. */
+  onPublishWeek?: () => void
 }
 
 export function WeekToolbar({
@@ -46,6 +51,8 @@ export function WeekToolbar({
   onOpenExceptions,
   canWrite,
   onNewShift,
+  draftCount,
+  onPublishWeek,
 }: WeekToolbarProps) {
   // Every control here is a --control-h row: Button md / ToggleGroup / Dropdown form are all 32px at a
   // fine pointer and 44px under `pointer: coarse`, so the toolbar is one 32px line.
@@ -66,6 +73,9 @@ export function WeekToolbar({
           </Button>
         </div>
         <h2 className="font-display text-sm font-semibold tabular-nums text-foreground">{formatWeekRange(days)}</h2>
+        {draftCount != null && (draftCount > 0
+          ? <StatusBadge tone="neutral" label={plural(draftCount, 'draft')} />
+          : <StatusBadge tone="info" label="All published" />)}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -112,8 +122,12 @@ export function WeekToolbar({
             {plural(exceptionsCount, 'exception')}
           </Button>
         )}
+        {canWrite && onPublishWeek && !!draftCount && (
+          <Button size="md" onClick={onPublishWeek}>Publish week</Button>
+        )}
         {canWrite && (
-          <Button size="md" onClick={onNewShift}>
+          // One primary per page: New shift steps back while Publish week shows.
+          <Button size="md" variant={onPublishWeek && draftCount ? 'secondary' : 'primary'} onClick={onNewShift}>
             <Plus className="h-4 w-4" /> New shift
           </Button>
         )}
