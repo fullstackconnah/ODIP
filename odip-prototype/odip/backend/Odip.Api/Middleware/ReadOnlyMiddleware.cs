@@ -20,7 +20,8 @@ public class ReadOnlyMiddleware
     {
         if (context.User.Identity?.IsAuthenticated == true
             && context.User.IsInRole("ReadOnly")
-            && WriteMethods.Contains(context.Request.Method))
+            && WriteMethods.Contains(context.Request.Method)
+            && !IsOwnReadMark(context.Request))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             context.Response.ContentType = "application/json";
@@ -30,5 +31,22 @@ public class ReadOnlyMiddleware
         }
 
         await _next(context);
+    }
+
+    private static readonly string[] InboxPrefix = { "api", "v1", "notifications", "inbox" };
+
+    /// <summary>
+    /// The bell's two read marks change only the caller's own read state (NotificationsController keys them on the JWT
+    /// subject), so a ReadOnly user can clear their own badge (dashboard SHAPE call 9). Exactly
+    /// POST api/v1/notifications/inbox/{guid}/read and POST api/v1/notifications/inbox/read-all, matched segment by segment.
+    /// </summary>
+    private static bool IsOwnReadMark(HttpRequest request)
+    {
+        if (!HttpMethods.IsPost(request.Method)) return false;
+        var segments = (request.Path.Value ?? string.Empty).Trim('/').Split('/');
+        if (segments.Length < 5 || !segments.Take(4).SequenceEqual(InboxPrefix, StringComparer.OrdinalIgnoreCase)) return false;
+        return segments.Length == 5
+            ? string.Equals(segments[4], "read-all", StringComparison.OrdinalIgnoreCase)
+            : segments.Length == 6 && Guid.TryParse(segments[4], out _) && string.Equals(segments[5], "read", StringComparison.OrdinalIgnoreCase);
     }
 }
