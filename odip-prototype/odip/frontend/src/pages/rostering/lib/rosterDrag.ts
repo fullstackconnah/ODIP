@@ -310,3 +310,25 @@ export function leaveFromStaffRows(rows: RosterStaffRowDto[]): StaffLeaveDto[] {
     .filter(bar => bar.kind === 'ApprovedLeave' || bar.kind === 'PendingLeave')
     .map(bar => ({ staffId: row.staffId, from: bar.startDate, to: bar.endDate, status: bar.kind === 'ApprovedLeave' ? 'Approved' as const : 'Pending' as const })))
 }
+
+// The md+ picker panel's place: a pure rule here, not in StaffPicker.tsx, because a component file may export components only (react-refresh/only-export-components).
+const PANEL_WIDTH = 320
+const PANEL_MAX_HEIGHT = 416   // 26rem
+const FLIP_BELOW = 288         // 18rem
+const EDGE = 8
+const GAP = 4
+
+/**
+ * Where the md+ panel goes (the brief, section 4). It sits 4px under its chip, with their left edges together. It goes above the chip when the room below is under 18rem and the room
+ * above is larger. When 320px would pass the window's right edge, its right edge lines up with the chip's. It always stays 8px inside the window, and never covers its own chip.
+ */
+export type PickerPlace = { left: number; width: number; maxHeight: number; top?: number; bottom?: number }
+
+export function pickerPlacement(chip: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right'>, view: { width: number; height: number }): PickerPlace {
+  const below = view.height - chip.bottom - GAP - EDGE
+  const above = chip.top - GAP - EDGE
+  const left = Math.max(EDGE, Math.min(chip.left + PANEL_WIDTH > view.width - EDGE ? chip.right - PANEL_WIDTH : chip.left, view.width - EDGE - PANEL_WIDTH))
+  return below < FLIP_BELOW && above > below
+    ? { left, width: PANEL_WIDTH, bottom: view.height - chip.top + GAP, maxHeight: Math.min(PANEL_MAX_HEIGHT, above) }
+    : { left, width: PANEL_WIDTH, top: chip.bottom + GAP, maxHeight: Math.min(PANEL_MAX_HEIGHT, below) }
+}

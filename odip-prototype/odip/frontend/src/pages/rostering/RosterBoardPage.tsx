@@ -20,14 +20,14 @@ import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useDelete
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode } from '@/api/types'
 import {
-  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck,
+  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker,
   type ShiftSlideOverTarget,
 } from './components'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedSentence, replacePromptLines, rosterAnnouncements,
-  rosterCollision, staffWeekHours, swappedSentence, keepInWindow, type DragCarry, type DropTarget, type PendingDrop,
+  rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
 } from './lib/rosterDrag'
 
 /** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
@@ -94,6 +94,8 @@ export default function RosterBoardPage() {
   const [prompt, setPrompt] = useState<DropPrompt | null>(null)
   // Decision 6: a person carried off a puck onto an empty day MOVES. Their old shift waits here until the new one saves; the panel's Cancel forgets it.
   const [createMoveSource, setCreateMoveSource] = useState<ShiftDto | null>(null)
+  // The staff picker (spec 2026-10-15, decision C): one at a time, for a Needs staff shift. Stored as the shift that opened it; read back from the CURRENT board below.
+  const [pickerTarget, setPickerTarget] = useState<ShiftDto | null>(null)
   const [announcement, setAnnouncement] = useState('')
   // The error notice's height, for the board frame (finish review fix 5): with it above the board, strip and grid still share one screen.
   // shortcut: measured when the message changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
@@ -187,6 +189,11 @@ export default function RosterBoardPage() {
   const dragOn = canWrite && groupBy === 'participant' && !belowMd
   const boardShifts = useMemo(() => allBoardShifts(board), [board])
   const hours = useMemo(() => staffWeekHours(boardShifts), [boardShifts])
+  // The picker's shift as the board has it now: a refetch that filled, removed or locked it closes the picker (Review Focus 2). React's adjust-state-in-render pattern, as for `?date=` above.
+  const pickerShift = pickerTarget ? boardShifts.find(s => s.id === pickerTarget.id && isUnfilledShift(s) && !isLockedShift(s)) ?? null : null
+  if (pickerTarget && !pickerShift) setPickerTarget(null)
+  // Leave for the picker: the participant board sends the week's leave; the Staff view has it on its rows' leave bars (lead decision L3).
+  const boardLeave = useMemo(() => (!board ? [] : board.groupBy === 'Participant' ? board.staffLeave ?? [] : leaveFromStaffRows(board.staffRows)), [board])
   const publishWeek = usePublishWeek()
   const [publishOpen, setPublishOpen] = useState(false)
   // Counted from the raw board, all participants (the brief, section 8); the server publishes the same week for every participant the board shows.
@@ -298,6 +305,32 @@ export default function RosterBoardPage() {
     // From the strip, Replace is an assign (the shift's worker comes off); off a puck it is one move-staff request.
     if (person.fromShift) void dropMove(person, person.fromShift, shift, choice)
     else void dropAssign(person, shift)
+  }
+
+  /** The plus, and an unfilled chip's "Assign to…": opens the picker, or closes it when it is already open for that shift. */
+  const togglePicker = (shift: ShiftDto) => setPickerTarget(current => (current?.id === shift.id ? null : shift))
+
+  /** Closed without a pick: focus goes back to the plus (below md the SlideOver does that itself). */
+  function closePicker() {
+    const id = pickerTarget?.id
+    setPickerTarget(null)
+    if (id) document.querySelector<HTMLElement>(`[data-shift-plus="${id}"]`)?.focus({ preventScroll: true })
+  }
+
+  /**
+   * A pick is a drop without the drag (the brief, section 4). The picker closes first, so nothing sits over a dialog or the Callout. Focus goes to the shift's open control, where
+   * the dialogs hand it back. Then comes the same request a drop sends, with the same pending look, dialogs, Callout and announcement.
+   */
+  function handlePick(row: PickRow) {
+    const target = pickerShift
+    setPickerTarget(null)
+    if (!target) return
+    const person = { staffId: row.person.id, staffName: row.person.fullName }
+    focusShift(target.id)
+    // Below md the SlideOver hands focus back to the plus as it closes: move it on in the next frame, as handleShiftSaved does, unless a dialog has opened since.
+    if (belowMd) requestAnimationFrame(() => { if (!document.querySelector('[role="alertdialog"]')) focusShift(target.id) })
+    if (row.source) void dropMove({ ...person, fromShift: row.source }, row.source, target, 'Move')
+    else void dropAssign(person, target)
   }
 
   // Decision 6: a person carried off a puck onto an empty day moves. The panel saves the new shift and clears the old one in one guarded request (deep review S6).
@@ -460,29 +493,32 @@ export default function RosterBoardPage() {
         </div>
       )}
 
-      {!isLoading && !isError && grid && (dragOn ? (
-        <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending }}>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={rosterCollision}
-            accessibility={{ announcements: rosterAnnouncements, screenReaderInstructions: ROSTER_SCREEN_READER_INSTRUCTIONS, restoreFocus: false }}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => setCarry(null)}
-          >
-            <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} />
-            {grid}
-            {/* A portal (the brief, section 5), so no ancestor's overflow or transform clips or shifts it. No drop animation: the default flies the puck back to its source, which reads as a refusal.
-                pointer-events-none: rosterCollision asks what is on top at the pointer, and that must never be the carried puck itself. */}
-            {createPortal(
-              <DragOverlay className="pointer-events-none" style={{ width: 'max-content', height: 'auto' }} dropAnimation={null} modifiers={[liftAboveFinger, keepInWindow]}>
-                {carry && <CarriedPuck carry={carry} hours={hours.get(carry.staffId) ?? 0} />}
-              </DragOverlay>,
-              document.body,
-            )}
-          </DndContext>
+      {!isLoading && !isError && grid && (
+        // In every mode, not only while drag is on: the plus, and a pick's pending look, reach phones and the Staff view too (SHAPE departure 15). The DndContext stays drag-only.
+        <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending, pick: canWrite ? togglePicker : undefined, pickingId: pickerShift?.id ?? null }}>
+          {dragOn ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={rosterCollision}
+              accessibility={{ announcements: rosterAnnouncements, screenReaderInstructions: ROSTER_SCREEN_READER_INSTRUCTIONS, restoreFocus: false }}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setCarry(null)}
+            >
+              <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} />
+              {grid}
+              {/* A portal (the brief, section 5), so no ancestor's overflow or transform clips or shifts it. No drop animation: the default flies the puck back to its source, which reads as a refusal.
+                  pointer-events-none: rosterCollision asks what is on top at the pointer, and that must never be the carried puck itself. */}
+              {createPortal(
+                <DragOverlay className="pointer-events-none" style={{ width: 'max-content', height: 'auto' }} dropAnimation={null} modifiers={[liftAboveFinger, keepInWindow]}>
+                  {carry && <CarriedPuck carry={carry} hours={hours.get(carry.staffId) ?? 0} />}
+                </DragOverlay>,
+                document.body,
+              )}
+            </DndContext>
+          ) : grid}
         </DropStateContext.Provider>
-      ) : grid)}
+      )}
 
       <ShiftSlideOver
         key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `shift-${slideOverTarget.shift.id}` : 'shift-new') : 'shift-closed'}
@@ -494,6 +530,19 @@ export default function RosterBoardPage() {
         staffOptions={staffOptions}
         groupBy={groupBy}
         participantReadiness={participantReadiness}
+      />
+
+      <StaffPicker
+        key={pickerShift?.id ?? 'closed'}
+        target={pickerShift}
+        staff={staff}
+        staffLoading={staffLoading}
+        shifts={boardShifts}
+        leave={boardLeave}
+        hours={hours}
+        sheet={belowMd}
+        onPick={handlePick}
+        onClose={closePicker}
       />
 
       <ExceptionsDrawer

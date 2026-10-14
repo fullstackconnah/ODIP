@@ -7,7 +7,7 @@ import { SlideOver } from '@/components/SlideOver'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
 import { formatHoursMeter, formatShiftTimeRange } from '../lib/roster'
-import { WEEK_TARGET_HOURS, firstName, moveLine, pickName, pickOptionName, pickerGroups, type PickRow } from '../lib/rosterDrag'
+import { WEEK_TARGET_HOURS, firstName, moveLine, pickName, pickOptionName, pickerGroups, pickerPlacement, type PickRow } from '../lib/rosterDrag'
 
 export type StaffPickerProps = {
   /** The Needs staff shift being filled. Null: closed. */
@@ -30,27 +30,6 @@ const GROUPS = [
   { key: 'move', label: 'On another shift at this time' },
   { key: 'leave', label: 'On leave that day' },
 ] as const
-
-const PANEL_WIDTH = 320
-const PANEL_MAX_HEIGHT = 416   // 26rem
-const FLIP_BELOW = 288         // 18rem
-const EDGE = 8
-const GAP = 4
-
-/**
- * Where the md+ panel goes (the brief, section 4). It sits 4px under its chip, with their left edges together. It goes above the chip when the room below is under 18rem and the room
- * above is larger. When 320px would pass the window's right edge, its right edge lines up with the chip's. It always stays 8px inside the window, and never covers its own chip.
- */
-export type PickerPlace = { left: number; width: number; maxHeight: number; top?: number; bottom?: number }
-
-export function pickerPlacement(chip: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right'>, view: { width: number; height: number }): PickerPlace {
-  const below = view.height - chip.bottom - GAP - EDGE
-  const above = chip.top - GAP - EDGE
-  const left = Math.max(EDGE, Math.min(chip.left + PANEL_WIDTH > view.width - EDGE ? chip.right - PANEL_WIDTH : chip.left, view.width - EDGE - PANEL_WIDTH))
-  return below < FLIP_BELOW && above > below
-    ? { left, width: PANEL_WIDTH, bottom: view.height - chip.top + GAP, maxHeight: Math.min(PANEL_MAX_HEIGHT, above) }
-    : { left, width: PANEL_WIDTH, top: chip.bottom + GAP, maxHeight: Math.min(PANEL_MAX_HEIGHT, below) }
-}
 
 /**
  * The staff picker (spec 2026-10-15, decision C; the brief, section 4): a search and the active staff in three groups, for one Needs staff shift. It sorts people by what the board
@@ -79,7 +58,7 @@ function PickerPanel({ target, onClose, ...body }: OpenProps) {
       if (!chip) return closeRef.current()
       const rect = chip.getBoundingClientRect()
       const frame = chip.closest('.overflow-auto')?.getBoundingClientRect()
-      if (frame && (rect.bottom <= frame.top || rect.top >= frame.bottom || rect.right <= frame.left || rect.left >= frame.right)) return closeRef.current()
+      if (frame && (rect.bottom < frame.top || rect.top > frame.bottom || rect.right < frame.left || rect.left > frame.right)) return closeRef.current()
       // Written straight to the node, before paint: no state set in an effect (react-hooks/set-state-in-effect), and no re-render of the list on every scroll event.
       const p = pickerPlacement(rect, { width: window.innerWidth, height: window.innerHeight })
       const px = (n?: number) => (n === undefined ? '' : `${n}px`)
