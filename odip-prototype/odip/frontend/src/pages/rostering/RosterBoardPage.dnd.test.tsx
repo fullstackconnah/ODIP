@@ -266,6 +266,14 @@ describe('RosterBoardPage drag and drop: a drop on an empty day', () => {
     expect(h.create).toHaveBeenCalledTimes(1)
     expect(h.assign).not.toHaveBeenCalled()
   })
+
+  it("opens the same panel from the new-shift slot of a day that already has shifts (spec 2026-10-15, decision D)", async () => {
+    renderPage()
+    await drop(sam, { kind: 'day', participantId: 'p-1', participantName: 'Mia Chen', day: '2026-08-19', beside: 1 })   // Sam's own Wednesday is already there
+    const panel = screen.getByRole('dialog', { name: 'New shift' })
+    expect(within(panel).getByLabelText(/^Service date/)).toHaveValue('2026-08-19')
+    expect(within(panel).getByLabelText(/^Start time/)).toHaveFocus()
+  })
 })
 
 describe('RosterBoardPage drag and drop: pending, focus, the strip, and where drag is off', () => {

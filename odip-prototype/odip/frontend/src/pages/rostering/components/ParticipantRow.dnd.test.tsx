@@ -35,8 +35,8 @@ describe('ParticipantRow drop targets (roster drag and drop)', () => {
   it('makes each EMPTY day a drop target naming the participant and the day, and each puck one carrying its shift', () => {
     const shift = renderRow(true)
     expect(droppables).toContainEqual({ id: 'drop-day:p-1:2026-08-18', data: { kind: 'day', participantId: 'p-1', participantName: 'Mia Chen', day: '2026-08-18' }, disabled: false })
-    // A day that has pucks is reached through its pucks.
-    expect(droppables).toContainEqual({ id: 'drop-day:p-1:2026-08-17', data: { kind: 'day', participantId: 'p-1', participantName: 'Mia Chen', day: '2026-08-17' }, disabled: true })
+    // A day that has pucks is a target too, through its new-shift slot, which exists only while a person is carried (spec 2026-10-15, decision D).
+    expect(droppables).toContainEqual({ id: 'drop-day:p-1:2026-08-17', data: { kind: 'day', participantId: 'p-1', participantName: 'Mia Chen', day: '2026-08-17', beside: 1 }, disabled: false })
     expect(droppables).toContainEqual({ id: 'drop-shift:mon', data: { kind: 'shift', shift }, disabled: false })
     expect(draggables).toContainEqual({ id: 'shift:mon', data: { staffId: 'staff-2', staffName: 'Sam Wilson', fromShift: shift }, disabled: false })
   })

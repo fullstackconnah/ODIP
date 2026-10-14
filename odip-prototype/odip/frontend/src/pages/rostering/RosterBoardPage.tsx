@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, useSensor, useSensors,
+  DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor, TouchSensor, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent, type Modifier,
 } from '@dnd-kit/core'
 import { CalendarClock, X } from 'lucide-react'
@@ -504,6 +504,8 @@ export default function RosterBoardPage() {
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
               onDragCancel={() => setCarry(null)}
+            // The new-shift slot mounts only once a person is carried; the default (measure while dragging) can miss a droppable that appears mid-drag (plan check S2).
+            measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
             >
               <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} />
               {grid}

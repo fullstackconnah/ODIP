@@ -12,8 +12,8 @@ import { formatDayAccessibleName, formatShiftTimeRange, isUnfilledShift } from '
  */
 export type DragCarry = { staffId: string; staffName: string; fromShift?: ShiftDto }
 
-/** An empty day of a participant's row: a drop there opens the create form, prefilled. */
-export type DayTarget = { kind: 'day'; participantId: string; participantName: string; day: string }
+/** A day of a participant's row: a drop there opens the create form, prefilled. `beside` counts the shifts the day already holds (a drop on its new-shift slot); absent for an empty day. */
+export type DayTarget = { kind: 'day'; participantId: string; participantName: string; day: string; beside?: number }
 
 /** What a carried person can land on: a shift's puck, or an empty day. */
 export type DropTarget = { kind: 'shift'; shift: ShiftDto } | DayTarget
@@ -156,7 +156,7 @@ const targetOf = (over: { data: { current?: unknown } } | null) => over?.data.cu
 
 function overSentence(carry: DragCarry, target: DropTarget | undefined): string {
   if (!target) return 'Not over a shift.'
-  if (target.kind === 'day') return `Over ${target.participantName}, ${formatDayAccessibleName(target.day)}, empty. Dropping starts a new shift.`
+  if (target.kind === 'day') return `Over ${target.participantName}, ${formatDayAccessibleName(target.day)}, ${target.beside ? `beside ${plural(target.beside, 'shift')}` : 'empty'}. Dropping starts a new shift.`
   const { shift } = target
   if (isLockedShift(shift)) return `Over a ${lockedWords(shift.status).toLowerCase()} shift. It can't be changed.`
   const where = `Over ${shift.participantName}, ${formatDayAccessibleName(shift.serviceDate)}, ${spokenRange(shift)}`

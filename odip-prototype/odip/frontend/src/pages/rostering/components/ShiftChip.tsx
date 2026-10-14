@@ -94,6 +94,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   // Only while something is carried over this chip: the ring marks a drop that does something, and a locked chip refuses the cursor.
   const overKind = isOver && active ? dropOutcome(active.data.current as DragCarry, target).kind : null
   const busy = pending?.targetId === shift.id
+  // While a person is carried, the menu column becomes the day's new-shift slot (RosterDayCell): menus cannot be used mid-drag anyway.
+  const carrying = draggable && Boolean(active)
   const fading = pending?.sourceId === shift.id
   const lockTitle = `${lockedWords(shift.status)}: can't be changed here`
   // The plus (spec 2026-10-15, decision C): every Needs staff chip a writer may change, in both views and on phones, wherever the page can open a picker.
@@ -389,7 +391,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       )}
 
       {/* Not while a drop on this shift is out: no action can run during the write, and "Assigning {name}…" needs the room. */}
-      {canWrite && !busy && (
+      {canWrite && !busy && !carrying && (
         // The "Actions for …" trigger is Dropdown's icon variant, which hard-codes `p-1.5 rounded-lg` (a 26px
         // square, radius 8px) and takes no className or custom trigger. This wrapper gives that one button the
         // geometry of `<Button iconOnly>` — a --control-h-sm square (24px, 36px under a coarse pointer) at
