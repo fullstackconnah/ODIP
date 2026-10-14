@@ -313,12 +313,36 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     }
   })
 
-  it('sizes the bottom nav with --mobile-nav-h, the var the sticky wizard footer sits above, and main clears it by the same var', () => {
+  it('sizes the bottom nav with --mobile-nav-h, the var the sticky wizard footer sits above, and the footer after main clears it by the same var', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     const { container } = renderAt('/trips')
     const nav = screen.getByRole('navigation', { name: 'Mobile' })
     expect(nav).toHaveClass('h-[var(--mobile-nav-h)]', 'fixed', 'bottom-0', 'lg:hidden')
-    expect(container.querySelector('main')).toHaveClass('pb-[calc(var(--mobile-nav-h)+1.75rem)]', 'lg:pb-6')
+    // The clearance moved from main to the platform footer, the last thing in the content column.
+    const main = container.querySelector('main')!
+    expect(main).toHaveClass('pb-6')
+    expect(main.className).not.toContain('mobile-nav-h')
+    const footer = screen.getByRole('contentinfo')
+    expect(main.nextElementSibling).toBe(footer)
+    expect(footer.parentElement!.lastElementChild).toBe(footer)
+    expect(footer).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+0.75rem)]', 'lg:pb-3')
+    // md:p-6 once overrode the clearance between 768 and 1024px; no breakpoint below lg may set padding-bottom on either element.
+    expect(footer.className).not.toMatch(/(^|\s)(sm|md):pb-/)
+    expect(main.className).not.toMatch(/(^|\s)(sm|md|lg):pb-/)
+  })
+
+  it('always renders the platform footer beside main, never inside it, with its Accessibility link, for the office and the field', () => {
+    for (const [role, path] of [['Admin', '/trips'], ['SupportWorker', '/portal']]) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { container, unmount } = renderAt(path)
+      expect(container.querySelectorAll('main'), role).toHaveLength(1)
+      expect(screen.getAllByRole('contentinfo'), role).toHaveLength(1)
+      const footer = screen.getByRole('contentinfo')
+      expect(footer.closest('main, article, aside, nav, section'), role).toBeNull()
+      expect(within(footer).getByRole('link', { name: 'Accessibility' }), role).toHaveAttribute('href', '/accessibility')
+      unmount()
+      localStorage.clear()
+    }
   })
 
   it('defines --mobile-nav-h for both pointer types as exactly what the nav content needs: 12px + the taller of the 42px link and --tap-min + 12px', () => {
