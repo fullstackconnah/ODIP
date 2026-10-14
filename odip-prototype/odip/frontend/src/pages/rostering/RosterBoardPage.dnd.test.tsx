@@ -367,3 +367,12 @@ describe('RosterBoardPage: Publish week', () => {
     expect((await screen.findByText('Another change to the roster is still running.')).closest('[role="alert"]')).not.toBeNull()
   })
 })
+
+describe('RosterBoardPage: the toolbar the board frame makes room for (finish review, 1280)', () => {
+  it('reports how much taller than one row of controls the toolbar is, so a wrapped toolbar never pushes the board off the screen', () => {
+    const { container } = renderPage()
+    const page = container.querySelector('.animate-fade-in') as HTMLElement
+    // jsdom has no layout, so the toolbar is "one row" here; the 1280x800 capture measures the wrapped case.
+    expect(page.style.getPropertyValue('--roster-toolbar-extra')).toBe('0px')
+  })
+})

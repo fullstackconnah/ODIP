@@ -100,6 +100,20 @@ export default function RosterBoardPage() {
   const noticeRef = useRef<HTMLDivElement>(null)
   const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
   useLayoutEffect(() => { setNoticeHeight(assignError ? noticeRef.current?.offsetHeight ?? 0 : null) }, [assignError])
+  // How much taller than one row of controls the toolbar is: it wraps to two rows at 1280, which the board frame's fixed allowance does not know (finish review).
+  // Re-measured whenever the toolbar resizes, since the wrap follows the window's width.
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [toolbarExtra, setToolbarExtra] = useState(0)
+  useLayoutEffect(() => {
+    const toolbar = headerRef.current?.lastElementChild as HTMLElement | null | undefined
+    if (!toolbar) return
+    const measure = () => setToolbarExtra(Math.max(0, toolbar.offsetHeight - (parseFloat(getComputedStyle(toolbar).getPropertyValue('--control-h')) || 0)))
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(toolbar)
+    return () => observer.disconnect()
+  }, [])
   const [hintDismissed, setHintDismissed] = useState(() => {
     try {
       return sessionStorage.getItem(HINT_DISMISSED_KEY) === '1'
@@ -349,12 +363,15 @@ export default function RosterBoardPage() {
   return (
     <div
       className="flex flex-col gap-[var(--section-gap)] animate-fade-in"
-      style={noticeHeight === null ? undefined : ({ '--roster-notice-h': `calc(${noticeHeight}px + var(--section-gap))` } as React.CSSProperties)}
+      style={{
+        '--roster-toolbar-extra': `${toolbarExtra}px`,
+        ...(noticeHeight === null ? {} : { '--roster-notice-h': `calc(${noticeHeight}px + var(--section-gap))` }),
+      } as React.CSSProperties}
     >
       <AnnouncementRegion message={announcement} />
       {/* PageHeader is a fragment, so title row and toolbar sit in one tight block here (title 28px + 8px + toolbar 32px)
           instead of being spaced apart by the page's --section-gap. */}
-      <div className="flex flex-col gap-2">
+      <div ref={headerRef} className="flex flex-col gap-2">
         <PageHeader title="Roster board" />
 
         <WeekToolbar

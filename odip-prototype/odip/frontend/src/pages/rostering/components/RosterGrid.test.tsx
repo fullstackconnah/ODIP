@@ -226,3 +226,13 @@ describe('RosterGrid frame under an error notice (finish review fix 5)', () => {
     expect(plain.container.firstElementChild?.className).toContain('var(--roster-notice-h,0px)')
   })
 })
+
+describe('RosterGrid frame under a wrapped toolbar (finish review, 1280)', () => {
+  it('takes the extra toolbar row the page reports (--roster-toolbar-extra) off its height, with and without the strip', () => {
+    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
+    expect(container.firstElementChild?.className).toContain('var(--roster-toolbar-extra,0px)')
+    unmount()
+    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
+    expect(plain.container.firstElementChild?.className).toContain('var(--roster-toolbar-extra,0px)')
+  })
+})

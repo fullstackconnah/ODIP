@@ -55,11 +55,12 @@ const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${R
  * is the wide-screen column width (see STICKY_COL).
  */
 const FRAME = 'overflow-auto scroll-pt-9 rounded-[var(--radius-md)] border border-border min-[1500px]:[--roster-sticky-col:280px]'
-// --roster-notice-h: the height of an error notice the page shows above the board (finish review fix 5), so it never pushes the frame past one screen.
-const BOARD_FRAME = `${FRAME} md:max-h-[max(20rem,calc(100dvh_-_11.5rem_-_var(--roster-notice-h,0px)))]`
+// The page reports what the fixed 11.5rem cannot know, so nothing above the board pushes the frame past one screen: --roster-notice-h, an error notice's height
+// (finish review fix 5), and --roster-toolbar-extra, the toolbar's height past one row of controls when it wraps (two rows at 1280).
+const BOARD_FRAME = `${FRAME} md:max-h-[max(20rem,calc(100dvh_-_11.5rem_-_var(--roster-notice-h,0px)_-_var(--roster-toolbar-extra,0px)))]`
 // With the staff strip above it (StaffStrip: two --control-h rows and a 0.5rem gap, --card-pad top and bottom, a 1px border each side) and the page's --section-gap between them, the
 // chrome allowance grows by exactly that: strip and grid share one viewport, the page never scrolls, and the strip stays in view through a drag.
-const BOARD_FRAME_WITH_STRIP = `${FRAME} md:max-h-[max(20rem,calc(100dvh_-_11.5rem_-_2*var(--control-h)_-_0.5rem_-_2*var(--card-pad)_-_2px_-_var(--section-gap)_-_var(--roster-notice-h,0px)))]`
+const BOARD_FRAME_WITH_STRIP = `${FRAME} md:max-h-[max(20rem,calc(100dvh_-_11.5rem_-_2*var(--control-h)_-_0.5rem_-_2*var(--card-pad)_-_2px_-_var(--section-gap)_-_var(--roster-notice-h,0px)_-_var(--roster-toolbar-extra,0px)))]`
 // Keeps a keyboard-focused chip from scrolling to rest underneath the pinned first column.
 const BOARD_FRAME_STYLE = { scrollPaddingLeft: STICKY_COL }
 
