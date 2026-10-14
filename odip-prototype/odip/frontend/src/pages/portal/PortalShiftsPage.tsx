@@ -124,7 +124,7 @@ export default function PortalShiftsPage() {
   const { data: recent } = useMyShifts(format(subDays(now, 1), 'yyyy-MM-dd'), format(addDays(now, 1), 'yyyy-MM-dd'))
   const current = isThisWeek && recent ? pickCurrentShift(recent.shifts, now, recent.timeZoneId) : null
   const rest = shifts.filter(s => s.id !== current?.id)
-  const tz = data?.timeZoneId ?? ''
+  const tz = data?.timeZoneId   // undefined reads the device zone; '' would throw a RangeError
   const comingUp = rest.filter(s => !hasEnded(s, now, tz))
   const earlier = rest.filter(s => hasEnded(s, now, tz))
     .sort((a, b) => b.serviceDate.localeCompare(a.serviceDate) || a.startTime.localeCompare(b.startTime))   // newest day first, each day in time order
