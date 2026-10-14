@@ -1,4 +1,3 @@
-import { useDroppable } from '@dnd-kit/core'
 import type { ShiftDto } from '@/api/types'
 import { ShiftChip } from './ShiftChip'
 import { isToday, rosterDayColumnsTemplate } from '../lib/roster'
@@ -18,8 +17,6 @@ export type UnfilledLaneProps = {
  * (participant, time, ratio) since there's no staff name to lead with.
  */
 export function UnfilledLane({ days, shifts, canWrite, onOpen, onAssignTo, onDelete }: UnfilledLaneProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: 'unassign-target', disabled: !canWrite })
-
   return (
     <>
       <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] items-center border-b border-r border-border bg-surface-container px-2 text-sm font-semibold text-foreground">
@@ -31,8 +28,7 @@ export function UnfilledLane({ days, shifts, canWrite, onOpen, onAssignTo, onDel
         )}
       </div>
       <div
-        ref={setNodeRef}
-        className={`grid gap-x-1 gap-y-0.5 border-b border-border px-1 transition-colors duration-150 ${isOver ? 'bg-secondary-container/40' : 'bg-surface-container'}`}
+        className="grid gap-x-1 gap-y-0.5 border-b border-border bg-surface-container px-1"
         style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(days.length) }}
       >
         {days.map((day, i) => (

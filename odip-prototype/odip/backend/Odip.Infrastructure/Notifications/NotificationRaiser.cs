@@ -41,12 +41,15 @@ public sealed class NotificationRaiser : INotificationRaiser
 
         foreach (var recipientId in recipientUserIds.Distinct())
         {
-            // IgnoreQueryFilters: this check must see prior rows regardless of the calling
-            // context's ambient tenant (which may be null/anonymous, e.g. CaregiverController).
-            var alreadyRaised = await _db.NotificationOutbox.IgnoreQueryFilters().AnyAsync(o =>
-                o.EventType == type && o.EntityId == entityId && o.RecipientUserId == recipientId
-                && o.CreatedAt >= cutoff, ct);
-            if (alreadyRaised) continue;
+            // The newest notice this person already has about this entity, inside the window. The same kind again is a double-click or a retry, and is dropped;
+            // a different kind is news (a shift's worker put on, taken off and put back within five minutes must still end with "on").
+            // IgnoreQueryFilters: this must see prior rows whatever the calling context's tenant (it may be null/anonymous, e.g. CaregiverController).
+            var newest = await _db.NotificationOutbox.IgnoreQueryFilters()
+                .Where(o => o.EntityId == entityId && o.RecipientUserId == recipientId && o.CreatedAt >= cutoff)
+                .OrderByDescending(o => o.CreatedAt)
+                .Select(o => (NotificationEventType?)o.EventType)
+                .FirstOrDefaultAsync(ct);
+            if (newest == type) continue;
 
             // Select an anonymous projection (not just .Select(u => u.TenantId)) so a missing
             // user (null result) is distinguishable from a found user whose TenantId happens to

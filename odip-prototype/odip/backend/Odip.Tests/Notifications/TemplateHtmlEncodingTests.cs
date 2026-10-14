@@ -41,6 +41,17 @@ public class TemplateHtmlEncodingTests
     }
 
     [Fact]
+    public void ShiftAssignedTemplate_WithSeveralShifts_EncodesEveryParticipantName()
+    {
+        var payload = new ShiftAssignedPayload("worker@example.com", "Plain Name", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(17, 0),
+            new[] { new ShiftAssignedLine(Payload, new DateOnly(2026, 9, 16), new TimeOnly(9, 0), new TimeOnly(17, 0)) });
+        var message = ShiftAssignedTemplate.Render(payload, BaseUrl);
+
+        Assert.DoesNotContain("<script>", message.HtmlBody);
+        Assert.Contains(Encoded, message.HtmlBody);
+    }
+
+    [Fact]
     public void ShiftAssignedTemplate_EncodesParticipantName()
     {
         var payload = new ShiftAssignedPayload(
@@ -126,6 +137,10 @@ public class TemplateHtmlEncodingTests
             new ShiftAssignedPayload("a@example.com", Payload, new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(17, 0)),
             BaseUrl);
         Assert.Contains(Encoded, shiftAssigned.HtmlBody);
+        var shiftUnassigned = ShiftUnassignedTemplate.Render(
+            new ShiftUnassignedPayload("a@example.com", Payload, new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(17, 0)),
+            BaseUrl);
+        Assert.Contains(Encoded, shiftUnassigned.HtmlBody);
 
         var witness = WitnessRequestedTemplate.Render(
             new WitnessRequestedPayload("a@example.com", Payload, "Alice Participant"),
@@ -151,5 +166,16 @@ public class TemplateHtmlEncodingTests
             new ShiftCompletionReturnedPayload("a@example.com", "Alice Participant", new DateOnly(2026, 9, 15), Payload),
             BaseUrl);
         Assert.Contains(Encoded, returned.HtmlBody);
+    }
+
+    [Fact]
+    public void ShiftUnassignedTemplate_EncodesParticipantName()
+    {
+        var payload = new ShiftUnassignedPayload("worker@example.com", Payload, new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(15, 0));
+        var message = ShiftUnassignedTemplate.Render(payload, BaseUrl);
+
+        Assert.DoesNotContain("<script>", message.HtmlBody);
+        Assert.Contains(Encoded, message.HtmlBody);
+        Assert.Contains(BaseUrl, message.HtmlBody);
     }
 }

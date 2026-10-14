@@ -18,6 +18,8 @@ export type ParticipantRowProps = {
   onAddShift: (participantId: string, participantName: string, day: string) => void
   /** True when the whole board has zero shifts this week — every row would show the same "N days uncovered" badge, which is tautological noise the hint above the grid already covers, so suppress it here rather than repeat it once per row. */
   hideCoverageBadge: boolean
+  /** Roster drag and drop (the Participant view, md up, writers): grips, locks and drop targets on this row's pucks, and its empty days as drop targets. */
+  draggable?: boolean
 }
 
 /**
@@ -26,7 +28,7 @@ export type ParticipantRowProps = {
  * live inline on the day they fall on, rendered dashed by RosterDayCell/ShiftChip — there is no
  * separate Unfilled lane here, that stays a staff-view concept.
  */
-export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift, hideCoverageBadge }: ParticipantRowProps) {
+export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift, hideCoverageBadge, draggable }: ParticipantRowProps) {
   const visibleTripBars = row.tripBars.filter(t => barOverlapsWeek(t.startDate, t.endDate, days))
   const covered = row.daysWithoutCover === 0
   const ratioLabel = RATIO_LABELS[row.supportRatio] ?? row.supportRatio
@@ -123,6 +125,8 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
             canWrite={canWrite}
             addLabel={`Add a shift for ${row.fullName} on ${formatDayAccessibleName(day)}`}
             chipContext="participant"
+            draggable={draggable}
+            dayTarget={draggable ? { kind: 'day', participantId: row.participantId, participantName: row.fullName, day } : undefined}
             onAdd={() => onAddShift(row.participantId, row.fullName, day)}
             onOpen={onOpen}
             onAssignTo={onAssignTo}

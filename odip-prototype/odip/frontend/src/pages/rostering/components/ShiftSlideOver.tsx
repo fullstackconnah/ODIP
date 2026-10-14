@@ -37,8 +37,10 @@ export type ShiftSlideOverTarget =
       participantId?: string
       staffId?: string | null
       serviceDate?: string
-      /** Which field to send focus to once the panel opens, overriding the default first-focusable — set when the field it names is already prefilled and the other one is what needs picking (e.g. clicking an empty cell). */
-      focusField?: 'participant' | 'staff'
+      /** Which field to send focus to once the panel opens, overriding the default first-focusable — set when the field it names is already prefilled and the other one is what needs picking (e.g. clicking an empty cell). `start` when a drop on an empty day prefilled participant, day and person, and the times are what is left. */
+      focusField?: 'participant' | 'staff' | 'start'
+      /** Roster drag and drop: the shift the prefilled person was carried off. Saved with the new shift as one move, while the Staff field still names that person. */
+      moveFromShiftId?: string
     }
   | { mode: 'edit'; shift: ShiftDto }
 
@@ -56,6 +58,8 @@ export type ShiftSlideOverProps = {
    * `readinessIssues` in edit mode; an entry holding an empty list means "ready", and wins over that fallback.
    */
   participantReadiness?: Record<string, string[]>
+  /** Called with the saved shift after a successful save, before onClose; never on Cancel. The board uses it to clear the shift a person was carried off (roster drag and drop, decision 6). */
+  onSaved?: (shift: ShiftDto) => void
 }
 
 /** Normalises a Shift/TimeOnly string ("HH:mm:ss" or "HH:mm") to the "HH:mm" a <input type="time"> needs. */
@@ -79,7 +83,7 @@ const BUDGET_REASON_COPY = {
 /** Sort-boost order for the Staff dropdown: Preferred first, then Allowed/no row, Excluded last. */
 const COMPATIBILITY_RANK = { Preferred: 0, Allowed: 1, Excluded: 2 } as const
 
-export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness }: ShiftSlideOverProps) {
+export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness, onSaved }: ShiftSlideOverProps) {
   const staffCompatibilityNoticeId = useId()
   const refusalId = useId()
   const open = target !== null
@@ -90,11 +94,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // moves in, which is after every layout effect has run, so this one has set it by then.
   const participantFieldRef = useRef<HTMLDivElement>(null)
   const staffFieldRef = useRef<HTMLDivElement>(null)
+  const startFieldRef = useRef<HTMLDivElement>(null)
   const initialFocusRef = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
-    const field = open && target?.mode === 'create' && target.focusField
-      ? (target.focusField === 'staff' ? staffFieldRef : participantFieldRef).current
-      : null
+    const fieldRefs = { participant: participantFieldRef, staff: staffFieldRef, start: startFieldRef }
+    const field = open && target?.mode === 'create' && target.focusField ? fieldRefs[target.focusField].current : null
     initialFocusRef.current = field?.querySelector<HTMLElement>('button, input') ?? null
   }, [open, target])
 
@@ -326,14 +330,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       // A code once: two pools both past their funding are two findings with the same code.
       acknowledgedFindingCodes: [...new Set(warningFindings.map(f => f.code))],
       ...(emergencyActive ? { emergency: true } : {}),
+      // A person carried off a puck moves in the same save; once the Staff field names somebody else, nobody is moving.
+      ...(target?.mode === 'create' && target.moveFromShiftId && staffId === target.staffId ? { moveFromShiftId: target.moveFromShiftId } : {}),
     }
 
     try {
-      if (isEdit && existing) {
-        await updateShift.mutateAsync({ id: existing.id, data: payload })
-      } else {
-        await createShift.mutateAsync(payload)
-      }
+      const saved = isEdit && existing
+        ? await updateShift.mutateAsync({ id: existing.id, data: payload })
+        : await createShift.mutateAsync(payload)
+      onSaved?.(saved)
       onClose()
     } catch (err: unknown) {
       const serverFindings = getRosterFindings(err)
@@ -461,9 +466,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         </FormField>
 
         <div className={modalGrid}>
-          <FormField label="Start time" required>
-            <input type="time" value={startTime} disabled={!canWrite} onChange={e => { setStartTime(e.target.value); clearLengthRefusal() }} />
-          </FormField>
+          <div ref={startFieldRef}>
+            <FormField label="Start time" required>
+              <input type="time" value={startTime} disabled={!canWrite} onChange={e => { setStartTime(e.target.value); clearLengthRefusal() }} />
+            </FormField>
+          </div>
           <FormField label="End time" required error={lengthError}>
             <input type="time" value={endTime} disabled={!canWrite} onChange={e => { setEndTime(e.target.value); clearLengthRefusal() }} />
           </FormField>
