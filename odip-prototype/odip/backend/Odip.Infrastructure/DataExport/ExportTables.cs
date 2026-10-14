@@ -39,11 +39,12 @@ public static class ExportTables
     public const string DocumentsFolder = "documents/";
 
     // When Employment Hero's encrypted integration secret store lands, it goes here with: "Connection details for other systems, such as
-    // payroll. They are kept encrypted and never exported." (ExportTablesTests' (69, 7) pin moves with it.)
+    // payroll. They are kept encrypted and never exported." (ExportTablesTests' (69, 8) pin moves with it.)
     public static readonly IReadOnlyDictionary<Type, string> LeftOut = new Dictionary<Type, string>
     {
         [typeof(AuditLog)] = "The change history (audit log). It has no organisation column, so it can't yet be separated safely from other organisations' history.",
         [typeof(NotificationOutbox)] = "Queued notification messages and their contents.",
+        [typeof(InAppNotification)] = "Bell notices for each person. They are short-lived and purged after 90 days, like the queued notification messages.",
         [typeof(SupportCatalogueItem)] = "The NDIS support catalogue, which is the same for every organisation.",
         [typeof(SupportActivityGroup)] = "The support catalogue's activity groups, which are the same for every organisation.",
         [typeof(PublicHoliday)] = "The public holiday calendar, which is the same for every organisation.",

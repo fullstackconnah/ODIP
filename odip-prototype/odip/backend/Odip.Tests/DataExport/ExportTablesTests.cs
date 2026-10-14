@@ -58,7 +58,7 @@ public class ExportTablesTests
         Assert.Empty(exported.Intersect(leftOut));
         Assert.Empty(exported.Concat(leftOut).Except(model));
         Assert.Equal(exported.Count, exported.Distinct().Count());
-        Assert.Equal((69, 7), (exported.Count, leftOut.Count)); // adding the Employment Hero secret store to LeftOut makes this (69, 8)
+        Assert.Equal((69, 8), (exported.Count, leftOut.Count)); // adding the Employment Hero secret store to LeftOut makes this (69, 9)
     }
 
     [Fact]
