@@ -1,6 +1,6 @@
 // The intake visit as the screens show and edit it. Times are instants (UTC, Z) shown and entered in the PROVIDER's zone (the DTO's
 // timeZoneId), never the browser's, so a coordinator in another state still sees the family's 10:00 am. Pure and JSX-free.
-import type { CancelIntakeBookingResultDto, IntakeInviteError, ParticipantInquiryDto, SetIntakeBookingDto } from '@/api/types/inquiries'
+import type { CancelIntakeBookingResultDto, IntakeInviteError, IntakeVisitDto, ParticipantInquiryDto, SetIntakeBookingDto } from '@/api/types/inquiries'
 import type { StaffListDto } from '@/api/types'
 import { parseApiDate } from '@/lib/utils'
 import { providerLocalToUtcInstant, utcInstantToProviderLocal } from '@/pages/portal/shift/shiftTime'
@@ -153,4 +153,30 @@ export function cancelNotice(email: CancelIntakeBookingResultDto['cancellationEm
   if (email === 'NoInvite') return { tone: 'success', title: 'Intake visit cancelled', message: 'No invite had gone out, so nobody was emailed.' }
   const why = email === 'NotConfigured' ? "Email isn't set up yet" : "The email couldn't be sent"
   return { tone: 'danger', title: 'Intake visit cancelled, email not sent', message: `${why}, so ${name} wasn't told. Let them know another way.` }
+}
+
+/** Where a visit's intake has got to, read as the enquiry stage is: not started, a draft in progress, or done (complete, or a participant). */
+export function visitStage(v: Pick<IntakeVisitDto, 'participantId' | 'participantIsDraft' | 'participantIntakeCompletedAt'>): 'new' | 'draftintake' | 'complete' {
+  if (!v.participantId) return 'new'
+  return v.participantIsDraft === false || v.participantIntakeCompletedAt ? 'complete' : 'draftintake'
+}
+
+const localStart = (v: IntakeVisitDto) => utcInstantToProviderLocal(v.startsAt, v.timeZoneId || FALLBACK_ZONE)
+
+/** Visits grouped by the provider-local date of their start ("2026-10-16"), as the shift day groups are. */
+export function visitsByDay(visits: IntakeVisitDto[]): Map<string, IntakeVisitDto[]> {
+  const byDay = new Map<string, IntakeVisitDto[]>()
+  for (const visit of visits) {
+    const day = localStart(visit).slice(0, 10)
+    byDay.set(day, [...(byDay.get(day) ?? []), visit])
+  }
+  return byDay
+}
+
+/** A day's shifts and visits in start order: a visit is a sibling of the shift cards, placed by its provider-local start time. */
+export function withVisits<S extends { startTime: string }>(shifts: S[], visits: IntakeVisitDto[]): ({ kind: 'shift'; shift: S } | { kind: 'visit'; visit: IntakeVisitDto })[] {
+  return [
+    ...shifts.map(shift => ({ at: shift.startTime.slice(0, 5), entry: { kind: 'shift' as const, shift } })),
+    ...visits.map(visit => ({ at: localStart(visit).slice(11, 16), entry: { kind: 'visit' as const, visit } })),
+  ].sort((a, b) => a.at.localeCompare(b.at)).map(x => x.entry)
 }

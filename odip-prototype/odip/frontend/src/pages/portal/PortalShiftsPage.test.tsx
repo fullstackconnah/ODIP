@@ -10,6 +10,8 @@ const { mockUseMyShifts, mockUsePendingWitnessRequests } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/hooks', () => ({
+  useIntakeVisits: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useConvertParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
   useMyShifts: mockUseMyShifts,
   usePendingWitnessRequests: mockUsePendingWitnessRequests,
 }))

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  bookingBody, bookingFormOf, cancelNotice, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, staffOptions, visitTimes, visitWhen,
+  bookingBody, bookingFormOf, cancelNotice, visitsByDay, visitStage, withVisits, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, staffOptions, visitTimes, visitWhen,
 } from './intakeBooking'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 
@@ -119,5 +119,26 @@ describe('what a cancel tells the coordinator', () => {
       tone: 'danger', title: 'Intake visit cancelled, email not sent', message: "Email isn't set up yet, so Noah Fitzgerald wasn't told. Let them know another way.",
     })
     expect(cancelNotice('Failed', 'Noah Fitzgerald').message).toBe("The email couldn't be sent, so Noah Fitzgerald wasn't told. Let them know another way.")
+  })
+})
+
+describe('visits beside shifts', () => {
+  const visit = (startsAt: string, overrides = {}) => ({
+    inquiryId: startsAt, firstName: 'Noah', lastName: 'Fitzgerald', participantId: null, participantIsDraft: null, participantIntakeCompletedAt: null,
+    startsAt, durationMinutes: 90, location: 'Home', staffUserId: 'dana', staffName: 'Dana Smith', confirmedAt: null, timeZoneId: 'Australia/Sydney', ...overrides,
+  })
+
+  it('reads where the intake has got to', () => {
+    expect(visitStage(visit('2026-10-15T23:00:00Z'))).toBe('new')
+    expect(visitStage(visit('2026-10-15T23:00:00Z', { participantId: 'p', participantIsDraft: true }))).toBe('draftintake')
+    expect(visitStage(visit('2026-10-15T23:00:00Z', { participantId: 'p', participantIsDraft: true, participantIntakeCompletedAt: '2026-10-16T03:00:00Z' }))).toBe('complete')
+    expect(visitStage(visit('2026-10-15T23:00:00Z', { participantId: 'p', participantIsDraft: false }))).toBe('complete')
+  })
+
+  it('groups visits by the provider-local day and puts them among the shifts by start time', () => {
+    const tenAm = visit('2026-10-15T23:00:00Z') // 16 Oct, 10:00 am in Sydney, still 15 Oct in UTC
+    expect([...visitsByDay([tenAm]).keys()]).toEqual(['2026-10-16'])
+    const shifts = [{ id: 's1', startTime: '09:00:00' }, { id: 's2', startTime: '13:00:00' }]
+    expect(withVisits(shifts, [tenAm]).map(e => (e.kind === 'shift' ? e.shift.id : 'visit'))).toEqual(['s1', 'visit', 's2'])
   })
 })
