@@ -182,6 +182,8 @@ function useInquiriesScreen() {
     { key: 'participantId', header: 'Status', render: statusBadge },
     {
       key: 'intakeStartsAt', header: 'Intake', sortable: true, wrap: true,
+      // Room for the date and time unbroken; a narrower window scrolls the table in its box (the Column Rule) rather than crushing the cell.
+      minWidth: '12.5rem',
       // ISO instants sort in time order. An empty cell sorts last on the ascending sort.
       sortFn: (a, b) => (a.intakeStartsAt ?? '9999').localeCompare(b.intakeStartsAt ?? '9999'),
       render: row => <IntakeCell row={row} canManage={canManageParticipantLifecycle} onOpen={r => openBooking(r)} />,
@@ -203,6 +205,7 @@ function useInquiriesScreen() {
             <div className="md:hidden" onClick={e => e.stopPropagation()}>
               <Dropdown
                 variant="icon"
+                align="left"
                 label={`More actions for ${nameOf(row)}`}
                 icon={<MoreVertical className="h-4 w-4" aria-hidden="true" />}
                 items={menuItems(row)}

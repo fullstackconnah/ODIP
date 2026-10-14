@@ -26,7 +26,10 @@ export function IntakeCell({ row, canManage, onOpen, now = new Date() }: IntakeC
     ) : <span>—</span>
   }
   const past = isPastVisit(row.intakeStartsAt, row.intakeDurationMinutes ?? DEFAULT_DURATION, now)
-  const label = [visitWhen(row.intakeStartsAt, row.timeZoneId || FALLBACK_ZONE, now), row.intakeStaffFirstName].filter(Boolean).join(' · ')
+  const when = visitWhen(row.intakeStartsAt, row.timeZoneId || FALLBACK_ZONE, now)
+  const label = [when, row.intakeStaffFirstName].filter(Boolean).join(' · ')
+  // A narrow cell breaks line 1 only after the dot, never inside the date and time.
+  const text = [when.replaceAll(' ', '\u00a0'), row.intakeStaffFirstName].filter(Boolean).join('\u00a0· ')
   const line2 = past ? null : inviteLine(row)
   const ink = past ? TONE.neutral.ink : ''
   return (
@@ -41,9 +44,9 @@ export function IntakeCell({ row, canManage, onOpen, now = new Date() }: IntakeC
             onClick={() => onOpen(row)}
             className={`${TAP_AREA} max-md:min-h-11 rounded-sm text-left font-medium hover:text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${ink}`}
           >
-            {label}
+            {text}
           </button>
-        ) : <span className={ink}>{label}</span>}
+        ) : <span className={ink}>{text}</span>}
         {past ? <StatusBadge tone="neutral" label="Past" />
           : row.intakeConfirmedAt ? <StatusBadge tone="success" label="Confirmed" />
           : <StatusBadge tone="warning" label="Not confirmed" />}
