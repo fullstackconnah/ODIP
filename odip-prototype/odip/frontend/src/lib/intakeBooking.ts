@@ -1,6 +1,6 @@
 // The intake visit as the screens show and edit it. Times are instants (UTC, Z) shown and entered in the PROVIDER's zone (the DTO's
 // timeZoneId), never the browser's, so a coordinator in another state still sees the family's 10:00 am. Pure and JSX-free.
-import type { IntakeInviteError, ParticipantInquiryDto, SetIntakeBookingDto } from '@/api/types/inquiries'
+import type { CancelIntakeBookingResultDto, IntakeInviteError, ParticipantInquiryDto, SetIntakeBookingDto } from '@/api/types/inquiries'
 import type { StaffListDto } from '@/api/types'
 import { parseApiDate } from '@/lib/utils'
 import { providerLocalToUtcInstant, utcInstantToProviderLocal } from '@/pages/portal/shift/shiftTime'
@@ -145,4 +145,12 @@ export function staffOptions(staff: Pick<StaffListDto, 'id' | 'fullName' | 'role
     .map(s => ({ value: s.id, label: s.id === myId ? `${s.fullName} (you)` : s.fullName }))
   if (booked?.id && !items.some(i => i.value === booked.id)) items.unshift({ value: booked.id, label: booked.name ?? 'Current staff member' })
   return items
+}
+
+/** The notice after a cancel (SHAPE.md section 5, "Row notices"): who was emailed, or that nobody was and why. */
+export function cancelNotice(email: CancelIntakeBookingResultDto['cancellationEmail'], name: string): { tone: 'success' | 'danger'; title: string; message: string } {
+  if (email === 'Sent') return { tone: 'success', title: 'Intake visit cancelled', message: `We've emailed ${name} a cancellation.` }
+  if (email === 'NoInvite') return { tone: 'success', title: 'Intake visit cancelled', message: 'No invite had gone out, so nobody was emailed.' }
+  const why = email === 'NotConfigured' ? "Email isn't set up yet" : "The email couldn't be sent"
+  return { tone: 'danger', title: 'Intake visit cancelled, email not sent', message: `${why}, so ${name} wasn't told. Let them know another way.` }
 }

@@ -69,3 +69,7 @@ export const TAP_TRUNCATED_LINK = 'md:pointer-coarse:py-[calc((var(--tap-min)_-_
  * neighbours by 3px each, which the broad coarse sweep caught.
  */
 export const TAP_ICON_SQUARE = `${TAP_AREA} pointer-coarse:inline-flex pointer-coarse:size-[var(--control-h-sm)] pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:p-0`
+
+// The phone card: every control in the cluster (a Button, an ActionButtons icon) is a real 44px target, whatever the pointer, since a
+// card below md is what a phone shows. min-* only grow a control, so a text button keeps its width and the icons stay centred.
+export const ROW_ACTIONS_CARD = 'max-md:[&_:is(a,button)]:min-h-11 max-md:[&_:is(a,button)]:min-w-11'

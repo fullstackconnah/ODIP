@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  bookingBody, bookingFormOf, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, staffOptions, visitTimes, visitWhen,
+  bookingBody, bookingFormOf, cancelNotice, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, staffOptions, visitTimes, visitWhen,
 } from './intakeBooking'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 
@@ -108,5 +108,16 @@ describe('who can go', () => {
   it('offers active coordinators and admins only, marks the signed-in user, and keeps a booked person who no longer qualifies', () => {
     expect(staffOptions(staff, 'dana')).toEqual([{ value: 'dana', label: 'Dana Smith (you)' }, { value: 'sam', label: 'Sam Lee' }])
     expect(staffOptions(staff, 'dana', { id: 'jo', name: 'Jo Ng' })[0]).toEqual({ value: 'jo', label: 'Jo Ng' })
+  })
+})
+
+describe('what a cancel tells the coordinator', () => {
+  it('says who was emailed, or that nobody was and why', () => {
+    expect(cancelNotice('Sent', 'Noah Fitzgerald')).toEqual({ tone: 'success', title: 'Intake visit cancelled', message: "We've emailed Noah Fitzgerald a cancellation." })
+    expect(cancelNotice('NoInvite', 'Noah Fitzgerald')).toEqual({ tone: 'success', title: 'Intake visit cancelled', message: 'No invite had gone out, so nobody was emailed.' })
+    expect(cancelNotice('NotConfigured', 'Noah Fitzgerald')).toEqual({
+      tone: 'danger', title: 'Intake visit cancelled, email not sent', message: "Email isn't set up yet, so Noah Fitzgerald wasn't told. Let them know another way.",
+    })
+    expect(cancelNotice('Failed', 'Noah Fitzgerald').message).toBe("The email couldn't be sent, so Noah Fitzgerald wasn't told. Let them know another way.")
   })
 })
