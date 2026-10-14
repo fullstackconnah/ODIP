@@ -39,6 +39,8 @@ export type ShiftSlideOverTarget =
       serviceDate?: string
       /** Which field to send focus to once the panel opens, overriding the default first-focusable — set when the field it names is already prefilled and the other one is what needs picking (e.g. clicking an empty cell). `start` when a drop on an empty day prefilled participant, day and person, and the times are what is left. */
       focusField?: 'participant' | 'staff' | 'start'
+      /** Roster drag and drop: the shift the prefilled person was carried off. Saved with the new shift as one move, while the Staff field still names that person. */
+      moveFromShiftId?: string
     }
   | { mode: 'edit'; shift: ShiftDto }
 
@@ -328,6 +330,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       // A code once: two pools both past their funding are two findings with the same code.
       acknowledgedFindingCodes: [...new Set(warningFindings.map(f => f.code))],
       ...(emergencyActive ? { emergency: true } : {}),
+      // A person carried off a puck moves in the same save; once the Staff field names somebody else, nobody is moving.
+      ...(target?.mode === 'create' && target.moveFromShiftId && staffId === target.staffId ? { moveFromShiftId: target.moveFromShiftId } : {}),
     }
 
     try {

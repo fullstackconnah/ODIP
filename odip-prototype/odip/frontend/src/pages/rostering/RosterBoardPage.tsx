@@ -268,7 +268,7 @@ export default function RosterBoardPage() {
     else if (outcome.kind === 'prompt') setPrompt({ carry: person, shift: outcome.shift, canSwap: outcome.canSwap })
     else if (outcome.kind === 'create') {
       setCreateMoveSource(person.fromShift ?? null)
-      setSlideOverTarget({ mode: 'create', participantId: outcome.participantId, staffId: person.staffId, serviceDate: outcome.day, focusField: 'start' })
+      setSlideOverTarget({ mode: 'create', participantId: outcome.participantId, staffId: person.staffId, serviceDate: outcome.day, focusField: 'start', moveFromShiftId: person.fromShift?.id })
     }
   }
 
@@ -281,13 +281,12 @@ export default function RosterBoardPage() {
     else void dropAssign(person, shift)
   }
 
-  // Decision 6: once the ad-hoc shift saves, the person carried off a puck comes off their old shift.
-  // shortcut: the new shift saves before the old one clears, so a same-day overlap shows a DOUBLE_BOOKED warning in the form; one server request for both if coordinators trip on it.
-  async function handleShiftSaved(saved: ShiftDto) {
+  // Decision 6: a person carried off a puck onto an empty day moves. The panel saves the new shift and clears the old one in one guarded request (deep review S6).
+  // shortcut: the panel's live check still counts the shift they leave, so a same-day overlap can show a DOUBLE_BOOKED warning before Save; the save itself is judged without it.
+  function handleShiftSaved(saved: ShiftDto) {
     const source = createMoveSource
     // Only when the new shift is the carried person's: if the Staff field was changed in the panel, they have not moved, so their old shift stays as it is.
     if (!source || saved.staffId !== source.staffId) return
-    if (!(await performAssign(source, null))) return
     setAnnouncement(movedSentence({ staffId: saved.staffId ?? '', staffName: saved.staffName ?? '', fromShift: source }, saved))
     // The grip that started it went with the old shift, so focus goes to the new one, once the refetch has drawn it.
     requestAnimationFrame(() => focusShift(saved.id))

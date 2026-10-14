@@ -421,6 +421,8 @@ export interface CreateShiftDto {
    * means something when the check found the shift over budget; the server refuses a description that is too short.
    */
   emergency?: boolean
+  /** Create only. Roster drag and drop: the shift the person on `staffId` was carried off onto this empty day; the server clears it in the same save, or answers 409 if they are no longer on it. */
+  moveFromShiftId?: string
 }
 
 export type UpdateShiftDto = CreateShiftDto

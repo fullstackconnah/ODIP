@@ -1611,6 +1611,35 @@ describe('ShiftSlideOver — the length of a shift', () => {
   })
 })
 
+describe('ShiftSlideOver — a person carried off a puck onto an empty day (deep review S6)', () => {
+  const twoStaff = [{ value: 'staff-1', label: 'Alex Rivera' }, { value: 'staff-2', label: 'Jordan Smith' }]
+  const moveTarget = { mode: 'create' as const, participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18', focusField: 'start' as const, moveFromShiftId: 'from-1' }
+
+  it('saves the new shift and the move off the old one as one request', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValueOnce(makeShift({ id: 'new-shift' }))
+    render(<ShiftSlideOver target={moveTarget} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={twoStaff} />)
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18', moveFromShiftId: 'from-1' }))
+  })
+
+  it('sends no move once the Staff field names somebody else: the carried person stays where they were', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValueOnce(makeShift({ id: 'new-shift', staffId: 'staff-2' }))
+    render(<ShiftSlideOver target={moveTarget} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={twoStaff} />)
+
+    const field = screen.getByRole('combobox', { name: 'Staff' })
+    await user.click(field)
+    await user.click(screen.getByRole('option', { name: 'Jordan Smith' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ staffId: 'staff-2' }))
+    expect(mockCreateMutateAsync.mock.calls[0][0]).not.toHaveProperty('moveFromShiftId')
+  })
+})
+
 describe('ShiftSlideOver — opened by a drop on an empty day (roster drag and drop)', () => {
   const dropTarget = { mode: 'create' as const, participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18', focusField: 'start' as const }
 

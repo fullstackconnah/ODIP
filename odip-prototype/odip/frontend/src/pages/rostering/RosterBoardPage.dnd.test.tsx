@@ -220,9 +220,10 @@ describe('RosterBoardPage drag and drop: a drop on an empty day', () => {
     expect(within(panel).getByLabelText(/^Service date/)).toHaveValue('2026-08-21')
     await user.click(within(panel).getByRole('button', { name: 'Save' }))
 
-    expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ participantId: 'p-2', staffId: 'staff-2', serviceDate: '2026-08-21' }))
-    expect(h.assign).toHaveBeenCalledWith({ id: 'sam-wed', data: { staffId: null, overrideReason: null, acknowledgedFindingCodes: [] } })
-    expect(h.create.mock.invocationCallOrder[0]).toBeLessThan(h.assign.mock.invocationCallOrder[0])
+    // One guarded request (deep review S6): the create carries the move, and the server clears Wednesday in the same save.
+    expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ participantId: 'p-2', staffId: 'staff-2', serviceDate: '2026-08-21', moveFromShiftId: 'sam-wed' }))
+    expect(h.assign).not.toHaveBeenCalled()
+    expect(await screen.findByText('Sam Wilson moved to Jo Park, Friday 9am to 5pm. Wednesday 9am to 3pm now needs staff.')).toBeInTheDocument()
   })
 
   it('changes nothing when the panel is cancelled', async () => {

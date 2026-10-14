@@ -489,6 +489,48 @@ public class RosterBoardDragDropTests
         Assert.NotNull((await all.Shifts.SingleAsync(s => s.Id == from.Id)).UserId);
     }
 
+    // ── A person carried off a puck onto an empty day: the create and the move are one guarded save (deep review S6) ──
+
+    private static CreateShiftDto NewShiftFor(Guid participantId, Guid staffId, DateOnly day, int startHour, int endHour, Guid? moveFrom) => new()
+    {
+        ParticipantId = participantId, StaffId = staffId, ServiceDate = day, StartTime = new TimeOnly(startHour, 0), EndTime = new TimeOnly(endHour, 0),
+        Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, MoveFromShiftId = moveFrom,
+    };
+
+    [Fact]
+    public async Task CreateShift_MovingThePersonOffAPublishedShift_CreatesItAndClearsTheSourceInOneSave_WithNoFalseDoubleBooking()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var jo = SeedParticipant(db, "Jo", "Park");
+        var source = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Published, startHour: 9, endHour: 15);
+
+        // The same day and overlapping hours: judged as if Sam had already left the source, so no DOUBLE_BOOKED_SHIFT.
+        var created = Body(await Controller(db).CreateShift(NewShiftFor(jo.Id, sam.Id, Monday, 10, 14, source.Id), default));
+
+        Assert.Equal(sam.Id, created.StaffId);
+        Assert.DoesNotContain(created.Findings, f => f.Code == RosterConflictService.DoubleBookedShift);
+        Assert.Null((await Reload(db, source.Id)).UserId);
+        Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, sam.Id) }, await Notices(db));   // the new shift is a Draft: silent
+    }
+
+    [Fact]
+    public async Task CreateShift_MovingFromAShiftSomeoneElseIsOnNow_Is409AndCreatesNothing()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var jo = SeedStaff(db, "Jo", "Park");
+        var mia = SeedParticipant(db);
+        var source = SeedShift(db, mia.Id, jo.Id);   // the board carried Sam off it; Jo was put on since
+
+        var result = await Controller(db).CreateShift(NewShiftFor(mia.Id, sam.Id, Monday.AddDays(1), 9, 15, source.Id), default);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(jo.Id, (await Reload(db, source.Id)).UserId);
+        Assert.Equal(1, await db.Shifts.CountAsync());
+    }
+
     // ── Publish week ──
 
     [Fact]

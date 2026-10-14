@@ -306,6 +306,11 @@ public record CreateShiftDto
     /// (at least 10 characters once trimmed). It only means something when the check found the shift over budget; the path is open in every mode and cannot be switched off.
     /// </summary>
     public bool Emergency { get; init; }
+    /// <summary>
+    /// Create only (a PUT ignores it). Roster drag and drop (deep review S6): the shift the person on <see cref="StaffId"/> was carried off onto this empty day. In the same save the new
+    /// shift is created and that one is cleared, under the board lock, provided the person is still on it (409 otherwise), and the new shift is judged as if they had already left it.
+    /// </summary>
+    public Guid? MoveFromShiftId { get; init; }
 }
 
 public record UpdateShiftDto : CreateShiftDto

@@ -526,6 +526,32 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShift(
         [FromBody] CreateShiftDto dto, CancellationToken ct)
     {
+        if (dto.MoveFromShiftId is not { } fromId) return await CreateShiftCoreAsync(dto, null, ct);
+        if (dto.StaffId is null) return BadRequest(ApiResponse<ShiftDto>.Fail("Name the person who is moving."));
+        try
+        {
+            // An empty-day move (deep review S6): the board's lock order, then the source row, then the read, as move-staff takes them.
+            await using var held = await RosterBoardLockAsync(ct);
+            await LockShiftRowsAsync("\"Id\" = {0}", new object[] { fromId }, ct);
+            var from = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == fromId, ct);
+            if (from is null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+            if (IsLockedForStaffChange(from.Status))
+                return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
+            // The person the page carried is no longer on the shift they left: never clear somebody else by surprise.
+            if (from.UserId != dto.StaffId) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+            var result = await CreateShiftCoreAsync(dto, from, ct);
+            if (result.Result is OkObjectResult) await held.CommitAsync(ct);
+            return result;
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>The body of <see cref="CreateShift"/>. With <paramref name="movingFrom"/> (already locked and checked) the person leaves it in the same save.</summary>
+    private async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShiftCoreAsync(CreateShiftDto dto, Shift? movingFrom, CancellationToken ct)
+    {
         if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
@@ -540,7 +566,8 @@ public class RosteringController : ControllerBase
             Status = ShiftStatus.Draft
         };
 
-        var findings = await CheckAsync(shift, null, ct);
+        // A person moving here is judged without the shift they leave (no false DOUBLE_BOOKED_SHIFT against it).
+        var findings = await CheckAsync(shift, null, ct, leavingShiftId: movingFrom?.Id);
         findings.AddRange((await CheckBudgetAsync(shift, null, ShiftStatus.Draft, ct)).Findings);
 
         var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
@@ -552,6 +579,14 @@ public class RosteringController : ControllerBase
         if (budgetGate.EmergencyAccepted) await RaiseEmergencyReviewAsync(shift, ct);
 
         _db.Shifts.Add(shift);
+        if (movingFrom is not null)
+        {
+            var mover = movingFrom.UserId;
+            ApplyStaff(movingFrom, null, new List<RosterFinding>(), null, null);
+            // Item 9 of the connection map: the shift they left no longer waits to be re-covered for leave.
+            await _obligationTasks.CompleteByShiftAsync(movingFrom.Id, TaskType.LeaveCoverage, ct);
+            await NotifyStaffChangeAsync(movingFrom, mover, wasPublished: movingFrom.Status == ShiftStatus.Published, ct);
+        }
         await _db.SaveChangesAsync(ct);
 
         // No GET /shifts/{id} route exists in the spec's API table (the board and shift-list
