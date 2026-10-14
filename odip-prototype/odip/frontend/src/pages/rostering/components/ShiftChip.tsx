@@ -1,10 +1,10 @@
 import { useCallback, useContext } from 'react'
 import { Link } from 'react-router-dom'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { AlertOctagon, AlertTriangle, CalendarOff, Check, GripVertical, KeyRound, Lock, MoreVertical, Repeat, ShieldCheck, Siren } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, Asterisk, CalendarOff, Check, FileCheck, GripVertical, KeyRound, Lock, MoreVertical, Repeat, ShieldCheck, Siren } from 'lucide-react'
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
-import { formatShiftTimeRange, RATIO_LABELS } from '../lib/roster'
+import { formatShiftTimeRange, RATIO_LABELS, shiftSource } from '../lib/roster'
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
@@ -63,6 +63,9 @@ const LABEL_LINK =
  * actions trigger left the name 0-5px: a one-letter link. The chip is its own container (`@container`), so this follows the chip's
  * width, not the window's.
  */
+/** The provenance glyphs (the brief, section 5): a page with a tick, two arrows, six spokes. Each reads apart from the others, and from the chip's other marks, without colour at 12px. */
+const SOURCE_ICON = { agreed: FileCheck, pattern: Repeat, adhoc: Asterisk } as const
+
 export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggable = false, onOpen, onAssignTo, onUnassign, onDelete }: ShiftChipProps) {
   const hasFindings = shift.findings.length > 0
   const hasBlocking = shift.findings.some(f => f.severity === 'Blocking')
@@ -93,9 +96,9 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const busy = pending?.targetId === shift.id
   const fading = pending?.sourceId === shift.id
   const lockTitle = `${lockedWords(shift.status)}: can't be changed here`
-  const patternTitle = shift.shiftPatternId
-    ? (shift.fromAgreement ? (shift.sourceDraftVersion !== undefined ? `From agreement v${shift.sourceDraftVersion}` : 'From an agreement') : 'From a pattern')
-    : null
+  // Where the shift came from (spec 2026-10-15, decision B), derived: Agreed, Pattern or Ad hoc. Neutral ink for all three: colour on a chip means something is wrong.
+  const source = shiftSource(shift)
+  const SourceIcon = SOURCE_ICON[source.kind]
   // The accessible name and the hover title end with the shift's state (the brief, section 8): Draft or Published, or why it is locked.
   const statusWords = locked ? lockTitle : shift.status
 
@@ -151,7 +154,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     hasFindings ? findingsSeverityLabel(shift.findings) : null,
     `${timeRange}${shift.endsNextDay ? ' (ends the next day)' : ''}`,
     labelText,
-    patternTitle,
+    source.title,
     showRatio ? `${RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio` : null,
     budgetMarkerName ?? (shift.overrideReason ? `Assigned with an override: ${shift.overrideReason}` : null),
     onApprovedLeave ? 'On leave' : null,
@@ -277,8 +280,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           exceed the box; without a clip boundary here that excess would render over the actions menu
           beside it instead of just yielding.
         */}
-        <span className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden rounded-sm px-0.5 @[14rem]:flex-row @[14rem]:items-center">
-          <span className="flex min-w-0 items-center gap-1">
+        <span className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden rounded-sm @[14rem]:flex-row @[14rem]:items-center">
+          <span className="flex min-w-0 items-center gap-0.5">
             <span
               className={`shrink-0 font-medium tabular-nums ${shift.status === 'Cancelled' ? 'text-muted-foreground line-through' : 'text-foreground'}`}
               title={shift.endsNextDay ? `${timeRange} — ends the next day` : undefined}
@@ -292,13 +295,13 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
                 above) and for assistive tech (the control's aria-label).
               */}
             </span>
-            {patternTitle && (
-              // The Repeat glyph at the end of the time line gives way (shrinks to nothing) before the time is ever cut; the word joins it once the chip is 14rem wide.
-              <span className="flex min-w-0 shrink items-center gap-0.5 overflow-hidden text-xs text-muted-foreground" title={patternTitle}>
-                <Repeat className="h-3 w-3 shrink-0" aria-hidden="true" />
-                <span className="hidden @[14rem]:inline">Pattern</span>
-              </span>
-            )}
+            {/* The kind, after the time, which never gives way. The glyph and the word are each whole or not drawn at all, never a sliver. The box is one clipped line that wraps,
+                with a zero-width first item holding that line, so anything that does not fit wraps onto the hidden second line (ReadinessNote's technique). */}
+            <span className="flex h-4 min-w-0 flex-1 flex-wrap items-center gap-y-4 overflow-hidden text-xs text-muted-foreground" title={source.title} data-shift-source={source.kind}>
+              <span className="h-4 w-0" aria-hidden="true" />
+              <SourceIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="shrink-0 pl-0.5">{source.word}</span>
+            </span>
           </span>
           {/* Visual separator between time and name on the one-line layout; the accessible name (aria-label above) uses a comma. Gone
               while the name is under the time: a dot ending the first line reads as a typo. */}

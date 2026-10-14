@@ -1426,17 +1426,17 @@ describe('ShiftSlideOver — which agreement a shift came from', () => {
     expect(screen.getByText('From agreement v2')).toBeInTheDocument()
   })
 
-  it('says "From an agreement" when the version is not known, and nothing for a shift that does not say it came from one', () => {
+  it('says "From an agreement" when the version is not known, and names the other two kinds too, so a touch screen can read every kind (the brief, section 5)', () => {
     const first = open({ fromAgreement: true })
     expect(screen.getByText('From an agreement')).toBeInTheDocument()
     first.unmount()
 
     const second = open({})                                                                  // a hand-made pattern's shift: no fromAgreement on the wire
-    expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
+    expect(screen.getByText('From a pattern')).toBeInTheDocument()
     second.unmount()
 
     open({ shiftPatternId: null })                                                           // a one-off shift with no pattern at all
-    expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
+    expect(screen.getByText('Ad hoc: not from an agreement or a pattern')).toBeInTheDocument()
   })
 })
 
