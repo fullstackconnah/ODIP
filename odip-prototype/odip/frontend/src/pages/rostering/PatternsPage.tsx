@@ -129,6 +129,13 @@ export default function PatternsPage() {
 
   const participantOptions = useMemo(() => participants.map(p => ({ value: p.id, label: p.fullName })), [participants])
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
+  // An agreement pattern is one day of one worker of a block: the days of that block (the same revision, block and worker), for "Change every day of this support" in the panel.
+  const blockDays = useMemo(() => {
+    const target = slideOverTarget?.mode === 'edit' ? slideOverTarget.pattern : null
+    if (!target?.sourceDraftId) return undefined
+    return patterns.filter(p => p.sourceDraftId === target.sourceDraftId && p.sourceBlockKey === target.sourceBlockKey && p.workerSlot === target.workerSlot)
+      .sort((a, b) => DAY_OF_WEEK_INDEX[a.dayOfWeek] - DAY_OF_WEEK_INDEX[b.dayOfWeek]).map(p => p.dayOfWeek)
+  }, [patterns, slideOverTarget])
 
   function handleToggleActive(pattern: ShiftPatternDto) {
     setToggleError(null)
@@ -248,6 +255,7 @@ export default function PatternsPage() {
         canWrite={canWrite}
         participantOptions={participantOptions}
         staffOptions={staffOptions}
+        blockDays={blockDays}
       />
 
       <GeneratePatternDialog

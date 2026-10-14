@@ -1,5 +1,6 @@
 import type { DraftBlock, PlanQuote, PlannedLineFlags } from './plan-pricing'
 import type { BudgetWarningDto } from './rostering'
+import type { SleepoverType, SupportRatio } from './enums'
 
 export type AgreementState = 'ACT' | 'NSW' | 'NT' | 'QLD' | 'SA' | 'TAS' | 'VIC' | 'WA'
 
@@ -164,4 +165,35 @@ export interface CreateServiceAgreementDraftDto {
 /** The body of the 409 a save answers when somebody else saved a newer version first (`code` is "draft-version-conflict"). */
 export interface DraftVersionConflictDto {
   currentVersion: number
+}
+
+/** The body of POST .../{draftId}/pattern-change: what one roster pattern of the approved revision should become, and from when (agreement PR 1). */
+export interface PatternChangeDto {
+  patternId: string
+  dayOfWeek: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  ratio: SupportRatio
+  nightType: SleepoverType
+  /** Change every day of the pattern's block (no split); the day cannot change with it. */
+  allDays: boolean
+  /** The first day of the change, yyyy-MM-dd. Absent: the server's default, tomorrow or the agreement's start when that is later. */
+  fromDate?: string
+  /** Work out the revision and its price, and save nothing. */
+  preview: boolean
+}
+
+/** What a pattern change saved (or, on a preview, would save): the revision, its dates, and the price of its period before and after. Same dates and prices, so the difference is the change alone. */
+export interface PatternChangeResultDto {
+  /** The revision saved; absent on a preview. */
+  draftId?: string
+  version: number
+  agreementStartDate: string
+  agreementEndDate: string
+  oldTotal: number
+  newTotal: number
+  difference: number
+  /** The revision's pricing needs a look before it can be approved. */
+  needsReview: boolean
 }

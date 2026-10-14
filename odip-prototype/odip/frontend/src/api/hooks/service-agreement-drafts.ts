@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
-import type { ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, ServiceAgreementDraftDto } from '../types'
+import type { ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, ServiceAgreementDraftDto } from '../types'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
 
@@ -30,6 +30,25 @@ export function useCreateServiceAgreementDraft() {
     mutationFn: ({ participantId, data }: { participantId: string; data: CreateServiceAgreementDraftDto }) =>
       apiPost<ServiceAgreementDraftDto>(path(participantId), data),
     onSuccess: (_, { participantId }) => {
+      queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] })
+      // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
+      queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
+      queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+    },
+  })
+}
+
+/**
+ * A change to a roster pattern an approved agreement made (agreement PR 1). With `preview` the server works out the revision and its price difference and saves nothing. Without it, it saves the
+ * revision (a Draft, for approval), and what reads the participant's revisions is refreshed. The pattern and the roster change only when that revision is approved, so they are not.
+ */
+export function usePatternChange() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ participantId, draftId, data }: { participantId: string; draftId: string; data: PatternChangeDto }) =>
+      apiPost<PatternChangeResultDto>(`${path(participantId)}/${draftId}/pattern-change`, data),
+    onSuccess: (result, { participantId }) => {
+      if (!result.draftId) return
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] })
       // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
