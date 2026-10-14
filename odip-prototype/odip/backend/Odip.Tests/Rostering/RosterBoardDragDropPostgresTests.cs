@@ -177,6 +177,38 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task TwoStripDropsOntoOneNeedsStaffShiftAtOnce_OneWinsTheOtherIs409()   // deep review M1: /assign under the board lock and the row lock
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid kimId, leeId, openId;
+        await using (var db = Open(tenantId))
+        {
+            var kim = Worker(db, "Kim");
+            var lee = Worker(db, "Lee");
+            (kimId, leeId) = (kim.Id, lee.Id);
+            openId = ShiftOf(db, Person(db, "Mia").Id, null, ShiftStatus.Published, Monday).Id;
+            await db.SaveChangesAsync();
+        }
+
+        // Both boards drew it as Needs staff (expectedStaffId null).
+        await using var one = Open(tenantId);
+        await using var two = Open(tenantId);
+        var results = await Task.WhenAll(
+            Controller(one, tenantId).AssignShift(openId, new AssignShiftDto { StaffId = kimId, ExpectedStaffId = null }, default),
+            Controller(two, tenantId).AssignShift(openId, new AssignShiftDto { StaffId = leeId, ExpectedStaffId = null }, default));
+
+        Assert.Single(results, r => r.Result is OkObjectResult);
+        Assert.Single(results, r => r.Result is ConflictObjectResult);
+        var winner = await WorkerOn(tenantId, openId);
+        Assert.Contains(winner, new Guid?[] { kimId, leeId });
+        // Only the winner was told they are on it: nobody holds an "assigned" notice for a shift they are not on.
+        await using var check = Open(tenantId);
+        var told = await check.NotificationOutbox.Where(o => o.EntityId == openId && o.EventType == NotificationEventType.ShiftAssigned).Select(o => o.RecipientUserId).ToListAsync();
+        Assert.Equal(new[] { winner!.Value }, told);
+    }
+
+    [SkippableFact]
     public async Task TwoMovesOntoOneNeedsStaffShiftAtOnce_OneWinsTheOtherIs409()   // Review Focus 1
     {
         RequirePostgres();

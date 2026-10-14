@@ -681,6 +681,25 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> AssignShift(
         Guid id, [FromBody] AssignShiftDto dto, CancellationToken ct)
     {
+        try
+        {
+            // The board's lock order (deep review M1): the organisation's board lock, then the row, then the read, so the ExpectedStaffId check and the write cannot be split by
+            // another drop, a move-staff or a PUT on this shift.
+            await using var held = await RosterBoardLockAsync(ct);
+            await LockShiftRowsAsync("\"Id\" = {0}", new object[] { id }, ct);
+            var result = await AssignShiftLockedAsync(id, dto, ct);
+            if (result.Result is OkObjectResult) await held.CommitAsync(ct);
+            return result;
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>The body of <see cref="AssignShift"/>, run under its locks.</summary>
+    private async Task<ActionResult<ApiResponse<ShiftDto>>> AssignShiftLockedAsync(Guid id, AssignShiftDto dto, CancellationToken ct)
+    {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
         if (IsLockedForStaffChange(shift.Status))
