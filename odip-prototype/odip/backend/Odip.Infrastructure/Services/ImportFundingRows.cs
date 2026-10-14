@@ -273,7 +273,8 @@ public static class ImportFundingRows
         if (!decimal.TryParse(digits, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var amount))
             return (null, "Amount must be a number of dollars, like 12500.00.");
         if (amount < 0m) return (null, "Amount can't be negative.");
-        if (decimal.Round(amount, 2) != amount) return (null, "Amount is in dollars and cents: at most two decimal places.");
+        // Counted in the text, not the value: "12.500" (a thousands dot) is 12.5m, which would pass a value check as $12.50.
+        if (digits.IndexOf('.') is var dot and >= 0 && digits.Length - dot - 1 > 2) return (null, "Amount is in dollars and cents: at most two decimal places.");
         if (amount > FundingPlanValidator.MaxAmount) return (null, $"Amount can be at most ${FundingPlanValidator.MaxAmount.ToString("N2", CultureInfo.InvariantCulture)}.");
         return (amount, null);
     }

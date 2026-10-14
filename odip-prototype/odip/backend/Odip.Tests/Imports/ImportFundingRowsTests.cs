@@ -61,6 +61,7 @@ public class ImportFundingRowsTests
     [InlineData("12500", "12500")]
     [InlineData("12,500.5", "12500.5")]
     [InlineData("$ 12,500.00", "12500")]
+    [InlineData("1,234,567.89", "1234567.89")]
     public void An_amount_reads_as_Excel_or_a_person_writes_it(string text, string expected) =>
         Assert.Equal((decimal?)decimal.Parse(expected, CultureInfo.InvariantCulture), Read(Line("430000001", "Core", "Self managed", text)).Single().Funding!.Amount);
 
@@ -70,6 +71,10 @@ public class ImportFundingRowsTests
     [InlineData("12500,50", "Amount: use a dot for cents, and commas only between thousands, like 12,500.00.")]
     [InlineData("1,5", "Amount: use a dot for cents, and commas only between thousands, like 12,500.00.")]
     [InlineData("10.005", "Amount is in dollars and cents: at most two decimal places.")]
+    // A thousands dot, as a European-format export writes 12,500: never read as $12.50.
+    [InlineData("12.500", "Amount is in dollars and cents: at most two decimal places.")]
+    [InlineData("1.500", "Amount is in dollars and cents: at most two decimal places.")]
+    [InlineData("12.500,00", "Amount: use a dot for cents, and commas only between thousands, like 12,500.00.")]
     [InlineData("100000000", "Amount can be at most $99,999,999.99.")]
     public void A_wrong_amount_is_refused(string text, string reason) =>
         Assert.Equal(reason, Read(Line("430000001", "Core", "Self managed", text)).Single().Reasons.Single());
