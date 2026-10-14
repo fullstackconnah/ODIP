@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useCancelIntakeBooking } from '@/api/hooks'
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { FALLBACK_ZONE, visitWhen } from '@/lib/intakeBooking'
+import { FALLBACK_ZONE, unbroken, visitWhen } from '@/lib/intakeBooking'
 import { extractErrorMessage } from '@/lib/utils'
 
 type IntakeCancelDialogProps = {
@@ -18,7 +18,7 @@ export function IntakeCancelDialog({ row, onCancel, onDone }: IntakeCancelDialog
   if (!row?.intakeStartsAt) return null
   const staff = row.intakeStaffFirstName ?? 'the staff member'
   const message = row.intakeInviteSentAt
-    ? `We'll email ${row.firstName} a cancellation for ${visitWhen(row.intakeStartsAt, row.timeZoneId || FALLBACK_ZONE)}, and the visit comes off ${staff}'s schedule.`
+    ? `We'll email ${row.firstName} a cancellation for ${unbroken(visitWhen(row.intakeStartsAt, row.timeZoneId || FALLBACK_ZONE))}, and the visit comes off ${staff}'s schedule.`
     : `No invite went out, so nobody is emailed. The visit comes off ${staff}'s schedule.`
   return (
     <ConfirmDialog

@@ -3,15 +3,15 @@ import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
-import { DEFAULT_DURATION, FALLBACK_ZONE, inviteLine, isPastVisit, visitWhen } from '@/lib/intakeBooking'
+import { DEFAULT_DURATION, FALLBACK_ZONE, inviteLine, isPastVisit, unbroken, visitWhen } from '@/lib/intakeBooking'
 import { TONE } from '@/lib/tone'
 
 type IntakeCellProps = { row: ParticipantInquiryDto; canManage: boolean; onOpen: (row: ParticipantInquiryDto) => void; now?: Date }
 
 /**
  * The enquiry table's Intake cell (SHAPE.md section 1):
- * - line 1 is the booking ("Fri 16 Oct, 10:00 am · Sam"), which opens the panel, with a badge (Not confirmed, Confirmed or Past);
- * - line 2 is what the latest invite did;
+ * - line 1 is the booking ("Fri 16 Oct, 10:00 am · Sam"), which opens the panel;
+ * - line 2 is the reply badge (Not confirmed, Confirmed or Past), then what the latest invite did;
  * - Book intake when there is no booking; a dash for a direct intake (no enquiry) and for a read-only viewer's empty cell.
  * Each control carries `data-intake-control` (the enquiry id): the page focuses it after the panel closes, a cancel, or a dismissed notice.
  */
@@ -29,7 +29,7 @@ export function IntakeCell({ row, canManage, onOpen, now = new Date() }: IntakeC
   const when = visitWhen(row.intakeStartsAt, row.timeZoneId || FALLBACK_ZONE, now)
   const label = [when, row.intakeStaffFirstName].filter(Boolean).join(' · ')
   // A narrow cell breaks line 1 only after the dot, never inside the date and time.
-  const text = [when.replaceAll(' ', '\u00a0'), row.intakeStaffFirstName].filter(Boolean).join('\u00a0· ')
+  const text = [unbroken(when), row.intakeStaffFirstName].filter(Boolean).join('\u00a0· ')
   const line2 = past ? null : inviteLine(row)
   const ink = past ? TONE.neutral.ink : ''
   return (

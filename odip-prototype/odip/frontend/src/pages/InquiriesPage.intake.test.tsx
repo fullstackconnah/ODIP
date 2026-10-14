@@ -136,6 +136,9 @@ describe('the phone menu', () => {
     await user.click(screen.getByRole('option', { name: 'Cancel visit' }))
     const dialog = screen.getByRole('alertdialog', { name: "Cancel Priya Nair's intake visit?" })
     expect(dialog).toHaveTextContent(/We'll email Priya a cancellation for Wed 16 Oct( 2030)?, 10:00 am, and the visit comes off Sam's schedule\./)
+    // Fix round 2: the date and time never break across lines ("10:00" / "am"), as on line 1.
+    expect(dialog.textContent).toMatch(/16 Oct( 2030)?, 10/)
+    expect(dialog.textContent).toContain('10:00 am')
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
 
     expect(mocks.cancelVisit).toHaveBeenCalledWith('sent')

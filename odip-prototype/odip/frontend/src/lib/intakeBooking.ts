@@ -41,6 +41,9 @@ export function visitWhen(iso: string, zone: string, now: Date = new Date()): st
   return `${p.weekday} ${p.day} ${p.month}${year}, ${p.time}`
 }
 
+/** A date and time that never breaks across lines in running text ("10:00" / "am"): every space becomes a no-break space. */
+export const unbroken = (text: string) => text.replaceAll(' ', ' ')
+
 /** "Thu 15 Oct" */
 export function visitDay(iso: string, zone: string): string {
   const p = partsIn(iso, zone)
