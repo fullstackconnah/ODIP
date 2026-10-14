@@ -242,14 +242,14 @@ export function DosesStep({ shift, online, canAct, onRecord }: {
         <section aria-labelledby="finish-routines" className="space-y-2">
           <h3 id="finish-routines" className="text-sm font-semibold">Routines not ticked</h3>
           <p className="text-sm text-[var(--color-muted-foreground)]">These don't stop you finishing. Tick any you did.</p>
-          <ul className="space-y-2">{unticked.map(r => <RoutineRow key={r.id} routine={r} shiftId={shift.id} canAct={canAct} online={online} />)}</ul>
+          <ul className="divide-y divide-[var(--color-border)]">{unticked.map(r => <RoutineRow key={r.id} routine={r} shiftId={shift.id} canAct={canAct} online={online} />)}</ul>
         </section>
       )}
       {shift.prn.length > 0 && (
         <section aria-labelledby="finish-prn" className="space-y-2">
           <h3 id="finish-prn" className="text-sm font-semibold">Did you give an as-needed medicine?</h3>
           <Fold summary={`As needed · ${shift.prn.length} medicine${shift.prn.length === 1 ? '' : 's'}`}>
-            <ul className="space-y-2">
+            <ul className="divide-y divide-[var(--color-border)]">
               {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={shift.timeZoneId} canAct={canRecord} onRecord={t => onRecord(t, false)} />)}
             </ul>
           </Fold>

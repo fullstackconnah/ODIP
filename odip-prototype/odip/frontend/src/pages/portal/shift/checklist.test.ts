@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   breaksSignature, buildChecklist, clockLabel,
-  FINISH_STEPS, breaksLabel, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
+  FINISH_STEPS, breaksLabel, groupFolds, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
 } from './checklist'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
 
@@ -173,5 +173,21 @@ describe('the finish flow: the Breaks row (finish review fix 6)', () => {
     expect(breaksLabel(0, 0)).toBe('No breaks')
     expect(breaksLabel(1, 0)).toBe('1 break, 0 min')
     expect(breaksLabel(2, 15)).toBe('2 breaks, 15 min')
+  })
+})
+
+describe("Now's due list: what stays open (finish review fix 1)", () => {
+  it('keeps Overdue and the next open time open, folds done times to a count and every later time to one line', () => {
+    const done = dose({ medicationId: 'a', scheduledAt: '2026-10-05T08:00:00', scheduledTime: '08:00', outcome: { status: 'Administered' } as never })
+    const overdue = dose({ medicationId: 'b', scheduledAt: '2026-10-05T09:00:00', scheduledTime: '09:00', state: 'Overdue', isOverdue: true })
+    const noon = routine({ id: 'r1', occursAt: '2026-10-05T12:00:00' })
+    const half = dose({ medicationId: 'c', scheduledAt: '2026-10-05T12:30:00', scheduledTime: '12:30' })
+    const one = dose({ medicationId: 'd', scheduledAt: '2026-10-05T13:00:00', scheduledTime: '13:00' })
+    const one2 = routine({ id: 'r2', occursAt: '2026-10-05T13:00:00' })
+    const any = routine({ id: 'r3', occursAt: null })
+    const { groups } = buildChecklist({ medicationsDue: [done, overdue, half, one], shiftRoutines: [noon, one2, any] })
+
+    expect(groups.map(g => g.label)).toEqual(['Overdue', '8:00 am', '12:00 pm', '12:30 pm', '1:00 pm', 'Anytime'])
+    expect(groupFolds(groups)).toEqual([null, '8:00 am · 1 done', null, '12:30 pm · 1 dose', '1:00 pm · 1 dose, 1 routine', 'Anytime · 1 routine'])
   })
 })

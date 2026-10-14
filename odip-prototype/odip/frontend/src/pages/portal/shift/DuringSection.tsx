@@ -6,7 +6,7 @@ import { TAP_AREA } from '@/components/tapArea'
 import { TONE } from '@/lib/tone'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
-import { buildChecklist, clockLabel, type ChecklistItem } from './checklist'
+import { buildChecklist, clockLabel, groupFolds, type ChecklistItem } from './checklist'
 import { Chip, Fold, Section } from './ui'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalDoseSlotDto, PortalPrnDto, PortalShiftDetailDto, PortalShiftRoutineDto } from '@/api/types'
@@ -23,7 +23,7 @@ function DoseRow({ slot, tz, canAct, onRecord }: { slot: PortalDoseSlotDto; tz: 
   const outcome = slot.outcome
   const overdue = slot.state === 'Overdue'
   return (
-    <li className={`rounded-lg border px-3 py-2 text-sm ${overdue ? `${TONE.warning.soft} border-[var(--color-on-warning-container)]/30` : 'border-[var(--color-border)]'}`}>
+    <li className={`py-2.5 text-sm ${overdue ? `${TONE.warning.soft} -mx-3 px-3 rounded-lg` : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium flex items-center gap-1.5 flex-wrap">
@@ -82,7 +82,7 @@ export function RoutineRow({ routine, shiftId, canAct, online }: { routine: Port
   }
 
   return (
-    <li className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm">
+    <li className="py-2.5 text-sm">
       <button
         type="button"
         role="checkbox"
@@ -112,7 +112,7 @@ export function RoutineRow({ routine, shiftId, canAct, online }: { routine: Port
 
 export function PrnRow({ prn, tz, canAct, onRecord }: { prn: PortalPrnDto; tz: string; canAct: boolean; onRecord: (t: DoseTarget) => void }) {
   return (
-    <li className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm">
+    <li className="py-2.5 text-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium flex items-center gap-1.5 flex-wrap">
@@ -155,6 +155,7 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
   onRecord: (t: DoseTarget) => void
 }) {
   const { groups } = buildChecklist(shift)
+  const folds = groupFolds(groups)
   const canRecord = canAct && online && shift.canRecordDoses
   const tz = shift.timeZoneId
 
@@ -168,14 +169,14 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
         <p role="status" className="text-sm">{shift.canRecordDosesReason}</p>
       )}
       {shift.medicationsDue.length === 0 && <p className="text-sm text-[var(--color-muted-foreground)]">No doses due this shift.</p>}
-      {groups.map(group => {
-        const list = <ul className="space-y-2">{group.items.map(renderItem)}</ul>
-        // A time whose every dose and routine is settled folds to one line (SHAPE §3); the overdue group never does.
-        const done = group.tone === 'neutral' && group.items.every(i => (i.kind === 'dose' ? !!i.slot.outcome : i.routine.isChecked))
-        return done
-          ? <Fold key={group.id} summary={`${group.label} · ${group.items.length} done`}>{list}</Fold>
+      {/* Rows divided inside the one card, not a card per item; Overdue and the next time open, the rest one line each (finish review fix 1). */}
+      {groups.map((group, gi) => {
+        const list = <ul className="divide-y divide-[var(--color-border)]">{group.items.map(renderItem)}</ul>
+        const fold = folds[gi]
+        return fold
+          ? <Fold key={group.id} summary={fold}>{list}</Fold>
           : (
-            <div key={group.id} className="space-y-2">
+            <div key={group.id} className="space-y-1">
               <h3 className={`text-sm font-semibold ${group.tone === 'warning' ? TONE.warning.ink : ''}`}>{group.label}</h3>
               {list}
             </div>
@@ -183,7 +184,7 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
       })}
       {shift.prn.length > 0 && (
         <Fold summary={`As needed · ${shift.prn.length} medicine${shift.prn.length === 1 ? '' : 's'}`}>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-[var(--color-border)]">
             {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={tz} canAct={canRecord} onRecord={onRecord} />)}
           </ul>
         </Fold>

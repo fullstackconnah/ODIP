@@ -62,6 +62,24 @@ export function buildChecklist(shift: { medicationsDue: PortalDoseSlotDto[]; shi
   return { groups }
 }
 
+const settled = (i: ChecklistItem) => (i.kind === 'dose' ? !!i.slot.outcome : i.routine.isChecked)
+
+/**
+ * Now's due list (finish review fix 1): Overdue and the next open time stay open; a time whose every item is settled folds to
+ * "8:00 am · 3 done"; every later time folds to one line, "1:00 pm · 1 dose, 1 routine". Null keeps a group open.
+ */
+export function groupFolds(groups: ChecklistGroup[]): (string | null)[] {
+  let nextShown = false
+  return groups.map(g => {
+    if (g.tone === 'warning') return null
+    if (g.items.every(settled)) return `${g.label} · ${g.items.length} done`
+    if (!nextShown) { nextShown = true; return null }
+    const doses = g.items.filter(i => i.kind === 'dose').length
+    const routines = g.items.length - doses
+    return `${g.label} · ${[doses && plural(doses, 'dose'), routines && plural(routines, 'routine')].filter(Boolean).join(', ')}`
+  })
+}
+
 /** Changes whenever a break is added, removed, ended or edited, so the finish flow can send the worker back to step 1 when the breaks change. */
 export function breaksSignature(breaks: { id: string; startedAt: string; endedAt: string | null }[]): string {
   return breaks.map(b => `${b.id}|${b.startedAt}|${b.endedAt ?? ''}`).join(';')
