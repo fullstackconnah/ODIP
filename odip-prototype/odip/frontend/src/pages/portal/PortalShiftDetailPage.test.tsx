@@ -1078,6 +1078,14 @@ describe('PortalShiftDetailPage: submitted (SHAPE §4)', () => {
     expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
   })
 
+  it('ignores a finish draft left on another device once the shift is submitted: no flow, the summary shows', () => {
+    sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ step: 'submit', reached: 'submit' }))
+    show(makeDetail({ status: 'PendingReview', completion: makeCompletion({ actualEnd: '2026-08-17T17:00:00Z' }) }))
+    expect(screen.queryByRole('navigation', { name: 'Finish shift steps' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
+    expect(screen.getByText(/waiting for a coordinator/i)).toBeInTheDocument()
+  })
+
   it("the summary shows the worker's changed times with what they replaced, the reason and the kilometres", () => {
     show(makeDetail({
       status: 'PendingReview',

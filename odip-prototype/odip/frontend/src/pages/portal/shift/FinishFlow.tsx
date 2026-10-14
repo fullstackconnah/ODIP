@@ -204,19 +204,20 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   return (
     <div id="finish" className="space-y-4">
       <div ref={topRef} className="space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <WizardStepRail
-            steps={RAIL}
-            visitedSteps={new Set(FINISH_STEPS.slice(0, index(d.reached) + 1).map(s => s.key))}
-            currentKey={step}
-            onSelect={k => go(k as FinishStepKey)}
-            orientation="horizontal"
-            ariaLabel="Finish shift steps"
-            filled
-          />
-          {step !== 'times' && <Button variant="ghost" size="md" onClick={leave}>Back to shift</Button>}
+        <WizardStepRail
+          steps={RAIL}
+          visitedSteps={new Set(FINISH_STEPS.slice(0, index(d.reached) + 1).map(s => s.key))}
+          currentKey={step}
+          onSelect={k => go(k as FinishStepKey)}
+          orientation="horizontal"
+          ariaLabel="Finish shift steps"
+          filled
+        />
+        {/* Back to shift sits on the heading line, not the rail line: the rail scrolls inside whatever width is left, so a button beside it clipped the last pill on desktop. */}
+        <div className="flex items-center justify-between gap-2">
+          <WizardStepHeading stepKey={step} label={current.heading} />
+          {step !== 'times' && <Button variant="ghost" size="md" className="shrink-0" onClick={leave}>Back to shift</Button>}
         </div>
-        <WizardStepHeading stepKey={step} label={current.heading} />
       </div>
       {opened.breaksChanged && step === 'times' && <Callout tone="info">Your breaks changed. Check your times again.</Callout>}
       {step === 'times' && <TimesStep shift={shift} online={online} now={tick} draft={d} set={set} invalid={error?.field} />}

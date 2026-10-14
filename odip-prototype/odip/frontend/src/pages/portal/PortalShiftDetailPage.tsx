@@ -224,11 +224,13 @@ export default function PortalShiftDetailPage() {
   const startAt = rosteredInstants(shift).start
   const opensAt = startAt ? Date.parse(startAt) - EARLIEST_START_LEAD_MINUTES * 60_000 : 0
   const canStartNow = now.getTime() >= opensAt
-  const tabbed = belowLg && !finishing
+  // A draft can outlive the shift being in progress (another device submitted it): only an in-progress shift opens the flow.
+  const inFlow = finishing && inProgress
+  const tabbed = belowLg && !inFlow
   // Phone: real tab panels, all mounted. Desktop, or while finishing: plain columns, the flow in place of Now (Notes and, on a phone, About are hidden but stay mounted).
   const panel = (key: TabKey) => tabbed
     ? { role: 'tabpanel' as const, id: `shift-panel-${key}`, 'aria-labelledby': `shift-tab-${key}`, hidden: tab !== key }
-    : { id: `shift-panel-${key}`, hidden: finishing && (key === 'notes' || (belowLg && key === 'about')) }
+    : { id: `shift-panel-${key}`, hidden: inFlow && (key === 'notes' || (belowLg && key === 'about')) }
   const noteCount = notes?.length ?? 0
 
   const nowContent = (
@@ -349,7 +351,7 @@ export default function PortalShiftDetailPage() {
         </Button>
       </ActionBar>
     )
-  } else if (canAct && inProgress && !finishing && !submitted) {
+  } else if (canAct && inProgress && !inFlow && !submitted) {
     bar = (
       <ActionBar>
         <Button size="lg" variant={running ? 'primary' : 'secondary'} className="flex-1" onClick={() => handleBreak(running?.id)}
@@ -379,7 +381,7 @@ export default function PortalShiftDetailPage() {
           </PageHeaderMeta>
         }
       />
-      {!(belowLg && finishing) && <GlanceStrip shift={shift} />}
+      {!(belowLg && inFlow) && <GlanceStrip shift={shift} />}
       {!online && (
         <div role="alert" className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3 text-sm">
           <WifiOff className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -402,7 +404,7 @@ export default function PortalShiftDetailPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <div className="space-y-4 min-w-0">
           <div {...panel('now')} className="space-y-4">
-            {finishing
+            {inFlow
               ? <FinishFlow shift={shift} online={online} canAct={canAct} onRecord={(target, notGiven) => setSheet({ target, notGiven })} onClose={closeFinish} onEditNotes={editNotes} />
               : nowContent}
           </div>
