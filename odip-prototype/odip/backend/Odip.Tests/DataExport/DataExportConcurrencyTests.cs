@@ -125,9 +125,16 @@ public class DataExportConcurrencyTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<DataExportConcurrencyFilter>());
         Assert.NotSame(provider.GetRequiredService<PlanQuoteConcurrencyLimiter>(), provider.GetRequiredKeyedService<PlanQuoteConcurrencyLimiter>(DataExportConcurrencyFilter.LimiterKey));
+        // And by behaviour: the quote's limiter still admits two at once, the export's one.
+        using (var first = provider.GetRequiredService<PlanQuoteConcurrencyLimiter>().TryEnter("tenant:a"))
+        using (var second = provider.GetRequiredService<PlanQuoteConcurrencyLimiter>().TryEnter("tenant:a"))
+            Assert.True(first.IsAcquired && second.IsAcquired);
+        using (var first = provider.GetRequiredKeyedService<PlanQuoteConcurrencyLimiter>(DataExportConcurrencyFilter.LimiterKey).TryEnter("tenant:a"))
+        using (var second = provider.GetRequiredKeyedService<PlanQuoteConcurrencyLimiter>(DataExportConcurrencyFilter.LimiterKey).TryEnter("tenant:a"))
+            Assert.True(first.IsAcquired && !second.IsAcquired);
 
         var program = File.ReadAllText(Path.Combine(BackendRoot(), "Odip.Api", "Program.cs"));
-        Assert.Contains("AddKeyedSingleton(Odip.Api.RateLimiting.DataExportConcurrencyFilter.LimiterKey", program);
+        Assert.Contains("AddKeyedSingleton(Odip.Api.RateLimiting.DataExportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.DataExportConcurrencyFilter.PermitsPerOrganisation))", program);
         Assert.Contains("AddScoped<Odip.Api.RateLimiting.DataExportConcurrencyFilter>()", program);
     }
 

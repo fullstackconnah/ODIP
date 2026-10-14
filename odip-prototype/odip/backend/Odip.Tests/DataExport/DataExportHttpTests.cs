@@ -199,8 +199,15 @@ public class DataExportHttpTests
     [Fact]
     public async Task The_organisations_slot_is_free_again_after_the_client_cancels_a_download()
     {
-        var release = new ManualResetEventSlim();
-        await using var host = await Host.StartAsync(new OnVehicle(_ => release.Wait(TimeSpan.FromSeconds(20))));
+        // The first export is held at its vehicles until the server itself has seen the client go. Released any earlier, the rest of a small
+        // ZIP fits in the socket buffers, the export finishes and is recorded: TCP can't tell a client that left from one that got every byte.
+        var holdFirst = true;
+        await using var host = await Host.StartAsync(new OnVehicle(_ =>
+        {
+            if (!holdFirst) return;
+            holdFirst = false;
+            new HttpContextAccessor().HttpContext!.RequestAborted.WaitHandle.WaitOne(TimeSpan.FromSeconds(20));
+        }));
         var tenantId = await host.SeedAsync("Sunrise Care");
 
         using (var cancelled = new CancellationTokenSource())
@@ -212,10 +219,12 @@ public class DataExportHttpTests
             Assert.Equal(HttpStatusCode.OK, running.StatusCode); // it holds the slot
             cancelled.Cancel(); // the browser tab is closed mid-download
         }
-        release.Set(); // the export carries on, finds the client gone, and ends
 
         using var next = await host.ExportOnceTheSlotIsFreeAsync(tenantId);
         Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+        // The cancel was seen: the cancelled export logged the client going away and wrote no row; only the next one did.
+        Assert.Contains(host.Logs, l => l.Category == typeof(DataExportController).FullName && l.Level == LogLevel.Information && l.Message.Contains("stopped: the client went away"));
+        Assert.Single(await host.ExportRowsEventuallyAsync(tenantId));
     }
 
     [Theory]
