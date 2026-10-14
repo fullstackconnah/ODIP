@@ -11,6 +11,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -140,7 +141,7 @@ public class EmploymentHeroController : ControllerBase
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
     }
 
-    /// <summary>The Link picker: the EH employees nobody in this organisation is linked to. Read live from EH; nothing is stored.</summary>
+    /// <summary>The Link picker: the current EH employees nobody in this organisation is linked to (an ended record would be archived at the next sync). Read live from EH; nothing is stored.</summary>
     [HttpGet("employees")]
     public async Task<ActionResult<ApiResponse<List<EmploymentHeroEmployeeDto>>>> UnlinkedEmployees(CancellationToken ct)
     {
@@ -157,7 +158,9 @@ public class EmploymentHeroController : ControllerBase
         }
 
         var linked = (await _db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null).Select(u => u.ExternalPayrollId!).ToListAsync(ct)).ToHashSet();
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
         return Ok(ApiResponse<List<EmploymentHeroEmployeeDto>>.Ok(employees
+            .Where(e => !EmploymentHeroStaffSync.IsLeaver(e, today))
             .Select(e => new EmploymentHeroEmployeeDto(e.Id.ToString(CultureInfo.InvariantCulture), $"{e.FirstName} {e.Surname}".Trim(), e.EmailAddress))
             .Where(e => !linked.Contains(e.Id))
             .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList()));
@@ -177,14 +180,18 @@ public class EmploymentHeroController : ControllerBase
         if (await _db.Users.AnyAsync(u => u.TenantId == tenantId && u.ExternalPayrollId == employeeId, ct))
             return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in ODIP."));
         if (await SavedKeyAsync(tenantId, ct) is not { } saved) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.KeyUnreadableMessage));
+        EhEmployee employee;
         try
         {
-            await _client.GetEmployeeAsync(saved.Key, saved.BusinessId, employeeId, ct);
+            employee = await _client.GetEmployeeAsync(saved.Key, saved.BusinessId, employeeId, ct);
         }
         catch (EmploymentHeroException ex)
         {
             return Refused(ex);
         }
+        // The next sync would archive a current person linked to an ended record.
+        if (EmploymentHeroStaffSync.IsLeaver(employee, await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct)))
+            return BadRequest(ApiResponse<EmploymentHeroStatusDto>.Fail("Employment Hero has ended that employee's employment, so they can't be linked. Choose their current record."));
 
         person.ExternalPayrollId = employeeId;
         _db.EmploymentHeroAttentions.Remove(item);

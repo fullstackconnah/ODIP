@@ -407,7 +407,7 @@ public sealed class EmploymentHeroStaffSync
     private DateTime Now() => _clock.GetUtcNow().UtcDateTime;
     private static string Id(EhEmployee e) => e.Id.ToString(CultureInfo.InvariantCulture);
     /// <summary>A leaver's end date has passed in the organisation's own today: their last day is still a working day.</summary>
-    private static bool IsLeaver(EhEmployee e, DateOnly today) => e.EndDate is { } end && DateOnly.FromDateTime(end) < today;
+    public static bool IsLeaver(EhEmployee e, DateOnly today) => e.EndDate is { } end && DateOnly.FromDateTime(end) < today;
     private static string NameKey(string? first, string? last) => $"{first?.Trim()} {last?.Trim()}".ToLowerInvariant();
     private static string Display(EhEmployee e) => $"{e.FirstName?.Trim()} {e.Surname?.Trim()}".Trim() is { Length: > 0 } name ? name : $"Employee {Id(e)}";
     private static string? EmailOf(EhEmployee e) => string.IsNullOrWhiteSpace(e.EmailAddress) ? null : EmailIdentity.Normalise(e.EmailAddress);

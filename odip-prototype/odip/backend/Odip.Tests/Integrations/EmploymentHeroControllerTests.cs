@@ -343,4 +343,32 @@ public class EmploymentHeroControllerTests
 
         Assert.Equal((409, "That Employment Hero employee is already linked to someone in ODIP."), Refusal(result));
     }
+
+    [Fact]
+    public async Task The_picker_leaves_out_employees_whose_employment_has_ended()
+    {
+        var (db, tenant, _, _) = await WaitingJaneAsync();
+        await using var __ = db;
+        var eh = Eh(Employee(301, "Jane", "Smith", "jane.smith@acme.org.au"), Employee(302, "Jane", "Smith", "jane.old@acme.org.au", null, "2025-03-31T00:00:00"),
+            Employee(303, "Jo", "Lee", "jo@acme.org.au", null, "2026-10-14T00:00:00"));   // 303's last day is today: still current
+
+        var employees = Data(await Controller(db, tenant, eh).UnlinkedEmployees(CancellationToken.None));
+
+        Assert.Equal(new[] { "301", "303" }, employees.Select(e => e.Id).OrderBy(id => id));
+    }
+
+    [Fact]
+    public async Task Link_refuses_an_employee_whose_employment_has_ended()
+    {
+        var (db, tenant, jane, item) = await WaitingJaneAsync();
+        await using var _ = db;
+        var eh = new StubHttpHandler().On("/api/v2/business/777/employee/302/details", HttpStatusCode.OK,
+            Employee(302, "Jane", "Smith", "jane.old@acme.org.au", null, "2025-03-31T00:00:00"));
+
+        var result = await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("302"), CancellationToken.None);
+
+        Assert.Equal((400, "Employment Hero has ended that employee's employment, so they can't be linked. Choose their current record."), Refusal(result));
+        Assert.Null(jane.ExternalPayrollId);
+        Assert.Single(db.EmploymentHeroAttentions);
+    }
 }
