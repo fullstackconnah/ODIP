@@ -11,6 +11,7 @@ const http = require('http')
 const planPricing = require('./planPricing')
 const planApproval = require('./planApproval')
 const fundingModule = require('./funding')
+const intakeBookingModule = require('./intakeBooking')
 const rosterBudgetModule = require('./rosterBudget')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
@@ -2321,11 +2322,14 @@ const funding = fundingModule.create({
   respond, people: participants,
   priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
 })
+// Intake booking: the booking fields on the enquiry feed, its writes and GET intake-visits. See intakeBooking.js.
+const intake = intakeBookingModule.create({ respond, failEnvelope, enquiryFeed })
 // Budget phase 3: the roster's budget check, the shifts that carry the over-budget markers and the Admin's review task. See rosterBudget.js for the switches.
 const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
 const routes = [
   ...funding.get,
+  ...intake.get,
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
@@ -2346,7 +2350,7 @@ const routes = [
   // Honours the filters the Active participants tab sends (Active = isActive=true, Archived = isActive=false, both isDraft=false); the fixtures here have no drafts.
   ['participants', (searchParams) => paged(participants.filter((p) =>
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
-  ['inquiries', () => enquiryFeed],
+  ['inquiries', () => intake.feed()],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
   ['inquiries/:id/onboarding', (id) => {
     const budget = funding.budgetStatus(id)
@@ -2589,6 +2593,7 @@ const routes = [
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
   ...funding.post,
+  ...intake.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
     if (!body.periodFrom || !body.periodTo || body.periodFrom > body.periodTo) return respond(400, failEnvelope(null, ['The agreement period ends before it starts.']))
@@ -2764,6 +2769,7 @@ const postRoutes = [
 const putRoutes = [
   ...packageRoutesPut,
   ...funding.put,
+  ...intake.put,
   // A claim's status and notes, and, with a rejection, the NDIA's code (budget phase 2b: at most 10 characters, and only with a claim that is being marked Rejected). Kept in the fixture, so the next
   // GET shows it. A claim that stops being rejected forgets the moment and the code, as the server's does.
   ['claims/:id', (id, body) => {
@@ -3074,7 +3080,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete]) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           sendResult(res, handler(...params, body))
