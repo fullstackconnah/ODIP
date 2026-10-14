@@ -60,7 +60,6 @@ public sealed class AgreementRenewalService
 
         // The term (D2): a change saved as a revision covers only its last weeks and keeps the end, so the term starts at the earliest approved revision ending on that day.
         var termStart = revisions.Where(r => r.Approved && r.AgreementEndDate == source.AgreementEndDate).Min(r => r.AgreementStartDate);
-        var length = source.AgreementEndDate.DayNumber - termStart.DayNumber + 1;
         var start = source.AgreementEndDate.AddDays(1);
 
         // The participant's plan covering the first day (D7). Plans never overlap; the order only makes the answer certain.
@@ -69,7 +68,7 @@ public sealed class AgreementRenewalService
             .OrderBy(p => p.PlanStart).FirstOrDefaultAsync(ct);
         if (plan is null)
             return new RenewalOutcome(null, new[] { string.Create(CultureInfo.InvariantCulture, $"Record the new plan first: no plan of the participant's covers {start:yyyy-MM-dd}, the day the renewal starts.") }, PlanNeeded: true);
-        var end = new[] { start.AddDays(length - 1), plan.PlanEnd, start.AddDays(PlanPricingEngine.MaxPeriodDays - 1) }.Min();
+        var end = new[] { SameLengthEnd(termStart, source.AgreementEndDate, start), plan.PlanEnd, start.AddDays(PlanPricingEngine.MaxPeriodDays - 1) }.Min();
 
         var blocks = source.Blocks.OrderBy(b => b.Position).Select(DraftJson.ToDto).ToList();
         if (blocks.Count == 0 || blocks.Any(b => b.Unreadable))
@@ -81,5 +80,16 @@ public sealed class AgreementRenewalService
             Representative = source.Representative, Blocks = blocks, BaseVersion = source.Version,
         }, actor, ct);
         return new RenewalOutcome(saved.Draft, saved.Errors, saved.NotFound, saved.ConflictVersion);
+    }
+
+    /// <summary>
+    /// The last day of a term as long as termStart to termEnd, starting on <paramref name="start"/>. A term of whole calendar months (a year, say) runs for the same months, so a year stays a year
+    /// across 29 February; any other term runs for the same number of days (fix round 1, deep S1).
+    /// </summary>
+    public static DateOnly SameLengthEnd(DateOnly termStart, DateOnly termEnd, DateOnly start)
+    {
+        var next = termEnd.AddDays(1);
+        var months = (next.Year - termStart.Year) * 12 + next.Month - termStart.Month;
+        return months > 0 && termStart.AddMonths(months) == next ? start.AddMonths(months).AddDays(-1) : start.AddDays(termEnd.DayNumber - termStart.DayNumber);
     }
 }

@@ -189,4 +189,14 @@ public class AgreementRenewalServiceTests
         var draft = await AddRevisionAsync(unapproved, 1, new[] { WeekdayBlock() }, end: Nov22);
         Assert.Equal("This agreement is not approved for rostering yet, so there is nothing to renew.", Assert.Single((await RenewAsync(unapproved, draft)).Errors));
     }
+
+    /// <summary>Fix round 1 (deep S1): a term of whole calendar months renews for the same months, so a year stays a year across 29 February; any other term keeps its length in days.</summary>
+    [Theory]
+    [InlineData("2027-07-01", "2028-06-30", "2028-07-01", "2029-06-30")]   // 366 days, holding 29 Feb 2028: a year, not a year and a day
+    [InlineData("2027-01-01", "2027-12-31", "2028-01-01", "2028-12-31")]   // 365 days into a leap year: a year, not a day short
+    [InlineData("2027-03-01", "2027-05-31", "2027-06-01", "2027-08-31")]   // three months, 92 days, into 92 days
+    [InlineData("2026-10-12", "2026-11-22", "2026-11-23", "2027-01-03")]   // 42 days, not whole months: 42 days again
+    [InlineData("2028-01-31", "2028-02-29", "2028-03-01", "2028-03-30")]   // 30 days that only look like a month: days
+    public void A_term_of_whole_months_renews_for_the_same_months_and_any_other_for_the_same_days(string termStart, string termEnd, string start, string expected) =>
+        Assert.Equal(DateOnly.Parse(expected), AgreementRenewalService.SameLengthEnd(DateOnly.Parse(termStart), DateOnly.Parse(termEnd), DateOnly.Parse(start)));
 }
