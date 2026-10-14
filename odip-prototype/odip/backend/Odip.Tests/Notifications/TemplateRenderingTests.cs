@@ -61,6 +61,22 @@ public class TemplateRenderingTests
         Assert.Contains("https://odip.test/portal", message.HtmlBody);
     }
 
+    /// <summary>Publish week tells each worker once (roster drag and drop fix round 1): one email listing every shift of theirs it published.</summary>
+    [Fact]
+    public void ShiftAssignedTemplate_WithSeveralShifts_ListsEveryShiftInOneEmail()
+    {
+        var payload = new ShiftAssignedPayload("worker@example.com", "Alice Participant", new DateOnly(2026, 9, 14), new TimeOnly(9, 0), new TimeOnly(15, 0),
+            new[] { new ShiftAssignedLine("Bob Participant", new DateOnly(2026, 9, 20), new TimeOnly(16, 0), new TimeOnly(20, 0)) });
+        var message = ShiftAssignedTemplate.Render(payload, BaseUrl);
+
+        Assert.Equal("worker@example.com", message.RecipientAddress);
+        Assert.Equal("New shifts: 2 shifts from 14 Sep 2026", message.Subject);
+        Assert.Equal(
+            "You've been assigned 2 shifts:\n- Alice Participant, 14 Sep 2026 9:00 AM to 3:00 PM\n- Bob Participant, 20 Sep 2026 4:00 PM to 8:00 PM\n\nView them: https://odip.test/portal",
+            message.PlainTextBody);
+        Assert.Contains("<li>Bob Participant, 20 Sep 2026 4:00 PM to 8:00 PM</li>", message.HtmlBody);
+    }
+
     /// <summary>
     /// Regression guard for the deploy failure: en-AU (the dev machine's culture) abbreviates
     /// September as "Sept", while the container's invariant globalization renders "Sep" — a

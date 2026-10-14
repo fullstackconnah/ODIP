@@ -41,6 +41,17 @@ public class TemplateHtmlEncodingTests
     }
 
     [Fact]
+    public void ShiftAssignedTemplate_WithSeveralShifts_EncodesEveryParticipantName()
+    {
+        var payload = new ShiftAssignedPayload("worker@example.com", "Plain Name", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(17, 0),
+            new[] { new ShiftAssignedLine(Payload, new DateOnly(2026, 9, 16), new TimeOnly(9, 0), new TimeOnly(17, 0)) });
+        var message = ShiftAssignedTemplate.Render(payload, BaseUrl);
+
+        Assert.DoesNotContain("<script>", message.HtmlBody);
+        Assert.Contains(Encoded, message.HtmlBody);
+    }
+
+    [Fact]
     public void ShiftAssignedTemplate_EncodesParticipantName()
     {
         var payload = new ShiftAssignedPayload(

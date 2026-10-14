@@ -482,7 +482,12 @@ public class RosterBoardDragDropTests
         foreach (var id in new[] { monday.Id, tuesday.Id, sunday.Id }) Assert.Equal(ShiftStatus.Published, (await Reload(db, id)).Status);
         Assert.Equal(ShiftStatus.Cancelled, (await Reload(db, cancelled.Id)).Status);
         Assert.Equal(ShiftStatus.Draft, (await Reload(db, nextWeek.Id)).Status);
-        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, sam.Id), (NotificationEventType.ShiftAssigned, sam.Id) }, await Notices(db));
+        // One email for Sam, not one per shift (fix round 1), naming Monday and Sunday.
+        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, sam.Id) }, await Notices(db));
+        var payload = (await db.NotificationOutbox.SingleAsync()).PayloadJson;
+        Assert.Contains("2026-08-24", payload);
+        Assert.Contains("2026-08-30", payload);
+        Assert.Contains("16:00", payload);
         _ = alreadyOut;   // already Published: nobody is told again
     }
 

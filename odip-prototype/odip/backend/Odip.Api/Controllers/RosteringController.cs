@@ -830,15 +830,32 @@ public class RosteringController : ControllerBase
             var skipped = 0;
             foreach (var shift in drafts)
             {
-                // shortcut: only a lapsed screening is re-checked (the one Blocking rule today), and each notice looks its names up alone; check every filled draft again if another
-                // Blocking rule is added, and bulk-load the names as GetBoard does if a week ever holds thousands of drafts.
+                // shortcut: only a lapsed screening is re-checked (the one Blocking rule today); check every filled draft again if another Blocking rule is added.
                 var mayBeBlocked = shift.UserId is { } worker && screeningExpiry.GetValueOrDefault(worker) is { } expiry && expiry < shift.ServiceDate;
                 if (mayBeBlocked && (await CheckAsync(shift, shift.Id, ct)).Any(f => f.Severity == RosterFindingSeverity.Blocking)) { skipped++; continue; }
                 shift.Status = ShiftStatus.Published;
                 shift.UpdatedAt = DateTime.UtcNow;
-                // A shift whose day has gone is published for the record, but nobody is told about it now.
-                if (shift.ServiceDate >= today) await NotifyStaffChangeAsync(shift, shift.UserId, wasPublished: false, ct);
                 published.Add(shift);
+            }
+
+            // One notice per worker, listing every shift of theirs this publish put out, earliest first (fix round 1). A shift whose day has gone is published for the
+            // record, but nobody is told about it now.
+            var toTell = published.Where(s => s.UserId.HasValue && s.ServiceDate >= today).GroupBy(s => s.UserId!.Value).ToList();
+            var participantIds = published.Select(s => s.ParticipantId).Distinct().ToList();
+            var toTellIds = toTell.Select(g => g.Key).ToList();
+            var participantNames = await _db.Participants.Where(p => participantIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+            var emails = await _db.Users.Where(u => toTellIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Email, ct);
+            foreach (var worker in toTell)
+            {
+                if (!emails.TryGetValue(worker.Key, out var email)) continue;
+                var shifts = worker.OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ToList();
+                string NameOf(Shift s) => participantNames.GetValueOrDefault(s.ParticipantId) ?? "a participant";
+                var first = shifts[0];
+                await _notificationRaiser.RaiseAsync(
+                    Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", first.Id, new[] { worker.Key },
+                    new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(email, NameOf(first), first.ServiceDate, first.StartTime, first.EndTime,
+                        shifts.Skip(1).Select(s => new Odip.Infrastructure.Notifications.Templates.ShiftAssignedLine(NameOf(s), s.ServiceDate, s.StartTime, s.EndTime)).ToList()), ct);
             }
 
             await _db.SaveChangesAsync(ct);
@@ -846,7 +863,7 @@ public class RosteringController : ControllerBase
             return Ok(ApiResponse<PublishWeekResultDto>.Ok(new PublishWeekResultDto
             {
                 Published = published.Count,
-                Notified = published.Where(s => s.UserId.HasValue && s.ServiceDate >= today).Select(s => s.UserId).Distinct().Count(),
+                Notified = toTell.Count(g => emails.ContainsKey(g.Key)),
                 Unfilled = published.Count(s => s.UserId is null),
                 Skipped = skipped,
             }));
