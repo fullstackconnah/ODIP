@@ -349,6 +349,19 @@ public record MoveStaffDto
     public List<string>? AcknowledgedFindingCodes { get; init; }
 }
 
+/// <summary>What <c>POST /weeks/{weekStart}/publish</c> did (roster drag and drop, 2026-10-14).</summary>
+public record PublishWeekResultDto
+{
+    /// <summary>Draft shifts now Published, unfilled ones included.</summary>
+    public int Published { get; init; }
+    /// <summary>How many different workers were told about their shifts.</summary>
+    public int Notified { get; init; }
+    /// <summary>Of the published shifts, those nobody works yet: published as needing staff.</summary>
+    public int Unfilled { get; init; }
+    /// <summary>Drafts left as Draft because their worker now has a Blocking finding (a PUT publishing one of them alone is refused too).</summary>
+    public int Skipped { get; init; }
+}
+
 /// <summary>Dry-run input for <c>POST /shifts/check</c> — the same shape as a candidate shift, minus persistence fields.</summary>
 public record CheckShiftDto
 {

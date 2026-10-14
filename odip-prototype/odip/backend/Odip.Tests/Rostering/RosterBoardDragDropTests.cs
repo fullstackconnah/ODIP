@@ -57,7 +57,7 @@ public class RosterBoardDragDropTests
             WorkerScreeningNumber = "WSC-1", WorkerScreeningExpiryDate = screeningValid ? new DateOnly(2030, 1, 1) : new DateOnly(2020, 1, 1),
         };
         db.Users.Add(user);
-        db.SaveChanges();
+        db.SaveChangesAsync().GetAwaiter().GetResult();   // the async save is the one that stamps TenantId on a tenant context
         return user;
     }
 
@@ -66,7 +66,7 @@ public class RosterBoardDragDropTests
         // Active and not a draft: can receive services, so Warn-mode readiness lets a placement through.
         var participant = new Participant { Id = Guid.NewGuid(), FirstName = first, LastName = last, IsActive = true };
         db.Participants.Add(participant);
-        db.SaveChanges();
+        db.SaveChangesAsync().GetAwaiter().GetResult();
         return participant;
     }
 
@@ -79,7 +79,7 @@ public class RosterBoardDragDropTests
             Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = status,
         };
         db.Shifts.Add(shift);
-        db.SaveChanges();
+        db.SaveChangesAsync().GetAwaiter().GetResult();
         return shift;
     }
 
@@ -451,5 +451,131 @@ public class RosterBoardDragDropTests
         using var all = TestDb.Create(dbName);
         Assert.Null((await all.Shifts.SingleAsync(s => s.Id == to.Id)).UserId);
         Assert.NotNull((await all.Shifts.SingleAsync(s => s.Id == from.Id)).UserId);
+    }
+
+    // ── Publish week ──
+
+    [Fact]
+    public async Task PublishWeek_PublishesEveryDraftOfTheWeek_UnfilledToo_AndTellsEachWorker()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(dbName, tenant);
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var mia = SeedParticipant(db);
+        var jo = SeedParticipant(db, "Jo", "Park");
+        var monday = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        var tuesday = SeedShift(db, jo.Id, null, ShiftStatus.Draft, day: Monday.AddDays(1));
+        var sunday = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(6), startHour: 16, endHour: 20);
+        var alreadyOut = SeedShift(db, jo.Id, alex.Id, ShiftStatus.Published, day: Monday.AddDays(3));
+        var cancelled = SeedShift(db, jo.Id, alex.Id, ShiftStatus.Cancelled, day: Monday.AddDays(4));
+        var nextWeek = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(7));
+
+        // Any day of the week names the week: here, its Wednesday.
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday.AddDays(2), default));
+
+        Assert.Equal(3, result.Published);
+        Assert.Equal(1, result.Notified);        // Sam, on two shifts
+        Assert.Equal(1, result.Unfilled);
+        Assert.Equal(0, result.Skipped);
+        foreach (var id in new[] { monday.Id, tuesday.Id, sunday.Id }) Assert.Equal(ShiftStatus.Published, (await Reload(db, id)).Status);
+        Assert.Equal(ShiftStatus.Cancelled, (await Reload(db, cancelled.Id)).Status);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, nextWeek.Id)).Status);
+        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, sam.Id), (NotificationEventType.ShiftAssigned, sam.Id) }, await Notices(db));
+        _ = alreadyOut;   // already Published: nobody is told again
+    }
+
+    [Fact]
+    public async Task PublishWeek_LeavesAnotherTenantsDraftsAlone()   // Review Focus 5
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift theirs;
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) theirs = SeedShift(other, SeedParticipant(other).Id, SeedStaff(other).Id, ShiftStatus.Draft);
+        using var db = TestDb.ForTenant(dbName, ours);
+
+        var result = Body(await Controller(db, ours).PublishWeek(Monday, default));
+
+        Assert.Equal(0, result.Published);
+        using var all = TestDb.Create(dbName);
+        Assert.Equal(ShiftStatus.Draft, (await all.Shifts.SingleAsync(s => s.Id == theirs.Id)).Status);
+        Assert.Empty(await all.NotificationOutbox.ToListAsync());
+    }
+
+    [Fact]
+    public async Task PublishWeek_WithoutATenant_Is400()   // Review Focus 5: a SuperAdmin who has not chosen an organisation
+    {
+        using var db = TestDb.Create();
+        var draft = SeedShift(db, SeedParticipant(db).Id, SeedStaff(db).Id, ShiftStatus.Draft);
+
+        var result = await Controller(db).PublishWeek(Monday, default);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, draft.Id)).Status);
+    }
+
+    [Fact]
+    public async Task PublishWeek_SkipsADraftWhoseWorkerIsBlocked_AndAParticipantTheBoardDoesNotShow()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(dbName, tenant);
+        var lapsed = SeedStaff(db, "Lee", "Kim", screeningValid: false);   // WSC_EXPIRED: Blocking
+        var blocked = SeedShift(db, SeedParticipant(db).Id, lapsed.Id, ShiftStatus.Draft);
+        var gone = SeedParticipant(db, "Ivy", "Hall");
+        gone.IsActive = false;                                              // not on the board, so not published
+        db.SaveChanges();
+        var hidden = SeedShift(db, gone.Id, null, ShiftStatus.Draft);
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default));
+
+        Assert.Equal(0, result.Published);
+        Assert.Equal(1, result.Skipped);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, blocked.Id)).Status);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, hidden.Id)).Status);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task PublishWeek_SkipsOnlyTheDraftsAfterTheWorkersScreeningLapses()   // S3: the expiry is compared with each shift's own day
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(dbName, tenant);
+        var lee = SeedStaff(db, "Lee", "Kim");
+        lee.WorkerScreeningExpiryDate = Monday.AddDays(2);                  // lapses on Wednesday
+        db.SaveChanges();
+        var mia = SeedParticipant(db);
+        var monday = SeedShift(db, mia.Id, lee.Id, ShiftStatus.Draft, day: Monday);
+        var friday = SeedShift(db, mia.Id, lee.Id, ShiftStatus.Draft, day: Monday.AddDays(4));
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default));
+
+        Assert.Equal(1, result.Published);
+        Assert.Equal(1, result.Skipped);
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, monday.Id)).Status);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, friday.Id)).Status);
+    }
+
+    [Fact]
+    public async Task PublishWeek_PublishesDraftsBeforeToday_ButTellsOnlyTheWorkersOfTodayOn()   // N7
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(dbName, tenant);
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var monday = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        var thursday = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(3));
+        // Wednesday 26 August, midday in every Australian zone: Monday has gone, Thursday has not.
+        var wednesday = new FixedClock(new DateTimeOffset(2026, 8, 26, 2, 0, 0, TimeSpan.Zero));
+
+        var result = Body(await Controller(db, tenant, wednesday).PublishWeek(Monday, default));
+
+        Assert.Equal(2, result.Published);
+        Assert.Equal(1, result.Notified);
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, monday.Id)).Status);
+        Assert.Equal(thursday.Id, (await db.NotificationOutbox.SingleAsync()).EntityId);
     }
 }

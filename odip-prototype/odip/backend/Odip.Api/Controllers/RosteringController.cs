@@ -776,6 +776,67 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
+    /// Publish week (roster drag and drop, 2026-10-14): every Draft shift of the organisation in the Monday-start week holding <paramref name="weekStart"/>, for every participant the board
+    /// shows, unfilled ones too, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A filled Draft whose worker now has a Blocking finding stays
+    /// Draft and is counted as skipped, as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
+    /// tells nobody twice.
+    /// </summary>
+    [HttpPost("weeks/{weekStart}/publish")]
+    public async Task<ActionResult<ApiResponse<PublishWeekResultDto>>> PublishWeek(DateOnly weekStart, CancellationToken ct)
+    {
+        // A SuperAdmin who has not chosen an organisation has no tenant filter: a publish then would reach every organisation's week.
+        if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<PublishWeekResultDto>.Fail("Choose an organisation to publish its week."));
+        var start = WeekStart(weekStart);
+        var end = start.AddDays(6);
+        try
+        {
+            await using var held = await RosterBoardLockAsync(ct);
+            if (_db.Database.IsNpgsql())
+                // Hold the week's Draft rows until this commits, then read them. A PUT never takes the roster-board lock: one that cancels a draft now waits for the publish, and one that
+                // committed first is read below as it is, so a publish never writes Published over it.
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT 1 FROM \"Shifts\" WHERE \"TenantId\" = {tenantId} AND \"Status\" = {(int)ShiftStatus.Draft} AND \"ServiceDate\" >= {start} AND \"ServiceDate\" <= {end} FOR UPDATE", ct);
+            var shown = _db.Participants.Where(Participant.CanReceiveServicesRule).Select(p => p.Id);
+            var drafts = await _db.Shifts
+                .Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && shown.Contains(s.ParticipantId))
+                .ToListAsync(ct);
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+            // WSC_EXPIRED is the engine's only Blocking finding, so only a draft whose worker's screening has lapsed by its day needs the full roster check: one query for every worker.
+            var workerIds = drafts.Where(s => s.UserId.HasValue).Select(s => s.UserId!.Value).Distinct().ToList();
+            var screeningExpiry = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.WorkerScreeningExpiryDate, ct);
+
+            var published = new List<Shift>();
+            var skipped = 0;
+            foreach (var shift in drafts)
+            {
+                // shortcut: only a lapsed screening is re-checked (the one Blocking rule today), and each notice looks its names up alone; check every filled draft again if another
+                // Blocking rule is added, and bulk-load the names as GetBoard does if a week ever holds thousands of drafts.
+                var mayBeBlocked = shift.UserId is { } worker && screeningExpiry.GetValueOrDefault(worker) is { } expiry && expiry < shift.ServiceDate;
+                if (mayBeBlocked && (await CheckAsync(shift, shift.Id, ct)).Any(f => f.Severity == RosterFindingSeverity.Blocking)) { skipped++; continue; }
+                shift.Status = ShiftStatus.Published;
+                shift.UpdatedAt = DateTime.UtcNow;
+                // A shift whose day has gone is published for the record, but nobody is told about it now.
+                if (shift.ServiceDate >= today) await NotifyStaffChangeAsync(shift, shift.UserId, wasPublished: false, ct);
+                published.Add(shift);
+            }
+
+            await _db.SaveChangesAsync(ct);
+            await held.CommitAsync(ct);
+            return Ok(ApiResponse<PublishWeekResultDto>.Ok(new PublishWeekResultDto
+            {
+                Published = published.Count,
+                Notified = published.Where(s => s.UserId.HasValue && s.ServiceDate >= today).Select(s => s.UserId).Distinct().Count(),
+                Unfilled = published.Count(s => s.UserId is null),
+                Skipped = skipped,
+            }));
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<PublishWeekResultDto>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>
     /// Read-only shift notes for the roster slide-over (NOTES-01) — coordinators/admins read
     /// via this surface; only the assigned support worker creates/edits their own, through
     /// PortalController. Newest first.
