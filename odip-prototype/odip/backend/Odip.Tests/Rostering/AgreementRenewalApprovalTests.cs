@@ -114,4 +114,25 @@ public class AgreementRenewalApprovalTests
         Assert.All(made.Where(entry => entry.Key != DayOfWeek.Tuesday), entry => Assert.Equal((Guid?)ben, entry.Value));
         Assert.Empty(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId != renewal.Id && (p.EffectiveTo == null || p.EffectiveTo > Nov22)).ToListAsync());
     }
+
+    /// <summary>Fix round 2 (CR-A nit): a renewal where one old pattern is open (EffectiveTo null, as a legacy pattern can be) and the rest end the day before. The open one is ended and carried by PR 1's
+    /// carry-over, and the rest still hand on their default worker (D12): the open pattern must not switch the hand-on off for every other support.</summary>
+    [Fact]
+    public async Task With_one_old_pattern_open_the_others_still_hand_on_their_default_worker()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
+        await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        var ben = await UserAsync(f, "Ben", active: true);
+        foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
+        (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Monday)).EffectiveTo = null;
+        await f.Db.SaveChangesAsync();
+        var renewal = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: Nov23, end: Jan3);
+
+        var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, renewal.Id, false, Admin, CancellationToken.None);
+
+        Assert.Equal(1, outcome.Approval!.PatternsEnded);                                                  // the open Monday, ended the day before
+        var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == renewal.Id).ToDictionaryAsync(p => p.DayOfWeek, p => p.DefaultUserId);
+        Assert.All(made.Values, user => Assert.Equal((Guid?)ben, user));
+    }
 }

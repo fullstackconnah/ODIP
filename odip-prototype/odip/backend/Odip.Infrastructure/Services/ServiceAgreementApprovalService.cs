@@ -416,9 +416,9 @@ public sealed class ServiceAgreementApprovalService
             // An approval locks the old shifts before it reads any of them: the carry-over and the removal then both decide on what is committed.
             if (approving) await LockOldShiftsAsync(old.Select(p => p.Id).ToArray(), draft.AgreementStartDate > plan.Today ? draft.AgreementStartDate : plan.Today, ct);
             await CarryOverAsync(draft, plan, ct);
-            // A renewal ends nothing, so the carry-over had nothing to match; only then do the patterns ending the day before it hand on their default workers (D12). A renewal always ends
-            // nothing: only the newest revision is approved, each approval ends every earlier pattern past its start, and the roster cannot move an agreement pattern's dates.
-            if (plan.ToEnd.Count == 0) await CarryDefaultsIntoRenewalAsync(plan, old, versionOf, ct);
+            // A renewal ends no dated pattern: only the newest revision is approved, each approval ends every earlier pattern past its start, and the roster cannot move an agreement pattern's dates.
+            // So when the carry-over ended nothing, or only open patterns (a legacy pattern with no end, fix round 2), the patterns ending the day before hand on their default workers (D12).
+            if (plan.ToEnd.All(p => p.EffectiveTo is null)) await CarryDefaultsIntoRenewalAsync(plan, old, versionOf, ct);
             if (!approving) plan.HandEdited = await HandEditedAsync(plan, ct);
             (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, plan.ToCarry.Select(s => s.Id).ToHashSet());
             plan.OldShifts = plan.OldShifts with { Carried = plan.ToCarry.Count };
@@ -508,7 +508,8 @@ public sealed class ServiceAgreementApprovalService
         var taken = new HashSet<(Guid Made, Guid Source)>();
         foreach (var ended in endingBefore)
         {
-            if (plan.NewPatterns.FirstOrDefault(made => !taken.Contains((made.Id, ended.SourceDraftId!.Value)) && SameSupport(ended, made)) is not { } same) continue;
+            // A new pattern the carry-over already gave an open pattern's worker keeps it.
+            if (plan.NewPatterns.FirstOrDefault(made => !taken.Contains((made.Id, ended.SourceDraftId!.Value)) && !plan.CarryTo.ContainsValue(made) && SameSupport(ended, made)) is not { } same) continue;
             taken.Add((same.Id, ended.SourceDraftId!.Value));
             plan.HandedOn.Add(same);
             same.DefaultUserId = ended.DefaultUserId is { } user && active.Contains(user) ? user : null;
