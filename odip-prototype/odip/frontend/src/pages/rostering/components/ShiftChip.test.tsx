@@ -637,6 +637,9 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
       </DropStateContext.Provider>,
     )
     expect(container.querySelector('[aria-busy="true"]')).toHaveTextContent('Assigning Sam…')
+    // No action can run during the write, so the busy chip drops its actions menu and the label takes its room (finish review fix 2: "Assigning K…" at 1440).
+    expect(container.querySelector('[aria-busy="true"] button[aria-label^="Actions for"]')).toBeNull()
+    expect(container.querySelector('[aria-busy="true"] [data-shift-open]')).toHaveAccessibleName(/Assigning Sam…/)
     expect(container.querySelector('[data-shift-open="from"]')?.parentElement).toHaveClass('opacity-50')
     expect(screen.getByRole('button', { name: 'Drag to move Sam Wilson to another shift or day' })).toHaveAttribute('aria-disabled', 'true')
   })

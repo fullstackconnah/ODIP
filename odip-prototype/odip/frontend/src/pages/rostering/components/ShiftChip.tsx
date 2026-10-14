@@ -361,7 +361,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         </span>
       )}
 
-      {canWrite && (
+      {/* Not while a drop on this shift is out: no action can run during the write, and "Assigning {name}…" needs the room. */}
+      {canWrite && !busy && (
         // The "Actions for …" trigger is Dropdown's icon variant, which hard-codes `p-1.5 rounded-lg` (a 26px
         // square, radius 8px) and takes no className or custom trigger. This wrapper gives that one button the
         // geometry of `<Button iconOnly>` — a --control-h-sm square (24px, 36px under a coarse pointer) at
