@@ -403,6 +403,29 @@ public class RosterBoardDragDropTests
     }
 
     [Fact]
+    public async Task MoveStaff_SwapOfTwoPublishedShifts_TellsEachPersonOnAndOff()   // post-merge review N4
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Published, day: Monday);
+        var to = SeedShift(db, mia.Id, alex.Id, ShiftStatus.Published, day: Monday.AddDays(1));
+
+        Body(await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Swap), default));
+
+        // Sam: on Tuesday, off Monday. Alex: on Monday, off Tuesday. Four notices, one per change.
+        Assert.Equal(Sorted(
+            (NotificationEventType.ShiftAssigned, sam.Id), (NotificationEventType.ShiftAssigned, alex.Id),
+            (NotificationEventType.ShiftUnassigned, sam.Id), (NotificationEventType.ShiftUnassigned, alex.Id)), await Notices(db));
+        var rows = await db.NotificationOutbox.AsNoTracking().ToListAsync();
+        Assert.Contains(rows, r => r.RecipientUserId == sam.Id && r.EventType == NotificationEventType.ShiftAssigned && r.EntityId == to.Id);
+        Assert.Contains(rows, r => r.RecipientUserId == sam.Id && r.EventType == NotificationEventType.ShiftUnassigned && r.EntityId == from.Id);
+        Assert.Contains(rows, r => r.RecipientUserId == alex.Id && r.EventType == NotificationEventType.ShiftAssigned && r.EntityId == from.Id);
+        Assert.Contains(rows, r => r.RecipientUserId == alex.Id && r.EventType == NotificationEventType.ShiftUnassigned && r.EntityId == to.Id);
+    }
+
+    [Fact]
     public async Task MoveStaff_ASwapWhoseSecondHalfIsBlocked_Is422_AndLeavesBothShiftsAndTheOutboxAlone()
     {
         using var db = TestDb.Create();
