@@ -91,7 +91,10 @@ export function shownCount(model: GroupModel, gone: ReadonlySet<string>): number
   return model.count - (model.rows.length - visibleRows(model, gone).length)
 }
 
-/** On the page while waiting, failed, holding a row or holding a notice. Only a ready group with nothing left is absent, and named clear. */
+/**
+ * On the page while waiting, failed, holding a row, holding a notice, or while the server still counts rows beyond the ones decided here (every
+ * fetched row decided before the refetch lands). Only a ready group with nothing left is absent, and named clear.
+ */
 export function isPresent(model: GroupModel, gone: ReadonlySet<string>, notices: number): boolean {
-  return model.phase !== 'ready' || visibleRows(model, gone).length > 0 || notices > 0
+  return model.phase !== 'ready' || visibleRows(model, gone).length > 0 || shownCount(model, gone) > 0 || notices > 0
 }

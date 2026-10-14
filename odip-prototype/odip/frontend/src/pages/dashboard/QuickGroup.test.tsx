@@ -329,3 +329,52 @@ describe('QuickGroup — focus when a row leaves (SHAPE §10)', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Open Leave' })))
   })
 })
+
+describe('QuickGroup — fix round 1', () => {
+  it('stays with its count and See all when every fetched row was decided here but the server still counts more (deep S4)', async () => {
+    const tap = (id: string) => approve(id, async () => ({ announce: `Approved Person ${id}.` }))
+    render(<Harness model={model({ count: 3, rows: [row('a', { actions: [tap('a')] })] })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve leave: Person a' }))
+
+    await waitFor(() => expect(screen.queryByText('Person a')).not.toBeInTheDocument())
+    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See all leave requests' })).toBeInTheDocument()
+  })
+
+  it.each([409, 404])('on a %i refetches the group and announces the server words, so the row decided elsewhere resolves (N1)', async (code) => {
+    const refetch = vi.fn()
+    const run = vi.fn(async () => { throw { response: { status: code, data: { message: 'This request has already been decided.' } } } })
+    render(<Harness model={model({ count: 1, refetch, rows: [row('a', { actions: [approve('a', run)] })] })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve leave: Person a' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This request has already been decided.')
+    expect(refetch).toHaveBeenCalled()
+    expect(status()).toHaveTextContent('This request has already been decided.')
+  })
+
+  it('does not refetch on any other refusal', async () => {
+    const refetch = vi.fn()
+    const run = vi.fn(async () => { throw { response: { status: 400, data: { message: 'Nope.' } } } })
+    render(<Harness model={model({ count: 1, refetch, rows: [row('a', { actions: [approve('a', run)] })] })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve leave: Person a' }))
+
+    await screen.findByRole('alert')
+    expect(refetch).not.toHaveBeenCalled()
+  })
+
+  // jsdom has no layout, so the row's responsive contract is pinned as classes (finish 1-3; the captures measure it).
+  it('lets the meta give way first from md, and lets flags and meta wrap below md instead of crushing the subject or cutting a fact', () => {
+    render(<Harness model={model({ count: 1, rows: [row('a', { flags: [{ label: 'Overdue', tone: 'danger' }], meta: ['Budget emergency review', 'An admin signs this off'] })] })} />)
+
+    const subject = screen.getByText('Person a')
+    const subjectLine = subject.parentElement!
+    expect(subjectLine.className).not.toMatch(/md:max-w-1\/2|md:shrink-0/)
+    expect(subjectLine).toHaveClass('flex-wrap', 'md:flex-nowrap')
+    const meta = screen.getByText('Budget emergency review · An admin signs this off')
+    expect(meta).toHaveClass('md:truncate', 'md:flex-[1_1_0%]', 'md:min-w-24')
+    expect(meta.className).not.toMatch(/(^|\s)truncate(\s|$)/)
+  })
+})

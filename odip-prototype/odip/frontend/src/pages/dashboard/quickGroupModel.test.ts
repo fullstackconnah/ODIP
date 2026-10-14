@@ -52,4 +52,14 @@ describe('isPresent', () => {
     expect(isPresent(model(), gone, 0)).toBe(false)
     expect(isPresent(model(), gone, 1)).toBe(true)
   })
+
+  it('stays while the server still counts rows beyond the ones decided here: never named clear with work left', () => {
+    // 8 waiting, 5 fetched, all 5 decided before the refetch lands (or it is paused offline): 3 still wait.
+    const fetched = ['a', 'b', 'c', 'd', 'e']
+    const gone = new Set(fetched.map((id) => rowKey('leave', id)))
+    const eight = model({ count: 8, rows: fetched.map((id) => row(id)) })
+
+    expect(shownCount(eight, gone)).toBe(3)
+    expect(isPresent(eight, gone, 0)).toBe(true)
+  })
 })

@@ -30,12 +30,13 @@ function focusTargets(rowEl: HTMLElement): Array<HTMLElement | null | undefined>
 }
 
 /** A row's inline form (SHAPE §4, "An action that needs input"): under the row's line, inside the row. Its checks mirror the server's, never exceed them. */
-function RowForm({ id, form, onClose, onBusy, onDone }: {
+function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
   id: string
   form: QuickForm
   onClose: () => void
   onBusy: (busy: boolean) => void
   onDone: (outcome: ActionOutcome) => void
+  onRefused: (err: unknown, message: string) => void
 }) {
   const [value, setValue] = useState(form.initial ?? '')
   const [error, setError] = useState<string>()
@@ -56,7 +57,9 @@ function RowForm({ id, form, onClose, onBusy, onDone }: {
       onDone(await form.submit(value))
     } catch (err) {
       // The refusal shows in the field's own error slot, and the typed text stays.
-      setError(extractErrorMessage(err, form.failText))
+      const message = extractErrorMessage(err, form.failText)
+      setError(message)
+      onRefused(err, message)
       setBusy(false)
       onBusy(false)
     }
@@ -95,7 +98,11 @@ function RowForm({ id, form, onClose, onBusy, onDone }: {
 }
 
 /** One decision row (SHAPE §4, "A row"): the subject, its flags and its facts, then at most two buttons at the right edge, and its form under it when open. */
-function QuickRowView({ row, onDone }: { row: QuickRow; onDone: (outcome: ActionOutcome, rowEl: HTMLElement) => void }) {
+function QuickRowView({ row, onDone, onRefused }: {
+  row: QuickRow
+  onDone: (outcome: ActionOutcome, rowEl: HTMLElement) => void
+  onRefused: (err: unknown, message: string) => void
+}) {
   const rowRef = useRef<HTMLLIElement>(null)
   const formId = useId()
   const [tapping, setTapping] = useState(false)
@@ -129,7 +136,9 @@ function QuickRowView({ row, onDone }: { row: QuickRow; onDone: (outcome: Action
     try {
       done(await action.run())
     } catch (err) {
-      setError(extractErrorMessage(err, action.failText))
+      const message = extractErrorMessage(err, action.failText)
+      setError(message)
+      onRefused(err, message)
       setTapping(false)
     }
   }
@@ -140,13 +149,15 @@ function QuickRowView({ row, onDone }: { row: QuickRow; onDone: (outcome: Action
       <div className="flex min-h-[var(--row-h)] flex-wrap items-center gap-x-3 gap-y-1 py-1.5 md:flex-nowrap md:py-0">
         <div className="min-w-48 flex-1 md:min-w-0">
           <div className="flex min-w-0 flex-col md:flex-row md:items-center md:gap-3">
-            <div className="flex min-w-0 items-center gap-2 md:max-w-1/2 md:shrink-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 md:flex-nowrap">
               <span className="truncate text-sm font-medium text-[var(--color-foreground)]" title={row.subject}>{row.subject}</span>
               {row.flags.slice(0, 2).map((flag) => (
                 <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
               ))}
             </div>
-            {meta && <p className="min-w-0 truncate text-[13px] text-[var(--color-muted-foreground)]" title={meta}>{meta}</p>}
+            {/* From md the meta takes only the room the subject leaves, so it is cut first; below md it wraps, so a deciding fact ("An admin signs this off", a
+                due or expiry date) is never cut on a phone, where `title` shows nothing. */}
+            {meta && <p className="min-w-0 break-words text-[13px] text-[var(--color-muted-foreground)] md:min-w-24 md:flex-[1_1_0%] md:truncate" title={meta}>{meta}</p>}
           </div>
           {error && <p role="alert" className="text-xs text-[var(--color-destructive)]">{error}</p>}
         </div>
@@ -179,7 +190,7 @@ function QuickRowView({ row, onDone }: { row: QuickRow; onDone: (outcome: Action
           </div>
         )}
       </div>
-      {formOpen && formAction && <RowForm id={formId} form={formAction.form} onClose={closeForm} onBusy={setSubmitting} onDone={done} />}
+      {formOpen && formAction && <RowForm id={formId} form={formAction.form} onClose={closeForm} onBusy={setSubmitting} onDone={done} onRefused={onRefused} />}
     </li>
   )
 }
@@ -198,6 +209,14 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const count = shownCount(model, state.gone)
   const cut = ready && count > shown.length
   const notices = state.notices.filter((notice) => notice.subject === model.key)
+
+  // Decided or removed elsewhere (409, 404): say so, since the refetch may take the row and its alert line away, and refetch so the row resolves.
+  function refused(err: unknown, message: string) {
+    const status = (err as { response?: { status?: number } } | undefined)?.response?.status
+    if (status !== 404 && status !== 409) return
+    state.announce(message)
+    model.refetch()
+  }
 
   function finish(row: QuickRow, outcome: ActionOutcome, rowEl: HTMLElement) {
     if (outcome.notice) state.notify('success', outcome.notice.title, outcome.notice.message, model.key, outcome.notice.link)
@@ -220,7 +239,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
               <span aria-hidden="true">–</span>
               <span className="sr-only">{model.phase === 'loading' ? 'Loading' : "Couldn't load"}</span>
             </span>
-          ) : rows.length > 0 && (
+          ) : count > 0 && (
             <StatusBadge tone="neutral" label={String(count)} className="tabular-nums" />
           )}
         </div>
@@ -243,7 +262,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       )}
       {shown.length > 0 && (
         <ul aria-labelledby={headingId} className="divide-y divide-[var(--color-border)]">
-          {shown.map((row) => <QuickRowView key={row.id} row={row} onDone={(outcome, rowEl) => finish(row, outcome, rowEl)} />)}
+          {shown.map((row) => <QuickRowView key={row.id} row={row} onDone={(outcome, rowEl) => finish(row, outcome, rowEl)} onRefused={refused} />)}
         </ul>
       )}
       <NoticesRegion notices={notices} onDismiss={state.dismiss} focusAfterDismiss={() => linkRef.current} className="mt-2 empty:mt-0" />
