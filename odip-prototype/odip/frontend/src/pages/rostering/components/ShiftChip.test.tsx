@@ -698,7 +698,8 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
 
   it('is 18px wide on a fine pointer and a 44px square under a coarse one (the chip is 44px tall there)', () => {
     withPick(chipOf(open))
-    expect(screen.getByRole('button', { name: plusName })).toHaveClass('w-[18px]', 'pointer-coarse:w-11')
+    // The chip's 1px border leaves 42px inside a 44px chip: the stretched plus takes the border back with a -1px margin above and below (capture: 44x42 before).
+    expect(screen.getByRole('button', { name: plusName })).toHaveClass('w-[18px]', 'pointer-coarse:w-11', 'pointer-coarse:-my-px')
   })
 
   it('gives no plus to a filled, an on-leave or a locked chip, or to a reader', () => {

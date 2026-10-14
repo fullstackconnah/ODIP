@@ -229,7 +229,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           aria-expanded={picking}
           aria-disabled={dragsOff || undefined}
           onClick={() => { if (!dragsOff) pick?.(shift) }}
-          className={`flex w-[18px] shrink-0 items-center justify-center rounded-sm text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring pointer-coarse:w-11 ${
+          className={`flex w-[18px] shrink-0 items-center justify-center rounded-sm text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring pointer-coarse:-my-px pointer-coarse:w-11 ${
             dragsOff ? 'opacity-40' : 'hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)] aria-expanded:bg-[var(--color-accent)] aria-expanded:text-[var(--color-primary)]'
           }`}
         >
