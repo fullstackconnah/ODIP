@@ -304,3 +304,19 @@ export function describeSaveError(error: unknown): SaveFailure {
   if (status === 400 || status === 404) return { title: 'The draft was not saved', messages: messages.length > 0 ? [...new Set(messages.map(plain))] : ['The server refused the draft.'] }
   return { title: 'The draft was not saved', messages: ['The server could not price and save this draft. Check your connection and try again; nothing you entered is lost.'] }
 }
+
+/** The words of a renewal refused because no plan of the participant's covers its first day (409, code "plan-needed"), or null for any other failure (agreement PR 2). */
+export function planNeededMessageOf(error: unknown): string | null {
+  const response = (error as AxiosError<{ code?: string; errors?: unknown }> | undefined)?.response
+  if (response?.status !== 409 || response.data?.code !== 'plan-needed') return null
+  return messagesOf(error)[0] ?? null
+}
+
+/** What a refused renewal says. The two 409s (a newer revision, no plan for the first day) are read apart, by conflictVersionOf and planNeededMessageOf. */
+export function describeRenewError(error: unknown): SaveFailure {
+  const status = statusOf(error)
+  const messages = messagesOf(error)
+  if (status === 429) return { title: 'The server is busy', messages: ['Too many requests just now. Wait a moment and renew again.'] }
+  if ((status === 400 || status === 403 || status === 404) && messages.length > 0) return { title: 'The agreement was not renewed', messages: [...new Set(messages.map(plain))] }
+  return { title: 'The agreement was not renewed', messages: ['It could not be renewed just now. Check your connection and try again.'] }
+}

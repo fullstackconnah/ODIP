@@ -9,8 +9,8 @@ const BACKEND = resolve(__dirname, '../../../backend')
 const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
 const hasBackend = existsSync(PRICING)
 import {
-  CATEGORY_SHORT, REASON_COPY, addDays, asSentence,  categoryLabel, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, 
-   groupIssues, isPricingDate, isRefusal, issueWhere,  periodProblem,  pricedNothing,   referenceWeek,  refusals,  shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
+  CATEGORY_SHORT, REASON_COPY, addDays, asSentence,  categoryLabel, conflictVersionOf, describeQuoteError, describeRenewError, describeSaveError, formatServiceDate, friendlyMessage, 
+   groupIssues, isPricingDate, isRefusal, issueWhere,  periodProblem,  planNeededMessageOf, pricedNothing,   referenceWeek,  refusals,  shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
 } from './planQuote'
 
 const axiosError = (status: number, data: unknown = {}) => ({ response: { status, data } })
@@ -359,5 +359,25 @@ describe('when a request fails', () => {
     expect(describeQuoteError(axiosError(400, '<html>Bad gateway</html>')).title).toBe('This plan cannot be priced yet')
     expect(describeSaveError({ response: { status: 400 } }).messages).toEqual(['The server refused the draft.'])
     expect(describeSaveError(undefined).title).toBe('The draft was not saved')
+  })
+})
+
+describe('the renewal refusals (agreement PR 2)', () => {
+  const words = "Record the new plan first: no plan of the participant's covers 2026-11-23, the day the renewal starts."
+
+  it('reads the plan-needed words, and nothing else as plan-needed', () => {
+    expect(planNeededMessageOf(axiosError(409, { success: false, code: 'plan-needed', errors: [words] }))).toBe(words)
+    expect(planNeededMessageOf(axiosError(409, { success: false, code: 'draft-version-conflict', data: { currentVersion: 2 }, errors: ['x'] }))).toBeNull()
+    expect(planNeededMessageOf(axiosError(400, { success: false, code: 'plan-needed', errors: [words] }))).toBeNull()
+    expect(planNeededMessageOf(new Error('offline'))).toBeNull()
+  })
+
+  it('says every reason the server gave, and a busy server or a dropped connection in its own words', () => {
+    expect(describeRenewError(axiosError(400, { success: false, errors: ['Renew the agreement from its newest approved revision, v2.'] })))
+      .toEqual({ title: 'The agreement was not renewed', messages: ['Renew the agreement from its newest approved revision, v2.'] })
+    expect(describeRenewError(axiosError(403, { success: false, errors: ['Your role cannot renew agreements in your organisation. An Admin can change who may approve in Settings, Plan pricing.'] })).messages)
+      .toEqual(['Your role cannot renew agreements in your organisation. An Admin can change who may approve in Settings, Plan pricing.'])
+    expect(describeRenewError(axiosError(429)).title).toBe('The server is busy')
+    expect(describeRenewError(new Error('offline'))).toEqual({ title: 'The agreement was not renewed', messages: ['It could not be renewed just now. Check your connection and try again.'] })
   })
 })
