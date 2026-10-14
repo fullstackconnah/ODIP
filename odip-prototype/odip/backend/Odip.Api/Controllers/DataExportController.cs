@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -47,7 +48,7 @@ public class DataExportController : ControllerBase
     }
 
     /// <summary>
-    /// The organisation in scope, or null for a 400.
+    /// The organisation in scope, or null (see NoOrganisationResult).
     /// - An Admin's is the tenant_id claim. CurrentTenant ignores X-View-As-Tenant for anyone but a SuperAdmin.
     /// - A SuperAdmin's is the one they explicitly chose with X-View-As-Tenant. CurrentTenant then sets TenantId to it and IsSuperAdmin to false.
     /// - With no choice, IsSuperAdmin stays true and the filters are all off. TenantId may still be set from a tenant_id claim (CurrentTenantTests),
@@ -56,10 +57,18 @@ public class DataExportController : ControllerBase
     /// </summary>
     private Guid? Organisation => _tenant.IsSuperAdmin ? null : _tenant.TenantId;
 
+    /// <summary>
+    /// No organisation in scope: a SuperAdmin who hasn't chosen one gets 400 with what to do; anyone else (an Admin whose token names no
+    /// organisation) gets 403, because choosing one is not theirs to do.
+    /// </summary>
+    private ObjectResult NoOrganisationResult() => _tenant.IsSuperAdmin
+        ? BadRequest(ApiResponse<bool>.Fail(NoOrganisation))
+        : StatusCode(StatusCodes.Status403Forbidden, ApiResponse<bool>.Fail("Your account isn't linked to an organisation."));
+
     [HttpGet("last")]
     public async Task<ActionResult<ApiResponse<DataExportLastDto?>>> Last(CancellationToken ct)
     {
-        if (Organisation is not { } tenantId) return BadRequest(ApiResponse<DataExportLastDto?>.Fail(NoOrganisation));
+        if (Organisation is not { } tenantId) return NoOrganisationResult();
 
         var last = await _db.AuditLogs.AsNoTracking()
             .Where(a => a.EntityType == nameof(Tenant) && a.EntityId == tenantId && a.Action == AuditAction.Exported)
@@ -72,7 +81,7 @@ public class DataExportController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Download(CancellationToken ct)
     {
-        if (Organisation is not { } tenantId) return BadRequest(ApiResponse<bool>.Fail(NoOrganisation));
+        if (Organisation is not { } tenantId) return NoOrganisationResult();
 
         var name = await _db.Tenants.AsNoTracking().Where(t => t.Id == tenantId).Select(t => t.Name).FirstOrDefaultAsync(ct);
         // A stale or mistyped X-View-As-Tenant: never a complete-looking ZIP of empty files, nor an audit row for no organisation.

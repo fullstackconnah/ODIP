@@ -151,6 +151,20 @@ public class DataExportHttpTests
         Assert.Empty(await host.ExportRowsAsync(missing));
     }
 
+    [Fact]
+    public async Task An_admin_whose_token_names_no_organisation_gets_403_not_the_superadmin_choose_an_organisation_400()
+    {
+        await using var host = await Host.StartAsync();
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        foreach (var path in new[] { "/api/v1/data-export", "/api/v1/data-export/last" })
+        {
+            using var response = await host.GetAsync(path, "Admin", tenantClaim: null, viewAs: tenantId); // the header is a SuperAdmin's only
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        Assert.Empty(await host.ExportRowsAsync(tenantId));
+    }
+
     [Theory]
     [InlineData("Coordinator")]
     [InlineData("SupportWorker")]
