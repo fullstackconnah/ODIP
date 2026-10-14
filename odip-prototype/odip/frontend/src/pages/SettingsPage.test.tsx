@@ -122,7 +122,7 @@ beforeEach(() => {
 })
 
 describe('SettingsPage — Event Templates tab', () => {
-  it('shows an empty state and a single "New template" action, in the header, when there are no templates', async () => {
+  it('shows an empty state and a single "New template" action, at the top of its section, when there are no templates', async () => {
     const user = userEvent.setup()
     renderSettingsPage()
 
@@ -145,7 +145,7 @@ describe('SettingsPage — Event Templates tab', () => {
     expect(screen.queryByText('Old Escape')).not.toBeInTheDocument()
   })
 
-  it('lists active templates with the header action and no empty state', () => {
+  it('lists active templates with the one New template action and no empty state', () => {
     mockUseEventTemplates.mockReturnValue({
       data: [{ id: 't1', eventName: 'Beach Escape', eventCode: 'BE', isActive: true }],
     })
@@ -188,10 +188,10 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
     await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
-    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', /^delete/i]) {
+    for (const name of ['Add holiday', 'Sync holidays', 'Advanced', /^delete/i]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
-    expect(screen.getByText(/only a super admin can add, delete or sync public holidays/i)).toBeInTheDocument()
+    expect(screen.getByText(/only a super admin can change this calendar/i)).toBeInTheDocument()
   })
 
   it('gives a SuperAdmin the Add, Sync and Delete controls and no read-only note', async () => {
@@ -204,10 +204,10 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
     // Every row has a Delete, so its name says which holiday it deletes.
-    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete: Labour Day, 05/10/2026 (NSW)']) {
+    for (const name of ['Add holiday', 'Sync holidays', 'Advanced', 'Delete: Labour Day, 05/10/2026 (NSW)']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
-    expect(screen.queryByText(/only a super admin can add, delete or sync public holidays/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/only a super admin can change this calendar/i)).not.toBeInTheDocument()
 
     // Q5 review: the sync year fields are named by their labels.
     await user.click(screen.getByRole('button', { name: 'Advanced' }))
@@ -234,13 +234,13 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     renderSettingsPage()
 
     await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
-    for (const name of ['+ Add Holiday', 'Sync Holidays']) {
+    for (const name of ['Add holiday', 'Sync holidays']) {
       const button = screen.getByRole('button', { name })
       expect(button).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
       expect(button.className).not.toMatch(/rounded-full/)
     }
 
-    await user.click(screen.getByRole('button', { name: '+ Add Holiday' }))
+    await user.click(screen.getByRole('button', { name: 'Add holiday' }))
     for (const name of ['Save', 'Cancel']) {
       const button = screen.getByRole('button', { name })
       expect(button).toHaveClass('h-[var(--control-h-sm)]', 'rounded-[var(--radius-sm)]')
@@ -258,7 +258,7 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     renderSettingsPageWithQueryClient()
 
     await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    const open = screen.getByRole('button', { name: 'Import Catalogue' })
+    const open = screen.getByRole('button', { name: 'Import catalogue' })
     expect(open).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
 
     await user.click(open)
@@ -274,7 +274,7 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     renderSettingsPageWithQueryClient()
 
     await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    const open = screen.getByRole('button', { name: 'Import Catalogue' })
+    const open = screen.getByRole('button', { name: 'Import catalogue' })
     await user.click(open)
     expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
 
@@ -290,7 +290,7 @@ describe('SettingsPage — buttons are the Button primitive', () => {
     renderSettingsPageWithQueryClient()
 
     await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import catalogue' }))
     await user.click(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' }).parentElement!)
 
     expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
@@ -558,7 +558,7 @@ describe('SettingsPage — catalogue import preview', () => {
     renderSettingsPageWithQueryClient()
 
     await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import catalogue' }))
     const file = new File(['xlsx'], 'support-catalogue-2026-27.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file)
     await screen.findByLabelText('Catalogue version')
@@ -611,7 +611,7 @@ describe('SettingsPage — catalogue import preview', () => {
     renderSettingsPageWithQueryClient()
 
     await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import catalogue' }))
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'notes.xlsx'))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).')
@@ -688,7 +688,7 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
     await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: 'Sync Holidays' }), unmount)
+    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: 'Sync holidays' }), unmount)
 
     expect(mockSyncMutate).toHaveBeenCalledTimes(2)
     expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })

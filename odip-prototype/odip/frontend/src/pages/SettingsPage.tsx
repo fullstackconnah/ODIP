@@ -1,22 +1,13 @@
 import { labelClass } from '@/components/FormField'
-import { useEventTemplates, useSettings, useUpdateSettings, useProviderSettings, useUpsertProviderSettings, useSupportCatalogue, usePublicHolidays, useCreatePublicHoliday, useDeletePublicHoliday, useSyncHolidays } from '@/api/hooks'
+import { useSettings, useUpdateSettings, useProviderSettings, useUpsertProviderSettings } from '@/api/hooks'
 import { useState, useEffect, useRef } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { apiClient } from '@/api/client'
-import { LayoutTemplate, Pencil, Plus } from 'lucide-react'
 import { Tabs } from '@/components/Tabs'
-import { Modal } from '@/components/Modal'
-import { EmptyState } from '@/components/EmptyState'
-import { DataTable } from '@/components/DataTable'
-import { PageState } from '@/components/PageState'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { formatDateAu, extractErrorMessage } from '@/lib/utils'
-import TemplateFormPanel from '@/components/TemplateFormPanel'
+import { extractErrorMessage } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
-import type { MedicationCompetencyMode, EventTemplateDto, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto, SupportActivityGroupDto, SupportCatalogueItemDto, CatalogueFileFormat, CatalogueImportPreviewDto, CatalogueImportRowDto, PublicHolidayDto } from '@/api/types'
+import type { MedicationCompetencyMode, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto } from '@/api/types'
 import type { AxiosError } from 'axios'
 import TenantsTab from '@/pages/settings/TenantsTab'
 import TenantFormPanel from '@/pages/settings/TenantFormPanel'
@@ -32,12 +23,14 @@ import { usePermissions } from '@/lib/permissions'
 import { useNotices } from '@/hooks/useNotices'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import { plural } from '@/lib/format'
 import { useTabParam } from '@/hooks/useTabParam'
 import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
 import ImportDataTab from '@/pages/settings/ImportDataTab'
 import DataExportTab from '@/pages/settings/DataExportTab'
 import { Callout } from '@/components/Callout'
+import EventTemplatesSection from '@/pages/settings/EventTemplatesSection'
+import PublicHolidaysSection from '@/pages/settings/PublicHolidaysSection'
+import SupportCatalogueSection from '@/pages/settings/SupportCatalogueSection'
 
 function QualificationSettingsTab() {
   const { data: settings } = useSettings()
@@ -124,14 +117,6 @@ function AppearanceSettingsTab() {
 }
 
 export default function SettingsPage() {
-  const { data: templates = [], isLoading: templatesLoading, isError: templatesError, refetch: refetchTemplates } = useEventTemplates()
-  const [panelOpen, setPanelOpen] = useState(false)
-  const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
-
-  const activeTemplates = templates.filter((t) => t.isActive)
-  // Only claim "no templates" once the fetch has settled, so the empty state doesn't flash on load.
-  const templatesEmpty = !templatesLoading && !templatesError && activeTemplates.length === 0
-  const openNewTemplate = () => { setEditingTemplate(undefined); setPanelOpen(true) }
 
   const { isSuperAdmin, isAdmin, canManageNotifications, canImportData } = usePermissions()
 
@@ -173,14 +158,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Settings"
-        action={tab === 'templates' && (
-          <Button onClick={openNewTemplate} size="md">
-            <Plus className="w-4 h-4" /> New template
-          </Button>
-        )}
-      />
+      <PageHeader title="Settings" />
 
       <Tabs
         tabs={tabs.map(t => ({ id: t.key, label: t.label }))}
@@ -191,57 +169,7 @@ export default function SettingsPage() {
         overflow="scroll"
       />
 
-      {tab === 'templates' && (
-        <div className="space-y-4">
-          {templatesError && templates.length === 0 ? (
-            <PageState kind="error" noun="template list" onRetry={() => refetchTemplates()} />
-          ) : templatesEmpty ? (
-            // "New template" is the header action, so the empty state carries no second one.
-            <EmptyState
-              icon={LayoutTemplate}
-              title="No event templates yet"
-              description="Templates pre-fill the destination, region and duration when you create a trip. Add one to get started."
-            />
-          ) : (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                {activeTemplates.map((t) => (
-                  <div key={t.id} className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] group">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h3 className="font-semibold">{t.eventName}</h3>
-                        <span className="text-xs text-[var(--color-muted-foreground)] font-mono">{t.eventCode}</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        iconOnly
-                        onClick={() => { setEditingTemplate(t); setPanelOpen(true) }}
-                        className="opacity-0 group-hover:opacity-100"
-                        title="Edit template"
-                        aria-label="Edit template"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <div className="text-sm text-[var(--color-muted-foreground)] space-y-1">
-                      <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">location_on</span> {t.defaultDestination || '—'} · {t.defaultRegion || '—'}</p>
-                      {t.standardDurationDays && <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">schedule</span> {t.standardDurationDays} days</p>}
-                      {t.preferredTimeOfYear && <p className="flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">calendar_today</span> {t.preferredTimeOfYear}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          <TemplateFormPanel
-            isOpen={panelOpen}
-            onClose={() => { setPanelOpen(false); setEditingTemplate(undefined) }}
-            template={editingTemplate}
-          />
-        </div>
-      )}
+      {tab === 'templates' && <EventTemplatesSection />}
 
       {tab === 'activities' && <ActivityLibraryTab />}
 
@@ -252,8 +180,8 @@ export default function SettingsPage() {
       {tab === 'export' && <DataExportTab />}
       {tab === 'pricing' && <PlanPricingSettingsTab />}
       {tab === 'budgets' && <BudgetSettingsTab />}
-      {tab === 'catalogue' && <SupportCatalogueTab />}
-      {tab === 'holidays' && <PublicHolidaysTab canEdit={isSuperAdmin} />}
+      {tab === 'catalogue' && <SupportCatalogueSection />}
+      {tab === 'holidays' && <PublicHolidaysSection canEdit={isSuperAdmin} />}
       {tab === 'notifications' && <NotificationPreferencesTab />}
       {tab === 'notifications-admin' && canManageNotifications && <AdminNotificationsTab />}
 
@@ -474,401 +402,6 @@ function ProviderSettingsTab() {
           {upsert.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
         </Button>
       )}
-    </div>
-  )
-}
-
-/** What the uploaded workbook's header row showed: the 2026-27 layout (zone prices) or the 2025-26 one (a column per state). */
-function catalogueFormatLabel(format: CatalogueFileFormat): string {
-  return format === 'StateColumns' ? 'One price per state (2025-26 layout)' : 'National / Remote / Very Remote prices (2026-27 layout)'
-}
-
-function SupportCatalogueTab() {
-  const { data: groups = [], isLoading: catalogueLoading, isError: catalogueError, refetch: refetchCatalogue } = useSupportCatalogue()
-  const [importing, setImporting] = useState(false)
-  const [previewStep, setPreviewStep] = useState<'upload' | 'preview' | null>(null)
-  const [preview, setPreview] = useState<CatalogueImportPreviewDto | null>(null)
-  const [version, setVersion] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const [importError, setImportError] = useState<string | null>(null)
-  const qc = useQueryClient()
-
-  const allItems = (groups as SupportActivityGroupDto[]).flatMap((g: SupportActivityGroupDto) => g.items ?? [])
-
-  const dayTypeColor = (dt: string) => {
-    switch(dt) {
-      case 'Weekday': return 'bg-[var(--color-secondary-container)] text-[var(--color-foreground)]'
-      case 'Saturday': return 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
-      case 'Sunday': return 'bg-[var(--color-accessible-container)] text-[var(--color-on-accessible-container)]'
-      case 'PublicHoliday': return 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
-      default: return 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-    }
-  }
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setImportError(null)
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const { data } = await apiClient.post('/support-catalogue/import/preview', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      setPreview(data.data)
-      setVersion(data.data?.detectedVersion || '')
-      setPreviewStep('preview')
-    } catch (err: unknown) {
-      // The API explains a refusal in errors[0] (ApiResponse.Fail); the old `data.message` read always fell back to the generic text.
-      setImportError(extractErrorMessage(err, 'Upload failed'))
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  async function handleConfirm() {
-    if (!preview) return
-    setConfirming(true)
-    setImportError(null)
-    try {
-      await apiClient.post('/support-catalogue/import/confirm', { catalogueVersion: version, rows: preview.rows })
-      qc.invalidateQueries({ queryKey: ['support-catalogue'] })
-      setPreviewStep(null)
-      setPreview(null)
-      setImporting(false)
-    } catch (err: unknown) {
-      setImportError(extractErrorMessage(err, 'Confirm failed'))
-    } finally {
-      setConfirming(false)
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-semibold text-[var(--color-foreground)]">Support Catalogue</h2>
-          <p className="text-sm text-[var(--color-muted-foreground)]">NDIS price limits, every support item in the catalogue.</p>
-        </div>
-        <Button size="md" onClick={() => { setImporting(true); setPreviewStep('upload'); setImportError(null) }}>
-          Import Catalogue
-        </Button>
-      </div>
-
-      <DataTable
-        data={allItems}
-        keyField="id"
-        sortable
-        columns={[
-          { key: 'itemNumber', header: 'Item Number', sortable: true, className: 'font-mono text-xs' },
-          { key: 'description', header: 'Description', sortable: true },
-          {
-            key: 'dayType',
-            header: 'Day Type',
-            sortable: true,
-            render: (item: SupportCatalogueItemDto) => (
-              <span className={`text-xs px-2 py-0.5 rounded-full ${dayTypeColor(item.dayType)}`}>{item.dayType}</span>
-            ),
-          },
-          { key: 'priceLimit_ACT', header: 'ACT', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_NSW', header: 'NSW', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_NT', header: 'NT', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_QLD', header: 'QLD', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_SA', header: 'SA', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_TAS', header: 'TAS', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_VIC', header: 'VIC', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_WA', header: 'WA', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_Remote', header: 'Remote', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'priceLimit_VeryRemote', header: 'V.Remote', align: 'right' as const, type: 'currency' as const, sortable: true },
-          { key: 'effectiveFrom', header: 'Effective From', type: 'date' as const, sortable: true },
-        ]}
-        loading={catalogueLoading}
-        error={catalogueError}
-        onRetry={() => refetchCatalogue()}
-        emptyMessage="No catalogue items. Import the NDIS Support Catalogue XLSX."
-      />
-
-      {/* Import modal */}
-      {importing && (
-        <Modal
-          open
-          onClose={() => { setImporting(false); setPreviewStep(null); setPreview(null); setImportError(null) }}
-          title="Import NDIS Support Catalogue"
-          closeOnBackdrop={false}
-          footer={previewStep === 'preview' && preview ? (
-            <>
-              <Button variant="secondary" size="md" onClick={() => setPreviewStep('upload')}>Back</Button>
-              <Button size="md" onClick={handleConfirm} disabled={confirming}>
-                {confirming ? 'Importing...' : 'Confirm Import'}
-              </Button>
-            </>
-          ) : undefined}
-        >
-          <div className="space-y-4">
-            {importError && (
-              <Callout tone="error">{importError}</Callout>
-            )}
-
-            {previewStep === 'upload' && (
-              <div className="space-y-4">
-                <p className="text-sm text-[var(--color-muted-foreground)]">Upload the NDIA Support Catalogue .xlsx file to preview changes.</p>
-                <label className="flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-border)] rounded-[var(--radius-md)] p-[var(--card-pad)] cursor-pointer hover:border-[var(--color-primary)] transition-colors">
-                  <span className="text-[var(--color-muted-foreground)] text-sm mb-2">{uploading ? 'Uploading...' : 'Drop .xlsx here or click to browse'}</span>
-                  <input type="file" accept=".xlsx" onChange={handleUpload} className="hidden" disabled={uploading} />
-                </label>
-              </div>
-            )}
-
-            {previewStep === 'preview' && preview && (
-              <div className="space-y-4">
-                <div className="text-sm text-[var(--color-muted-foreground)]">
-                  <p>{preview.sourceDocument} — {catalogueFormatLabel(preview.detectedFormat)}</p>
-                  <p>Starts {formatDateAu(preview.effectiveFrom)} · {(preview.rows ?? []).length} rows, {preview.legacyItems} legacy</p>
-                </div>
-                <div className="grid grid-cols-4 gap-3 text-center">
-                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">New items</p><p className="text-xl font-bold text-[var(--color-primary)]">{preview.itemsToAdd}</p></div>
-                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">Updated</p><p className="text-xl font-bold text-[var(--color-warning)]">{(preview.rows ?? []).filter((r: CatalogueImportRowDto) => r.priceChanged).length}</p></div>
-                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">Unchanged</p><p className="text-xl font-bold text-[var(--color-foreground)]">{preview.itemsUnchanged}</p></div>
-                  <div className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-[var(--card-pad)]"><p className="text-xs text-[var(--color-muted-foreground)]">To end-date</p><p className="text-xl font-bold text-[var(--color-destructive)]">{preview.itemsToDeactivate}</p></div>
-                </div>
-                {(preview.warnings ?? []).length > 0 && (
-                  <div className="bg-[var(--color-warning-container)] rounded-[var(--radius-md)] p-[var(--card-pad)] text-xs text-[var(--color-on-warning-container)] space-y-1">
-                    {preview.warnings.map((w: string, i: number) => <p key={i}>&#9888; {w}</p>)}
-                  </div>
-                )}
-                <div>
-                  <label htmlFor="catalogue-version" className={labelClass}>Catalogue version</label>
-                  <input id="catalogue-version" value={version} onChange={e => setVersion(e.target.value)} className="w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-              </div>
-            )}
-          </div>
-        </Modal>
-      )}
-    </div>
-  )
-}
-
-/**
- * The public holiday calendar. It is global: every tenant's plan quotes and claims read the same rows, and a row decides whether a day is priced at
- * the public holiday rate (+122% on a weekday). So only a SuperAdmin may add, delete or sync rows (the API refuses everyone else); with
- * <code>canEdit</code> false the tab is the calendar to read, with no control that would only fail.
- */
-function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
-  const [year, setYear] = useState(new Date().getFullYear())
-  const [state, setState] = useState('VIC')
-  const { data: holidays = [], isLoading: holidaysLoading, isError: holidaysError, refetch: refetchHolidays } = usePublicHolidays(year, state)
-  const createHoliday = useCreatePublicHoliday()
-  const deleteHoliday = useDeletePublicHoliday()
-  const syncHolidays = useSyncHolidays()
-  const [adding, setAdding] = useState(false)
-  const [deletingHoliday, setDeletingHoliday] = useState<PublicHolidayDto | null>(null)
-  const [newForm, setNewForm] = useState({ date: '', name: '', state: 'VIC' })
-  const [showSyncAdvanced, setShowSyncAdvanced] = useState(false)
-  const [syncFromYear, setSyncFromYear] = useState<number | undefined>(undefined)
-  const [syncToYear, setSyncToYear] = useState<number | undefined>(undefined)
-  const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
-  // A sync's result line goes away by itself after four seconds. The timer is kept so the next sync can cancel it (it would take the new line down
-  // early) and leaving the tab can cancel it: left running it fires setSyncMessage into a tree that is gone.
-  const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    return () => {
-      if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current)
-    }
-  }, [])
-
-  const inputClass = 'px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
-
-  function handleAdd() {
-    createHoliday.mutate(newForm, {
-      onSuccess: () => { setAdding(false); setNewForm({ date: '', name: '', state: 'VIC' }) }
-    })
-  }
-
-  function handleSync() {
-    if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current)
-    setSyncMessage(null)
-    syncHolidays.mutate(
-      { fromYear: syncFromYear, toYear: syncToYear },
-      {
-        onSuccess: (result) => {
-          const errSuffix = result.errors?.length > 0 ? ` (${plural(result.errors.length, 'error')} — check server logs)` : ''
-          setSyncMessage({ type: result.errors?.length > 0 ? 'warning' : 'success', text: `Sync complete: ${result.holidaysAdded} added, ${result.holidaysUpdated} updated${errSuffix}` })
-          syncMessageTimer.current = setTimeout(() => setSyncMessage(null), 4000)
-        },
-        onError: (error: Error) => {
-          const err = error as AxiosError<{ message?: string }>
-          const msg = err?.response?.data?.message || err?.message || 'Sync failed. Please try again.'
-          setSyncMessage({ type: 'error', text: msg })
-        },
-      }
-    )
-  }
-
-  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i)
-  const states = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="font-semibold text-[var(--color-foreground)]">Public Holidays</h2>
-          <p className="text-sm text-[var(--color-muted-foreground)]">Used to determine NDIS public holiday rates on plans and claims.</p>
-          {!canEdit && (
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              Only a super admin can add, delete or sync public holidays: one calendar prices every organisation&apos;s plans and claims.
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Dropdown
-            variant="form"
-            value={String(year)}
-            onChange={v => setYear(Number(v))}
-            items={years.map(y => ({ value: String(y), label: String(y) }))}
-            label="Select year"
-          />
-          <Dropdown
-            variant="form"
-            value={state}
-            onChange={v => setState(v)}
-            items={states.map(s => ({ value: s, label: s }))}
-            label="Select state"
-          />
-          {canEdit && (
-            <Button size="md" onClick={() => setAdding(true)}>
-              + Add Holiday
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {canEdit && adding && (
-        <div className="bg-[var(--color-card)] rounded-t-2xl border border-b-0 border-[var(--color-border)] p-3">
-          <div className="flex items-center gap-3">
-            <input type="date" value={newForm.date} onChange={e => setNewForm(p => ({ ...p, date: e.target.value }))} className={inputClass + ' w-40'} />
-            <input value={newForm.name} onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))} placeholder="Holiday name" className={inputClass + ' flex-1'} />
-            <Dropdown
-              variant="form"
-              value={newForm.state}
-              onChange={v => setNewForm(p => ({ ...p, state: v }))}
-              items={states.map(s => ({ value: s, label: s }))}
-              label="Select state"
-            />
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd} disabled={createHoliday.isPending}>Save</Button>
-              <Button variant="secondary" size="sm" onClick={() => setAdding(false)}>Cancel</Button>
-            </div>
-          </div>
-        </div>
-      )}
-      <DataTable
-        data={holidays as PublicHolidayDto[]}
-        keyField="id"
-        className={adding ? 'relative bg-[var(--color-card)] rounded-b-2xl border border-t-0 border-[var(--color-border)] overflow-x-auto' : undefined}
-        sortable
-        columns={[
-          { key: 'date', header: 'Date', type: 'date' as const, sortable: true, className: 'font-medium' },
-          { key: 'name', header: 'Name', sortable: true },
-          {
-            key: 'state',
-            header: 'State',
-            render: (h: PublicHolidayDto) => (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-muted-foreground)]">
-                {h.state || 'All'}
-              </span>
-            ),
-          },
-          ...(canEdit
-            ? [{
-                key: 'actions',
-                header: '',
-                render: (h: PublicHolidayDto) => (
-                  <Button variant="ghost-danger" size="sm" onClick={() => setDeletingHoliday(h)} aria-label={`Delete: ${h.name}, ${formatDateAu(h.date)} (${h.state || 'All'})`}>
-                    Delete
-                  </Button>
-                ),
-              }]
-            : []),
-        ]}
-        loading={holidaysLoading}
-        error={holidaysError}
-        onRetry={() => refetchHolidays()}
-        emptyMessage={`No holidays found for ${year} in ${state}.`}
-      />
-
-      {/* Holiday Sync */}
-      {canEdit && (
-        <div className="pt-4">
-          <div className="flex items-center gap-3">
-            <Button size="md" onClick={handleSync} disabled={syncHolidays.isPending}>
-              {syncHolidays.isPending ? 'Syncing...' : 'Sync Holidays'}
-            </Button>
-            <button
-              type="button"
-              onClick={() => setShowSyncAdvanced(v => !v)}
-              className="text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline"
-            >
-              {showSyncAdvanced ? 'Hide advanced' : 'Advanced'}
-            </button>
-          </div>
-
-          {showSyncAdvanced && (
-            <div className="flex items-center gap-3 mt-3">
-              <label htmlFor="holiday-sync-from" className="text-sm text-[var(--color-muted-foreground)]">From year</label>
-              <input
-                id="holiday-sync-from"
-                type="number"
-                value={syncFromYear ?? ''}
-                onChange={e => setSyncFromYear(e.target.value ? Number(e.target.value) : undefined)}
-                placeholder={String(new Date().getFullYear())}
-                className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-              />
-              <label htmlFor="holiday-sync-to" className="text-sm text-[var(--color-muted-foreground)]">To year</label>
-              <input
-                id="holiday-sync-to"
-                type="number"
-                value={syncToYear ?? ''}
-                onChange={e => setSyncToYear(e.target.value ? Number(e.target.value) : undefined)}
-                placeholder={String(new Date().getFullYear() + 1)}
-                className="w-24 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-              />
-            </div>
-          )}
-
-          {syncMessage && (
-            <div className={`mt-3 px-4 py-2.5 rounded-[var(--radius-md)] text-sm ${
-              syncMessage.type === 'success'
-                ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
-                : syncMessage.type === 'warning'
-                ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
-                : 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
-            }`}>
-              {syncMessage.text}
-            </div>
-          )}
-        </div>
-      )}
-
-      <ConfirmDialog
-        open={deletingHoliday !== null}
-        onCancel={() => setDeletingHoliday(null)}
-        onConfirm={() => {
-          if (!deletingHoliday) return
-          deleteHoliday.mutate(deletingHoliday.id, { onSuccess: () => setDeletingHoliday(null) })
-        }}
-        title="Delete Public Holiday"
-        message={
-          deletingHoliday
-            ? `Delete the public holiday "${deletingHoliday.name}" on ${formatDateAu(deletingHoliday.date)} (${deletingHoliday.state || 'All states'})? This cannot be undone.`
-            : ''
-        }
-        confirmLabel="Delete"
-        variant="danger"
-        loading={deleteHoliday.isPending}
-      />
     </div>
   )
 }
