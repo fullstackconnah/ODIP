@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -525,6 +526,32 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShift(
         [FromBody] CreateShiftDto dto, CancellationToken ct)
     {
+        if (dto.MoveFromShiftId is not { } fromId) return await CreateShiftCoreAsync(dto, null, ct);
+        if (dto.StaffId is null) return BadRequest(ApiResponse<ShiftDto>.Fail("Name the person who is moving."));
+        try
+        {
+            // An empty-day move (deep review S6): the board's lock order, then the source row, then the read, as move-staff takes them.
+            await using var held = await RosterBoardLockAsync(ct);
+            await LockShiftRowsAsync("\"Id\" = {0}", new object[] { fromId }, ct);
+            var from = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == fromId, ct);
+            if (from is null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+            if (IsLockedForStaffChange(from.Status))
+                return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
+            // The person the page carried is no longer on the shift they left: never clear somebody else by surprise.
+            if (from.UserId != dto.StaffId) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+            var result = await CreateShiftCoreAsync(dto, from, ct);
+            if (result.Result is OkObjectResult) await held.CommitAsync(ct);
+            return result;
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>The body of <see cref="CreateShift"/>. With <paramref name="movingFrom"/> (already locked and checked) the person leaves it in the same save.</summary>
+    private async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShiftCoreAsync(CreateShiftDto dto, Shift? movingFrom, CancellationToken ct)
+    {
         if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
@@ -539,7 +566,8 @@ public class RosteringController : ControllerBase
             Status = ShiftStatus.Draft
         };
 
-        var findings = await CheckAsync(shift, null, ct);
+        // A person moving here is judged without the shift they leave (no false DOUBLE_BOOKED_SHIFT against it).
+        var findings = await CheckAsync(shift, null, ct, leavingShiftId: movingFrom?.Id);
         findings.AddRange((await CheckBudgetAsync(shift, null, ShiftStatus.Draft, ct)).Findings);
 
         var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
@@ -551,6 +579,14 @@ public class RosteringController : ControllerBase
         if (budgetGate.EmergencyAccepted) await RaiseEmergencyReviewAsync(shift, ct);
 
         _db.Shifts.Add(shift);
+        if (movingFrom is not null)
+        {
+            var mover = movingFrom.UserId;
+            ApplyStaff(movingFrom, null, new List<RosterFinding>(), null, null);
+            // Item 9 of the connection map: the shift they left no longer waits to be re-covered for leave.
+            await _obligationTasks.CompleteByShiftAsync(movingFrom.Id, TaskType.LeaveCoverage, ct);
+            await NotifyStaffChangeAsync(movingFrom, mover, wasPublished: movingFrom.Status == ShiftStatus.Published, ct);
+        }
         await _db.SaveChangesAsync(ct);
 
         // No GET /shifts/{id} route exists in the spec's API table (the board and shift-list
@@ -563,6 +599,25 @@ public class RosteringController : ControllerBase
     [HttpPut("shifts/{id:guid}")]
     public async Task<ActionResult<ApiResponse<ShiftDto>>> UpdateShift(
         Guid id, [FromBody] UpdateShiftDto dto, CancellationToken ct)
+    {
+        try
+        {
+            // The board's lock order (deep review S1), as /assign and move-staff take it: a PUT that changes the worker or the status waits for a Publish week or a move
+            // of the same organisation, then reads the shift as it is now, so it never writes over a publish or a move from a stale read and its notices tell the truth.
+            await using var held = await RosterBoardLockAsync(ct);
+            await LockShiftRowsAsync("\"Id\" = {0}", new object[] { id }, ct);
+            var result = await UpdateShiftLockedAsync(id, dto, ct);
+            if (result.Result is OkObjectResult) await held.CommitAsync(ct);
+            return result;
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>The body of <see cref="UpdateShift"/>, run under its locks.</summary>
+    private async Task<ActionResult<ApiResponse<ShiftDto>>> UpdateShiftLockedAsync(Guid id, UpdateShiftDto dto, CancellationToken ct)
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
@@ -624,6 +679,7 @@ public class RosteringController : ControllerBase
         if (rejection != null) return UnprocessableEntity(rejection);
 
         var previousUserId = shift.UserId;
+        var previousStatus = shift.Status;
         // What the shift holds now, for the budget rules: a save that does not decide the budget again keeps the over-budget acknowledgement it already has.
         var previousReason = shift.OverrideReason;
         var previousCodes = shift.AcknowledgedFindingCodes;
@@ -643,6 +699,10 @@ public class RosteringController : ControllerBase
         if (previousUserId != shift.UserId || shift.Status == ShiftStatus.Cancelled)
             await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
+        // The slide-over's Staff field is the menus' way to assign (the brief, section 7), so a PUT tells people exactly as a drop does; becoming Published tells the worker (decision 9).
+        // shortcut: two coordinators editing ONE shift in the slide-over is still last-write-wins on the worker (the PUT carries no ExpectedStaffId as the board's drops do), though the
+        // locks above keep it from writing over a publish or a move; add one if that ever collides.
+        await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: previousStatus == ShiftStatus.Published, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
     }
@@ -676,8 +736,32 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> AssignShift(
         Guid id, [FromBody] AssignShiftDto dto, CancellationToken ct)
     {
+        try
+        {
+            // The board's lock order (deep review M1): the organisation's board lock, then the row, then the read, so the ExpectedStaffId check and the write cannot be split by
+            // another drop, a move-staff or a PUT on this shift.
+            await using var held = await RosterBoardLockAsync(ct);
+            await LockShiftRowsAsync("\"Id\" = {0}", new object[] { id }, ct);
+            var result = await AssignShiftLockedAsync(id, dto, ct);
+            if (result.Result is OkObjectResult) await held.CommitAsync(ct);
+            return result;
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>The body of <see cref="AssignShift"/>, run under its locks.</summary>
+    private async Task<ActionResult<ApiResponse<ShiftDto>>> AssignShiftLockedAsync(Guid id, AssignShiftDto dto, CancellationToken ct)
+    {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        if (IsLockedForStaffChange(shift.Status))
+            return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
+        // A drop names who the board showed (nobody, or the person the prompt offered to replace): someone changed the shift since, so say so rather than replace them by surprise.
+        if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
+            return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
 
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail("Staff member not found."));
@@ -689,50 +773,162 @@ public class RosteringController : ControllerBase
             && !(await ParticipantReadiness.CheckAsync(_db, shift.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<ShiftDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
 
-        var candidate = new Shift
-        {
-            Id = shift.Id, ParticipantId = shift.ParticipantId, UserId = dto.StaffId,
-            ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime,
-            EndsNextDay = shift.EndsNextDay, Ratio = shift.Ratio, NightType = shift.NightType
-        };
+        var candidate = WithWorker(shift, dto.StaffId);
 
         var findings = await CheckAsync(candidate, shift.Id, ct);
         var rejection = EvaluateFindings(findings, dto.OverrideReason);
         if (rejection != null) return UnprocessableEntity(rejection);
 
         var previousUserId = shift.UserId;
-        var previousReason = shift.OverrideReason;
-        var previousCodes = shift.AcknowledgedFindingCodes;
-        shift.UserId = dto.StaffId;
-        shift.UpdatedAt = DateTime.UtcNow;
-        // Assigning a worker is not a budget moment: the shift keeps the over-budget acknowledgement it already has.
-        ApplyOverride(shift, findings, ShiftBudgetGate.Decision.NoEmergency(findings), dto.OverrideReason, dto.AcknowledgedFindingCodes, previousReason, previousCodes);
+        ApplyStaff(shift, dto.StaffId, findings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
 
         // Item 9 of the connection map: reassigning away from (or clearing) the on-leave staff
         // member closes the LeaveCoverage obligation raised against this shift.
         if (previousUserId != shift.UserId)
             await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
-        // NotificationEventType.ShiftAssigned — only when a staff member is actually being set;
-        // clearing an assignment (dto.StaffId null) has no recipient (design spec §5).
-        if (dto.StaffId.HasValue)
-        {
-            var assignedStaff = await _db.Users.FirstOrDefaultAsync(u => u.Id == dto.StaffId.Value, ct);
-            var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
-                .Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct) ?? "a participant";
-            if (assignedStaff is not null)
-            {
-                await _notificationRaiser.RaiseAsync(
-                    Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", shift.Id,
-                    new[] { assignedStaff.Id },
-                    new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(
-                        assignedStaff.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime),
-                    ct);
-            }
-        }
+        // An assignment leaves the status as it was: only a Published shift tells anybody (decision 9).
+        await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: shift.Status == ShiftStatus.Published, ct);
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
+    }
+
+    /// <summary>
+    /// Roster drag and drop (2026-10-14): carries the person on FromShiftId to ToShiftId in one all-or-nothing write. Move: onto an unfilled shift; the source becomes unfilled.
+    /// Replace: the target's worker comes off; the source becomes unfilled. Swap: the two change places. Each person is judged against the shift they land on, with the shift they leave
+    /// ignored (no false DOUBLE_BOOKED). A swap's two checks go through one gate (Blocking refuses, a warning needs the reason), and nothing is written unless all of it passes: one save,
+    /// with its notices. Runs under the organisation's roster lock and reads both shifts after taking it, so a target filled or emptied since the board was drawn is refused (409).
+    /// </summary>
+    [HttpPost("shifts/move-staff")]
+    public async Task<ActionResult<ApiResponse<ShiftDto>>> MoveStaff([FromBody] MoveStaffDto dto, CancellationToken ct)
+    {
+        if (dto.FromShiftId == dto.ToShiftId) return BadRequest(ApiResponse<ShiftDto>.Fail("Pick a different shift to move them to."));
+        try
+        {
+            await using var held = await RosterBoardLockAsync(ct);
+            // Lock order (shared with the agreement approval): the organisation's board lock, then the shift rows by Id. A PUT takes neither, so this holds both rows until the save.
+            await LockShiftRowsAsync("\"Id\" IN ({0}, {1})", new object[] { dto.FromShiftId, dto.ToShiftId }, ct);
+            var from = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.FromShiftId, ct);
+            var to = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.ToShiftId, ct);
+            // The query filter keeps both in the caller's organisation; a SuperAdmin with no tenant sees all of them, so they must also share one.
+            if (from is null || to is null || from.TenantId != to.TenantId) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+            if (IsLockedForStaffChange(from.Status) || IsLockedForStaffChange(to.Status))
+                return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
+            // The person the page carried is no longer on the source (or nobody is): never move somebody else by surprise.
+            if (from.UserId is not { } mover || (dto.StaffId is { } carried && carried != mover)) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+            if (to.UserId == mover) return BadRequest(ApiResponse<ShiftDto>.Fail("They are already on that shift."));
+            // Drawn as Needs staff but filled since (Move), drawn filled but emptied since (Swap), or someone other than the person drawn there is on it now (Replace, Swap):
+            // never take somebody off, or swap with somebody, by surprise.
+            if ((dto.Mode == MoveStaffMode.Move && to.UserId is not null) || (dto.Mode == MoveStaffMode.Swap && to.UserId is null)
+                || (dto.Mode != MoveStaffMode.Move && dto.ExpectedToStaffId is { } shown && shown != to.UserId))
+                return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+
+            var displaced = to.UserId;
+            var back = dto.Mode == MoveStaffMode.Swap ? displaced : null;   // who lands on the source
+            var refusal = await PlacementRefusalAsync(mover, to.ParticipantId, ct)
+                ?? (back is { } b ? await PlacementRefusalAsync(b, from.ParticipantId, ct) : null);
+            if (refusal != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refusal));
+
+            var toFindings = await CheckAsync(WithWorker(to, mover), to.Id, ct, leavingShiftId: from.Id);
+            var fromFindings = back is { } swapped ? await CheckAsync(WithWorker(from, swapped), from.Id, ct, leavingShiftId: to.Id) : new List<RosterFinding>();
+            var rejection = EvaluateFindings(toFindings.Concat(fromFindings).ToList(), dto.OverrideReason);
+            if (rejection != null) return UnprocessableEntity(rejection);
+
+            ApplyStaff(to, mover, toFindings, dto.OverrideReason, dto.AcknowledgedFindingCodes);
+            // The source takes the swapped person, or nobody (and then no reason of its own, as a clear on /assign).
+            ApplyStaff(from, back, fromFindings, back is null ? null : dto.OverrideReason, back is null ? null : dto.AcknowledgedFindingCodes);
+            // Item 9 of the connection map: both shifts changed hands, so neither still waits to be re-covered for leave.
+            await _obligationTasks.CompleteByShiftAsync(to.Id, TaskType.LeaveCoverage, ct);
+            await _obligationTasks.CompleteByShiftAsync(from.Id, TaskType.LeaveCoverage, ct);
+            await NotifyStaffChangeAsync(to, displaced, wasPublished: to.Status == ShiftStatus.Published, ct);
+            await NotifyStaffChangeAsync(from, mover, wasPublished: from.Status == ShiftStatus.Published, ct);
+
+            await _db.SaveChangesAsync(ct);
+            await held.CommitAsync(ct);
+            return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(to, toFindings, ct)));
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>
+    /// Publish week (roster drag and drop, 2026-10-14): every Draft shift of the organisation in the Monday-start week holding <paramref name="weekStart"/>, for every participant the board
+    /// shows, unfilled ones too, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A filled Draft whose worker now has a Blocking finding stays
+    /// Draft and is counted as skipped, as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
+    /// tells nobody twice.
+    /// </summary>
+    [HttpPost("weeks/{weekStart}/publish")]
+    public async Task<ActionResult<ApiResponse<PublishWeekResultDto>>> PublishWeek(DateOnly weekStart, CancellationToken ct)
+    {
+        // A SuperAdmin who has not chosen an organisation has no tenant filter: a publish then would reach every organisation's week.
+        if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<PublishWeekResultDto>.Fail("Choose an organisation to publish its week."));
+        var start = WeekStart(weekStart);
+        var end = start.AddDays(6);
+        try
+        {
+            await using var held = await RosterBoardLockAsync(ct);
+            // Hold the week's Draft rows until this commits, then read them. A PUT never takes the roster-board lock: one that cancels a draft now waits for the publish, and one that
+            // committed first is read below as it is, so a publish never writes Published over it.
+            await LockShiftRowsAsync("\"TenantId\" = {0} AND \"Status\" = {1} AND \"ServiceDate\" >= {2} AND \"ServiceDate\" <= {3}",
+                new object[] { tenantId, (int)ShiftStatus.Draft, start, end }, ct);
+            var shown = _db.Participants.Where(Participant.CanReceiveServicesRule).Select(p => p.Id);
+            var drafts = await _db.Shifts
+                .Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && shown.Contains(s.ParticipantId))
+                .ToListAsync(ct);
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+            // WSC_EXPIRED is the engine's only Blocking finding, so only a draft whose worker's screening has lapsed by its day needs the full roster check: one query for every worker.
+            var workerIds = drafts.Where(s => s.UserId.HasValue).Select(s => s.UserId!.Value).Distinct().ToList();
+            var screeningExpiry = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.WorkerScreeningExpiryDate, ct);
+
+            var published = new List<Shift>();
+            var skipped = 0;
+            foreach (var shift in drafts)
+            {
+                // shortcut: only a lapsed screening is re-checked (the one Blocking rule today); check every filled draft again if another Blocking rule is added.
+                var mayBeBlocked = shift.UserId is { } worker && screeningExpiry.GetValueOrDefault(worker) is { } expiry && expiry < shift.ServiceDate;
+                if (mayBeBlocked && (await CheckAsync(shift, shift.Id, ct)).Any(f => f.Severity == RosterFindingSeverity.Blocking)) { skipped++; continue; }
+                shift.Status = ShiftStatus.Published;
+                shift.UpdatedAt = DateTime.UtcNow;
+                published.Add(shift);
+            }
+
+            // One notice per worker, listing every shift of theirs this publish put out, earliest first (fix round 1). A shift whose day has gone is published for the
+            // record, but nobody is told about it now.
+            var toTell = published.Where(s => s.UserId.HasValue && s.ServiceDate >= today).GroupBy(s => s.UserId!.Value).ToList();
+            var participantIds = published.Select(s => s.ParticipantId).Distinct().ToList();
+            var toTellIds = toTell.Select(g => g.Key).ToList();
+            var participantNames = await _db.Participants.Where(p => participantIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+            var emails = await _db.Users.Where(u => toTellIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Email, ct);
+            foreach (var worker in toTell)
+            {
+                if (!emails.TryGetValue(worker.Key, out var email)) continue;
+                var shifts = worker.OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ToList();
+                string NameOf(Shift s) => participantNames.GetValueOrDefault(s.ParticipantId) ?? "a participant";
+                var first = shifts[0];
+                await _notificationRaiser.RaiseAsync(
+                    Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", first.Id, new[] { worker.Key },
+                    new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(email, NameOf(first), first.ServiceDate, first.StartTime, first.EndTime,
+                        shifts.Skip(1).Select(s => new Odip.Infrastructure.Notifications.Templates.ShiftAssignedLine(NameOf(s), s.ServiceDate, s.StartTime, s.EndTime)).ToList()), ct);
+            }
+
+            await _db.SaveChangesAsync(ct);
+            await held.CommitAsync(ct);
+            return Ok(ApiResponse<PublishWeekResultDto>.Ok(new PublishWeekResultDto
+            {
+                Published = published.Count,
+                Notified = toTell.Count(g => emails.ContainsKey(g.Key)),
+                Unfilled = published.Count(s => s.UserId is null),
+                Skipped = skipped,
+            }));
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<PublishWeekResultDto>.Fail(RosterBoardBusyMessage));
+        }
     }
 
     /// <summary>
@@ -1608,7 +1804,7 @@ public class RosteringController : ControllerBase
     /// the shift's own prior Id on an update/assign (falls back to <paramref name="candidate"/>'s
     /// own Id), so a shift never conflicts with itself.
     /// </summary>
-    private async Task<List<RosterFinding>> CheckAsync(Shift candidate, Guid? excludeId, CancellationToken ct)
+    private async Task<List<RosterFinding>> CheckAsync(Shift candidate, Guid? excludeId, CancellationToken ct, Guid? leavingShiftId = null)
     {
         if (candidate.UserId is null)
             return new List<RosterFinding>();
@@ -1622,9 +1818,11 @@ public class RosteringController : ControllerBase
         var weekEnd = weekStart.AddDays(6);
         var excludeShiftId = excludeId ?? candidate.Id;
 
+        // A person being moved or swapped off leavingShiftId is judged without it: no DOUBLE_BOOKED_SHIFT or OVER_HOURS against the shift they are leaving (roster drag and drop, 2026-10-14).
+        // shortcut: participantShiftsOnDate still counts them on the shift they leave, so a swap inside one 2:1 pair can warn RATIO_SHORTFALL falsely; filter it there too if pairs get swapped often.
         var staffShiftsInWeek = await _db.Shifts
             .Where(s => s.UserId == candidate.UserId.Value && s.ServiceDate >= weekStart && s.ServiceDate <= weekEnd
-                        && s.Id != excludeShiftId)
+                        && s.Id != excludeShiftId && s.Id != leavingShiftId)
             .ToListAsync(ct);
 
         var participantShiftsOnDate = await _db.Shifts
@@ -1694,6 +1892,95 @@ public class RosteringController : ControllerBase
         shift.OverrideReason = reason;
         shift.AcknowledgedFindingCodes = codes;
     }
+
+    /// <summary>Roster drag and drop (2026-10-14), decision 8: a shift that has started, waits for review, is finished or is cancelled keeps its worker; only its completion endpoints move it on.</summary>
+    private static bool IsLockedForStaffChange(ShiftStatus status) =>
+        status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
+
+    private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
+
+    /// <summary>What a drop made on an out-of-date board is refused with (409): /assign with ExpectedStaffId, and move-staff.</summary>
+    private const string BoardChangedMessage = "This shift changed after the board was loaded. Refresh the board and try again.";
+
+    /// <summary>The shift as it would be with <paramref name="userId"/> on it: the candidate the roster check judges.</summary>
+    private static Shift WithWorker(Shift shift, Guid? userId) => new()
+    {
+        Id = shift.Id, ParticipantId = shift.ParticipantId, UserId = userId,
+        ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime,
+        EndsNextDay = shift.EndsNextDay, Ratio = shift.Ratio, NightType = shift.NightType
+    };
+
+    /// <summary>Puts <paramref name="userId"/> on the shift (null clears it) with the override fields the findings just approved. Assigning a worker is not a budget moment: the shift keeps the over-budget acknowledgement it already has.</summary>
+    private static void ApplyStaff(Shift shift, Guid? userId, List<RosterFinding> findings, string? overrideReason, List<string>? acknowledgedCodes)
+    {
+        var previousReason = shift.OverrideReason;
+        var previousCodes = shift.AcknowledgedFindingCodes;
+        shift.UserId = userId;
+        shift.UpdatedAt = DateTime.UtcNow;
+        ApplyOverride(shift, findings, ShiftBudgetGate.Decision.NoEmergency(findings), overrideReason, acknowledgedCodes, previousReason, previousCodes);
+    }
+
+    /// <summary>
+    /// Roster drag and drop (2026-10-14), decision 9: a worker hears about a shift only once it is Published. Call it once the shift holds its new worker and status, before the
+    /// caller's one save, so the outbox rows commit with the change (a refused write sends nothing). The worker on a Published shift gets ShiftAssigned when it is newly theirs or
+    /// has just become Published; whoever came off a shift that was already Published gets ShiftUnassigned, even when the same save takes it off Published (deep review S2). Draft changes, and a
+    /// Published shift going back to Draft or Cancelled with its worker kept, stay silent.
+    /// </summary>
+    private async Task NotifyStaffChangeAsync(Shift shift, Guid? previousUserId, bool wasPublished, CancellationToken ct)
+    {
+        var assignedTo = shift.Status == ShiftStatus.Published && shift.UserId is { } now && (now != previousUserId || !wasPublished) ? now : (Guid?)null;
+        var takenOff = wasPublished && previousUserId is { } before && before != shift.UserId ? before : (Guid?)null;
+        if (assignedTo is null && takenOff is null) return;
+
+        var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
+            .Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct) ?? "a participant";
+        if (assignedTo is { } a && await _db.Users.FirstOrDefaultAsync(u => u.Id == a, ct) is { } assigned)
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", shift.Id, new[] { assigned.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(assigned.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime), ct);
+        if (takenOff is { } t && await _db.Users.FirstOrDefaultAsync(u => u.Id == t, ct) is { } removed)
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.ShiftUnassigned, "Shift", shift.Id, new[] { removed.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftUnassignedPayload(removed.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime), ct);
+    }
+
+    /// <summary>
+    /// The organisation's lock for the board's own writes (roster drag and drop, 2026-10-14): move-staff and Publish week hold it, so two drops, or a drop and a publish, never interleave,
+    /// even across participants (one person dropped onto two overlapping shifts at once). It is the generator's <see cref="RosterGenerationLock"/>, keyed on the tenant under a scope of its
+    /// own: a move only changes who works a shift, so it has nothing to wait for in a generation. A no-op off PostgreSQL. Read what you change AFTER taking it.
+    /// </summary>
+    private Task<RosterGenerationLock> RosterBoardLockAsync(CancellationToken ct) =>
+        RosterGenerationLock.AcquireAsync(_db, _tenant?.TenantId ?? Guid.Empty, ct, _generator.LockWait, scope: "roster-board");
+
+    /// <summary>The placement rules of /assign for one person landing on one participant's shift: an active worker and a participant ready for a new placement. Null when both hold.</summary>
+    private async Task<string?> PlacementRefusalAsync(Guid userId, Guid participantId, CancellationToken ct)
+    {
+        if (!await _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct)) return "Staff member not found.";
+        return (await ParticipantReadiness.CheckAsync(_db, participantId, ct)).Allowed ? null : ParticipantReadinessGate.NotReadyMessage;
+    }
+
+    /// <summary>
+    /// Locks the shift rows <paramref name="where"/> picks (a fixed predicate; values only as parameters) FOR UPDATE, in Id order: the order the agreement approval locks its participant's rows in,
+    /// so two lockers never take the same rows in opposite orders. Call it after the board lock. The wait is bounded like the advisory lock's, and a wait that runs out, or a deadlock PostgreSQL
+    /// breaks, is a <see cref="RosterBusyException"/> (409 busy), never a raw 500. A no-op off PostgreSQL.
+    /// </summary>
+    private async Task LockShiftRowsAsync(string where, object[] parameters, CancellationToken ct)
+    {
+        if (!_db.Database.IsNpgsql()) return;
+        var sql = string.Create(CultureInfo.InvariantCulture,
+            $"SET LOCAL lock_timeout = {(int)_generator.LockWait.TotalMilliseconds}; SELECT 1 FROM \"Shifts\" WHERE {where} ORDER BY \"Id\" FOR UPDATE; SET LOCAL lock_timeout TO DEFAULT");
+        try
+        {
+            await _db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.LockNotAvailable or PostgresErrorCodes.DeadlockDetected)
+        {
+            throw new RosterBusyException();
+        }
+    }
+
+    /// <summary>What a board write answers when the organisation's roster lock stayed held too long (RosterBusyException speaks of one participant's roster; this lock is the whole organisation's).</summary>
+    private const string RosterBoardBusyMessage = "Another change to the roster is still running. Wait a moment, then try again.";
 
     /// <summary>
     /// Where the shifts just made take a pool past its funding for a period (budget phase 3), as warnings; null when there are none to say. A warning only, in every mode: the shifts exist, and a budget that could

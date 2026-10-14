@@ -34,7 +34,7 @@ function makeGrid(overrides: Partial<Record<string, boolean>> = {}): Notificatio
     'LeaveRequestSubmitted', 'LeaveRequestDecided', 'ShiftAssigned',
     'ShiftCompletionPendingReview', 'ShiftCompletionReturned', 'WitnessRequested',
     'CaregiverSubmissionReceived', 'IncidentReported', 'ServiceAgreementSent',
-    'ServiceAgreementSigned', 'IntegrationDegraded',
+    'ServiceAgreementSigned', 'IntegrationDegraded', 'ShiftUnassigned',
   ] as const
   return {
     rows: eventTypes.flatMap(eventType => ([
