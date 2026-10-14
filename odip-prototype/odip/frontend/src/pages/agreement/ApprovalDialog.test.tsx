@@ -120,6 +120,17 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect(screen.getByText(/Ends 5 patterns from the agreement it replaces the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
+  it('says the changed patterns start with no default staff, and nothing of it when none changed: a matched support keeps its worker', () => {
+    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', changedPatterns: 2 }))
+    const { unmount } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+    expect(screen.getByText('The changed patterns start with no default staff.')).toBeInTheDocument()
+    unmount()
+
+    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', changedPatterns: 0 }))
+    render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+    expect(screen.queryByText(/default staff/)).not.toBeInTheDocument()
+  })
+
   it('agrees its nouns with its counts', () => {
     ready(preview({ patternsToCreate: 1, shiftsToCreate: 1, patternsToEnd: 1, endsFromVersion: 3, endsOn: '2026-11-01' }))
     setUp()
@@ -129,29 +140,59 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect(screen.getByText(/Ends 1 pattern from the agreement it replaces the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
-  it("names the old version's shifts that stay, unfilled and assigned apart, says the new ones will sit beside them, and offers them on the roster in a new tab", () => {
-    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 21, assigned: 3, firstDate: '2026-11-04', fromVersion: 1 } }))
+  const keptShift = (id: string, serviceDate: string, status: 'Draft' | 'Published', workerName?: string) => ({ id, serviceDate, startTime: '09:00:00', endTime: '13:00:00', endsNextDay: false, status, workerName })
+
+  it("says what it removes and carries of the old version's shifts, lists the kept ones with their workers, and offers them on the roster in a new tab", () => {
+    ready(preview({
+      patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01',
+      oldShiftsRemaining: { open: 1, assigned: 1, removed: 21, carried: 25, firstDate: '2026-11-02', fromVersion: 1, shifts: [keptShift('s-1', '2026-11-04', 'Draft', 'Ben Turner'), keptShift('s-2', '2026-11-06', 'Published')] },
+    }))
     setUp()
 
-    expect(screen.getByText(/21 unfilled and 3 assigned shifts from the agreement it replaces, from Wed 4 Nov 2026 on, stay on the roster\. The new unfilled shifts will sit beside them on the same days\./)).toBeInTheDocument()
-    const link = screen.getByRole('link', { name: /See them on the roster/ })
+    expect(screen.getByText('Removes 21 unfilled shifts of the agreement it replaces, from Mon 2 Nov 2026 on.')).toBeInTheDocument()
+    expect(screen.getByText("Keeps 25 shifts that don't change, as they are.")).toBeInTheDocument()
+    const kept = within(screen.getByRole('region', { name: '2 shifts of the agreement it replaces stay on the roster' }))
+    expect(kept.getByText('They have a worker, are published, or have a note or completion recorded, so approval leaves them as they are. Move or cancel each one.')).toBeInTheDocument()
+    expect(kept.getByText('Wed 4 Nov 2026 9am–1pm · Ben Turner')).toBeInTheDocument()
+    expect(kept.getByText('Fri 6 Nov 2026 9am–1pm · Unfilled')).toBeInTheDocument()
+    const link = kept.getByRole('link', { name: /See them on the roster/ })
     expect(link).toHaveAttribute('href', '/rostering?date=2026-11-02&participant=p-1')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link.getAttribute('rel')).toContain('noopener')
+    expect(screen.queryByText(/will sit beside/)).not.toBeInTheDocument()
   })
 
-  it('says it in the singular for one old shift', () => {
-    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 1, assigned: 0, firstDate: '2026-11-04', fromVersion: 1 } }))
+
+  it('says it in the singular for one shift of each kind', () => {
+    ready(preview({
+      patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', changedPatterns: 1,
+      oldShiftsRemaining: { open: 0, assigned: 1, removed: 1, carried: 1, firstDate: '2026-11-04', fromVersion: 1, shifts: [keptShift('s-1', '2026-11-04', 'Draft', 'Ben Turner')] },
+    }))
     setUp()
 
-    expect(screen.getByText(/1 unfilled and 0 assigned shift from the agreement it replaces, from Wed 4 Nov 2026 on, stays on the roster. The new unfilled shifts will sit beside it on the same days./)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /See it on the roster/ })).toBeInTheDocument()
+    expect(screen.getByText('Removes 1 unfilled shift of the agreement it replaces, from Wed 4 Nov 2026 on.')).toBeInTheDocument()
+    expect(screen.getByText("Keeps 1 shift that doesn't change, as it is.")).toBeInTheDocument()
+    expect(screen.getByText('The changed pattern starts with no default staff.')).toBeInTheDocument()
+    const kept = within(screen.getByRole('region', { name: '1 shift of the agreement it replaces stays on the roster' }))
+    expect(kept.getByText('It has a worker, is published, or has a note or completion recorded, so approval leaves it as it is. Move it or cancel it.')).toBeInTheDocument()
+    expect(kept.getByRole('link', { name: /See it on the roster/ })).toBeInTheDocument()
+  })
+
+  it('counts the kept shifts the list leaves out (the server lists at most 50)', () => {
+    const shifts = Array.from({ length: 50 }, (_, i) => keptShift(`s-${i}`, '2026-11-04', 'Published'))
+    ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01', oldShiftsRemaining: { open: 60, assigned: 0, removed: 0, firstDate: '2026-11-04', fromVersion: 1, shifts } }))
+    setUp()
+
+    const kept = within(screen.getByRole('region', { name: '60 shifts of the agreement it replaces stay on the roster' }))
+    expect(kept.getAllByRole('listitem')).toHaveLength(50)
+    expect(kept.getByText('And 10 more.')).toBeInTheDocument()
   })
 
   it('draws no sentence about old shifts when there are none', () => {
     setUp()
 
     expect(screen.queryByText(/stay on the roster/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Removes|^Keeps/)).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /on the roster/ })).not.toBeInTheDocument()
   })
 

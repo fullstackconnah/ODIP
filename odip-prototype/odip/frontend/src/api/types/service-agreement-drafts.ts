@@ -1,6 +1,6 @@
 import type { DraftBlock, PlanQuote, PlannedLineFlags } from './plan-pricing'
 import type { BudgetWarningDto } from './rostering'
-import type { SleepoverType, SupportRatio } from './enums'
+import type { ShiftStatus, SleepoverType, SupportRatio } from './enums'
 
 export type AgreementState = 'ACT' | 'NSW' | 'NT' | 'QLD' | 'SA' | 'TAS' | 'VIC' | 'WA'
 
@@ -61,13 +61,33 @@ export interface DraftApprovalDto {
   topUpEnabled?: boolean
 }
 
-/** The shifts of the previous approved revision on or after the new one starts: left alone by approval, counted so a coordinator can tidy them. */
+/** The shifts of the previous approved revisions from the day the new one starts (or today): approval removes the unfilled Draft ones, carries those of a support that did not change, and lists the rest. */
 export interface OldShiftsRemainingDto {
+  /** Kept with nobody on them (published, or with a note or a record). */
   open: number
+  /** Kept with a worker on them. */
   assigned: number
+  /** Unfilled Draft shifts approval removes (a preview) or removed (an approval's answer). Absent from an older server. */
+  removed?: number
+  /** Shifts that move to the new patterns because their support did not change. Absent when there are none to say. */
+  carried?: number
   firstDate?: string
   /** The version they came from. */
   fromVersion?: number
+  /** The kept ones by day and time, at most 50 (open and assigned count them all). */
+  shifts?: OldShiftDto[]
+}
+
+/** A shift of a replaced revision that approval leaves for a coordinator to move or cancel. */
+export interface OldShiftDto {
+  id: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  status: ShiftStatus
+  /** Absent when nobody is on it. */
+  workerName?: string
 }
 
 /** One reason an approval is refused, in plain words. `code` is a pricing issue reason (NoItem, BlocksOverlap, ...) or one of the approval's own (HolidayUndecided, ReviewFlag, HandTyped, TimeZoneMismatch, ...). */
@@ -99,6 +119,8 @@ export interface DraftApprovalPreviewDto {
   reasons: ApprovalReasonDto[]
   patternsToCreate: number
   patternsToEnd: number
+  /** The new patterns no ended pattern matches (a changed support): they start with no default staff. Absent from an older server. */
+  changedPatterns?: number
   /** The version whose patterns would end, and the day they would end (the day before this revision starts). */
   endsFromVersion?: number
   endsOn?: string
