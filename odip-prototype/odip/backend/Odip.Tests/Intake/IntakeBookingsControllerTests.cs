@@ -444,10 +444,185 @@ public class IntakeBookingsControllerTests
         Assert.DoesNotContain("ORGANIZER", update.Ics!.Content);
     }
 
+    private static CancelIntakeBookingResultDto Cancelled(ActionResult<ApiResponse<CancelIntakeBookingResultDto>> r) => Ok<CancelIntakeBookingResultDto>(r.Result!);
+
     [Fact]
-    public void Booking_takes_the_same_roles_as_the_enquiry_update()
+    public async Task Cancelling_a_visit_whose_invite_went_emails_a_cancel_with_the_same_uid_and_clears_the_booking()
     {
-        var roles = typeof(IntakeBookingsController).GetMethod(nameof(IntakeBookingsController.Set))!.GetCustomAttribute<AuthorizeAttribute>()!.Roles;
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        await f.BookAsync();
+        var uid = f.Row().IntakeUid;
+
+        var result = Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None));
+
+        Assert.Equal("Sent", result.CancellationEmail);
+        Assert.Null(result.Inquiry.IntakeStartsAt);
+        var cancel = f.Channel.Sent[1];
+        Assert.Equal("CANCEL", cancel.Ics!.Method);
+        Assert.Contains($"UID:{uid}", cancel.Ics.Content);
+        Assert.Contains("SEQUENCE:1", cancel.Ics.Content);
+        var row = f.Row();
+        Assert.Null(row.IntakeStartsAt);
+        Assert.Null(row.IntakeStaffUserId);
+        Assert.Null(row.IntakeUid);
+        Assert.Null(row.IntakeBookedByUserId);
+        Assert.Equal(0, row.IntakeIcsSequence);
+        Assert.Equal(2, f.Outbox().Count(o => o.RecipientUserId == f.Sam.Id)); // Booked, then Cancelled
+        Assert.Contains("ORGANIZER;CN=\"Dana Smith\":mailto:dana@provider.example", cancel.Ics.Content.Replace("\r\n ", ""));
+    }
+
+    // The browser goes away while the CANCEL is on its way. The booking is already cleared, so nothing could send it later: it must still go.
+    private sealed class AbortingChannel(CancellationTokenSource request) : INotificationChannel
+    {
+        public List<NotificationMessage> Sent { get; } = [];
+        public NotificationChannelKind Kind => NotificationChannelKind.Email;
+        public Task<ChannelSendResult> SendAsync(NotificationMessage message, CancellationToken ct)
+        {
+            request.Cancel();
+            if (ct.IsCancellationRequested) return Task.FromResult(new ChannelSendResult(ChannelSendOutcome.TransientFailure, null, "aborted"));
+            Sent.Add(message);
+            return Task.FromResult(new ChannelSendResult(ChannelSendOutcome.Sent, null, null));
+        }
+    }
+
+    [Fact]
+    public async Task A_cancellation_still_goes_when_the_request_is_aborted_mid_send()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        await f.BookAsync();
+        using var request = new CancellationTokenSource();
+        var aborting = new AbortingChannel(request);
+
+        var result = Cancelled(await f.Controller(channel: aborting).Cancel(f.Noah.Id, request.Token));
+
+        Assert.Equal("Sent", result.CancellationEmail);
+        Assert.Equal("CANCEL", Assert.Single(aborting.Sent).Ics!.Method);
+    }
+
+    [Fact]
+    public async Task Cancelling_when_no_invite_ever_went_emails_nobody_but_still_tells_the_staff_member()
+    {
+        var f = new Fixture(ChannelSendOutcome.Skipped);
+        await f.BookAsync();
+
+        var result = Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None));
+
+        Assert.Equal("NoInvite", result.CancellationEmail);
+        Assert.Single(f.Channel.Sent);
+        Assert.Equal(2, f.Outbox().Count);
+    }
+
+    [Fact]
+    public async Task A_cancellation_that_cannot_be_emailed_says_why()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        await f.BookAsync();
+        f.Channel.Outcome = ChannelSendOutcome.Skipped;
+
+        Assert.Equal("NotConfigured", Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None)).CancellationEmail);
+    }
+
+    // v1 keeps no sent-to address: an update, a cancel or a Send again goes to the enquiry's CURRENT email (lead call 11).
+    [Fact]
+    public async Task A_cancel_after_the_enquiry_email_was_edited_goes_to_the_current_address()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        await f.BookAsync();
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).Email = "new.address@example.com";
+        f.Db.SaveChanges();
+
+        await f.Controller().Cancel(f.Noah.Id, CancellationToken.None);
+
+        Assert.Equal("new.address@example.com", f.Channel.Sent[1].RecipientAddress);
+    }
+
+    [Fact]
+    public async Task A_visit_that_has_happened_cannot_be_cancelled()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+
+        var result = await f.Controller(now: Start.AddMinutes(90)).Cancel(f.Noah.Id, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task Cancel_confirm_and_send_again_need_a_booking_in_the_callers_organisation()
+    {
+        var f = new Fixture();
+        var other = f.Controller(tenantId: Guid.NewGuid());
+        Assert.IsType<NotFoundObjectResult>((await f.Controller().Cancel(f.Noah.Id, CancellationToken.None)).Result);
+        await f.BookAsync();
+
+        Assert.IsType<NotFoundObjectResult>((await other.Cancel(f.Noah.Id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await other.Confirm(f.Noah.Id, new ConfirmIntakeBookingDto { Confirmed = true }, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await other.Resend(f.Noah.Id, CancellationToken.None)).Result);
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
+        Assert.Null(f.Row().IntakeConfirmedAt);
+    }
+
+    [Fact]
+    public async Task Mark_confirmed_sets_and_clears_the_moment()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+
+        var on = Ok<ParticipantInquiryDto>((await f.Controller().Confirm(f.Noah.Id, new ConfirmIntakeBookingDto { Confirmed = true }, CancellationToken.None)).Result!);
+        var off = Ok<ParticipantInquiryDto>((await f.Controller().Confirm(f.Noah.Id, new ConfirmIntakeBookingDto { Confirmed = false }, CancellationToken.None)).Result!);
+
+        Assert.Equal(Now, on.IntakeConfirmedAt);
+        Assert.Null(off.IntakeConfirmedAt);
+        Assert.Single(f.Channel.Sent); // confirming emails nobody
+    }
+
+    [Fact]
+    public async Task Send_again_resends_the_same_invite_and_stores_the_new_outcome()
+    {
+        var f = new Fixture(ChannelSendOutcome.Skipped);
+        await f.BookAsync();
+        f.Channel.Outcome = ChannelSendOutcome.Sent;
+
+        var dto = Ok<ParticipantInquiryDto>((await f.Controller().Resend(f.Noah.Id, CancellationToken.None)).Result!);
+
+        Assert.Equal(Now, dto.IntakeInviteSentAt);
+        Assert.Null(dto.IntakeInviteError);
+        Assert.Equal(f.Channel.Sent[0].Subject, f.Channel.Sent[1].Subject);
+        Assert.Contains("SEQUENCE:0", f.Channel.Sent[1].Ics!.Content);
+        Assert.Equal(0, f.Row().IntakeIcsSequence);
+    }
+
+    [Fact]
+    public async Task Send_again_without_an_enquiry_email_says_so()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).Email = null;
+        f.Db.SaveChanges();
+
+        var result = await f.Controller().Resend(f.Noah.Id, CancellationToken.None);
+
+        Assert.Equal(new[] { "Add Noah's email to the enquiry to send the invite." }, Problems(result.Result!)["contactEmail"]);
+    }
+
+    [Fact]
+    public async Task Send_again_for_a_visit_that_has_happened_is_refused()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+
+        Assert.IsType<ConflictObjectResult>((await f.Controller(now: Start.AddHours(2)).Resend(f.Noah.Id, CancellationToken.None)).Result);
+    }
+
+    [Theory]
+    [InlineData(nameof(IntakeBookingsController.Set))]
+    [InlineData(nameof(IntakeBookingsController.Cancel))]
+    [InlineData(nameof(IntakeBookingsController.Confirm))]
+    [InlineData(nameof(IntakeBookingsController.Resend))]
+    public void Every_booking_write_takes_the_same_roles_as_the_enquiry_update(string action)
+    {
+        var roles = typeof(IntakeBookingsController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()!.Roles;
 
         Assert.Equal("Admin,Coordinator,SuperAdmin", roles);
     }

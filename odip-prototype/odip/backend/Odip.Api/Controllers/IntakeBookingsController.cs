@@ -134,6 +134,82 @@ public class IntakeBookingsController : ControllerBase
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, staff, provider.ZoneId)));
     }
 
+    [HttpDelete("inquiries/{id:guid}/intake-booking")]
+    [Authorize(Roles = LifecycleRoles)]
+    public async Task<ActionResult<ApiResponse<CancelIntakeBookingResultDto>>> Cancel(Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<CancelIntakeBookingResultDto>.Fail("A tenant context is required."));
+        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        if (inquiry is null || inquiry.IntakeStartsAt is not DateTime start) return NotFound(ApiResponse<CancelIntakeBookingResultDto>.Fail("No intake visit is booked for this enquiry."));
+        // A visit that has happened stays on the enquiry as its record; it can be rescheduled, not cancelled.
+        if (ProviderLocalTime.AsUtc(start).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) <= NowUtc)
+            return Conflict(ApiResponse<CancelIntakeBookingResultDto>.Fail("This visit has already happened, so it can't be cancelled."));
+
+        var staff = await StaffAsync(inquiry.IntakeStaffUserId, inquiry.TenantId, ct);
+        var provider = await ProviderAsync(inquiry.TenantId, ct);
+        inquiry.IntakeIcsSequence += 1;
+        // From the coordinator who booked, as every revision of this UID is (lead decision S2). Read before the columns are cleared.
+        var from = await InviteFromAsync(inquiry, await CallerAsync(ct), ct);
+        // Only a contact who was sent an invite has anything in their calendar to cancel. Built now, while the columns still hold the visit.
+        var cancellation = inquiry.IntakeInviteSentAt != null && inquiry.Email != null && IsSendable(inquiry.Email)
+            ? ContactMessage(inquiry, IntakeWording.Cancelled, staff, provider, from)
+            : null;
+        if (staff != null) await RaiseStaffAsync(inquiry, staff, IntakeWording.Cancelled, provider, from, ct);
+        inquiry.ClearIntakeBooking();
+        inquiry.UpdatedAt = NowUtc;
+        await _db.SaveChangesAsync(ct);
+
+        var email = "NoInvite";
+        if (cancellation != null)
+        {
+            // Not on the request's token: the booking is already cleared, so a CANCEL aborted with the browser could never be sent again.
+            var outcome = await _sender.SendAsync(cancellation, CancellationToken.None);
+            email = outcome.Sent ? "Sent" : outcome.ErrorCode ?? IntakeSendOutcome.Failed;
+        }
+        return Ok(ApiResponse<CancelIntakeBookingResultDto>.Ok(new CancelIntakeBookingResultDto
+        {
+            Inquiry = ParticipantInquiriesController.ToDto(inquiry, null, provider.ZoneId), CancellationEmail = email,
+        }));
+    }
+
+    /// <summary>The family replied or rang: the coordinator marks it by hand (no confirm link in v1). Emails nobody.</summary>
+    [HttpPost("inquiries/{id:guid}/intake-booking/confirm")]
+    [Authorize(Roles = LifecycleRoles)]
+    public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Confirm(Guid id, ConfirmIntakeBookingDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
+        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        if (inquiry is null || inquiry.IntakeStartsAt is null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("No intake visit is booked for this enquiry."));
+        inquiry.IntakeConfirmedAt = dto.Confirmed ? NowUtc : null;
+        inquiry.UpdatedAt = NowUtc;
+        await _db.SaveChangesAsync(ct);
+        var provider = await ProviderAsync(inquiry.TenantId, ct);
+        return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, await StaffAsync(inquiry.IntakeStaffUserId, inquiry.TenantId, ct), provider.ZoneId)));
+    }
+
+    /// <summary>Send again: the current invite, with the same UID and SEQUENCE, to the enquiry's current email. The outcome is stored like any send.</summary>
+    [HttpPost("inquiries/{id:guid}/intake-booking/send")]
+    [Authorize(Roles = LifecycleRoles)]
+    public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Resend(Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
+        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        if (inquiry is null || inquiry.IntakeStartsAt is not DateTime start) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("No intake visit is booked for this enquiry."));
+        if (ProviderLocalTime.AsUtc(start).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) <= NowUtc)
+            return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("This visit has already happened, so there's no invite to send."));
+        if (inquiry.Email is null || !IsSendable(inquiry.Email))
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["contactEmail"] = [$"Add {inquiry.FirstName}'s email to the enquiry to send the invite."] }));
+
+        var staff = await StaffAsync(inquiry.IntakeStaffUserId, inquiry.TenantId, ct);
+        var provider = await ProviderAsync(inquiry.TenantId, ct);
+        var from = await InviteFromAsync(inquiry, await CallerAsync(ct), ct);
+        var outcome = await _sender.SendAsync(ContactMessage(inquiry, inquiry.IntakeIcsSequence == 0 ? IntakeWording.Booked : IntakeWording.Changed, staff, provider, from), CancellationToken.None);
+        Record(inquiry, outcome, NowUtc);
+        inquiry.UpdatedAt = NowUtc;
+        await _db.SaveChangesAsync(CancellationToken.None);
+        return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, staff, provider.ZoneId)));
+    }
+
     private sealed record Provider(string ZoneId, string Name, string Address, string? ManagerName, string? ManagerPhone);
 
     // Read by the ENQUIRY's organisation: a SuperAdmin viewing as a tenant has no query filter, and must never get another organisation's settings.
