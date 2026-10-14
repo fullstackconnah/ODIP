@@ -241,9 +241,11 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
           onUseSubmitTime={() => set({ endOverride: null })} onChangeTimes={() => go('times')}
         />
       )}
-      {error && <p role="alert" className="text-sm text-[var(--color-destructive)]">{error.message}</p>}
-      {networkError && <p role="alert" className="text-sm text-[var(--color-destructive)]">Couldn't submit. Check your connection. Your entries are kept: try again.</p>}
-      <ActionBar>
+      <ActionBar notice={(error || networkError) && (
+        <p role="alert" className="text-sm text-[var(--color-destructive)]">
+          {error ? error.message : "Couldn't submit. Check your connection. Your entries are kept: try again."}
+        </p>
+      )}>
         <Button size="lg" variant="secondary" onClick={back}>{step === 'times' ? 'Back to shift' : 'Back'}</Button>
         <Button size="lg" className="flex-1" onClick={forward} disabled={submitting || (step === 'submit' && !online)}>{forwardLabel}</Button>
       </ActionBar>

@@ -46,13 +46,15 @@ export function Fact({ label, value }: { label: string; value: string | null | u
 }
 
 /** The page's one sticky action bar (SHAPE §3): above the phone's bottom nav, at the foot from lg. Its buttons change with the state; it never stacks with a second bar. */
-export function ActionBar({ children }: { children: ReactNode }) {
+export function ActionBar({ children, notice }: { children: ReactNode; notice?: ReactNode }) {
   return (
     <div
       role="toolbar"
       aria-label="Shift actions"
-      className="sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-20 -mx-4 flex gap-2 border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 lg:mx-0 lg:rounded-lg lg:border"
+      className="sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-20 -mx-4 flex flex-wrap gap-2 border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 lg:mx-0 lg:rounded-lg lg:border"
     >
+      {/* A refusal sits in the bar, above its buttons, so it is on screen however long the step is. */}
+      {notice && <div className="basis-full">{notice}</div>}
       {children}
     </div>
   )

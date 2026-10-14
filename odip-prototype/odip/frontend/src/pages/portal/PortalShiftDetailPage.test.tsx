@@ -532,7 +532,8 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T02:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u' }] }))
     endShift()
     forward('Confirm times')
-    expect(screen.getByRole('alert')).toHaveTextContent('End your break first.')
+    // In the sticky bar, above its buttons, so a refusal is on screen however long the step is (fix round 1 captures).
+    expect(bar().getByRole('alert')).toHaveTextContent('End your break first.')
     await waitFor(() => expect(document.getElementById('brk-end-now-b1')).toHaveFocus())
     expect(heading('Your times')).toBeInTheDocument()
     expect(bar().getByRole('button', { name: 'Confirm times' })).toBeEnabled()
