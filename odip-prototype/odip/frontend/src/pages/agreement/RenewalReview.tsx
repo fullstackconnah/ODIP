@@ -38,7 +38,8 @@ export function RenewalReview({ renewal, renewedFrom, oldLines, oldBlocks, oldFa
   const columns: Column<RenewalRow>[] = [
     {
       key: 'support', header: 'Support', mobile: 'primary',
-      render: row => <><span className="block">{row.serviceType}</span><span className="block text-xs text-[var(--color-muted-foreground)]">{row.itemCode}{row.band ? ` · ${row.band}` : ''}</span></>,
+      // Two lines in a row of fixed height: the cell carries its own padding so they clear the row rules (fix round 2, finish 5).
+      render: row => <div className="py-1.5"><span className="block">{row.serviceType}</span><span className="block text-xs text-[var(--color-muted-foreground)]">{row.itemCode}{row.band ? ` · ${row.band}` : ''}</span></div>,
     },
     { key: 'oldPrice', header: `${was} unit price`, align: 'right', render: row => money(row.old, side => side.unitPrice) },
     { key: 'newPrice', header: `${now} unit price`, align: 'right', render: row => money(row.renewal, side => side.unitPrice) },
