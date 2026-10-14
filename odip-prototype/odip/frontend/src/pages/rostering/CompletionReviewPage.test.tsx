@@ -302,3 +302,26 @@ describe('CompletionReviewPage: what the worker confirmed at Finish', () => {
     expect(screen.queryByText(/km driven/)).not.toBeInTheDocument()
   })
 })
+
+describe('CompletionReviewPage: shifts sent back before (review CR-B Must 1)', () => {
+  it('says on the queue row how many times the shift was returned, and only when it was', () => {
+    mockUseCompletions.mockReturnValue({
+      data: makePaged([makeQueueItem({ returnCount: 2 }), makeQueueItem({ shiftId: 'shift-2', completionId: 'sc-2', participantName: 'Mia Chen' })]),
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+
+    expect(screen.getAllByText('Returned 2 times')).toHaveLength(1)
+  })
+
+  it('says it in the review dialog too', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ returnCount: 1 })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ shiftReturnCount: 1 }) })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+
+    expect(within(screen.getByRole('alertdialog')).getByText('Returned to the worker 1 time before.')).toBeInTheDocument()
+  })
+})

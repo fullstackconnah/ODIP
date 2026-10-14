@@ -98,6 +98,7 @@ function WorkerAnswers({ c }: { c: ShiftCompletionDto }) {
     c.timeAdjustmentReason && `Reason: ${c.timeAdjustmentReason}`,
     c.kilometres != null && `${c.kilometres} km driven with the participant`,
     c.anythingToReport && 'The worker said there was something to report.',
+    c.shiftReturnCount > 0 && `Returned to the worker ${plural(c.shiftReturnCount, 'time')} before.`,
   ].filter((line): line is string => typeof line === 'string')
   if (lines.length === 0) return null
   return <ul className="space-y-0.5 text-xs">{lines.map(line => <li key={line}>{line}</li>)}</ul>
@@ -211,6 +212,9 @@ export default function CompletionReviewPage() {
           {row.timesAdjusted && (
             // An adjustment is not a compliance warning, so it takes the info tone (SHAPE §7).
             <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.info.solid}`}>Times adjusted by the worker</span>
+          )}
+          {row.returnCount > 0 && (
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Returned {plural(row.returnCount, 'time')}</span>
           )}
           <IncidentIndicator shiftId={row.shiftId} />
         </div>
