@@ -25,7 +25,7 @@ import { EARLIEST_START_LEAD_MINUTES, OVERNIGHT_SUPPORT_LABELS, portalStatusLabe
 import { ShiftNotesSection } from './components/ShiftNotesSection'
 import { HandoverSection, GlanceSection, ContactsSection, MustKnowLine } from './shift/BeforeSection'
 import { DuringSection } from './shift/DuringSection'
-import { EndSection } from './shift/EndSection'
+import { FinishFlow } from './shift/FinishFlow'
 import { DoseSheet, type DoseTarget } from './shift/DoseSheet'
 import { loadEndDraft } from './shift/endDraft'
 import { requestGeolocation } from './shift/geolocation'
@@ -111,8 +111,8 @@ export default function PortalShiftDetailPage() {
   const startBreak = useStartBreak()
   const endBreak = useEndBreak()
   const [actionError, setActionError] = useState<string | null>(null)
-  // A saved End draft means the worker was mid-End (e.g. left to Report incident): open End again.
-  const [finishing, setFinishing] = useState(() => !!id && loadEndDraft(id) !== null)
+  // A draft with an open step means the worker was mid-finish (left for the incident form, or reloaded): open it again at that step.
+  const [finishing, setFinishing] = useState(() => !!id && loadEndDraft(id)?.step != null)
   const [sheet, setSheet] = useState<{ target: DoseTarget; notGiven: boolean } | null>(null)
 
   async function handleStart() {
@@ -139,7 +139,20 @@ export default function PortalShiftDetailPage() {
 
   function openFinish() {
     setFinishing(true)
-    setTimeout(() => document.getElementById('end')?.scrollIntoView?.({ block: 'start' }), 0)
+    setTimeout(() => document.getElementById('finish')?.scrollIntoView?.({ block: 'start' }), 0)
+  }
+
+  function closeFinish(submitted: boolean) {
+    setFinishing(false)
+    // Back to shift returns focus to the control that opened the flow (SHAPE §6).
+    if (!submitted) setTimeout(() => document.getElementById('end-shift')?.focus(), 0)
+  }
+
+  // Step 4's "Add or edit notes": close the flow (its entries are saved) and open Notes, focusing its tab as a tap on it would.
+  function editNotes() {
+    setFinishing(false)
+    setTab('notes')
+    setTimeout(() => document.getElementById('shift-tab-notes')?.focus(), 0)
   }
 
   function showAbout() {
@@ -292,14 +305,14 @@ export default function PortalShiftDetailPage() {
         </Button>
       </ActionBar>
     )
-  } else if (canAct && inProgress) {
+  } else if (canAct && inProgress && !finishing) {
     bar = (
       <ActionBar>
         <Button size="lg" variant={running ? 'primary' : 'secondary'} className="flex-1" onClick={() => handleBreak(running?.id)}
           disabled={!online || startBreak.isPending || endBreak.isPending}>
           {running ? 'End break' : 'Start break'}
         </Button>
-        <Button id="end-shift" size="lg" variant={running ? 'secondary' : 'primary'} className="flex-1" onClick={openFinish} disabled={finishing}>End shift</Button>
+        <Button id="end-shift" size="lg" variant={running ? 'secondary' : 'primary'} className="flex-1" onClick={openFinish}>End shift</Button>
       </ActionBar>
     )
   }
@@ -345,7 +358,7 @@ export default function PortalShiftDetailPage() {
         <div className="space-y-4 min-w-0">
           <div {...panel('now')} className="space-y-4">
             {finishing
-              ? <EndSection shift={shift} online={online} canAct={canAct} onRecord={(target, notGiven) => setSheet({ target, notGiven })} />
+              ? <FinishFlow shift={shift} online={online} canAct={canAct} onRecord={(target, notGiven) => setSheet({ target, notGiven })} onClose={closeFinish} onEditNotes={editNotes} />
               : nowContent}
           </div>
           {/* Hidden, never unmounted, while finishing: ShiftNotesSection keeps a half-typed note in its own state (plan check S1). */}

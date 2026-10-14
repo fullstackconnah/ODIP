@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  breaksSignature, buildChecklist, clockLabel, endChecklist,
+  breaksSignature, buildChecklist, clockLabel,
   FINISH_STEPS, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
 } from './checklist'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
@@ -49,41 +49,7 @@ describe('buildChecklist', () => {
   })
 })
 
-describe('endChecklist', () => {
-  const base = { blockers: [], breaksConfirmed: true, noteCount: 1, nothingToNote: false, handoverText: '', nothingToHandOver: false }
-  it('needs a note or Nothing to note', () => {
-    expect(endChecklist({ ...base, noteCount: 0 }).find(i => i.id === 'note')?.done).toBe(false)
-    expect(endChecklist({ ...base, noteCount: 0, nothingToNote: true }).find(i => i.id === 'note')?.done).toBe(true)
-  })
-  it('needs handover text or Nothing to hand over', () => {
-    expect(endChecklist(base).find(i => i.id === 'handover')?.done).toBe(false)
-    expect(endChecklist({ ...base, handoverText: 'ok' }).find(i => i.id === 'handover')?.done).toBe(true)
-    expect(endChecklist({ ...base, nothingToHandOver: true }).find(i => i.id === 'handover')?.done).toBe(true)
-  })
-  it('is blocked by missing doses and a running break', () => {
-    const items = endChecklist({
-      ...base,
-      blockers: [
-        { code: 'DOSE_OUTCOME_MISSING', message: 'x', medicationId: 'm', medicationName: 'P', scheduledAt: '2026-10-05T08:00:00' },
-        { code: 'BREAK_RUNNING', message: 'y', medicationId: null, medicationName: null, scheduledAt: null },
-      ],
-    })
-    expect(items.find(i => i.id === 'doses')?.done).toBe(false)
-    expect(items.find(i => i.id === 'breaks')?.done).toBe(false)
-  })
-  it('needs the breaks confirmed', () => {
-    expect(endChecklist({ ...base, breaksConfirmed: false }).find(i => i.id === 'breaks')?.done).toBe(false)
-    expect(endChecklist(base).find(i => i.id === 'breaks')?.done).toBe(true)
-  })
-})
-
 describe('wording and break signature', () => {
-  const blocker = { code: 'DOSE_OUTCOME_MISSING' as const, message: 'x', medicationId: 'm', medicationName: 'P', scheduledAt: '2026-10-05T08:00:00' }
-  const base = { blockers: [], breaksConfirmed: true, noteCount: 1, nothingToNote: false, handoverText: '', nothingToHandOver: false }
-  it('agrees the verb with the count', () => {
-    expect(endChecklist({ ...base, blockers: [blocker] })[0].label).toBe('1 dose needs an outcome')
-    expect(endChecklist({ ...base, blockers: [blocker, blocker] })[0].label).toBe('2 doses need an outcome')
-  })
   it('changes the break signature when a break is edited or ended', () => {
     const a = [{ id: 'b', startedAt: '2026-10-05T01:00:00Z', endedAt: null }]
     expect(breaksSignature(a)).not.toBe(breaksSignature([{ ...a[0], endedAt: '2026-10-05T01:30:00Z' }]))

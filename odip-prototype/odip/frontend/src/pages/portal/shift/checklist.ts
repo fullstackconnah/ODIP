@@ -1,6 +1,6 @@
 // The During and End checklists as plain data. Pure and JSX-free; the components only draw what these return.
 import { formatWallClock, toDatetimeInputValue } from '@/lib/wallClock'
-import type { PortalDoseSlotDto, PortalShiftRoutineDto, PortalFinishBlockerDto } from '@/api/types'
+import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
 import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
 import { parseApiDate } from '@/lib/utils'
 import { providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
@@ -61,34 +61,7 @@ export function buildChecklist(shift: { medicationsDue: PortalDoseSlotDto[]; shi
   return { groups }
 }
 
-export interface EndItem {
-  id: 'doses' | 'breaks' | 'note' | 'handover'
-  label: string
-  done: boolean
-}
-
-/** What must clear before Finish. Doses and breaks come from the server's `finishBlockers` (its rule is the rule). */
-export function endChecklist(input: {
-  blockers: PortalFinishBlockerDto[]
-  breaksConfirmed: boolean
-  noteCount: number
-  nothingToNote: boolean
-  handoverText: string
-  nothingToHandOver: boolean
-}): EndItem[] {
-  const doseBlockers = input.blockers.filter(b => b.code === 'DOSE_OUTCOME_MISSING').length
-  const breakRunning = input.blockers.some(b => b.code === 'BREAK_RUNNING')
-  const noteDone = input.noteCount > 0 || input.nothingToNote
-  const handoverDone = !!input.handoverText.trim() || input.nothingToHandOver
-  return [
-    { id: 'doses', label: doseBlockers ? `${doseBlockers} dose${doseBlockers === 1 ? '' : 's'} ${doseBlockers === 1 ? 'needs' : 'need'} an outcome` : 'Every due dose has an outcome', done: doseBlockers === 0 },
-    { id: 'breaks', label: breakRunning ? 'A break is still running' : input.breaksConfirmed ? 'Breaks confirmed' : 'Check your breaks and confirm them', done: !breakRunning && input.breaksConfirmed },
-    { id: 'note', label: noteDone ? 'Shift note done' : 'Add a note, or say nothing to note', done: noteDone },
-    { id: 'handover', label: handoverDone ? 'Handover done' : 'Write a handover, or say nothing to hand over', done: handoverDone },
-  ]
-}
-
-/** Changes whenever a break is added, removed, ended or edited, so a "my breaks are correct" tick can be dropped when the breaks change. */
+/** Changes whenever a break is added, removed, ended or edited, so the finish flow can send the worker back to step 1 when the breaks change. */
 export function breaksSignature(breaks: { id: string; startedAt: string; endedAt: string | null }[]): string {
   return breaks.map(b => `${b.id}|${b.startedAt}|${b.endedAt ?? ''}`).join(';')
 }

@@ -65,7 +65,7 @@ function DoseRow({ slot, tz, canAct, onRecord }: { slot: PortalDoseSlotDto; tz: 
   )
 }
 
-function RoutineRow({ routine, shiftId, canAct, online }: { routine: PortalShiftRoutineDto; shiftId: string; canAct: boolean; online: boolean }) {
+export function RoutineRow({ routine, shiftId, canAct, online }: { routine: PortalShiftRoutineDto; shiftId: string; canAct: boolean; online: boolean }) {
   const check = useCheckRoutine()
   const uncheck = useUncheckRoutine()
   const [error, setError] = useState<string | null>(null)
@@ -110,7 +110,7 @@ function RoutineRow({ routine, shiftId, canAct, online }: { routine: PortalShift
   )
 }
 
-function PrnRow({ prn, tz, canAct, onRecord }: { prn: PortalPrnDto; tz: string; canAct: boolean; onRecord: (t: DoseTarget) => void }) {
+export function PrnRow({ prn, tz, canAct, onRecord }: { prn: PortalPrnDto; tz: string; canAct: boolean; onRecord: (t: DoseTarget) => void }) {
   return (
     <li className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm">
       <div className="flex items-start justify-between gap-3">

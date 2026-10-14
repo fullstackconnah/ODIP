@@ -17,7 +17,7 @@ export function CurrentShiftCard({ shift }: { shift: PortalShiftSummaryDto }) {
   const { data: detail } = usePortalShiftDetail(shift.id)
   const [now] = useNow(30_000)
   const inProgress = shift.status === 'InProgress'
-  const finishing = inProgress && loadEndDraft(shift.id) !== null
+  const finishing = inProgress && loadEndDraft(shift.id)?.step != null
   const tz = detail?.timeZoneId
   const clock = (iso: string) => formatWithTimeZone(iso, tz, { hour: 'numeric', minute: '2-digit' })
   const running = detail?.breaks.find(b => b.isRunning)
