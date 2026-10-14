@@ -15,6 +15,7 @@ import { PageState } from '@/components/PageState'
 import { WizardNavFooter, WizardShell, WizardStepHeading, WizardStepRail, type WizardStepDef } from '@/components/wizard'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { agreementIssues, type AgreementIssue } from '@/lib/agreementIssues'
+import { endingWords } from '@/lib/agreementEnding'
 import { approvalHistory } from '@/lib/agreementHistory'
 import { blocksToShifts, chargeHolidaysByDefault, engineLimits, shiftIdsOfBlock, type Shift } from '@/lib/agreementShifts'
 import { localIsoDate } from '@/lib/dateOnly'
@@ -22,7 +23,7 @@ import { currentPlanOf, planStatus } from '@/lib/fundingPlan'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, normaliseBlock, stampLocation } from '@/lib/planBlocks'
-import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, conflictVersionOf, describeRenewError, describeSaveError, formatServiceDate, friendlyMessage, isPricingDate, planNeededMessageOf, type SaveFailure } from '@/lib/planQuote'
+import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, conflictVersionOf, describeRenewError, describeSaveError, friendlyMessage, isPricingDate, planNeededMessageOf, type SaveFailure } from '@/lib/planQuote'
 import { ApprovalDialog } from './agreement/ApprovalDialog'
 import { STATES, planDatesOf, type Details } from '@/lib/agreementDetails'
 import { AgreementStep } from './agreement/AgreementStep'
@@ -62,13 +63,6 @@ function dateProblems(details: Details, plan: { start: string; end: string }): {
  * The working copy belongs to one participant and is seeded once from that participant's newest save, so the page is keyed by participant: a change of the route's id without a
  * remount would show, and then save, one participant's shifts under another.
  */
-/** The words the participant alert says of an agreement ending (AgreementEnding.Describe on the server), as a sentence. */
-function endingWords(daysLeft: number, end: string): string {
-  if (daysLeft < 0) return `Agreement ended ${formatServiceDate(end)}: shifts stop after it.`
-  if (daysLeft === 0) return 'Agreement ends today.'
-  return daysLeft === 1 ? 'Agreement ends in 1 day.' : `Agreement ends in ${daysLeft} days.`
-}
-
 /** What the last press of Renew agreement met, shown beside it: no plan for its first day, a newer revision waiting, or another refusal. */
 type RenewNotice = { kind: 'plan'; words: string } | { kind: 'newer'; version: number } | { kind: 'failed'; failure: SaveFailure }
 
@@ -181,7 +175,7 @@ function DraftPage() {
   // as the alert counts them, never from the browser's date (fix round 1, CR-B S1).
   const endingList = useAgreementsEnding(locked)
   const daysLeft = locked && newest ? endingList.data?.find(row => row.draftId === newest.id)?.daysLeft ?? null : null
-  const ending = newest && daysLeft !== null && daysLeft <= 60 ? endingWords(daysLeft, newest.agreementEndDate) : null
+  const ending = newest && daysLeft !== null && daysLeft <= 60 ? `${endingWords(daysLeft, newest.agreementEndDate)}.` : null
   const readOnly = !canEdit || locked
   const plan = planDatesOf(details, recorded)
   const dates = dateProblems(details, plan)

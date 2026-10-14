@@ -29,7 +29,7 @@ describe('AgreementsEndingList', () => {
     renderList()
 
     const [ben, amy] = screen.getAllByRole('row').slice(1)
-    for (const text of ['Ben Ng', 'Ended', 'Wed 7 Oct 2026', 'Agreement ended 2026-10-07: shifts stop after it. Renewal v2 is waiting for approval']) expect(within(ben).getByText(text)).toBeInTheDocument()
+    for (const text of ['Ben Ng', 'Ended', 'Wed 7 Oct 2026', 'Agreement ended Wed 7 Oct 2026: shifts stop after it. Renewal v2 is waiting for approval']) expect(within(ben).getByText(text)).toBeInTheDocument()
     for (const text of ['Amy Ng', 'Ending', 'Fri 30 Oct 2026', 'Agreement ends in 20 days']) expect(within(amy).getByText(text)).toBeInTheDocument()
 
     await user.click(within(amy).getByText('Amy Ng'))

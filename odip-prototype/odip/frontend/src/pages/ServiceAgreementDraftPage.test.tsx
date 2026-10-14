@@ -600,14 +600,14 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
     renderPage()
 
     await user.click(renewButton())
-    expect(screen.getByText(words)).toBeInTheDocument()
+    expect(screen.getByText("Record the new plan first: no plan of the participant's covers Mon 2 Nov 2026, the day the renewal starts.")).toBeInTheDocument()
     expect(screen.getByText('Approved for rostering')).toBeInTheDocument()            // nothing else on the page changed
     await user.click(screen.getByRole('button', { name: 'Record a new plan' }))
     expect(screen.getByTestId('editor')).toHaveAttribute('data-previous', 'f-1')
     expect(screen.getByTestId('editor')).toHaveAttribute('data-plan', 'new')
     await user.click(screen.getByRole('button', { name: 'Save the plan' }))
 
-    expect(screen.queryByText(words)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Record the new plan first/)).not.toBeInTheDocument()
     expect(screen.getByText('Agreement ends in 20 days.')).toHaveFocus()
     expect(renewButton()).toBeInTheDocument()
   })

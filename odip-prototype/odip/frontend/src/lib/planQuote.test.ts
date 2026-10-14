@@ -366,7 +366,7 @@ describe('the renewal refusals (agreement PR 2)', () => {
   const words = "Record the new plan first: no plan of the participant's covers 2026-11-23, the day the renewal starts."
 
   it('reads the plan-needed words, and nothing else as plan-needed', () => {
-    expect(planNeededMessageOf(axiosError(409, { success: false, code: 'plan-needed', errors: [words] }))).toBe(words)
+    expect(planNeededMessageOf(axiosError(409, { success: false, code: 'plan-needed', errors: [words] }))).toBe("Record the new plan first: no plan of the participant's covers Mon 23 Nov 2026, the day the renewal starts.")   // the house's dates (fix round 2)
     expect(planNeededMessageOf(axiosError(409, { success: false, code: 'draft-version-conflict', data: { currentVersion: 2 }, errors: ['x'] }))).toBeNull()
     expect(planNeededMessageOf(axiosError(400, { success: false, code: 'plan-needed', errors: [words] }))).toBeNull()
     expect(planNeededMessageOf(new Error('offline'))).toBeNull()

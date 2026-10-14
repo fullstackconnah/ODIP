@@ -6,13 +6,15 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
+import { endingWords } from '@/lib/agreementEnding'
 import { formatServiceDate } from '@/lib/planQuote'
 
 const columns: Column<AgreementEndingDto>[] = [
   { key: 'participantName', header: 'Participant', mobile: 'primary' },
   { key: 'agreementEndDate', header: 'Agreement ends', render: row => formatServiceDate(row.agreementEndDate) },
   { key: 'state', header: 'State', mobile: 'status', render: row => <StatusBadge tone={row.daysLeft < 0 ? 'danger' : 'warning'} label={row.daysLeft < 0 ? 'Ended' : 'Ending'} /> },
-  { key: 'status', header: 'What it means', wrap: true, mobile: 'meta' },
+  // The house's dates, built from the row, not the alert's ISO words (fix round 2).
+  { key: 'status', header: 'What it means', wrap: true, mobile: 'meta', render: row => endingWords(row.daysLeft, row.agreementEndDate, row.renewalVersion) },
 ]
 
 /**

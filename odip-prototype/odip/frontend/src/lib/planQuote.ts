@@ -309,7 +309,8 @@ export function describeSaveError(error: unknown): SaveFailure {
 export function planNeededMessageOf(error: unknown): string | null {
   const response = (error as AxiosError<{ code?: string; errors?: unknown }> | undefined)?.response
   if (response?.status !== 409 || response.data?.code !== 'plan-needed') return null
-  return messagesOf(error)[0] ?? null
+  // The server names the day in ISO; the screen says it as it says every date (fix round 2).
+  return messagesOf(error)[0]?.replace(/\d{4}-\d{2}-\d{2}/, iso => formatServiceDate(iso)) ?? null
 }
 
 /** What a refused renewal says. The two 409s (a newer revision, no plan for the first day) are read apart, by conflictVersionOf and planNeededMessageOf. */
