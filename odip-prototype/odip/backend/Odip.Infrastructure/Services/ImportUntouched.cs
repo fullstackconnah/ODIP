@@ -92,4 +92,15 @@ public static class ImportUntouched
         await Add(db.BookingTasks.Where(t => t.OwnerId != null && list.Contains(t.OwnerId.Value)).Select(t => t.OwnerId!.Value), "owns tasks");
         return reasons;
     }
+
+    /// <summary>
+    /// An imported funding plan changed since the import: every change to a plan, its pools or its periods is a replace, which raises its revision. Nothing
+    /// stores a reference to a plan (the ledger and the alerts compute from it on every read), so an unchanged one can go.
+    /// </summary>
+    public static async Task<Dictionary<Guid, string>> FundingPlanBlockersAsync(OdipDbContext db, IReadOnlyCollection<Guid> ids, CancellationToken ct)
+    {
+        var list = ids.ToList();
+        return (await db.FundingPlans.Where(f => list.Contains(f.Id) && f.Revision > 1).Select(f => f.Id).ToListAsync(ct))
+            .ToDictionary(id => id, _ => "was changed after the import");
+    }
 }

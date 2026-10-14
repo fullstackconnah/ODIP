@@ -348,30 +348,50 @@ public sealed class OnboardingImportService
         // still lands, on the now archived participant (archiving is an update, not a delete). SupportProfiles and ElectronicSigningSnapshots have
         // no foreign key to Participants, so their writes neither wait nor are guaranteed to be seen.
         // Staff the same way: a shift, leave or pairing row's foreign key to Users conflicts with this lock too.
-        var staff = batch.Kind == ImportKind.Staff;
+        // Funding plans: every writer of a plan takes its participant's row (FundingPlanLock), so holding those rows waits out a save in flight and the
+        // revision read below is the one it left.
         if (_db.Database.IsNpgsql())
-            await _db.Database.ExecuteSqlRawAsync(staff
-                ? "SELECT 1 FROM \"Users\" WHERE \"Id\" = ANY({0}) FOR UPDATE"
-                : "SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE", new object[] { ids.ToArray() }, ct);
-        var blockers = staff
-            ? await ImportUntouched.StaffBlockersAsync(_db, ids, ct)
-            : await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct);
+            await _db.Database.ExecuteSqlRawAsync(batch.Kind switch
+            {
+                ImportKind.Staff => "SELECT 1 FROM \"Users\" WHERE \"Id\" = ANY({0}) FOR UPDATE",
+                ImportKind.FundingPlans => "SELECT 1 FROM \"Participants\" WHERE \"Id\" IN (SELECT \"ParticipantId\" FROM \"FundingPlans\" WHERE \"Id\" = ANY({0})) FOR NO KEY UPDATE",
+                _ => "SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE",
+            }, new object[] { ids.ToArray() }, ct);
+        var blockers = batch.Kind switch
+        {
+            ImportKind.Staff => await ImportUntouched.StaffBlockersAsync(_db, ids, ct),
+            ImportKind.FundingPlans => await ImportUntouched.FundingPlanBlockersAsync(_db, ids, ct),
+            _ => await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct),
+        };
         if (blockers.Count > 0)
         {
             var blockedIds = blockers.Keys.ToList();
-            var names = staff
-                ? await _db.Users.Where(u => blockedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct)
-                : await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+            var names = batch.Kind switch
+            {
+                ImportKind.Staff => await _db.Users.Where(u => blockedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct),
+                ImportKind.FundingPlans => (await _db.FundingPlans.Where(f => blockedIds.Contains(f.Id))
+                        .Select(f => new { f.Id, f.PlanStart, f.PlanEnd, f.Participant!.FirstName, f.Participant.LastName })
+                        .ToListAsync(ct))
+                    .ToDictionary(f => f.Id, f => $"The plan for {f.FirstName} {f.LastName} ({Say(f.PlanStart)} to {Say(f.PlanEnd)})"),
+                _ => await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct),
+            };
             return new ImportUndoOutcome(false, blockers
                 .Select(b => new ImportUndoBlockerDto(b.Key, names.GetValueOrDefault(b.Key, ""), b.Value))
                 .OrderBy(b => b.Name).ToList(), null);
         }
 
         var now = DateTime.UtcNow;
-        if (staff)
+        if (batch.Kind == ImportKind.Staff)
         {
             // Deleted, not archived: the address must be free for a corrected re-import. The audit log keeps a Created and a Deleted row for each.
             _db.Users.RemoveRange(await _db.Users.Where(u => ids.Contains(u.Id)).ToListAsync(ct));
+        }
+        else if (batch.Kind == ImportKind.FundingPlans)
+        {
+            // Deleted, as the Funding tab's Delete does: the pools and periods are loaded so the cascade is tracked and audited. A plan deleted by hand
+            // since the import is simply not found.
+            _db.FundingPlans.RemoveRange(await _db.FundingPlans.Include(f => f.Pools).ThenInclude(p => p.Periods).AsSplitQuery()
+                .Where(f => ids.Contains(f.Id)).ToListAsync(ct));
         }
         else
         {

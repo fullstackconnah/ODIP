@@ -100,4 +100,59 @@ public class OnboardingImportFundingTests
         Assert.Equal(1, result.CreatedCount);
         Assert.Equal(live.Id, (await db.FundingPlans.SingleAsync()).ParticipantId);
     }
+
+    [Fact]
+    public async Task Undo_deletes_the_plans_with_their_pools_and_periods_and_then_the_participants_can_be_undone()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenantId);
+        var service = Service(db, tenantId);
+        var people = await service.CommitAsync(ImportKind.Participants, Csv("First name,Last name,NDIS number", "Ava,Stone,430000001"), "people.csv", null, ImportLanding.Active, "p-1", Admin(), CancellationToken.None);
+        var funding = await service.CommitAsync(ImportKind.FundingPlans, File, "budgets.csv", null, null, "f-1", Admin(), CancellationToken.None);
+        Assert.Equal("has a funding plan", (await service.UndoAsync(people.BatchId, Admin(), CancellationToken.None)).Blockers.Single().Reason);
+
+        var outcome = await service.UndoAsync(funding.BatchId, Admin(), CancellationToken.None);
+
+        Assert.Empty(outcome.Blockers);
+        Assert.Equal((ImportKind.FundingPlans, "Ada Admin"), (outcome.Batch!.Kind, outcome.Batch.UndoneByName));
+        Assert.Empty(await db.FundingPlans.ToListAsync());
+        Assert.Empty(await db.FundingPools.ToListAsync());
+        Assert.Empty(await db.FundingPeriods.ToListAsync());
+        Assert.Empty((await service.UndoAsync(people.BatchId, Admin(), CancellationToken.None)).Blockers);
+    }
+
+    [Fact]
+    public async Task Undo_is_refused_while_a_plan_was_changed_since_and_names_it()
+    {
+        var (db, tenantId, _) = WithAva();
+        using var scope = db;
+        var service = Service(db, tenantId);
+        var result = await service.CommitAsync(ImportKind.FundingPlans, File, "budgets.csv", null, null, "key-1", Admin(), CancellationToken.None);
+        var plan = await db.FundingPlans.SingleAsync();
+        plan.Revision = 2;
+        await db.SaveChangesAsync();
+
+        var outcome = await service.UndoAsync(result.BatchId, Admin(), CancellationToken.None);
+
+        Assert.Equal(new ImportUndoBlockerDto(plan.Id, "The plan for Ava Stone (1 Jul 2026 to 30 Jun 2027)", "was changed after the import"), outcome.Blockers.Single());
+        Assert.Single(await db.FundingPlans.ToListAsync());
+        Assert.Null((await db.ImportBatches.SingleAsync()).UndoneAt);
+    }
+
+    [Fact]
+    public async Task A_plan_deleted_by_hand_since_the_import_does_not_stop_the_undo()
+    {
+        var (db, tenantId, avaId) = WithAva();
+        using var scope = db;
+        var service = Service(db, tenantId);
+        var result = await service.CommitAsync(ImportKind.FundingPlans, File, "budgets.csv", null, null, "key-1", Admin(), CancellationToken.None);
+        var planId = (await db.FundingPlans.SingleAsync()).Id;
+        Assert.True(await new FundingPlanService(db, TimeProvider.System).DeleteAsync(tenantId, avaId, planId, CancellationToken.None));
+        db.ChangeTracker.Clear();
+
+        var outcome = await service.UndoAsync(result.BatchId, Admin(), CancellationToken.None);
+
+        Assert.Empty(outcome.Blockers);
+        Assert.NotNull(outcome.Batch!.UndoneAt);
+    }
 }
