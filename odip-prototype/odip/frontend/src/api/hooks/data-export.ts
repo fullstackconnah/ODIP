@@ -78,6 +78,8 @@ export async function exportFailure(err: unknown): Promise<DataExportFailure> {
     return { title: 'Choose an organisation first', body: extractErrorMessage({ response: { data } }, NO_ORGANISATION) }
   }
   if (response?.status === 403) return { title: "You can't export this organisation's data", body: 'Only an Admin can download a full export.' }
+  // A SuperAdmin viewing an organisation that has gone (DataExportController's 404): trying again never helps.
+  if (response?.status === 404) return { title: 'That organisation no longer exists', body: 'Choose another organisation to view as.' }
   return { title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.' }
 }
 

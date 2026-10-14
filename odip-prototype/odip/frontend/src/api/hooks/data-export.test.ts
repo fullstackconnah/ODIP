@@ -44,6 +44,13 @@ describe('exportFailure', () => {
     })
   })
 
+  it('a 404 says the organisation no longer exists, since trying again never helps', async () => {
+    expect(await exportFailure(answered(404, blobOf({ success: false, errors: ['Organisation not found.'] })))).toEqual({
+      title: 'That organisation no longer exists',
+      body: 'Choose another organisation to view as.',
+    })
+  })
+
   it('anything else before the stream started could not be built', async () => {
     expect(await exportFailure(answered(500, blobOf({})))).toEqual({ title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.' })
     expect(await exportFailure(new Error('boom'))).toEqual({ title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.' })
