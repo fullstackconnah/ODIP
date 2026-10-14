@@ -178,6 +178,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetEffect>();
 builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>();
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
 // The data export: one at a time per organisation. The same limiter with one permit, keyed so the quote keeps its two.
+// shortcut: process-local, correct for the single api container in deploy/compose.yaml; move to a DB advisory lock if the API is ever scaled out.
 builder.Services.AddKeyedSingleton(Odip.Api.RateLimiting.DataExportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.DataExportConcurrencyFilter.PermitsPerOrganisation));
 builder.Services.AddScoped<Odip.Api.RateLimiting.DataExportConcurrencyFilter>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftService>();
