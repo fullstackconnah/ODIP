@@ -1,7 +1,7 @@
 import { createContext } from 'react'
 import { closestCenter, pointerWithin, type Announcements, type CollisionDetection, type Modifier, type ScreenReaderInstructions } from '@dnd-kit/core'
 import { format, parseISO } from 'date-fns'
-import type { PublishWeekResultDto, ShiftDto, ShiftStatus } from '@/api/types'
+import type { PublishWeekResultDto, RosterStaffRowDto, ShiftDto, ShiftStatus, StaffLeaveDto, StaffListDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatShiftTime } from '@/lib/utils'
 import { formatDayAccessibleName, formatShiftTimeRange, isUnfilledShift } from './roster'
@@ -53,6 +53,9 @@ export const WEEK_TARGET_HOURS = 38
 export function firstName(fullName: string | null | undefined): string {
   return (fullName ?? '').trim().split(' ')[0]
 }
+
+/** "12" or "7.5": hours as the strip puck and the picker print them. */
+export const hoursText = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
 /** What letting go here would do. The server still judges it: nothing here checks a rule. */
 export function dropOutcome(carry: DragCarry, target: DropTarget | undefined): DropOutcome {
@@ -225,4 +228,82 @@ export function publishWeekMessage(drafts: ShiftDto[]): string {
     people > 0 ? `The ${plural(people, 'person', 'people')} on them ${people === 1 ? 'is' : 'are'} notified.` : null,
     unfilled > 0 ? `${unfilled} still ${unfilled === 1 ? 'needs' : 'need'} staff and ${unfilled === 1 ? 'is' : 'are'} published as needing staff.` : null,
   ].filter(Boolean).join(' ')
+}
+
+// ── The staff picker (spec 2026-10-15, decision C; the brief, section 4). Nothing here checks a rule: the server judges the pick. ──
+
+/** One row of the picker: a person, and on a Move row the shift they would come off. `key` is unique in the list: the person's id, or `{person id}:{source shift id}`. */
+export type PickRow = { key: string; person: StaffListDto; hours: number; leave: 'Approved' | 'Pending' | null; source?: ShiftDto }
+export type PickGroups = { free: PickRow[]; move: PickRow[]; leave: PickRow[] }
+
+/** A shift's start and end in minutes on the wall clock with no zone. A day is always 1440 minutes, so a clock change never moves an overlap (Review Focus 1). */
+function shiftMinutes(s: Pick<ShiftDto, 'serviceDate' | 'startTime' | 'endTime' | 'endsNextDay'>): [number, number] {
+  const day = Date.UTC(+s.serviceDate.slice(0, 4), +s.serviceDate.slice(5, 7) - 1, +s.serviceDate.slice(8, 10)) / 60_000
+  const at = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3, 5)
+  return [day + at(s.startTime), day + at(s.endTime) + (s.endsNextDay ? 1440 : 0)]
+}
+
+export function shiftsOverlap(a: ShiftDto, b: ShiftDto): boolean {
+  const [aStart, aEnd] = shiftMinutes(a)
+  const [bStart, bEnd] = shiftMinutes(b)
+  return aStart < bEnd && bStart < aEnd
+}
+
+/** Leave covering the day: approved wins over pending. */
+function leaveOn(leave: StaffLeaveDto[], staffId: string, day: string): PickRow['leave'] {
+  const covering = leave.filter(l => l.staffId === staffId && l.from <= day && day <= l.to)
+  return covering.some(l => l.status === 'Approved') ? 'Approved' : covering.length > 0 ? 'Pending' : null
+}
+
+/**
+ * Who goes in which group for a Needs staff shift (the brief, section 4). Each active person lands in the FIRST group that matches:
+ * 1. Move: they hold a non-cancelled, unlocked shift whose time overlaps this one. Each such shift is its own row.
+ *    Left out entirely: a person whose only overlapping shifts are locked, or who is on the other chip of this 2:1 pair (same participant, day and times).
+ * 2. Leave: approved or pending leave covers the day.
+ * 3. Free: everyone else, a non-overlapping shift that day included.
+ * Each group keeps the staff list's order (by last name), and a person's Move rows go by start time. Shown Free, then Move, then Leave.
+ */
+export function pickerGroups(target: ShiftDto, staff: StaffListDto[], shifts: ShiftDto[], leave: StaffLeaveDto[], hours: Map<string, number>): PickGroups {
+  const groups: PickGroups = { free: [], move: [], leave: [] }
+  const isPair = (s: ShiftDto) => s.participantId === target.participantId && s.serviceDate === target.serviceDate && s.startTime === target.startTime && s.endTime === target.endTime
+  for (const person of staff) {
+    if (!person.isActive) continue
+    const row = { person, hours: hours.get(person.id) ?? 0, leave: leaveOn(leave, person.id, target.serviceDate) }
+    const overlapping = shifts
+      .filter(s => s.staffId === person.id && s.id !== target.id && s.status !== 'Cancelled' && shiftsOverlap(s, target))
+      .sort((a, b) => shiftMinutes(a)[0] - shiftMinutes(b)[0])
+    const sources = overlapping.filter(s => !isLockedShift(s) && !isPair(s))
+    if (sources.length > 0) groups.move.push(...sources.map(source => ({ ...row, key: `${person.id}:${source.id}`, source })))
+    else if (overlapping.length === 0) (row.leave ? groups.leave : groups.free).push({ ...row, key: person.id })
+  }
+  return groups
+}
+
+/** The plus's accessible name and title: "Assign someone to Tuesday 9am to 3pm for Mia". */
+export function pickName(shift: ShiftDto): string {
+  return `Assign someone to ${format(parseISO(shift.serviceDate), 'EEEE')} ${spokenRange(shift)} for ${firstName(shift.participantName)}`
+}
+
+/** A Move row's second line: "Move from Mon 8am–5pm · Liam". */
+export function moveLine(source: ShiftDto): string {
+  return `Move from ${format(parseISO(source.serviceDate), 'EEE')} ${formatShiftTimeRange(source.startTime, source.endTime)} · ${firstName(source.participantName)}`
+}
+
+/** An option's accessible name, in the strip puck's style (StaffStrip): "Jack O'Sullivan, 15 of 38 hours this week, move from Monday 8am to 5pm with Liam, published: tells Jack". */
+export function pickOptionName(row: PickRow): string {
+  const { person, source } = row
+  return [
+    `${person.fullName}, ${hoursText(row.hours)} of ${WEEK_TARGET_HOURS} hours this week`,
+    person.hasExpiredQualifications ? 'qualifications expired' : null,
+    row.leave === 'Approved' ? 'on leave' : row.leave === 'Pending' ? 'leave pending' : null,
+    source ? `move from ${format(parseISO(source.serviceDate), 'EEEE')} ${spokenRange(source)} with ${firstName(source.participantName)}` : null,
+    source?.status === 'Published' ? `published: tells ${firstName(person.fullName)}` : null,
+  ].filter(Boolean).join(', ')
+}
+
+/** The Staff view's leave for the picker: its rows' leave bars that are leave requests (the participant board sends `staffLeave` instead). */
+export function leaveFromStaffRows(rows: RosterStaffRowDto[]): StaffLeaveDto[] {
+  return rows.flatMap(row => row.leave
+    .filter(bar => bar.kind === 'ApprovedLeave' || bar.kind === 'PendingLeave')
+    .map(bar => ({ staffId: row.staffId, from: bar.startDate, to: bar.endDate, status: bar.kind === 'ApprovedLeave' ? 'Approved' as const : 'Pending' as const })))
 }

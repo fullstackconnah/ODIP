@@ -5,7 +5,7 @@ import type {
   PortalShiftRoutineDto,
 } from './shift-package'
 import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
-import type { UnavailabilityKind } from './leave'
+import type { LeaveStatus, UnavailabilityKind } from './leave'
 import type { PlanBlockRequirements } from './plan-pricing'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
@@ -333,6 +333,23 @@ export interface LeaveBarDto {
   endTime: string | null
 }
 
+/** A participant whose newest agreement revision waits for an approval for rostering (spec 2026-10-15; L10): its shifts are not on the board until it is approved. They may have no row: `canReceiveServices` false means their services have not started. */
+export interface PendingAgreementDto {
+  participantId: string
+  displayName: string
+  draftId: string
+  version: number
+  canReceiveServices: boolean
+}
+
+/** One approved or pending leave request touching the board's week (participant board only; the Staff view has its rows' leave bars). Whole days, both ends inclusive, not clipped to the week. */
+export interface StaffLeaveDto {
+  staffId: string
+  from: string
+  to: string
+  status: Extract<LeaveStatus, 'Approved' | 'Pending'>
+}
+
 // ── Roster Board ──────────────────────────────────────────
 export interface RosterStaffRowDto {
   staffId: string
@@ -362,6 +379,8 @@ export interface RosterParticipantRowDto {
   /** What is still missing for this participant (e.g. "No signed service agreement"), shown verbatim as a
    * quiet warning. Omitted by the server when there is nothing missing. */
   readinessIssues?: string[]
+  /** The organisation enforces readiness and this participant fails it: new shifts and assignments are refused (the row says so). */
+  notReadyForRostering?: boolean
 }
 
 export interface RosterExceptionDto {
@@ -383,6 +402,10 @@ export type RosterBoardDto =
       weekStart: string
       days: string[]
       participantRows: RosterParticipantRowDto[]
+      /** Every participant whose newest agreement waits for an approval for rostering, with or without a row (the notice). */
+      pendingAgreements?: PendingAgreementDto[]
+      /** The week's approved and pending leave of every active staff member, for the staff picker. */
+      staffLeave?: StaffLeaveDto[]
       exceptions: RosterExceptionDto[]
     }
   | {

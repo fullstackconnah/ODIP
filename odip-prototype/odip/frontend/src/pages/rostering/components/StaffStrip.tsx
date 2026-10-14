@@ -5,7 +5,7 @@ import type { StaffListDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchInput } from '@/components/SearchInput'
 import { formatHoursMeter } from '../lib/roster'
-import { DropStateContext, WEEK_TARGET_HOURS, carriedLine, dropOutcome, type DragCarry, type DropTarget } from '../lib/rosterDrag'
+import { DropStateContext, WEEK_TARGET_HOURS, carriedLine, hoursText, dropOutcome, type DragCarry, type DropTarget } from '../lib/rosterDrag'
 
 export type StaffStripProps = {
   staff: StaffListDto[]
@@ -16,8 +16,6 @@ export type StaffStripProps = {
   regionFilter: string
   onRegionFilterChange: (value: string) => void
 }
-
-const hoursText = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
 /**
  * The staff strip (roster drag and drop, the brief section 3): every active person as a puck to carry onto a shift or an empty day. The page shows it in the Participant view, for
