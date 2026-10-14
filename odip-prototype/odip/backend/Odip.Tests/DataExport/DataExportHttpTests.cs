@@ -170,8 +170,52 @@ public class DataExportHttpTests
 
         using var zip = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
         Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
-        Assert.Contains(host.Logs, l => l.Category == typeof(DataExportController).FullName && l.Level == LogLevel.Error && l.Message.Contains("audit row"));
+        Assert.Contains(host.Logs, l => l.Category == typeof(DataExportController).FullName && l.Level == LogLevel.Error
+            && l.Message.Contains("audit row not written") && l.Message.Contains(tenantId.ToString()));
         Assert.Empty(await host.ExportRowsAsync(tenantId));
+    }
+
+    [Fact]
+    public async Task An_audit_save_that_hangs_is_cut_off_by_its_own_timeout_logged_and_the_client_keeps_its_whole_zip()
+    {
+        // A save that never finishes on its own (a lock, a dead connection) and gives up only when its token is cancelled, as Npgsql does.
+        await using var host = await Host.StartAsync(new OnAuditSave(token =>
+        {
+            token.WaitHandle.WaitOne(TimeSpan.FromSeconds(60));
+            token.ThrowIfCancellationRequested();
+        }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        using var response = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId);
+
+        using var zip = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
+        Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30), $"The audit save is bounded at about 15 s; the request took {watch.Elapsed.TotalSeconds:0} s.");
+        Assert.Contains(host.Logs, l => l.Category == typeof(DataExportController).FullName && l.Level == LogLevel.Error
+            && l.Message.Contains("audit row not written") && l.Message.Contains(tenantId.ToString()));
+    }
+
+    [Fact]
+    public async Task The_organisations_slot_is_free_again_after_the_client_cancels_a_download()
+    {
+        var release = new ManualResetEventSlim();
+        await using var host = await Host.StartAsync(new OnVehicle(_ => release.Wait(TimeSpan.FromSeconds(20))));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        using (var cancelled = new CancellationTokenSource())
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/data-export");
+            request.Headers.Add("X-Test-Role", "Admin");
+            request.Headers.Add("X-Test-Tenant", tenantId.ToString());
+            using var running = await host.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancelled.Token);
+            Assert.Equal(HttpStatusCode.OK, running.StatusCode); // it holds the slot
+            cancelled.Cancel(); // the browser tab is closed mid-download
+        }
+        release.Set(); // the export carries on, finds the client gone, and ends
+
+        using var next = await host.ExportOnceTheSlotIsFreeAsync(tenantId);
+        Assert.Equal(HttpStatusCode.OK, next.StatusCode);
     }
 
     [Theory]

@@ -29,6 +29,9 @@ namespace Odip.Api.Controllers;
 [Route("api/v1/data-export")]
 public class DataExportController : ControllerBase
 {
+    /// <summary>How long the audit row's save may take once the ZIP is complete.</summary>
+    public static readonly TimeSpan AuditSaveTimeout = TimeSpan.FromSeconds(15);
+
     public const string NoOrganisation = "Choose an organisation to view as before exporting data.";
 
     // Nothing in the build carries a commit, so this is the API assembly's version. Stamping the commit at deploy time is a follow-up.
@@ -108,13 +111,15 @@ public class DataExportController : ControllerBase
                 ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null,
                 ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name),
             });
-            // Not ct: a client that leaves once it has the last byte still has the whole export, and this row is its only trace. One INSERT.
-            await _db.SaveChangesAsync(CancellationToken.None);
+            // Its own token, not ct: a client that leaves once it has the last byte still has the whole export, and this row is its only trace.
+            // Bounded, so a stuck save can't hold the request (and its connection) open.
+            using var auditTimeout = new CancellationTokenSource(AuditSaveTimeout);
+            await _db.SaveChangesAsync(auditTimeout.Token);
         }
         catch (Exception ex) when (zipComplete)
         {
             // The client has a whole ZIP: aborting now would destroy it. The trail is what failed, so say so loudly.
-            _logger.LogError(ex, "Data export for {TenantId} finished but its audit row was not saved", tenantId);
+            _logger.LogError(ex, "Data export for {TenantId} finished; audit row not written", tenantId);
         }
         catch (Exception ex)
         {
