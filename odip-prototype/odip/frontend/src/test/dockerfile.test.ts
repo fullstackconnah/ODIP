@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const DOCKERFILE = resolve(__dirname, '../../Dockerfile')
+// Capped at 4 workers: the deploy host also runs test jobs, and an uncapped run starved it (deploy of #244, 2026-10-15).
+const TEST_RUN = 'RUN npm test -- --maxWorkers=4'
 
 // The deployed commit reaches Vite as VITE_BUILD_SHA (the platform footer's "Build 1a2b3c4"). Every RUN after an ARG sees it, so
 // declared above `npm ci` a new sha each deploy would throw away the cached install; declared above `npm test` the tests could see it.
@@ -12,10 +14,17 @@ describe.skipIf(!existsSync(DOCKERFILE))('frontend/Dockerfile: the build sha', (
     const at = (line: string) => lines.indexOf(line)
     const arg = at('ARG VITE_BUILD_SHA')
     const env = at('ENV VITE_BUILD_SHA=$VITE_BUILD_SHA')
-    expect(arg).toBeGreaterThan(at('RUN npm test'))
+    expect(arg).toBeGreaterThan(at(TEST_RUN))
     expect(env).toBeGreaterThan(arg)
     expect(env).toBeLessThan(at('RUN npm run build'))
     const firstMention = lines.findIndex((l) => !l.startsWith('#') && l.includes('VITE_BUILD_SHA'))
     expect(firstMention).toBe(arg)
+  })
+})
+
+describe.skipIf(!existsSync(DOCKERFILE))('frontend/Dockerfile: the test run', () => {
+  it('runs the test suite with 4 workers', () => {
+    const lines = readFileSync(DOCKERFILE, 'utf8').split('\n').map((l) => l.trim())
+    expect(lines).toContain(TEST_RUN)
   })
 })
