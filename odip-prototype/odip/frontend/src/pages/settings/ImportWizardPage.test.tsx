@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ImportWizardPage from './ImportWizardPage'
@@ -183,5 +183,16 @@ describe('ImportWizardPage', () => {
     expect(screen.getByRole('button', { name: 'Send sign-in invites (1)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
     expect(within(screen.getByRole('alertdialog')).getByText('The 1 staff member it created is removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
+  })
+})
+
+describe('ImportWizardPage: where an unknown kind goes', () => {
+  it('sends /settings/import/<unknown> back to Settings › Import data', async () => {
+    const router = createMemoryRouter(
+      [{ path: '/settings/import/:kind', element: <ImportWizardPage /> }, { path: '/settings', element: <p>Settings</p> }],
+      { initialEntries: ['/settings/import/unknown'] },
+    )
+    render(<RouterProvider router={router} />)
+    await waitFor(() => expect(router.state.location.search).toBe('?section=import'))
   })
 })

@@ -144,7 +144,7 @@ export default function QualificationsPage() {
       title="Qualifications"
       subtitle={allStaff.length > 0 ? `${plural(issueCount, 'issue')} across ${groups.length} active staff` : undefined}
       action={canAccessPage('settings') && (
-        <Button to="/settings?tab=qualifications" variant="secondary" size="md">
+        <Button to="/settings?section=alerts" variant="secondary" size="md">
           <Settings className="w-4 h-4" /> Warning window
         </Button>
       )}
