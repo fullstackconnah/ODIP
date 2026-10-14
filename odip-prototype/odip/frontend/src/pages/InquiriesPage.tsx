@@ -191,7 +191,7 @@ function useInquiriesScreen() {
     {
       key: 'id', header: 'Actions', type: 'custom', pin: 'end',
       render: row => canManageParticipantLifecycle ? (
-        <div className={`flex flex-wrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
+        <div className={`flex flex-wrap md:flex-nowrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
           {primaryAction(row)}
           {/* A direct intake has no enquiry record, so there is nothing to edit as one. On a booked row's phone card, Edit enquiry moves into More. */}
           {!row.isDirectIntake && (

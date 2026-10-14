@@ -46,6 +46,14 @@ beforeEach(() => {
 })
 
 describe('the Intake column', () => {
+  // Fix round 1 (SHAPE section 6): from md up the pinned Actions cluster stays on one row; only the phone card may wrap it.
+  it('keeps the desktop actions on one row', () => {
+    page()
+
+    const cluster = screen.getByRole('button', { name: 'Start intake for Noah Fitzgerald' }).parentElement!
+    expect(cluster).toHaveClass('flex-wrap', 'md:flex-nowrap')
+  })
+
   it('shows each state in words, never colour alone', () => {
     page()
 
