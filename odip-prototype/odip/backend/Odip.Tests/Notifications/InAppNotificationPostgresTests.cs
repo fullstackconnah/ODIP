@@ -2,12 +2,19 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Npgsql;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Application.Interfaces;
 using Odip.Domain.Notifications;
+using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Notifications;
 using Odip.Tests.Postgres;
 using Xunit;
 
@@ -99,6 +106,84 @@ public class InAppNotificationPostgresTests : IClassFixture<PostgresFixture>
 
             Assert.IsType<NoContentResult>(await controller.MarkAllInboxRead(CancellationToken.None));
             Assert.Equal(0, Inbox(await controller.GetInbox(30, CancellationToken.None)).UnreadCount);
+        }
+    }
+
+    private static NotificationDispatchBackgroundService Dispatcher(string connectionString, bool enabled)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<OdipDbContext>(o => o.UseNpgsql(connectionString));
+        var email = new Mock<INotificationChannel>();
+        email.Setup(c => c.Kind).Returns(NotificationChannelKind.Email);
+        services.AddSingleton<INotificationChannel>(email.Object);
+        services.AddSingleton<INotificationChannel>(new SmsChannel());
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Notifications:Enabled"] = enabled ? "true" : "false",
+            ["Notifications:DispatchIntervalSeconds"] = "3600",
+        }).Build();
+        return new NotificationDispatchBackgroundService(
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), config,
+            NullLogger<NotificationDispatchBackgroundService>.Instance);
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_DeletesRowsOlderThan90Days_InEveryOrganisation_AndKeepsTheRest()
+    {
+        RequirePostgres();
+        var now = DateTime.UtcNow;
+        var (setupA, a) = await _pg.NewTenantContextAsync();
+        var (setupB, b) = await _pg.NewTenantContextAsync();
+        await setupA.DisposeAsync();
+        await setupB.DisposeAsync();
+        var expiredA = Row(a, Guid.NewGuid(), now.AddDays(-91));
+        var keptA = Row(a, Guid.NewGuid(), now.AddDays(-89));
+        var expiredB = Row(b, Guid.NewGuid(), now.AddDays(-91));
+        var keptB = Row(b, Guid.NewGuid(), now.AddDays(-89));
+        await using (var admin = PostgresFixture.NewContext(_pg.ConnectionString))
+        {
+            admin.InAppNotifications.AddRange(expiredA, keptA, expiredB, keptB);
+            await admin.SaveChangesAsync();
+        }
+
+        var deleted = await Dispatcher(_pg.ConnectionString, enabled: false).PurgeExpiredInAppNotificationsAsync(now, CancellationToken.None);
+
+        Assert.True(deleted >= 2);
+        await using var check = PostgresFixture.NewContext(_pg.ConnectionString);
+        var left = await check.InAppNotifications.Where(n => n.TenantId == a || n.TenantId == b).Select(n => n.Id).ToListAsync();
+        Assert.Equal(new[] { keptA.Id, keptB.Id }.OrderBy(x => x), left.OrderBy(x => x));
+    }
+
+    /// <summary>Review Focus 3: live has Notifications:Enabled=false and usually an empty outbox; the purge must still run.</summary>
+    [SkippableFact]
+    public async Task ThePurge_RunsFromTheServiceLoop_WithNotificationsDisabledAndAnEmptyOutbox()
+    {
+        RequirePostgres();
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await setup.DisposeAsync();
+        var expired = Row(tenantId, Guid.NewGuid(), DateTime.UtcNow.AddDays(-91));
+        await using (var admin = PostgresFixture.NewContext(_pg.ConnectionString))
+        {
+            admin.InAppNotifications.Add(expired);
+            await admin.SaveChangesAsync();
+        }
+
+        var service = Dispatcher(_pg.ConnectionString, enabled: false);
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            var gone = false;
+            for (var i = 0; i < 150 && !gone; i++) // up to 15 s: the first loop pass purges before its first delay
+            {
+                await Task.Delay(100);
+                await using var check = PostgresFixture.NewContext(_pg.ConnectionString);
+                gone = !await check.InAppNotifications.AnyAsync(n => n.Id == expired.Id);
+            }
+            Assert.True(gone, "the loop did not purge an expired bell row while Notifications:Enabled was false");
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
         }
     }
 }
