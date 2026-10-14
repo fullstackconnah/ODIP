@@ -279,6 +279,35 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task AssignShift_OnAnotherOrganisationsHeldRow_Is404_NotBusy()   // post-merge review N5: the row lock never reaches another organisation's rows
+    {
+        RequirePostgres();
+        var ours = await NewOrganisationAsync();
+        var theirsTenant = await NewOrganisationAsync();
+        Guid samId, theirShift;
+        await using (var db = Open(ours)) { samId = Worker(db, "Sam").Id; await db.SaveChangesAsync(); }
+        await using (var db = Open(theirsTenant)) { theirShift = ShiftOf(db, Person(db, "Ivy").Id, null, ShiftStatus.Draft, Monday).Id; await db.SaveChangesAsync(); }
+
+        // Their own coordinator is mid-save on that row.
+        await using var other = new NpgsqlConnection(_pg.ConnectionString);
+        await other.OpenAsync();
+        await using var editing = await other.BeginTransactionAsync();
+        await using (var touch = new NpgsqlCommand("UPDATE \"Shifts\" SET \"Notes\" = 'theirs' WHERE \"Id\" = @id", other, editing))
+        {
+            touch.Parameters.AddWithValue("id", theirShift);
+            await touch.ExecuteNonQueryAsync();
+        }
+
+        await using (var db = Open(ours))
+        {
+            // A guessed id from another organisation: 404 at once, not a lock wait that answers busy and so says the row exists and is being written.
+            var result = await Controller(db, ours, TimeSpan.FromMilliseconds(400)).AssignShift(theirShift, new AssignShiftDto { StaffId = samId }, default);
+            Assert.IsType<NotFoundObjectResult>(result.Result);
+        }
+        await editing.RollbackAsync();
+    }
+
+    [SkippableFact]
     public async Task TwoMovesOntoOneNeedsStaffShiftAtOnce_OneWinsTheOtherIs409()   // Review Focus 1
     {
         RequirePostgres();

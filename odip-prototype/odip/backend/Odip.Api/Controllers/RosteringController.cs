@@ -1953,6 +1953,8 @@ public class RosteringController : ControllerBase
     /// even across participants (one person dropped onto two overlapping shifts at once). It is the generator's <see cref="RosterGenerationLock"/>, keyed on the tenant under a scope of its
     /// own: a move only changes who works a shift, so it has nothing to wait for in a generation. A no-op off PostgreSQL. Read what you change AFTER taking it.
     /// </summary>
+    // shortcut: a SuperAdmin with no organisation chosen locks the Guid.Empty key, so their board writes do not exclude one organisation's coordinators (they serialise only with
+    // each other); key the lock on the shifts' own tenant if SuperAdmins ever edit rosters without choosing one.
     private Task<RosterGenerationLock> RosterBoardLockAsync(CancellationToken ct) =>
         RosterGenerationLock.AcquireAsync(_db, _tenant?.TenantId ?? Guid.Empty, ct, _generator.LockWait, scope: "roster-board");
 
@@ -1971,6 +1973,13 @@ public class RosteringController : ControllerBase
     private async Task LockShiftRowsAsync(string where, object[] parameters, CancellationToken ct)
     {
         if (!_db.Database.IsNpgsql()) return;
+        // Raw SQL skips the tenant query filter, so name the caller's organisation (post-merge review N5): another organisation's row is never locked, and a guessed id answers
+        // 404 at once from the filtered read rather than waiting on, and so revealing, a row someone else is writing.
+        if (_tenant?.TenantId is { } tenantId)
+        {
+            where = string.Create(CultureInfo.InvariantCulture, $"({where}) AND \"TenantId\" = {{{parameters.Length}}}");
+            parameters = [.. parameters, tenantId];
+        }
         var sql = string.Create(CultureInfo.InvariantCulture,
             $"SET LOCAL lock_timeout = {(int)_generator.LockWait.TotalMilliseconds}; SELECT 1 FROM \"Shifts\" WHERE {where} ORDER BY \"Id\" FOR UPDATE; SET LOCAL lock_timeout TO DEFAULT");
         try
