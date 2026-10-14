@@ -1,9 +1,14 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Odip.Api.Controllers;
+using Odip.Application.Common;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
+using Odip.Tests.Medications;
 using Odip.Tests.Postgres;
 using Xunit;
 using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
@@ -65,5 +70,19 @@ public class AgreementRenewalPostgresTests : IClassFixture<PostgresFixture>
         var row = Assert.Single(await AgreementEnding.FindAsync(db, new[] { participantId }, new DateOnly(2026, 10, 10), CancellationToken.None));
 
         Assert.Equal((1, -5, (int?)2), (row.Version, row.DaysLeft, row.RenewalVersion));
+    }
+
+    [SkippableFact]
+    public async Task TheEndingList_NamesTheParticipantAndReadsTheProvidersDay_OnPostgres()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        await StoreAsync(cs, tenantId, participantId, 1, new DateOnly(2026, 10, 3), new DateOnly(2026, 10, 30), approved: true);
+
+        await using var db = Open(cs, tenantId);
+        var response = await new ServiceAgreementsController(db, FakeClock.AtUtc(2026, 10, 10, 2, 0)).Ending(CancellationToken.None);
+
+        var row = Assert.Single(Assert.IsType<ApiResponse<List<AgreementEndingDto>>>(Assert.IsType<OkObjectResult>(response.Result).Value).Data!);
+        Assert.Equal((participantId, "Amy Ng", 20, "Agreement ends in 20 days"), (row.ParticipantId, row.ParticipantName, row.DaysLeft, row.Status));
     }
 }
