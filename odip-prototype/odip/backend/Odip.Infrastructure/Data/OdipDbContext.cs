@@ -1550,6 +1550,15 @@ public class OdipDbContext : DbContext
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
             entity.HasIndex(e => new { e.TenantId, e.ParticipantId });
+            entity.Property(e => e.IntakeLocation).HasMaxLength(300);
+            entity.Property(e => e.IntakeNotes).HasMaxLength(1000);
+            entity.Property(e => e.IntakeInviteError).HasMaxLength(20);
+            entity.Property(e => e.IntakeUid).HasMaxLength(100);
+            // Restrict: a staff member booked for a visit is never deleted out from under it (ImportUntouched.StaffBlockersAsync lists it).
+            entity.HasOne(e => e.IntakeStaffUser).WithMany().HasForeignKey(e => e.IntakeStaffUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.IntakeBookedByUser).WithMany().HasForeignKey(e => e.IntakeBookedByUserId).OnDelete(DeleteBehavior.Restrict);
+            // The schedule views read visits by organisation and start.
+            entity.HasIndex(e => new { e.TenantId, e.IntakeStartsAt });
         });
         modelBuilder.Entity<ParticipantOnboarding>(entity =>
         {

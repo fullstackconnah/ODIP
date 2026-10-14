@@ -90,6 +90,8 @@ public static class ImportUntouched
         await Add(db.IncidentWitnesses.Where(w => w.WitnessUserId != null && list.Contains(w.WitnessUserId.Value)).Select(w => w.WitnessUserId!.Value), "is a witness to an incident");
         await Add(db.TripInstances.Where(t => t.LeadCoordinatorId != null && list.Contains(t.LeadCoordinatorId.Value)).Select(t => t.LeadCoordinatorId!.Value), "leads a trip");
         await Add(db.BookingTasks.Where(t => t.OwnerId != null && list.Contains(t.OwnerId.Value)).Select(t => t.OwnerId!.Value), "owns tasks");
+        await Add(db.ParticipantInquiries.Where(q => q.IntakeStaffUserId != null && list.Contains(q.IntakeStaffUserId.Value)).Select(q => q.IntakeStaffUserId!.Value), "is booked for an intake visit");
+        await Add(db.ParticipantInquiries.Where(q => q.IntakeBookedByUserId != null && list.Contains(q.IntakeBookedByUserId.Value)).Select(q => q.IntakeBookedByUserId!.Value), "booked an intake visit");
         return reasons;
     }
 }
