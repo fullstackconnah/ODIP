@@ -227,7 +227,8 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
 
 describe('PortalShiftsPage: a response with no provider zone (review deep nit)', () => {
   it('still splits the week, reading the device zone instead of throwing', () => {
-    const { timeZoneId: _omit, ...noZone } = makeShiftsResponse()
+    const noZone: Partial<PortalShiftsResponseDto> = makeShiftsResponse()
+    delete noZone.timeZoneId
     mockUseMyShifts.mockReturnValue({ data: noZone, isLoading: false })
     renderPage()
 
