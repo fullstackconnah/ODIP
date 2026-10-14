@@ -9,7 +9,7 @@ type Pattern = {
   id: string; dayOfWeek: string; startTime: string; endTime: string;
   sourceDraftId: string; effectiveFrom: string; effectiveTo?: string; defaultStaffId?: string;
 };
-type Shift = { shiftId: string; serviceDate: string; startTime: string; endTime: string; staffId?: string; status: string };
+type Shift = { shiftId: string; serviceDate: string; startTime: string; endTime: string; endsNextDay: boolean; staffId?: string; status: string };
 const money = (n: number) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
 const get = async (s: Session, path: string) => (await expectStatus(`GET ${path}`, 200, await call(s, 'GET', path))).data;
 
@@ -22,8 +22,8 @@ for (const allDays of [false, true]) {
     const start = nextWednesday(sydneyToday());
     const end = addDays(start, 8);
     const base = `/participants/${participant.id}/service-agreement-drafts`;
-    const patterns = async (): Promise<Pattern[]> => get(session, `/rostering/patterns?participantId=${participant.id}`);
-    const shifts = async (): Promise<Shift[]> => (await get(session, `/participants/${participant.id}/rostering`)).upcomingShifts;
+    const patterns = async (): Promise<Pattern[]> => (await get(session, `/rostering/patterns?participantId=${participant.id}`)).sort((a: Pattern, b: Pattern) => a.id.localeCompare(b.id));
+    const shifts = async (): Promise<Shift[]> => (await get(session, `/participants/${participant.id}/rostering`)).upcomingShifts.sort((a: Shift, b: Shift) => a.shiftId.localeCompare(b.shiftId));
     const v1 = (await expectStatus('create priced agreement', 200, await call(session, 'POST', base, {
       planStartDate: start, planEndDate: end, agreementStartDate: start, agreementEndDate: end,
       state: 'NSW', serviceTypes: ['CommunityAccess'], baseVersion: 0,
@@ -97,7 +97,7 @@ for (const allDays of [false, true]) {
     await panel.getByLabel('Change starts', { exact: false }).fill(start);
     if (allDays) await panel.getByRole('checkbox', { name: /Change every day/ }).check();
     await panel.getByRole('button', { name: 'Check the change', exact: true }).click();
-    const saveResponse = page.waitForResponse(r => r.url().endsWith(changePath) && r.request().method() === 'POST');
+    const saveResponse = page.waitForResponse(r => r.url().endsWith(changePath) && r.request().method() === 'POST' && r.request().postDataJSON().preview === false);
     await panel.getByRole('button', { name: 'Create revision v2', exact: true }).click();
     const savedHttp = await saveResponse;
     expect(savedHttp.status()).toBe(200);
@@ -138,7 +138,10 @@ for (const allDays of [false, true]) {
     await expect(page.getByText('Approved for rostering', { exact: true })).toBeVisible();
 
     const afterPatterns = await patterns();
-    for (const old of afterPatterns.filter(p => p.sourceDraftId === v1.id)) {
+    expect(afterPatterns).toHaveLength(4);
+    const endedPatterns = afterPatterns.filter(p => p.sourceDraftId === v1.id);
+    expect(endedPatterns.map(p => p.id)).toEqual(originalPatterns.map(p => p.id));
+    for (const old of endedPatterns) {
       expect(old.effectiveTo).toBe(addDays(start, -1));
     }
     const newPatterns = afterPatterns.filter(p => p.sourceDraftId === saved.draftId);
@@ -157,8 +160,13 @@ for (const allDays of [false, true]) {
       else expect(after.some(s => s.shiftId === old.shiftId)).toBe(false);
     }
     const fresh = after.filter(s => !before.some(old => old.shiftId === s.shiftId));
-    expect(fresh.length).toBeGreaterThan(0);
-    expect(fresh.every(s => s.endTime === '14:00:00' && !s.staffId && s.status === 'Draft')).toBe(true);
+    expect(fresh).toHaveLength(allDays ? 4 : 2);
+    expect(after).toHaveLength(5); // the assigned old shift is explicitly retained beside the new schedule
+    expect(fresh.map(s => s.serviceDate).sort()).toEqual(
+      (allDays ? [start, addDays(start, 1), addDays(start, 7), end] : [start, addDays(start, 7)]).sort(),
+    );
+    expect(result.approval.shiftsCreated).toBe(fresh.length);
+    expect(fresh.every(s => s.startTime === '09:00:00' && s.endTime === '14:00:00' && s.endsNextDay === false && !s.staffId && s.status === 'Draft')).toBe(true);
     // Repeated approval is idempotent at the real persistence boundary.
     await expectStatus('repeat approval', 200, await call(session, 'POST', `${base}/${saved.draftId}/approve`, { acknowledgeOverlaps: false }));
     expect(await shifts()).toEqual(after);
