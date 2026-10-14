@@ -77,21 +77,26 @@ export default function PublicHolidaysSection({ canEdit }: { canEdit: boolean })
           Only a super admin can change this calendar, because it prices every organisation&apos;s plans and claims.
         </Callout>
       )}
+      {/* Each filter sized to what it holds (a year, a state), side by side: a form Dropdown otherwise fills the row. */}
       <div className="flex flex-wrap items-center gap-2">
-        <Dropdown
-          variant="form"
-          value={String(year)}
-          onChange={v => setYear(Number(v))}
-          items={years.map(y => ({ value: String(y), label: String(y) }))}
-          label="Select year"
-        />
-        <Dropdown
-          variant="form"
-          value={state}
-          onChange={v => setState(v)}
-          items={states.map(s => ({ value: s, label: s }))}
-          label="Select state"
-        />
+        <div className="w-28">
+          <Dropdown
+            variant="form"
+            value={String(year)}
+            onChange={v => setYear(Number(v))}
+            items={years.map(y => ({ value: String(y), label: String(y) }))}
+            label="Select year"
+          />
+        </div>
+        <div className="w-28">
+          <Dropdown
+            variant="form"
+            value={state}
+            onChange={v => setState(v)}
+            items={states.map(s => ({ value: s, label: s }))}
+            label="Select state"
+          />
+        </div>
         {canEdit && (
           <Button size="md" onClick={() => setAdding(true)}>
             Add holiday

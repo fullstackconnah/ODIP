@@ -471,6 +471,15 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
     for (const fact of ['Dana Whitlock', 'dana.whitlock', 'Admin', 'Sunrise Support']) expect(within(profile).getByText(fact)).toBeInTheDocument()
   })
 
+  it.each([['SuperAdmin'], ['SuperAdminNoOrg']] as const)('names no organisation on Profile for a %s: the one in their sign-in is not the one in view', role => {
+    mockUsePermissions.mockReturnValue({ ...SETTINGS_PERMS[role], tenantName: 'ODIP Platform' })
+    renderSettingsPage()
+    const profile = screen.getByRole('region', { name: 'Profile' })
+    expect(within(profile).queryByText('Organisation')).not.toBeInTheDocument()
+    expect(within(profile).queryByText('ODIP Platform')).not.toBeInTheDocument()
+    expect(within(profile).getByText('Super admin')).toBeInTheDocument()
+  })
+
   it('shows a SuperAdmin viewing as someone only that person: no sign-in name or organisation of their own', () => {
     localStorage.setItem('odip_viewing_user', 'user-2')
     try {
