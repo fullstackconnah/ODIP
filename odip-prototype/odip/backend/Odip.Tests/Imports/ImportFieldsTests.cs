@@ -49,4 +49,9 @@ public class ImportFieldsTests
         foreach (var field in ImportFields.For(ImportKind.Staff))
             Assert.Equal(new string?[] { field.Key }, ImportFields.AutoMatch(ImportKind.Staff, [field.Label]));
     }
+
+    [Fact]
+    public void The_plan_columns_match_their_usual_headers() =>
+        Assert.Equal(new string?[] { "planType", "planStartDate", "planEndDate" },
+            ImportFields.AutoMatch(ImportKind.Participants, ["Plan Management", "Plan start date", "Plan End Date"]));
 }

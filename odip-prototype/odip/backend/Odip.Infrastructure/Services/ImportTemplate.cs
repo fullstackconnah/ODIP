@@ -52,6 +52,7 @@ public static class ImportTemplate
         {
             ["firstName"] = ImportParticipantRows.ExampleFirstName, ["lastName"] = ImportParticipantRows.ExampleLastName,
             ["preferredName"] = "", ["dateOfBirth"] = "03/04/1990", ["gender"] = "Female", ["ndisNumber"] = "430000000",
+            ["planType"] = "Self managed", ["planStartDate"] = "01/07/2026", ["planEndDate"] = "30/06/2027",
             ["phone"] = "0400 000 000", ["email"] = "example@example.com", ["addressStreet"] = "1 Example Street", ["addressSuburb"] = "Sydney",
             ["addressState"] = "NSW", ["addressPostcode"] = "2000", ["contact1Name"] = "Sam Example", ["contact1Relationship"] = "Next of kin",
             ["contact1Phone"] = "0400 000 001",
