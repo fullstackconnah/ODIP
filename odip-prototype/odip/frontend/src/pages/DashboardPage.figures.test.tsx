@@ -11,6 +11,7 @@ const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeave
   mockUseStaff: vi.fn(),
 }))
 
+vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
   useDashboard: mockUseDashboard,
   useSettings: () => ({ data: undefined }),
@@ -54,18 +55,14 @@ function renderPage() {
 // it counts, and a link to the page where the rows are.
 
 describe('Dashboard "Overdue" figure', () => {
+  // Overdue is a tile only for a viewer without the Tasks due group (SHAPE call 6): a SuperAdmin with no organisation.
+  beforeEach(() => localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' })))
+
   it('links the tile to the task list filtered to Overdue, which the server answers with the same predicate', () => {
     renderPage()
 
     const tile = screen.getByRole('group', { name: 'Overdue 2' })
     expect(within(tile).getByRole('link', { name: 'Open overdue tasks' })).toHaveAttribute('href', '/tasks?status=Overdue')
-  })
-
-  it('links the Overdue Tasks panel "View All" to the same filtered list', () => {
-    renderPage()
-
-    const panel = screen.getByRole('heading', { name: 'Overdue Tasks' }).closest('div')!.parentElement!
-    expect(within(panel).getByRole('link', { name: 'View All' })).toHaveAttribute('href', '/tasks?status=Overdue')
   })
 })
 
@@ -94,6 +91,9 @@ describe('Dashboard "Critical Participant Alerts" figure', () => {
 })
 
 describe('Dashboard "Qualification Issues" figure', () => {
+  // Qualification Issues is a tile only for a viewer without the Staff compliance group (SHAPE call 6): a SuperAdmin with no organisation.
+  beforeEach(() => localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' })))
+
   it('says how many staff the issues belong to, so it reads against the Qualifications page headline (a staff count)', () => {
     // Staff A holds four flagged credentials with no date (4 issues); staff B one expired First Aid (1 issue): the tile counts 5.
     const base = { isActive: true, workerScreeningExpiryDate: null }

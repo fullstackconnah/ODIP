@@ -10,6 +10,7 @@ const { mockUseStaff, mockUseSettings } = vi.hoisted(() => ({
   mockUseSettings: vi.fn(),
 }))
 
+vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
   useStaff: mockUseStaff,
   useSettings: mockUseSettings,
@@ -160,6 +161,8 @@ describe('QualificationsPage and the Dashboard agree', () => {
     const listTotal = screen.getAllByText(/^\d+ issues?$/).reduce((sum, el) => sum + Number.parseInt(el.textContent!, 10), 0)
     unmount()
 
+    // A Coordinator now updates these in the Staff compliance group (the same sum); the tile is a SuperAdmin's with no organisation (SHAPE call 6).
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     render(<MemoryRouter><DashboardPage /></MemoryRouter>)
     // With issues, Qualification Issues is a tall tile: a named group ("Qualification Issues 12") whose figure is the count.
     const tile = within(screen.getByRole('region', { name: 'Alerts' })).getByRole('group', { name: /^Qualification Issues \d+$/ })

@@ -10,6 +10,7 @@ import { mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAler
 import { installDashboardDefaults, renderPage, summaryData, asRole, pendingLeave, pendingCompletions, criticalAlertFor, staffWithOneIssue, staffWithThreeIssues, threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk, FULL_ORDER, showAll, band, grid, tiles, labelOf, tileLabels, tileFor, clearRow, APP_ROUTES, routeExists } from './dashboard/dashboardTestKit'
 
 vi.mock('@/api/hooks', async () => (await import('./dashboard/dashboardHookMocks')).hooks)
+vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (await import('./dashboard/dashboardHookMocks')).mockUseDecisionGroups }))
 
 const PAGES = dirname(fileURLToPath(import.meta.url))
 
@@ -27,7 +28,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
   })
 
   it('makes a tile of each item above zero, in that order, and of nothing else: the zero is named in the All clear row instead', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(staffWithOneIssue)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false })
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(2))
@@ -63,13 +64,21 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     expect(screen.queryByText(/Qualification Issues/)).not.toBeInTheDocument()
   })
 
-  it('shows Qualification Issues, linked to the Qualifications page, to every role that can open that page, and to none that cannot', () => {
+  it('shows Qualification Issues, linked to the Qualifications page, to every role without the Staff compliance group, and to none that cannot', () => {
     mockUseStaff.mockReturnValue(staffWithOneIssue)
-    for (const role of ['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly']) {
+    for (const role of ['SuperAdmin', 'ReadOnly']) {
       asRole(role)
       const { unmount } = renderPage()
       const tile = screen.getByRole('group', { name: 'Qualification Issues 1' })
       expect(within(tile).getByRole('link', { name: 'Review qualifications' }), role).toHaveAttribute('href', '/qualifications')
+      unmount()
+      localStorage.clear()
+    }
+    // An Admin and a Coordinator update the credentials in their Staff compliance group instead (SHAPE call 6).
+    for (const role of ['Admin', 'Coordinator']) {
+      asRole(role)
+      const { unmount } = renderPage()
+      expect(screen.queryByRole('group', { name: 'Qualification Issues 1' }), role).toBeNull()
       unmount()
       localStorage.clear()
     }
@@ -89,7 +98,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
   })
 
   it('carries the same numbers as before: each figure is the count its KPI tile showed, at the display step in tabular figures', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseDashboard.mockReturnValue(summaryData({
       overdueTaskCount: 7, tripsMissingAccommodation: 6, tripsMissingVehicles: 5, tripsMissingStaff: 4, openIncidentCount: 3, qscOverdueCount: 2,
     }))
@@ -113,7 +122,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
   })
 
   it('keeps the inactive participant\'s Critical alert out of the tile count, as it is out of the list', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseParticipantAlertsAggregate.mockReturnValue({
       data: [criticalAlertFor('p1', 'Jamie Smith'), { ...criticalAlertFor('p2', 'Churned Client'), isActive: false }],
       isLoading: false,
@@ -205,7 +214,7 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
   })
 
   it('keeps a count of one in the singular: "Trip starts", "1 staff member", "1 participant"', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(staffWithOneIssue)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false })
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingAccommodation: 1, tripsMissingVehicles: 1, tripsMissingStaff: 1 }))
@@ -219,7 +228,7 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
   })
 
   it('states the warning window the Qualifications page uses (30 days unless the settings say otherwise), with the noun agreeing', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(staffWithOneIssue)
     renderPage()
     expect(tileFor('Qualification Issues')).toHaveTextContent('due within 30 days')
@@ -255,7 +264,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
   })
 
   it('names the items at zero in ONE All clear row on Pale Sprout, after the tiles, and gives them no tile', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 2 }))
     renderPage()
 
@@ -283,7 +292,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
   })
 
   it('becomes one full-width Pale Sprout field when everything is zero: "All clear. Nothing needs you right now."', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     renderPage()
 
     const field = screen.getByText('All clear. Nothing needs you right now.').closest('div.rounded-md') as HTMLElement
@@ -307,7 +316,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
   })
 
   it('tints nothing when every item is zero: no container fill but the one Pale Sprout field', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     renderPage()
 
     expect(document.body.innerHTML).not.toContain('error-container)]')
@@ -316,7 +325,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
   })
 
   it('goes back to tiles the moment something is above zero: the field is not sticky', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     const { rerender } = renderPage()
     expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
 
@@ -376,7 +385,7 @@ describe('DashboardPage — the Schedule links say what the role can do', () => 
 
 describe('DashboardPage — the All clear row and field name the items by nouns', () => {
   it('says "overdue tasks" and "overdue QSC reports": the tile labels "Overdue" and "QSC Overdue" read as the same thing once they leave their tiles', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingStaff: 1 }))
     renderPage()
 
@@ -386,7 +395,7 @@ describe('DashboardPage — the All clear row and field name the items by nouns'
   })
 
   it('says the three trip counts are of trips: "trips missing staff", never a bare "missing staff"', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 1 }))
     renderPage()
 
@@ -395,7 +404,7 @@ describe('DashboardPage — the All clear row and field name the items by nouns'
   })
 
   it('uses the same nouns in the all-clear field\'s audit line', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     renderPage()
 
     expect(screen.getByText(/^Checked and at zero: qualification issues, critical participant alerts, overdue tasks, trips missing accommodation/)).toBeInTheDocument()
@@ -443,7 +452,7 @@ describe('DashboardPage — needs-attention band: accessibility', () => {
   })
 
   it('still has exactly one h1 whatever the band shows', () => {
-    for (const setUp of [showAll, () => asRole('Coordinator')]) {
+    for (const setUp of [showAll, () => asRole('SuperAdmin')]) {
       setUp()
       const { unmount } = renderPage()
       expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
@@ -473,7 +482,7 @@ describe('DashboardPage — needs-attention band: responsive shape', () => {
     [3, { overdueTaskCount: 2, qscOverdueCount: 1, tripsMissingStaff: 1 }],
     [5, { overdueTaskCount: 2, qscOverdueCount: 1, tripsMissingStaff: 1, openIncidentCount: 1, tripsMissingVehicles: 1 }],
   ])('deals %i tile(s) into balanced rows: each cell reads the spans bandSpans gives it', (count, counts) => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseDashboard.mockReturnValue(summaryData(counts))
     renderPage()
 
@@ -485,18 +494,6 @@ describe('DashboardPage — needs-attention band: responsive shape', () => {
       spans[i].forEach((span, step) => expect(cell.style.getPropertyValue(`--span-${step}`)).toBe(String(span)))
     })
   })
-
-  it('keeps the band a peak in the page: it sits between the header and the panels', () => {
-    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 1 }))
-    renderPage()
-
-    const page = band().parentElement as HTMLElement
-    const children = [...page.children]
-    expect(children.indexOf(band())).toBe(1)
-    expect(children[0]).toContainElement(screen.getByRole('heading', { level: 1 }))
-    expect(children[2].className).toMatch(/xl:grid-cols-2/)
-  })
-
   it('never truncates, scrolls sideways or shrinks the type in the band', () => {
     showAll()
     renderPage()

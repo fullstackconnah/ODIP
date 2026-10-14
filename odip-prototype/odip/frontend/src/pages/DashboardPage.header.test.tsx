@@ -7,6 +7,7 @@ import { mockUseDashboard, mockUseStaff, mockUseParticipantAlertsAggregate } fro
 import { installDashboardDefaults, renderPage, summaryData, asRole, tileFor, clearRow } from './dashboard/dashboardTestKit'
 
 vi.mock('@/api/hooks', async () => (await import('./dashboard/dashboardHookMocks')).hooks)
+vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (await import('./dashboard/dashboardHookMocks')).mockUseDecisionGroups }))
 
 installDashboardDefaults()
 
@@ -176,8 +177,8 @@ describe('DashboardPage — header (a greeting, the date and the summary line)',
     mockUseDashboard.mockReturnValue(summaryData({ upcomingTripCount: 3, activeParticipantCount: 5, outstandingTaskCount: 4 }))
     renderPage()
 
-    // "Upcoming Trips" is now only the panel heading; the other two labels are gone.
-    expect(screen.getAllByText('Upcoming Trips')).toHaveLength(1)
+    // "Upcoming trips" is now only the section heading; the other two labels are gone.
+    expect(screen.getAllByRole('heading', { level: 2, name: 'Upcoming trips' })).toHaveLength(1)
     expect(screen.queryByText('Active Participants')).not.toBeInTheDocument()
     expect(screen.queryByText('Outstanding Tasks')).not.toBeInTheDocument()
   })
@@ -193,7 +194,7 @@ describe('DashboardPage — the qualification count follows the day', () => {
   it('recounts when the day turns over with no new staff data: a window that opens at midnight is counted at midnight', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 8, 30, 23, 59, 30)) // 30 Sep 2026, 23:59:30 on the wall clock, whatever the zone
-    asRole('Coordinator', 'Sarah Mitchell')
+    asRole('SuperAdmin', 'Sarah Mitchell')
     // First Aid expires on 31 Oct: 31 days away on 30 Sep (outside the 30-day window), 30 days away from 1 Oct (inside it, so an issue).
     const staff = { data: [{ isFirstAidQualified: true, firstAidExpiryDate: '2026-10-31' }] }
     mockUseStaff.mockReturnValue(staff) // the same object, so the same array, on every render: only the day can change the count
@@ -215,7 +216,7 @@ describe('DashboardPage — the qualification count follows the day', () => {
   it('does not recount on an ordinary minute: the staff list is walked once a day, not once a minute', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 8, 30, 10, 0, 30))
-    asRole('Coordinator', 'Sarah Mitchell')
+    asRole('SuperAdmin', 'Sarah Mitchell')
     const staff = { data: [{ isFirstAidQualified: true, firstAidExpiryDate: '2026-10-31' }] }
     mockUseStaff.mockReturnValue(staff)
     renderPage()
@@ -258,7 +259,7 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
   it('keeps the heading steady when the summary lands: the same greeting, now with the counts and the band', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(2026, 9, 2, 9, 30))
-    asRole('Coordinator', 'Sarah Mitchell')
+    asRole('SuperAdmin', 'Sarah Mitchell')
     mockUseDashboard.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })
     const { rerender } = renderPage()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Good morning, Sarah Friday 2 October')
@@ -274,16 +275,17 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
     vi.useRealTimers()
   })
 
-  it('shows the house error banner with a working Try again, not a band of zeros, when the summary fails', () => {
+  it('shows the house error in the Alerts slot with a working Try again, not a band of zeros, when the summary fails', () => {
     const refetch = vi.fn()
     mockUseDashboard.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
     renderPage()
 
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this dashboard.")
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this dashboard summary.")
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalled()
     expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Alerts' }).compareDocumentPosition(screen.getByRole('alert')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -313,7 +315,7 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
   })
 
   it('shows an en dash, busy, on Qualification Issues and Critical Participant Alerts while their requests are paused, and never names them clear', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(paused)
     mockUseParticipantAlertsAggregate.mockReturnValue(paused)
     renderPage()
@@ -340,7 +342,7 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
   })
 
   it('keeps a failed request a failure, whatever else is true of it', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue({ data: undefined, isPending: false, isLoading: false, isError: true, fetchStatus: 'idle' })
     renderPage()
 

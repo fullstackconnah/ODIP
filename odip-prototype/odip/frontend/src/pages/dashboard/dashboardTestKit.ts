@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from '../DashboardPage'
 import {
-  mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue,
+  mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseDecisionGroups,
 } from './dashboardHookMocks'
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -34,6 +34,8 @@ export function installDashboardDefaults() {
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0))
     mockUseStaff.mockReturnValue({ data: [] })
+    // No decision groups: a test sees the band exactly as its viewer's role draws it.
+    mockUseDecisionGroups.mockReturnValue([])
   })
 }
 
@@ -115,9 +117,10 @@ export const threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk = {
   isLoading: false,
 }
 
-// Every item above zero, for a Coordinator: all eleven are tiles (the staff list and the alerts give 3 issues and 3 alerts, and three participants have a budget at risk).
+// Every item above zero, for a SuperAdmin with no organisation: all eleven are tiles (the staff list and the alerts give 3 issues and 3 alerts, and three participants have a budget at risk).
 export function showAll() {
-  asRole('Coordinator')
+  // A SuperAdmin with no organisation: the one viewer who has every tile and no decision group (SHAPE call 6).
+  asRole('SuperAdmin')
   mockUseStaff.mockReturnValue(staffWithThreeIssues)
   mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk)
   mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))

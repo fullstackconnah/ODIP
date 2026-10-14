@@ -6,12 +6,13 @@ import { mockUseDashboard, mockUseStaff, mockUseParticipantAlertsAggregate, mock
 import { installDashboardDefaults, renderPage, summaryData, asRole, pendingLeave, pendingCompletions, criticalAlertFor, staffWithOneIssue, threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk, showAll, band, tiles, tileLabels, tileFor, clearRow, routeExists } from './dashboard/dashboardTestKit'
 
 vi.mock('@/api/hooks', async () => (await import('./dashboard/dashboardHookMocks')).hooks)
+vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (await import('./dashboard/dashboardHookMocks')).mockUseDecisionGroups }))
 
 installDashboardDefaults()
 
 describe('DashboardPage — Pending Leave card (I-6)', () => {
-  it('links to the leave approvals queue with the pending count for a Coordinator', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+  it('links to the leave approvals queue with the pending count for a SuperAdmin with no organisation', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
     renderPage()
@@ -22,7 +23,7 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
   })
 
   it('is no tile when there are no pending leave requests: the band names it among the items that are clear', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
     renderPage()
@@ -32,7 +33,7 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
   })
 
   it('does not call the queue clear while it is still loading, or after it failed (its count is 0 in both)', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
 
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
@@ -82,7 +83,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   const clearNames = () => clearRow()?.textContent ?? ''
 
   it('shows an en dash on Qualification Issues while the staff list loads: busy, untinted, a link to the page, no "All clear"', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(inFlight)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     renderPage()
@@ -96,7 +97,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('shows an en dash and "Couldn\'t load" on Qualification Issues when the staff request fails: not busy, no "All clear"', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(failed)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     renderPage()
@@ -108,7 +109,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('shows an en dash and "Couldn\'t load" on Critical Participant Alerts when the alerts request fails: not busy, no "All clear"', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseParticipantAlertsAggregate.mockReturnValue(failed)
     renderPage()
 
@@ -121,7 +122,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('shows an en dash on Pending Leave while the queue loads or after it failed, for a role that approves leave: never a clear queue', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
 
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
@@ -139,7 +140,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('shows the placeholder in the item\'s own place among the tiles, so the rows do not jump when its data arrives', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(inFlight)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 2, tripsMissingStaff: 1 }))
@@ -149,7 +150,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('claims "All clear" for none of the items while their requests are all in flight', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(inFlight)
     mockUseParticipantAlertsAggregate.mockReturnValue(inFlight)
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
@@ -167,7 +168,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('claims "All clear" for none of the items whose requests have all failed, and says so four times', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(failed)
     mockUseParticipantAlertsAggregate.mockReturnValue(failed)
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { error: true }))
@@ -180,7 +181,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('treats a failed request as a placeholder even when rows are still cached, so a stale count is never tinted', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue({ ...staffWithOneIssue, isLoading: false, isError: true })
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false, isError: true })
     renderPage()
@@ -212,7 +213,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 
   it('settles from each placeholder: a zero joins the All clear row, a count becomes a tinted tile', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(failed)
     mockUseParticipantAlertsAggregate.mockReturnValue(inFlight)
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
@@ -243,9 +244,9 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 })
 
 describe('DashboardPage — Shift Completions: the band counts what the nav badge counts', () => {
-  it('is a tile for every role that can review completions, linked to the review queue, and for no other role', () => {
+  it('is a tile for a SuperAdmin with no organisation, linked to the review queue: an Admin and a Coordinator get the group instead, and no other role either', () => {
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(2))
-    for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) {
+    for (const role of ['SuperAdmin']) {
       asRole(role)
       const { unmount } = renderPage()
       const tile = screen.getByRole('group', { name: 'Shift Completions 2' })
@@ -255,7 +256,7 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
       unmount()
       localStorage.clear()
     }
-    for (const role of ['ReadOnly', 'SupportWorker']) {
+    for (const role of ['Admin', 'Coordinator', 'ReadOnly', 'SupportWorker']) {
       asRole(role)
       const { unmount } = renderPage()
       expect(screen.queryByText(/Shift Completions/), role).not.toBeInTheDocument()
@@ -264,20 +265,24 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
     }
   })
 
-  it('asks for the queue only for a role that can review it, the gate the nav badge uses', () => {
-    asRole('Coordinator')
+  it('asks for the queue only where its tile is drawn', () => {
+    asRole('SuperAdmin')
     renderPage()
     expect(mockUsePendingCompletionQueue).toHaveBeenLastCalledWith(true)
     cleanup()
 
-    asRole('ReadOnly')
-    renderPage()
-    expect(mockUsePendingCompletionQueue).toHaveBeenLastCalledWith(false)
+    // An Admin and a Coordinator read the same queue in their Shift completions group; ReadOnly and a SupportWorker cannot review it.
+    for (const role of ['Admin', 'Coordinator', 'ReadOnly', 'SupportWorker']) {
+      asRole(role)
+      renderPage()
+      expect(mockUsePendingCompletionQueue, role).toHaveBeenLastCalledWith(false)
+      cleanup()
+    }
   })
 
   // The nav shows a red 2 on Staff & roster for two shifts awaiting review: the band must not say, beside it, that nothing needs you.
   it('does not say "Nothing needs you" while shifts wait for review, even with every other item at zero', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(2))
     renderPage()
 
@@ -290,7 +295,7 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
   })
 
   it('names Shift Completions among the items it checked once the queue is empty', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0))
     renderPage()
 
@@ -299,7 +304,7 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
   })
 
   it('shows an en dash while the queue loads or after it failed, and never calls the queue clear', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
 
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0, { loading: true }))
     const first = renderPage()
@@ -342,7 +347,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   const budgetTile = () => tileFor('Budgets at risk')
 
   it('is a tile whose figure is the participants over or forecast to go over, with the line "{n} participants: {a} over, {b} forecast to go over" and a link to the Budgets list', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'), budgetParticipant('p2', 'Olga Over', 'budget-over'), budgetParticipant('p3', 'Ford Cast', 'budget-forecast-over'))
     renderPage()
 
@@ -352,7 +357,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('is in the danger tone when any participant is already over', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'), budgetParticipant('p3', 'Ford Cast', 'budget-forecast-over'))
     renderPage()
 
@@ -360,7 +365,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('is in the warning tone when nobody is over and some are only forecast to go over', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p3', 'Ford Cast', 'budget-forecast-over'), budgetParticipant('p4', 'Fern Cast', 'budget-forecast-over'))
     renderPage()
 
@@ -370,7 +375,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('counts a participant once however many pools are at risk, in their worst state', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'Two Pools', 'budget-forecast-over', {
       alerts: [
         { type: 'budget-forecast-over', severity: 'Warning', message: 'Pool A', deepLinkTab: 'funding' },
@@ -387,7 +392,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   // At zero the band names an item in its All clear row, "checked, and nothing": true only of a budget somebody has recorded. A participant on track has no alert, so the alerts say who has a budget in
   // force (budgetInForce), and the item is named only where somebody does.
   it('is not a tile at zero, and is a name in the one All clear row instead, where a budget is in force; approaching does not make it a tile', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'Appa Roach', 'budget-approaching', { budgetInForce: true }), budgetParticipant('p2', 'Ontrack Olive', 'budget-approaching', { budgetInForce: true, alerts: [], warningCount: 0 }))
     renderPage()
 
@@ -397,7 +402,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('is not named at all where no budget is in force for anybody: the band cannot say it checked what nobody recorded', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'No Plan', 'plan-expiring-soon', { budgetInForce: false }), budgetParticipant('p2', 'Older Answer', 'plan-expiring-soon'))
     renderPage()
 
@@ -406,7 +411,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('is not named at zero while the NDIA says the funds ran out for somebody: an all clear about budgets would contradict the Critical tile beside it', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'Noor Refused', 'budget-ndia-exhausted', { budgetInForce: true }))
     renderPage()
 
@@ -416,7 +421,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('is still a tile when somebody is over, whether or not the NDIA has also refused a claim', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over', { budgetInForce: true }), budgetParticipant('p2', 'Noor Refused', 'budget-ndia-exhausted', { budgetInForce: true }))
     renderPage()
 
@@ -424,7 +429,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('is not a tile while the alerts are loading, and the band is not an all clear: the Critical alerts tile is the en dash that says so', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })
     renderPage()
 
@@ -436,7 +441,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('is not a tile when the alerts failed to load, and the band is not an all clear', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: false, isError: true })
     renderPage()
 
@@ -448,7 +453,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('leaves out an archived participant', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'Archie Gone', 'budget-over', { isActive: false }))
     renderPage()
 
@@ -477,7 +482,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   })
 
   it('links to a route the app really has', () => {
-    asRole('Coordinator')
+    asRole('SuperAdmin')
     withAlerts(budgetParticipant('p1', 'Olive Over', 'budget-over'))
     renderPage()
 

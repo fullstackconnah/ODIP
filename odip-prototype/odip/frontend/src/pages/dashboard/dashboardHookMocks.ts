@@ -9,6 +9,8 @@ export const mockUseStaff = vi.fn()
 export const mockUseParticipantAlertsAggregate = vi.fn()
 export const mockUsePendingLeaveQueue = vi.fn()
 export const mockUsePendingCompletionQueue = vi.fn()
+// The page's decision groups (pages/dashboard/useDecisionGroups), mocked by the page tests beside the barrel.
+export const mockUseDecisionGroups = vi.fn()
 
 export const hooks = {
   useDashboard: mockUseDashboard,
