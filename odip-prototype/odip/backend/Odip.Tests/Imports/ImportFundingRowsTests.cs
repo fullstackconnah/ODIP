@@ -259,4 +259,29 @@ public class ImportFundingRowsTests
     public void The_plan_screens_validator_has_the_last_word() =>
         Assert.Equal("The plan runs 1096 days. A plan can be at most 800 days long.",
             Checked(NoPlans, Line("430000001", "Core", "Plan managed", "1000", end: "30/06/2029")).Single().Reasons.Single());
+
+    [Fact]
+    public void A_placeholder_NDIS_number_is_no_number_so_two_people_with_a_dash_never_merge()
+    {
+        var cal = Guid.NewGuid();
+        var plans = Read(
+            Line("-", "Core", "Self managed", "100", first: "Ava", last: "Stone", dob: "03/04/1990"),
+            Line("-", "15", "Self managed", "200", first: "Ben", last: "Lee", dob: "02/01/1985"),
+            Line("TBC", "Core", "Self managed", "300"));
+        // Cal holds "-" in ODIP, as a participant import of the same export would leave it: nobody's money lands on him.
+        ImportFundingRows.Match(plans, [.. People, new(cal, "-", "Cal", "Wu", new DateOnly(1980, 1, 1))]);
+        ImportFundingRows.Check(plans, NoPlans);
+
+        Assert.Equal(new[] { ImportRowStatus.Ready, ImportRowStatus.Ready, ImportRowStatus.Invalid }, plans.Select(p => p.Status));
+        Assert.Equal(new[] { Ava, Ben }, ImportFundingRows.Plans(plans).Select(p => p.ParticipantId));
+        Assert.All(plans.Take(2), p => Assert.Equal("The NDIS number isn't 9 digits, so this row finds its participant by name and date of birth.", p.Warnings.Single()));
+        Assert.Equal("The NDIS number isn't 9 digits, so give the participant's first name, last name and date of birth instead.", plans[2].Reasons.Single());
+    }
+
+    [Theory]
+    [InlineData("N/A")]
+    [InlineData("4300001")]
+    [InlineData("4300000012")]
+    public void Anything_but_nine_digits_is_not_an_NDIS_number(string ndis) =>
+        Assert.Null(Read(Line(ndis, "Core", "Self managed", "100", first: "Ava", last: "Stone", dob: "03/04/1990")).Single().Funding!.NdisKey);
 }

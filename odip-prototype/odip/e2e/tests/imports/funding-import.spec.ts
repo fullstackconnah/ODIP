@@ -36,9 +36,10 @@ test('an Admin imports funding plans for imported participants, finds the plan o
   const end = addDays(start, 364);
   await page.emulateMedia({ reducedMotion: 'reduce' });
 
-  // The NDIS number is the token: letters and digits, unique to the run, inside the field's 20 characters.
+  // A real NDIS number is 9 digits (the funding import refuses anything else as one); the e2e database is fresh for each run.
+  const ndis = String(Date.now()).slice(-9);
   await page.goto('/settings/import/participants');
-  await runImport(page, people, ['First name,Last name,NDIS number,Plan type,Plan start,Plan end', `Ava,${token},${token},Plan managed,${start},${end}`],
+  await runImport(page, people, ['First name,Last name,NDIS number,Plan type,Plan start,Plan end', `Ava,${token},${ndis},Plan managed,${start},${end}`],
     'Import 1 participant', 'Imported 1 participant');
 
   await page.goto('/settings?tab=import');
@@ -49,9 +50,9 @@ test('an Admin imports funding plans for imported participants, finds the plan o
   await expect(page.getByRole('heading', { level: 1, name: 'Import funding plans' })).toBeVisible();
   await runImport(page, budgets, [
     'NDIS number,Plan start,Plan end,Support category,Managed by,Amount',
-    `${token},${start},${end},01,Plan managed,1000`,
-    `${token},${start},${end},04,Plan managed,250.50`,
-    `${token},${start},${end},15,NDIA managed,5000`,
+    `${ndis},${start},${end},01,Plan managed,1000`,
+    `${ndis},${start},${end},04,Plan managed,250.50`,
+    `${ndis},${start},${end},15,NDIA managed,5000`,
   ], 'Import 1 funding plan', 'Imported 1 funding plan');
 
   await page.getByRole('link', { name: 'View participants' }).click();

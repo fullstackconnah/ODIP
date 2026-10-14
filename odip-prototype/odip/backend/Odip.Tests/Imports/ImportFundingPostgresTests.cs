@@ -24,15 +24,14 @@ public class ImportFundingPostgresTests : IClassFixture<PostgresFixture>
 
     private OdipDbContext Open(Guid tenantId) => new(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString).Options, Tenant(tenantId));
 
-    /// <summary>A new organisation with Ava and Ben, whose NDIS numbers belong to this test alone.</summary>
+    /// <summary>A new organisation with Ava and Ben, whose NDIS numbers (9 digits, as the import needs) belong to this test alone.</summary>
     private async Task<(Guid TenantId, Guid Ava, string AvaNdis, Guid Ben, string BenNdis)> SetUpAsync()
     {
         var (setup, tenantId) = await _pg.NewTenantContextAsync();
         await using (setup)
         {
-            var token = Guid.NewGuid().ToString("N")[..10];
-            var ava = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ava", LastName = "Stone", NdisNumber = $"A{token}", IsActive = true };
-            var ben = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ben", LastName = "Lee", NdisNumber = $"B{token}", IsActive = true };
+            var ava = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ava", LastName = "Stone", NdisNumber = $"4{Random.Shared.Next(10_000_000, 100_000_000)}", IsActive = true };
+            var ben = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ben", LastName = "Lee", NdisNumber = $"5{Random.Shared.Next(10_000_000, 100_000_000)}", IsActive = true };
             setup.Participants.AddRange(ava, ben);
             await setup.SaveChangesAsync();
             return (tenantId, ava.Id, ava.NdisNumber, ben.Id, ben.NdisNumber);
