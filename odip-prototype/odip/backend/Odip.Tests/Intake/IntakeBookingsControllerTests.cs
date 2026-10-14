@@ -503,15 +503,29 @@ public class IntakeBookingsControllerTests
         Assert.All(f.Outbox(), o => Assert.Equal("Dana Smith", Payload(o).GetProperty("BookedByName").GetString()));
     }
 
-    [Theory]
-    [InlineData("deactivated")]
-    [InlineData("no email")]
-    public async Task When_the_booker_can_no_longer_organise_the_organizer_is_left_out_and_reply_to_is_whoever_acts(string what)
+    // Fix round 1, N2: the booker stays ORGANIZER for the UID's whole life, even once deactivated (the address only identifies the event; the system
+    // never mails it). Replies go to whoever is acting.
+    [Fact]
+    public async Task A_deactivated_booker_stays_the_organizer_and_reply_to_is_whoever_acts()
     {
         var f = new Fixture();
         await f.BookAsync();
-        var dana = f.Db.Users.Single(u => u.Id == f.Dana.Id);
-        if (what == "deactivated") dana.IsActive = false; else dana.Email = string.Empty;
+        f.Db.Users.Single(u => u.Id == f.Dana.Id).IsActive = false;
+        f.Db.SaveChanges();
+
+        await f.Controller(userId: f.Sam.Id, role: "Admin").Set(f.Noah.Id, f.Body() with { StartsAt = Start.AddDays(1) }, CancellationToken.None);
+
+        var update = f.Channel.Sent[1];
+        Assert.Equal("sam@provider.example", update.ReplyTo);
+        Assert.Contains("ORGANIZER;CN=\"Dana Smith\":mailto:dana@provider.example", update.Ics!.Content.Replace("\r\n ", ""));
+    }
+
+    [Fact]
+    public async Task A_booker_with_no_email_left_cannot_organise_so_the_organizer_is_left_out_and_reply_to_is_whoever_acts()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        f.Db.Users.Single(u => u.Id == f.Dana.Id).Email = string.Empty;
         f.Db.SaveChanges();
 
         await f.Controller(userId: f.Sam.Id, role: "Admin").Set(f.Noah.Id, f.Body() with { StartsAt = Start.AddDays(1) }, CancellationToken.None);
@@ -519,6 +533,21 @@ public class IntakeBookingsControllerTests
         var update = f.Channel.Sent[1];
         Assert.Equal("sam@provider.example", update.ReplyTo);
         Assert.DoesNotContain("ORGANIZER", update.Ics!.Content);
+    }
+
+    // Fix round 1, N1: a view-as user from another organisation is never the caller: their address is not the Reply-To, their name not "Booked by".
+    [Fact]
+    public async Task A_caller_from_another_organisation_lends_no_reply_to_or_name()
+    {
+        var f = new Fixture();
+        var stranger = f.Staff("Eve", "Other", UserRole.Coordinator, "eve@other.example", tenantId: Guid.NewGuid());
+        f.Db.Users.Add(stranger);
+        f.Db.SaveChanges();
+
+        await f.Controller(userId: stranger.Id, role: "SuperAdmin").Set(f.Noah.Id, f.Body(), CancellationToken.None);
+
+        Assert.NotEqual("eve@other.example", f.Channel.Sent[0].ReplyTo);
+        Assert.DoesNotContain("Eve Other", f.Outbox().Single().PayloadJson);
     }
 
     private static CancelIntakeBookingResultDto Cancelled(ActionResult<ApiResponse<CancelIntakeBookingResultDto>> r) => Ok<CancelIntakeBookingResultDto>(r.Result!);

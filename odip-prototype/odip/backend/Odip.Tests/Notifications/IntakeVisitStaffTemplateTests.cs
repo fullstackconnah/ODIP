@@ -25,6 +25,11 @@ public class IntakeVisitStaffTemplateTests
 
         Assert.Equal("sam.lee@provider.example", message.RecipientAddress);
         Assert.Equal("Intake visit booked: Noah Fitzgerald, Fri 16 Oct at 10:00 am", message.Subject);
+        // Fix round 1, N3: when the staff member is also the booker, their own copy names no ORGANIZER (calendar apps treat an invite you organised
+        // as yours to send, not one to add).
+        var own = IntakeVisitStaffTemplate.Render(Payload() with { OrganizerEmail = "Sam.Lee@provider.example" }, BaseUrl);
+        Assert.DoesNotContain("ORGANIZER", own.Ics!.Content);
+        Assert.Contains("ORGANIZER", message.Ics.Content); // someone else booked: they stay the organizer
         // Fix round 1, S1: a line break typed into a name never reaches the Subject header.
         Assert.Equal("Intake visit booked: Noah Fitzgerald, Fri 16 Oct at 10:00 am",
             IntakeVisitStaffTemplate.Render(Payload() with { PersonFullName = "Noah\r\nFitzgerald" }, BaseUrl).Subject);

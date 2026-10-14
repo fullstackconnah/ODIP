@@ -282,7 +282,7 @@ public class IntakeBookingsController : ControllerBase
     private async Task<User?> CallerAsync(CancellationToken ct)
     {
         Guid? id = _tenant.ViewAsUserId ?? (Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var own) ? own : (Guid?)null);
-        return id is Guid userId ? await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == userId, ct) : null;
+        return id is Guid userId ? await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == _tenant.TenantId, ct) : null; // view-as must name a user of this organisation
     }
 
     // Keyed on the enquiry's organisation, never the ambient filter (a SuperAdmin has none): another organisation's user is simply not found.
@@ -290,15 +290,16 @@ public class IntakeBookingsController : ControllerBase
         id is Guid staffId ? await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == staffId && u.TenantId == tenantId, ct) : null;
 
     // Who an invite is from (lead decision S2). ORGANIZER and Reply-To stay the coordinator who booked, for every revision of the UID: calendar apps
-    // treat a changed ORGANIZER as another event. If that person has since been deactivated or has no email, ORGANIZER is left out and Reply-To is
-    // whoever is acting now.
+    // treat a changed ORGANIZER as another event. A booker since deactivated stays ORGANIZER (the address only identifies the event, and the system
+    // never mails it) while replies go to whoever is acting now; a booker with no email left cannot be ORGANIZER at all.
     private sealed record InviteFrom(string? OrganizerName, string? OrganizerEmail, string? ReplyTo, string BookedByName);
 
     private async Task<InviteFrom> InviteFromAsync(ParticipantInquiry x, User? caller, CancellationToken ct)
     {
         var booker = await StaffAsync(x.IntakeBookedByUserId, x.TenantId, ct);
-        var organizer = booker is { IsActive: true } && !string.IsNullOrWhiteSpace(booker.Email) ? booker : null;
-        return new InviteFrom(organizer?.FullName, organizer?.Email, organizer?.Email ?? caller?.Email, booker?.FullName ?? caller?.FullName ?? "A coordinator");
+        var organizer = booker is not null && !string.IsNullOrWhiteSpace(booker.Email) ? booker : null;
+        var replyTo = organizer is { IsActive: true } ? organizer.Email : caller?.Email;
+        return new InviteFrom(organizer?.FullName, organizer?.Email, replyTo, booker?.FullName ?? caller?.FullName ?? "A coordinator");
     }
 
     private NotificationMessage ContactMessage(ParticipantInquiry x, string kind, User? staff, Provider provider, InviteFrom from) =>
