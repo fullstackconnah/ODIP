@@ -200,7 +200,9 @@ export default function ImportWizardPage() {
               <Button variant="secondary" size="sm" onClick={() => setConfirmUndo(true)}>Undo import</Button>
             </>}
           >
-            {`${result.skippedCount} skipped${kind === 'funding-plans' ? '' : ' (already in ODIP)'}, ${result.failedCount} couldn't be imported.`}
+            {kind === 'funding-plans'
+              ? `${plural(result.skippedCount, 'row')} skipped, ${plural(result.failedCount, 'row')} couldn't be imported.`
+              : `${result.skippedCount} skipped (already in ODIP), ${result.failedCount} couldn't be imported.`}
           </Callout>
         )}
         {kind === 'staff' && !undone && <ImportInvites batchId={result.batchId} count={result.createdCount} />}
@@ -348,7 +350,7 @@ export default function ImportWizardPage() {
             {step === 'review' && data && (
               <div className="flex max-w-xl flex-col gap-2 text-sm">
                 <p>{`${plural(data.createCount, noun)} will be created${landing ? `, ${LANDINGS.find(l => l.value === landing)!.label.toLowerCase()}` : ''}.`}</p>
-                {data.skippedCount > 0 && <p>{kind === 'funding-plans' ? `Skipped: ${data.skippedCount}.` : `Skipped, already in ODIP: ${data.skippedCount}.`}</p>}
+                {data.skippedCount > 0 && <p>{kind === 'funding-plans' ? `Rows skipped: ${data.skippedCount}.` : `Skipped, already in ODIP: ${data.skippedCount}.`}</p>}
                 {data.invalidCount > 0 && <p>{kind === 'funding-plans'
                   ? `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import just ${data.invalidCount === 1 ? 'that row' : 'those rows'}. A plan that was imported without one of its rows has to be undone and imported again.`
                   : `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import it again afterwards.`}</p>}

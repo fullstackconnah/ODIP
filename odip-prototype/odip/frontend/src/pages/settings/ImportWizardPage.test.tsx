@@ -186,8 +186,8 @@ describe('ImportWizardPage', () => {
   })
 
   it('imports funding plans: no landing, counts plans not rows, and says undo deletes them', async () => {
-    preview.mockResolvedValue({ ...previewOf(['firstName', 'lastName']), rows: [], readyCount: 3, invalidCount: 2, createCount: 1 })
-    commit.mockResolvedValue({ batchId: 'b1', createdCount: 1, skippedCount: 0, failedCount: 0, rows: [], replayed: false })
+    preview.mockResolvedValue({ ...previewOf(['firstName', 'lastName']), rows: [], readyCount: 3, skippedCount: 1, invalidCount: 2, createCount: 1 })
+    commit.mockResolvedValue({ batchId: 'b1', createdCount: 1, skippedCount: 1, failedCount: 2, rows: [], replayed: false })
     const router = createMemoryRouter([{ path: '/settings/import/:kind', element: <ImportWizardPage /> }], { initialEntries: ['/settings/import/funding-plans'] })
     render(<RouterProvider router={router} />)
     expect(screen.getByRole('heading', { level: 1, name: 'Import funding plans' })).toBeInTheDocument()
@@ -202,6 +202,7 @@ describe('ImportWizardPage', () => {
     expect(screen.getByText(/make one plan: 1 plan from 3 ready rows\./)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(screen.getByText('1 funding plan will be created.')).toBeInTheDocument()
+    expect(screen.getByText('Rows skipped: 1.')).toBeInTheDocument()
     expect(screen.getByText("Can't be imported: 2. Fix them in the file and import just those rows. A plan that was imported without one of its rows has to be undone and imported again.")).toBeInTheDocument()
     expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of them has been changed since the import.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Import 1 funding plan' }))
@@ -209,7 +210,8 @@ describe('ImportWizardPage', () => {
 
     expect(commit).toHaveBeenCalledWith({ kind: 'funding-plans', file, mapping: ['firstName', 'lastName'], landing: undefined, idempotencyKey: expect.any(String) })
     expect(await screen.findByText('Imported 1 funding plan')).toBeInTheDocument()
-    expect(screen.getByText("0 skipped, 0 couldn't be imported.")).toBeInTheDocument()
+    // Plans were created, but rows were skipped or refused: each count names its unit.
+    expect(screen.getByText("1 row skipped, 2 rows couldn't be imported.")).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
     expect(within(screen.getByRole('alertdialog')).getByText('The 1 funding plan it created is deleted. This only works while none of them has been changed since the import.')).toBeInTheDocument()
   })

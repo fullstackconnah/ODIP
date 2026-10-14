@@ -49,9 +49,10 @@ export default function ImportDataTab() {
     { key: 'kind', header: 'Type', mobile: 'meta', render: b => KIND_LABEL[b.kind] },
     { key: 'createdByName', header: 'Run by', mobile: 'meta' },
     { key: 'createdAt', header: 'When', mobile: 'meta', render: b => formatDateTimeAu(b.createdAt) },
-    { key: 'createdCount', header: 'Created', align: 'right' },
-    { key: 'skippedCount', header: 'Skipped', align: 'right' },
-    { key: 'failedCount', header: "Couldn't import", align: 'right' },
+    // A funding plans batch creates plans from several rows each, so its counts name their unit.
+    { key: 'createdCount', header: 'Created', align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.createdCount, 'plan') : b.createdCount },
+    { key: 'skippedCount', header: 'Skipped', align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.skippedCount, 'row') : b.skippedCount },
+    { key: 'failedCount', header: "Couldn't import", align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.failedCount, 'row') : b.failedCount },
     {
       key: 'status', header: 'Status', mobile: 'status',
       render: b => b.undoneAt ? <StatusBadge tone="neutral" label="Undone" /> : <StatusBadge tone="success" label="Imported" />,

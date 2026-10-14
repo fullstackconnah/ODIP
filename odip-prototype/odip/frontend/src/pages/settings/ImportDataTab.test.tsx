@@ -108,6 +108,8 @@ describe('ImportDataTab', () => {
 
     const row = screen.getByRole('row', { name: /budgets\.csv/ })
     expect(within(row).getByText('Funding plans')).toBeInTheDocument()
+    // A plan is several rows, so the counts say which they are.
+    expect([within(row).getByText('3 plans'), within(row).getByText('1 row')]).toHaveLength(2)
     await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
     expect(screen.getByText('The 3 funding plans that budgets.csv created are deleted. This only works while none of them has been changed since the import.')).toBeInTheDocument()
   })
