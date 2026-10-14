@@ -4705,6 +4705,10 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("RecipientUserId")
+                        .HasDatabaseName("IX_InAppNotifications_Unread")
+                        .HasFilter("\"ReadAt\" IS NULL");
+
                     b.HasIndex("TenantId");
 
                     b.HasIndex("RecipientUserId", "CreatedAt")

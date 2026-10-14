@@ -55,6 +55,47 @@ public class InAppNotificationPostgresTests : IClassFixture<PostgresFixture>
         Assert.Contains(@"(""RecipientUserId"", ""CreatedAt"" DESC)", def);
     }
 
+    /// <summary>
+    /// Fix round 1 (deep review S1): the badge's unread count reads only unread rows, through a partial index, instead of the
+    /// recipient's whole 90-day history. The plan is checked with EXPLAIN on the count the endpoint runs (tenant filter included).
+    /// </summary>
+    [SkippableFact]
+    public async Task TheUnreadCount_UsesThePartialUnreadIndex()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        var me = Guid.NewGuid();
+        await using (db)
+        {
+            var now = DateTime.UtcNow;
+            for (var i = 0; i < 400; i++)
+            {
+                var row = Row(tenantId, me, now.AddMinutes(-i));
+                if (i >= 3) row.ReadAt = now; // a long read history, three unread
+                db.InAppNotifications.Add(row);
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await using var conn = new NpgsqlConnection(_pg.ConnectionString);
+        await conn.OpenAsync();
+        await using (var analyze = new NpgsqlCommand("ANALYZE \"InAppNotifications\"", conn)) await analyze.ExecuteNonQueryAsync();
+
+        await using var def = new NpgsqlCommand(
+            "SELECT indexdef FROM pg_indexes WHERE tablename = 'InAppNotifications' AND indexname = 'IX_InAppNotifications_Unread'", conn);
+        Assert.Contains(@"WHERE (""ReadAt"" IS NULL)", (string?)await def.ExecuteScalarAsync() ?? "");
+
+        await using var explain = new NpgsqlCommand(
+            "EXPLAIN SELECT count(*)::int FROM \"InAppNotifications\" AS i " +
+            "WHERE i.\"TenantId\" = @tenant AND i.\"RecipientUserId\" = @me AND i.\"ReadAt\" IS NULL", conn);
+        explain.Parameters.AddWithValue("tenant", tenantId);
+        explain.Parameters.AddWithValue("me", me);
+        var plan = new List<string>();
+        await using (var reader = await explain.ExecuteReaderAsync())
+            while (await reader.ReadAsync()) plan.Add(reader.GetString(0));
+        Assert.Contains(plan, line => line.Contains("IX_InAppNotifications_Unread"));
+    }
+
     [SkippableFact]
     public async Task ALongTitle_Saves_SoANameCanNeverFailTheWriteItRidesOn()
     {

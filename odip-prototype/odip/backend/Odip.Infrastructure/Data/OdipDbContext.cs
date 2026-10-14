@@ -1333,6 +1333,8 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.EntityType).HasMaxLength(100);
             entity.HasIndex(e => new { e.RecipientUserId, e.CreatedAt }).IsDescending(false, true);   // the bell: own rows, newest first
+            // The badge's unread count, polled every minute: only unread rows, not the recipient's whole 90-day history.
+            entity.HasIndex(e => e.RecipientUserId).HasFilter("\"ReadAt\" IS NULL").HasDatabaseName("IX_InAppNotifications_Unread");
         });
 
         // ── StaffAssignment override fields (PR 3 wires the gate; columns land now) ──

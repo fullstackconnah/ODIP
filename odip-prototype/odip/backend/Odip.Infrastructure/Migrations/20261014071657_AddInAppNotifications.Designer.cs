@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261014055759_AddInAppNotifications")]
+    [Migration("20261014071657_AddInAppNotifications")]
     partial class AddInAppNotifications
     {
         /// <inheritdoc />
@@ -4707,6 +4707,10 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RecipientUserId")
+                        .HasDatabaseName("IX_InAppNotifications_Unread")
+                        .HasFilter("\"ReadAt\" IS NULL");
 
                     b.HasIndex("TenantId");
 

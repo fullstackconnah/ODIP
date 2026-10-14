@@ -32,6 +32,18 @@ public class InAppNotificationModelTests
         Assert.NotNull(entity.GetQueryFilter());
     }
 
+    /// <summary>Fix round 1 (deep review S1): the badge count has a partial index over unread rows only.</summary>
+    [Fact]
+    public void TheUnreadCount_HasAPartialIndexOverUnreadRows()
+    {
+        using var db = TestDb.Create();
+        var entity = db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(InAppNotification))!;
+
+        var index = Assert.Single(entity.GetIndexes(), i => i.GetDatabaseName() == "IX_InAppNotifications_Unread");
+        Assert.Equal(new[] { "RecipientUserId" }, index.Properties.Select(p => p.Name));
+        Assert.Equal("\"ReadAt\" IS NULL", index.GetFilter());
+    }
+
     [Fact]
     public async Task ATenantScopedContext_SeesOnlyItsOwnOrganisationsRows()
     {

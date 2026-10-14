@@ -41,6 +41,12 @@ namespace Odip.Infrastructure.Migrations
                 name: "IX_InAppNotifications_TenantId",
                 table: "InAppNotifications",
                 column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_InAppNotifications_Unread",
+                table: "InAppNotifications",
+                column: "RecipientUserId",
+                filter: "\"ReadAt\" IS NULL");
         }
 
         /// <inheritdoc />
