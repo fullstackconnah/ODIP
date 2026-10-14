@@ -48,14 +48,15 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
     return {
       id: t.id,
       subject: t.title,
+      // The date first, so a narrow row cuts the context and never the date; the trip only from lg (finish re-score 1).
       meta: [
+        isLate && t.dueDate && noBreak(`due ${formatDayMonth(t.dueDate)}`),
         TASK_TYPE_LABELS[t.taskType],
         (t.priority === 'High' || t.priority === 'Urgent') && t.priority,
-        isLate && t.dueDate && noBreak(`due ${formatDayMonth(t.dueDate)}`),
-        t.tripName,
-        signOff && 'An admin signs this off',
       ],
-      flags: [isLate ? { label: 'Overdue', tone: 'danger' } : { label: 'Due today', tone: 'warning' }],
+      wideMeta: [t.tripName],
+      // Why the row has no Done is a flag, which never truncates.
+      flags: [isLate ? { label: 'Overdue', tone: 'danger' } : { label: 'Due today', tone: 'warning' }, ...(signOff ? [{ label: 'An admin signs this off', tone: 'neutral' as const }] : [])],
       actions,
     }
   }

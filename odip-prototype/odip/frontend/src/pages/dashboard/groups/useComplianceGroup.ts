@@ -40,13 +40,14 @@ export function useComplianceGroup(enabled: boolean, { staff, today, warningDays
     return {
       id: `${member.id}:${credential.field}`,
       subject: member.fullName,
+      // The date first, so a narrow row cuts the credential name and never the date (finish re-score 1).
       meta: [
-        credential.label,
         status === 'overdue' && noBreak(`expired ${formatDayMonth(credential.expiryDate)}`),
         status === 'soon' && noBreak(`expires ${formatDayMonth(credential.expiryDate)}`),
-        adminOnly && 'An admin updates this',
+        credential.label,
       ],
-      flags: [{ label: deadlineLabel(credential.state, 'compact'), tone: DEADLINE_TONE[status] }],
+      // Why the row has no editor is a flag, which never truncates.
+      flags: [{ label: deadlineLabel(credential.state, 'compact'), tone: DEADLINE_TONE[status] }, ...(adminOnly ? [{ label: 'An admin updates this', tone: 'neutral' as const }] : [])],
       actions: adminOnly ? [{ kind: 'link', label: 'Open', name: `Open staff member: ${member.fullName}`, to: `/staff/${member.id}` }] : [{ kind: 'form', label: `${verb} expiry`, name: `${verb} expiry: ${member.fullName}, ${name}`, form: {
         field: 'date', label: 'Expiry date', initial: credential.expiryDate?.slice(0, 10) ?? '', required: 'Choose the expiry date.',
         submitLabel: 'Save', busyLabel: 'Saving…', failText: "Couldn't save. Try again.",

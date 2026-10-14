@@ -50,9 +50,11 @@ describe('Tasks due group — what it lists', () => {
     expect(screen.getByText('4')).toBeInTheDocument()
     const overdueRow = screen.getByText('Overdue older').closest('li')!
     expect(within(overdueRow).getByText('Overdue')).toBeInTheDocument()
-    expect(within(overdueRow).getByText('Insurance confirmation · Urgent · due 8 Oct · Beach Trip')).toBeInTheDocument()
+    // The date first, so a narrow row cuts the context, never the date (finish re-score 1); the trip only from lg.
+    expect(within(overdueRow).getByText('due 8 Oct · Insurance confirmation · Urgent')).toBeInTheDocument()
+    expect(within(overdueRow).getByText('· Beach Trip')).toHaveClass('hidden', 'lg:inline')
     expect(within(screen.getByText('Due today medium').closest('li')!).getByText('Due today')).toBeInTheDocument()
-    expect(within(screen.getByText('Due today medium').closest('li')!).getByText('Insurance confirmation · Beach Trip')).toBeInTheDocument()
+    expect(within(screen.getByText('Due today medium').closest('li')!).getByText('Insurance confirmation')).toBeInTheDocument()
   })
 })
 
@@ -112,7 +114,9 @@ describe('Tasks due group — the review of an emergency over budget', () => {
 
     expect(await screen.findByRole('link', { name: 'Open task: Review the emergency booking for Grace' })).toHaveAttribute('href', '/tasks/t9/edit')
     expect(screen.queryByRole('button', { name: /^Done/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/An admin signs this off$/)).toBeInTheDocument()
+    // A neutral flag, never the end of a meta a narrow row cuts.
+    expect(screen.getByText('An admin signs this off').closest('p')).toBeNull()
+    expect(screen.getByText('due 10 Oct · Budget emergency review · Urgent')).toBeInTheDocument()
   })
 })
 

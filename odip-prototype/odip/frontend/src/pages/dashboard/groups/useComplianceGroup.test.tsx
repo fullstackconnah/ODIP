@@ -39,8 +39,9 @@ describe('Staff compliance group — what it lists', () => {
     await screen.findByText('Sam Lee')
     expect(apiGet).toHaveBeenCalledWith('/staff', { isActive: 'true' })
     expect(screen.getAllByRole('listitem').map((li) => li.querySelector('span')!.textContent)).toEqual(['Sam Lee', 'Ana Ruiz', 'Ben Ito', 'Cy Moss'])
-    expect(screen.getByText('First Aid · expired 3 Oct')).toBeInTheDocument()
-    expect(screen.getByText('First Aid · expires 30 Oct')).toBeInTheDocument()
+    // The date first, so a narrow row cuts the credential name, never the date (finish re-score 1).
+    expect(screen.getByText('expired 3 Oct · First Aid')).toBeInTheDocument()
+    expect(screen.getByText('expires 30 Oct · First Aid')).toBeInTheDocument()
     for (const flag of ['Expired', 'Expires today', '16 days', 'No date set']) expect(screen.getByText(flag)).toBeInTheDocument()
     expect(screen.getByText('4')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add expiry: Cy Moss, driver licence' })).toBeInTheDocument()
@@ -129,6 +130,7 @@ describe('Staff compliance group — fix round 1', () => {
     const open = await screen.findByRole('link', { name: 'Open staff member: Sam Lee' })
     expect(open).toHaveAttribute('href', '/staff/s1')
     expect(screen.queryByRole('button', { name: UPDATE_SAM })).not.toBeInTheDocument()
-    expect(screen.getByText(/An admin updates this$/)).toBeInTheDocument()
+    // A neutral flag, never the end of a meta a narrow row cuts.
+    expect(screen.getByText('An admin updates this').closest('p')).toBeNull()
   })
 })

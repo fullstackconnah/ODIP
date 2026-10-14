@@ -111,6 +111,7 @@ function QuickRowView({ row, onDone, onRefused }: {
   const [formOpen, setFormOpen] = useState(false)
   const busy = tapping || submitting
   const meta = row.meta.filter(Boolean).join(' · ')
+  const wide = (row.wideMeta ?? []).filter(Boolean).join(' · ')
   const formAction = row.actions.find((a): a is Extract<RowAction, { kind: 'form' }> => a.kind === 'form')
   const opener = () => rowRef.current?.querySelector<HTMLElement>(`[aria-controls="${formId}"]`)
 
@@ -157,7 +158,11 @@ function QuickRowView({ row, onDone, onRefused }: {
             </div>
             {/* From md the meta takes only the room the subject leaves, so it is cut first; below md it wraps, so a deciding fact ("An admin signs this off", a
                 due or expiry date) is never cut on a phone, where `title` shows nothing. */}
-            {meta && <p className="min-w-0 break-words text-[13px] text-[var(--color-muted-foreground)] md:min-w-24 md:flex-[1_1_0%] md:truncate" title={meta}>{meta}</p>}
+            {meta && (
+              <p className="min-w-0 break-words text-[13px] text-[var(--color-muted-foreground)] md:min-w-24 md:flex-[1_1_0%] md:truncate" title={wide ? `${meta} · ${wide}` : meta}>
+                {meta}{wide && <span className="hidden lg:inline"> · {wide}</span>}
+              </p>
+            )}
           </div>
           {error && <p role="alert" className="text-xs text-[var(--color-destructive)]">{error}</p>}
         </div>

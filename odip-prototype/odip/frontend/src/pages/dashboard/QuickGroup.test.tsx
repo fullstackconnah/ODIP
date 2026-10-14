@@ -378,3 +378,13 @@ describe('QuickGroup — fix round 1', () => {
     expect(meta.className).not.toMatch(/(^|\s)truncate(\s|$)/)
   })
 })
+
+describe('QuickGroup — fix round 2', () => {
+  it('draws the wide-only facts after the meta from lg only, and keeps them in the tooltip', () => {
+    render(<Harness model={model({ count: 1, rows: [row('a', { meta: ['due 8 Oct', 'Insurance confirmation'], wideMeta: ['Beach Trip'] })] })} />)
+
+    const meta = screen.getByText('due 8 Oct · Insurance confirmation')
+    expect(meta).toHaveAttribute('title', 'due 8 Oct · Insurance confirmation · Beach Trip')
+    expect(within(meta).getByText('· Beach Trip')).toHaveClass('hidden', 'lg:inline')
+  })
+})

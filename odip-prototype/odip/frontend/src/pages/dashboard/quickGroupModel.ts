@@ -46,6 +46,8 @@ export interface QuickRow {
   subject: string
   /** The facts, joined by middots. An empty one is dropped before the dots are placed (PageHeaderMeta's rule). */
   meta: Array<string | null | undefined | false>
+  /** Context drawn after the meta only from lg (a task's trip): one tap away, and the longest wrap on a phone. */
+  wideMeta?: Array<string | null | undefined | false>
   /** Only the true ones; the first two are drawn. Colour always comes with its word. */
   flags: Array<{ label: string; tone: Tone }>
   /** At most two, secondary first: a `tap` action (the one-tap decision, primary) is always last, at the right edge. */
