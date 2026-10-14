@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { useAdminTenantsSummary } from '@/api/hooks/admin'
-import { DataTable } from '@/components/DataTable'
+import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
@@ -103,22 +103,14 @@ export default function TenantsTab({
             header: '',
             align: 'right',
             render: (tenant: TenantSummaryDto) => (
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => onEditTenant(tenant)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-foreground)] transition-colors"
-                >
+              <RowActions>
+                <Button variant="ghost" size="sm" onClick={() => onEditTenant(tenant)} aria-label={`Edit: ${tenant.name}`}>
                   Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onViewTenantDetail(tenant)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-primary)] transition-colors"
-                >
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onViewTenantDetail(tenant)} aria-label={`View Users: ${tenant.name}`}>
                   View Users
-                </button>
-              </div>
+                </Button>
+              </RowActions>
             ),
           },
         ]}

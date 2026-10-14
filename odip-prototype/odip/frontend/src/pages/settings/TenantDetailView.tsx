@@ -3,7 +3,7 @@ import { Users, UserCheck, Clock, ChevronDown, ChevronRight, Plus } from 'lucide
 import { BackButton } from '@/components/BackButton'
 import { useAdminTenantUsers } from '@/api/hooks/settings'
 import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
-import { DataTable } from '@/components/DataTable'
+import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { formatInstantDateAu } from '@/lib/format'
@@ -165,13 +165,11 @@ export default function TenantDetailView({
                 header: '',
                 align: 'right',
                 render: (user: TenantUserDto) => (
-                  <button
-                    type="button"
-                    onClick={() => onEditUser(user.id)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-primary)] transition-colors"
-                  >
-                    Edit
-                  </button>
+                  <RowActions>
+                    <Button variant="ghost" size="sm" onClick={() => onEditUser(user.id)} aria-label={`Edit: ${user.fullName}`}>
+                      Edit
+                    </Button>
+                  </RowActions>
                 ),
               },
             ]}
