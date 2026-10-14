@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
@@ -73,5 +74,23 @@ public class AgreementEndingAlertsTests
         var mine = Assert.Single(body.Data!, p => p.ParticipantId == f.ParticipantId);
         var ended = Assert.Single(mine.Alerts, a => a.Type == "agreement-ended");
         Assert.Equal(("Agreement ended 2026-10-07: shifts stop after it", $"/participants/{f.ParticipantId}/agreement-draft", 1), (ended.Message, ended.LinkTo, mine.CriticalCount));
+    }
+
+    /// <summary>Fix round 1 (CR-B S2): an ended agreement stays Critical while the participant is active and not renewed (nothing can be rostered), and clears when a renewal is approved or the participant is archived.</summary>
+    [Fact]
+    public async Task The_ended_alert_clears_when_a_renewal_is_approved_or_the_participant_is_archived()
+    {
+        await using var renewed = await SetUpAsync();
+        await ApprovedEndingAsync(renewed, Today.AddDays(-3));
+        var renewal = await AddRevisionAsync(renewed, 2, new[] { WeekdayBlock() }, start: Today.AddDays(-2), end: Today.AddDays(40));
+        Assert.Equal("agreement-ended", Assert.Single(await AgreementAlertsAsync(renewed)).Type);           // still Critical while the renewal only waits
+        await MarkApprovedAsync(renewed.Db, renewal);
+        Assert.Equal("agreement-ending-soon", Assert.Single(await AgreementAlertsAsync(renewed)).Type);    // the renewal is the agreement now, ending in 40 days
+
+        await using var archived = await SetUpAsync();
+        await ApprovedEndingAsync(archived, Today.AddDays(-3));
+        (await archived.Db.Participants.SingleAsync(p => p.Id == archived.ParticipantId)).IsActive = false;
+        await archived.Db.SaveChangesAsync();
+        Assert.Empty(await AgreementAlertsAsync(archived));
     }
 }
