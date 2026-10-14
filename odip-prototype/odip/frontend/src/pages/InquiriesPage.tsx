@@ -171,7 +171,7 @@ function useInquiriesScreen() {
         if (!row.provenance) return <span>{text}</span>
         return (
           <span
-            className="block max-w-[280px] truncate text-sm text-[var(--color-muted-foreground)]"
+            className="block max-w-[12rem] truncate text-sm text-[var(--color-muted-foreground)]"
             title={row.provenance}
           >
             {text}
@@ -183,7 +183,8 @@ function useInquiriesScreen() {
     {
       key: 'intakeStartsAt', header: 'Intake', sortable: true, wrap: true,
       // Room for the date and time unbroken; a narrower window scrolls the table in its box (the Column Rule) rather than crushing the cell.
-      minWidth: '12.5rem',
+      // With Provenance capped at 12rem this keeps the whole table, one-row Actions included, inside its box at 1440.
+      minWidth: '11rem',
       // ISO instants sort in time order. An empty cell sorts last on the ascending sort.
       sortFn: (a, b) => (a.intakeStartsAt ?? '9999').localeCompare(b.intakeStartsAt ?? '9999'),
       render: row => <IntakeCell row={row} canManage={canManageParticipantLifecycle} onOpen={r => openBooking(r)} />,
