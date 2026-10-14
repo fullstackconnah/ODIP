@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
