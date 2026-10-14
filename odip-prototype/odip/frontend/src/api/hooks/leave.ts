@@ -152,6 +152,7 @@ export function useApproveLeave() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['leave-requests'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: ['tasks'] })   // approving leave raises a LeaveCoverage task per overlapped shift: the task lists must not be served stale
     },
   })
 }
