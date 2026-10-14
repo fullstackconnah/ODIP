@@ -140,7 +140,7 @@ describe('RosterGrid — density', () => {
     expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
   })
 
-  it('shows "Unfilled" on an unfilled shift inside a participant row', () => {
+  it('shows "Needs staff" on an unfilled shift inside a participant row', () => {
     const board = makeParticipantBoard({
       participantRows: [makeParticipantRow({
         participantId: 'p1',
@@ -150,7 +150,7 @@ describe('RosterGrid — density', () => {
     })
     renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
 
-    expect(screen.getByText('Unfilled')).toBeInTheDocument()
+    expect(screen.getByText('Needs staff')).toBeInTheDocument()
   })
 
   it('in a staff row the chip names the participant and the staff member is named once, by the row header link', () => {
