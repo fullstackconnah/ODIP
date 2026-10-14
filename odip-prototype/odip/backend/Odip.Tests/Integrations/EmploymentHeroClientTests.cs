@@ -66,4 +66,19 @@ public class EmploymentHeroClientTests
         Assert.Equal(EmploymentHeroFailure.Unavailable, (await Assert.ThrowsAsync<EmploymentHeroException>(() => client.ListBusinessesAsync(Key, CancellationToken.None))).Failure);
         Assert.Equal(EmploymentHeroFailure.Unavailable, (await Assert.ThrowsAsync<EmploymentHeroException>(() => client.GetBusinessAsync(Key, "777", CancellationToken.None))).Failure);
     }
+
+    [Fact]
+    public async Task An_EH_that_never_shortens_its_pages_is_Unavailable_not_an_endless_loop()
+    {
+        // EH answering every $skip with the same full page (it ignores $skip): the second page adds nobody new, so the client stops.
+        var page = Enumerable.Range(1, 100).Select(i => StubHttpHandler.Employee(i, "P", $"{i}", $"p{i}@example.org")).ToArray();
+        var eh = new StubHttpHandler().OnAnyQuery("/api/v2/business/777/employee/details", HttpStatusCode.OK, page);
+        using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var ex = await Assert.ThrowsAsync<EmploymentHeroException>(() => StubHttpHandler.Client(eh).ListEmployeesAsync(Key, "777", guard.Token));
+
+        Assert.Equal(EmploymentHeroFailure.Unavailable, ex.Failure);
+        Assert.Equal(2, eh.Requests.Count);
+        Assert.Contains("$orderby=id", Uri.UnescapeDataString(eh.Requests[0].RequestUri!.Query));
+    }
 }

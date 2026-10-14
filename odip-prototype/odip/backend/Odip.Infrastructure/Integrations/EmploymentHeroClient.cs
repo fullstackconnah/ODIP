@@ -30,6 +30,9 @@ public class EmploymentHeroClient
 {
     public const string DefaultBaseUrl = "https://api.yourpayroll.com.au/";
     private const int PageSize = 100;
+    // 20,000 employees: past this the list is not ending, and a run must not page forever.
+    private const int MaxPages = 200;
+    private const string NotEndingMessage = "Employment Hero kept sending the same employees, so ODIP stopped reading the list. Try again in a few minutes.";
     // EH allows 5 requests a second per key and IP (Usage.html): a short pause between pages keeps a large list under it.
     private static readonly TimeSpan PagePause = TimeSpan.FromMilliseconds(250);
     private readonly HttpClient _http;
@@ -49,17 +52,25 @@ public class EmploymentHeroClient
     public Task<EhEmployee> GetEmployeeAsync(string apiKey, string businessId, string employeeId, CancellationToken ct) =>
         GetAsync<EhEmployee>(apiKey, $"api/v2/business/{Uri.EscapeDataString(businessId)}/employee/{Uri.EscapeDataString(employeeId)}/details", ct);
 
-    /// <summary>Every employee, 100 a page until a short page. Any failure throws, so a caller never acts on part of the list.</summary>
+    /// <summary>
+    /// Every employee, 100 a page in id order until a short page. Any failure throws, so a caller never acts on part of the list. A page that adds nobody
+    /// new (an EH that ignores $skip) or a list past MaxPages is Unavailable, never an endless loop.
+    /// </summary>
     public async Task<List<EhEmployee>> ListEmployeesAsync(string apiKey, string businessId, CancellationToken ct)
     {
         var all = new List<EhEmployee>();
-        for (var skip = 0; ; skip += PageSize)
+        var seen = new HashSet<int>();
+        for (var pageNo = 0; pageNo < MaxPages; pageNo++)
         {
-            if (skip > 0) await Task.Delay(PagePause, ct);
-            var page = await GetAsync<List<EhEmployee>>(apiKey, $"api/v2/business/{Uri.EscapeDataString(businessId)}/employee/details?$top={PageSize}&$skip={skip}", ct);
+            if (pageNo > 0) await Task.Delay(PagePause, ct);
+            var page = await GetAsync<List<EhEmployee>>(apiKey,
+                $"api/v2/business/{Uri.EscapeDataString(businessId)}/employee/details?$orderby=id&$top={PageSize}&$skip={pageNo * PageSize}", ct);
+            var added = page.Count(e => seen.Add(e.Id));
             all.AddRange(page);
             if (page.Count < PageSize) return all;
+            if (added == 0) break;
         }
+        throw new EmploymentHeroException(EmploymentHeroFailure.Unavailable, NotEndingMessage);
     }
 
     private async Task<T> GetAsync<T>(string apiKey, string path, CancellationToken ct)
