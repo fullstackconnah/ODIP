@@ -621,6 +621,10 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        // A started, finished or cancelled shift keeps its worker here too, as /assign and a drop do (decision 8; post-merge review S2): its completion and timesheet
+        // belong to that worker. Every other edit the rules below allow still saves.
+        if (dto.StaffId != shift.UserId && IsLockedForStaffChange(shift.Status))
+            return Conflict(ApiResponse<ShiftDto>.Fail("This shift has started or finished, so its worker can't change here.", ShiftErrorCodes.ShiftStatusLocked));
 
         // A shift has to end after it starts. The rule is for times somebody is setting now: an edit that leaves the shift's times alone, or cancels it, never trips it, because rows saved before this rule
         // may already be wrong and the panel must still be able to annotate, assign and cancel them (a started shift's times are locked and could not be mended at all).
@@ -655,7 +659,7 @@ public class RosteringController : ControllerBase
         // ServiceDate/StartTime/EndTime/EndsNextDay are locked — the active ShiftCompletion's
         // variance is computed against those values, so editing them out from under an
         // in-flight or already-reviewed completion would silently invalidate it. Every other
-        // field (Notes, Ratio, NightType, StaffId, etc.) remains editable on these statuses.
+        // field (Notes, Ratio, NightType, etc.) remains editable on these statuses; the worker is refused above.
         if (shift.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed
             && (dto.ServiceDate != shift.ServiceDate || dto.StartTime != shift.StartTime
                 || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay))

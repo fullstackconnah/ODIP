@@ -256,6 +256,57 @@ public class RosterBoardDragDropTests
         Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
     }
 
+    // ── The slide-over's PUT keeps a started, finished or cancelled shift's worker, as /assign and a drop do (post-merge review S2) ──
+
+    [Theory]
+    [InlineData(ShiftStatus.InProgress)]
+    [InlineData(ShiftStatus.PendingReview)]
+    [InlineData(ShiftStatus.Completed)]
+    [InlineData(ShiftStatus.Cancelled)]
+    public async Task UpdateShift_ChangingTheWorkerOfALockedShift_Is409AndChangesNothing(ShiftStatus status)
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, status);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, status) with { Notes = "changed too" }, default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value);
+        Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, body.Code);
+        Assert.Equal("This shift has started or finished, so its worker can't change here.", Assert.Single(body.Errors!));
+        var after = await Reload(db, shift.Id);
+        Assert.Equal(alex.Id, after.UserId);
+        Assert.Null(after.Notes);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_OtherEditsOnALockedShift_StillSave()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Completed);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Completed) with { Notes = "Handover read" }, default));
+
+        Assert.Equal("Handover read", (await Reload(db, shift.Id)).Notes);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingTheWorkerOfADraft_StillChangesIt()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Draft);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Draft), default));
+
+        Assert.Equal(sam.Id, (await Reload(db, shift.Id)).UserId);
+    }
+
     [Theory]
     [InlineData(ShiftStatus.Draft)]
     [InlineData(ShiftStatus.Cancelled)]
