@@ -14,6 +14,8 @@ async function carry(page: Page, from: Locator, to: Locator) {
   await page.mouse.move(a.x + a.width / 2 + 8, a.y + a.height / 2, { steps: 4 });
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 20 });
   await page.mouse.up();
+  // dnd-kit swallows clicks on the document for 50 ms after a drop (its sensors' post-drag click guard), so a click on the prompt that opens at once could be lost.
+  await page.waitForTimeout(150);
 }
 
 test('a person from the strip fills a Needs staff shift, then swaps with a colleague', async ({ page, session }) => {
