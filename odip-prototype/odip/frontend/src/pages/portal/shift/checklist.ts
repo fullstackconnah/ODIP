@@ -95,6 +95,8 @@ const toMs = (local: string, tz: string) => {
  * What each Change control offers, as provider-local "yyyy-MM-ddTHH:mm" (a datetime-local's digits). The server compares with its stamps
  * truncated to the minute, so these are too: the start's stamp ±15, and the end from 15 minutes before this minute up to this minute.
  */
+// shortcut: on the DST fall-back night the bounds are wall-clock strings, so in the repeated hour min can read later than max and a move
+// may be refused; the server stays the floor and no wrong time is stored. Upgrade to instant bounds if overnight workers hit it.
 export function timeBounds(stampedStart: string, tz: string, now: Date) {
   const start = Math.floor(parseApiDate(stampedStart).getTime() / MINUTE) * MINUTE
   const end = Math.floor(now.getTime() / MINUTE) * MINUTE
