@@ -142,7 +142,6 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
         </Callout>
       )}
       {sync.error != null && <Callout tone="danger">{extractErrorMessage(sync.error, "The sync couldn't start. Try again.")}</Callout>}
-      {disconnect.error != null && <Callout tone="danger">{extractErrorMessage(disconnect.error, "Employment Hero couldn't be disconnected. Try again.")}</Callout>}
       {/* One line each on a phone, so the destructive action never sits beside the routine one. */}
       <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
         <Button variant="secondary" onClick={() => sync.mutate()} disabled={sync.isPending}>{sync.isPending ? 'Syncing…' : 'Sync now'}</Button>
@@ -154,7 +153,13 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
       <ConfirmDialog
         open={confirming}
         title="Disconnect Employment Hero?"
-        message="Syncing stops and the saved API key is deleted. Staff keep their links, so connecting the same business again links them back. New staff member and the staff import come back."
+        message={
+          <>
+            <p>Syncing stops and the saved API key is deleted. Staff keep their links, so connecting the same business again links them back. New staff member and the staff import come back.</p>
+            {/* In the dialog that asked, which stays open until a disconnect works. */}
+            {disconnect.error != null && <Callout tone="danger">{extractErrorMessage(disconnect.error, "Employment Hero couldn't be disconnected. Try again.")}</Callout>}
+          </>
+        }
         confirmLabel="Disconnect"
         variant="danger"
         loading={disconnect.isPending}
@@ -257,6 +262,7 @@ function LinkPicker({ item, onClose }: { item: EmploymentHeroAttentionDto; onClo
   const link = useLinkEmploymentHeroStaff()
   const [employeeId, setEmployeeId] = useState(item.employeeId ?? '')
   const list = employees.data ?? []
+  const chosen = list.find(e => e.id === employeeId)
   return (
     <Modal open onClose={onClose} title={`Link ${item.name}`} size="sm" footer={
       <>
@@ -274,6 +280,9 @@ function LinkPicker({ item, onClose }: { item: EmploymentHeroAttentionDto; onClo
           : (
             // A native select on purpose: a phone opens its own picker, and a desktop type-ahead searches 200 names.
             <SelectField label="Employment Hero employee" value={employeeId} onChange={e => setEmployeeId(e.target.value)} placeholder="Choose an employee"
+              hint={chosen?.addedBySync
+                ? `The sync added ${chosen.name} as a new staff member, and they have never signed in. Linking gives this record to ${item.name} and archives that account.`
+                : undefined}
               options={list.map(e => ({
                 value: e.id,
                 // Added by sync: Link moves the id from that never-signed-in duplicate and archives it (EmploymentHeroController.Link).

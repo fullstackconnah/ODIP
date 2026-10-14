@@ -220,9 +220,11 @@ describe('IntegrationsTab — the review fixes', () => {
     state.status = connected()
     state.disconnectError = { response: { data: { errors: ['A sync for this organisation is already running. Try again in a minute.'] } } }
     renderTab()
-    expect(screen.getByText('A sync for this organisation is already running. Try again in a minute.')).toBeInTheDocument()
+    expect(screen.queryByText('A sync for this organisation is already running. Try again in a minute.')).toBeNull()   // not on the card: it belongs to the dialog that asked
     await user.click(screen.getByRole('button', { name: 'Disconnect' }))
-    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Disconnect' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText('A sync for this organisation is already running. Try again in a minute.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Disconnect' }))
     expect(calls.disconnect).toHaveBeenCalledWith(undefined, expect.objectContaining({ onSuccess: expect.any(Function) }))
     expect(calls.disconnect.mock.calls[0][1]).not.toHaveProperty('onSettled')
   })
@@ -241,6 +243,10 @@ describe('IntegrationsTab — the review fixes', () => {
     state.employees = [{ id: '302', name: 'Robert Smith', email: 'robert@acme.org.au', addedBySync: true }] satisfies EmploymentHeroEmployeeDto[]
     renderTab()
     await user.click(screen.getByRole('button', { name: 'Link to an Employment Hero employee: Jane Smith' }))
-    expect(within(screen.getByRole('dialog')).getByRole('option', { name: 'Robert Smith (robert@acme.org.au) (added by sync, never signed in)' })).toBeInTheDocument()
+    const picker = screen.getByRole('dialog')
+    expect(within(picker).getByRole('option', { name: 'Robert Smith (robert@acme.org.au) (added by sync, never signed in)' })).toBeInTheDocument()
+    expect(within(picker).queryByText(/added by the sync/)).toBeNull()   // the hint shows only once that employee is chosen
+    await user.selectOptions(within(picker).getByLabelText('Employment Hero employee'), '302')
+    expect(within(picker).getByText("The sync added Robert Smith as a new staff member, and they have never signed in. Linking gives this record to Jane Smith and archives that account.")).toBeInTheDocument()
   })
 })
