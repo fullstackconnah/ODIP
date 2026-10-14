@@ -49,7 +49,8 @@ export function RenewalReview({ renewal, renewedFrom, oldLines, oldBlocks, oldFa
       render: row => isMissing(row) ? <StatusBadge tone="warning" label="Not in the new price list" />
         : row.renewal === null ? <StatusBadge tone="neutral" label={`Not in ${now}'s dates`} />
         : row.old === null ? <StatusBadge tone="info" label="New" />
-        : `${row.old.catalogueVersion} to ${row.renewal.catalogueVersion}`,
+        // One version when the price list did not change; "2025-26 to 2026-27" only when it did (fix round 2).
+        : row.old.catalogueVersion === row.renewal.catalogueVersion ? row.renewal.catalogueVersion : `${row.old.catalogueVersion} to ${row.renewal.catalogueVersion}`,
     },
   ]
 
@@ -67,10 +68,10 @@ export function RenewalReview({ renewal, renewedFrom, oldLines, oldBlocks, oldFa
         <>
           {missing > 0 && (
             <Callout tone="warning" announce={false} className="max-w-prose">
-              {missing === 1 ? '1 line' : `${missing} lines`} of {was} {missing === 1 ? 'is' : 'are'} not in the new price list, so {now} cannot be approved yet. Change that support on the Week step: To look at, below, names it.
+              {missing === 1 ? '1 line' : `${missing} lines`} of {was} {missing === 1 ? 'is' : 'are'} not in the new price list, so {now} cannot be approved yet: To look at, below, says what to change.
             </Callout>
           )}
-          <DataTable data={rows} columns={columns} keyField="key" sortable={false} loading={!oldLines} compact />
+          <DataTable data={rows} columns={columns} keyField="key" sortable={false} loading={!oldLines} />
           {oldLines && <p className="text-sm">{was} came to {formatCurrency(totals.old)}; {now} comes to {formatCurrency(totals.renewal)}.</p>}
         </>
       )}

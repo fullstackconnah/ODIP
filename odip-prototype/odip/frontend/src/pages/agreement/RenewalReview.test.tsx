@@ -28,7 +28,8 @@ describe('RenewalReview', () => {
     const [weekdays, saturday] = screen.getAllByRole('row').slice(1)
     for (const text of [formatCurrency(70.23), formatCurrency(73.58), formatCurrency(8427.6), formatCurrency(8829.6), '2025-26 to 2026-27']) expect(within(weekdays).getByText(text)).toBeInTheDocument()
     expect(within(saturday).getByText('Not in the new price list')).toBeInTheDocument()
-    expect(screen.getByText('1 line of v1 is not in the new price list, so v2 cannot be approved yet. Change that support on the Week step: To look at, below, names it.')).toBeInTheDocument()
+    // Fix round 2 (finish 3): the callout defers to To look at, which gives the one remedy.
+    expect(screen.getByText('1 line of v1 is not in the new price list, so v2 cannot be approved yet: To look at, below, says what to change.')).toBeInTheDocument()
     expect(screen.getByText(`v1 came to ${formatCurrency(9046.44)}; v2 comes to ${formatCurrency(8829.6)}.`)).toBeInTheDocument()
   })
 
@@ -58,6 +59,8 @@ describe('RenewalReview', () => {
     const [weekdays, removed, withdrawn] = screen.getAllByRole('row').slice(1)
     expect(within(weekdays).getByText(formatCurrency(70.23))).toBeInTheDocument()                     // paired: the old price beside the new
     expect(within(weekdays).getByText(formatCurrency(73.58))).toBeInTheDocument()
+    expect(within(weekdays).getByText('2026-27')).toBeInTheDocument()                                 // one version when the price list did not change (fix round 2, finish 4)
+    expect(within(weekdays).queryByText('2026-27 to 2026-27')).not.toBeInTheDocument()
     expect(within(removed).getByText('01_013_0107_1_1 · Saturday')).toBeInTheDocument()
     expect(within(removed).getByText("Not in v2's dates")).toBeInTheDocument()                      // removed on purpose: nothing withdrawn
     expect(within(withdrawn).getByText('01_014_0107_1_1 · Sunday')).toBeInTheDocument()

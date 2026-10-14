@@ -381,3 +381,9 @@ describe('the renewal refusals (agreement PR 2)', () => {
     expect(describeRenewError(new Error('offline'))).toEqual({ title: 'The agreement was not renewed', messages: ['It could not be renewed just now. Check your connection and try again.'] })
   })
 })
+
+describe('the catalogue-not-found advice (agreement PR 2, fix round 2)', () => {
+  it('leads with the withdrawn item, the cause a renewal meets, and keeps the price list not imported yet', () => {
+    expect(REASON_COPY.CatalogueNotFound.advice).toBe('No price list row covers this support on some of these dates. If the item was withdrawn from the price list, choose a current support on the Week step; if the price list for those dates is not imported yet, a SuperAdmin can import it in Settings.')
+  })
+})
