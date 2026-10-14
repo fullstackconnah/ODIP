@@ -25,7 +25,7 @@ vi.mock('@/api/client', async () => {
   const actual = await vi.importActual<typeof import('@/api/client')>('@/api/client')
   // The tenant and user panels the page always mounts read through `apiClient` directly; an empty page keeps them quiet (no real request).
   const apiClient = { get: vi.fn(async () => ({ data: { data: [] } })), post: vi.fn(), put: vi.fn(), delete: vi.fn() }
-  return { ...actual, apiGet: mockApiGet, apiPut: mockApiPut, apiClient }
+  return { ...actual, apiGet: mockApiGet, apiGetWithDefault: async (url: string, fallback: unknown) => (await mockApiGet(url)) ?? fallback, apiPut: mockApiPut, apiClient }
 })
 
 vi.mock('@/lib/permissions', () => ({
@@ -62,7 +62,7 @@ const HELPER_TEXT =
 
 function renderProviderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings?section=organisation'] })
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings?section=safety'] })
   render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />

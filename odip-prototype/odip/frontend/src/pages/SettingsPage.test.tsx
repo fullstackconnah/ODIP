@@ -304,7 +304,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
 
   it('warns before navigating away from an edited Provider Settings form', async () => {
     const user = userEvent.setup()
-    const { router } = renderSettingsPage('/settings?section=organisation')
+    const { router } = renderSettingsPage('/settings?section=safety')
 
     // ProviderSettingsTab's labels aren't associated via htmlFor/id, so select the input
     // relative to its label text instead of by accessible label.
@@ -319,7 +319,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
   // The single-line inputs take a fixed `--control-h` height. A textarea that reuses that class ignores `rows` (an explicit
   // height beats it) and, with `resize-none`, could not be enlarged either: Invoice Footer Notes was stuck at one line.
   it('Invoice Footer Notes keeps its 3 rows and can be resized vertically', async () => {
-    renderSettingsPage('/settings?section=organisation')
+    renderSettingsPage('/settings?section=safety')
 
     const notes = screen.getByPlaceholderText(/NDIS Code of Conduct/i)
 
@@ -354,7 +354,7 @@ describe('SettingsPage — Provider Settings: medication competency check', () =
 
   async function openProviderSettings() {
     const user = userEvent.setup()
-    renderSettingsPage('/settings?section=organisation')
+    renderSettingsPage('/settings?section=safety')
     return user
   }
 
@@ -617,7 +617,7 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
   it('Provider Settings: the "Saved!" reset', async () => {
     mockUpsertMutate.mockImplementation((_body, opts) => opts?.onSuccess?.())
     const user = userEvent.setup()
-    const { unmount } = renderSettingsPage('/settings?section=organisation')
+    const { unmount } = renderSettingsPage('/settings?section=safety')
     await user.type(screen.getByLabelText('ABN') as HTMLInputElement, '1')
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })

@@ -10,11 +10,13 @@ import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import AlertWindowsSection from '@/pages/settings/AlertWindowsSection'
 import AppearanceSection from '@/pages/settings/AppearanceSection'
+import BillingDetailsSection from '@/pages/settings/BillingDetailsSection'
 import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
 import DataExportTab from '@/pages/settings/DataExportTab'
 import EventTemplatesSection from '@/pages/settings/EventTemplatesSection'
 import ImportDataTab from '@/pages/settings/ImportDataTab'
 import NotificationPreferencesTab from '@/pages/settings/NotificationPreferencesTab'
+import OrganisationProfileSection from '@/pages/settings/OrganisationProfileSection'
 import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
 import ProfileSection from '@/pages/settings/ProfileSection'
 import PublicHolidaysSection from '@/pages/settings/PublicHolidaysSection'
@@ -86,8 +88,10 @@ export default function SettingsPage() {
       case 'profile': return framed(<ProfileSection />)
       case 'notifications': return <NotificationPreferencesTab {...frame} />
       case 'appearance': return framed(<AppearanceSection />)
-      // shortcut: one Provider settings form behind all three keys until the split later in this PR (Tasks 11 and 12).
-      case 'organisation': case 'billing': case 'safety': return framed(<ProviderSettingsTab />)
+      case 'organisation': return <OrganisationProfileSection {...frame} />
+      case 'billing': return <BillingDetailsSection {...frame} />
+      // shortcut: the old Provider settings form stays behind Safety checks until Task 12 replaces it.
+      case 'safety': return framed(<ProviderSettingsTab />)
       case 'alerts': return <AlertWindowsSection {...frame} />
       case 'pricing': return <PlanPricingSettingsTab {...frame} />
       case 'budgets': return <BudgetSettingsTab {...frame} />
