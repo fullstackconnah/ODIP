@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  bookingBody, bookingFormOf, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, visitTimes, visitWhen,
+  bookingBody, bookingFormOf, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, staffOptions, visitTimes, visitWhen,
 } from './intakeBooking'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 
@@ -94,5 +94,19 @@ describe('the booking form', () => {
     expect(validateBooking(past, { askEmail: false, firstName: 'Noah', timeChanged: false, zone: 'Australia/Sydney', now: NOW })).toEqual({})
     expect(validateBooking({ ...past, email: 'noah@' }, { askEmail: true, firstName: 'Noah', timeChanged: false, zone: 'Australia/Sydney', now: NOW }).email)
       .toBe('Enter a full email address, like name@example.com.')
+  })
+})
+
+describe('who can go', () => {
+  const staff = [
+    { id: 'dana', fullName: 'Dana Smith', role: 'Coordinator' as const },
+    { id: 'sam', fullName: 'Sam Lee', role: 'Admin' as const },
+    { id: 'jo', fullName: 'Jo Ng', role: 'SupportWorker' as const },
+    { id: 'root', fullName: 'Platform Admin', role: 'SuperAdmin' as const },
+  ]
+
+  it('offers active coordinators and admins only, marks the signed-in user, and keeps a booked person who no longer qualifies', () => {
+    expect(staffOptions(staff, 'dana')).toEqual([{ value: 'dana', label: 'Dana Smith (you)' }, { value: 'sam', label: 'Sam Lee' }])
+    expect(staffOptions(staff, 'dana', { id: 'jo', name: 'Jo Ng' })[0]).toEqual({ value: 'jo', label: 'Jo Ng' })
   })
 })

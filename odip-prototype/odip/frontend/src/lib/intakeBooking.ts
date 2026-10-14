@@ -1,6 +1,7 @@
 // The intake visit as the screens show and edit it. Times are instants (UTC, Z) shown and entered in the PROVIDER's zone (the DTO's
 // timeZoneId), never the browser's, so a coordinator in another state still sees the family's 10:00 am. Pure and JSX-free.
 import type { IntakeInviteError, ParticipantInquiryDto, SetIntakeBookingDto } from '@/api/types/inquiries'
+import type { StaffListDto } from '@/api/types'
 import { parseApiDate } from '@/lib/utils'
 import { providerLocalToUtcInstant, utcInstantToProviderLocal } from '@/pages/portal/shift/shiftTime'
 
@@ -134,4 +135,14 @@ export const SERVER_FIELD: Record<string, BookingField> = {
 export function noAnswer(error: unknown): boolean {
   const e = error as { isAxiosError?: boolean; response?: unknown } | null
   return !!e?.isAxiosError && !e.response
+}
+
+/** Who can go: Admins and Coordinators (never SuperAdmin, never filtered on `position`), "(you)" on the signed-in user. A booked person who no
+ * longer qualifies stays listed as they are, so an old visit still shows who was going until someone else is chosen. */
+export function staffOptions(staff: Pick<StaffListDto, 'id' | 'fullName' | 'role'>[], myId: string | null, booked?: { id?: string | null; name?: string | null }) {
+  const items = staff
+    .filter(s => s.role === 'Admin' || s.role === 'Coordinator')
+    .map(s => ({ value: s.id, label: s.id === myId ? `${s.fullName} (you)` : s.fullName }))
+  if (booked?.id && !items.some(i => i.value === booked.id)) items.unshift({ value: booked.id, label: booked.name ?? 'Current staff member' })
+  return items
 }
