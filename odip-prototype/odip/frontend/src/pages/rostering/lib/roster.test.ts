@@ -8,6 +8,8 @@ import {
   formatShiftRange,
   formatShiftTimeRange,
   isUnfilledShift,
+  formatWeekSpan,
+  rosterDayColumnsTemplate,
 } from './roster'
 
 describe('countPatternOccurrences', () => {
@@ -139,5 +141,18 @@ describe('isUnfilledShift', () => {
     expect(isUnfilledShift({ staffId: null })).toBe(true)
     expect(isUnfilledShift({ staffId: '' })).toBe(true)
     expect(isUnfilledShift({ staffId: 'staff-1' })).toBe(false)
+  })
+})
+
+describe('formatWeekSpan', () => {
+  it('names a week shortly, across a month end too', () => {
+    expect(formatWeekSpan(daysOfWeek('2026-10-12'))).toBe('12–18 Oct')
+    expect(formatWeekSpan(daysOfWeek('2026-09-28'))).toBe('28 Sep–4 Oct')
+  })
+})
+
+describe('rosterDayColumnsTemplate', () => {
+  it('takes the day-column floor from --roster-day-col-min, 127px unless a coarse pointer widens it (finish review fix 4)', () => {
+    expect(rosterDayColumnsTemplate(7)).toBe('repeat(7, minmax(var(--roster-day-col-min, 127px), 1fr))')
   })
 })

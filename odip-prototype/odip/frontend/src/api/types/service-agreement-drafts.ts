@@ -191,6 +191,22 @@ export interface DraftVersionConflictDto {
   currentVersion: number
 }
 
+/** One row of GET /service-agreements/ending (agreement PR 2): an active participant's newest approved agreement ending within 60 days, or ended with no successor approved. No money. */
+export interface AgreementEndingDto {
+  participantId: string
+  participantName: string
+  /** The approved revision that ends. */
+  draftId: string
+  version: number
+  agreementEndDate: string
+  /** Days from the provider's today; below 0 once it has ended. */
+  daysLeft: number
+  /** The renewal waiting for approval after an ended agreement, if any. */
+  renewalVersion?: number | null
+  /** The participant alert's words, such as "Agreement ends in 20 days". */
+  status: string
+}
+
 /** The body of POST .../{draftId}/pattern-change: what one roster pattern of the approved revision should become, and from when (agreement PR 1). */
 export interface PatternChangeDto {
   patternId: string

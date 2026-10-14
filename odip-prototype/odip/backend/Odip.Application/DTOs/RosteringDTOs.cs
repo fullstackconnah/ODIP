@@ -306,6 +306,11 @@ public record CreateShiftDto
     /// (at least 10 characters once trimmed). It only means something when the check found the shift over budget; the path is open in every mode and cannot be switched off.
     /// </summary>
     public bool Emergency { get; init; }
+    /// <summary>
+    /// Create only (a PUT ignores it). Roster drag and drop (deep review S6): the shift the person on <see cref="StaffId"/> was carried off onto this empty day. In the same save the new
+    /// shift is created and that one is cleared, under the board lock, provided the person is still on it (409 otherwise), and the new shift is judged as if they had already left it.
+    /// </summary>
+    public Guid? MoveFromShiftId { get; init; }
 }
 
 public record UpdateShiftDto : CreateShiftDto
@@ -319,6 +324,49 @@ public record AssignShiftDto
     public Guid? StaffId { get; init; }
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }
+
+    private readonly Guid? _expectedStaffId;
+    /// <summary>
+    /// Roster drag and drop (2026-10-14): who the board showed on the shift when the drop was made, null for nobody. When the request names it and the shift's worker is someone else
+    /// now, the assign is refused (409) instead of replacing them by surprise. A request that leaves it out (the menus, LeaveApprovalsPage) is not checked. Its setter runs only when
+    /// the JSON names the property, explicit null included, so <see cref="ExpectsStaff"/> tells "left out" from "null".
+    /// </summary>
+    public Guid? ExpectedStaffId { get => _expectedStaffId; init { _expectedStaffId = value; ExpectsStaff = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool ExpectsStaff { get; private init; }
+}
+
+/// <summary>How <c>POST /shifts/move-staff</c> carries a person (roster drag and drop, 2026-10-14). On the wire: "Move", "Swap", "Replace".</summary>
+public enum MoveStaffMode { Move, Swap, Replace }
+
+/// <summary>
+/// One all-or-nothing carry of the person on <see cref="FromShiftId"/> to <see cref="ToShiftId"/>: Move onto an unfilled shift, Replace the worker there, or Swap the two.
+/// The source is left unfilled except in a swap.
+/// </summary>
+public record MoveStaffDto
+{
+    public Guid FromShiftId { get; init; }
+    public Guid ToShiftId { get; init; }
+    public MoveStaffMode Mode { get; init; }
+    /// <summary>The person the page carried. When given and someone else is on the source now, the move is refused (409) rather than moving the wrong person.</summary>
+    public Guid? StaffId { get; init; }
+    /// <summary>Who the board showed on the target, for Replace and Swap (deep review S4). When given and someone else is on the target now, the move is refused (409) rather than taking off, or swapping with, somebody the coordinator never saw.</summary>
+    public Guid? ExpectedToStaffId { get; init; }
+    /// <summary>Required when any finding of the move (a swap has two people's) needs a reason; never enough for a Blocking one.</summary>
+    public string? OverrideReason { get; init; }
+    public List<string>? AcknowledgedFindingCodes { get; init; }
+}
+
+/// <summary>What <c>POST /weeks/{weekStart}/publish</c> did (roster drag and drop, 2026-10-14).</summary>
+public record PublishWeekResultDto
+{
+    /// <summary>Draft shifts now Published, unfilled ones included.</summary>
+    public int Published { get; init; }
+    /// <summary>How many different workers were told about their shifts.</summary>
+    public int Notified { get; init; }
+    /// <summary>Of the published shifts, those nobody works yet: published as needing staff.</summary>
+    public int Unfilled { get; init; }
+    /// <summary>Drafts left as Draft because their worker now has a Blocking finding (a PUT publishing one of them alone is refused too).</summary>
+    public int Skipped { get; init; }
 }
 
 /// <summary>Dry-run input for <c>POST /shifts/check</c> — the same shape as a candidate shift, minus persistence fields.</summary>

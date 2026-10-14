@@ -1,12 +1,14 @@
+import { useCallback, useContext } from 'react'
 import { Link } from 'react-router-dom'
-import { useDraggable } from '@dnd-kit/core'
-import { AlertOctagon, AlertTriangle, CalendarOff, Check, GripVertical, KeyRound, MoreVertical, ShieldCheck, Siren } from 'lucide-react'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
+import { AlertOctagon, AlertTriangle, CalendarOff, Check, GripVertical, KeyRound, Lock, MoreVertical, Repeat, ShieldCheck, Siren } from 'lucide-react'
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { formatShiftTimeRange, RATIO_LABELS } from '../lib/roster'
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
+import { DropStateContext, dropOutcome, firstName, isLockedShift, lockedWords, type DragCarry, type DropTarget } from '../lib/rosterDrag'
 
 /**
  * Accessible name for the severity marker — states the severity(s) present and their counts, so
@@ -33,9 +35,14 @@ export type ShiftChipProps = {
   /**
    * The row this chip sits in. A chip's label is the person the row header does NOT already name, so
    * nothing is repeated: in a staff row (and the Unfilled lane) — the default — the label is the
-   * participant being supported; in a participant row it is the covering staff member, or "Unfilled".
+   * participant being supported; in a participant row it is the covering staff member, or "Needs staff".
    */
   context?: ShiftChipContext
+  /**
+   * Roster drag and drop, the Participant view from md up (2026-10-14): a grip that carries this shift's PERSON on a filled, unlocked chip (never the shift: no drag changes a day or a
+   * time), a Lock in that column on a locked one, and the chip as a drop target. Off in the Staff view and on phones, which keep click and the menus.
+   */
+  draggable?: boolean
   onOpen: (shift: ShiftDto) => void
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
@@ -50,19 +57,13 @@ const LABEL_LINK =
  * reserved for "something is wrong" — a healthy chip is a neutral surface; only the warning dot and
  * the dashed/unfilled variant carry meaning.
  *
- * At least `--row-h` minus 6px tall (28px at a fine pointer; grows with the row under `pointer: coarse`). Where the chip is 14rem or
+ * At least `--row-h` minus 6px tall (28px at a fine pointer; under `pointer: coarse` at least 44px, the touch target size, where row-h less 6px would be 42px). Where the chip is 14rem or
  * wider it is one line, `time · name`, with the time never clipping and the name yielding first. Narrower (a day column is 123-130px
  * at the board's native widths) the name sits UNDER the time on its own line, because on one line the time, the drag handle and the
  * actions trigger left the name 0-5px: a one-letter link. The chip is its own container (`@container`), so this follows the chip's
  * width, not the window's.
  */
-export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, onAssignTo, onUnassign, onDelete }: ShiftChipProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `shift:${shift.id}`,
-    data: { shift },
-    disabled: !canWrite,
-  })
-
+export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggable = false, onOpen, onAssignTo, onUnassign, onDelete }: ShiftChipProps) {
   const hasFindings = shift.findings.length > 0
   const hasBlocking = shift.findings.some(f => f.severity === 'Blocking')
   const showRatio = shift.ratio !== 'OneToOne'
@@ -76,6 +77,27 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
   // a hole (dashed, like an unfilled chip) rather than a normal covered shift.
   const onApprovedLeave = isFilled && shift.assigneeOnApprovedLeave
   const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
+
+  // Roster drag and drop: the grip lifts this shift's person; the chip is a drop target, locked ones included, so a drag over one can say why it is refused.
+  const { disabled: dragsOff, pending } = useContext(DropStateContext)
+  const locked = isLockedShift(shift)
+  const canLift = draggable && canWrite && isFilled && !locked
+  const carry: DragCarry = { staffId: shift.staffId ?? '', staffName: shift.staffName ?? '', fromShift: shift }
+  const { attributes, listeners, setNodeRef: setDragNode, isDragging } = useDraggable({ id: `shift:${shift.id}`, data: carry, disabled: !canLift || dragsOff })
+  const target: DropTarget = { kind: 'shift', shift }
+  const { setNodeRef: setDropNode, isOver, active } = useDroppable({ id: `drop-shift:${shift.id}`, data: target, disabled: !draggable || !canWrite })
+  // One stable ref for both: an inline arrow would detach and re-attach the drag and drop nodes on every render.
+  const setNodeRef = useCallback((node: HTMLElement | null) => { setDragNode(node); setDropNode(node) }, [setDragNode, setDropNode])
+  // Only while something is carried over this chip: the ring marks a drop that does something, and a locked chip refuses the cursor.
+  const overKind = isOver && active ? dropOutcome(active.data.current as DragCarry, target).kind : null
+  const busy = pending?.targetId === shift.id
+  const fading = pending?.sourceId === shift.id
+  const lockTitle = `${lockedWords(shift.status)}: can't be changed here`
+  const patternTitle = shift.shiftPatternId
+    ? (shift.fromAgreement ? (shift.sourceDraftVersion !== undefined ? `From agreement v${shift.sourceDraftVersion}` : 'From an agreement') : 'From a pattern')
+    : null
+  // The accessible name and the hover title end with the shift's state (the brief, section 8): Draft or Published, or why it is locked.
+  const statusWords = locked ? lockTitle : shift.status
 
   // Budget phase 3: a shift saved past its budget on purpose carries a marker, read from the codes the SERVER stored (never from the reason's words). It stands in for the generic override mark: one shield, not two.
   const budgetMarker = markerForAcknowledgedCodes(shift.acknowledgedFindingCodes)
@@ -92,7 +114,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
 
   // The words of every marker that applies, on the chip itself, one to a line: on leave, the over-budget marker, the severity marker. The disc and the severity icon are pointer-events-none (they must never take a click),
   // so hit testing skips them and their own titles can never show; the pointer lands on the chip, and this is what it shows. Their aria-labels, and the control's accessible name, are unchanged.
-  const chipTitle = [onApprovedLeave ? onLeaveTitle : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null].filter(Boolean).join('\n') || undefined
+  const chipTitle = [onApprovedLeave ? onLeaveTitle : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null, statusWords].filter(Boolean).join('\n')
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
@@ -118,7 +140,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
   }
 
   // The person this chip's one-line label names (see `context`), as plain text for the accessible name below.
-  const labelText = context === 'participant' ? (isFilled ? shift.staffName : 'Unfilled') : subjectLabel
+  const labelText = busy ? `Assigning ${firstName(pending?.staffName)}…` : context === 'participant' ? (isFilled ? shift.staffName : 'Needs staff') : subjectLabel
   const timeRange = formatShiftTimeRange(shift.startTime, shift.endTime)
   // The open control's accessible name, spelled out once. Everything the chip can't afford to draw at 28px
   // — the next-day note, the ratio, the override, the on-leave state — is announced from here (and from the
@@ -129,15 +151,19 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
     hasFindings ? findingsSeverityLabel(shift.findings) : null,
     `${timeRange}${shift.endsNextDay ? ' (ends the next day)' : ''}`,
     labelText,
+    patternTitle,
     showRatio ? `${RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio` : null,
     budgetMarkerName ?? (shift.overrideReason ? `Assigned with an override: ${shift.overrideReason}` : null),
     onApprovedLeave ? 'On leave' : null,
+    statusWords,
   ].filter(Boolean).join(', ')
 
   // A link to the person's own page, or plain "Unfilled" text in a participant row when nobody covers
   // the shift (a staff-row chip is never unfilled: it exists because that staff member holds it).
   // stopPropagation keeps a name click from also bubbling up to the open-shift div.
-  const label = context === 'participant'
+  const label = busy
+    ? <span className="min-w-0 flex-1 truncate italic text-muted-foreground">{labelText}</span>
+    : context === 'participant'
     ? isFilled
       ? (
         <Link
@@ -149,7 +175,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
           {shift.staffName}
         </Link>
       )
-      : <span className="min-w-0 flex-1 truncate italic text-muted-foreground">Unfilled</span>
+      : <span className="min-w-0 flex-1 truncate italic text-muted-foreground">Needs staff</span>
     : (
       <Link
         to={`/participants/${shift.participantId}`}
@@ -164,13 +190,15 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
   return (
     <div
       ref={setNodeRef}
-      style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 30 } : undefined}
       // On-leave gets the explanation on the whole chip too: on a narrow day column the inline marker
       // below is the first thing to clip, so the hover text must not depend on it being visible.
       title={chipTitle}
-      className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
+      aria-busy={busy || undefined}
+      className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] pointer-coarse:min-h-11 items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
         dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
-      } ${isDragging ? 'opacity-50' : ''} ${budgetMarker ? (hasFindings ? 'mb-2' : 'mt-2') : ''}`}
+      } ${isDragging || fading ? 'opacity-50' : ''} ${overKind === 'assign' || overKind === 'move' || overKind === 'prompt' ? 'ring-2 ring-ring' : ''} ${
+        overKind === 'locked' ? 'cursor-not-allowed' : ''
+      } ${budgetMarker ? (hasFindings ? 'mb-2' : 'mt-2') : ''}`}
     >
       {/* Drag activation lives on its own handle, separate from the open button below. Both used
           to share one element with dnd-kit's listeners spread onto the same button that opens the
@@ -178,16 +206,25 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
           turned "open this shift" into "start a keyboard drag" for anyone tabbing to the chip.
           Splitting them keeps keyboard drag working (from the handle) without hijacking Enter on
           the primary control. */}
-      {canWrite && (
-        <button
-          type="button"
-          className="flex shrink-0 cursor-grab touch-none items-center rounded-sm px-0.5 text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
-          aria-label={`Drag to move ${subjectLabel}'s shift`}
-          {...listeners}
-          {...attributes}
-        >
-          <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
+      {canWrite && draggable && (
+        canLift ? (
+          <button
+            type="button"
+            className="flex shrink-0 cursor-grab touch-none items-center rounded-sm px-0.5 text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
+            aria-label={`Drag to move ${shift.staffName} to another shift or day`}
+            {...listeners}
+            {...attributes}
+          >
+            <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        ) : locked ? (
+          <span className="flex w-[18px] shrink-0 items-center justify-center text-muted-foreground" title={lockTitle}>
+            <Lock className="h-3 w-3" aria-hidden="true" />
+          </span>
+        ) : (
+          // Nobody to move, so no grip, but the column stays so times line up down a day.
+          <span className="w-[18px] shrink-0" aria-hidden="true" />
+        )
       )}
 
       {/* The whole visible chip body is the open control, so the tappable area matches what's drawn.
@@ -199,6 +236,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
         role="button"
         tabIndex={0}
         aria-label={openName}
+        data-shift-open={shift.id}
         onClick={() => onOpen(shift)}
         onKeyDown={handleOpenKeyDown}
         // relative, no overflow-hidden here: the severity marker below needs to sit over the top edge
@@ -240,18 +278,27 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
           beside it instead of just yielding.
         */}
         <span className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden rounded-sm px-0.5 @[14rem]:flex-row @[14rem]:items-center">
-          <span
-            className="shrink-0 font-medium tabular-nums text-foreground"
-            title={shift.endsNextDay ? `${timeRange} — ends the next day` : undefined}
-          >
-            {timeRange}
-            {/*
-              No visible "+1"/next-day glyph, deliberately: an overnight shift is self-evident from its own
-              times — "10pm–6am" has an end earlier than its start, which can only mean the next day. The
-              suffix restated what the range already says, so dropping it is redundancy removed, not
-              information lost — do not "restore" it. It's still spelled out in full on hover (the title
-              above) and for assistive tech (the control's aria-label).
-            */}
+          <span className="flex min-w-0 items-center gap-1">
+            <span
+              className={`shrink-0 font-medium tabular-nums ${shift.status === 'Cancelled' ? 'text-muted-foreground line-through' : 'text-foreground'}`}
+              title={shift.endsNextDay ? `${timeRange} — ends the next day` : undefined}
+            >
+              {timeRange}
+              {/*
+                No visible "+1"/next-day glyph, deliberately: an overnight shift is self-evident from its own
+                times — "10pm–6am" has an end earlier than its start, which can only mean the next day. The
+                suffix restated what the range already says, so dropping it is redundancy removed, not
+                information lost — do not "restore" it. It's still spelled out in full on hover (the title
+                above) and for assistive tech (the control's aria-label).
+              */}
+            </span>
+            {patternTitle && (
+              // The Repeat glyph at the end of the time line gives way (shrinks to nothing) before the time is ever cut; the word joins it once the chip is 14rem wide.
+              <span className="flex min-w-0 shrink items-center gap-0.5 overflow-hidden text-xs text-muted-foreground" title={patternTitle}>
+                <Repeat className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="hidden @[14rem]:inline">Pattern</span>
+              </span>
+            )}
           </span>
           {/* Visual separator between time and name on the one-line layout; the accessible name (aria-label above) uses a comma. Gone
               while the name is under the time: a dot ending the first line reads as a typo. */}
@@ -314,7 +361,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', onOpen, 
         </span>
       )}
 
-      {canWrite && (
+      {/* Not while a drop on this shift is out: no action can run during the write, and "Assigning {name}…" needs the room. */}
+      {canWrite && !busy && (
         // The "Actions for …" trigger is Dropdown's icon variant, which hard-codes `p-1.5 rounded-lg` (a 26px
         // square, radius 8px) and takes no className or custom trigger. This wrapper gives that one button the
         // geometry of `<Button iconOnly>` — a --control-h-sm square (24px, 36px under a coarse pointer) at
