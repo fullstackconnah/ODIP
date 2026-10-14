@@ -46,6 +46,8 @@ public sealed class EmploymentHeroStaffSync
     private const string CouldNotSave = "ODIP couldn't save their details this time; the next sync tries again.";
     private const string ArchivedButCurrent = "Employment Hero has them as current, but their ODIP account is archived. Restore them on their staff page.";
     private const string LastAdminLeaving = "Employment Hero has ended their employment; they are the only Admin. Add another Admin first, then archive them.";
+    // The sync re-pointed a never-signed-in person's sign-in address: any invite they were sent went to the old one.
+    private const string EmailChangedStart = "Employment Hero changed their email to ";
     private const string MassLeaving = "Employment Hero has ended the employment of {0} staff in one sync, so ODIP archived nobody in case its data is wrong. Check their end dates in Employment Hero; if they really have left, archive them on their staff page.";
     private const int NameMax = 100, MobileMax = 20, EmailMax = 200;
 
@@ -284,6 +286,12 @@ public sealed class EmploymentHeroStaffSync
             else if (!byId.ContainsKey(u.ExternalPayrollId))
                 problems.Add(new(EmploymentHeroAttentionKind.MissingFromEmploymentHero, u.Id, u.ExternalPayrollId, u.FullName, "Linked, but no longer in Employment Hero's employee list."));
         }
+        // 5. An address the sync changed stays an item until the person signs in (or the Admin dismisses it): their old invite no longer works.
+        var emailChanges = await db.EmploymentHeroAttentions
+            .Where(a => a.TenantId == tenantId && a.Kind == EmploymentHeroAttentionKind.FixInOdip && a.Reason.StartsWith(EmailChangedStart)).ToListAsync(ct);
+        foreach (var a in emailChanges)
+            if (users.FirstOrDefault(u => u.Id == a.UserId) is { IsActive: true, LastLoginAt: null } u)
+                problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, a.ExternalEmployeeId, u.FullName, a.Reason));
         return problems;
     }
 
@@ -307,7 +315,12 @@ public sealed class EmploymentHeroStaffSync
                         ? $"Employment Hero has a new email for them ({email}). They have signed in to ODIP before, so an Admin changes their sign-in address on their staff page, then sends a sign-in invite."
                         : $"Employment Hero has a new email for them ({email}). They have the {u.Role} role in ODIP, so an Admin changes their sign-in address on their staff page."));
                 else if (await EmailProblemAsync(db, creator, email, u.Id, u.TenantId, ct) is { } emailProblem) problems.Add(FixInEh(e, emailProblem));
-                else { u.Email = email; changed = true; }
+                else
+                {
+                    u.Email = email;
+                    changed = true;
+                    problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, $"{EmailChangedStart}{email}. Send them a new sign-in invite."));
+                }
             }
         }
         if (changed) u.UpdatedAt = Now();

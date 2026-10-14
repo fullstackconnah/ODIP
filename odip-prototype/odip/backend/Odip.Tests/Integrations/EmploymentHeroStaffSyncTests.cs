@@ -195,7 +195,7 @@ public class EmploymentHeroStaffSyncTests
         var sam = await db.Users.SingleAsync(u => u.FirstName == "Sam");
         Assert.Equal("sam@acme.org.au", sam.Email);
         Assert.Equal("tom.ito@gmail.com", (await db.Users.SingleAsync(u => u.FirstName == "Tom")).Email);
-        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        var item = await db.EmploymentHeroAttentions.SingleAsync(a => a.UserId == sam.Id);
         Assert.Equal((EmploymentHeroAttentionKind.FixInOdip, (Guid?)sam.Id), (item.Kind, item.UserId));
         Assert.Contains("sam.lee@acme.org.au", item.Reason);
     }
@@ -426,5 +426,27 @@ public class EmploymentHeroStaffSyncTests
         Assert.Equal(2, alerts.Count);
         Assert.Contains(alerts, a => a.PayloadJson.Contains("stopped working"));
         Assert.Contains(alerts, a => a.PayloadJson.Contains("1 staff member needs attention"));
+    }
+
+    [Fact]
+    public async Task An_email_change_for_someone_who_never_signed_in_is_applied_and_asks_for_a_new_invite_until_they_sign_in()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Tom", "Ito", "tom@gmail.com", "102"));
+        await using var _ = db;
+        var eh = Eh(Employee(102, "Tom", "Ito", "tom.ito@gmail.com"));
+
+        await RunAsync(db, tenant, eh);
+        await RunAsync(db, tenant, eh);   // nothing changes now, but the old invite still points at the old address
+
+        var tom = await db.Users.SingleAsync(u => u.FirstName == "Tom");
+        Assert.Equal("tom.ito@gmail.com", tom.Email);
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal((EmploymentHeroAttentionKind.FixInOdip, (Guid?)tom.Id), (item.Kind, item.UserId));
+        Assert.Equal("Employment Hero changed their email to tom.ito@gmail.com. Send them a new sign-in invite.", item.Reason);
+
+        tom.LastLoginAt = new DateTime(2026, 10, 14, 0, 30, 0, DateTimeKind.Utc);   // they signed in with the new address
+        await db.SaveChangesAsync();
+        await RunAsync(db, tenant, eh);
+        Assert.Empty(db.EmploymentHeroAttentions);
     }
 }
