@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Odip.Api.Controllers;
 using Odip.Api.Middleware;
+using Odip.Api.RateLimiting;
 using Odip.Api.Serialization;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -87,6 +88,56 @@ public class DataExportHttpTests
         Assert.True(error is HttpRequestException or IOException,
             $"The client must see a broken download, never a clean end of a truncated ZIP; it saw {error?.GetType().Name ?? "a clean end"}.");
         Assert.Empty(await host.ExportRowsAsync(tenantId));
+    }
+
+    [Fact]
+    public async Task A_second_export_of_one_organisation_while_one_runs_gets_429_and_another_organisation_still_exports()
+    {
+        var release = new ManualResetEventSlim();
+        Guid? hold = null;
+        await using var host = await Host.StartAsync(new OnVehicle(v => { if (v.TenantId == hold) release.Wait(TimeSpan.FromSeconds(20)); }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+        var otherTenantId = await host.SeedAsync("Bravo Care");
+        hold = tenantId;
+
+        // Its 200 is sent from inside the action, so once the headers are here the first export holds the organisation's slot.
+        using var running = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead);
+        Assert.Equal(HttpStatusCode.OK, running.StatusCode);
+
+        using (var refused = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+            using var json = JsonDocument.Parse(await refused.Content.ReadAsStringAsync());
+            Assert.Equal("An export for this organisation is already running. Try again when it finishes.", json.RootElement.GetProperty("errors")[0].GetString());
+        }
+        using (var other = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: otherTenantId))
+        {
+            Assert.Equal(HttpStatusCode.OK, other.StatusCode);
+            using var zip = new ZipArchive(new MemoryStream(await other.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
+            Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
+        }
+
+        release.Set();
+        await running.Content.ReadAsByteArrayAsync();
+    }
+
+    [Fact]
+    public async Task The_organisations_slot_is_free_again_after_a_failed_export_and_after_a_finished_one()
+    {
+        var failNext = true;
+        await using var host = await Host.StartAsync(new OnVehicle(_ =>
+        {
+            if (!failNext) return;
+            failNext = false;
+            throw new InvalidOperationException("The disk went away");
+        }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        using (var failed = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead))
+            await Record.ExceptionAsync(() => failed.Content.ReadAsByteArrayAsync()); // aborted part-way
+
+        using (var afterFailure = await host.ExportOnceTheSlotIsFreeAsync(tenantId)) Assert.Equal(HttpStatusCode.OK, afterFailure.StatusCode);
+        using (var afterSuccess = await host.ExportOnceTheSlotIsFreeAsync(tenantId)) Assert.Equal(HttpStatusCode.OK, afterSuccess.StatusCode);
     }
 
     [Fact]
@@ -259,6 +310,16 @@ public class DataExportHttpTests
         }
     }
 
+    /// <summary>Runs <paramref name="onEach"/> as each vehicle is read, with the row, so a test can hold or fail one organisation's export.</summary>
+    private sealed class OnVehicle(Action<Vehicle> onEach) : IMaterializationInterceptor
+    {
+        public object InitializedInstance(MaterializationInterceptionData materializationData, object entity)
+        {
+            if (entity is Vehicle vehicle) onEach(vehicle);
+            return entity;
+        }
+    }
+
     /// <summary>Runs <paramref name="onSave"/> with the save's token as the export's audit row is saved; seeding saves pass straight through.</summary>
     private sealed class OnAuditSave(Action<CancellationToken> onSave) : SaveChangesInterceptor
     {
@@ -330,6 +391,9 @@ public class DataExportHttpTests
             builder.Services.AddDbContext<OdipDbContext>(o => o.UseInMemoryDatabase(databaseName).AddInterceptors(interceptors));
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
+            // As Program.cs registers them: the download's one-export-per-organisation filter.
+            builder.Services.AddKeyedSingleton(DataExportConcurrencyFilter.LimiterKey, (_, _) => new PlanQuoteConcurrencyLimiter(DataExportConcurrencyFilter.PermitsPerOrganisation));
+            builder.Services.AddScoped<DataExportConcurrencyFilter>();
             builder.Services.AddAuthentication(HeaderAuth.Scheme).AddScheme<AuthenticationSchemeOptions, HeaderAuth>(HeaderAuth.Scheme, _ => { });
             builder.Services.AddAuthorization();
             builder.Services.AddControllers()
@@ -380,6 +444,19 @@ public class DataExportHttpTests
             var other = DataExportTestKit.Plant(db, b, "43100000001");
             var own = DataExportTestKit.Plant(db, a, "43100000002");
             return (own, other);
+        }
+
+        /// <summary>A whole export for the organisation, retried while it answers 429: the client can have the last byte a moment before the slot is released.</summary>
+        public async Task<HttpResponseMessage> ExportOnceTheSlotIsFreeAsync(Guid tenantId)
+        {
+            var until = DateTime.UtcNow.AddSeconds(10);
+            while (true)
+            {
+                var response = await GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId);
+                if (response.StatusCode != HttpStatusCode.TooManyRequests || DateTime.UtcNow > until) return response;
+                response.Dispose();
+                await Task.Delay(50);
+            }
         }
 
         /// <summary>The export rows, waiting up to 10 s for one: the server finishes a request after the client has stopped reading.</summary>

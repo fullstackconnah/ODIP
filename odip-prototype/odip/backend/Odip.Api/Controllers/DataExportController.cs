@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.RateLimiting;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -79,6 +80,7 @@ public class DataExportController : ControllerBase
     }
 
     [HttpGet]
+    [ServiceFilter(typeof(DataExportConcurrencyFilter))] // one at a time per organisation; not on Last, which the tab refetches while one runs
     public async Task<IActionResult> Download(CancellationToken ct)
     {
         if (Organisation is not { } tenantId) return NoOrganisationResult();
