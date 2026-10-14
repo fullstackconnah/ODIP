@@ -707,7 +707,7 @@ const shiftCompletions = [
     reviewedByUserId: null, reviewedByName: null, reviewedAt: null,
     reviewOutcome: null, returnReason: null,
     varianceMinutesStart: 32, varianceMinutesEnd: -10, isOutlierVariance: true, varianceReviewMinutes: 15,
-    shiftReturnCount: 0,
+    shiftReturnCount: 1,   // returned once and sent again: the queue says "Returned 1 time"
     incidents: [
       { id: 'inc-0002', title: 'Missed evening medication dose', severity: 'Medium', status: 'UnderReview', incidentDateTime: '2026-07-11T20:15:00' },
     ],
