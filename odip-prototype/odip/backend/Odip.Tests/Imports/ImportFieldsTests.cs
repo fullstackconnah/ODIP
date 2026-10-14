@@ -54,4 +54,15 @@ public class ImportFieldsTests
     public void The_plan_columns_match_their_usual_headers() =>
         Assert.Equal(new string?[] { "planType", "planStartDate", "planEndDate" },
             ImportFields.AutoMatch(ImportKind.Participants, ["Plan Management", "Plan start date", "Plan End Date"]));
+    [Fact]
+    public void Funding_headers_match_and_every_label_matches_its_own_field()
+    {
+        string[] headers = ["NDIS No", "Given name", "Surname", "DOB", "Plan Start Date", "Plan End Date", "Category", "Management type", "Plan amount"];
+        Assert.Equal(new string?[] { "ndisNumber", "firstName", "lastName", "dateOfBirth", "planStart", "planEnd", "category", "management", "amount" },
+            ImportFields.AutoMatch(ImportKind.FundingPlans, headers));
+        foreach (var field in ImportFields.For(ImportKind.FundingPlans))
+            Assert.Equal(new string?[] { field.Key }, ImportFields.AutoMatch(ImportKind.FundingPlans, [field.Label]));
+        Assert.Equal("Match a column to Plan start, Plan end, Support category, Managed by, Amount.",
+            ImportFields.MappingError(ImportKind.FundingPlans, ["ndisNumber"], 1, requireAll: true));
+    }
 }

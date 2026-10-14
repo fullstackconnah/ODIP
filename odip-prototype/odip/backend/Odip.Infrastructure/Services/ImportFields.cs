@@ -15,6 +15,7 @@ public static class ImportFields
 
     private static readonly IReadOnlyList<ImportField> Participants = BuildParticipants();
     private static readonly IReadOnlyList<ImportField> Staff = BuildStaff();
+    private static readonly IReadOnlyList<ImportField> FundingPlans = BuildFundingPlans();
 
     private const string Payroll = "Won't be imported: your payroll system keeps employment details.";
     private const string NoField = "Won't be imported: ODIP has no field for this yet.";
@@ -30,6 +31,7 @@ public static class ImportFields
     {
         ImportKind.Participants => Participants,
         ImportKind.Staff => Staff,
+        ImportKind.FundingPlans => FundingPlans,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -122,6 +124,27 @@ public static class ImportFields
             new("overnight", "Overnight eligible", false, ["overnight", "sleepover", "sleepovers"], yesNo),
             new("workerScreeningNumber", "NDIS worker screening number", false, ["worker screening number", "screening number", "nwsc", "nwsc number"], "Up to 50 characters."),
             new("workerScreeningExpiry", "NDIS worker screening expiry", false, ["worker screening expiry", "screening expiry", "nwsc expiry"], date),
+        ];
+    }
+
+    private static List<ImportField> BuildFundingPlans()
+    {
+        const string date = "dd/mm/yyyy or yyyy-mm-dd.";
+        const string byName = "With the other name and date of birth, finds the participant when the row has no NDIS number.";
+        return
+        [
+            new("ndisNumber", "NDIS number", false, ["ndis no", "ndis", "ndis id", "ndis participant number"], "Finds the participant in ODIP. Leave it blank to find them by name and date of birth instead."),
+            new("firstName", "First name", false, ["given name", "forename", "first"], byName),
+            new("lastName", "Last name", false, ["surname", "family name", "last"], byName),
+            new("dateOfBirth", "Date of birth", false, ["dob", "birth date", "birthdate"], date),
+            new("planStart", "Plan start", true, ["plan start date", "start date", "plan from"], "Required. " + date),
+            new("planEnd", "Plan end", true, ["plan end date", "end date", "plan to"], "Required. " + date),
+            new("category", "Support category", true, ["category", "support category number", "pace category", "budget category"],
+                "Required. The category number (01 to 21), its name, or Core. Categories 01 to 04 are added together into one Core (flexible) pool."),
+            new("management", "Managed by", true, ["management", "management type", "plan management", "plan type", "funding management"],
+                "Required. Self managed, Plan managed or NDIA managed."),
+            new("amount", "Amount", true, ["plan amount", "budget", "budget amount", "allocated", "allocation", "total"],
+                "Required. In dollars and cents, like 12500.00. A $ sign and commas are fine."),
         ];
     }
 }

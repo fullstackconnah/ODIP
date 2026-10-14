@@ -7,6 +7,7 @@ public enum ImportKind
 {
     Participants = 0,
     Staff = 1,
+    FundingPlans = 2,
 }
 
 /// <summary>
@@ -42,7 +43,7 @@ public class ImportBatchItem
     public Guid Id { get; set; }
     public Guid BatchId { get; set; }
     public ImportBatch? Batch { get; set; }
-    /// <summary>"Participant" or "User".</summary>
+    /// <summary>"Participant", "User" or "FundingPlan".</summary>
     public string EntityType { get; set; } = string.Empty;
     public Guid EntityId { get; set; }
 }
