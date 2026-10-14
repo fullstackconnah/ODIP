@@ -6,7 +6,7 @@ import { staffCredentials, type StaffCredential } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, deadlineState, isDeadlineIssue } from '@/lib/deadline'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
-import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
+import { groupPhase, noBreak, type GroupModel, type QuickRow } from '../quickGroupModel'
 
 const ORDER = { overdue: 0, today: 1, soon: 2, none: 3, ok: 4 } as const
 
@@ -42,8 +42,8 @@ export function useComplianceGroup(enabled: boolean, { staff, today, warningDays
       subject: member.fullName,
       meta: [
         credential.label,
-        status === 'overdue' && `expired ${formatDayMonth(credential.expiryDate)}`,
-        status === 'soon' && `expires ${formatDayMonth(credential.expiryDate)}`,
+        status === 'overdue' && noBreak(`expired ${formatDayMonth(credential.expiryDate)}`),
+        status === 'soon' && noBreak(`expires ${formatDayMonth(credential.expiryDate)}`),
         adminOnly && 'An admin updates this',
       ],
       flags: [{ label: deadlineLabel(credential.state, 'compact'), tone: DEADLINE_TONE[status] }],

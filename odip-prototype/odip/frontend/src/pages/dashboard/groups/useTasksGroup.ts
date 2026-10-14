@@ -2,7 +2,7 @@ import { apiGet } from '@/api/client'
 import { useTasks, useUpdateTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS, type TaskDto, type UpdateTaskDto } from '@/api/types'
 import { formatDayMonth } from '@/lib/dateRange'
-import { groupPhase, type GroupModel, type QuickRow, type RowAction } from '../quickGroupModel'
+import { groupPhase, noBreak, type GroupModel, type QuickRow, type RowAction } from '../quickGroupModel'
 
 const PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 }
 const isOpen = (t: TaskDto) => t.status !== 'Completed' && t.status !== 'Cancelled'
@@ -51,7 +51,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
       meta: [
         TASK_TYPE_LABELS[t.taskType],
         (t.priority === 'High' || t.priority === 'Urgent') && t.priority,
-        isLate && t.dueDate && `due ${formatDayMonth(t.dueDate)}`,
+        isLate && t.dueDate && noBreak(`due ${formatDayMonth(t.dueDate)}`),
         t.tripName,
         signOff && 'An admin signs this off',
       ],

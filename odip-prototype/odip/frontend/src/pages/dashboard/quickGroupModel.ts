@@ -70,6 +70,9 @@ export interface GroupModel {
 
 export const SHOWN_ROWS = 5
 
+/** A short fact kept on one line when a phone row wraps its meta ("expired 10 Sep", never "expired 10" then "Sep"). */
+export const noBreak = (fact: string) => fact.replace(/ /g, '\u00a0')
+
 export const rowKey = (group: GroupKey, rowId: string) => `${group}:${rowId}`
 
 type QueryLike = { data?: unknown; isError?: boolean; isPending?: boolean; fetchStatus?: string }

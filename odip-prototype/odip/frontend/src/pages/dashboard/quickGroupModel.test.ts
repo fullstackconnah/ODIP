@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { groupPhase, isPresent, rowKey, shownCount, visibleRows, type GroupModel, type QuickRow } from './quickGroupModel'
+import { groupPhase, isPresent, noBreak, rowKey, shownCount, visibleRows, type GroupModel, type QuickRow } from './quickGroupModel'
 
 const row = (id: string): QuickRow => ({ id, subject: `Person ${id}`, meta: [], flags: [], actions: [] })
 const model = (o: Partial<GroupModel> = {}): GroupModel => ({
@@ -61,5 +61,12 @@ describe('isPresent', () => {
 
     expect(shownCount(eight, gone)).toBe(3)
     expect(isPresent(eight, gone, 0)).toBe(true)
+  })
+})
+
+describe('noBreak', () => {
+  it('keeps a short fact on one line when a phone row wraps its meta: "expired 10 Sep", never "expired 10" then "Sep"', () => {
+    expect(noBreak('expired 10 Sep')).toBe('expired\u00a010\u00a0Sep')
+    expect(noBreak('expired 10 Sep')).not.toMatch(/ /)
   })
 })
