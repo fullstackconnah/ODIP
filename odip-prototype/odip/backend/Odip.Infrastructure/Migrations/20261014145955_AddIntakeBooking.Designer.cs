@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261014114601_AddIntakeBooking")]
+    [Migration("20261014145955_AddIntakeBooking")]
     partial class AddIntakeBooking
     {
         /// <inheritdoc />
@@ -2353,6 +2353,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("IntakeIcsSequence")
+                        .IsConcurrencyToken()
                         .HasColumnType("integer");
 
                     b.Property<string>("IntakeInviteError")
@@ -2377,6 +2378,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("IntakeUid")
+                        .IsConcurrencyToken()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 

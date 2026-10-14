@@ -125,7 +125,7 @@ public class IntakeBookingsController : ControllerBase
             inquiry.IntakeStaffUserId = staff!.Id;
             await RaiseStaffAsync(inquiry, staff, isNew || previousStaffId != staff.Id ? IntakeWording.Booked : IntakeWording.Changed, provider, from, ct);
         }
-        await _db.SaveChangesAsync(ct);
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
 
         if (from is not null)
         {
@@ -133,7 +133,7 @@ public class IntakeBookingsController : ControllerBase
             // request's token: a browser that goes away mid-send must not abort an invite the saved booking promises (the sender bounds it at 30 s).
             var outcome = await _sender.SendAsync(ContactMessage(inquiry, isNew ? IntakeWording.Booked : IntakeWording.Changed, staff, provider, from), CancellationToken.None);
             Record(inquiry, outcome, NowUtc);
-            await _db.SaveChangesAsync(CancellationToken.None);
+            await SavedAsync(CancellationToken.None); // false: a newer revision owns the row, so this send's outcome is dropped
         }
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, staff, provider.ZoneId)));
     }
@@ -161,7 +161,7 @@ public class IntakeBookingsController : ControllerBase
         if (staff != null) await RaiseStaffAsync(inquiry, staff, IntakeWording.Cancelled, provider, from, ct);
         inquiry.ClearIntakeBooking();
         inquiry.UpdatedAt = NowUtc;
-        await _db.SaveChangesAsync(ct);
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<CancelIntakeBookingResultDto>.Fail(ChangedByOther));
 
         var email = "NoInvite";
         if (cancellation != null)
@@ -186,7 +186,7 @@ public class IntakeBookingsController : ControllerBase
         if (inquiry is null || inquiry.IntakeStartsAt is null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("No intake visit is booked for this enquiry."));
         inquiry.IntakeConfirmedAt = dto.Confirmed ? NowUtc : null;
         inquiry.UpdatedAt = NowUtc;
-        await _db.SaveChangesAsync(ct);
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
         var provider = await ProviderAsync(inquiry.TenantId, ct);
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, await StaffAsync(inquiry.IntakeStaffUserId, inquiry.TenantId, ct), provider.ZoneId)));
     }
@@ -210,7 +210,7 @@ public class IntakeBookingsController : ControllerBase
         var outcome = await _sender.SendAsync(ContactMessage(inquiry, inquiry.IntakeIcsSequence == 0 ? IntakeWording.Booked : IntakeWording.Changed, staff, provider, from), CancellationToken.None);
         Record(inquiry, outcome, NowUtc);
         inquiry.UpdatedAt = NowUtc;
-        await _db.SaveChangesAsync(CancellationToken.None);
+        await SavedAsync(CancellationToken.None); // false: a newer revision owns the row, so this send's outcome is dropped
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, staff, provider.ZoneId)));
     }
 
@@ -318,6 +318,22 @@ public class IntakeBookingsController : ControllerBase
                 x.IntakeDurationMinutes ?? DefaultDuration, provider.ZoneId, x.IntakeLocation ?? string.Empty, x.Phone, x.Email, x.IntakeNotes,
                 from.BookedByName, from.OrganizerEmail, provider.Name, provider.ManagerName, provider.ManagerPhone,
                 x.IntakeUid!, x.IntakeIcsSequence, NowUtc, ReplyTo: from.ReplyTo), ct);
+
+    private const string ChangedByOther = "Someone else just changed this visit. Reload and try again.";
+
+    // IntakeIcsSequence and IntakeUid are concurrency tokens: a write based on a revision someone else has since replaced matches no row.
+    private async Task<bool> SavedAsync(CancellationToken ct)
+    {
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
 
     private static void Record(ParticipantInquiry x, IntakeSendOutcome outcome, DateTime now)
     {

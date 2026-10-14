@@ -48,6 +48,9 @@ public class IntakeBookingsControllerTests
     internal sealed class Fixture
     {
         public Guid TenantId { get; } = Guid.NewGuid();
+        public string DbName { get; } = Guid.NewGuid().ToString();
+        /// <summary>A second context on the same store: another request, for the races.</summary>
+        public OdipDbContext OtherDb() => TestDb.ForTenant(DbName, TenantId);
         public OdipDbContext Db { get; }
         public User Dana { get; }  // the signed-in coordinator who books
         public User Sam { get; }   // an admin who can be sent
@@ -56,7 +59,7 @@ public class IntakeBookingsControllerTests
 
         public Fixture(ChannelSendOutcome outcome = ChannelSendOutcome.Skipped, string? contactEmail = "priya.nair@example.com.au")
         {
-            Db = TestDb.ForTenant(Guid.NewGuid().ToString(), TenantId);
+            Db = TestDb.ForTenant(DbName, TenantId);
             Dana = Staff("Dana", "Smith", UserRole.Coordinator, "dana@provider.example");
             Sam = Staff("Sam", "Lee", UserRole.Admin, "sam@provider.example");
             Db.Users.AddRange(Dana, Sam);
@@ -78,14 +81,14 @@ public class IntakeBookingsControllerTests
         };
 
         public IntakeBookingsController Controller(DateTime? now = null, string role = "Coordinator", Guid? userId = null, Guid? tenantId = null, bool superAdmin = false,
-            bool noTenant = false, INotificationChannel? channel = null)
+            bool noTenant = false, INotificationChannel? channel = null, OdipDbContext? db = null, INotificationRaiser? raiser = null)
         {
             var tenant = new Mock<ICurrentTenant>();
             tenant.SetupGet(t => t.TenantId).Returns(noTenant ? (Guid?)null : tenantId ?? TenantId);
             tenant.SetupGet(t => t.IsSuperAdmin).Returns(superAdmin);
             var sender = new IntakeInviteSender([channel ?? Channel], NullLogger<IntakeInviteSender>.Instance);
             var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, (userId ?? Dana.Id).ToString()), new Claim(ClaimTypes.Role, role)], "test");
-            return new IntakeBookingsController(Db, tenant.Object, sender, new NotificationRaiser(Db), new FixedClock(now ?? Now))
+            return new IntakeBookingsController(db ?? Db, tenant.Object, sender, raiser ?? new NotificationRaiser(db ?? Db), new FixedClock(now ?? Now))
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
             };
@@ -259,6 +262,60 @@ public class IntakeBookingsControllerTests
 
         var rebooked = await f.Controller(now: Start.AddHours(3)).Set(f.Noah.Id, f.Body() with { StartsAt = Start.AddDays(2), Location = "Somewhere else" }, CancellationToken.None);
         Assert.Equal("Somewhere else", Ok<ParticipantInquiryDto>(rebooked.Result!).IntakeLocation);
+    }
+
+    /// <summary>Runs a callback once, the first time a staff notification is raised: the gap between a save's read and its write.</summary>
+    private sealed class InterleavingRaiser(INotificationRaiser inner, Func<Task> once) : INotificationRaiser
+    {
+        private Func<Task>? _once = once;
+        public async Task RaiseAsync(NotificationEventType type, string entityType, Guid entityId, IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default)
+        {
+            if (Interlocked.Exchange(ref _once, null) is { } run) await run();
+            await inner.RaiseAsync(type, entityType, entityId, recipientUserIds, payload, ct);
+        }
+    }
+
+    // Fix round 1, S3: a cancel that lands between a reschedule's read and its save must not leave a booked row with no UID.
+    [Fact]
+    public async Task A_cancel_racing_a_reschedule_makes_the_reschedule_a_409_and_never_leaves_a_booking_without_a_uid()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        var other = f.OtherDb();
+        var raiser = new InterleavingRaiser(new NotificationRaiser(f.Db),
+            async () => Assert.IsType<OkObjectResult>((await f.Controller(db: other).Cancel(f.Noah.Id, CancellationToken.None)).Result));
+
+        var result = await f.Controller(raiser: raiser).Set(f.Noah.Id, f.Body() with { StartsAt = Start.AddDays(1) }, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Someone else just changed this visit. Reload and try again.", Assert.Single(Assert.IsType<ApiResponse<ParticipantInquiryDto>>(conflict.Value).Errors!));
+        var row = f.OtherDb().ParticipantInquiries.AsNoTracking().Single(x => x.Id == f.Noah.Id);
+        Assert.Null(row.IntakeStartsAt); // the cancel stands
+        Assert.Null(row.IntakeUid);
+    }
+
+    // Fix round 1, S3: a cancel while the booking's invite is still sending wins; the slower send's outcome is dropped, not written onto the cleared row.
+    [Fact]
+    public async Task A_cancel_during_the_invite_send_wins_and_the_send_outcome_is_dropped()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        var other = f.OtherDb();
+        var slowChannel = new Mock<INotificationChannel>();
+        slowChannel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        slowChannel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                Assert.IsType<OkObjectResult>((await f.Controller(db: other).Cancel(f.Noah.Id, CancellationToken.None)).Result);
+                return new ChannelSendResult(ChannelSendOutcome.Sent, null, null);
+            });
+
+        var result = await f.Controller(channel: slowChannel.Object).Set(f.Noah.Id, f.Body(), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var row = f.OtherDb().ParticipantInquiries.AsNoTracking().Single(x => x.Id == f.Noah.Id);
+        Assert.Null(row.IntakeStartsAt);
+        Assert.Null(row.IntakeUid);
+        Assert.Null(row.IntakeInviteSentAt);
     }
 
     // A staff member deactivated (or moved to support worker) after booking keeps the visit until it is rescheduled; then someone eligible must go.

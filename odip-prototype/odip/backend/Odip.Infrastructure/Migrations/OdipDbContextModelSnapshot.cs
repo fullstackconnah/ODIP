@@ -2350,6 +2350,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("IntakeIcsSequence")
+                        .IsConcurrencyToken()
                         .HasColumnType("integer");
 
                     b.Property<string>("IntakeInviteError")
@@ -2374,6 +2375,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("IntakeUid")
+                        .IsConcurrencyToken()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 

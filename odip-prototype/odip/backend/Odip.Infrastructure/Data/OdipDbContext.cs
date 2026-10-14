@@ -1554,6 +1554,10 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.IntakeNotes).HasMaxLength(1000);
             entity.Property(e => e.IntakeInviteError).HasMaxLength(20);
             entity.Property(e => e.IntakeUid).HasMaxLength(100);
+            // Concurrency tokens: every revision of a booking changes one of them, so a cancel and a reschedule (or a slow send's outcome) racing
+            // each other cannot interleave into a booked row with no UID; the loser gets a 409 or drops its write.
+            entity.Property(e => e.IntakeIcsSequence).IsConcurrencyToken();
+            entity.Property(e => e.IntakeUid).IsConcurrencyToken();
             // Restrict: a staff member booked for a visit is never deleted out from under it (ImportUntouched.StaffBlockersAsync lists it).
             entity.HasOne(e => e.IntakeStaffUser).WithMany().HasForeignKey(e => e.IntakeStaffUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.IntakeBookedByUser).WithMany().HasForeignKey(e => e.IntakeBookedByUserId).OnDelete(DeleteBehavior.Restrict);
