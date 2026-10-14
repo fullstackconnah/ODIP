@@ -4,6 +4,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { AlertOctagon, AlertTriangle, CalendarOff, Check, GripVertical, KeyRound, Lock, MoreVertical, Repeat, ShieldCheck, Siren } from 'lucide-react'
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
+import { TAP_AREA } from '@/components/tapArea'
 import { formatShiftTimeRange, RATIO_LABELS } from '../lib/roster'
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
@@ -210,7 +211,9 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         canLift ? (
           <button
             type="button"
-            className="flex shrink-0 cursor-grab touch-none items-center rounded-sm px-0.5 text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
+            // A 44px hit area under a coarse pointer (post-merge review N6): a touch on the grip lifts at once, so this narrow target decides drag versus scroll. TAP_AREA pads it
+            // 13px past each side; the coarse-only margin keeps that pad inside the chip and off the time beside it. A mouse gets neither.
+            className={`${TAP_AREA} flex shrink-0 cursor-grab touch-none items-center rounded-sm px-0.5 text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing pointer-coarse:mx-[13px]`}
             aria-label={`Drag to move ${shift.staffName} to another shift or day`}
             {...listeners}
             {...attributes}
@@ -218,12 +221,12 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
             <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         ) : locked ? (
-          <span className="flex w-[18px] shrink-0 items-center justify-center text-muted-foreground" title={lockTitle}>
+          <span className="flex w-[18px] shrink-0 items-center justify-center text-muted-foreground pointer-coarse:mx-[13px]" title={lockTitle}>
             <Lock className="h-3 w-3" aria-hidden="true" />
           </span>
         ) : (
           // Nobody to move, so no grip, but the column stays so times line up down a day.
-          <span className="w-[18px] shrink-0" aria-hidden="true" />
+          <span className="w-[18px] shrink-0 pointer-coarse:mx-[13px]" aria-hidden="true" />
         )
       )}
 

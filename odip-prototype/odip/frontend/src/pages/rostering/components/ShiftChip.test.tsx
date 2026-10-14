@@ -257,6 +257,15 @@ describe('ShiftChip one-line label', () => {
     expect(container.firstElementChild).not.toHaveClass('h-[calc(var(--row-h)_-_6px)]')
   })
 
+  it('gives the grip a 44px hit area under a coarse pointer, kept inside the chip and off the open control (post-merge review N6)', () => {
+    renderChip(<ShiftChip shift={makeShift()} canWrite draggable onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    const grip = screen.getByRole('button', { name: /^Drag to move/ })
+    // The house TAP_AREA pad (a transparent ::before, 44px under coarse, the grip's own box with a mouse) ...
+    expect(grip).toHaveClass('relative', 'before:min-w-[var(--tap-min)]', 'before:min-h-[var(--tap-min)]')
+    // ... reaches 13px past each side of the 18px grip, so a coarse-only margin keeps that pad inside the chip and off the time and name beside it.
+    expect(grip).toHaveClass('pointer-coarse:mx-[13px]')
+  })
+
   it('is at least 44px under a coarse pointer, where row-h less 6px would leave it at 42px', () => {
     const { container } = renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
