@@ -279,7 +279,8 @@ public sealed class EmploymentHeroStaffSync
                 problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, string.Format(CultureInfo.InvariantCulture, MassLeaving, leavers.Count)));
                 continue;
             }
-            if (u.Role == UserRole.Admin && !users.Any(o => o.Id != u.Id && o.IsActive && o.Role == UserRole.Admin))
+            // Only an Admin who has signed in counts: an invited Admin who never has can't yet run the organisation.
+            if (u.Role == UserRole.Admin && !users.Any(o => o.Id != u.Id && o.IsActive && o.Role == UserRole.Admin && o.LastLoginAt != null))
             {
                 problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, LastAdminLeaving));
                 continue;

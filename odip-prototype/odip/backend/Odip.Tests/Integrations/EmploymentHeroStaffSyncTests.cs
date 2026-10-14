@@ -524,11 +524,21 @@ public class EmploymentHeroStaffSyncTests
         Assert.Equal(linked - archived, await db.Users.CountAsync(u => u.IsActive));
     }
 
+    private static readonly DateTime SignedIn = new(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>Ada, the fixture's Admin (EH 1), has signed in to ODIP.</summary>
+    private static async Task AdaHasSignedInAsync(OdipDbContext db)
+    {
+        (await db.Users.SingleAsync(u => u.FirstName == "Ada")).LastLoginAt = SignedIn;
+        await db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task Two_Admins_leaving_in_one_run_archives_one_and_keeps_the_last()
     {
-        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Bea", "Admin", "bea@acme.org.au", "2", UserRole.Admin));
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Bea", "Admin", "bea@acme.org.au", "2", UserRole.Admin, SignedIn));
         await using var _ = db;
+        await AdaHasSignedInAsync(db);
         var eh = new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.OK, new[]
         {
             Employee(1, "Ada", "Admin", "ada@acme.org.au", null, "2026-10-01T00:00:00"), Employee(2, "Bea", "Admin", "bea@acme.org.au", null, "2026-10-01T00:00:00"),
@@ -543,11 +553,29 @@ public class EmploymentHeroStaffSyncTests
     }
 
     [Fact]
-    public async Task A_pending_Admin_counts_as_another_Admin_so_the_leaving_Admin_is_archived()
+    public async Task A_pending_Admin_who_never_signed_in_does_not_count_so_the_only_signed_in_Admin_is_kept()
     {
-        // Pins today's rule (deep review N1): Cal, an Admin who has never signed in, is "another active Admin".
+        // Cal was invited as an Admin but has never signed in: archiving Ada would leave nobody able to run the organisation (deep review N1).
         var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Cal", "Ray", "cal@acme.org.au", null, UserRole.Admin));
         await using var _ = db;
+        await AdaHasSignedInAsync(db);
+        var eh = new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.OK, new[] { Employee(1, "Ada", "Admin", "ada@acme.org.au", null, "2026-10-01T00:00:00") });
+
+        var result = await RunAsync(db, tenant, eh);
+
+        Assert.Equal(0, result.Log!.Archived);
+        var ada = await db.Users.SingleAsync(u => u.FirstName == "Ada");
+        Assert.True(ada.IsActive);
+        var item = await db.EmploymentHeroAttentions.SingleAsync(a => a.UserId == ada.Id);
+        Assert.Equal((EmploymentHeroAttentionKind.FixInOdip, "Employment Hero has ended their employment; they are the only Admin. Add another Admin first, then archive them."), (item.Kind, item.Reason));
+    }
+
+    [Fact]
+    public async Task A_second_Admin_who_has_signed_in_counts_so_the_leaving_Admin_is_archived()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Cal", "Ray", "cal@acme.org.au", null, UserRole.Admin, SignedIn));
+        await using var _ = db;
+        await AdaHasSignedInAsync(db);
         var eh = new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.OK, new[] { Employee(1, "Ada", "Admin", "ada@acme.org.au", null, "2026-10-01T00:00:00") });
 
         var result = await RunAsync(db, tenant, eh);

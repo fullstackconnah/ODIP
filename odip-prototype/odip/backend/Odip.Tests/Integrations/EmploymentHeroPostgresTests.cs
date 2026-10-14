@@ -202,10 +202,12 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         // Two linked Admins, both ended in EH. Ann first, so she is archived (or not) first.
         var ann = Person(tenantId, "ann", "901");
         ann.Role = UserRole.Admin;
+        ann.LastLoginAt = DateTime.UtcNow.AddDays(-1);   // both have signed in, so each counts as the other Admin
         db.Users.Add(ann);
         await db.SaveChangesAsync();
         var bea = Person(tenantId, "bea", "902");
         bea.Role = UserRole.Admin;
+        bea.LastLoginAt = DateTime.UtcNow.AddDays(-1);
         db.Users.Add(bea);
         await db.SaveChangesAsync();
         // The database refuses Ann's archive mid-run. Inside the run's transaction EF rolls back to its savepoint; the sync must then reload Ann, or her
