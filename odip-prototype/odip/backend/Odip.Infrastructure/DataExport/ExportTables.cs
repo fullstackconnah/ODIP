@@ -223,7 +223,10 @@ public static class ExportTables
         Via("staff-assignments.csv", "Staff assigned to trips.",
             (db, t) => { var trips = Trips(db, t); return db.StaffAssignments.Where(s => trips.Any(x => x.Id == s.TripInstanceId)); }),
         Via("trip-documents.csv", "Documents recorded against trips: their details only, as ODIP stores no files for them.",
-            (db, t) => { var trips = Trips(db, t); return db.TripDocuments.Where(d => trips.Any(x => x.Id == d.TripInstanceId)); }),
+            (db, t) => { var trips = Trips(db, t); return db.TripDocuments.Where(d => trips.Any(x => x.Id == d.TripInstanceId)); }) with
+        {
+            Omit = new Dictionary<string, string> { [nameof(TripDocument.FilePath)] = "a location on ODIP's own server, which means nothing outside ODIP" },
+        },
 
         // Incidents
         Via("incidents.csv", "Incident reports: what happened, who was involved, the compliance steps and the review.", (db, t) => Incidents(db, t)),

@@ -122,6 +122,7 @@ public class ExportTablesTests
     {
         Assert.DoesNotContain(ExportTables.Columns(Model, Table<CaregiverProfileSubmission>()), c => c.Name == nameof(CaregiverProfileSubmission.TokenHash));
         Assert.DoesNotContain(ExportTables.Columns(Model, Table<ParticipantIntakeSnapshot>()), c => c.Name == nameof(ParticipantIntakeSnapshot.PdfContent));
+        Assert.DoesNotContain(ExportTables.Columns(Model, Table<TripDocument>()), c => c.Name == nameof(TripDocument.FilePath)); // a server-side path
         Assert.Contains(ExportTables.Columns(Model, Table<User>()), c => c.Name == nameof(User.WorkerScreeningNumber)); // the provider's own data (spec)
         Assert.Equal("Id", ExportTables.Columns(Model, Table<Participant>())[0].Name);
     }
