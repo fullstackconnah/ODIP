@@ -99,7 +99,8 @@ export function useAssignShift() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: AssignShiftDto }) =>
       apiPost<ShiftDto>(`/rostering/shifts/${id}/assign`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    // onSettled: a refused drop (409, 422) refetches too, so the board shows the server's truth rather than the stale puck that caused it.
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
 
@@ -108,7 +109,7 @@ export function useMoveStaff() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: MoveStaffDto) => apiPost<ShiftDto>('/rostering/shifts/move-staff', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
 
@@ -117,7 +118,7 @@ export function usePublishWeek() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (weekStart: string) => apiPost<PublishWeekResultDto>(`/rostering/weeks/${weekStart}/publish`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
 

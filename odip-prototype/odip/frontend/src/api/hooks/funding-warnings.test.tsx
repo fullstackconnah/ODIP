@@ -223,6 +223,21 @@ describe('the writes that move a participant’s money', () => {
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['participant-alerts-aggregate'] })
   })
 
+  // Deep review S5: a refused drop (409 board changed or busy, 422 findings) must leave the board showing the server's truth, not the stale puck that caused it.
+  it.each([
+    ['an assign', (client: QueryClient) => run(client, useAssignShift, { id: 's-1', data: { staffId: 'st-1' } as never })],
+    ['a move', (client: QueryClient) => run(client, useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Move', staffId: 'st-1', overrideReason: null, acknowledgedFindingCodes: [] })],
+    ['a publish', (client: QueryClient) => run(client, usePublishWeek, '2026-08-17')],
+  ])('refetches the board after the server refuses %s', async (_name, write) => {
+    const client = newClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    answer = () => { throw Object.assign(new Error('Request failed with status code 409'), { response: { status: 409, data: { success: false, errors: ['This shift changed after the board was loaded.'] } } }) }
+
+    await expect(write(client)).rejects.toBeTruthy()
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+  })
+
   it('sends move-staff and publish-week to their endpoints with the whole body', async () => {
     await run(newClient(), useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] })
     await run(newClient(), usePublishWeek, '2026-08-17')
