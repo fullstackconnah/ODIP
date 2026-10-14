@@ -64,20 +64,30 @@ export function buildChecklist(shift: { medicationsDue: PortalDoseSlotDto[]; shi
 
 const settled = (i: ChecklistItem) => (i.kind === 'dose' ? !!i.slot.outcome : i.routine.isChecked)
 
+const countWords = (items: ChecklistItem[]) => {
+  const doses = items.filter(i => i.kind === 'dose').length
+  const routines = items.length - doses
+  return [doses && plural(doses, 'dose'), routines && plural(routines, 'routine')].filter(Boolean).join(', ')
+}
+
 /**
- * Now's due list (finish review fix 1): Overdue and the next open time stay open; a time whose every item is settled folds to
- * "8:00 am · 3 done"; every later time folds to one line, "1:00 pm · 1 dose, 1 routine". Null keeps a group open.
+ * Now's due list (finish review fix 1). Overdue and the next open time stay open; a time whose every item is settled folds to
+ * "8:00 am · 3 done"; every time after the next one folds, together, into one line: "Later · 2 doses, 2 routines".
  */
-export function groupFolds(groups: ChecklistGroup[]): (string | null)[] {
+export function foldDueList(groups: ChecklistGroup[]): {
+  shown: { group: ChecklistGroup; fold: string | null }[]
+  later: { summary: string; groups: ChecklistGroup[] } | null
+} {
+  const shown: { group: ChecklistGroup; fold: string | null }[] = []
+  const later: ChecklistGroup[] = []
   let nextShown = false
-  return groups.map(g => {
-    if (g.tone === 'warning') return null
-    if (g.items.every(settled)) return `${g.label} · ${g.items.length} done`
-    if (!nextShown) { nextShown = true; return null }
-    const doses = g.items.filter(i => i.kind === 'dose').length
-    const routines = g.items.length - doses
-    return `${g.label} · ${[doses && plural(doses, 'dose'), routines && plural(routines, 'routine')].filter(Boolean).join(', ')}`
-  })
+  for (const g of groups) {
+    if (g.tone === 'warning') shown.push({ group: g, fold: null })
+    else if (g.items.every(settled)) shown.push({ group: g, fold: `${g.label} · ${g.items.length} done` })
+    else if (!nextShown) { nextShown = true; shown.push({ group: g, fold: null }) }
+    else later.push(g)
+  }
+  return { shown, later: later.length ? { summary: `Later · ${countWords(later.flatMap(g => g.items))}`, groups: later } : null }
 }
 
 /** Changes whenever a break is added, removed, ended or edited, so the finish flow can send the worker back to step 1 when the breaks change. */

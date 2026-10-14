@@ -6,7 +6,7 @@ import { TAP_AREA } from '@/components/tapArea'
 import { TONE } from '@/lib/tone'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
-import { buildChecklist, clockLabel, groupFolds, type ChecklistItem } from './checklist'
+import { buildChecklist, clockLabel, foldDueList, type ChecklistGroup, type ChecklistItem } from './checklist'
 import { Chip, Fold, Section } from './ui'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalDoseSlotDto, PortalPrnDto, PortalShiftDetailDto, PortalShiftRoutineDto } from '@/api/types'
@@ -155,10 +155,11 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
   onRecord: (t: DoseTarget) => void
 }) {
   const { groups } = buildChecklist(shift)
-  const folds = groupFolds(groups)
+  const plan = foldDueList(groups)
   const canRecord = canAct && online && shift.canRecordDoses
   const tz = shift.timeZoneId
 
+  const rowsOf = (group: ChecklistGroup) => <ul className="divide-y divide-[var(--color-border)]">{group.items.map(renderItem)}</ul>
   const renderItem = (item: ChecklistItem) => item.kind === 'dose'
     ? <DoseRow key={item.key} slot={item.slot} tz={tz} canAct={canRecord} onRecord={onRecord} />
     : <RoutineRow key={item.key} routine={item.routine} shiftId={shift.id} canAct={canAct} online={online} />
@@ -169,25 +170,36 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
         <p role="status" className="text-sm">{shift.canRecordDosesReason}</p>
       )}
       {shift.medicationsDue.length === 0 && <p className="text-sm text-[var(--color-muted-foreground)]">No doses due this shift.</p>}
-      {/* Rows divided inside the one card, not a card per item; Overdue and the next time open, the rest one line each (finish review fix 1). */}
-      {groups.map((group, gi) => {
-        const list = <ul className="divide-y divide-[var(--color-border)]">{group.items.map(renderItem)}</ul>
-        const fold = folds[gi]
-        return fold
-          ? <Fold key={group.id} summary={fold}>{list}</Fold>
-          : (
-            <div key={group.id} className="space-y-1">
-              <h3 className={`text-sm font-semibold ${group.tone === 'warning' ? TONE.warning.ink : ''}`}>{group.label}</h3>
-              {list}
-            </div>
-          )
-      })}
-      {shift.prn.length > 0 && (
-        <Fold summary={`As needed · ${shift.prn.length} medicine${shift.prn.length === 1 ? '' : 's'}`}>
-          <ul className="divide-y divide-[var(--color-border)]">
-            {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={tz} canAct={canRecord} onRecord={onRecord} />)}
-          </ul>
-        </Fold>
+      {/* Rows divided inside the one card, not a card per item. Overdue and the next time stay open; done times fold to a count, and every
+          later time folds, with the as-needed medicines, into the one-line folds at the end (finish review fix 1). */}
+      {plan.shown.map(({ group, fold }) => fold
+        ? <Fold key={group.id} summary={fold}>{rowsOf(group)}</Fold>
+        : (
+          <div key={group.id} className="space-y-1">
+            <h3 className={`text-sm font-semibold ${group.tone === 'warning' ? TONE.warning.ink : ''}`}>{group.label}</h3>
+            {rowsOf(group)}
+          </div>
+        ))}
+      {(plan.later || shift.prn.length > 0) && (
+        <div>
+          {plan.later && (
+            <Fold summary={plan.later.summary}>
+              {plan.later.groups.map(group => (
+                <div key={group.id} className="space-y-1">
+                  <h3 className="text-sm font-semibold">{group.label}</h3>
+                  {rowsOf(group)}
+                </div>
+              ))}
+            </Fold>
+          )}
+          {shift.prn.length > 0 && (
+            <Fold summary={`As needed · ${shift.prn.length} medicine${shift.prn.length === 1 ? '' : 's'}`}>
+              <ul className="divide-y divide-[var(--color-border)]">
+                {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={tz} canAct={canRecord} onRecord={onRecord} />)}
+              </ul>
+            </Fold>
+          )}
+        </div>
       )}
     </Section>
   )

@@ -9,11 +9,14 @@ export function Section({ title, icon, children, id, className = '', collapse }:
   title: string; icon?: ReactNode; children: ReactNode; id?: string; className?: string; collapse?: { summary: ReactNode } | null
 }) {
   const heading = <h2 id={id ? `${id}-title` : undefined} className="font-semibold flex items-center gap-2">{icon}{title}</h2>
-  const base = `bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 ${className}`
+  // 16px on a phone, 20px from lg: the shift page's cards stay compact where every line counts (finish review fix 1).
+  const base = `bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 lg:p-5 ${className}`
   if (collapse) {
+    // Folded, the row is the 44px target itself, so the card needs less vertical padding.
     return (
-      <details id={id} data-collapsed-section className={base}>
-        <summary className="cursor-pointer min-h-[44px] flex flex-col justify-center gap-1 list-none [&::-webkit-details-marker]:hidden">
+      <details id={id} data-collapsed-section className={`${base} py-2 lg:py-2`}>
+        {/* Folded, the heading and its summary share one line. */}
+        <summary className="cursor-pointer min-h-[44px] flex flex-wrap items-center gap-x-3 gap-y-1 list-none [&::-webkit-details-marker]:hidden">
           {heading}
           <div className="text-sm text-[var(--color-muted-foreground)] flex flex-wrap items-center gap-2">{collapse.summary}<span className="underline">Show</span></div>
         </summary>
