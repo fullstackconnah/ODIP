@@ -169,3 +169,14 @@ describe('WeekToolbar drafts badge and Publish week', () => {
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
   })
 })
+
+describe('WeekToolbar at phone width (finish review)', () => {
+  it('keeps the drafts badge, the week range and "This week" each on one line, and wraps the row between them instead', () => {
+    renderToolbar({ draftCount: 4, onPublishWeek: vi.fn() })
+    const badge = screen.getByText('4 drafts')
+    expect(badge).toHaveClass('whitespace-nowrap', 'shrink-0')
+    expect(screen.getByRole('heading', { name: /Aug/ })).toHaveClass('whitespace-nowrap')
+    expect(screen.getByRole('button', { name: 'This week' })).toHaveClass('whitespace-nowrap')
+    expect(badge.parentElement).toHaveClass('flex-wrap')
+  })
+})
