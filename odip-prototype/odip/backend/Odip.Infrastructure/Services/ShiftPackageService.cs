@@ -317,7 +317,10 @@ public sealed class ShiftPackageService
         // "As needed" doses this WORKER gave during the actual shift: PRN medications only (an unscheduled record against a Regular
         // medication is not an as-needed dose) and only the submitting worker's own records - a colleague on an overlapping shift for the
         // same participant gave theirs on their own completion.
+        // The stamped span as well as the moved one (My shifts redesign): a dose given in minutes the worker trimmed off is still theirs to review.
         var end = completion.ActualEnd ?? _slots.UtcNow;
+        if (completion.OriginalActualEnd > end) end = completion.OriginalActualEnd.Value;
+        var start = completion.OriginalActualStart < completion.ActualStart ? completion.OriginalActualStart.Value : completion.ActualStart;
         var prnDoses = await _db.MedicationAdministrations
             .Include(a => a.ParticipantMedication)
             .Where(a => a.ParticipantId == shift.ParticipantId
@@ -325,7 +328,7 @@ public sealed class ShiftPackageService
                 && a.RecordedByUserId == completion.SubmittedByUserId
                 && a.ScheduledAt == null
                 && a.Status == MedicationAdministrationStatus.Administered
-                && a.AdministeredAt != null && a.AdministeredAt >= completion.ActualStart && a.AdministeredAt <= end)
+                && a.AdministeredAt != null && a.AdministeredAt >= start && a.AdministeredAt <= end)
             .OrderBy(a => a.AdministeredAt)
             .ToListAsync(ct);
 

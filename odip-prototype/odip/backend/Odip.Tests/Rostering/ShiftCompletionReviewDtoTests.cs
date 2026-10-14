@@ -384,6 +384,30 @@ public class ShiftCompletionReviewDtoTests
     }
 
     [Fact]
+    public async Task APrnDoseGivenInTheMinutesTheWorkerTrimmed_StillShowsInTheReview()
+    {
+        // Review deep S1: the worker started later and finished earlier than the stamps. Doses given in the trimmed minutes are still the
+        // worker's doses on this shift, and the coordinator approving the moved times must see them.
+        var a = Arrange();
+        a.Completion.OriginalActualStart = ActualStart.AddMinutes(-10);
+        a.Completion.OriginalActualEnd = ActualEnd.AddMinutes(12);
+        var prn = AddMed(a, "Paracetamol", null, MedicationType.Prn);
+        foreach (var at in new[] { ActualStart.AddMinutes(-5), ActualEnd.AddMinutes(8), ActualEnd.AddMinutes(30) })
+        {
+            a.Db.MedicationAdministrations.Add(new MedicationAdministration
+            {
+                Id = Guid.NewGuid(), TenantId = prn.TenantId, ParticipantMedicationId = prn.Id, ParticipantId = prn.ParticipantId, Status = MedicationAdministrationStatus.Administered,
+                RecordedByName = "Ben Turner", RecordedByUserId = a.Worker.Id, PrnReason = "Headache", AdministeredAt = at,
+            });
+        }
+        a.Db.SaveChanges();
+
+        var prnDoses = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).PrnDoses;
+
+        Assert.Equal(2, prnDoses.Count);   // the two inside the stamped span; the one after the Finish instant is not this shift's
+    }
+
+    [Fact]
     public async Task AnUnmovedCompletion_IsNotFlagged_InTheReviewOrTheQueue()
     {
         var a = Arrange();
