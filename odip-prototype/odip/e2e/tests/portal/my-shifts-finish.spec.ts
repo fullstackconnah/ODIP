@@ -41,7 +41,7 @@ test('a support worker finishes a shift through all five steps on a phone, and t
 
   // The list leads with the shift in progress.
   await page.goto('/portal')
-  await expect(page.getByRole('heading', { name: 'On shift now' })).toBeVisible()
+  await expect(page.getByText(/^On shift now/)).toBeVisible()
   await shot('e2e-01-list')
   await page.getByRole('link', { name: 'Continue shift' }).tap()
   await expect(page.getByRole('tablist', { name: 'Shift' })).toBeVisible()

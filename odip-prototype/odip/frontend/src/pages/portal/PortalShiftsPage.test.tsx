@@ -156,7 +156,9 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
     answer([now], [now])
     renderPage()
 
-    expect(screen.getByRole('heading', { level: 2, name: 'On shift now' })).toBeInTheDocument()
+    // No eyebrow (finish review fix 5): the name is the card's heading and the state line says it.
+    expect(screen.getByRole('heading', { level: 2, name: 'Sienna Whitfield' })).toBeInTheDocument()
+    expect(screen.getByText(/^On shift now/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Continue shift' })).toHaveAttribute('href', '/portal/shifts/shift-2')
     expect(screen.getAllByText('Sienna Whitfield')).toHaveLength(1)
   })
@@ -173,7 +175,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
     })
     renderPage()
 
-    expect(screen.getByText(/^Started 9:02\s?am · .+ on shift$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^On shift now · Started 9:02\s?am · .+ on shift$/i)).toBeInTheDocument()
     expect(screen.getByText('2 doses overdue')).toBeInTheDocument()
     expect(screen.getByText('Handover to read')).toBeInTheDocument()
   })
@@ -183,7 +185,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
     const later = row({ id: 'shift-3', serviceDate: today, startTime: '15:00:00', endTime: '20:00:00' })
     answer([later], [later])
     const { unmount } = renderPage()
-    expect(screen.getByRole('heading', { level: 2, name: 'Today' })).toBeInTheDocument()
+    expect(screen.getByText(/^Today/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open shift' })).toHaveAttribute('href', '/portal/shifts/shift-3')
     unmount()
 
@@ -200,7 +202,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
 
-    expect(screen.queryByRole('heading', { name: 'On shift now' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/^On shift now/)).not.toBeInTheDocument()
   })
 
   it('splits the week into Coming up and Earlier (newest first), in worker words, with no badge on a plain Rostered shift', () => {

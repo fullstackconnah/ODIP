@@ -25,6 +25,7 @@ export function CurrentShiftCard({ shift }: { shift: PortalShiftSummaryDto }) {
   const h = detail?.handover
   const handoverToRead = h ? h.requiresAcknowledgement && !h.isRead : false
 
+  const when = inProgress ? 'On shift now' : 'Today'
   let state: string | null = null
   if (detail && tz) {
     if (running) state = `On a break since ${clock(running.startedAt)}`
@@ -39,12 +40,12 @@ export function CurrentShiftCard({ shift }: { shift: PortalShiftSummaryDto }) {
 
   return (
     <section aria-labelledby="current-shift-title" className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] space-y-2">
-      <h2 id="current-shift-title" className="text-[13px] font-semibold text-[var(--color-muted-foreground)]">{inProgress ? 'On shift now' : 'Today'}</h2>
-      <p className="text-xl font-bold">{shift.participantName}</p>
+      {/* No eyebrow over the name (the craft floor; a deviation from SHAPE §2): "On shift now" or "Today" leads the state line. */}
+      <h2 id="current-shift-title" className="text-xl font-bold">{shift.participantName}</h2>
       <p className="text-sm text-[var(--color-muted-foreground)]">
         {formatDayAccessibleName(shift.serviceDate)} · {formatShiftTimeRange(shift.startTime, shift.endTime)}{shift.endsNextDay && ' (+1 day)'}
       </p>
-      {state && <p className="text-sm">{state}</p>}
+      <p className="text-sm">{state ? `${when} · ${state}` : when}</p>
       {(overdue > 0 || handoverToRead) && (
         <div className="flex flex-wrap gap-2">
           {overdue > 0 && <Chip tone="warning">{overdue} dose{overdue === 1 ? '' : 's'} overdue</Chip>}
