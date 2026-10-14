@@ -40,11 +40,15 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   const rows = () => [...enquiryFeed, ...extraEnquiries]
   const withBooking = (row) => ({ ...row, timeZoneId: ZONE, ...(bookings[row.id] ?? {}) })
   const find = (id) => rows().find((r) => r.id === id)
+  // The browsed range, as the API reads it: provider-local dates, inclusive at both ends.
+  const sydneyDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: ZONE }).format(new Date(iso))
+  const inRange = (day, params) => (!params?.get('from') || day >= params.get('from')) && (!params?.get('to') || day <= params.get('to'))
   const notBooked = () => respond(404, failEnvelope(null, ['No intake visit is booked for this enquiry.']))
 
   const get = [
     ['intake-visits', (params) => Object.entries(bookings)
       .filter(([, b]) => !params?.get('staffUserId') || b.intakeStaffUserId === params.get('staffUserId'))
+      .filter(([, b]) => inRange(sydneyDay(b.intakeStartsAt), params))
       .map(([id, b]) => {
         const row = find(id)
         return {
@@ -55,11 +59,11 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       })
       .sort((a, b) => a.startsAt.localeCompare(b.startsAt))],
     // My shifts for the capture: two shifts on the day of Priya's visit, either side of it.
-    ['portal/my-shifts', () => {
-      const day = new Intl.DateTimeFormat('en-CA', { timeZone: ZONE }).format(new Date(bookings['inq-0002'].intakeStartsAt))
+    ['portal/my-shifts', (params) => {
+      const day = sydneyDay(bookings['inq-0002'].intakeStartsAt)
       const shift = (id, start, end) => ({ id, participantId: 'p-0001', participantName: 'Liam Okafor', serviceDate: day, startTime: start, endTime: end,
         endsNextDay: false, durationHours: 2, ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null })
-      return { shifts: [shift('sh-am', '07:00:00', '09:00:00'), shift('sh-pm', '13:00:00', '15:00:00')], tripAssignments: [] }
+      return { shifts: inRange(day, params) ? [shift('sh-am', '07:00:00', '09:00:00'), shift('sh-pm', '13:00:00', '15:00:00')] : [], tripAssignments: [] }
     }],
   ]
 
