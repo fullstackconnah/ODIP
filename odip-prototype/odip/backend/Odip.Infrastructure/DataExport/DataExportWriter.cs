@@ -97,6 +97,10 @@ public static class DataExportWriter
     {
         var text = new StringBuilder();
         text.Append("ODIP data export\r\n");
+        // First, because the ZIP travels without the Settings tab's warning.
+        text.Append("This export holds personal and health information about participants and staff, for example in participants.csv, medications.csv, ");
+        text.Append("participant-health-conditions.csv, restrictive-practices.csv, incidents.csv and staff.csv. ");
+        text.Append("Store it securely and share it only with people who need it.\r\n");
         text.Append("Made ").Append(ExportValue.Cell(generatedAtUtc, wallClock: false)).Append(" by ODIP build ").Append(build).Append(".\r\n\r\n");
 
         text.Append("FILES\r\n");

@@ -119,6 +119,24 @@ public class DataExportWriterTests
     }
 
     [Fact]
+    public async Task The_readme_opens_by_saying_the_zip_holds_personal_and_health_information_and_how_to_keep_it()
+    {
+        var (db, tenantId) = await NewOrganisationAsync();
+
+        using var zip = await DataExportTestKit.ExportAsync(db, tenantId);
+
+        // The ZIP travels without the Settings tab, so its own first words carry the warning.
+        Assert.StartsWith(
+            "ODIP data export\r\n"
+            + "This export holds personal and health information about participants and staff, for example in participants.csv, medications.csv, "
+            + "participant-health-conditions.csv, restrictive-practices.csv, incidents.csv and staff.csv. "
+            + "Store it securely and share it only with people who need it.\r\n",
+            DataExportTestKit.Text(zip, DataExportWriter.ReadmeName));
+        foreach (var file in new[] { "participants.csv", "medications.csv", "participant-health-conditions.csv", "restrictive-practices.csv", "incidents.csv", "staff.csv" })
+            Assert.Contains(ExportTables.All, t => t.FileName == file); // every file it names is one the ZIP has
+    }
+
+    [Fact]
     public async Task The_readme_names_every_file_everything_left_out_and_the_local_time_columns()
     {
         var (db, tenantId) = await NewOrganisationAsync();
