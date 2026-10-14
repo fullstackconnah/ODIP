@@ -2100,6 +2100,24 @@ function retriedNotification(id) {
   return { ...row, status: 'Pending', attempts: 0, nextAttemptAt: new Date().toISOString(), lastError: undefined }
 }
 
+// The bell (dashboard PR B): GET notifications/inbox, POST notifications/inbox/:id/read and notifications/inbox/read-all.
+// Unlike most POSTs here these change the fixture, so the refetch after "Mark all as read" doesn't bring the dots back.
+// Four items, two unread (SHAPE section 13's fixture), for the finish reviewer's own mock run. Titles are plain text, in the server's voice.
+const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
+const inAppInbox = [
+  { id: 'inapp-0001', title: 'Sam Lee asked for annual leave, 20 to 24 Oct.', linkTo: '/rostering/leave', createdAt: minutesAgo(5) },
+  { id: 'inapp-0002', title: "Sam Lee's shift with Grace Palmer-Hughes on Tue 13 Oct is ready for review.", linkTo: '/rostering/completions', createdAt: minutesAgo(120) },
+  { id: 'inapp-0003', title: 'Sam Lee reported an incident: injury, high severity.', linkTo: '/incidents', createdAt: minutesAgo(26 * 60), readAt: minutesAgo(25 * 60) },
+  { id: 'inapp-0004', title: 'Ann Hughes sent a profile update for Grace Palmer-Hughes.', linkTo: '/caregiver-submissions', createdAt: minutesAgo(3 * 24 * 60), readAt: minutesAgo(2 * 24 * 60) },
+]
+function inAppInboxView() {
+  return { items: inAppInbox, unreadCount: inAppInbox.filter((n) => !n.readAt).length, hasMore: false }
+}
+function markInAppRead(id) {
+  for (const n of inAppInbox) if ((id === undefined || n.id === id) && !n.readAt) n.readAt = new Date().toISOString()
+  return null
+}
+
 // Connection map item 12 (staff hub) — staffId linkage for the three portalShiftBase fixture
 // shifts, derived from shiftCompletions.submittedByUserId where a completion exists (shift-0001/
 // 0002) and from the shift-0003 note's authorUserId otherwise (shift-0003 has no completion yet —
@@ -2562,6 +2580,7 @@ const routes = [
   // is the self-service grid.
   ['notifications/preferences', () => notificationPreferenceGrid()],
   ['admin/notifications', () => notificationOutbox],
+  ['notifications/inbox', () => inAppInboxView()],
 ]
 
 // POST routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -2732,6 +2751,8 @@ const postRoutes = [
   // contract without needing an actual SMTP config to demo against.
   ['admin/notifications/:id/retry', (id) => retriedNotification(id)],
   ['admin/notifications/test-email', () => ({ sent: true, error: undefined })],
+  ['notifications/inbox/read-all', () => markInAppRead()],
+  ['notifications/inbox/:id/read', (id) => markInAppRead(id)],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback
