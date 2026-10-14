@@ -41,10 +41,19 @@ public class ParticipantInquiriesController : ControllerBase
             ? new Dictionary<Guid, (bool IsDraft, bool IsActive, DateTime? IntakeCompletedAt)>()
             : (await _db.Participants.Where(p => participantIds.Contains(p.Id)).Select(p => new { p.Id, p.IsDraft, p.IsActive, p.IntakeCompletedAt }).ToListAsync(ct))
                 .ToDictionary(p => p.Id, p => (p.IsDraft, p.IsActive, p.IntakeCompletedAt));
+        // The booked staff members' names, and the provider's zone the visit times are shown in. One query each for the page.
+        var staffIds = inquiries.Where(x => x.IntakeStaffUserId != null).Select(x => x.IntakeStaffUserId!.Value).Distinct().ToList();
+        var staffById = staffIds.Count == 0 ? new Dictionary<Guid, User>() : await _db.Users.Where(u => staffIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
+        var zoneId = (_tenant.TenantId is Guid tenantId ? await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct) : await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Id;
+        User? StaffOf(ParticipantInquiry x) => x.IntakeStaffUserId is Guid id ? staffById.GetValueOrDefault(id) : null;
         var rows = inquiries.Select(x =>
             x.ParticipantId is Guid participantId && states.TryGetValue(participantId, out var state)
-                ? ToDto(x) with { ParticipantIsDraft = state.IsDraft, ParticipantIsActive = state.IsActive, ParticipantIntakeCompletedAt = state.IntakeCompletedAt }
-                : ToDto(x)).ToList();
+                ? ToDto(x, StaffOf(x), zoneId) with { ParticipantIsDraft = state.IsDraft, ParticipantIsActive = state.IsActive, ParticipantIntakeCompletedAt = state.IntakeCompletedAt }
+                : ToDto(x, StaffOf(x), zoneId)).ToList();
+        // A visit's address (often a home), its internal notes and the staff member's full name are for the lifecycle roles, as on /intake-visits.
+        // Everyone else who can open the Enquiries tab still sees when it is, the staff member's first name and what the invite did.
+        var seesVisitDetails = User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true;
+        if (!seesVisitDetails) rows = rows.Select(r => r with { IntakeLocation = null, IntakeNotes = null, IntakeStaffName = null }).ToList();
 
         // A draft intake started in the Intake wizard (/participants/new) has no enquiry. It used to be reachable only through the register's
         // Drafts view; with that view gone it rides here so it is not lost. A draft an enquiry already links is that enquiry's row, never a second one.
@@ -54,7 +63,7 @@ public class ParticipantInquiriesController : ControllerBase
         rows.AddRange(direct.Select(p => new ParticipantInquiryDto
         {
             Id = p.Id, ParticipantId = p.Id, FirstName = p.FirstName, LastName = p.LastName, Phone = p.Phone, Email = p.Email, CreatedAt = p.CreatedAt,
-            ParticipantIsDraft = true, ParticipantIsActive = p.IsActive, ParticipantIntakeCompletedAt = null, IsDirectIntake = true,
+            ParticipantIsDraft = true, ParticipantIsActive = p.IsActive, ParticipantIntakeCompletedAt = null, IsDirectIntake = true, TimeZoneId = zoneId,
         }));
         return Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok(rows.OrderByDescending(x => x.CreatedAt).ToList()));
     }
@@ -260,5 +269,13 @@ public class ParticipantInquiriesController : ControllerBase
     /// <summary>A form's "left blank" arrives as "" or spaces: store nothing, trimmed otherwise, never an empty string.</summary>
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static ParticipantInquiryDto ToDto(ParticipantInquiry x) => new() { Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName, Phone = x.Phone, Email = x.Email, Source = x.Source, Provenance = x.Provenance, CreatedAt = x.CreatedAt };
+    /// <summary>The enquiry as the API sends it. <paramref name="staff"/> is the booked staff member (for their names); <paramref name="timeZoneId"/> is the provider's zone.</summary>
+    internal static ParticipantInquiryDto ToDto(ParticipantInquiry x, User? staff = null, string? timeZoneId = null) => new()
+    {
+        Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName, Phone = x.Phone, Email = x.Email, Source = x.Source,
+        Provenance = x.Provenance, CreatedAt = x.CreatedAt,
+        IntakeStartsAt = x.IntakeStartsAt, IntakeDurationMinutes = x.IntakeDurationMinutes, IntakeLocation = x.IntakeLocation,
+        IntakeStaffUserId = x.IntakeStaffUserId, IntakeStaffFirstName = staff?.FirstName, IntakeStaffName = staff?.FullName, IntakeNotes = x.IntakeNotes,
+        IntakeInviteSentAt = x.IntakeInviteSentAt, IntakeInviteError = x.IntakeInviteError, IntakeConfirmedAt = x.IntakeConfirmedAt, TimeZoneId = timeZoneId,
+    };
 }
