@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter,
-  type DragEndEvent,
+  DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, useSensor, useSensors,
+  type DragEndEvent, type DragStartEvent, type Modifier,
 } from '@dnd-kit/core'
 import { CalendarClock, X } from 'lucide-react'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
+import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { PageHeader } from '@/components/PageHeader'
@@ -12,18 +15,33 @@ import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
-import { useRosterBoard, useAssignShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
+import { useRosterBoard, useAssignShift, useMoveStaff, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
-import type { ShiftDto, RosterFindingDto, RosterBoardDto } from '@/api/types'
+import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode } from '@/api/types'
 import {
-  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer,
+  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck,
   type ShiftSlideOverTarget,
 } from './components'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
+import {
+  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, replacePromptLines, rosterAnnouncements,
+  rosterCollision, staffWeekHours, swappedSentence, type DragCarry, type DropTarget, type PendingDrop,
+} from './lib/rosterDrag'
 
-type PendingAssign = { shift: ShiftDto; staffId: string | null; findings: RosterFindingDto[] }
-type PendingBlocked = { shift: ShiftDto; findings: RosterFindingDto[] }
+/** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
+type Send = (overrideReason: string | null, acknowledgedFindingCodes: string[]) => Promise<unknown>
+type PendingAssign = { findings: RosterFindingDto[]; retry: (overrideReason: string, codes: string[]) => Promise<boolean> }
+type PendingBlocked = { findings: RosterFindingDto[] }
+type DropPrompt = { carry: DragCarry; shift: ShiftDto; canSwap: boolean }
+
+/** The carried puck rides one coarse row (48px, --row-h under pointer: coarse) above a finger, so its outcome line is not under the thumb. A mouse or keyboard drag is left alone. */
+const liftAboveFinger: Modifier = ({ transform, activatorEvent }) => (activatorEvent?.type === 'touchstart' ? { ...transform, y: transform.y - 48 } : transform)
+
+/** Focus on a shift's open control (ShiftChip's data-shift-open): the thing a keyboard drop changed. */
+function focusShift(id: string) {
+  document.querySelector<HTMLElement>(`[data-shift-open="${id}"]`)?.focus()
+}
 
 const HINT_DISMISSED_KEY = 'odip.roster.hintDismissed'
 
@@ -70,6 +88,12 @@ export default function RosterBoardPage() {
   // The server's refusal of an assign / unassign that is NOT the 422 findings protocol (e.g. Enforce mode's 400 "Participant is not ready
   // for booking or rostering."). It used to be swallowed, leaving a drag that silently snapped back.
   const [assignError, setAssignError] = useState<string | null>(null)
+  const [carry, setCarry] = useState<DragCarry | null>(null)
+  const [dropPending, setDropPending] = useState<PendingDrop | null>(null)
+  const [prompt, setPrompt] = useState<DropPrompt | null>(null)
+  // Decision 6: a person carried off a puck onto an empty day MOVES. Their old shift waits here until the new one saves; the panel's Cancel forgets it.
+  const [createMoveSource, setCreateMoveSource] = useState<ShiftDto | null>(null)
+  const [announcement, setAnnouncement] = useState('')
   const [hintDismissed, setHintDismissed] = useState(() => {
     try {
       return sessionStorage.getItem(HINT_DISMISSED_KEY) === '1'
@@ -82,8 +106,10 @@ export default function RosterBoardPage() {
   // INTAKE-08: the board's participant filter/assignment picker excludes drafts (the board
   // query itself already excludes them server-side; this keeps the filter dropdown in sync).
   const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
-  const { data: staff = [] } = useStaff()
+  const { data: staff = [], isLoading: staffLoading } = useStaff()
   const assignShift = useAssignShift()
+  const moveStaff = useMoveStaff()
+  const belowMd = useIsBelowMd()
   const deleteShift = useDeleteShift()
 
   const days = board?.days ?? daysOfWeek(weekStart)
@@ -137,17 +163,33 @@ export default function RosterBoardPage() {
     }
   }, [board, participantFilter, regionFilter, staffRegionById, unfilledOnly])
 
+  // Decisions 1 and 10: drag and drop is the Participant view's, for writers, from md up; the Staff view and phones keep click and the menus.
+  const dragOn = canWrite && groupBy === 'participant' && !belowMd
+  const boardShifts = useMemo(() => allBoardShifts(board), [board])
+  const hours = useMemo(() => staffWeekHours(boardShifts), [boardShifts])
+  const dragsOff = dropPending !== null || prompt !== null || pendingAssign !== null || pendingBlocked !== null
+
+  // A mouse lifts after a 4px move. A finger lifts a strip puck after a 200 ms press, so a swipe still scrolls the strip; a grip (touch-none, a person off a puck) lifts at once.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+      bypassActivationConstraint: ({ activeNode }) => Boolean((activeNode.data.current as DragCarry | undefined)?.fromShift),
+    }),
     useSensor(KeyboardSensor),
   )
 
-  async function performAssign(shift: ShiftDto, staffId: string | null, overrideReason: string | null = null, acknowledgedFindingCodes: string[] = []) {
+  /**
+   * One roster write and today's answers to it: a 422 with a Blocking finding opens "Can't assign"; warnings open "Assign with warnings", whose "Assign anyway" re-sends this SAME
+   * request with the reason and the codes; any other refusal is the error Callout, in the server's words. True when the write went through.
+   */
+  async function runRosterWrite(send: Send, overrideReason: string | null = null, codes: string[] = []): Promise<boolean> {
     setAssignError(null)
     try {
-      await assignShift.mutateAsync({ id: shift.id, data: { staffId, overrideReason, acknowledgedFindingCodes } })
+      await send(overrideReason, codes)
       setPendingAssign(null)
       setOverrideReasonDraft('')
+      return true
     } catch (err: unknown) {
       const findings = getRosterFindings(err)
       if (!findings) {
@@ -156,31 +198,83 @@ export default function RosterBoardPage() {
         setPendingAssign(null)
         setOverrideReasonDraft('')
         setAssignError(extractErrorMessage(err, 'Something went wrong assigning this shift. Please try again.'))
-        return
+        return false
       }
-      const blocking = findings.filter(f => f.severity === 'Blocking')
-      if (blocking.length > 0) {
-        setPendingBlocked({ shift, findings })
+      if (findings.some(f => f.severity === 'Blocking')) {
+        setPendingBlocked({ findings })
       } else {
-        setPendingAssign({ shift, staffId, findings })
+        setPendingAssign({ findings, retry: (reason, retryCodes) => runRosterWrite(send, reason, retryCodes) })
         setOverrideReasonDraft('')
       }
+      return false
     }
   }
 
+  function performAssign(shift: ShiftDto, staffId: string | null) {
+    return runRosterWrite((overrideReason, acknowledgedFindingCodes) =>
+      assignShift.mutateAsync({ id: shift.id, data: { staffId, overrideReason, acknowledgedFindingCodes } }))
+  }
+
+  /** A drop's write: the pending look on its shifts while it is out (every drag waits), and the sentence a screen reader hears once it lands, a retry included. */
+  async function dropWrite(pending: PendingDrop, sentence: string, send: Send) {
+    setDropPending(pending)
+    await runRosterWrite(async (reason, codes) => { await send(reason, codes); setAnnouncement(sentence) })
+    setDropPending(null)
+  }
+
+  function dropAssign(person: DragCarry, shift: ShiftDto) {
+    return dropWrite({ targetId: shift.id, staffName: person.staffName }, assignedSentence(person, shift), (overrideReason, acknowledgedFindingCodes) =>
+      // expectedStaffId: who the board showed (nobody, an on-leave worker, or the person the prompt replaces); the server refuses with 409 if that changed since.
+      assignShift.mutateAsync({ id: shift.id, data: { staffId: person.staffId, overrideReason, acknowledgedFindingCodes, expectedStaffId: shift.staffId ?? null } }))
+  }
+
+  /** A person carried off a puck: one all-or-nothing request, so a refused second half leaves both shifts as they were. */
+  function dropMove(person: DragCarry, from: ShiftDto, to: ShiftDto, mode: MoveStaffMode) {
+    const sentence = mode === 'Swap' ? swappedSentence(person, to) : movedSentence(person, to)
+    return dropWrite({ targetId: to.id, sourceId: from.id, staffName: person.staffName }, sentence, (overrideReason, acknowledgedFindingCodes) =>
+      moveStaff.mutateAsync({ fromShiftId: from.id, toShiftId: to.id, mode, staffId: person.staffId, overrideReason, acknowledgedFindingCodes }))
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setCarry(event.active.data.current as DragCarry)
+  }
+
   function handleDragEnd(event: DragEndEvent) {
-    if (!canWrite) return
-    const shift = event.active.data.current?.shift as ShiftDto | undefined
-    const overId = event.over?.id
-    if (!shift || !overId) return
-    if (overId === 'unassign-target') {
-      if (!isUnfilledShift(shift)) performAssign(shift, null)                   // dropping an unfilled shift on the lane is nothing to do (it has no staffId at all, not a null one)
-      return
+    setCarry(null)
+    const person = event.active.data.current as DragCarry | undefined
+    if (!person) return
+    const outcome = dropOutcome(person, event.over?.data.current as DropTarget | undefined)
+    // A keyboard drop that lands, or opens a dialog, leaves focus on the shift it changed (the dialog hands focus back to it). dnd-kit's own focus return is off, so
+    // a cancel, or a drop on nothing, simply leaves focus where the drag began.
+    if (event.activatorEvent instanceof KeyboardEvent && (outcome.kind === 'assign' || outcome.kind === 'move' || outcome.kind === 'prompt')) focusShift(outcome.shift.id)
+    if (outcome.kind === 'assign') void dropAssign(person, outcome.shift)
+    else if (outcome.kind === 'move') void dropMove(person, outcome.from, outcome.shift, outcome.mode)
+    else if (outcome.kind === 'prompt') setPrompt({ carry: person, shift: outcome.shift, canSwap: outcome.canSwap })
+    else if (outcome.kind === 'create') {
+      setCreateMoveSource(person.fromShift ?? null)
+      setSlideOverTarget({ mode: 'create', participantId: outcome.participantId, staffId: person.staffId, serviceDate: outcome.day, focusField: 'start' })
     }
-    if (typeof overId === 'string' && overId.startsWith('staff:')) {
-      const targetStaffId = overId.slice('staff:'.length)
-      if (targetStaffId !== shift.staffId) performAssign(shift, targetStaffId)
-    }
+  }
+
+  function choosePrompt(choice: 'Replace' | 'Swap') {
+    if (!prompt) return
+    const { carry: person, shift } = prompt
+    setPrompt(null)
+    // From the strip, Replace is an assign (the shift's worker comes off); off a puck it is one move-staff request.
+    if (person.fromShift) void dropMove(person, person.fromShift, shift, choice)
+    else void dropAssign(person, shift)
+  }
+
+  // Decision 6: once the ad-hoc shift saves, the person carried off a puck comes off their old shift.
+  // shortcut: the new shift saves before the old one clears, so a same-day overlap shows a DOUBLE_BOOKED warning in the form; one server request for both if coordinators trip on it.
+  async function handleShiftSaved(saved: ShiftDto) {
+    const source = createMoveSource
+    // Only when the new shift is the carried person's: if the Staff field was changed in the panel, they have not moved, so their old shift stays as it is.
+    if (!source || saved.staffId !== source.staffId) return
+    if (!(await performAssign(source, null))) return
+    setAnnouncement(movedSentence({ staffId: saved.staffId ?? '', staffName: saved.staffName ?? '', fromShift: source }, saved))
+    // The grip that started it went with the old shift, so focus goes to the new one, once the refetch has drawn it.
+    requestAnimationFrame(() => focusShift(saved.id))
   }
 
   async function handleConfirmDelete() {
@@ -216,8 +310,25 @@ export default function RosterBoardPage() {
       : board.staffRows.every(r => r.shifts.length === 0) && board.unfilled.length === 0
   )
 
+  const grid = filteredBoard && (
+    <RosterGrid
+      board={filteredBoard}
+      canWrite={canWrite}
+      draggable={dragOn}
+      unfilledOnly={unfilledOnly}
+      weekHasNoShifts={weekHasNoShifts}
+      onOpenShift={shift => setSlideOverTarget({ mode: 'edit', shift })}
+      onAssignTo={shift => setSlideOverTarget({ mode: 'edit', shift })}
+      onUnassign={shift => performAssign(shift, null)}
+      onDeleteShift={shift => setConfirmDeleteTarget(shift)}
+      onAddParticipantShift={handleAddParticipantShift}
+      onAddStaffShift={handleAddStaffShift}
+    />
+  )
+
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <AnnouncementRegion message={announcement} />
       {/* PageHeader is a fragment, so title row and toolbar sit in one tight block here (title 28px + 8px + toolbar 32px)
           instead of being spaced apart by the page's --section-gap. */}
       <div className="flex flex-col gap-2">
@@ -305,27 +416,35 @@ export default function RosterBoardPage() {
         </div>
       )}
 
-      {!isLoading && !isError && filteredBoard && (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <RosterGrid
-            board={filteredBoard}
-            canWrite={canWrite}
-            unfilledOnly={unfilledOnly}
-            weekHasNoShifts={weekHasNoShifts}
-            onOpenShift={shift => setSlideOverTarget({ mode: 'edit', shift })}
-            onAssignTo={shift => setSlideOverTarget({ mode: 'edit', shift })}
-            onUnassign={shift => performAssign(shift, null)}
-            onDeleteShift={shift => setConfirmDeleteTarget(shift)}
-            onAddParticipantShift={handleAddParticipantShift}
-            onAddStaffShift={handleAddStaffShift}
-          />
-        </DndContext>
-      )}
+      {!isLoading && !isError && grid && (dragOn ? (
+        <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending }}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={rosterCollision}
+            accessibility={{ announcements: rosterAnnouncements, screenReaderInstructions: ROSTER_SCREEN_READER_INSTRUCTIONS, restoreFocus: false }}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setCarry(null)}
+          >
+            <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} />
+            {grid}
+            {/* A portal (the brief, section 5), so no ancestor's overflow or transform clips or shifts it. No drop animation: the default flies the puck back to its source, which reads as a refusal.
+                pointer-events-none: rosterCollision asks what is on top at the pointer, and that must never be the carried puck itself. */}
+            {createPortal(
+              <DragOverlay className="pointer-events-none" dropAnimation={null} modifiers={[liftAboveFinger]}>
+                {carry && <CarriedPuck carry={carry} hours={hours.get(carry.staffId) ?? 0} />}
+              </DragOverlay>,
+              document.body,
+            )}
+          </DndContext>
+        </DropStateContext.Provider>
+      ) : grid)}
 
       <ShiftSlideOver
         key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `shift-${slideOverTarget.shift.id}` : 'shift-new') : 'shift-closed'}
         target={slideOverTarget}
-        onClose={() => setSlideOverTarget(null)}
+        onClose={() => { setSlideOverTarget(null); setCreateMoveSource(null) }}
+        onSaved={handleShiftSaved}
         canWrite={canWrite}
         participantOptions={participantOptions}
         staffOptions={staffOptions}
@@ -395,11 +514,26 @@ export default function RosterBoardPage() {
               Cancel
             </Button>
             <Button
-              disabled={!overrideReasonDraft.trim() || assignShift.isPending}
-              onClick={() => pendingAssign && performAssign(pendingAssign.shift, pendingAssign.staffId, overrideReasonDraft.trim(), pendingAssign.findings.map(f => f.code))}
+              disabled={!overrideReasonDraft.trim() || assignShift.isPending || moveStaff.isPending}
+              onClick={() => pendingAssign && pendingAssign.retry(overrideReasonDraft.trim(), pendingAssign.findings.map(f => f.code))}
             >
-              {assignShift.isPending ? 'Assigning…' : 'Assign anyway'}
+              {assignShift.isPending || moveStaff.isPending ? 'Assigning…' : 'Assign anyway'}
             </Button>
+          </>
+        }
+      />
+
+      {/* Replace or swap (the brief, sections 5 and 10): a ConfirmDialog with its own footer, right-aligned Cancel, Swap (only for a person carried off a puck) and Replace. Esc is Cancel. */}
+      <ConfirmDialog
+        open={prompt !== null}
+        onCancel={() => setPrompt(null)}
+        title={prompt ? `${prompt.shift.staffName} is on this shift` : ''}
+        message={prompt && replacePromptLines(prompt.carry, prompt.shift, prompt.canSwap).map(line => <p key={line}>{line}</p>)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPrompt(null)}>Cancel</Button>
+            {prompt?.canSwap && <Button variant="secondary" onClick={() => choosePrompt('Swap')}>Swap</Button>}
+            <Button onClick={() => choosePrompt('Replace')}>Replace</Button>
           </>
         }
       />
