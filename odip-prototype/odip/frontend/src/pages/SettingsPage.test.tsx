@@ -214,14 +214,6 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
 })
 
 describe('SettingsPage — buttons are the Button primitive', () => {
-  it('draws Save Settings as a Button at --control-h, not a hand-rolled rounded-full pill', async () => {
-    renderSettingsPage('/settings?section=alerts')
-
-
-    const save = screen.getByRole('button', { name: 'Save Settings' })
-    expect(save).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
-    expect(save.className).not.toMatch(/rounded-full|py-2\.5/)
-  })
 
   it('draws the Public Holidays actions as Buttons: + Add Holiday and Sync Holidays at --control-h, the add-row Save and Cancel at --control-h-sm', async () => {
     const user = userEvent.setup()
@@ -289,11 +281,11 @@ describe('SettingsPage — buttons are the Button primitive', () => {
 })
 
 describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
-  it('warns before navigating away from an edited Qualification Warning window', async () => {
+  it('warns before navigating away from an edited alert window', async () => {
     const user = userEvent.setup()
     const { router } = renderSettingsPage('/settings?section=alerts')
 
-    await user.click(screen.getByRole('button', { name: /30 days/i }))
+    await user.click(screen.getByRole('button', { name: /Staff qualifications/ }))
     await user.click(await screen.findByRole('option', { name: /60 days/i }))
 
     await act(async () => { router.navigate('/elsewhere') })
@@ -301,7 +293,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     expect(await screen.findByText(/leave without saving\?/i)).toBeInTheDocument()
   })
 
-  it('does not warn when the Qualification Warning window is untouched', async () => {
+  it('does not warn when the alert window is untouched', async () => {
     const { router } = renderSettingsPage('/settings?section=alerts')
 
     await act(async () => { router.navigate('/elsewhere') })
@@ -335,6 +327,21 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     expect(notes.className).not.toMatch(/(^|\s)h-\[var\(--control-h\)\]/)
     expect(notes).toHaveClass('h-auto', 'min-h-[var(--control-h)]', 'resize-y')
     expect(notes).not.toHaveClass('resize-none')
+  })
+
+  it('asks before switching to another section with an edited alert window, and stays on it after "Keep editing"', async () => {
+    const user = userEvent.setup()
+    screenSize.belowMd = false
+    const { router } = renderSettingsPage('/settings?section=alerts')
+
+    await user.click(screen.getByRole('button', { name: /Staff qualifications/ }))
+    await user.click(await screen.findByRole('option', { name: /60 days/i }))
+    await user.click(within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('link', { name: 'Budgets' }))
+
+    expect(screen.getByRole('alertdialog', { name: 'Leave Alert windows without saving?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(router.state.location.search).toBe('?section=alerts')
+    expect(screen.getByRole('button', { name: /Staff qualifications/ })).toHaveTextContent('60 days')
   })
 })
 
@@ -606,17 +613,6 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
     return { afterSecond, afterUnmount: vi.getTimerCount() }
   }
 
-  it('Qualification Warnings: the "Saved!" reset', async () => {
-    const user = userEvent.setup()
-    const { unmount } = renderSettingsPage('/settings?section=alerts')
-    await user.click(screen.getByRole('button', { name: /30 days/i }))
-    await user.click(await screen.findByRole('option', { name: /60 days/i }))
-
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ }), unmount)
-
-    expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
-  })
 
   it('Provider Settings: the "Saved!" reset', async () => {
     mockUpsertMutate.mockImplementation((_body, opts) => opts?.onSuccess?.())

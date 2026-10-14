@@ -8,6 +8,7 @@ import { useNotices } from '@/hooks/useNotices'
 import { usePermissions } from '@/lib/permissions'
 import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
+import AlertWindowsSection from '@/pages/settings/AlertWindowsSection'
 import AppearanceSection from '@/pages/settings/AppearanceSection'
 import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
 import DataExportTab from '@/pages/settings/DataExportTab'
@@ -27,7 +28,7 @@ import TenantsTab from '@/pages/settings/TenantsTab'
 import UserFormPanel from '@/pages/settings/UserFormPanel'
 import UsersTab from '@/pages/settings/UsersTab'
 import type { AxiosError } from 'axios'
-import { useProviderSettings, useSettings, useUpdateSettings, useUpsertProviderSettings } from '@/api/hooks'
+import { useProviderSettings, useUpsertProviderSettings } from '@/api/hooks'
 import type { MedicationCompetencyMode, ParticipantReadinessMode, ProviderSettingsDto, UpsertProviderSettingsDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -83,11 +84,11 @@ export default function SettingsPage() {
     const framed = (content: ReactNode) => <SettingsSection {...frame} wide={def.wide}>{content}</SettingsSection>
     switch (def.key) {
       case 'profile': return framed(<ProfileSection />)
-      case 'notifications': return framed(<NotificationPreferencesTab />)
+      case 'notifications': return <NotificationPreferencesTab {...frame} />
       case 'appearance': return framed(<AppearanceSection />)
       // shortcut: one Provider settings form behind all three keys until the split later in this PR (Tasks 11 and 12).
       case 'organisation': case 'billing': case 'safety': return framed(<ProviderSettingsTab />)
-      case 'alerts': return framed(<QualificationSettingsTab />)
+      case 'alerts': return <AlertWindowsSection {...frame} />
       case 'pricing': return framed(<PlanPricingSettingsTab />)
       case 'budgets': return framed(<BudgetSettingsTab />)
       case 'templates': return framed(<EventTemplatesSection />)
@@ -148,66 +149,6 @@ export default function SettingsPage() {
         user={editingUser}
         defaultTenantId={defaultTenantId}
       />
-    </div>
-  )
-}
-
-function QualificationSettingsTab() {
-  const { data: settings } = useSettings()
-  const updateSettings = useUpdateSettings()
-  const [warningDays, setWarningDays] = useState<number>(30)
-  const [initialWarningDays, setInitialWarningDays] = useState<number | null>(null)
-  const [saved, setSaved] = useState(false)
-  // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the tab can cancel it: left
-  // running it fires setSaved into a tree that is gone.
-  const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    return () => {
-      if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (settings) {
-      setWarningDays(settings.qualificationWarningDays)
-      setInitialWarningDays(current => current ?? settings.qualificationWarningDays)
-    }
-  }, [settings])
-
-  const isDirty = initialWarningDays !== null && warningDays !== initialWarningDays
-  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
-
-  function handleSave() {
-    updateSettings.mutate({ qualificationWarningDays: warningDays }, {
-      onSuccess: () => {
-        setInitialWarningDays(warningDays)
-        setSaved(true)
-        if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
-        savedResetTimer.current = setTimeout(() => setSaved(false), 2000)
-      },
-    })
-  }
-
-  return (
-    <div className="max-w-md flex flex-col gap-[var(--section-gap)]">
-      {unsavedChangesDialog}
-      <div>
-        <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Qualification Warning Window</h2>
-        <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
-          Staff qualifications expiring within this window will appear as warnings on the
-          Qualifications page and Dashboard.
-        </p>
-        <Dropdown
-          variant="form"
-          value={String(warningDays)}
-          onChange={v => setWarningDays(Number(v))}
-          items={[7, 14, 30, 60, 90].map(d => ({ value: String(d), label: `${d} days` }))}
-          label="Select warning window"
-        />
-      </div>
-      <Button size="md" onClick={handleSave} disabled={updateSettings.isPending}>
-        {updateSettings.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
-      </Button>
     </div>
   )
 }
