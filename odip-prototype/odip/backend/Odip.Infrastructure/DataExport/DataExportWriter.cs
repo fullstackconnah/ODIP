@@ -42,7 +42,8 @@ public static class DataExportWriter
         await WriteTextAsync(zip, ReadmeName, Readme(db, tables, generatedAtUtc, build), ct);
         await WriteTextAsync(zip, ManifestName, Manifest(counts, generatedAtUtc, build), ct);
         zip.Dispose();
-        await output.FlushAsync(ct);
+        // Not ct: the ZIP is whole once Dispose has written its end. A client leaving now must not fail the export (and cost its audit row).
+        await output.FlushAsync(CancellationToken.None);
     }
 
     private static async Task<long> WriteTableAsync(ZipArchive zip, OdipDbContext db, Guid tenantId, ExportTable table, CancellationToken ct)
