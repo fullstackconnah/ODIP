@@ -64,8 +64,9 @@ export function useCreateShift() {
     onSuccess: (_, data) => {
       refreshBudgetFigures(qc, [data.participantId])   // a new shift is booked ahead in its participant's budget
       qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write: the Tasks list must not be served stale
-      return qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
+    // onSettled, as assign, move and publish: a refused save (an empty-day move whose source changed, 409; findings, 422) refetches the board too.
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
 
@@ -77,8 +78,9 @@ export function useUpdateShift() {
     onSuccess: () => {
       refreshBudgetFigures(qc)   // its times, status or day changed what it costs, and where; the update names no participant, so every ledger held is refreshed
       qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write
-      return qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
+    // onSettled: a refused PUT (busy, locked or findings) refetches the board too, so the panel and the board show the server's truth.
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
 
