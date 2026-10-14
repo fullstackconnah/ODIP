@@ -36,6 +36,7 @@ import { plural } from '@/lib/format'
 import { useTabParam } from '@/hooks/useTabParam'
 import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
 import ImportDataTab from '@/pages/settings/ImportDataTab'
+import DataExportTab from '@/pages/settings/DataExportTab'
 import { Callout } from '@/components/Callout'
 
 function QualificationSettingsTab() {
@@ -152,6 +153,8 @@ export default function SettingsPage() {
     { key: 'provider' as const, label: 'Provider settings' },
     // Settings → Import data: an Admin, or a SuperAdmin viewing as the organisation (ImportsController; an import belongs to one organisation).
     { key: 'import' as const, label: 'Import data', hidden: !canImportData },
+    // Settings → Data export: the same gate. DataExportController admits Admin and SuperAdmin, and answers 400 to a SuperAdmin who hasn't chosen an organisation.
+    { key: 'export' as const, label: 'Data export', hidden: !canImportData },
     // The pricing engine's own answers (registration groups, crossing policy, travel rates): the provider's to set, so Admins and SuperAdmins only.
     { key: 'pricing' as const, label: 'Plan pricing', hidden: !(isAdmin || isSuperAdmin) },
     // What a budget check does about a one-off shift that would put a participant over budget, and when a participant counts as approaching it (budget phase 1 stores the choice): Admins and SuperAdmins only.
@@ -246,6 +249,7 @@ export default function SettingsPage() {
       {tab === 'appearance' && <AppearanceSettingsTab />}
       {tab === 'provider' && <ProviderSettingsTab />}
       {tab === 'import' && <ImportDataTab />}
+      {tab === 'export' && <DataExportTab />}
       {tab === 'pricing' && <PlanPricingSettingsTab />}
       {tab === 'budgets' && <BudgetSettingsTab />}
       {tab === 'catalogue' && <SupportCatalogueTab />}
