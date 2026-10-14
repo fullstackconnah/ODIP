@@ -70,3 +70,36 @@ describe('switchViewAndReload when the reload goes ahead', () => {
     expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-b')
   })
 })
+
+describe('switchViewAndReload when the first act after staying is a bare click or a submit', () => {
+  // A screen reader in browse mode, voice control or a scripted .click() sends a click with no pointerdown or keydown before it.
+  it('puts the old organisation back before a bare click on Save sends anything', async () => {
+    stubReload()
+    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    switchViewAndReload(() => localStorage.setItem('odip_viewing_tenant', 'tenant-b'))
+    const save = document.createElement('button')
+    let sent: Promise<Record<string, string>> | null = null
+    save.addEventListener('click', () => { sent = nextRequestHeaders() })
+    document.body.appendChild(save)
+
+    save.click()
+
+    expect((await sent!)['X-View-As-Tenant']).toBe('tenant-a')
+    save.remove()
+  })
+
+  it('puts it back before a form submits', () => {
+    stubReload()
+    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    switchViewAndReload(() => localStorage.setItem('odip_viewing_tenant', 'tenant-b'))
+    const form = document.createElement('form')
+    let seen: string | null = null
+    form.addEventListener('submit', e => { e.preventDefault(); seen = localStorage.getItem('odip_viewing_tenant') })
+    document.body.appendChild(form)
+
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+
+    expect(seen).toBe('tenant-a')
+    form.remove()
+  })
+})
