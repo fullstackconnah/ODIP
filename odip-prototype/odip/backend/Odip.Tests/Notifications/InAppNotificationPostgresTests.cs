@@ -1,5 +1,11 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Odip.Api.Controllers;
+using Odip.Application.Common;
+using Odip.Application.DTOs;
 using Odip.Domain.Notifications;
 using Odip.Infrastructure.Data;
 using Odip.Tests.Postgres;
@@ -55,5 +61,44 @@ public class InAppNotificationPostgresTests : IClassFixture<PostgresFixture>
 
         await using var check = PostgresFixture.NewContext(_pg.ConnectionString);
         Assert.Equal(5000, (await check.InAppNotifications.SingleAsync(n => n.TenantId == tenantId)).Title.Length);
+    }
+
+    private static NotificationsController Caller(OdipDbContext db, Guid userId) => new(db)
+    {
+        ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, userId.ToString()) }, "Test")),
+            },
+        },
+    };
+
+    private static InboxDto Inbox(ActionResult<ApiResponse<InboxDto>> result) =>
+        ((ApiResponse<InboxDto>)((OkObjectResult)result.Result!).Value!).Data!;
+
+    [SkippableFact]
+    public async Task TheInbox_TranslatesToSql_OwnRowsNewestFirst_ThenReadAllEmptiesTheCount()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using (db)
+        {
+            var me = Guid.NewGuid();
+            var now = DateTime.UtcNow;
+            var oldest = Row(tenantId, me, now.AddMinutes(-30));
+            var newest = Row(tenantId, me, now.AddMinutes(-1));
+            var middle = Row(tenantId, me, now.AddMinutes(-10));
+            db.InAppNotifications.AddRange(oldest, newest, middle, Row(tenantId, Guid.NewGuid(), now));
+            await db.SaveChangesAsync();
+            var controller = Caller(db, me);
+
+            var inbox = Inbox(await controller.GetInbox(30, CancellationToken.None));
+            Assert.Equal(new[] { newest.Id, middle.Id, oldest.Id }, inbox.Items.Select(i => i.Id));
+            Assert.Equal(3, inbox.UnreadCount);
+
+            Assert.IsType<NoContentResult>(await controller.MarkAllInboxRead(CancellationToken.None));
+            Assert.Equal(0, Inbox(await controller.GetInbox(30, CancellationToken.None)).UnreadCount);
+        }
     }
 }

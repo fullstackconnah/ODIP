@@ -66,3 +66,21 @@ public record SendTestEmailDto
 {
     public string To { get; init; } = string.Empty;
 }
+
+/// <summary>One bell item, GET api/v1/notifications/inbox. Title is plain text built on the server; LinkTo and ReadAt are omitted when null.</summary>
+public record InAppNotificationDto
+{
+    public Guid Id { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public string? LinkTo { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime? ReadAt { get; init; }
+}
+
+/// <summary>GET api/v1/notifications/inbox: the caller's newest items, their unread count over every item they have, and whether older items exist past `take`.</summary>
+public record InboxDto
+{
+    public List<InAppNotificationDto> Items { get; init; } = new();
+    public int UnreadCount { get; init; }
+    public bool HasMore { get; init; }
+}
