@@ -7,8 +7,8 @@ export type ImportRowStatus = 'Ready' | 'Skipped' | 'Invalid'
 
 export interface ImportFieldDto { key: string; label: string; required: boolean }
 export interface ImportColumnDto { index: number; header: string; field: string | null; note: string | null }
-/** One row's outcome. Warnings want a look before importing; notes only say what the row does. */
-export interface ImportRowDto { rowNumber: number; name: string; status: ImportRowStatus; reasons: string[]; warnings: string[]; notes: string[]; skipReason: string | null }
+/** One row's outcome. Warnings want a look before importing; notes only say what the row does; detail is what it will create (funding rows). */
+export interface ImportRowDto { rowNumber: number; name: string; status: ImportRowStatus; reasons: string[]; warnings: string[]; notes: string[]; skipReason: string | null; detail: string | null }
 
 export interface ImportPreviewDto {
   fields: ImportFieldDto[]

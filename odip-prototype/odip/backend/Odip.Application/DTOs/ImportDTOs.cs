@@ -13,8 +13,8 @@ public record ImportFieldDto(string Key, string Label, bool Required);
 /// <summary>A column of the uploaded file, the field it is matched to (null: Don't import), and a note when ODIP won't import it.</summary>
 public record ImportColumnDto(int Index, string Header, string? Field, string? Note);
 
-/// <summary>One row's outcome. <see cref="Warnings"/> want a look before importing; <see cref="Notes"/> only say what the row does.</summary>
-public record ImportRowDto(int RowNumber, string Name, ImportRowStatus Status, List<string> Reasons, List<string> Warnings, string? SkipReason, List<string> Notes);
+/// <summary>One row's outcome. <see cref="Warnings"/> want a look before importing; <see cref="Notes"/> only say what the row does; <see cref="Detail"/> is what it will create.</summary>
+public record ImportRowDto(int RowNumber, string Name, ImportRowStatus Status, List<string> Reasons, List<string> Warnings, string? SkipReason, List<string> Notes, string? Detail);
 
 /// <summary>What a preview found. <see cref="CreateCount"/> is what Import would create: the ready rows or, for funding plans, the plans they make.</summary>
 public record ImportPreviewDto(List<ImportFieldDto> Fields, List<ImportColumnDto> Columns, List<ImportRowDto> Rows,

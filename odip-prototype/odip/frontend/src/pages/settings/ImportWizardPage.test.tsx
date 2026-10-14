@@ -25,8 +25,8 @@ const previewOf = (fields: (string | null)[]): ImportPreviewDto => ({
   fields: FIELDS,
   columns: [{ index: 0, header: 'Given', field: fields[0], note: null }, { index: 1, header: 'Surname', field: fields[1], note: null }],
   rows: [
-    { rowNumber: 2, name: 'Ava Stone', status: 'Ready', reasons: [], warnings: [], notes: [], skipReason: null },
-    { rowNumber: 3, name: 'Ben', status: 'Invalid', reasons: ['Last name is required.'], warnings: [], notes: [], skipReason: null },
+    { rowNumber: 2, name: 'Ava Stone', status: 'Ready', reasons: [], warnings: [], notes: [], skipReason: null, detail: null },
+    { rowNumber: 3, name: 'Ben', status: 'Invalid', reasons: ['Last name is required.'], warnings: [], notes: [], skipReason: null, detail: null },
   ],
   readyCount: 1, skippedCount: 0, invalidCount: 1, previouslyImportedAt: null, createCount: 1,
 })
@@ -220,8 +220,8 @@ describe('ImportWizardPage', () => {
     preview.mockResolvedValue({
       ...previewOf(['firstName', 'lastName']), readyCount: 2, invalidCount: 0, createCount: 2,
       rows: [
-        { rowNumber: 2, name: 'Ava Stone', status: 'Ready', reasons: [], warnings: [check], notes: [], skipReason: null },
-        { rowNumber: 3, name: 'Cal Wu', status: 'Ready', reasons: [], warnings: [], notes: [note], skipReason: null },
+        { rowNumber: 2, name: 'Ava Stone', status: 'Ready', reasons: [], warnings: [check], notes: [], skipReason: null, detail: null },
+        { rowNumber: 3, name: 'Cal Wu', status: 'Ready', reasons: [], warnings: [], notes: [note], skipReason: null, detail: '01 Assistance with Daily Life, plan-managed, $1,000.00, 1 Jul 2026 to 30 Jun 2027' },
       ],
     })
     renderWizard()
@@ -233,6 +233,8 @@ describe('ImportWizardPage', () => {
     // The warning is named in words, not only by its colour; the note is not.
     expect(screen.getByText(check).closest('li')).toHaveTextContent(/^Check: /)
     expect(screen.getByText(note).closest('li')).not.toHaveTextContent(/Check:/)
+    // What each row will create, so a misread amount or category is seen before the import.
+    expect(screen.getByText('01 Assistance with Daily Life, plan-managed, $1,000.00, 1 Jul 2026 to 30 Jun 2027')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('radio', { name: 'To check (1)' }))
     expect(screen.queryByText('Cal Wu')).toBeNull()
     expect(screen.getByText('Ava Stone')).toBeInTheDocument()

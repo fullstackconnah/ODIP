@@ -284,6 +284,8 @@ public static class ImportFundingRows
             {
                 UnreadNdis = ndisKey is null && ImportParticipantRows.NdisKey(ndis) is { Length: > 0 } typed ? typed : null,
             };
+        if (category is { } c && management is { } m && amount is { } a && start is { } from && end is { } to)
+            plan.Detail = $"{(c == Core ? "Core" : $"{c:00} {PaceCategories.NameOf(c)}")}, {Words(m)}, ${Money(a)}, {Say(from)} to {Say(to)}";
         if (ndis.Length > 0 && ndisKey is null && known) plan.Warnings.Add("The NDIS number isn't 9 digits, so this row finds its participant by name and date of birth.");
         if (first == ImportParticipantRows.ExampleFirstName && last == ImportParticipantRows.ExampleLastName) plan.Skip("This is the template's example row.");
         else if (category == RecurringTransport) plan.Skip("Recurring Transport (18) is paid to the participant and never claimed by providers, so ODIP doesn't record it.");

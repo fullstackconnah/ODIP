@@ -72,7 +72,7 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
       // meta on a phone card: one muted line, and a Ready row with nothing to say shows no empty Details label.
       key: 'details', header: 'Details', wrap: true, mobile: 'meta',
       render: r => {
-        const plain = [...(r.skipReason ? [r.skipReason] : []), ...r.reasons]
+        const plain = [...(r.detail ? [r.detail] : []), ...(r.skipReason ? [r.skipReason] : []), ...r.reasons]
         return plain.length + r.warnings.length + r.notes.length > 0 && (
           <ul className="text-sm">
             {plain.map(text => <li key={text}>{text}</li>)}

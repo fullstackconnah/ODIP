@@ -330,4 +330,18 @@ public class ImportFundingRowsTests
         var plans = Checked(NoPlans, Line("430000001", "01", "Plan managed", "1000"), Line("430000002", "15", "Plan managed", "500"));
         Assert.Equal((ImportRowStatus.Ready, Ava), (plans[0].Status, ImportFundingRows.Plans(plans).Single().ParticipantId));
     }
+
+    [Fact]
+    public void Each_readable_row_says_what_it_will_create_so_the_preview_shows_the_figures()
+    {
+        var plans = Read(
+            Line("430000001", "01", "Plan-managed", "$12,500.50"),
+            Line("430000001", "Core", "NDIA managed", "300"),
+            Line("430000001", "15", "Self managed", "lots"));
+
+        Assert.Equal("01 Assistance with Daily Life, plan-managed, $12,500.50, 1 Jul 2026 to 30 Jun 2027", plans[0].Detail);
+        Assert.Equal("Core, NDIA-managed, $300.00, 1 Jul 2026 to 30 Jun 2027", plans[1].Detail);
+        Assert.Null(plans[2].Detail);
+        Assert.Equal(plans[0].Detail, plans[0].ToDto().Detail);
+    }
 }
