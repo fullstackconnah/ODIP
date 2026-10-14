@@ -96,7 +96,8 @@ const EMAIL = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/
 /** The client's mirror of the server's checks, in the brief's words. The server is the floor. A past time is checked only when the time changed. */
 export function validateBooking(
   form: BookingForm,
-  opts: { askEmail: boolean; firstName: string; timeChanged: boolean; zone: string; now?: Date },
+  /** pastVisitChange: the saved visit has passed and this save would send an invite (the server refuses it unless the time changes). */
+  opts: { askEmail: boolean; firstName: string; timeChanged: boolean; zone: string; now?: Date; pastVisitChange?: boolean },
 ): BookingErrors {
   const errors: BookingErrors = {}
   if (opts.askEmail && !form.email.trim()) errors.email = `Add ${opts.firstName}'s email to send the invite.`
@@ -107,6 +108,7 @@ export function validateBooking(
     const start = providerLocalToUtcInstant(`${form.date}T${form.time}`, opts.zone)
     if (!start || parseApiDate(start).getTime() <= (opts.now ?? new Date()).getTime()) errors.time = "Choose a time that hasn't passed."
   }
+  if (opts.pastVisitChange && !opts.timeChanged) errors.time = 'This visit has passed. Change the date and time to book another.'
   if (!form.location.trim()) errors.location = 'Say where the visit is.'
   else if (form.location.trim().length > 300) errors.location = 'Keep it under 300 characters.'
   if (!form.staffUserId) errors.staffUserId = "Choose who's going."

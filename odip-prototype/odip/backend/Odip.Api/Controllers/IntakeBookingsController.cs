@@ -73,6 +73,10 @@ public class IntakeBookingsController : ControllerBase
 
         var errors = new Dictionary<string, string[]>();
         if (sends && timeChanged && startsAt <= now) errors["startsAt"] = ["Choose a time that hasn't passed."];
+        // A visit that has happened (as Cancel and Send again judge it) is rebooked only at a new time: any other invite change would email an
+        // "updated" invite for a time already gone. Its notes still save.
+        else if (sends && !timeChanged && ProviderLocalTime.AsUtc(inquiry.IntakeStartsAt!.Value).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) <= now)
+            errors["startsAt"] = ["This visit has passed. Change the date and time to book another."];
         if (dto.DurationMinutes is < 15 or > 480) errors["durationMinutes"] = ["Choose a length between 15 minutes and 8 hours."];
         if (location is null) errors["location"] = ["Say where the visit is."];
         else if (location.Length > 300) errors["location"] = ["Keep it under 300 characters."];

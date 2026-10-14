@@ -95,6 +95,15 @@ describe('the booking form', () => {
     expect(validateBooking({ ...past, email: 'noah@' }, { askEmail: true, firstName: 'Noah', timeChanged: false, zone: 'Australia/Sydney', now: NOW }).email)
       .toBe('Enter a full email address, like name@example.com.')
   })
+
+  // Fix round 1, S2: the server's rule, mirrored. A passed visit can be rebooked at a new time, never re-sent at its old one.
+  it('refuses an invite change to a passed visit unless its time changes', () => {
+    const form = bookingFormOf(row(), 'dana')
+    const opts = { askEmail: false, firstName: 'Noah', zone: 'Australia/Sydney', now: NOW, pastVisitChange: true }
+    expect(validateBooking(form, { ...opts, timeChanged: false }).time).toBe('This visit has passed. Change the date and time to book another.')
+    expect(validateBooking(form, { ...opts, timeChanged: true }).time).toBeUndefined()
+    expect(validateBooking(form, { ...opts, timeChanged: false, pastVisitChange: false })).toEqual({})
+  })
 })
 
 describe('who can go', () => {

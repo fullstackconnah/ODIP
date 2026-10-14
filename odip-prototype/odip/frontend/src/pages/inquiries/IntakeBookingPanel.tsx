@@ -137,7 +137,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
   async function submit() {
     if (inFlight.current) return
     // The email is asked for only by a save that emails: notes on a visit whose enquiry has lost its address still save.
-    const found = validateBooking(effective, { askEmail: askEmail && sends, firstName: current.firstName, timeChanged, zone })
+    const found = validateBooking(effective, { askEmail: askEmail && sends, firstName: current.firstName, timeChanged, zone, pastVisitChange: past && sends })
     setErrors(found)
     setRefusal(null)
     const firstBad = FIELD_ORDER.find(f => found[f])

@@ -241,6 +241,26 @@ public class IntakeBookingsControllerTests
         Assert.Single(f.Channel.Sent);
     }
 
+    // Fix round 1, S2: a visit that has passed can only be rebooked at a new time. Any other change the invite states would email the family
+    // an "updated" invite for a time already gone, so it is refused, nothing is sent and the revision stays.
+    [Fact]
+    public async Task A_past_visit_refuses_an_invite_change_unless_its_time_changes()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        var outboxBefore = f.Outbox().Count;
+
+        var result = await f.Controller(now: Start.AddHours(3)).Set(f.Noah.Id, f.Body() with { Location = "Somewhere else" }, CancellationToken.None);
+
+        Assert.Equal(["This visit has passed. Change the date and time to book another."], Problems(result.Result!)["startsAt"]);
+        Assert.Single(f.Channel.Sent);
+        Assert.Equal(outboxBefore, f.Outbox().Count);
+        Assert.Equal((0, "12 Smith St, Parramatta"), (f.Row().IntakeIcsSequence, f.Row().IntakeLocation));
+
+        var rebooked = await f.Controller(now: Start.AddHours(3)).Set(f.Noah.Id, f.Body() with { StartsAt = Start.AddDays(2), Location = "Somewhere else" }, CancellationToken.None);
+        Assert.Equal("Somewhere else", Ok<ParticipantInquiryDto>(rebooked.Result!).IntakeLocation);
+    }
+
     // A staff member deactivated (or moved to support worker) after booking keeps the visit until it is rescheduled; then someone eligible must go.
     [Fact]
     public async Task A_since_deactivated_staff_member_keeps_the_visit_until_it_is_rescheduled()
