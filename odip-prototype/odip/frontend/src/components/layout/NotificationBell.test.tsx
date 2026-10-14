@@ -50,7 +50,7 @@ function renderBell() {
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={['/trips']}>
         <Routes>
-          <Route path="*" element={<><NotificationBell /><button type="button">Elsewhere</button><Link to="/staff">Go to staff</Link><Where /></>} />
+          <Route path="*" element={<><NotificationBell /><button type="button">Elsewhere</button><p>Plain text</p><Link to="/staff">Go to staff</Link><Where /></>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -195,7 +195,87 @@ describe('NotificationBell: the panel, from lg', () => {
   })
 })
 
+describe('NotificationBell: where focus goes when the panel closes (fix round 1)', () => {
+  beforeEach(desktop)
+
+  it('stays open when the window loses focus (alt-tab: a blur with no related target)', async () => {
+    renderBell()
+    await ready()
+    fireEvent.click(bell())
+    fireEvent.focusOut(bell(), { relatedTarget: null })
+    expect(heading()).not.toBeNull()
+  })
+
+  it('a click on nothing focusable outside closes it and puts focus back on the bell', async () => {
+    renderBell()
+    await ready()
+    fireEvent.click(bell())
+    screen.getByRole('link', { name: /^Unread: Sam Lee asked for annual leave/ }).focus()
+
+    fireEvent.mouseDown(screen.getByText('Plain text'))
+
+    expect(heading()).toBeNull()
+    await waitFor(() => expect(bell()).toHaveFocus())
+  })
+
+  it('a click or Tab to a real target outside closes it and leaves focus on that target', async () => {
+    renderBell()
+    await ready()
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' })
+    fireEvent.click(bell())
+    fireEvent.mouseDown(elsewhere)
+    act(() => elsewhere.focus()) // the browser moves focus to what was clicked
+    expect(heading()).toBeNull()
+    await act(async () => { await new Promise(r => setTimeout(r, 0)) })
+    expect(elsewhere).toHaveFocus()
+
+    bell().focus()
+    fireEvent.click(bell())
+    act(() => elsewhere.focus()) // Tab out of the panel: focus leaves for the next control
+    expect(heading()).toBeNull()
+    await act(async () => { await new Promise(r => setTimeout(r, 0)) })
+    expect(elsewhere).toHaveFocus()
+  })
+
+  it('a chosen item that navigates leaves focus to the new page, not the bell', async () => {
+    renderBell()
+    await ready()
+    fireEvent.click(bell())
+    const link = screen.getByRole('link', { name: /^Unread: Sam Lee asked for annual leave/ })
+    link.focus()
+    fireEvent.click(link)
+    expect(screen.getByTestId('where')).toHaveTextContent('/rostering/leave')
+    await act(async () => { await new Promise(r => setTimeout(r, 0)) })
+    expect(bell()).not.toHaveFocus()
+  })
+
+  it('a chosen item that does not navigate keeps the panel open with focus on it, and focus goes to the bell when it then closes', async () => {
+    renderBell()
+    await ready()
+    fireEvent.click(bell())
+    const item = screen.getByRole('button', { name: /^Unread: You have a new notification/ })
+    item.focus()
+    fireEvent.click(item)
+    expect(heading()).not.toBeNull()
+    expect(item).toHaveFocus()
+
+    fireEvent.keyDown(item, { key: 'Escape' })
+    expect(bell()).toHaveFocus()
+  })
+})
+
 describe('NotificationBell: below lg', () => {
+  it('a chosen link closes the SlideOver and the house dialog gives focus back to the bell (fix round 1, item 2c)', async () => {
+    renderBell()
+    await ready()
+    bell().focus()
+    fireEvent.click(bell())
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('link', { name: /^Unread: Sam Lee asked for annual leave/ }))
+    expect(screen.getByTestId('where')).toHaveTextContent('/rostering/leave')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(bell()).toHaveFocus()
+  })
+
   it('opens the SlideOver "Notifications" outside the header, Mark all as read in its footer; Escape closes it and focus returns to the bell', async () => {
     renderBell()
     await ready()

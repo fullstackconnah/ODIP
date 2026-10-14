@@ -46,7 +46,12 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!open || isBelowLg) return
     const onMouseDown = (e: MouseEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false)
+      if (wrapperRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+      // Focus follows a click on a real control. A click on nothing focusable leaves it on the page body, so it comes back to the bell.
+      setTimeout(() => {
+        if (!document.activeElement || document.activeElement === document.body) bellRef.current?.focus()
+      })
     }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -81,8 +86,10 @@ export default function NotificationBell() {
     // The button is about to disappear: keep focus in the panel, on its heading, rather than dropping it to the page.
     ;(headingRef.current ?? slideOverTitleRef.current)?.focus()
   }
+  // Focus leaving for another control (Tab, or a click on one) closes the panel and stays where the user put it. A blur with
+  // no related target is the window losing focus (alt-tab), which leaves the panel open.
   const onBlur = (e: FocusEvent) => {
-    if (!isBelowLg && !wrapperRef.current?.contains(e.relatedTarget as Node | null)) setOpen(false)
+    if (!isBelowLg && e.relatedTarget && !wrapperRef.current?.contains(e.relatedTarget as Node)) setOpen(false)
   }
 
   const list = <NotificationList inbox={inbox} onChoose={choose} markAllFailed={markAll.isError} />
