@@ -7,7 +7,7 @@ export interface RenewalSide {
   catalogueVersion: string
 }
 
-/** One line of the renewal review (agreement PR 2, D10): the old revision's against the renewal's. `old` is null for a line only the renewal has, `renewal` for one the new price list has not got. */
+/** One line of the renewal review (agreement PR 2, D10): the old revision's against the renewal's. `old` is null for a line only the renewal has, `renewal` for an old one it has not got (a withdrawn item, or days outside its dates). */
 export interface RenewalRow {
   key: string
   blockId: string | null

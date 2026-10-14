@@ -29,7 +29,10 @@ export function RenewalReview({ renewal, renewedFrom, oldLines, oldFailed, onRet
   const now = `v${renewal.version}`
   const rows = oldLines ? renewalComparison(oldLines, renewal.lines) : []
   const totals = renewalTotals(rows)
-  const missing = rows.filter(row => row.renewal === null).length
+  // An old line with no partner is missing from the price list only when the renewal's own pricing says its block has no item; otherwise its days (a public holiday, say) just do not fall in the renewal's dates.
+  const withdrawn = new Set((renewal.pricing?.issues ?? []).filter(issue => issue.reason === 'NoItem' || issue.reason === 'CatalogueNotFound').map(issue => issue.blockId))
+  const isMissing = (row: RenewalRow) => row.renewal === null && withdrawn.has(row.blockId ?? '')
+  const missing = rows.filter(isMissing).length
   const columns: Column<RenewalRow>[] = [
     {
       key: 'support', header: 'Support', mobile: 'primary',
@@ -41,7 +44,8 @@ export function RenewalReview({ renewal, renewedFrom, oldLines, oldFailed, onRet
     { key: 'newTotal', header: `${now} total`, align: 'right', render: row => money(row.renewal, side => side.total) },
     {
       key: 'priceList', header: 'Price list', mobile: 'status',
-      render: row => row.renewal === null ? <StatusBadge tone="warning" label="Not in the new price list" />
+      render: row => isMissing(row) ? <StatusBadge tone="warning" label="Not in the new price list" />
+        : row.renewal === null ? <StatusBadge tone="neutral" label={`Not in ${now}'s dates`} />
         : row.old === null ? <StatusBadge tone="info" label="New" />
         : `${row.old.catalogueVersion} to ${row.renewal.catalogueVersion}`,
     },
