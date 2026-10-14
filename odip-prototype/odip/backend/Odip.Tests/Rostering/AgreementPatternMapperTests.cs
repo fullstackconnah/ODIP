@@ -192,4 +192,14 @@ public class AgreementPatternMapperTests
         Assert.Equal(11, AgreementPatternMapper.Count(blocks));
         Assert.Equal(100, AgreementPatternMapper.MaxPatternsPerApproval);
     }
+
+    [Fact]
+    public void ShapeOf_is_RatioOf_backwards_and_has_no_answer_for_shared_support_or_other()
+    {
+        foreach (var ratio in Enum.GetValues<SupportRatio>())
+        {
+            if (AgreementPatternMapper.ShapeOf(ratio) is { } shape) Assert.Equal(ratio, AgreementPatternMapper.RatioOf(shape.Workers, shape.ParticipantsPresent));
+            else Assert.True(ratio is SupportRatio.SharedSupport or SupportRatio.Other, ratio.ToString());
+        }
+    }
 }

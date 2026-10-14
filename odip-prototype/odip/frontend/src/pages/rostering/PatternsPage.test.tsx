@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import PatternsPage from './PatternsPage'
 import type { ShiftPatternDto } from '@/api/types'
+import { MemoryRouter } from 'react-router-dom'
 
 // Activating and deactivating a pattern is a PUT the readiness gate can refuse. In Enforce mode the API answers 400
 // "Participant is not ready for booking or rostering."; the page used to swallow it (the activate had no error handler at all and
@@ -26,6 +27,7 @@ vi.mock('@/api/hooks', () => ({
   useCreatePattern: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeletePattern: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useGeneratePattern: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  usePatternChange: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 const NOT_READY_MESSAGE = 'Participant is not ready for booking or rostering.'
@@ -185,6 +187,21 @@ describe('PatternsPage — patterns made by an agreement', () => {
     id: 'pattern-agreement', dayOfWeek: 'Tuesday', notes: 'From agreement v2: Community access, community',
     sourceDraftId: 'draft-2', sourceBlockKey: 'mornings', sourceDraftVersion: 2, workerSlot: 1, requirements: { workerGender: 'Female', driver: true, skills: ['FirstAid', 'ManualHandling'] },
     ...overrides,
+  })
+
+  it("hands the panel the days of an agreement pattern's block, for a change to every day of it", async () => {
+    const user = userEvent.setup()
+    mockUsePatterns.mockReturnValue({
+      data: [agreement({ id: 'p-wed', dayOfWeek: 'Wednesday' }), agreement({ id: 'p-mon', dayOfWeek: 'Monday' }), makePattern({ id: 'pattern-hand', dayOfWeek: 'Friday' })],
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    // The panel's notice links to the agreement page, so this one renders inside a router.
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
+
+    await user.click(screen.getByRole('button', { name: /^Edit .*Wednesday/ }))
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+
+    expect(screen.getByLabelText('Change every day of this support (Mon, Wed)')).toBeInTheDocument()
   })
 
   it('badges a pattern with the version of the agreement it came from, and shows what it asks of a worker, on its own row', () => {

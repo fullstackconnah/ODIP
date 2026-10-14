@@ -59,6 +59,18 @@ public static class AgreementPatternMapper
         _ => SupportRatio.Other,
     };
 
+    /// <summary>The workers and participants present a roster ratio stands for: <see cref="RatioOf"/> backwards. None for shared support and Other, which do not say how many participants there are.</summary>
+    public static (int Workers, int ParticipantsPresent)? ShapeOf(SupportRatio ratio) => ratio switch
+    {
+        SupportRatio.OneToOne => (1, 1),
+        SupportRatio.TwoToOne => (2, 1),
+        SupportRatio.OneToTwo => (1, 2),
+        SupportRatio.OneToThree => (1, 3),
+        SupportRatio.OneToFour => (1, 4),
+        SupportRatio.OneToFive => (1, 5),
+        _ => null,
+    };
+
     /// <summary>A block where the worker may sleep is a sleepover; otherwise one that crosses midnight (its end is not after its start) is an active night; otherwise it is none.</summary>
     public static SleepoverType NightTypeOf(PlanBlock block) => block.WorkerMaySleep ? SleepoverType.Sleepover : block.EndsNextDay ? SleepoverType.ActiveNight : SleepoverType.None;
 

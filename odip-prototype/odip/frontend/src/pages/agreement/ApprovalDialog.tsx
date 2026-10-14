@@ -10,6 +10,7 @@ import { CheckboxField } from '@/components/CheckboxField'
 import { Modal } from '@/components/Modal'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { plural } from '@/lib/format'
 import { httpStatusOf } from '@/lib/httpStatus'
 import { shiftWords, type ShiftGroup } from '@/lib/agreementShifts'
@@ -57,7 +58,7 @@ function failureMessages(error: unknown): string[] {
 
 type Failure = { timedOut: boolean; messages: string[] }
 
-const timeRange = (pattern: OverlappingPatternDto) => `${formatShiftTime(pattern.startTime)}–${formatShiftTime(pattern.endTime)}${pattern.endsNextDay ? ' +1' : ''}`
+const timeRange = (pattern: Pick<OverlappingPatternDto, 'startTime' | 'endTime' | 'endsNextDay'>) => `${formatShiftTime(pattern.startTime)}–${formatShiftTime(pattern.endTime)}${pattern.endsNextDay ? ' +1' : ''}`
 
 type ApprovalDialogProps = {
   open: boolean
@@ -76,7 +77,7 @@ type ApprovalDialogProps = {
 /**
  * The confirm screen of "Mark approved". It is built from the server's preview (nothing is done until Approve is pressed): when the revision can be approved it says plainly what approval does, the
  * patterns it makes and the unfilled shifts it generates up to when (and, while the daily top-up is on, that more are added each day until the agreement ends), the patterns of the revision before it that end the day before this
- * one starts, the old version's shifts that stay on the roster (with a link to them, in a new tab so the person can look and come back), the hand-made patterns that overlap (which are never changed, and
+ * one starts, what it removes and carries of the old version's shifts, and the ones it leaves, listed (with a link to them, in a new tab so the person can look and come back), the hand-made patterns that overlap (which are never changed, and
  * need a box ticked), and that an approval cannot be undone; when it cannot be approved, it lists every reason, each with the block it is about and what to do. It does not sign anything. While the
  * approval is on its way nothing closes it: the request has been sent, and Cancel would only hide a dialog the approval goes on behind. That hold ends when the request does: an answer, or the time limit
  * (APPROVE_TIMEOUT_MS), after which it says no answer came back, to check the card, and that approving again is safe.
@@ -167,9 +168,13 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
   const ends = preview.patternsToEnd > 0 && preview.endsFromVersion !== undefined
     ? `Ends ${plural(preview.patternsToEnd, 'pattern')} from the agreement it replaces the day before ${start}.`
     : null
+  // What approval does to the replaced revision's shifts from this one's start: removes the unfilled drafts, carries those of a support that did not change, and leaves the rest for a person.
   const old = preview.oldShiftsRemaining
-  const oldCount = old.open + old.assigned
-  const oneOld = oldCount === 1
+  const removed = old.removed ?? 0
+  const carried = old.carried ?? 0
+  const kept = old.shifts ?? []
+  const keptCount = old.open + old.assigned
+  const oneKept = keptCount === 1
   const overlaps = preview.overlappingPatterns
   const manyOverlaps = overlaps.length > 1
 
@@ -181,20 +186,37 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
         <p>{`Creates ${patterns}, ${range}.`}</p>
         {makesShifts && <p>{`Makes ${plural(preview.shiftsToCreate, 'unfilled shift')} up to ${formatServiceDate(preview.horizonEnd!)}.${keepsGoing ? ' After that, unfilled shifts are added each day until the agreement ends.' : ''}`}</p>}
         {ends && <p>{ends}</p>}
+        {removed > 0 && old.firstDate && <p>{`Removes ${plural(removed, 'unfilled shift')} of the agreement it replaces, from ${formatServiceDate(old.firstDate)} on.`}</p>}
+        {carried > 0 && <p>{carried === 1 ? "Carries over 1 shift that doesn't change." : `Carries over ${carried} shifts that don't change.`}</p>}
+        {/* A matched support keeps its default worker (D10): only the changed ones start without one. */}
+        {(preview.changedPatterns ?? 0) > 0 && <p>{preview.changedPatterns === 1 ? 'The changed pattern starts with no default staff.' : 'The changed patterns start with no default staff.'}</p>}
+        {(preview.handEditedPatterns ?? 0) > 0 && <p>{preview.handEditedPatterns === 1 ? "1 pattern edited by hand goes back to the agreement's times." : `${preview.handEditedPatterns} patterns edited by hand go back to the agreement's times.`}</p>}
       </div>
       {preview.shiftsToCreate === 0 && (preview.shiftsNote
         ? <p>{preview.shiftsNote}</p>
         : <p>{topUpOn ? "No unfilled shifts yet. They are added each day as the agreement's dates come near." : 'No unfilled shifts are made now.'}</p>)}
       {/* Budget phase 3: where the shifts approval would make take a pool past its funding. Read in order with the rest of what approval does, so it does not announce itself; and never a reason to refuse. */}
       <BudgetWarnings warnings={preview.budgetWarnings} note="This is a warning only. Approving is not blocked." announce={false} />
-      {oldCount > 0 && old.firstDate && (
-        <p>
-          {old.open} unfilled and {old.assigned} assigned {oneOld ? 'shift' : 'shifts'} from the agreement it replaces, from {formatServiceDate(old.firstDate)} on, {oneOld ? 'stays' : 'stay'} on the roster. The new unfilled shifts will sit beside {oneOld ? 'it' : 'them'} on the same days.{' '}
+      {keptCount > 0 && (
+        <section aria-labelledby="kept-heading" className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]">
+          <h4 id="kept-heading" className="font-semibold">{`${plural(keptCount, 'shift')} of the agreement it replaces ${oneKept ? 'stays' : 'stay'} on the roster`}</h4>
+          <p className="text-[var(--color-muted-foreground)]">{oneKept
+            ? 'It has a worker, is published, or has a note or completion recorded, so approval leaves it as it is. Move it or cancel it.'
+            : 'They have a worker, are published, or have a note or completion recorded, so approval leaves them as they are. Move or cancel each one.'}</p>
+          <ul className="flex flex-col gap-1">
+            {kept.map(shift => (
+              <li key={shift.id} className="flex flex-wrap items-center gap-2">
+                <span>{`${formatServiceDate(shift.serviceDate)} ${timeRange(shift)} · ${shift.workerName ?? 'Unfilled'}`}</span>
+                <StatusBadge status={shift.status} />
+              </li>
+            ))}
+          </ul>
+          {keptCount > kept.length && <p>{`And ${keptCount - kept.length} more.`}</p>}
           {/* A new tab: the person can look at the roster and come back to approve, instead of losing the dialog and its preview. */}
-          <Link className="font-medium underline" to={rosterLink(old.firstDate, participantId)} target="_blank" rel="noopener noreferrer">
-            {oneOld ? 'See it on the roster' : 'See them on the roster'}<span className="sr-only"> (opens in a new tab)</span>
+          <Link className={`${TAP_FLOOR} self-start font-medium underline`} to={rosterLink(kept[0]?.serviceDate ?? old.firstDate ?? draft.agreementStartDate, participantId)} target="_blank" rel="noopener noreferrer">
+            {oneKept ? 'See it on the roster' : 'See them on the roster'}<span className="sr-only"> (opens in a new tab)</span>
           </Link>
-        </p>
+        </section>
       )}
       {overlaps.length > 0 && (
         <section aria-labelledby="overlap-heading" className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]">

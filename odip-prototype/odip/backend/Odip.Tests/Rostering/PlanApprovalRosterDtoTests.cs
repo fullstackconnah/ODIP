@@ -104,21 +104,23 @@ public class PlanApprovalRosterDtoTests
     }
 
     [Fact]
-    public async Task An_agreement_pattern_can_be_edited_on_the_patterns_page_and_keeps_where_it_came_from_and_what_it_asks_nothing_is_locked()
+    public async Task An_agreement_pattern_keeps_its_notes_editable_and_where_it_came_from_and_what_it_asks_and_a_timing_edit_is_a_409()
     {
         var s = await SeedAsync();
         await using var _ = s.Db;
-        var edit = new UpdateShiftPatternDto
+        var notesOnly = new UpdateShiftPatternDto
         {
-            ParticipantId = s.Participant.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(14, 0), EndsNextDay = false,
-            Ratio = SupportRatio.OneToTwo, NightType = SleepoverType.None, EffectiveFrom = s.FromAgreement.EffectiveFrom, EffectiveTo = new DateOnly(2026, 11, 30), IsActive = true, Notes = "Moved an hour",
+            ParticipantId = s.Participant.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), EndsNextDay = false,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = s.FromAgreement.EffectiveFrom, EffectiveTo = s.FromAgreement.EffectiveTo, IsActive = true, Notes = "Ring the bell twice",
         };
 
-        var result = await Controller(s.Db).UpdatePattern(s.FromAgreement.Id, edit, CancellationToken.None);
+        var saved = await Controller(s.Db).UpdatePattern(s.FromAgreement.Id, notesOnly, CancellationToken.None);
+        var moved = await Controller(s.Db).UpdatePattern(s.FromAgreement.Id, notesOnly with { StartTime = new TimeOnly(10, 0), EndTime = new TimeOnly(14, 0) }, CancellationToken.None);
 
-        var pattern = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
-        Assert.Equal((new TimeOnly(10, 0), SupportRatio.OneToTwo, "Moved an hour"), (pattern.StartTime, pattern.Ratio, pattern.Notes));
+        var pattern = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<OkObjectResult>(saved.Result).Value).Data!;
+        Assert.Equal((new TimeOnly(9, 0), SupportRatio.OneToOne, "Ring the bell twice"), (pattern.StartTime, pattern.Ratio, pattern.Notes));
         Assert.Equal((s.Draft.Id, "mornings", 1, 2), (pattern.SourceDraftId, pattern.SourceBlockKey, pattern.WorkerSlot, pattern.SourceDraftVersion));
+        Assert.Equal("agreement-pattern", Assert.IsType<ApiResponse<AgreementPatternConflictDto>>(Assert.IsType<ConflictObjectResult>(moved.Result).Value).Code);
         Assert.Equal(Female, (await s.Db.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == s.FromAgreement.Id)).RequirementsJson);
     }
 

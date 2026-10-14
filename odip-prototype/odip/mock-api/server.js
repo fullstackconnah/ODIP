@@ -2588,6 +2588,20 @@ const postRoutes = [
     const budgetWarnings = rosterBudget.sampleWarnings('shift', 8)
     return budgetWarnings ? { created: 8, skipped: 0, budgetWarnings } : { created: 0, skipped: 3 }
   }],
+  // Agreement PR 1: a change to a pattern an approved agreement made, as the next revision. The real server builds, prices and saves it; this answers in its shape so the panel can be seen.
+  // shortcut: canned figures, and nothing is saved even without preview; enough for screenshots of the panel, never a check of the money.
+  ['participants/:id/service-agreement-drafts/:id/pattern-change', (participantId, draftId, body) => {
+    const revisions = serviceAgreementDrafts[participantId] || []
+    const source = revisions.find((draft) => draft.id === draftId)
+    if (!source) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    const newest = Math.max(...revisions.map((draft) => draft.version))
+    if (newest !== source.version) return respond(409, failEnvelope({ currentVersion: newest }, [`This agreement has a newer revision, v${newest}. Open the agreement and make the change there.`], 'draft-version-conflict'))
+    const result = {
+      version: source.version + 1, agreementStartDate: (body && body.fromDate) || source.agreementStartDate, agreementEndDate: source.agreementEndDate,
+      oldTotal: 7358, newTotal: 7725.9, difference: 367.9, needsReview: false,
+    }
+    return body && body.preview ? result : { ...result, draftId: `${draftId}-change` }
+  }],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
@@ -2753,10 +2767,11 @@ const putRoutes = [
   ['rostering/patterns/:id', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
     if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
-    // An agreement pattern is one weekday of one block for one worker of one revision (a unique key): moving it to a weekday its block already has is a 409 in words, as the real server answers it.
-    if (pattern.sourceDraftId && body && body.dayOfWeek && body.dayOfWeek !== pattern.dayOfWeek
-      && rosterPatterns.some((p) => p.id !== pattern.id && p.sourceDraftId === pattern.sourceDraftId && p.sourceBlockKey === pattern.sourceBlockKey && p.workerSlot === pattern.workerSlot && p.dayOfWeek === body.dayOfWeek)) {
-      return respond(409, failEnvelope(null, ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.']))
+    // An agreement pattern's participant, day, times, ratio, night type and dates are the agreement's: a change to any of them is the real server's 409 agreement-pattern (agreement PR 1).
+    const hhmm = (time) => String(time || '').slice(0, 5)
+    const definition = (p) => [p.participantId, p.dayOfWeek, hhmm(p.startTime), hhmm(p.endTime), !!p.endsNextDay, p.ratio, p.nightType, p.effectiveFrom, p.effectiveTo || null].join('|')
+    if (pattern.sourceDraftId && body && definition({ ...pattern, ...body }) !== definition(pattern)) {
+      return respond(409, failEnvelope({ draftId: pattern.sourceDraftId }, ["This pattern comes from a service agreement. Its day, times, ratio, night type, dates and participant are the agreement's: change it through the agreement, which saves a new revision for approval. Default staff, notes and active can be changed here."], 'agreement-pattern'))
     }
     // No length is refused only when the edit changes the times, as on the server, so a pattern saved before the rule can still be switched off.
     const noLength = rosterBudget.refusePatternNoLength(pattern, body || {})
