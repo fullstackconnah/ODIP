@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { Outlet } from 'react-router-dom'
+import { PLATFORM_INFO } from '@/lib/platformInfo'
+import { platformFacts } from '@/lib/platformFacts'
 
 /**
  * The public reading pages sit OUTSIDE the app shell, beside /login, so a signed-out reader from the landing or the sign-in page reaches
@@ -37,4 +41,54 @@ describe('/accessibility is public', () => {
     expect(window.location.pathname).toBe('/accessibility')
     expect(screen.queryByRole('navigation', { name: 'App sidebar' })).not.toBeInTheDocument()
   }, 30_000)
+})
+
+// The legal documents go live in ONE later PR, on the owner's word. That PR commits the approved files, sets legalPublished, fills the
+// company facts and registers the routes. Until then the footer links are hidden and the routes don't exist. This guard keeps the flag
+// and the files from drifting apart in either direction. It reads only files under frontend/, which is all the Docker test run has.
+const LEGAL_DIR = join(__dirname, '../legal')
+const DOCS = ['privacy', 'terms']
+const MARKERS = [
+  'DRAFT: not legal advice', 'Operator to confirm', '[Company legal name]', '[ABN]', '[Registered address]', '[Support email]',
+  '[Privacy contact email]', '[date]',
+]
+
+describe.runIf(PLATFORM_INFO.legalPublished)('legal documents, once published', () => {
+  it.each(DOCS)('%s.md exists, with no draft marker left', doc => {
+    const file = join(LEGAL_DIR, `${doc}.md`)
+    expect(existsSync(file), file).toBe(true)
+    const text = readFileSync(file, 'utf-8')
+    for (const marker of MARKERS) expect(text, marker).not.toContain(marker)
+  })
+
+  it('names the company that publishes them', () => {
+    expect(platformFacts(PLATFORM_INFO).company).not.toBeNull()
+  })
+
+  it.each(DOCS)('serves /legal/%s to a signed-out reader', async doc => {
+    localStorage.removeItem('odip_token')
+    await renderAppAt(`/legal/${doc}`)
+    expect(await screen.findByRole('heading', { level: 1 }, { timeout: 20_000 })).toBeInTheDocument()
+    expect(window.location.pathname).toBe(`/legal/${doc}`)
+  }, 30_000)
+})
+
+describe.skipIf(PLATFORM_INFO.legalPublished)('legal documents, until they are published', () => {
+  it.each(DOCS)('/legal/%s is not a route: signed in, it is the not-found page inside the shell', async doc => {
+    localStorage.setItem('odip_token', 'test-token')
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    await renderAppAt(`/legal/${doc}`)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Page not found' }, { timeout: 20_000 })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'App sidebar' })).toBeInTheDocument()
+  }, 30_000)
+
+  it.each(DOCS)('/legal/%s signed out goes to /login, like any unknown URL', async doc => {
+    localStorage.removeItem('odip_token')
+    await renderAppAt(`/legal/${doc}`)
+    await waitFor(() => expect(window.location.pathname).toBe('/login'), { timeout: 20_000 })
+  }, 30_000)
+
+  it('ships no legal document: the drafts stay out of the repo until they are approved', () => {
+    expect(existsSync(LEGAL_DIR)).toBe(false)
+  })
 })
