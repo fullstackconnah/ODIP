@@ -34,7 +34,7 @@ const KIND_LABEL: Record<ImportBatchDto['kind'], string> = { Participants: 'Part
 const UNDO_MESSAGE: Record<ImportBatchDto['kind'], (b: ImportBatchDto) => string> = {
   Participants: b => `The ${plural(b.createdCount, 'participant')} that ${b.fileName} created ${b.createdCount === 1 ? 'is' : 'are'} archived. This only works while none of them has changed since the import. If a funding plans import added plans for them, undo that first.`,
   Staff: b => `The ${plural(b.createdCount, 'staff member')} it created ${b.createdCount === 1 ? 'is' : 'are'} removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.`,
-  FundingPlans: b => `The ${plural(b.createdCount, 'funding plan')} that ${b.fileName} created ${b.createdCount === 1 ? 'is' : 'are'} deleted. This only works while none of them has been changed since the import.`,
+  FundingPlans: b => `The ${plural(b.createdCount, 'funding plan')} that ${b.fileName} created ${b.createdCount === 1 ? 'is' : 'are'} deleted. This only works while none of them has been changed, or used by a shift or a service agreement, since the import.`,
 }
 
 export default function ImportDataTab() {

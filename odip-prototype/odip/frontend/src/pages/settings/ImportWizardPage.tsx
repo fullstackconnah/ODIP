@@ -45,7 +45,7 @@ const KIND: Record<ImportKind, { noun: string; title: string; listNoun: string; 
   },
   'funding-plans': {
     noun: 'funding plan', title: 'Import funding plans', listNoun: 'participants', listTo: () => '/participants?tab=active',
-    undone: 'deleted', undoRule: 'none of them has been changed since the import', undoNote: '',
+    undone: 'deleted', undoRule: 'none of its plans has been changed, or used by a shift or a service agreement, since the import', undoNote: '',
   },
 }
 
@@ -352,7 +352,7 @@ export default function ImportWizardPage() {
                 <p>{`${plural(data.createCount, noun)} will be created${landing ? `, ${LANDINGS.find(l => l.value === landing)!.label.toLowerCase()}` : ''}.`}</p>
                 {data.skippedCount > 0 && <p>{kind === 'funding-plans' ? `Rows skipped: ${data.skippedCount}.` : `Skipped, already in ODIP: ${data.skippedCount}.`}</p>}
                 {data.invalidCount > 0 && <p>{kind === 'funding-plans'
-                  ? `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import just ${data.invalidCount === 1 ? 'that row' : 'those rows'}. A plan that was imported without one of its rows has to be undone and imported again.`
+                  ? `Rows that can't be imported: ${data.invalidCount}. Their plans are left out whole. Fix ${data.invalidCount === 1 ? 'that row' : 'those rows'} in the file and import it again: plans already in ODIP are refused, never added twice.`
                   : `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import it again afterwards.`}</p>}
                 {checkCount > 0 && <p>{`Rows to check first: ${checkCount}. Each one says why in the preview.`}</p>}
                 {kind === 'staff' && <p>Nobody is emailed yet: send sign-in invites after the import, now or later from Import history.</p>}

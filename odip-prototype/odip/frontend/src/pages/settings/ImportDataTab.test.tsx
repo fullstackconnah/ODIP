@@ -111,7 +111,7 @@ describe('ImportDataTab', () => {
     // A plan is several rows, so the counts say which they are.
     expect([within(row).getByText('3 plans'), within(row).getByText('1 row')]).toHaveLength(2)
     await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
-    expect(screen.getByText('The 3 funding plans that budgets.csv created are deleted. This only works while none of them has been changed since the import.')).toBeInTheDocument()
+    expect(screen.getByText('The 3 funding plans that budgets.csv created are deleted. This only works while none of them has been changed, or used by a shift or a service agreement, since the import.')).toBeInTheDocument()
   })
 
   it('tells the Admin to undo a funding plans import before the participants it used', async () => {

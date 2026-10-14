@@ -203,8 +203,8 @@ describe('ImportWizardPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(screen.getByText('1 funding plan will be created.')).toBeInTheDocument()
     expect(screen.getByText('Rows skipped: 1.')).toBeInTheDocument()
-    expect(screen.getByText("Can't be imported: 2. Fix them in the file and import just those rows. A plan that was imported without one of its rows has to be undone and imported again.")).toBeInTheDocument()
-    expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of them has been changed since the import.')).toBeInTheDocument()
+    expect(screen.getByText("Rows that can't be imported: 2. Their plans are left out whole. Fix those rows in the file and import it again: plans already in ODIP are refused, never added twice.")).toBeInTheDocument()
+    expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of its plans has been changed, or used by a shift or a service agreement, since the import.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Import 1 funding plan' }))
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
 
@@ -213,7 +213,7 @@ describe('ImportWizardPage', () => {
     // Plans were created, but rows were skipped or refused: each count names its unit.
     expect(screen.getByText("1 row skipped, 2 rows couldn't be imported.")).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
-    expect(within(screen.getByRole('alertdialog')).getByText('The 1 funding plan it created is deleted. This only works while none of them has been changed since the import.')).toBeInTheDocument()
+    expect(within(screen.getByRole('alertdialog')).getByText('The 1 funding plan it created is deleted. This only works while none of its plans has been changed, or used by a shift or a service agreement, since the import.')).toBeInTheDocument()
   })
 
   it('sets the rows to check apart from notes, filters them, and counts them before the import', async () => {
