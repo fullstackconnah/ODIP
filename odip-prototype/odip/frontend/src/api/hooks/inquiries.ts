@@ -61,7 +61,14 @@ export function useCancelIntakeBooking() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (id: string) => (await apiDeleteRaw<CancelIntakeBookingResultDto>(`/inquiries/${id}/intake-booking`)).data as CancelIntakeBookingResultDto,
-    onSuccess: () => refreshIntake(qc),
+    onSuccess: (_result, id) => {
+      // The row shows Book intake at once, so the page can focus it now rather than the old line 1 the refetch would then remove.
+      qc.setQueryData<ParticipantInquiryDto[]>(['participant-inquiries'], rows => rows?.map(r => r.id !== id ? r : {
+        ...r, intakeStartsAt: null, intakeDurationMinutes: null, intakeLocation: null, intakeStaffUserId: null, intakeStaffFirstName: null,
+        intakeStaffName: null, intakeNotes: null, intakeInviteSentAt: null, intakeInviteError: null, intakeConfirmedAt: null,
+      }))
+      refreshIntake(qc)
+    },
   })
 }
 

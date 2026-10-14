@@ -45,6 +45,23 @@ describe('intake booking hooks', () => {
     expect(apiDeleteRaw).toHaveBeenCalledWith('/inquiries/inq-1/intake-booking')
   })
 
+  // The page focuses the row's Book intake straight after a cancel; the row must have lost its booking by then, not after the refetch.
+  it('clears the cancelled row\'s booking in the enquiry list at once, keeping its other fields', async () => {
+    const qc = new QueryClient()
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    qc.setQueryData(['participant-inquiries'], [
+      { id: 'inq-1', firstName: 'Noah', participantIsDraft: true, intakeStartsAt: '2030-10-15T23:00:00Z', intakeStaffFirstName: 'Sam', intakeInviteSentAt: '2030-10-14T00:00:00Z' },
+      { id: 'inq-2', firstName: 'Ava', intakeStartsAt: '2030-10-16T23:00:00Z' },
+    ])
+    const { result } = renderHook(() => useCancelIntakeBooking(), { wrapper })
+
+    await result.current.mutateAsync('inq-1')
+
+    const rows = qc.getQueryData<Record<string, unknown>[]>(['participant-inquiries'])!
+    expect(rows[0]).toMatchObject({ id: 'inq-1', firstName: 'Noah', participantIsDraft: true, intakeStartsAt: null, intakeStaffFirstName: null, intakeInviteSentAt: null })
+    expect(rows[1]).toMatchObject({ id: 'inq-2', intakeStartsAt: '2030-10-16T23:00:00Z' })
+  })
+
   it('marks confirmed and sends again with POSTs', async () => {
     const { spy, wrapper } = setup()
     const confirm = renderHook(() => useConfirmIntakeBooking(), { wrapper }).result
