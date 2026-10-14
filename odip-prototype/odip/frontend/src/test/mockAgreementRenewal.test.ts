@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url'
  */
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SERVER = join(__dirname, '../../../mock-api/server.js')
+const PRICING = join(__dirname, '../../../mock-api/planPricing.js')
+const FUNDING = join(__dirname, '../../../mock-api/funding.js')
 
 describe.skipIf(!existsSync(SERVER))('the mock answers agreement renewal as the server does', () => {
   it('lists the agreements ending in the alert\'s words, hiding one whose renewal waits until it has ended', () => {
@@ -29,5 +31,23 @@ describe.skipIf(!existsSync(SERVER))('the mock answers agreement renewal as the 
     expect(source).toContain('`This agreement has a newer revision, v${newest.version}. Load it first: a renewal would replace it.`], \'draft-version-conflict\')')
     expect(source).toContain('funding.plansOf(participantId)')
     expect(source).toContain('return saveDraft(participantId, {')
+  })
+  // Fix round 1 (the finish review's recapture): the states the captures show need the mock to have a withdrawn item and the agreement alerts.
+  it('withdraws one item from three weeks after today, so a renewal\u0027s review can show a line the new price list has not got', () => {
+    const server = readFileSync(SERVER, 'utf-8')
+    const pricing = readFileSync(PRICING, 'utf-8')
+
+    expect(server).toContain("planPricing.withdraw('04_105_0136_6_1', planApproval.addDays(planApproval.providerToday(), 21))")
+    expect(pricing).toContain('function withdraw(itemCode, from)')
+    expect(pricing).toContain("addIssue(block.id, 'CatalogueNotFound', `The price list withdraws")
+  })
+
+  it('serves the agreement alerts with the budget ones, in the server\u0027s words and severities', () => {
+    const server = readFileSync(SERVER, 'utf-8')
+    const funding = readFileSync(FUNDING, 'utf-8')
+
+    expect(server).toContain("type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status")
+    expect(funding).toContain('alertsDto(p, ledgerOf(p.id), agreementAlertsOf(p.id))')
+    expect(funding).toContain('alertsDto(person, ledgerOf(id), agreementAlertsOf(id))')
   })
 })

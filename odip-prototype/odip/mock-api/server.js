@@ -2344,7 +2344,13 @@ function agreementsEnding() {
 const funding = fundingModule.create({
   respond, people: participants,
   priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
+  // Agreement PR 2, rule 12 of ParticipantAlertsService: the agreement ending soon (Warning) or ended (Critical), from the ending list's rule, opening the agreement page.
+  agreementAlertsOf: (id) => agreementsEnding().filter((row) => row.participantId === id).map((row) => ({
+    type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status, deepLinkTab: 'details', linkTo: `/participants/${id}/agreement-draft`,
+  })),
 })
+// Fix round 1: the price list withdraws the group activity Sunday item three weeks from today (no seeded plan has one), so a renewal's review can show a line the new price list has not got.
+planPricing.withdraw('04_105_0136_6_1', planApproval.addDays(planApproval.providerToday(), 21))
 // Budget phase 3: the roster's budget check, the shifts that carry the over-budget markers and the Admin's review task. See rosterBudget.js for the switches.
 const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
