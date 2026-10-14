@@ -390,7 +390,8 @@ function DraftPage() {
 
     {locked && newest && (
       <Callout
-        tone="info" className="max-w-prose" title="Approved for rostering"
+        // One fact, one tone (Tone Rule): ended is the banner's Critical, ending its Warning. It is there from the first render, so it is not announced.
+        tone={daysLeft !== null && daysLeft < 0 ? 'error' : ending ? 'warning' : 'info'} announce={!ending} className="max-w-prose" title="Approved for rostering"
         actions={<>
           {ending && mayApprove && <Button disabled={renew.isPending} onClick={renewNow}>{renew.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{renew.isPending ? 'Renewing…' : 'Renew agreement'}</Button>}
           <Button variant={ending && mayApprove ? 'secondary' : undefined} onClick={() => { setRevisingFrom(newest.id); go('week') }}>Start a new revision</Button>
@@ -398,8 +399,14 @@ function DraftPage() {
       >
         {ending && <strong ref={endingRef} tabIndex={-1} className="block focus:outline-none">{ending}</strong>}
         This agreement is read only: the roster was made from it. A new revision changes nothing until you save it.
-        {/* Fix round 1 (deep S3): a known limit. Once a renewal exists, this term changes only through a revision with its dates, and approving that ends the renewal's patterns. */}
-        {ending && mayApprove && <span className="mt-2 block">Make any change this agreement needs before you renew it: once it is renewed, a change to it replaces the renewal.</span>}
+        {/* Fix round 1 (deep S3): a known limit. Once a renewal exists, this term changes only through a revision with its dates, and approving that ends the renewal's patterns. Not said of an ended agreement (fix round 2). */}
+        {ending && mayApprove && daysLeft !== null && daysLeft >= 0 && <span className="mt-2 block">Make any change this agreement needs before you renew it: once it is renewed, a change to it replaces the renewal.</span>}
+      </Callout>
+    )}
+    {/* Fix round 2: without the ending list the page cannot say when the agreement ends or offer Renew, so it says it could not check rather than going quiet. */}
+    {locked && endingList.isError && (
+      <Callout tone="warning" className="max-w-prose" actions={<Button size="sm" variant="secondary" onClick={() => { void endingList.refetch() }}>Try again</Button>}>
+        Couldn&apos;t check whether this agreement is ending.
       </Callout>
     )}
     {renewNotice?.kind === 'plan' && (

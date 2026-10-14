@@ -510,6 +510,43 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
     expect(screen.getByText('Make any change this agreement needs before you renew it: once it is renewed, a change to it replaces the renewal.')).toBeInTheDocument()
   })
 
+  // Fix round 2 (finish, Tone Rule): one fact, one tone. The callout's container carries the house Callout tone, so the test reads it from there.
+  const lockedTone = () => {
+    const box = screen.getByText('Approved for rostering').parentElement!.parentElement!.className
+    return box.includes('--color-destructive') ? 'error' : box.includes('--color-warning-container') ? 'warning' : 'info'
+  }
+
+  it('says when it could not check whether the agreement is ending, and tries again, rather than dropping Renew silently', async () => {
+    const refetch = vi.fn()
+    endingRows.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    showing(ending)
+    renderPage()
+
+    expect(screen.getByText("Couldn't check whether this agreement is ending.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Renew agreement' })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('is in the error tone once the agreement has ended, warning while it is ending, and info otherwise', () => {
+    endsIn(-1, '2026-10-11')
+    showing(draft({ approval, agreementStartDate: '2026-07-01', agreementEndDate: '2026-10-11' }))
+    const { unmount } = renderPage()
+    expect(lockedTone()).toBe('error')
+    unmount()
+
+    endsIn(20)
+    showing(ending)
+    const second = renderPage()
+    expect(lockedTone()).toBe('warning')
+    second.unmount()
+
+    endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })
+    showing(draft({ approval }))
+    renderPage()
+    expect(lockedTone()).toBe('info')
+  })
+
   it('says nothing of an end more than 60 days away, and an ended agreement says its shifts stop', () => {
     endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })            // ends 30 June 2027: not on the list
     showing(draft({ approval }))
@@ -523,6 +560,8 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
     renderPage()
     expect(screen.getByText('Agreement ended Sun 11 Oct 2026: shifts stop after it.')).toBeInTheDocument()
     expect(renewButton()).toBeInTheDocument()
+    // Fix round 2: there is nothing left of an ended agreement to change before renewing it.
+    expect(screen.queryByText(/^Make any change this agreement needs/)).not.toBeInTheDocument()
   })
 
   it('tells a coordinator the organisation does not let approve when it ends, without offering Renew', () => {
