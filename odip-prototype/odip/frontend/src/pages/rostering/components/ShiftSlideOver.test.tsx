@@ -1610,3 +1610,28 @@ describe('ShiftSlideOver — the length of a shift', () => {
     expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
   })
 })
+
+describe('ShiftSlideOver — opened by a drop on an empty day (roster drag and drop)', () => {
+  const dropTarget = { mode: 'create' as const, participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18', focusField: 'start' as const }
+
+  it('puts focus on Start time when the board prefilled participant, day and person', () => {
+    render(<ShiftSlideOver target={dropTarget} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    expect(screen.getByLabelText(/^Start time/)).toHaveFocus()
+  })
+
+  it('hands the saved shift to onSaved before it closes', async () => {
+    const user = userEvent.setup()
+    const saved = makeShift({ id: 'new-shift' })
+    mockCreateMutateAsync.mockResolvedValueOnce(saved)
+    const onSaved = vi.fn()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver target={dropTarget} onClose={onClose} onSaved={onSaved} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18' }))
+    expect(onSaved).toHaveBeenCalledWith(saved)
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onSaved.mock.invocationCallOrder[0]).toBeLessThan(onClose.mock.invocationCallOrder[0])
+  })
+})
