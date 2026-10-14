@@ -27,6 +27,11 @@ const paged = (items) => ({
   hasNext: false,
   hasPrevious: false,
 })
+// The provider's calendar day (Australia/Sydney, the captures' zone), so "due today" and "overdue" mean what they mean to the browser.
+const providerToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+const addDaysIso = (iso, days) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10) }
+// The id the capture scripts' dev sign-in returns (scratchpad dash-shots): a leave request of "the signed-in Admin".
+const CAPTURE_VIEWER_ID = '00000000-0000-0000-0000-0000000000a1'
 
 // ── Sample data ──────────────────────────────────────────────
 
@@ -443,6 +448,18 @@ const tasks = [
     dueDate: '2026-07-13', status: 'Overdue', completedDate: null,
     notes: 'QSC reporting window closes 72h after the incident.',
     linkTo: '/incidents/inc-0002/edit', incidentReportId: 'inc-0002',
+  },
+  // The dashboard's Tasks due group: an Admin-only review of an emergency over budget, overdue (the oldest due, so it is among the group's first five
+  // rows), and a task due today (the provider's day).
+  {
+    id: 'task-0008', participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'BudgetEmergencyReview', title: 'Review the emergency booking over budget – Grace Palmer-Hughes, 8 Oct', ownerId: null, ownerName: null,
+    priority: 'Urgent', dueDate: '2026-07-01', status: 'NotStarted', completedDate: null, notes: 'Booked over the Core budget on the night.', shiftId: 'board-shift-0002',
+  },
+  {
+    id: 'task-0009', tripInstanceId: 't-0002', tripName: 'Tamborine Mountain Getaway', participantBookingId: null, accommodationReservationId: null,
+    vehicleAssignmentId: null, staffAssignmentId: null, taskType: 'InsuranceConfirmation', title: 'Confirm travel insurance – Liam O.', ownerId: 's-0001',
+    ownerName: 'Callum Radford', priority: 'High', dueDate: providerToday(), status: 'NotStarted', completedDate: null, notes: 'Policy number to follow.',
   },
 ]
 
@@ -1542,6 +1559,20 @@ const completionQueueItems = Object.values(portalShiftBase)
   })
   .filter(Boolean)
 
+// The dashboard's Shift completions group: a clean row (one-tap Approve), one with an incident on the shift (Review), and one whose approve the
+// server refuses (409, the row error). Queue-only rows: nothing else reads them.
+const dashboardQueueRow = (shiftId, staffName, participantName, o) => ({
+  shiftId, completionId: `sc-${shiftId}`, participantName, staffName, serviceDate: '2026-10-13',
+  rosteredStart: '2026-10-12T23:00:00Z', rosteredEnd: '2026-10-13T05:00:00Z', actualStart: '2026-10-12T23:02:00Z', actualEnd: '2026-10-13T05:04:00Z',
+  varianceMinutesStart: 2, varianceMinutesEnd: 4, status: 'PendingReview', timeZoneId: 'Australia/Brisbane', isOutlierVariance: false,
+  varianceReviewMinutes: 15, returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 30, startWasManual: false, incidentCount: 0, ...o,
+})
+completionQueueItems.push(
+  dashboardQueueRow('shift-dash-clean', 'Priya Nadarajah', 'Liam Okafor', {}),
+  dashboardQueueRow('shift-dash-incident', 'Tom Beattie', 'Grace Palmer-Hughes', { incidentCount: 1 }),
+  dashboardQueueRow('shift-dash-409', 'Callum Radford', 'Ava Chen', {}),
+)
+
 // Bookings (BookingListDto)
 const bookings = [
   {
@@ -1878,6 +1909,12 @@ const leaveRequests = [
     requestedByUserId: 's-0002', requestedAt: '2026-09-03T10:15:00Z',
     decidedByUserId: 's-0001', decidedAt: '2026-09-04T09:00:00Z',
     decisionNote: 'Already short-staffed that day.',
+  },
+  // A request of the capture viewer's own: the dashboard shows it as "Your request", with no buttons.
+  {
+    id: 'leave-0004', userId: CAPTURE_VIEWER_ID, userFullName: 'Dev Admin', leaveType: 'Annual', startDate: '2026-11-02', endDate: '2026-11-06',
+    status: 'Pending', reason: 'School holidays.', requestedByUserId: CAPTURE_VIEWER_ID, requestedAt: '2026-10-01T09:00:00Z',
+    decidedByUserId: null, decidedAt: null, decisionNote: null,
   },
 ]
 
@@ -2482,7 +2519,16 @@ const routes = [
   }],
 
   // tasks
-  ['tasks', () => tasks],
+  ['tasks', (searchParams) => {
+    // The server's two dashboard filters: Overdue is the TaskOverdue rule (stored Overdue, or past due and still open); dueThisWeek is today to today + 7.
+    const today = providerToday()
+    const open = (t) => t.status !== 'Completed' && t.status !== 'Cancelled'
+    const status = searchParams.get('status')
+    if (status === 'Overdue') return tasks.filter((t) => t.status === 'Overdue' || (t.dueDate && t.dueDate < today && open(t)))
+    if (status) return tasks.filter((t) => t.status === status)
+    if (searchParams.get('dueThisWeek') === 'true') return tasks.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate <= addDaysIso(today, 7))
+    return tasks
+  }],
 
   // incidents
   ['incidents/overdue-qsc', () => incidents.filter((i) => i.isOverdue24h)],
@@ -2536,14 +2582,10 @@ const routes = [
   ['settings', () => appSettings],
   ['public-holidays', () => publicHolidays],
 
-  // leave + recurring unavailability — GET /leave and /leave/unavailability don't filter by the
-  // `status`/`userId` query string here. The GET dispatch loop DOES now pass url.searchParams as
-  // every handler's trailing argument (added for GET /incidents?involvedUserId= — see the
-  // `incidents` route above), but these two simply don't declare/read it, same net effect as
-  // before. Returns the full fixture list; the frontend pages that read it don't rely on the mock
-  // filtering (LeaveApprovalsPage/PortalLeavePage render off whatever the hook returns either way).
-  ['leave', () => leaveRequests],
-  ['leave/unavailability', () => recurringUnavailabilities],
+  // leave + recurring unavailability — GET /leave and /leave/unavailability filter by `status` (the dashboard's Leave group and the nav badge ask for
+  // Pending, so the count matches the rows); `userId` is still not read.
+  ['leave', (searchParams) => leaveRequests.filter((r) => !searchParams.get('status') || r.status === searchParams.get('status'))],
+  ['leave/unavailability', (searchParams) => recurringUnavailabilities.filter((r) => !searchParams.get('status') || r.status === searchParams.get('status'))],
 
   // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
   ['rostering/board', (searchParams) => rosterBoard(searchParams)],
@@ -2571,11 +2613,10 @@ const routes = [
   ['rostering/flagged-notes', () => flaggedShiftNotes],
 
   // Shift completion (design spec §2/§4) — portal detail (PortalShiftDetailPage's Start/Finish
-  // card) and the rostering review queue/detail (CompletionReviewPage). Same "query string isn't
-  // read here" caveat as leave/staff-availability above: GetCompletions' status/from/to/page/
-  // pageSize aren't applied — paged() below just returns every fixture row as one full page.
+  // card) and the rostering review queue/detail (CompletionReviewPage). GetCompletions' status is
+  // applied (PendingReview when absent, the server's default); from/to/page/pageSize aren't: paged() returns every matching row as one page.
   ['portal/shifts/:id', (id) => buildPortalShiftDetail(id)],
-  ['rostering/completions', () => paged(completionQueueItems)],
+  ['rostering/completions', (searchParams) => paged(completionQueueItems.filter((i) => i.status === (searchParams.get('status') || 'PendingReview')))],
   ['rostering/shifts/:id/completion', (id) => withPackageFields(id, pkgState(id).completion || shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0])],
   // The coordinator's one-call review of a submitted shift (ShiftCompletionReviewDto): completion with breaks / net
   // minutes / handover, every dose in the window with its outcome, PRN doses, notes.
@@ -2724,6 +2765,8 @@ const postRoutes = [
     return buildPortalShiftDetail(base.id)
   }],
   ['rostering/shifts/:id/completion/approve', (id) => {
+    // The dashboard captures' row error: somebody reviewed it first.
+    if (id === 'shift-dash-409') return respond(409, failEnvelope(null, ['This shift has already been reviewed.'], 'SHIFT_NOT_PENDING_REVIEW'))
     const c = withPackageFields(id, shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0])
     return { ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(), reviewOutcome: 'Approved' }
   }],
