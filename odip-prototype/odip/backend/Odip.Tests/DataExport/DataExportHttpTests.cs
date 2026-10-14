@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Net;
 using System.Reflection;
@@ -7,6 +8,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -84,6 +86,40 @@ public class DataExportHttpTests
         var error = await Record.ExceptionAsync(() => response.Content.ReadAsByteArrayAsync());
         Assert.True(error is HttpRequestException or IOException,
             $"The client must see a broken download, never a clean end of a truncated ZIP; it saw {error?.GetType().Name ?? "a clean end"}.");
+        Assert.Empty(await host.ExportRowsAsync(tenantId));
+    }
+
+    [Fact]
+    public async Task A_client_that_leaves_after_the_last_byte_still_gets_its_audit_row()
+    {
+        await using var host = await Host.StartAsync(new OnAuditSave(token =>
+        {
+            // The client leaves just as the row is saved. Kestrel cancels RequestAborted on the thread pool, so wait for it, then do what
+            // Npgsql does with a cancelled token.
+            var http = new HttpContextAccessor().HttpContext!;
+            http.Abort();
+            http.RequestAborted.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
+            token.ThrowIfCancellationRequested();
+        }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        using var response = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead);
+        await Record.ExceptionAsync(() => response.Content.ReadAsByteArrayAsync()); // the connection is gone, however the read ends
+
+        Assert.Single(await host.ExportRowsEventuallyAsync(tenantId));
+    }
+
+    [Fact]
+    public async Task An_audit_save_that_fails_after_a_complete_zip_is_logged_and_the_client_keeps_its_whole_zip()
+    {
+        await using var host = await Host.StartAsync(new OnAuditSave(_ => throw new InvalidOperationException("The audit table is locked")));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        using var response = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId);
+
+        using var zip = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
+        Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
+        Assert.Contains(host.Logs, l => l.Category == typeof(DataExportController).FullName && l.Level == LogLevel.Error && l.Message.Contains("audit row"));
         Assert.Empty(await host.ExportRowsAsync(tenantId));
     }
 
@@ -223,6 +259,32 @@ public class DataExportHttpTests
         }
     }
 
+    /// <summary>Runs <paramref name="onSave"/> with the save's token as the export's audit row is saved; seeding saves pass straight through.</summary>
+    private sealed class OnAuditSave(Action<CancellationToken> onSave) : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<AuditLog>().Any(e => e.State == EntityState.Added)) onSave(cancellationToken);
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    /// <summary>Every log entry the host writes, so a test can see what the controller logged.</summary>
+    private sealed class CapturedLogs : ILoggerProvider
+    {
+        public ConcurrentQueue<(string Category, LogLevel Level, string Message)> Entries { get; } = new();
+        public ILogger CreateLogger(string categoryName) => new Logger(this, categoryName);
+        public void Dispose() { }
+
+        private sealed class Logger(CapturedLogs logs, string category) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                logs.Entries.Enqueue((category, logLevel, formatter(state, exception)));
+        }
+    }
+
     private sealed class OnlyDataExportController : ApplicationPart, IApplicationPartTypeProvider
     {
         public override string Name => nameof(OnlyDataExportController);
@@ -249,9 +311,13 @@ public class DataExportHttpTests
         public static readonly Guid CallerId = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
         private readonly WebApplication _app;
 
-        private Host(WebApplication app, HttpClient client) { _app = app; Client = client; }
+        private readonly CapturedLogs _logs;
+
+        private Host(WebApplication app, HttpClient client, CapturedLogs logs) { _app = app; Client = client; _logs = logs; }
 
         public HttpClient Client { get; }
+
+        public IReadOnlyCollection<(string Category, LogLevel Level, string Message)> Logs => _logs.Entries;
 
         public static async Task<Host> StartAsync(params IInterceptor[] interceptors)
         {
@@ -259,6 +325,8 @@ public class DataExportHttpTests
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
             builder.WebHost.UseUrls("http://127.0.0.1:0");
             builder.Logging.ClearProviders();
+            var logs = new CapturedLogs();
+            builder.Logging.AddProvider(logs);
             builder.Services.AddDbContext<OdipDbContext>(o => o.UseInMemoryDatabase(databaseName).AddInterceptors(interceptors));
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
@@ -275,7 +343,7 @@ public class DataExportHttpTests
             app.UseAuthorization();
             app.MapControllers();
             await app.StartAsync();
-            return new Host(app, new HttpClient { BaseAddress = new Uri(app.Urls.Single()), Timeout = TimeSpan.FromSeconds(60) });
+            return new Host(app, new HttpClient { BaseAddress = new Uri(app.Urls.Single()), Timeout = TimeSpan.FromSeconds(60) }, logs);
         }
 
         public Task<HttpResponseMessage> GetAsync(string path, string role, Guid? tenantClaim, Guid? viewAs = null,
@@ -312,6 +380,15 @@ public class DataExportHttpTests
             var other = DataExportTestKit.Plant(db, b, "43100000001");
             var own = DataExportTestKit.Plant(db, a, "43100000002");
             return (own, other);
+        }
+
+        /// <summary>The export rows, waiting up to 10 s for one: the server finishes a request after the client has stopped reading.</summary>
+        public async Task<List<AuditLog>> ExportRowsEventuallyAsync(Guid tenantId)
+        {
+            var until = DateTime.UtcNow.AddSeconds(10);
+            List<AuditLog> rows;
+            while ((rows = await ExportRowsAsync(tenantId)).Count == 0 && DateTime.UtcNow < until) await Task.Delay(100);
+            return rows;
         }
 
         public async Task<List<AuditLog>> ExportRowsAsync(Guid tenantId)

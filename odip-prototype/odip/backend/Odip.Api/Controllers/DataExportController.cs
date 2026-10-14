@@ -93,10 +93,12 @@ public class DataExportController : ControllerBase
         Response.Headers.ContentDisposition = $"attachment; filename=\"odip-export-{Slug(name)}-{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.zip\"";
         Response.Headers.CacheControl = "no-store";
 
+        var zipComplete = false;
         try
         {
             await Response.StartAsync(ct);
             await DataExportWriter.WriteAsync(Response.Body, _db, tenantId, ExportTables.All, _clock.GetUtcNow().UtcDateTime, Build, ct);
+            zipComplete = true;
             // After the last byte, so a download that fails never moves the "last exported" line.
             _db.AuditLogs.Add(new AuditLog
             {
@@ -104,7 +106,13 @@ public class DataExportController : ControllerBase
                 ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null,
                 ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name),
             });
-            await _db.SaveChangesAsync(ct);
+            // Not ct: a client that leaves once it has the last byte still has the whole export, and this row is its only trace. One INSERT.
+            await _db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception ex) when (zipComplete)
+        {
+            // The client has a whole ZIP: aborting now would destroy it. The trail is what failed, so say so loudly.
+            _logger.LogError(ex, "Data export for {TenantId} finished but its audit row was not saved", tenantId);
         }
         catch (Exception ex)
         {
