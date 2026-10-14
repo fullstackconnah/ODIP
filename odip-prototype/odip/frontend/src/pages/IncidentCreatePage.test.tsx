@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IncidentCreatePage from './IncidentCreatePage'
 import { refetchable } from '@/test/refetchable'
-import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
+import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState, ShiftIncidentPrefillState } from '@/lib/incidentPrefill'
 import {
   buildIncidentTitleSkeleton, buildIncidentDescriptionSkeleton, buildIncidentDateTime, suggestedIncidentSeverity,
   buildShiftNoteIncidentTitleSkeleton, buildShiftNoteIncidentDescriptionSkeleton, buildShiftNoteIncidentDateTime,
@@ -65,6 +65,7 @@ function renderCreatePage(initialEntry: string | { pathname: string; state?: unk
       { path: '/incidents/new', element: <IncidentCreatePage /> },
       { path: '/incidents/:id/edit', element: <IncidentCreatePage /> },
       { path: '/incidents', element: <div>Incidents list</div> },
+      { path: '/portal/shifts/:id', element: <div>Shift page</div> },
     ],
     { initialEntries: [initialEntry] },
   )
@@ -1624,5 +1625,37 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     const payload = mockCreateMutateAsync.mock.calls[0][0]
     expect(payload).toMatchObject({ restrictivePracticeId: 'rp-new', usedWithoutAuthorisation: true, description: 'Held both arms at the kerb.' })
     expect(payload.unapprovedRestrictivePracticeDetails).toBeUndefined()
+  })
+})
+
+describe('IncidentCreatePage: the shift prefill from "Anything to report?"', () => {
+  const shiftPrefill: ShiftIncidentPrefillState = {
+    source: 'shift', shiftId: 'shift-9', participantId: 'participant-1', participantName: 'Sophie Brown',
+    serviceDate: '2026-08-17', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false, reportedByUserId: 'staff-1',
+    returnTo: '/portal/shifts/shift-9',
+  }
+
+  it('says where the form came from and fills the shift in', () => {
+    renderCreatePage({ pathname: '/incidents/new', state: shiftPrefill })
+
+    expect(screen.getByText(/pre-filled from your shift/i)).toBeInTheDocument()
+    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toContain('Sophie Brown')
+    expect(screen.getByText(/linked to: shift on 17\/08\/2026/i)).toBeInTheDocument()
+  })
+
+  it('files the incident against the shift, then goes back to the shift', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: shiftPrefill })
+
+    await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Fall in the garden')
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user)   // Basics -> Incident Details (description and date are prefilled)
+    await clickNext(user)   // -> Witnesses
+    await clickNext(user)   // -> Review
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(await screen.findByText('Shift page')).toBeInTheDocument()
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ shiftId: 'shift-9', involvedParticipantId: 'participant-1' })
+    expect(mockApiPost).not.toHaveBeenCalled()
   })
 })
