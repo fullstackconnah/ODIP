@@ -88,6 +88,9 @@ describe('rosterCollision', () => {
 
   it('lands a keyboard drag nowhere until it has moved, then on the nearest target', () => {   // N3
     expect(rosterCollision(args(null))).toEqual([])
+    // The first pass of a lift runs before dnd-kit has measured where it started: that is not a move either.
+    const unmeasured = { ...args(null, movedOnce), active: { id: 'carry', rect: { current: { initial: null, translated: null } } } } as unknown as Parameters<typeof rosterCollision>[0]
+    expect(rosterCollision(unmeasured)).toEqual([])
     expect(rosterCollision(args(null, movedOnce)).map(c => c.id)).toEqual(['target'])
   })
 

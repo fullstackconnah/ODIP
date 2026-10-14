@@ -106,7 +106,8 @@ export const rosterCollision: CollisionDetection = args => {
   const { pointerCoordinates, droppableContainers, active, collisionRect } = args
   if (!pointerCoordinates) {
     const start = active.rect.current.initial
-    return start && start.top === collisionRect.top && start.left === collisionRect.left ? [] : closestCenter(args)
+    // Not measured yet (the lift's first pass) counts as not moved: otherwise the nearest shift is "over" for a frame and the live region says so instead of "Picked up".
+    return !start || (start.top === collisionRect.top && start.left === collisionRect.left) ? [] : closestCenter(args)
   }
   const hits = pointerWithin(args)
   if (typeof document.elementFromPoint !== 'function') return hits   // jsdom has none
