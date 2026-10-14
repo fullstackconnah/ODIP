@@ -17,12 +17,32 @@ public class ExportTablesTests
     // The Npgsql model, as production builds it (provider-only properties included); building it opens no connection, as in ParticipantQueriesSqlTests.
     private static IModel BuildModel()
     {
-        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>()
-            .UseNpgsql("Host=localhost;Database=odip_sql_translation_test;Username=postgres;Password=postgres").Options, new Mock<ICurrentTenant>().Object);
+        using var db = NpgsqlContext();
         return db.Model;
     }
 
+    private static OdipDbContext NpgsqlContext() => new(new DbContextOptionsBuilder<OdipDbContext>()
+        .UseNpgsql("Host=localhost;Database=odip_sql_translation_test;Username=postgres;Password=postgres").Options, new Mock<ICurrentTenant>().Object);
+
     private static ExportTable Table<T>() => ExportTables.All.Single(t => t.EntityType == typeof(T));
+
+    [Fact]
+    public void A_csv_query_never_reads_a_byte_array_column_but_still_reads_every_column_it_writes()
+    {
+        // The intake PDFs are read once, for documents/; the CSV pass reading them too doubled the bytes through the database.
+        using var db = NpgsqlContext();
+        var withBytes = ExportTables.All.Where(t => Model.FindEntityType(t.EntityType)!.GetProperties().Any(p => p.ClrType == typeof(byte[]))).ToList();
+        Assert.Contains(withBytes, t => t.EntityType == typeof(ParticipantIntakeSnapshot));
+        foreach (var table in withBytes)
+        {
+            var entity = Model.FindEntityType(table.EntityType)!;
+            var sql = table.Rows(db, Guid.NewGuid()).ToQueryString(); // translation only: no connection is opened
+            foreach (var p in entity.GetProperties().Where(p => p.ClrType == typeof(byte[])))
+                Assert.DoesNotContain($"\"{p.GetColumnName()}\"", sql);
+            foreach (var column in ExportTables.Columns(Model, table))
+                Assert.Contains($"\"{entity.FindProperty(column.Name)!.GetColumnName()}\"", sql);
+        }
+    }
 
     [Fact]
     public void Every_entity_in_the_model_is_exported_or_deliberately_left_out()

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -87,7 +88,21 @@ public static class ExportTables
         .ToHashSet();
 
     private static ExportTable Own<T>(string file, string description) where T : class, ITenantEntity =>
-        new(file, typeof(T), description, (db, t) => db.Set<T>().AsNoTracking().Where(e => e.TenantId == t));
+        new(file, typeof(T), description, (db, t) => WithoutBytes(db, db.Set<T>().AsNoTracking().Where(e => e.TenantId == t)));
+
+    /// <summary>
+    /// The rows with every byte-array column left unread, built from the model so a new column can't be missed. The CSV never writes bytes
+    /// (Columns skips them), and the intake PDFs are read once, for documents/.
+    /// </summary>
+    private static IQueryable<T> WithoutBytes<T>(OdipDbContext db, IQueryable<T> rows) where T : class
+    {
+        var mapped = db.Model.FindEntityType(typeof(T))!.GetProperties().Where(p => p.PropertyInfo is not null).ToList();
+        if (mapped.All(p => p.ClrType != typeof(byte[]))) return rows;
+        var row = Expression.Parameter(typeof(T), "row");
+        var copy = Expression.MemberInit(Expression.New(typeof(T)),
+            mapped.Where(p => p.ClrType != typeof(byte[])).Select(p => Expression.Bind(p.PropertyInfo!, Expression.Property(row, p.PropertyInfo!))));
+        return rows.Select(Expression.Lambda<Func<T, T>>(copy, row));
+    }
 
     private static ExportTable Via<T>(string file, string description, Func<OdipDbContext, Guid, IQueryable<T>> rows) where T : class =>
         new(file, typeof(T), description, (db, t) => rows(db, t).AsNoTracking());
@@ -133,7 +148,6 @@ public static class ExportTables
         Own<Participant>("participants.csv", "Participants: personal, NDIS, Medicare and card details, diagnoses, support needs and plan details."),
         Own<ParticipantInquiry>("participant-inquiries.csv", "Enquiries from people who might become participants."),
         Own<ParticipantOnboarding>("participant-onboarding.csv", "Each participant's onboarding steps and when they were done."),
-        // shortcut: this pass also reads each intake PDF (one row at a time, so memory stays flat) and drops it; project PdfContent out if big exports get slow.
         Own<ParticipantIntakeSnapshot>("participant-intake-snapshots.csv", "Each completed intake: when, by whom, and its data. The PDF of each is in documents/."),
         Own<Person>("people.csv", "People connected to participants: family, guardians, nominees, plan managers and health professionals."),
         Own<ParticipantContactRole>("participant-contact-roles.csv", "How each person is connected to a participant, with any order or appointment details."),
