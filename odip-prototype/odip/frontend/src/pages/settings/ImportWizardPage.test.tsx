@@ -28,7 +28,7 @@ const previewOf = (fields: (string | null)[]): ImportPreviewDto => ({
     { rowNumber: 2, name: 'Ava Stone', status: 'Ready', reasons: [], warnings: [], skipReason: null },
     { rowNumber: 3, name: 'Ben', status: 'Invalid', reasons: ['Last name is required.'], warnings: [], skipReason: null },
   ],
-  readyCount: 1, skippedCount: 0, invalidCount: 1, previouslyImportedAt: null,
+  readyCount: 1, skippedCount: 0, invalidCount: 1, previouslyImportedAt: null, createCount: 1,
 })
 
 function renderWizard() {
@@ -183,5 +183,34 @@ describe('ImportWizardPage', () => {
     expect(screen.getByRole('button', { name: 'Send sign-in invites (1)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
     expect(within(screen.getByRole('alertdialog')).getByText('The 1 staff member it created is removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
+  })
+
+  it('imports funding plans: no landing, counts plans not rows, and says undo deletes them', async () => {
+    preview.mockResolvedValue({ ...previewOf(['firstName', 'lastName']), rows: [], readyCount: 3, invalidCount: 2, createCount: 1 })
+    commit.mockResolvedValue({ batchId: 'b1', createdCount: 1, skippedCount: 0, failedCount: 0, rows: [], replayed: false })
+    const router = createMemoryRouter([{ path: '/settings/import/:kind', element: <ImportWizardPage /> }], { initialEntries: ['/settings/import/funding-plans'] })
+    render(<RouterProvider router={router} />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Import funding plans' })).toBeInTheDocument()
+    expect(screen.getByText(/^Import participants first\./)).toBeInTheDocument()
+
+    const file = await upload('budgets.csv')
+    expect(preview).toHaveBeenCalledWith({ kind: 'funding-plans', file, mapping: undefined })
+    await screen.findByRole('heading', { name: 'Match columns' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { name: 'Preview' })
+    expect(screen.queryByLabelText(/Already receiving services/)).toBeNull()
+    expect(screen.getByText(/make one plan: 1 plan from 3 ready rows\./)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('1 funding plan will be created.')).toBeInTheDocument()
+    expect(screen.getByText("Can't be imported: 2. Fix them in the file and import just those rows. A plan that was imported without one of its rows has to be undone and imported again.")).toBeInTheDocument()
+    expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of them has been changed since the import.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Import 1 funding plan' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+
+    expect(commit).toHaveBeenCalledWith({ kind: 'funding-plans', file, mapping: ['firstName', 'lastName'], landing: undefined, idempotencyKey: expect.any(String) })
+    expect(await screen.findByText('Imported 1 funding plan')).toBeInTheDocument()
+    expect(screen.getByText("0 skipped, 0 couldn't be imported.")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
+    expect(within(screen.getByRole('alertdialog')).getByText('The 1 funding plan it created is deleted. This only works while none of them has been changed since the import.')).toBeInTheDocument()
   })
 })

@@ -26,9 +26,9 @@ export function usePreviewImport() {
   })
 }
 
-/** The lists an import or an undo changes. */
+/** The lists an import or an undo changes. A funding plans import also changes each participant's Funding tab and the onboarding "Funding recorded" gate. */
 function refreshAfterImport(qc: ReturnType<typeof useQueryClient>) {
-  for (const key of ['imports', 'participants', 'staff']) qc.invalidateQueries({ queryKey: [key] })
+  for (const key of ['imports', 'participants', 'staff', 'participant-funding', 'onboarding', 'participant-onboarding-worklist']) qc.invalidateQueries({ queryKey: [key] })
 }
 
 /** POST /imports/{kind}/commit. A retry with the same idempotency key answers with the batch the first request made. */

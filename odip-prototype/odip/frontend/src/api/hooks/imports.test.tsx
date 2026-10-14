@@ -45,4 +45,14 @@ describe('import hooks', () => {
     expect(url).toBe('/imports/participants/commit')
     expect([form.get('landing'), form.get('idempotencyKey')]).toEqual(['Onboarding', 'k-1'])
   })
+
+  it('refreshes the Funding tab and the onboarding checklist after a commit', async () => {
+    const client = new QueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => useCommitImport(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> })
+    await result.current.mutateAsync({ kind: 'funding-plans', file: new File(['x'], 'budgets.csv'), mapping: ['amount'], idempotencyKey: 'k-2' })
+    expect(mockPost.mock.calls[0][0]).toBe('/imports/funding-plans/commit')
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey?.[0])).toEqual(
+      expect.arrayContaining(['imports', 'participants', 'participant-funding', 'onboarding', 'participant-onboarding-worklist']))
+  })
 })

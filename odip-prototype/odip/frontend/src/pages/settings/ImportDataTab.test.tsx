@@ -98,4 +98,23 @@ describe('ImportDataTab', () => {
 
     expect(screen.queryByText(/no invites were sent/)).toBeNull()
   })
+
+  it('offers a funding plans import, names its batches and says what undoing one does', async () => {
+    history.current = [batch({ id: 'b3', kind: 'FundingPlans', fileName: 'budgets.csv', createdCount: 3 })]
+    renderTab()
+    expect(screen.getByRole('link', { name: 'Import funding plans' })).toHaveAttribute('href', '/settings/import/funding-plans')
+    await userEvent.click(within(screen.getByRole('region', { name: 'Funding plans' })).getByRole('button', { name: 'Download template' }))
+    expect(templateMutate).toHaveBeenCalledWith('funding-plans')
+
+    const row = screen.getByRole('row', { name: /budgets\.csv/ })
+    expect(within(row).getByText('Funding plans')).toBeInTheDocument()
+    await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
+    expect(screen.getByText('The 3 funding plans that budgets.csv created are deleted. This only works while none of them has been changed since the import.')).toBeInTheDocument()
+  })
+
+  it('tells the Admin to undo a funding plans import before the participants it used', async () => {
+    renderTab()
+    await userEvent.click(within(screen.getByRole('row', { name: /people\.csv/ })).getByRole('button', { name: 'Undo' }))
+    expect(screen.getByText(/If a funding plans import added plans for them, undo that first\.$/)).toBeInTheDocument()
+  })
 })

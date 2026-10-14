@@ -1,7 +1,7 @@
 // Settings → Import data (ImportsController). Shapes follow Odip.Application/DTOs/ImportDTOs.cs.
 import type { FirebaseAccountState } from './users'
 
-export type ImportKind = 'participants' | 'staff'
+export type ImportKind = 'participants' | 'staff' | 'funding-plans'
 export type ImportLanding = 'Active' | 'Onboarding'
 export type ImportRowStatus = 'Ready' | 'Skipped' | 'Invalid'
 
@@ -17,13 +17,15 @@ export interface ImportPreviewDto {
   skippedCount: number
   invalidCount: number
   previouslyImportedAt: string | null
+  /** What Import would create: the ready rows or, for funding plans, the plans they make (a plan is several rows). */
+  createCount: number
 }
 
 export interface ImportResultDto { batchId: string; createdCount: number; skippedCount: number; failedCount: number; rows: ImportRowDto[]; replayed: boolean }
 
 export interface ImportBatchDto {
   id: string
-  kind: 'Participants' | 'Staff'
+  kind: 'Participants' | 'Staff' | 'FundingPlans'
   fileName: string
   createdByName: string
   createdAt: string
