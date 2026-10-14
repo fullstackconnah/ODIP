@@ -2337,6 +2337,17 @@ function agreementsEnding() {
     delete result._lines
     serviceAgreementDrafts[participantId] = [draftDto(participantId, 1, body, result, lines)]
   }
+  // Agreement PR 2 (fix round 1): p-0001 has an agreement approved for rostering that ended three days ago with no renewal, so the "ended" states can be seen. An approval refuses an agreement
+  // that has already ended, so it is seeded approved. It names the 2026-27 plan; the captures record that plan before they renew it.
+  const today = planApproval.providerToday()
+  const charged = plan.map((entry) => ({ ...entry, block: { ...entry.block, onPublicHoliday: 'Charge' } }))
+  const ended = { ...base, representative: undefined, blocks: charged, agreementStartDate: planApproval.addDays(today, -59), agreementEndDate: planApproval.addDays(today, -3) }
+  const endedQuote = planPricing.quote({ blocks: charged.map((entry) => entry.block), periodFrom: ended.agreementStartDate, periodTo: ended.agreementEndDate, includeLines: true }, planPricingSettings)
+  const endedLines = planPricing.groupLines(endedQuote._lines, charged.map((entry) => entry.block))
+  delete endedQuote._lines
+  serviceAgreementDrafts['p-0001'] = [{ ...draftDto('p-0001', 1, ended, endedQuote, endedLines), approval: {
+    approvedAt: `${planApproval.addDays(today, -60)}T01:00:00Z`, approvedByName: 'Callum Radford', patternsCreated: 7, patternsEnded: 0, shiftsCreated: 0, topUpEnabled: true,
+  } }]
 })()
 
 // Participant budgets (phase 1): the plan record, the support category list and the budget settings. See funding.js.

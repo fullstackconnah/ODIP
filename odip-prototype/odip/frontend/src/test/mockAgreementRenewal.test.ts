@@ -50,4 +50,10 @@ describe.skipIf(!existsSync(SERVER))('the mock answers agreement renewal as the 
     expect(funding).toContain('alertsDto(p, ledgerOf(p.id), agreementAlertsOf(p.id))')
     expect(funding).toContain('alertsDto(person, ledgerOf(id), agreementAlertsOf(id))')
   })
+  it('seeds an approved agreement that ended three days ago, since an approval refuses one already ended', () => {
+    const server = readFileSync(SERVER, 'utf-8')
+
+    expect(server).toContain("serviceAgreementDrafts['p-0001'] = [{ ...draftDto('p-0001', 1, ended, endedQuote, endedLines), approval: {")
+    expect(server).toContain('agreementStartDate: planApproval.addDays(today, -59), agreementEndDate: planApproval.addDays(today, -3)')
+  })
 })
