@@ -124,6 +124,8 @@ public class OdipDbContext : DbContext
     public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
+    /// <summary>The bell's inbox — see <see cref="InAppNotification"/>.</summary>
+    public DbSet<InAppNotification> InAppNotifications => Set<InAppNotification>();
 
     /// <summary>Onboarding import batches (Settings → Import data) and the records each created: see <see cref="Entities.ImportBatch"/>.</summary>
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
@@ -1324,6 +1326,15 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.OutboxId);
         });
 
+        // The bell (dashboard spec 2026-10-14). Title and LinkTo stay unbounded text: the row commits in the caller's own
+        // SaveChanges, so a length limit on a title that carries names could fail the leave request or incident it rides on.
+        modelBuilder.Entity<InAppNotification>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EntityType).HasMaxLength(100);
+            entity.HasIndex(e => new { e.RecipientUserId, e.CreatedAt }).IsDescending(false, true);   // the bell: own rows, newest first
+        });
+
         // ── StaffAssignment override fields (PR 3 wires the gate; columns land now) ──
         modelBuilder.Entity<StaffAssignment>(entity =>
         {
@@ -1923,6 +1934,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<NotificationLog>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<NotificationLog>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<InAppNotification>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<InAppNotification>()
             .HasIndex(e => e.TenantId);
 
         // ── Medication Management tenant query filters ────────────────────────────
