@@ -129,7 +129,7 @@ public class ExportTablesTests
     [Fact]
     public void No_exported_column_looks_like_a_secret_unless_it_is_listed_with_why_it_is_not_one()
     {
-        var looksSecret = new Regex("hash|token|secret|password|cipher|apikey|key$", RegexOptions.IgnoreCase);
+        var looksSecret = new Regex("hash|token|secret|password|passphrase|cipher|encrypt|credential|salt|nonce|otp|jwt|apikey|key$", RegexOptions.IgnoreCase);
         var flagged = ExportTables.All
             .SelectMany(t => ExportTables.Columns(Model, t).Where(c => looksSecret.IsMatch(c.Name)).Select(c => $"{t.EntityType.Name}.{c.Name}"))
             .ToList();
