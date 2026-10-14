@@ -360,7 +360,7 @@ public sealed class OnboardingImportService
         var blockers = batch.Kind switch
         {
             ImportKind.Staff => await ImportUntouched.StaffBlockersAsync(_db, ids, ct),
-            ImportKind.FundingPlans => await ImportUntouched.FundingPlanBlockersAsync(_db, ids, ct),
+            ImportKind.FundingPlans => await ImportUntouched.FundingPlanBlockersAsync(_db, ids, batch.CreatedAt, ct),
             _ => await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct),
         };
         if (blockers.Count > 0)

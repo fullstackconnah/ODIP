@@ -155,4 +155,44 @@ public class OnboardingImportFundingTests
         Assert.Empty(outcome.Blockers);
         Assert.NotNull(outcome.Batch!.UndoneAt);
     }
+
+    [Fact]
+    public async Task A_shift_outside_the_plans_dates_does_not_stop_the_undo()
+    {
+        var (db, tenantId, avaId) = WithAva();
+        using var scope = db;
+        var service = Service(db, tenantId);
+        var result = await service.CommitAsync(ImportKind.FundingPlans, File, "budgets.csv", null, null, "key-1", Admin(), CancellationToken.None);
+        var planId = (await db.FundingPlans.SingleAsync()).Id;
+        // Before the import or outside the plan's dates, these use nothing the import made.
+        db.Shifts.Add(new Odip.Domain.Rostering.Shift { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = avaId, ServiceDate = new DateOnly(2026, 6, 30), CreatedAt = DateTime.UtcNow.AddMinutes(1) });
+        await db.SaveChangesAsync();
+        Assert.Empty((await service.UndoAsync(result.BatchId, Admin(), CancellationToken.None)).Blockers);
+    }
+
+    [Theory]
+    [InlineData("shift", "has shifts booked in its dates since the import")]
+    [InlineData("agreement", "has a service agreement made since the import")]
+    public async Task Undo_is_refused_while_a_plan_has_been_used_since_the_import(string use, string reason)
+    {
+        var (db, tenantId, avaId) = WithAva();
+        using var scope = db;
+        var service = Service(db, tenantId);
+        var result = await service.CommitAsync(ImportKind.FundingPlans, File, "budgets.csv", null, null, "key-1", Admin(), CancellationToken.None);
+        var later = DateTime.UtcNow.AddMinutes(1);
+        if (use == "shift")
+            db.Shifts.Add(new Odip.Domain.Rostering.Shift { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = avaId, ServiceDate = new DateOnly(2026, 9, 1), CreatedAt = later });
+        else
+            db.ServiceAgreementDrafts.Add(new ServiceAgreementDraft
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = avaId, Version = 1, PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30),
+                AgreementStartDate = new DateOnly(2026, 8, 1), AgreementEndDate = new DateOnly(2027, 6, 30), State = "Draft", CreatedAt = later,
+            });
+        await db.SaveChangesAsync();
+
+        var outcome = await service.UndoAsync(result.BatchId, Admin(), CancellationToken.None);
+
+        Assert.Equal($"The plan for Ava Stone (1 Jul 2026 to 30 Jun 2027) {reason}", $"{outcome.Blockers.Single().Name} {outcome.Blockers.Single().Reason}");
+        Assert.Single(await db.FundingPlans.ToListAsync());
+    }
 }
