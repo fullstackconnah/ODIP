@@ -28,6 +28,8 @@ let currentError: unknown = null
 let refetchError: unknown = null
 
 vi.mock('@/api/hooks', () => ({
+  useIntakeVisits: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useConvertParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
   useScheduleOverview: () => ({ data: currentError ? undefined : currentOverview, isLoading: false, error: currentError ?? refetchError }),
   useCreateStaffAssignment: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useCreateVehicleAssignment: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
