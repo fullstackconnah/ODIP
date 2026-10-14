@@ -148,12 +148,11 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
               header: '',
               render: (c: TripClaimListDto) => (
                 <div className="flex items-center gap-3">
-                  <Link to={`/claims/${c.id}`} className="text-xs text-[var(--color-primary)] hover:underline">View</Link>
+                  <Link to={`/claims/${c.id}`} className="text-xs text-[var(--color-primary)] hover:underline" aria-label={`View: ${c.claimReference}`}>View</Link>
                   {canWrite && c.status !== 'Submitted' && c.status !== 'Paid' && (
-                    <button
-                      onClick={() => handleDelete(c)}
-                      className="text-xs text-[var(--color-destructive)] hover:underline"
-                    >Delete</button>
+                    <Button variant="ghost-danger" size="sm" onClick={() => handleDelete(c)} aria-label={`Delete: ${c.claimReference}`}>
+                      Delete
+                    </Button>
                   )}
                 </div>
               ),

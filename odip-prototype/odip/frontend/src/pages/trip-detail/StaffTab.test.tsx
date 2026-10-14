@@ -358,9 +358,8 @@ describe('StaffTab — add modal live conflict gate (trip-side parity)', () => {
   })
 })
 
-// Density polish (touch): the Edit assignment / Remove from trip icon buttons were 22px on touch. They take the shared
-// TAP_ICON_SQUARE (22px on a mouse as before; the 36px --control-h-sm square with a 44px hit area on touch), spaced by the
-// row's 8px gap so the pads touch and never overlap.
+// Density polish (touch): the Edit assignment / Remove from trip icon buttons are the house Button iconOnly (the 24px --control-h-sm
+// square on a mouse, 36px with a 44px TAP_AREA pad on touch), spaced by the row's 8px gap so the pads touch and never overlap.
 describe('StaffTab — touch targets in the row actions', () => {
   const row = {
     id: 'assign-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
@@ -370,14 +369,15 @@ describe('StaffTab — touch targets in the row actions', () => {
     hasConflict: false, overrideReason: null, acknowledgedFindingCodes: null,
   } as StaffAssignmentDto
 
-  it('gives Edit assignment and Remove from trip the 44px touch shape without changing the mouse look', () => {
+  it('makes Edit assignment and Remove from trip the house icon button, named for the row', () => {
     render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
 
     for (const title of ['Edit assignment', 'Remove from trip']) {
       const button = screen.getByTitle(title)
       expect(button, title).toHaveClass(...TAP_AREA.split(' '))
-      expect(button, title).toHaveClass('pointer-coarse:inline-flex', 'pointer-coarse:size-[var(--control-h-sm)]', 'pointer-coarse:items-center', 'pointer-coarse:justify-center', 'pointer-coarse:p-0')
-      expect(button, title).toHaveClass('p-1', 'rounded', 'transition-colors')
+      expect(button, title).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0', 'shrink-0')
+      // Every row has the same two, so each name says whose assignment it is.
+      expect(button, title).toHaveAccessibleName(`${title}: Alex Rivera`)
     }
   })
 
