@@ -22,24 +22,28 @@ public static class InAppNotificationText
         (type, payload) switch
         {
             (NotificationEventType.LeaveRequestSubmitted, LeaveRequestSubmittedPayload p) =>
-                ($"{p.RequesterName} asked for {Leave(p.LeaveType)}, {Range(p.StartDate, p.EndDate)}.", "/rostering/leave"),
+                ($"{Who(p.RequesterName)} asked for {Leave(p.LeaveType)}, {Range(p.StartDate, p.EndDate)}.", "/rostering/leave"),
             (NotificationEventType.LeaveRequestDecided, LeaveRequestDecidedPayload p) =>
                 ($"Your {Leave(p.LeaveType)} for {Range(p.StartDate, p.EndDate)} was {(p.Approved ? "approved" : "declined")}.", "/portal/leave"),
             (NotificationEventType.ShiftAssigned, ShiftAssignedPayload p) =>
-                ($"You're rostered with {p.ParticipantName} on {Day(p.ServiceDate)} at {Clock(p.StartTime)}.", $"/portal/shifts/{entityId}"),
+                ($"You're rostered with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} at {Clock(p.StartTime)}.", $"/portal/shifts/{entityId}"),
             (NotificationEventType.ShiftCompletionPendingReview, ShiftCompletionPendingReviewPayload p) =>
-                ($"{p.WorkerName}'s shift with {p.ParticipantName} on {Day(p.ServiceDate)} is ready for review.", "/rostering/completions"),
+                ($"{Who(p.WorkerName)}'s shift with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} is ready for review.", "/rostering/completions"),
             // The entity is the completion, not the shift, so this links to the portal, as the email does.
             (NotificationEventType.ShiftCompletionReturned, ShiftCompletionReturnedPayload p) =>
-                ($"Your shift with {p.ParticipantName} on {Day(p.ServiceDate)} was returned. See why.", "/portal"),
+                ($"Your shift with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} was returned. See why.", "/portal"),
             (NotificationEventType.WitnessRequested, WitnessRequestedPayload p) =>
-                ($"{p.AdministeringStaffName} needs you to witness a medication for {p.ParticipantName}.", "/portal/witness-approvals"),
+                ($"{Who(p.AdministeringStaffName)} needs you to witness a medication for {Whom(p.ParticipantName)}.", "/portal/witness-approvals"),
             (NotificationEventType.CaregiverSubmissionReceived, CaregiverSubmissionReceivedPayload p) =>
-                ($"{p.CaregiverName} sent a profile update for {p.ParticipantName}.", $"/caregiver-submissions/{entityId}"),
+                ($"{Who(p.CaregiverName)} sent a profile update for {Whom(p.ParticipantName)}.", $"/caregiver-submissions/{entityId}"),
             (NotificationEventType.IncidentReported, IncidentReportedPayload p) =>
-                ($"{p.ReportedByName} reported an incident: {Words(p.IncidentType)}, {Words(p.Severity)} severity.", $"/incidents/{entityId}"),
+                ($"{Who(p.ReportedByName)} reported an incident: {Words(p.IncidentType)}, {Words(p.Severity)} severity.", $"/incidents/{entityId}"),
             _ => (GenericTitle, null),
         };
+
+    /// <summary>A missing name reads as a neutral word, never as a gap in the sentence.</summary>
+    private static string Who(string? name) => string.IsNullOrWhiteSpace(name) ? "Someone" : name;
+    private static string Whom(string? participant) => string.IsNullOrWhiteSpace(participant) ? "a participant" : participant;
 
     /// <summary>"annual leave", but LeaveType.Other reads as plain "leave".</summary>
     private static string Leave(string leaveType) => leaveType == "Other" ? "leave" : $"{Words(leaveType)} leave";
