@@ -326,3 +326,32 @@ describe('RosterBoardPage drag and drop: pending, focus, the strip, and where dr
     expect(h.dnd.props).toBeNull()
   })
 })
+
+describe('RosterBoardPage: Publish week', () => {
+  // BOARD's drafts: Needs staff on Tuesday, Sam's Wednesday, Alex's Friday (on leave), Sam's Saturday with Jo. Two people, one unfilled.
+  it("counts the drafts, confirms in the brief's words, publishes the week, and says what it did", async () => {
+    const user = userEvent.setup()
+    h.publish.mockResolvedValueOnce({ published: 4, notified: 2, unfilled: 1, skipped: 0 })
+    renderPage()
+
+    expect(screen.getByText('4 drafts')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Publish week' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Publish 17–23 Aug?' })
+    expect(within(dialog).getByText('4 draft shifts go out to staff. The 2 people on them are notified. 1 still needs staff and is published as needing staff.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Publish 4 shifts' }))
+
+    expect(h.publish).toHaveBeenCalledWith('2026-08-17')
+    expect(await screen.findByText('Published 4 shifts. 2 people notified.')).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('shows a refusal in the error Callout, and is offered on a phone too', async () => {
+    const user = userEvent.setup()
+    h.screen.belowMd = true
+    h.publish.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['Another change to the roster is still running.'] } } })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Publish week' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 4 shifts' }))
+    expect((await screen.findByText('Another change to the roster is still running.')).closest('[role="alert"]')).not.toBeNull()
+  })
+})

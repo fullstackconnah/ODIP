@@ -15,17 +15,18 @@ import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
-import { useRosterBoard, useAssignShift, useMoveStaff, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
+import { plural } from '@/lib/format'
+import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode } from '@/api/types'
 import {
   WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck,
   type ShiftSlideOverTarget,
 } from './components'
-import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift } from './lib/roster'
+import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
-  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, replacePromptLines, rosterAnnouncements,
+  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, type DragCarry, type DropTarget, type PendingDrop,
 } from './lib/rosterDrag'
 
@@ -167,6 +168,20 @@ export default function RosterBoardPage() {
   const dragOn = canWrite && groupBy === 'participant' && !belowMd
   const boardShifts = useMemo(() => allBoardShifts(board), [board])
   const hours = useMemo(() => staffWeekHours(boardShifts), [boardShifts])
+  const publishWeek = usePublishWeek()
+  const [publishOpen, setPublishOpen] = useState(false)
+  // Counted from the raw board, all participants (the brief, section 8); the server publishes the same week for every participant the board shows.
+  const drafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft'), [boardShifts])
+
+  async function handlePublishWeek() {
+    try {
+      setAnnouncement(publishedSentence(await publishWeek.mutateAsync(weekStart)))
+    } catch (err: unknown) {
+      setAssignError(extractErrorMessage(err, 'Something went wrong publishing this week. Please try again.'))
+    } finally {
+      setPublishOpen(false)
+    }
+  }
   const dragsOff = dropPending !== null || prompt !== null || pendingAssign !== null || pendingBlocked !== null
 
   // A mouse lifts after a 4px move. A finger lifts a strip puck after a 200 ms press, so a swipe still scrolls the strip; a grip (touch-none, a person off a puck) lifts at once.
@@ -353,6 +368,8 @@ export default function RosterBoardPage() {
           onOpenExceptions={() => setExceptionsOpen(true)}
           canWrite={canWrite}
           onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
+          draftCount={board && !weekHasNoShifts ? drafts.length : null}
+          onPublishWeek={() => setPublishOpen(true)}
         />
       </div>
 
@@ -472,6 +489,16 @@ export default function RosterBoardPage() {
         confirmLabel="Delete"
         variant="danger"
         loading={deleteShift.isPending}
+      />
+
+      <ConfirmDialog
+        open={publishOpen}
+        onCancel={() => setPublishOpen(false)}
+        onConfirm={handlePublishWeek}
+        title={`Publish ${formatWeekSpan(days)}?`}
+        message={<p>{publishWeekMessage(drafts)}</p>}
+        confirmLabel={`Publish ${plural(drafts.length, 'shift')}`}
+        loading={publishWeek.isPending}
       />
 
       <ConfirmDialog
