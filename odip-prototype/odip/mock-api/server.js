@@ -700,6 +700,8 @@ const shiftCompletions = [
     // A manual start (the worker never pressed Start and supplied the time at Finish): that path skips the dose checklist, which is why this
     // fixture also has a dose with no outcome - the queue shows both.
     timeZoneId: 'Australia/Brisbane', geolocationDeclined: false, startWasManual: true,
+    originalActualEnd: '2026-09-11T00:02:00Z', timeAdjustmentReason: 'Left at ten to midnight; tapped Finish at home.',
+    kilometres: 12.5, anythingToReport: true,
     submittedByUserId: 's-0004', submittedByName: 'Mei Zhang',
     startedAt: '2026-09-10T19:32:00Z', submittedAt: '2026-09-10T23:50:00Z',
     reviewedByUserId: null, reviewedByName: null, reviewedAt: null,
@@ -1042,7 +1044,10 @@ function withPackageFields(shiftId, completion) {
   }, 0)
   const breakMins = wholeMinutes(breakMinutes)
   return {
-    handoverText: null, nothingToHandOver: false, nothingToNoteConfirmed: false, ...completion,
+    handoverText: null, nothingToHandOver: false, nothingToNoteConfirmed: false,
+    originalActualStart: null, originalActualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null,
+    ...completion,
+    timesAdjusted: !!(completion.originalActualStart || completion.originalActualEnd),
     breaks: breaks.map((b) => breakDto(b, nowMs)), breakMinutes: breakMins, netWorkedMinutes: Math.max(0, gross - breakMins),
   }
 }
@@ -1536,6 +1541,8 @@ const completionQueueItems = Object.values(portalShiftBase)
       breakMinutes: (packageHistoryBreaks[base.id] || []).reduce((sum, b) => sum + Math.round((Date.parse(b.endedAt) - Date.parse(b.startedAt)) / 60000), 0),
       // True on the manual-start path (the worker never pressed Start and supplied the start time at Finish), which skips the dose checklist.
       startWasManual: !!completion.startWasManual,
+      // True when the worker moved the start or end at Finish (the server derives it from the stored originals the same way).
+      timesAdjusted: !!(completion.originalActualStart || completion.originalActualEnd),
     }
   })
   .filter(Boolean)
@@ -2691,8 +2698,19 @@ const postRoutes = [
       reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
       varianceMinutesStart: 3, varianceMinutesEnd: 0, isOutlierVariance: false, varianceReviewMinutes: 15, shiftReturnCount: 0, incidents: [],
     }
+    // The finish flow's inputs, stored as the server stores them. A start move only exists on an in-progress completion, and the mock doesn't
+    // re-check the 15-minute rule: the server is the floor.
+    const startMoved = !!(body?.actualStart && st.completion)
     st.completion = {
-      ...started, actualEnd: now, submittedAt: now, varianceMinutesEnd: -2,
+      ...started,
+      actualStart: startMoved ? body.actualStart : started.actualStart,
+      originalActualStart: startMoved ? started.actualStart : null,
+      actualEnd: body?.actualEnd ?? now,
+      originalActualEnd: body?.actualEnd ? now : null,
+      timeAdjustmentReason: body?.actualEnd || startMoved ? body?.timeAdjustmentReason ?? null : null,
+      kilometres: body?.kilometres ?? null,
+      anythingToReport: body?.anythingToReport ?? null,
+      submittedAt: now, varianceMinutesEnd: -2,
       handoverText, nothingToHandOver: !!body?.nothingToHandOver, nothingToNoteConfirmed: !!body?.nothingToNote,
     }
     st.status = 'PendingReview'

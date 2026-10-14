@@ -52,6 +52,7 @@ function makeQueueItem(overrides: Partial<CompletionQueueItemDto> = {}): Complet
     dosesWithoutOutcome: 0,
     breakMinutes: 0,
     startWasManual: false,
+    timesAdjusted: false,
     ...overrides,
   }
 }
@@ -255,5 +256,49 @@ describe('CompletionReviewPage — a failed load', () => {
     expect(alert).toHaveTextContent(/couldn't load shift completions/i)
     await userEvent.setup().click(within(alert).getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalled()
+  })
+})
+
+describe('CompletionReviewPage: what the worker confirmed at Finish', () => {
+  it('flags only the rows whose times the worker moved, beside the variance badge', () => {
+    mockUseCompletions.mockReturnValue({
+      data: makePaged([makeQueueItem({ timesAdjusted: true }), makeQueueItem({ shiftId: 'shift-2', completionId: 'sc-2', participantName: 'Mia Chen' })]),
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+
+    expect(screen.getAllByText('Times adjusted by the worker')).toHaveLength(1)
+  })
+
+  it('shows the stamped and moved times, the reason, the kilometres and the report answer in the review dialog', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ timesAdjusted: true })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({
+      data: makeCompletionDetail({
+        actualStart: '2026-09-07T21:55:00Z', originalActualStart: '2026-09-07T22:02:00Z', timesAdjusted: true,
+        timeAdjustmentReason: 'Arrived early to help with breakfast.', kilometres: 12.5, anythingToReport: true,
+      }),
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText(/Start 8:02\s?am, changed to 7:55\s?am\./i)).toBeInTheDocument()
+    expect(within(dialog).getByText('Reason: Arrived early to help with breakfast.')).toBeInTheDocument()
+    expect(within(dialog).getByText('12.5 km driven with the participant')).toBeInTheDocument()
+    expect(within(dialog).getByText('The worker said there was something to report.')).toBeInTheDocument()
+  })
+
+  it('says nothing extra for a completion the worker did not change', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail() })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+
+    expect(screen.queryByText(/changed to/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/km driven/)).not.toBeInTheDocument()
   })
 })
