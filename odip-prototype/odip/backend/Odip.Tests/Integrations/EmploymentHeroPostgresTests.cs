@@ -191,4 +191,44 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         await using var check = PostgresFixture.NewContext(_pg.ConnectionString, ImportTestSupport.Tenant(tenantId));
         Assert.Equal("888", (await check.EmploymentHeroConnections.SingleAsync()).BusinessId);
     }
+
+    [SkippableFact]
+    public async Task A_failed_archive_is_reloaded_so_the_last_Admin_check_stays_right_on_Postgres()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        await ConnectAsync(db, tenantId);
+        // Two linked Admins, both ended in EH. Ann first, so she is archived (or not) first.
+        var ann = Person(tenantId, "ann", "901");
+        ann.Role = UserRole.Admin;
+        db.Users.Add(ann);
+        await db.SaveChangesAsync();
+        var bea = Person(tenantId, "bea", "902");
+        bea.Role = UserRole.Admin;
+        db.Users.Add(bea);
+        await db.SaveChangesAsync();
+        // The database refuses Ann's archive mid-run. Inside the run's transaction EF rolls back to its savepoint; the sync must then reload Ann, or her
+        // in-memory IsActive=false would make Bea look like the last Admin and keep her.
+        var fn = $"eh_refuse_{Guid.NewGuid():N}";
+        await db.Database.ExecuteSqlRawAsync(
+            $"CREATE FUNCTION {fn}() RETURNS trigger AS $body$ BEGIN IF NEW.\"Id\" = '{ann.Id}' AND NEW.\"IsActive\" = false THEN RAISE EXCEPTION 'refused' USING ERRCODE = '23514'; END IF; RETURN NEW; END $body$ LANGUAGE plpgsql; " +
+            $"CREATE TRIGGER {fn} BEFORE UPDATE ON \"Users\" FOR EACH ROW EXECUTE FUNCTION {fn}();");
+        try
+        {
+            var result = await EhFixture.Sync(EhList([
+                    StubHttpHandler.Employee(901, ann.FirstName, ann.LastName, ann.Email, null, "2026-10-01T00:00:00"),
+                    StubHttpHandler.Employee(902, bea.FirstName, bea.LastName, bea.Email, null, "2026-10-01T00:00:00")]))
+                .RunAsync(db, tenantId, CancellationToken.None);
+
+            Assert.Equal(EmploymentHeroSyncOutcome.Done, result.Outcome);
+            db.ChangeTracker.Clear();
+            Assert.True((await db.Users.SingleAsync(u => u.Id == ann.Id)).IsActive);
+            Assert.False((await db.Users.SingleAsync(u => u.Id == bea.Id)).IsActive);
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlRawAsync($"DROP TRIGGER IF EXISTS {fn} ON \"Users\"; DROP FUNCTION IF EXISTS {fn}();");
+        }
+    }
 }

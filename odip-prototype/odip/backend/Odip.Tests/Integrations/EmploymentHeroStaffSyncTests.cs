@@ -477,4 +477,83 @@ public class EmploymentHeroStaffSyncTests
         Assert.Empty(check.EmploymentHeroSyncLogs);
         Assert.Null((await check.EmploymentHeroConnections.SingleAsync()).LastSyncAt);
     }
+
+    /// <summary>Refuses the run's last save (the one that writes a successful log row), as a lost database or a unique-index race would.</summary>
+    private sealed class FailingFinalSave : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            eventData.Context!.ChangeTracker.Entries<EmploymentHeroSyncLog>().Any(e => e.State == EntityState.Added && e.Entity.ErrorClass == null)
+                ? throw new DbUpdateException("the final save failed")
+                : base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    [Fact]
+    public async Task An_unexpected_failure_is_recorded_as_a_failed_run_and_alerts_the_Admins()
+    {
+        var name = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        await using (var setup = Db(name, tenant)) await ConnectAsync(setup, tenant);
+        await using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name)
+            .AddInterceptors(new Odip.Infrastructure.Audit.AuditInterceptor(new Microsoft.AspNetCore.Http.HttpContextAccessor()), new FailingFinalSave()).Options,
+            Odip.Tests.Imports.ImportTestSupport.Tenant(tenant));
+
+        var result = await RunAsync(db, tenant, Eh(Employee(101, "Ana", "Ruiz", "ana@gmail.com")));
+
+        Assert.Equal((EmploymentHeroSyncOutcome.Failed, "Unexpected"), (result.Outcome, result.Log!.ErrorClass));
+        await using var check = Db(name, tenant);
+        Assert.Equal(EmploymentHeroStaffSync.UnexpectedMessage, (await check.EmploymentHeroConnections.SingleAsync()).LastSyncError);
+        Assert.Equal("Unexpected", (await check.EmploymentHeroSyncLogs.SingleAsync()).ErrorClass);
+        Assert.Contains("stopped working", (await check.NotificationOutbox.SingleAsync()).PayloadJson);
+    }
+
+    [Theory]
+    [InlineData(12, 3, 3)]   // 3 is not more than max(3, 12 / 4): archived
+    [InlineData(20, 5, 5)]   // 5 is not more than a quarter of 20: archived
+    [InlineData(20, 6, 0)]   // 6 is: held, every one shown instead
+    public async Task The_leaver_brake_holds_only_above_max_3_or_a_quarter_of_the_active_linked_staff(int linked, int leaving, int archived)
+    {
+        // Ada (EH 1, current) is one of the linked staff; staff 2 to linked are linked too, and the first `leaving` of them have ended.
+        var ids = Enumerable.Range(2, linked - 1).ToArray();
+        var (db, tenant) = await OrganisationAsync(ids.Select(i => (Func<Guid, User>)(t => EhFixture.Staff(t, $"P{i}", "Lee", $"p{i}@gmail.com", $"{i}"))).ToArray());
+        await using var _ = db;
+
+        var result = await RunAsync(db, tenant, Eh(ids.Select(i => Employee(i, $"P{i}", "Lee", $"p{i}@gmail.com", null, i <= leaving + 1 ? "2026-10-01T00:00:00" : null)).ToArray()));
+
+        Assert.Equal(archived, result.Log!.Archived);
+        Assert.Equal(linked - archived, await db.Users.CountAsync(u => u.IsActive));
+    }
+
+    [Fact]
+    public async Task Two_Admins_leaving_in_one_run_archives_one_and_keeps_the_last()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Bea", "Admin", "bea@acme.org.au", "2", UserRole.Admin));
+        await using var _ = db;
+        var eh = new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.OK, new[]
+        {
+            Employee(1, "Ada", "Admin", "ada@acme.org.au", null, "2026-10-01T00:00:00"), Employee(2, "Bea", "Admin", "bea@acme.org.au", null, "2026-10-01T00:00:00"),
+        });
+
+        var result = await RunAsync(db, tenant, eh);
+
+        Assert.Equal(1, result.Log!.Archived);
+        Assert.Equal(1, await db.Users.CountAsync(u => u.Role == UserRole.Admin && u.IsActive));
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal("Employment Hero has ended their employment; they are the only Admin. Add another Admin first, then archive them.", item.Reason);
+    }
+
+    [Fact]
+    public async Task A_pending_Admin_counts_as_another_Admin_so_the_leaving_Admin_is_archived()
+    {
+        // Pins today's rule (deep review N1): Cal, an Admin who has never signed in, is "another active Admin".
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Cal", "Ray", "cal@acme.org.au", null, UserRole.Admin));
+        await using var _ = db;
+        var eh = new StubHttpHandler().On(EmployeesPage(Business), HttpStatusCode.OK, new[] { Employee(1, "Ada", "Admin", "ada@acme.org.au", null, "2026-10-01T00:00:00") });
+
+        var result = await RunAsync(db, tenant, eh);
+
+        Assert.Equal(1, result.Log!.Archived);
+        Assert.False((await db.Users.SingleAsync(u => u.FirstName == "Ada")).IsActive);
+        Assert.True((await db.Users.SingleAsync(u => u.FirstName == "Cal")).IsActive);
+    }
 }

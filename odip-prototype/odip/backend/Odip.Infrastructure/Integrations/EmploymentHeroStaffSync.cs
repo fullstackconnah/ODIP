@@ -42,6 +42,7 @@ public sealed class EmploymentHeroStaffSync
     public const string ActorName = "Employment Hero sync";
     public const string StaffFromEmploymentHeroMessage = "Staff come from Employment Hero for this organisation. Add them there; they appear here within 30 minutes.";
     public const string KeyUnreadableMessage = "ODIP can't read the saved API key (this server's integrations key changed or is missing). Connect again with the API key.";
+    public const string UnexpectedMessage = "ODIP couldn't apply Employment Hero's list this time. The next sync tries again.";
     public const string BusyMessage = "A sync for this organisation is already running. Try again in a minute.";
     private const string OtherOrganisationEmail = "Their email in Employment Hero belongs to another organisation on ODIP.";
     private const string CouldNotSave = "ODIP couldn't save their details this time; the next sync tries again.";
@@ -106,15 +107,30 @@ public sealed class EmploymentHeroStaffSync
             _logger.LogInformation("Employment Hero sync for organisation {TenantId} skipped: the connection changed while the list was read", tenantId);
             return new(businessNow is null ? EmploymentHeroSyncOutcome.NotConnected : EmploymentHeroSyncOutcome.Skipped, null);
         }
-        var added = await ApplyAndRecordAsync(db, tenantId, employees, log, ct);
-        if (added > 0)
+        try
         {
-            // Its own entity (this run's log row), so NotificationRaiser's 5-minute dedupe never swallows it behind a recent failure alert.
-            await AlertAdminsAsync(db, tenantId, nameof(EmploymentHeroSyncLog), log.Id, $"{added} staff {(added == 1 ? "member needs" : "members need")} attention after the Employment Hero sync.", ct);
-            await db.SaveChangesAsync(ct);
+            var added = await ApplyAndRecordAsync(db, tenantId, employees, log, ct);
+            if (added > 0)
+            {
+                // Its own entity (this run's log row), so NotificationRaiser's 5-minute dedupe never swallows it behind a recent failure alert.
+                await AlertAdminsAsync(db, tenantId, nameof(EmploymentHeroSyncLog), log.Id, $"{added} staff {(added == 1 ? "member needs" : "members need")} attention after the Employment Hero sync.", ct);
+                await db.SaveChangesAsync(ct);
+            }
+            await runLock.CommitAsync(ct);
+            return new(EmploymentHeroSyncOutcome.Done, log);
         }
-        await runLock.CommitAsync(ct);
-        return new(EmploymentHeroSyncOutcome.Done, log);
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Anything else (the final save, the database) rolls the whole run back. It is still a failed run on the card, in the log and to the Admins,
+            // never a silent 500. Rolled back first, so the record is written outside the abandoned transaction.
+            await runLock.DisposeAsync();
+            db.ChangeTracker.Clear();
+            var current = await db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
+            if (current is null) throw;
+            _logger.LogError("Employment Hero sync for organisation {TenantId} failed unexpectedly ({Error}); nothing was changed", tenantId, ex.GetType().Name);
+            var failed = new EmploymentHeroSyncLog { Id = Guid.NewGuid(), TenantId = tenantId, BusinessId = log.BusinessId, StartedAt = log.StartedAt };
+            return await FailAsync(db, current, failed, "Unexpected", UnexpectedMessage, ct);
+        }
     }
 
     /// <summary>The advisory-lock key for one organisation's sync. It is the import's per-organisation key with "EHSYNC" mixed in, so the two never share a lock.</summary>
