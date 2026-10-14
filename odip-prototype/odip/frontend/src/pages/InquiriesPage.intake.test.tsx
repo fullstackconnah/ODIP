@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { InquiriesTable } from './InquiriesPage'
@@ -52,6 +52,19 @@ describe('the Intake column', () => {
 
     const cluster = screen.getByRole('button', { name: 'Start intake for Noah Fitzgerald' }).parentElement!
     expect(cluster).toHaveClass('flex-wrap', 'md:flex-nowrap')
+  })
+
+  // Fix round 2 (FINISH review 2): two lines in every row. Line 1 is the visit alone; the reply badge leads line 2, beside what the invite did, so a
+  // long line 1 never pushes the badge onto a line of its own (it used to, on Priya's phone card only).
+  it('puts the reply badge on line 2, beside the invite fact', () => {
+    page()
+
+    const line1 = screen.getByRole('button', { name: /intake visit for Priya Nair$/ })
+    const badge = within(line1.parentElement!).getByText('Not confirmed')
+    expect(line1).not.toContainElement(badge)
+    expect(badge.closest('[data-intake-line2]')).toHaveTextContent('Invite sent')
+    const pastBadge = screen.getByText('Past') // a past visit's line 2 is the badge alone
+    expect(pastBadge.closest('[data-intake-line2]')).toHaveTextContent(/^Past$/)
   })
 
   it('shows each state in words, never colour alone', () => {

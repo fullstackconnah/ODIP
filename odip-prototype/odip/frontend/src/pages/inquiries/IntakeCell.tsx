@@ -33,30 +33,32 @@ export function IntakeCell({ row, canManage, onOpen, now = new Date() }: IntakeC
   const line2 = past ? null : inviteLine(row)
   const ink = past ? TONE.neutral.ink : ''
   return (
+    // Two lines (SHAPE section 1): line 1 is the visit alone; the reply badge leads line 2, beside what the invite did. The badge used to sit
+    // beside line 1 and dropped to a line of its own whenever line 1 was long (the 18rem cap), so rows differed.
     <div className="max-w-[18rem]">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {canManage ? (
-          <button
-            type="button"
-            data-intake-control={row.id}
-            // Starts with the visible words (Label in Name); a hidden span would leave a stray space before the comma.
-            aria-label={`${label}, intake visit for ${name}`}
-            onClick={() => onOpen(row)}
-            className={`${TAP_AREA} max-md:min-h-11 rounded-sm text-left font-medium hover:text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${ink}`}
-          >
-            {text}
-          </button>
-        ) : <span className={ink}>{text}</span>}
+      {canManage ? (
+        <button
+          type="button"
+          data-intake-control={row.id}
+          // Starts with the visible words (Label in Name); a hidden span would leave a stray space before the comma.
+          aria-label={`${label}, intake visit for ${name}`}
+          onClick={() => onOpen(row)}
+          className={`${TAP_AREA} max-md:min-h-11 rounded-sm text-left font-medium hover:text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${ink}`}
+        >
+          {text}
+        </button>
+      ) : <span className={ink}>{text}</span>}
+      <div data-intake-line2 className={`mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] ${line2?.failed ? TONE.danger.ink : 'text-[var(--color-muted-foreground)]'}`}>
         {past ? <StatusBadge tone="neutral" label="Past" />
           : row.intakeConfirmedAt ? <StatusBadge tone="success" label="Confirmed" />
           : <StatusBadge tone="warning" label="Not confirmed" />}
+        {line2 && (
+          <span className="inline-flex items-start gap-1">
+            {line2.failed && <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+            {line2.text}
+          </span>
+        )}
       </div>
-      {line2 && (
-        <p className={`mt-0.5 flex items-start gap-1 text-[13px] ${line2.failed ? TONE.danger.ink : 'text-[var(--color-muted-foreground)]'}`}>
-          {line2.failed && <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-          {line2.text}
-        </p>
-      )}
     </div>
   )
 }
