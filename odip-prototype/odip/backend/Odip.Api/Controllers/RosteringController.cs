@@ -732,6 +732,8 @@ public class RosteringController : ControllerBase
         try
         {
             await using var held = await RosterBoardLockAsync(ct);
+            // Lock order (shared with the agreement approval): the organisation's board lock, then the shift rows by Id. A PUT takes neither, so this holds both rows until the save.
+            await LockShiftRowsAsync("\"Id\" IN ({0}, {1})", new object[] { dto.FromShiftId, dto.ToShiftId }, ct);
             var from = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.FromShiftId, ct);
             var to = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.ToShiftId, ct);
             // The query filter keeps both in the caller's organisation; a SuperAdmin with no tenant sees all of them, so they must also share one.
@@ -791,11 +793,10 @@ public class RosteringController : ControllerBase
         try
         {
             await using var held = await RosterBoardLockAsync(ct);
-            if (_db.Database.IsNpgsql())
-                // Hold the week's Draft rows until this commits, then read them. A PUT never takes the roster-board lock: one that cancels a draft now waits for the publish, and one that
-                // committed first is read below as it is, so a publish never writes Published over it.
-                await _db.Database.ExecuteSqlInterpolatedAsync(
-                    $"SELECT 1 FROM \"Shifts\" WHERE \"TenantId\" = {tenantId} AND \"Status\" = {(int)ShiftStatus.Draft} AND \"ServiceDate\" >= {start} AND \"ServiceDate\" <= {end} FOR UPDATE", ct);
+            // Hold the week's Draft rows until this commits, then read them. A PUT never takes the roster-board lock: one that cancels a draft now waits for the publish, and one that
+            // committed first is read below as it is, so a publish never writes Published over it.
+            await LockShiftRowsAsync("\"TenantId\" = {0} AND \"Status\" = {1} AND \"ServiceDate\" >= {2} AND \"ServiceDate\" <= {3}",
+                new object[] { tenantId, (int)ShiftStatus.Draft, start, end }, ct);
             var shown = _db.Participants.Where(Participant.CanReceiveServicesRule).Select(p => p.Id);
             var drafts = await _db.Shifts
                 .Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && shown.Contains(s.ParticipantId))
@@ -1862,6 +1863,26 @@ public class RosteringController : ControllerBase
     {
         if (!await _db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct)) return "Staff member not found.";
         return (await ParticipantReadiness.CheckAsync(_db, participantId, ct)).Allowed ? null : ParticipantReadinessGate.NotReadyMessage;
+    }
+
+    /// <summary>
+    /// Locks the shift rows <paramref name="where"/> picks (a fixed predicate; values only as parameters) FOR UPDATE, in Id order: the order the agreement approval locks its participant's rows in,
+    /// so two lockers never take the same rows in opposite orders. Call it after the board lock. The wait is bounded like the advisory lock's, and a wait that runs out, or a deadlock PostgreSQL
+    /// breaks, is a <see cref="RosterBusyException"/> (409 busy), never a raw 500. A no-op off PostgreSQL.
+    /// </summary>
+    private async Task LockShiftRowsAsync(string where, object[] parameters, CancellationToken ct)
+    {
+        if (!_db.Database.IsNpgsql()) return;
+        var sql = string.Create(CultureInfo.InvariantCulture,
+            $"SET LOCAL lock_timeout = {(int)_generator.LockWait.TotalMilliseconds}; SELECT 1 FROM \"Shifts\" WHERE {where} ORDER BY \"Id\" FOR UPDATE; SET LOCAL lock_timeout TO DEFAULT");
+        try
+        {
+            await _db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.LockNotAvailable or PostgresErrorCodes.DeadlockDetected)
+        {
+            throw new RosterBusyException();
+        }
     }
 
     /// <summary>What a board write answers when the organisation's roster lock stayed held too long (RosterBusyException speaks of one participant's roster; this lock is the whole organisation's).</summary>

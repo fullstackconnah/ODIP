@@ -139,6 +139,44 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task MoveStaff_WhileAShiftRowIsHeld_Is409Busy_AndChangesNothing()   // lock order: the board lock, then the shift rows by Id, under a bounded wait
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid samId, fromId, toId;
+        await using (var db = Open(tenantId))
+        {
+            var sam = Worker(db, "Sam");
+            var mia = Person(db, "Mia");
+            samId = sam.Id;
+            fromId = ShiftOf(db, mia.Id, sam.Id, ShiftStatus.Draft, Monday).Id;
+            toId = ShiftOf(db, mia.Id, null, ShiftStatus.Draft, Monday.AddDays(1)).Id;
+            await db.SaveChangesAsync();
+        }
+
+        // A PUT (which takes no board lock) is mid-transaction on the target row.
+        await using var other = new NpgsqlConnection(_pg.ConnectionString);
+        await other.OpenAsync();
+        await using var editing = await other.BeginTransactionAsync();
+        await using (var touch = new NpgsqlCommand("UPDATE \"Shifts\" SET \"Notes\" = 'edited' WHERE \"Id\" = @id", other, editing))
+        {
+            touch.Parameters.AddWithValue("id", toId);
+            await touch.ExecuteNonQueryAsync();
+        }
+
+        await using (var db = Open(tenantId))
+        {
+            var result = await Controller(db, tenantId, TimeSpan.FromMilliseconds(400)).MoveStaff(new MoveStaffDto { FromShiftId = fromId, ToShiftId = toId, Mode = MoveStaffMode.Move }, default);
+            var busy = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+            Assert.Equal("Another change to the roster is still running. Wait a moment, then try again.", Assert.Single(busy.Errors!));
+        }
+        await editing.RollbackAsync();
+
+        Assert.Equal(samId, await WorkerOn(tenantId, fromId));
+        Assert.Null(await WorkerOn(tenantId, toId));
+    }
+
+    [SkippableFact]
     public async Task TwoMovesOntoOneNeedsStaffShiftAtOnce_OneWinsTheOtherIs409()   // Review Focus 1
     {
         RequirePostgres();
