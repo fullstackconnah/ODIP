@@ -5,9 +5,11 @@ using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
+using Odip.Tests.Catalogue;
 using Odip.Tests.Medications;
 using Odip.Tests.Postgres;
 using Xunit;
@@ -84,5 +86,32 @@ public class AgreementRenewalPostgresTests : IClassFixture<PostgresFixture>
 
         var row = Assert.Single(Assert.IsType<ApiResponse<List<AgreementEndingDto>>>(Assert.IsType<OkObjectResult>(response.Result).Value).Data!);
         Assert.Equal((participantId, "Amy Ng", 20, "Agreement ends in 20 days"), (row.ParticipantId, row.ParticipantName, row.DaysLeft, row.Status));
+    }
+
+    [SkippableFact]
+    public async Task TheRenewal_ReadsTheTermAndThePlanAndSaves_OnPostgres()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        await using (var admin = PostgresFixture.NewContext(cs)) await CatalogueImportTestSupport.ImportAsync(admin, CatalogueFixtures.File2026_27);
+        await StoreAsync(cs, tenantId, participantId, 1, new DateOnly(2026, 10, 12), new DateOnly(2026, 11, 22), approved: true);
+        var change = await StoreAsync(cs, tenantId, participantId, 2, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 22), approved: true);
+        await using (var setup = Open(cs, tenantId))
+        {
+            setup.FundingPlans.Add(new FundingPlan
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30),
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            await setup.SaveChangesAsync();
+        }
+
+        await using var db = Open(cs, tenantId);
+        var outcome = await new AgreementRenewalService(db).RenewAsync(tenantId, participantId, change.Id, Admin, "admin", CancellationToken.None);
+
+        Assert.Empty(outcome.Errors);
+        var v3 = outcome.Draft!;
+        Assert.Equal((3, new DateOnly(2026, 11, 23), new DateOnly(2027, 1, 3), new DateOnly(2026, 7, 1)), (v3.Version, v3.AgreementStartDate, v3.AgreementEndDate, v3.PlanStartDate));
+        Assert.NotEmpty(v3.Lines);
     }
 }

@@ -95,7 +95,7 @@ public sealed class ServiceAgreementApprovalService
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
         if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: true, ct);
-        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
 
         var (draft, participant) = found.Value;
         var plan = await PlanAsync(tenantId, draft, participant, ct, includeBudget: true);
@@ -108,7 +108,7 @@ public sealed class ServiceAgreementApprovalService
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
         if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: false, ct);
-        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
 
         try
         {
@@ -157,7 +157,7 @@ public sealed class ServiceAgreementApprovalService
     private async Task<ApprovalOutcome> NotThereAsync(Guid tenantId, Guid participantId, ApprovalCaller caller, bool preview, CancellationToken ct)
     {
         if (await NewestVersionAsync(tenantId, participantId, ct) is not { } newest) return new ApprovalOutcome(ApprovalStatus.NotFound, Errors: new[] { "Draft not found." });
-        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
         return Superseded(newest, preview);
     }
 
@@ -606,11 +606,11 @@ public sealed class ServiceAgreementApprovalService
 
     // ── Who may approve ───────────────────────────────────────────────────────────
 
-    /// <summary>The caller's role is one of the organisation's approver roles (Admin and Coordinator until it says otherwise), or the caller is a SuperAdmin acting for the organisation.</summary>
-    private async Task<bool> MayApproveAsync(Guid tenantId, ApprovalCaller caller, CancellationToken ct)
+    /// <summary>The caller's role is one of the organisation's approver roles (Admin and Coordinator until it says otherwise), or the caller is a SuperAdmin acting for the organisation. Renewing asks the same (agreement PR 2).</summary>
+    internal static async Task<bool> MayApproveAsync(PlanPricingService pricing, Guid tenantId, ApprovalCaller caller, CancellationToken ct)
     {
         if (caller.IsSuperAdmin) return true;
-        var allowed = PlanPricingPolicy.From(await _pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;
+        var allowed = PlanPricingPolicy.From(await pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;
         return caller.Roles.Any(role => allowed.Contains(role, StringComparer.OrdinalIgnoreCase));
     }
 
