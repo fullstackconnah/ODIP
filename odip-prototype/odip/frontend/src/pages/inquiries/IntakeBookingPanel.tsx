@@ -308,6 +308,8 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
               onChange={value => set('staffUserId', value)}
               placeholder="Choose who's going"
               loading={staffQuery.isLoading}
+              // A refusal focuses the field to fix: it must show who was chosen, not an empty search over an open list.
+              openOnFocus={false}
             />
           </FormField>
         </div>

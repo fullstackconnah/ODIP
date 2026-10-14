@@ -89,6 +89,11 @@ describe('IntakeBookingPanel: a new booking', () => {
     expect(screen.getByLabelText(/^How long/)).toHaveValue('120')
     expect(screen.getByLabelText(/^Notes for your team/)).toHaveValue('Side gate')
     expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ staffUserId: 'dana', durationMinutes: 120, notes: 'Side gate' }) }))
+    // Fix round 1: the refused field takes focus showing the chosen person, its list closed.
+    const staff = screen.getByRole('combobox', { name: /^Who's going/ })
+    expect(staff).toHaveFocus()
+    expect(staff).toHaveValue('Dana Smith (you)')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
   it('says the connection failed and keeps the entries', async () => {
