@@ -2287,6 +2287,30 @@ function saveDraft(participantId, body) {
   return draft
 }
 
+const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
+
+// Agreement PR 2: the agreements ending, as AgreementEnding.FindAsync finds them on the server. An active participant's newest approved revision ending within 60 days of the provider's today, or
+// ended; a newer revision starting after it (a renewal) hides one still running, and an ended one says it waits. Soonest end first, in the participant alert's words. Revisions are newest first here.
+function agreementsEnding() {
+  const today = planApproval.providerToday()
+  const rows = []
+  for (const person of participants.filter((p) => p.isActive && !p.isDraft)) {
+    const revisions = serviceAgreementDrafts[person.id] || []
+    const approved = revisions.find((draft) => draft.approval)
+    if (!approved) continue
+    const daysLeft = daysBetween(today, approved.agreementEndDate)
+    if (daysLeft > 60) continue
+    const renewal = revisions.find((draft) => draft.version > approved.version && draft.agreementStartDate > approved.agreementEndDate)
+    if (renewal && daysLeft >= 0) continue
+    const words = daysLeft < 0 ? `Agreement ended ${approved.agreementEndDate}: shifts stop after it` : daysLeft === 0 ? 'Agreement ends today' : daysLeft === 1 ? 'Agreement ends in 1 day' : `Agreement ends in ${daysLeft} days`
+    rows.push({
+      participantId: person.id, participantName: person.fullName, draftId: approved.id, version: approved.version, agreementEndDate: approved.agreementEndDate, daysLeft,
+      renewalVersion: renewal ? renewal.version : null, status: renewal ? `${words}. Renewal v${renewal.version} is waiting for approval` : words,
+    })
+  }
+  return rows.sort((a, b) => a.agreementEndDate.localeCompare(b.agreementEndDate))
+}
+
 ;(function seedDrafts() {
   serviceAgreementDrafts['p-0002'] = [{
     id: 'draft-p-0002-v1', participantId: 'p-0002', version: 1, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3',
@@ -2313,6 +2337,17 @@ function saveDraft(participantId, body) {
     delete result._lines
     serviceAgreementDrafts[participantId] = [draftDto(participantId, 1, body, result, lines)]
   }
+  // Agreement PR 2 (fix round 1): p-0001 has an agreement approved for rostering that ended three days ago with no renewal, so the "ended" states can be seen. An approval refuses an agreement
+  // that has already ended, so it is seeded approved. It names the 2026-27 plan; the captures record that plan before they renew it.
+  const today = planApproval.providerToday()
+  const charged = plan.map((entry) => ({ ...entry, block: { ...entry.block, onPublicHoliday: 'Charge' } }))
+  const ended = { ...base, representative: undefined, blocks: charged, agreementStartDate: planApproval.addDays(today, -59), agreementEndDate: planApproval.addDays(today, -3) }
+  const endedQuote = planPricing.quote({ blocks: charged.map((entry) => entry.block), periodFrom: ended.agreementStartDate, periodTo: ended.agreementEndDate, includeLines: true }, planPricingSettings)
+  const endedLines = planPricing.groupLines(endedQuote._lines, charged.map((entry) => entry.block))
+  delete endedQuote._lines
+  serviceAgreementDrafts['p-0001'] = [{ ...draftDto('p-0001', 1, ended, endedQuote, endedLines), approval: {
+    approvedAt: `${planApproval.addDays(today, -60)}T01:00:00Z`, approvedByName: 'Callum Radford', patternsCreated: 7, patternsEnded: 0, shiftsCreated: 0, topUpEnabled: true,
+  } }]
 })()
 
 // Participant budgets (phase 1): the plan record, the support category list and the budget settings. See funding.js.
@@ -2320,7 +2355,13 @@ function saveDraft(participantId, body) {
 const funding = fundingModule.create({
   respond, people: participants,
   priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
+  // Agreement PR 2, rule 12 of ParticipantAlertsService: the agreement ending soon (Warning) or ended (Critical), from the ending list's rule, opening the agreement page.
+  agreementAlertsOf: (id) => agreementsEnding().filter((row) => row.participantId === id).map((row) => ({
+    type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status, deepLinkTab: 'details', linkTo: `/participants/${id}/agreement-draft`,
+  })),
 })
+// Fix round 1: the price list withdraws the group activity Sunday item three weeks from today (no seeded plan has one), so a renewal's review can show a line the new price list has not got.
+planPricing.withdraw('04_105_0136_6_1', planApproval.addDays(planApproval.providerToday(), 21))
 // Budget phase 3: the roster's budget check, the shifts that carry the over-budget markers and the Admin's review task. See rosterBudget.js for the switches.
 const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
@@ -2328,6 +2369,7 @@ const routes = [
   ...funding.get,
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
+  ['service-agreements/ending', () => agreementsEnding()],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
   ['participants/:id/service-agreement-drafts/:id', (participantId, draftId) => {
     const found = (serviceAgreementDrafts[participantId] || []).find((draft) => draft.id === draftId)
@@ -2620,6 +2662,28 @@ const postRoutes = [
       oldTotal: 7358, newTotal: 7725.9, difference: 367.9, needsReview: false,
     }
     return body && body.preview ? result : { ...result, draftId: `${draftId}-change` }
+  }],
+  // Agreement PR 2: Renew agreement, as AgreementRenewalService answers it: the newest approved revision's blocks saved as the next revision from the day after it ends, for the same length, cut at
+  // the plan covering that first day and at 800 days; 409 plan-needed with no such plan, 409 draft-version-conflict while a newer revision waits.
+  // shortcut: the length is this revision's own, not its term's (D2's chained changes), which the mock's screens never make; the server holds the term.
+  ['participants/:id/service-agreement-drafts/:id/renew', (participantId, draftId) => {
+    const revisions = serviceAgreementDrafts[participantId] || []
+    const source = revisions.find((draft) => draft.id === draftId)
+    if (!source) return respond(404, failEnvelope(null, ['Agreement not found.']))
+    const approved = revisions.find((draft) => draft.approval)
+    if (!approved || approved.id !== source.id) {
+      return respond(400, failEnvelope(null, [approved ? `Renew the agreement from its newest approved revision, v${approved.version}.` : 'This agreement is not approved for rostering yet, so there is nothing to renew.']))
+    }
+    const newest = revisions[0]
+    if (newest.id !== source.id) return respond(409, failEnvelope({ currentVersion: newest.version }, [`This agreement has a newer revision, v${newest.version}. Load it first: a renewal would replace it.`], 'draft-version-conflict'))
+    const start = planApproval.addDays(source.agreementEndDate, 1)
+    const plan = funding.plansOf(participantId).find((p) => p.planStart <= start && start <= p.planEnd)
+    if (!plan) return respond(409, failEnvelope(null, [`Record the new plan first: no plan of the participant's covers ${start}, the day the renewal starts.`], 'plan-needed'))
+    const end = [planApproval.addDays(start, daysBetween(source.agreementStartDate, source.agreementEndDate)), plan.planEnd, planApproval.addDays(start, 799)].sort()[0]
+    return saveDraft(participantId, {
+      state: source.state, planStartDate: plan.planStart, planEndDate: plan.planEnd, agreementStartDate: start, agreementEndDate: end, representative: source.representative,
+      blocks: source.blocks, baseVersion: revisions.length,
+    })
   }],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
