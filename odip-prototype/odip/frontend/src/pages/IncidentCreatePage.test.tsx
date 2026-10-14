@@ -1658,4 +1658,19 @@ describe('IncidentCreatePage: the shift prefill from "Anything to report?"', () 
     expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ shiftId: 'shift-9', involvedParticipantId: 'participant-1' })
     expect(mockApiPost).not.toHaveBeenCalled()
   })
+
+  it("dates the incident at the shift's actual start when the shift gives one (review deep N3)", async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: { ...shiftPrefill, incidentAt: '2026-08-17T09:05' } })
+
+    await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Fall in the garden')
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user)
+    await clickNext(user)
+    await clickNext(user)
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    await screen.findByText('Shift page')
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ incidentDateTime: '2026-08-17T09:05' })
+  })
 })

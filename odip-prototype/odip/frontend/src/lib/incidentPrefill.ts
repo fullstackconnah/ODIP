@@ -288,6 +288,8 @@ export interface ShiftIncidentPrefillState {
   reportedByUserId?: string | null
   /** Where the form goes after the report is filed: back to the shift, whose finish flow reopens at its report step. */
   returnTo?: string
+  /** The shift's actual start, provider-local "yyyy-MM-ddTHH:mm": the incident's default time. Without it, the rostered start. */
+  incidentAt?: string
 }
 
 export function isShiftIncidentPrefillState(state: unknown): state is ShiftIncidentPrefillState {

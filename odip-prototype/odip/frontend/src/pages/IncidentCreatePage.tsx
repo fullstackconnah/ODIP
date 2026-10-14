@@ -344,7 +344,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       description: buildShiftIncidentDescriptionSkeleton(shiftPrefill),
       involvedParticipantId: shiftPrefill.participantId,
       reportedByStaffId: shiftPrefill.reportedByUserId ?? currentUserId ?? '',
-      incidentDateTime: `${shiftPrefill.serviceDate}T${shiftPrefill.startTime.slice(0, 5)}`,
+      incidentDateTime: shiftPrefill.incidentAt ?? `${shiftPrefill.serviceDate}T${shiftPrefill.startTime.slice(0, 5)}`,
     })
   }, [shiftPrefill, reset, currentUserId])
 

@@ -590,6 +590,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Yes, report it' }))
     expect(JSON.parse(screen.getByTestId('incident-form').textContent!)).toMatchObject({
       source: 'shift', shiftId: 'shift-1', participantId: 'participant-1', participantName: 'Mia Chen', returnTo: '/portal/shifts/shift-1',
+      incidentAt: '2026-08-17T18:58',   // the actual start (08:58Z) in Brisbane, so the form is dated at the shift, not its roster (review deep N3)
     })
     expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: 'report', reached: 'report', anythingToReport: 'yes' })
   })

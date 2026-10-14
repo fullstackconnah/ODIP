@@ -14,6 +14,7 @@ import { breaksSignature, FINISH_STEPS, handoverForward, movedTimes, parseKilome
 import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusal } from './finishSteps'
 import { requestGeolocation } from './geolocation'
+import { utcInstantToProviderLocal } from './shiftTime'
 import { ActionBar } from './ui'
 import { useNow } from './useNow'
 import type { DoseTarget } from './DoseSheet'
@@ -190,6 +191,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
       source: 'shift', shiftId: shift.id, participantId: shift.participant.id, participantName: shift.participant.fullName,
       serviceDate: shift.serviceDate, startTime: shift.startTime, endTime: shift.endTime, endsNextDay: shift.endsNextDay,
       reportedByUserId: currentUserId, returnTo: `/portal/shifts/${shift.id}`,
+      incidentAt: shift.completion ? utcInstantToProviderLocal(shift.completion.actualStart, shift.timeZoneId) : undefined,
     }
     navigate('/incidents/new', { state: prefill })
   }
