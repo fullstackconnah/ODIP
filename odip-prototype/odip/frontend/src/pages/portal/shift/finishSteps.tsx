@@ -303,6 +303,7 @@ export function ReportStep({ shift, answer, onYes, onNo, onLeave }: {
         </div>
       ) : (
         <div className="grid gap-2">
+          {answer === 'no' && <p className="text-sm">You said there's nothing to report.</p>}
           <Button size="lg" variant="secondary" className="w-full" onClick={onYes}>Yes, report it</Button>
           <Button size="lg" variant="secondary" className="w-full" onClick={onNo}>No, nothing to report</Button>
         </div>
@@ -399,16 +400,18 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
       ))}
       <p className="text-sm">A coordinator reviews your shift next. You can still add notes after you submit.</p>
       {refusals.length > 0 && (
-        <Callout tone="info" title="You can't submit yet">
-          <ul className="space-y-1">
-            {refusals.map((r, i) => (
-              <li key={i} className="flex flex-wrap items-center gap-2">
-                {r.message}
-                {r.step && <Button variant="ghost" size="md" onClick={() => go(r.step!)}>Go to step</Button>}
-              </li>
-            ))}
-          </ul>
-        </Callout>
+        <div id="finish-refusals" tabIndex={-1} className="focus:outline-none">
+          <Callout tone="info" title="You can't submit yet">
+            <ul className="space-y-1">
+              {refusals.map((r, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-2">
+                  {r.message}
+                  {r.step && <Button variant="ghost" size="md" onClick={() => go(r.step!)}>Go to step</Button>}
+                </li>
+              ))}
+            </ul>
+          </Callout>
+        </div>
       )}
     </div>
   )

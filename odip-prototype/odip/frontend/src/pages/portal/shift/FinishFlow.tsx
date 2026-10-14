@@ -56,7 +56,8 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   const [tick, refreshClock] = useNow(30_000)
   const [opened] = useState(() => openDraft(shift))
   const [d, setD] = useState<EndDraft>(opened.draft)
-  const set = (patch: Partial<EndDraft>) => setD(prev => ({ ...prev, ...patch }))
+  // An edit clears the refusal it may have fixed: a stale "choose a time between" next to a corrected time misleads.
+  const set = (patch: Partial<EndDraft>) => { setError(null); setD(prev => ({ ...prev, ...patch })) }
   const [error, setError] = useState<{ message: string; focus?: string; field?: TimesField } | null>(null)
   const [refusals, setRefusals] = useState<Refusal[]>([])
   const [networkError, setNetworkError] = useState(false)
@@ -84,6 +85,8 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   // WizardStepHeading moves focus on a step change but skips its first mount, so opening (or resuming) the flow focuses the heading here.
   useEffect(() => { topRef.current?.querySelector<HTMLElement>('h2')?.focus() }, [])
   useEffect(() => { if (error?.focus) document.getElementById(error.focus)?.focus() }, [error])
+  // A server refusal is listed under the summary; focus brings it on screen, however long the summary is.
+  useEffect(() => { if (refusals.length) document.getElementById('finish-refusals')?.focus() }, [refusals])
 
   function go(key: FinishStepKey) {
     refreshClock()

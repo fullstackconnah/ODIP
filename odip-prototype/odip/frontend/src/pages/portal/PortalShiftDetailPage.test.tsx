@@ -616,6 +616,17 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: 'report', anythingToReport: 'yes' })
   })
 
+  it("step 3 says when the answer was No, so coming back to it shows it answered", () => {
+    show(inProgress())
+    endShift()
+    forward('Confirm times')
+    forward('Next')
+    fireEvent.click(screen.getByRole('button', { name: 'No, nothing to report' }))
+    fireEvent.click(bar().getByRole('button', { name: 'Back' }))
+    expect(screen.getByText("You said there's nothing to report.")).toBeInTheDocument()
+    expect(bar().getByRole('button', { name: 'Next' })).toBeInTheDocument()
+  })
+
   it('step 4 names the missing answers on its forward button', () => {
     show(inProgress())
     endShift()
@@ -666,6 +677,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     forward('Submit shift')
     await waitFor(() => expect(screen.getByText("You can't submit yet")).toBeInTheDocument())
     expect(screen.getByText('Paracetamol at 12:00 needs an outcome before you finish.')).toBeInTheDocument()
+    await waitFor(() => expect(document.getElementById('finish-refusals')).toHaveFocus())   // brought on screen below a long summary
     fireEvent.click(screen.getByRole('button', { name: 'Go to step' }))
     expect(heading('Doses & routines')).toBeInTheDocument()
   })
@@ -993,6 +1005,15 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
         handoverText: null, nothingToHandOver: true, nothingToNote: true,
       },
     }))
+  })
+
+  it('clears a refusal once the worker edits, so a fixed value is never shown as still wrong', () => {
+    open()
+    change('Kilometres driven with Mia (optional)', '12,5')
+    forward('Confirm times')
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
+    change('Kilometres driven with Mia (optional)', '12.5')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it("refuses kilometres it can't read, on step 1 with focus on the field", async () => {
