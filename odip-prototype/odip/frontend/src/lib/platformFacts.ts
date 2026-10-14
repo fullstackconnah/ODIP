@@ -30,7 +30,7 @@ export function platformFacts(info: PlatformInfo, today: Date = new Date()): Pla
     abn: company && /^\d{11}$/.test(abnDigits)
       ? `${abnDigits.slice(0, 2)} ${abnDigits.slice(2, 5)} ${abnDigits.slice(5, 8)} ${abnDigits.slice(8)}`
       : null,
-    supportEmail: info.supportEmail && /^[^\s@]+@[^\s@]+$/.test(info.supportEmail) ? info.supportEmail : null,
+    supportEmail: info.supportEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(info.supportEmail) ? info.supportEmail : null,
     statusUrl: isHttpsUrl(info.statusUrl) ? info.statusUrl : null,
     legal: info.legalPublished === true,
     build: version && sha ? `${version} · ${sha}` : version ?? (sha && `Build ${sha}`),

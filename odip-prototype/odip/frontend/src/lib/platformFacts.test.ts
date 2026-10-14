@@ -51,6 +51,9 @@ describe('platformFacts: every row of SHAPE 6.1', () => {
     ['@example.org', null],
     ['help@', null],
     ['a@b@c.org', null],
+    ['help@example', null],
+    ['help@localhost', null],
+    ['help@example.', null],
   ])('support email %j shows %j', (supportEmail, shown) => {
     expect(platformFacts({ ...FULL, supportEmail }, TODAY).supportEmail).toBe(shown)
   })
