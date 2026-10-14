@@ -60,6 +60,7 @@ const PortalShiftDetailPage = React.lazy(() => import('@/pages/portal/PortalShif
 const PortalWitnessApprovalsPage = React.lazy(() => import('@/pages/portal/PortalWitnessApprovalsPage'))
 const PortalLeavePage = React.lazy(() => import('@/pages/portal/PortalLeavePage'))
 const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage'))
+const AccessibilityPage = React.lazy(() => import('@/pages/AccessibilityPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +119,8 @@ const router = createBrowserRouter(
       {/* Caregiver profile form — public, token-authenticated, deliberately OUTSIDE the
           authenticated shell: no PrivateRoute, no AppLayout, no UiPreferencesProvider. */}
       <Route path="/caregiver/:token" element={<CaregiverWizardPage />} />
+      {/* The accessibility statement: public, outside the shell, so a signed-out reader is never sent to /login. */}
+      <Route path="/accessibility" element={<AccessibilityPage />} />
       <Route element={<UiPreferencesProvider><ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary></UiPreferencesProvider>}>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/trips" element={<PrivateRoute page="trips"><TripsPage /></PrivateRoute>} />

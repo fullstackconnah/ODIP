@@ -63,14 +63,14 @@ describe('AgreementBudgetBreakdown: the states that are not an answer', () => {
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
   })
 
-  // The spec's sentence stays ("No budget recorded for this participant ..."), and for a plan that ended it says so, as the Funding tab shows that plan: it must not read as if none was ever recorded.
-  it('says the recorded plan ended, and when, after the same words, and offers to record a new plan', () => {
+  // A plan that ended says so, and when, as the Funding tab shows that plan: the bar must not read as if none was ever recorded.
+  it('says the recorded plan ended, and when, and offers to record a new plan', () => {
     renderView({
       status: 'none', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, noBudgetReason: 'PlanEnded', planEnd: '2026-06-30',
       noBudgetAction: { label: 'Record a new plan', to: '/participants/p-1?tab=funding' },
     })
 
-    expect(screen.getByText('No budget recorded for this participant: the recorded plan ended on 30 Jun 2026, so there is nothing to compare the agreement against.')).toBeInTheDocument()
+    expect(screen.getByText("The participant's recorded plan ended on 30 Jun 2026, so there is no current budget to compare the agreement against.")).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Record a new plan' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

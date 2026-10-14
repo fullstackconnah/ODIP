@@ -47,6 +47,7 @@ public class DedupeTests
         await db.SaveChangesAsync();
 
         Assert.Equal(1, await db.NotificationOutbox.CountAsync());
+        Assert.Equal(1, await db.InAppNotifications.CountAsync()); // the bell shares the outbox dedupe: one event, one bell item
     }
 
     [Fact]
@@ -69,5 +70,6 @@ public class DedupeTests
         await db.SaveChangesAsync();
 
         Assert.Equal(2, await db.NotificationOutbox.CountAsync());
+        Assert.Equal(2, await db.InAppNotifications.CountAsync());
     }
 }

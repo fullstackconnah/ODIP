@@ -93,6 +93,12 @@ public class PortalLeaveTests
         var row = await db.NotificationOutbox.SingleAsync();
         Assert.Equal(Odip.Domain.Notifications.NotificationEventType.LeaveRequestSubmitted, row.EventType);
         Assert.Equal(coordinator.Id, row.RecipientUserId);
+
+        // The bell, through the real controller: the requester is the seeded "Ben Turner", the dates are Today and Today + 1.
+        var bell = await db.InAppNotifications.SingleAsync();
+        Assert.Equal(coordinator.Id, bell.RecipientUserId);
+        Assert.Equal("Ben Turner asked for annual leave, 7 to 8 Sep.", bell.Title);
+        Assert.Equal("/rostering/leave", bell.LinkTo);
     }
 
     [Fact]
