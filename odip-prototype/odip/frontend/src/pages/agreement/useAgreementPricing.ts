@@ -18,6 +18,8 @@ type Args = {
   canQuote: boolean
   /** What a saved revision was priced with: shown instead of a live quote while the agreement cannot be changed. */
   stored?: PlanBudget
+  /** Opens the editor to record the participant's budget, for a person who may. */
+  onRecordBudget?: () => void
 }
 
 /**
@@ -25,7 +27,7 @@ type Args = {
  * quotes one after the other so they never pass the organisation's limit of two in flight), and the answer is read back in shifts. A shift with something missing is left out of the quote and
  * counted. Nothing here decides whether anything can be saved: that is the engine's refusals, listed in `refused`.
  */
-export function useAgreementPricing({ participantId, shifts, state, zone, from, to, canQuote, stored }: Args) {
+export function useAgreementPricing({ participantId, shifts, state, zone, from, to, canQuote, stored, onRecordBudget }: Args) {
   const settings = usePlanPricingSettings(canQuote).data
   const groups = useMemo(() => groupShifts(shifts), [shifts])
   const { quoted, leftOut } = useMemo(() => {
@@ -52,6 +54,7 @@ export function useAgreementPricing({ participantId, shifts, state, zone, from, 
     failed: check.isError,
     pending: settling || budget.isFetching || check.isFetching || check.isPlaceholderData,
     onRetry: () => { void check.refetch() },
+    onRecord: onRecordBudget,
   })
   const issues: PlanIssue[] = answer?.period.issues ?? []
   return {

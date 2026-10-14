@@ -188,7 +188,7 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
     await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
-    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete']) {
+    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', /^delete/i]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
     expect(screen.getByText(/only a super admin can add, delete or sync public holidays/i)).toBeInTheDocument()
@@ -203,7 +203,8 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
     await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
-    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete']) {
+    // Every row has a Delete, so its name says which holiday it deletes.
+    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete: Labour Day, 05/10/2026 (NSW)']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
     expect(screen.queryByText(/only a super admin can add, delete or sync public holidays/i)).not.toBeInTheDocument()

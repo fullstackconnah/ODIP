@@ -28,11 +28,13 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly PlanQuoteConcurrencyLimiter? _saveLimiter;
     private readonly ServiceAgreementApprovalService _approval;
+    private readonly AgreementPatternChangeService _patternChange;
     public const string SaveBusyMessage = "Another plan is already being saved for your organisation. Try again in a moment.";
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null, ServiceAgreementApprovalService? approval = null)
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null, ServiceAgreementApprovalService? approval = null, AgreementPatternChangeService? patternChange = null)
     {
         _saveLimiter = saveLimiter;
         _approval = approval ?? new ServiceAgreementApprovalService(db, new Odip.Api.Services.RosterPlacementGate(), configuration: configuration);
+        _patternChange = patternChange ?? new AgreementPatternChangeService(db, service);
         _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
         _simulation = simulation ?? new DemoJourneySimulationService(db);
         _configuration = configuration ?? new ConfigurationBuilder().Build();
@@ -132,8 +134,8 @@ public class ServiceAgreementDraftsController : ControllerBase
 
     /// <summary>
     /// Approves the NEWEST revision for rostering (phase D), in one transaction: records who and when, makes the weekly roster patterns of its blocks, ends the patterns of the revision before it the
-    /// day before this one starts, and generates the open shifts up to the horizon (<c>RosterTopUp:HorizonDays</c>, 56 days by default) when the participant may be rostered. No shift that exists is changed. 200 with
-    /// the revision (its <c>approval</c> and the <c>oldShiftsRemaining</c> counts); 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 409 when a newer revision exists
+    /// day before this one starts, and generates the open shifts up to the horizon (<c>RosterTopUp:HorizonDays</c>, 56 days by default) when the participant may be rostered. The revision before's unfilled Draft shifts from this one's start are removed in the same transaction; the rest are listed (<c>oldShiftsRemaining</c>) and left for a coordinator. 200 with
+    /// the revision (its <c>approval</c> and <c>oldShiftsRemaining</c>); 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 409 when a newer revision exists
     /// (<c>draft-superseded</c>) or another change to the participant's roster was still running (<c>roster-busy</c>; nothing was changed, try again). Approving an approved revision again is a 200 with
     /// the existing approval and writes nothing.
     /// </summary>
@@ -160,6 +162,37 @@ public class ServiceAgreementDraftsController : ControllerBase
             default:
                 return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(outcome.Draft!) with { Approval = ApprovalOf(outcome.Approval), OldShiftsRemaining = outcome.OldShifts }));
         }
+    }
+
+    /// <summary>
+    /// A change to the day, times, ratio or night type of a roster pattern that revision <c>{id}</c>'s approval made, saved as the agreement's next revision, re-priced, for approval (agreement PR 1). The
+    /// pattern and the roster do not change until that revision is approved. With <c>preview</c> nothing is saved and the answer is what would be. 200 with the revision's number and dates and what its
+    /// period costs before and after; 400 with every reason in <c>errors</c>; 404 for a revision or pattern that is not the caller's; 409 <c>draft-version-conflict</c> when a newer revision exists.
+    /// </summary>
+    [HttpPost("{id:guid}/pattern-change")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(4_096)]
+    [EnableRateLimiting("api")]
+    public async Task<ActionResult<ApiResponse<PatternChangeResultDto>>> PatternChange(Guid participantId, Guid id, AgreementPatternChangeDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<PatternChangeResultDto>.Fail("A tenant context is required."));
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
+
+        // A change is priced twice (before and after), preview or not: it holds one of the organisation's save permits, as Create does.
+        using var lease = _saveLimiter is not null ? _saveLimiter.TryEnter("save:tenant:" + tenantId.ToString("N")) : null;
+        if (lease is { IsAcquired: false })
+        {
+            Response.Headers.RetryAfter = "1";
+            return StatusCode(StatusCodes.Status429TooManyRequests, ApiResponse<PatternChangeResultDto>.Fail(SaveBusyMessage));
+        }
+
+        var outcome = await _patternChange.ChangeAsync(tenantId, participantId, id, dto, actor, ct);
+        if (outcome.Result is { } result) return Ok(ApiResponse<PatternChangeResultDto>.Ok(result));
+        if (outcome.ConflictVersion is int newest)
+            return Conflict(new ApiResponse<DraftVersionConflictDto> { Success = false, Data = new DraftVersionConflictDto { CurrentVersion = newest }, Errors = outcome.Errors.ToList(), Code = "draft-version-conflict" });
+        return outcome.NotFound
+            ? NotFound(ApiResponse<PatternChangeResultDto>.Fail(outcome.Errors.First()))
+            : BadRequest(ApiResponse<PatternChangeResultDto>.Fail(outcome.Errors.ToList()));
     }
 
     [HttpGet("{id:guid}/pdf")]

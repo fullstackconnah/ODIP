@@ -13,12 +13,12 @@ import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, OVER_BY_WORD, WITHIN_WORD,
 // component only draws them, the way the Budgets list draws the ledger's.
 //
 // WARNING ONLY, in every mode: an owner decision. Nothing here blocks a save or an approval, and this component cannot express a block: it holds no callback that could refuse anything. The
-// one callback it takes is the retry after a failed check, and the one link it can show points to the Funding tab where a budget is recorded.
+// callbacks it takes are the retry after a failed check and the "no budget" action, which either opens the editor to record a budget in place or links to the Funding tab: neither can refuse anything.
 
 const LABEL = 'text-xs text-[var(--color-muted-foreground)]'
 const NOTE = 'text-[13px] text-[var(--color-muted-foreground)]'
 
-/** The action the "no budget recorded" state offers: a link to where a budget is recorded. Navigation is the caller's. */
+/** The action the "no budget recorded" state offers: a link to the Funding tab, or the caller's own way to record a budget in place (the agreement opens the editor). Either is the caller's. */
 function ActionButton({ action }: { action: BudgetAttentionAction }) {
   if ('to' in action) return <Button size="sm" variant="secondary" to={action.to}>{action.label}</Button>
   return <Button size="sm" variant="secondary" onClick={action.onSelect}>{action.label}</Button>
@@ -131,7 +131,7 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
   }
 
   if (view.status === 'none') {
-    // "No budget recorded" is the commonest state and must link to where a budget is recorded, never warn (SHAPE-BRIEF §5).
+    // "No budget recorded" is the commonest state and must offer a way to record one (in place, or on the Funding tab), never warn (SHAPE-BRIEF §5).
     return (
       <div className={`flex flex-wrap items-center gap-2 ${NOTE}`}>
         <p>

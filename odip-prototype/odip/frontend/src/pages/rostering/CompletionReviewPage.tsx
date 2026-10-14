@@ -199,12 +199,13 @@ export default function CompletionReviewPage() {
     },
     ...(canReviewCompletions ? [{
       key: 'actions', header: '', align: 'right' as const, render: (row: CompletionQueueItemDto) => (
+        // Always visible (not a hover-revealed RowActions): reviewing is this queue's whole purpose. sm keeps the row at --row-h.
         row.status === 'PendingReview' ? (
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setReturnTarget(row)}>
+          <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setReturnTarget(row)} aria-label={`Return ${row.staffName} with ${row.participantName} on ${formatDateAu(row.serviceDate)}`}>
               Return
             </Button>
-            <Button onClick={() => setApproveTarget(row)}>
+            <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={`Approve ${row.staffName} with ${row.participantName} on ${formatDateAu(row.serviceDate)}`}>
               Approve
             </Button>
           </div>

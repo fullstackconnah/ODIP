@@ -2100,6 +2100,24 @@ function retriedNotification(id) {
   return { ...row, status: 'Pending', attempts: 0, nextAttemptAt: new Date().toISOString(), lastError: undefined }
 }
 
+// The bell (dashboard PR B): GET notifications/inbox, POST notifications/inbox/:id/read and notifications/inbox/read-all.
+// Unlike most POSTs here these change the fixture, so the refetch after "Mark all as read" doesn't bring the dots back.
+// Four items, two unread (SHAPE section 13's fixture), for the finish reviewer's own mock run. Titles are plain text, in the server's voice.
+const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
+const inAppInbox = [
+  { id: 'inapp-0001', title: 'Sam Lee asked for annual leave, 20 to 24 Oct.', linkTo: '/rostering/leave', createdAt: minutesAgo(5) },
+  { id: 'inapp-0002', title: "Sam Lee's shift with Grace Palmer-Hughes on Tue 13 Oct is ready for review.", linkTo: '/rostering/completions', createdAt: minutesAgo(120) },
+  { id: 'inapp-0003', title: 'Sam Lee reported an incident: injury, high severity.', linkTo: '/incidents', createdAt: minutesAgo(26 * 60), readAt: minutesAgo(25 * 60) },
+  { id: 'inapp-0004', title: 'Ann Hughes sent a profile update for Grace Palmer-Hughes.', linkTo: '/caregiver-submissions', createdAt: minutesAgo(3 * 24 * 60), readAt: minutesAgo(2 * 24 * 60) },
+]
+function inAppInboxView() {
+  return { items: inAppInbox, unreadCount: inAppInbox.filter((n) => !n.readAt).length, hasMore: false }
+}
+function markInAppRead(id) {
+  for (const n of inAppInbox) if ((id === undefined || n.id === id) && !n.readAt) n.readAt = new Date().toISOString()
+  return null
+}
+
 // Connection map item 12 (staff hub) — staffId linkage for the three portalShiftBase fixture
 // shifts, derived from shiftCompletions.submittedByUserId where a completion exists (shift-0001/
 // 0002) and from the shift-0003 note's authorUserId otherwise (shift-0003 has no completion yet —
@@ -2562,6 +2580,7 @@ const routes = [
   // is the self-service grid.
   ['notifications/preferences', () => notificationPreferenceGrid()],
   ['admin/notifications', () => notificationOutbox],
+  ['notifications/inbox', () => inAppInboxView()],
 ]
 
 // POST routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -2587,6 +2606,20 @@ const postRoutes = [
   ['rostering/patterns/:id/generate', () => {
     const budgetWarnings = rosterBudget.sampleWarnings('shift', 8)
     return budgetWarnings ? { created: 8, skipped: 0, budgetWarnings } : { created: 0, skipped: 3 }
+  }],
+  // Agreement PR 1: a change to a pattern an approved agreement made, as the next revision. The real server builds, prices and saves it; this answers in its shape so the panel can be seen.
+  // shortcut: canned figures, and nothing is saved even without preview; enough for screenshots of the panel, never a check of the money.
+  ['participants/:id/service-agreement-drafts/:id/pattern-change', (participantId, draftId, body) => {
+    const revisions = serviceAgreementDrafts[participantId] || []
+    const source = revisions.find((draft) => draft.id === draftId)
+    if (!source) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    const newest = Math.max(...revisions.map((draft) => draft.version))
+    if (newest !== source.version) return respond(409, failEnvelope({ currentVersion: newest }, [`This agreement has a newer revision, v${newest}. Open the agreement and make the change there.`], 'draft-version-conflict'))
+    const result = {
+      version: source.version + 1, agreementStartDate: (body && body.fromDate) || source.agreementStartDate, agreementEndDate: source.agreementEndDate,
+      oldTotal: 7358, newTotal: 7725.9, difference: 367.9, needsReview: false,
+    }
+    return body && body.preview ? result : { ...result, draftId: `${draftId}-change` }
   }],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
@@ -2718,6 +2751,8 @@ const postRoutes = [
   // contract without needing an actual SMTP config to demo against.
   ['admin/notifications/:id/retry', (id) => retriedNotification(id)],
   ['admin/notifications/test-email', () => ({ sent: true, error: undefined })],
+  ['notifications/inbox/read-all', () => markInAppRead()],
+  ['notifications/inbox/:id/read', (id) => markInAppRead(id)],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -2753,10 +2788,11 @@ const putRoutes = [
   ['rostering/patterns/:id', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
     if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
-    // An agreement pattern is one weekday of one block for one worker of one revision (a unique key): moving it to a weekday its block already has is a 409 in words, as the real server answers it.
-    if (pattern.sourceDraftId && body && body.dayOfWeek && body.dayOfWeek !== pattern.dayOfWeek
-      && rosterPatterns.some((p) => p.id !== pattern.id && p.sourceDraftId === pattern.sourceDraftId && p.sourceBlockKey === pattern.sourceBlockKey && p.workerSlot === pattern.workerSlot && p.dayOfWeek === body.dayOfWeek)) {
-      return respond(409, failEnvelope(null, ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.']))
+    // An agreement pattern's participant, day, times, ratio, night type and dates are the agreement's: a change to any of them is the real server's 409 agreement-pattern (agreement PR 1).
+    const hhmm = (time) => String(time || '').slice(0, 5)
+    const definition = (p) => [p.participantId, p.dayOfWeek, hhmm(p.startTime), hhmm(p.endTime), !!p.endsNextDay, p.ratio, p.nightType, p.effectiveFrom, p.effectiveTo || null].join('|')
+    if (pattern.sourceDraftId && body && definition({ ...pattern, ...body }) !== definition(pattern)) {
+      return respond(409, failEnvelope({ draftId: pattern.sourceDraftId }, ["This pattern comes from a service agreement. Its day, times, ratio, night type, dates and participant are the agreement's: change it through the agreement, which saves a new revision for approval. Default staff, notes and active can be changed here."], 'agreement-pattern'))
     }
     // No length is refused only when the edit changes the times, as on the server, so a pattern saved before the rule can still be switched off.
     const noLength = rosterBudget.refusePatternNoLength(pattern, body || {})

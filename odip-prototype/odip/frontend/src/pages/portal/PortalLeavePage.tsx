@@ -90,13 +90,9 @@ export default function PortalLeavePage() {
     ) },
     ...(canRequestLeave ? [{
       key: 'actions', header: '', align: 'right' as const, render: (r: LeaveRequestDto) => r.status === 'Pending' && (
-        <button
-          type="button"
-          onClick={() => setWithdrawTarget({ kind: 'leave', id: r.id })}
-          className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline"
-        >
+        <Button variant="ghost-danger" size="sm" onClick={() => setWithdrawTarget({ kind: 'leave', id: r.id })} aria-label={`Withdraw: ${formatEffectiveRange(r.startDate, r.endDate)}`}>
           Withdraw
-        </button>
+        </Button>
       ),
     }] : []),
   ]
@@ -115,13 +111,9 @@ export default function PortalLeavePage() {
     ) },
     ...(canRequestLeave ? [{
       key: 'actions', header: '', align: 'right' as const, render: (r: RecurringUnavailabilityDto) => r.status === 'Pending' && (
-        <button
-          type="button"
-          onClick={() => setWithdrawTarget({ kind: 'unavailability', id: r.id })}
-          className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline"
-        >
+        <Button variant="ghost-danger" size="sm" onClick={() => setWithdrawTarget({ kind: 'unavailability', id: r.id })} aria-label={`Withdraw: ${r.dayOfWeek} ${r.startTime.slice(0, 5)}–${r.endTime.slice(0, 5)}, ${formatEffectiveRange(r.effectiveFrom, r.effectiveTo)}`}>
           Withdraw
-        </button>
+        </Button>
       ),
     }] : []),
   ]

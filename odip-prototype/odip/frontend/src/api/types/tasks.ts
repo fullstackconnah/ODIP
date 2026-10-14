@@ -22,6 +22,7 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   MedicationWitness: 'Medication witness',
   FlaggedNoteFollowUp: 'Flagged note follow-up',
   BudgetEmergencyReview: 'Budget emergency review',
+  RestrictivePracticeRegisterAddition: 'Restrictive practice register',
   Other: 'Other',
 }
 

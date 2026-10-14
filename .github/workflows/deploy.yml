@@ -111,6 +111,8 @@ jobs:
       - name: Build images
         # This is the gate. If either image fails to compile the job stops here
         # and the currently running containers are left untouched.
+        env:
+          GIT_SHA: ${{ github.sha }} # the platform footer's build number (deploy/compose.yaml, frontend/Dockerfile)
         run: |
           set -euo pipefail
           cd "$STACK_DIR"

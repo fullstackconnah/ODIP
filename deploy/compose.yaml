@@ -78,6 +78,9 @@ services:
         # Must match DEV_AUTH_ENABLED on the api service. Baked in at build time,
         # so changing it requires rebuilding this image.
         VITE_DEV_AUTH: ${VITE_DEV_AUTH:-false}
+        # The deployed commit, shown in the platform footer. deploy.yml sets GIT_SHA for the build; a hand-run
+        # build gets "dev", which the footer hides.
+        VITE_BUILD_SHA: ${GIT_SHA:-dev}
     image: odip-frontend:local
     container_name: odip-frontend
     restart: unless-stopped

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type Ref } from 'react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -21,6 +21,8 @@ type CheckStepProps = {
   /** Select the shifts that fall on a public holiday, to change how they are charged. */
   onChangeHolidays: (blockIds: string[]) => void
   readOnly: boolean
+  /** The budget comparison's heading: focus goes to it after a budget is recorded from this step, since the button that opened the editor goes. */
+  budgetHeadingRef?: Ref<HTMLHeadingElement>
 }
 
 const LABEL = 'text-xs text-[var(--color-muted-foreground)]'
@@ -30,7 +32,7 @@ const HEADLINE = 'text-xl font-bold tabular-nums leading-tight'
  * Step 3: the one place for money and for what stands in the way. The participant's budget comes first (per pool and funding period, the server's comparison), then the week and the agreement
  * in figures, then every issue in plain words with a Fix that jumps to the shifts. A comparison with the budget never stops a save: it is a warning only.
  */
-export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays, readOnly }: CheckStepProps) {
+export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays, readOnly, budgetHeadingRef }: CheckStepProps) {
   const { answer, status, budgetView, refreshing, leftOut } = pricing
   const period = answer?.period
   const weekly = answer?.weekly ?? null
@@ -53,7 +55,7 @@ export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays
       {status === 'ready' && period && (
         <>
           <section aria-labelledby="check-budget" className="flex flex-col gap-2" aria-busy={refreshing}>
-            <h3 id="check-budget" className="text-sm font-semibold">Against the participant&apos;s budget{refreshing && <span className="font-normal text-[var(--color-muted-foreground)]"> · updating…</span>}</h3>
+            <h3 id="check-budget" ref={budgetHeadingRef} tabIndex={-1} className="text-sm font-semibold focus:outline-none">Against the participant&apos;s budget{refreshing && <span className="font-normal text-[var(--color-muted-foreground)]"> · updating…</span>}</h3>
             {nothing ? (
               <p className="text-[13px] text-[var(--color-muted-foreground)]">Nothing is priced yet, so there is nothing to compare.</p>
             ) : budgetView ? <AgreementBudgetBreakdown view={budgetView} /> : null}

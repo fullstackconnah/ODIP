@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render as renderInDom, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PatternSlideOver } from './PatternSlideOver'
 import type { ShiftPatternDto } from '@/api/types'
+import { MemoryRouter } from 'react-router-dom'
+import type { ReactElement } from 'react'
 
-const { mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync } = vi.hoisted(() => ({
+// The panel links to the agreement page (Open the agreement, Open the revision), so every render is inside a router.
+const render = (ui: ReactElement) => renderInDom(ui, { wrapper: MemoryRouter })
+
+const { mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockChangeMutateAsync } = vi.hoisted(() => ({
+  mockChangeMutateAsync: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
   mockDeleteMutateAsync: vi.fn(),
@@ -16,6 +22,7 @@ vi.mock('@/api/hooks', () => ({
   useCreatePattern: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false }),
   useUpdatePattern: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useDeletePattern: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
+  usePatternChange: () => ({ mutateAsync: mockChangeMutateAsync, isPending: false }),
 }))
 
 function noop() {}
@@ -52,6 +59,7 @@ beforeEach(() => {
   mockCreateMutateAsync.mockClear()
   mockUpdateMutateAsync.mockClear()
   mockDeleteMutateAsync.mockClear()
+  mockChangeMutateAsync.mockReset()
 })
 
 describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01 migration)', () => {
@@ -365,150 +373,221 @@ describe('PatternSlideOver as a dialog', () => {
   })
 })
 
-// Plan builder phase D: a pattern an approved agreement made stays editable, and says so when it is edited (nothing is locked).
+// Agreement PR 1: a pattern an approved agreement made changes through the agreement. A new day, time, ratio or night type is checked and priced, then saved as the next revision for approval; the
+// pattern changes only when that revision is approved. Its dates are the agreement's. Default staff and notes are the coordinator's own and save on the pattern, as before.
 describe('PatternSlideOver — a pattern an agreement made', () => {
-  const agreementPattern = () => makePattern({
+  const agreementPattern = (overrides: Partial<ShiftPatternDto> = {}) => makePattern({
     sourceDraftId: 'draft-2', sourceBlockKey: 'mornings', sourceDraftVersion: 2, workerSlot: 1, notes: 'From agreement v2: Community access, community',
-    requirements: { workerGender: 'Female', driver: true, skills: ['FirstAid'] },
+    effectiveFrom: '2026-10-12', effectiveTo: '2026-12-20', requirements: { workerGender: 'Female', driver: true, skills: ['FirstAid'] }, ...overrides,
+  })
+  const checked = { version: 3, agreementStartDate: '2026-10-19', agreementEndDate: '2026-12-20', oldTotal: 7358, newTotal: 7725.9, difference: 367.9, needsReview: false }
+  const PRICE = "Price from Mon 19 Oct 2026 to Sun 20 Dec 2026: $7,358.00 as it is at today's prices, $7,725.90 with the change (+$367.90)."
+  const STORED = {
+    participantId: 'participant-1', defaultStaffId: 'staff-1', dayOfWeek: 'Monday', startTime: '09:00', endTime: '17:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+    effectiveFrom: '2026-10-12', effectiveTo: '2026-12-20', isActive: true,
+  }
+
+  const open = (pattern: ShiftPatternDto | null, blockDays?: string[]) => render(
+    <PatternSlideOver target={pattern ? { mode: 'edit', pattern } : { mode: 'create' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} blockDays={blockDays} />,
+  )
+  /** A start an hour later, from Monday 19 October: the change the tests check and create. */
+  const startLater = () => {
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+    fireEvent.change(screen.getByLabelText(/Change starts/), { target: { value: '2026-10-19' } })
+  }
+  const body = (preview: boolean, allDays = false) => ({
+    participantId: 'participant-1', draftId: 'draft-2',
+    data: { patternId: 'pattern-1', dayOfWeek: 'Monday', startTime: '10:00', endTime: '17:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', allDays, fromDate: '2026-10-19', preview },
   })
 
-  const open = (pattern: ShiftPatternDto | null) => render(
-    <PatternSlideOver
-      target={pattern ? { mode: 'edit', pattern } : { mode: 'create' }}
-      onClose={noop}
-      canWrite
-      participantOptions={participantOptions}
-      staffOptions={staffOptions}
-    />,
-  )
+  it('opens the agreement in a new tab, so the change being typed is not lost', () => {
+    open(agreementPattern())
 
-  it('opens with a quiet line that says where the pattern came from, not an alert: nothing has been changed yet', () => {
+    startLater()
+
+    const link = screen.getByRole('link', { name: /Open the agreement/ })
+    expect(link).toHaveAttribute('href', '/participants/participant-1/agreement-draft')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('says where a new default staff is saved when it is changed with the times, and says nothing when only the times change', async () => {
+    const user = userEvent.setup()
+    open(agreementPattern())
+    const line = 'Default staff is saved on the current pattern now. After approval, set it on the changed pattern.'
+
+    startLater()
+    expect(screen.queryByText(line)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Default staff' }))
+    await user.click(screen.getByRole('option', { name: 'Jordan Smith' }))
+
+    expect(screen.getByText(line)).toBeInTheDocument()
+  })
+
+  it('opens with a quiet line that says where it came from, its dates read-only and no Delete: it ends through the agreement', () => {
     open(agreementPattern())
 
     expect(screen.getByRole('status')).toHaveTextContent('From agreement v2.')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.queryByText(/the roster will differ/)).not.toBeInTheDocument()
-  })
-
-  it('does not warn about the edits that cause no drift: who does the shifts, and the notes', () => {
-    open(agreementPattern())
-
-    fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Ring the bell twice' } })
-
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Effective from/)).toBeDisabled()
+    expect(screen.getByLabelText(/Effective to/)).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 
   it.each([
     ['the start time', () => fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })],
     ['the end time', () => fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '18:00' } })],
-    ['the days it covers', () => fireEvent.change(screen.getByLabelText(/Effective to/), { target: { value: '2026-12-31' } })],
-  ])('warns, in the agreement\'s own version, once %s differs from what the agreement set, and says how to change the plan itself', (_, change) => {
+  ])("a change to %s shows the notice in the agreement's words and offers Check the change", (_, change) => {
     open(agreementPattern())
 
     change()
+    fireEvent.change(screen.getByLabelText(/Change starts/), { target: { value: '2026-10-19' } })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('You have changed what agreement v2 set, so the roster will differ from it. To change the plan itself, save a new revision.')
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByText('This changes the service agreement. Saving creates revision v3 from Mon 19 Oct 2026, re-priced, for approval.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check the change' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/the roster will differ/)).not.toBeInTheDocument()                 // the old drift warning is gone
   })
 
-  it('takes the warning back when the change is put back', () => {
+  it('takes the notice back when the change is put back', () => {
     open(agreementPattern())
 
     fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
-    expect(screen.getByRole('alert')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '09:00' } })
 
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/This changes the service agreement/)).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('From agreement v2.')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 
-  it('says "an agreement", never a version it does not know', () => {
-    open({ ...agreementPattern(), sourceDraftVersion: undefined })
 
-    expect(screen.getByRole('status')).toHaveTextContent('From an agreement.')
-    expect(screen.queryByText(/v\?/)).not.toBeInTheDocument()
+  it('notes alone save on the pattern as before, with no notice and no revision', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockResolvedValue({})
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Ring the bell twice' } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-1', data: { ...STORED, notes: 'Ring the bell twice' } })
+    expect(mockChangeMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('says nothing of the kind about a hand-made pattern, or when making a new one', () => {
+  it('Check the change asks the server with every field and preview, then shows the price and offers Create revision v3', async () => {
+    const user = userEvent.setup()
+    mockChangeMutateAsync.mockResolvedValueOnce(checked)
+    open(agreementPattern())
+
+    startLater()
+    await user.click(screen.getByRole('button', { name: 'Check the change' }))
+
+    expect(mockChangeMutateAsync).toHaveBeenCalledWith(body(true))
+    expect(await screen.findByText(PRICE)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create revision v3' })).toBeEnabled()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('Create revision saves it, says so with its price, offers Open the revision, and leaves the pattern as it is', async () => {
+    const user = userEvent.setup()
+    mockChangeMutateAsync.mockResolvedValueOnce(checked).mockResolvedValueOnce({ ...checked, draftId: 'draft-3' })
+    open(agreementPattern())
+
+    startLater()
+    await user.click(screen.getByRole('button', { name: 'Check the change' }))
+    await user.click(await screen.findByRole('button', { name: 'Create revision v3' }))
+
+    expect(mockChangeMutateAsync).toHaveBeenLastCalledWith(body(false))
+    expect(await screen.findByText('Revision v3 saved')).toBeInTheDocument()
+    expect(screen.getByText(`It starts on Mon 19 Oct 2026. ${PRICE} The pattern and the roster change when it is approved.`)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open the revision' })).toHaveAttribute('href', '/participants/participant-1/agreement-draft')
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('a change after a check asks for a new check: the price was for what was checked', async () => {
+    const user = userEvent.setup()
+    mockChangeMutateAsync.mockResolvedValueOnce(checked)
+    open(agreementPattern())
+
+    startLater()
+    await user.click(screen.getByRole('button', { name: 'Check the change' }))
+    await screen.findByText(PRICE)
+    fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '16:00' } })
+
+    expect(screen.queryByText(PRICE)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check the change' })).toBeInTheDocument()
+  })
+
+  it('a mixed edit saves the notes with the stored times, then the change; a refused change keeps every value', async () => {
+    const user = userEvent.setup()
+    const conflict = { response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 3 }, errors: ['This agreement has a newer revision, v3. Open the agreement and make the change there.'] } } }
+    mockUpdateMutateAsync.mockResolvedValue({})
+    mockChangeMutateAsync.mockResolvedValueOnce(checked).mockRejectedValueOnce(conflict)
+    open(agreementPattern())
+
+    fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Ring the bell twice' } })
+    startLater()
+    await user.click(screen.getByRole('button', { name: 'Check the change' }))
+    await user.click(await screen.findByRole('button', { name: 'Create revision v3' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-1', data: { ...STORED, notes: 'Ring the bell twice' } })
+    expect(mockChangeMutateAsync).toHaveBeenLastCalledWith(body(false))
+    expect(mockUpdateMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(mockChangeMutateAsync.mock.invocationCallOrder[1])   // the notes first, then the revision
+    expect(await screen.findByText('This agreement has a newer revision, v3. Open the agreement and make the change there.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Start time/)).toHaveValue('10:00')
+    expect(screen.getByLabelText(/Notes/)).toHaveValue('Ring the bell twice')
+    expect(screen.getByLabelText(/Change starts/)).toHaveValue('2026-10-19')
+    expect(screen.queryByText('Revision v3 saved')).not.toBeInTheDocument()
+  })
+
+
+  it("a refused check shows the server's words and keeps the edits", async () => {
+    const user = userEvent.setup()
+    mockChangeMutateAsync.mockRejectedValueOnce(badRequest('A change cannot start before today (2026-10-20).'))
+    open(agreementPattern())
+
+    startLater()
+    await user.click(screen.getByRole('button', { name: 'Check the change' }))
+
+    expect(await screen.findByText('A change cannot start before today (2026-10-20).')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Start time/)).toHaveValue('10:00')
+    expect(screen.getByRole('button', { name: 'Check the change' })).toBeEnabled()
+  })
+
+  it('offers every day of the support only for a block of several days, and sends it as allDays', async () => {
+    const user = userEvent.setup()
+    mockChangeMutateAsync.mockResolvedValueOnce(checked)
+    const { unmount } = open(agreementPattern(), ['Monday'])
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+    expect(screen.queryByLabelText(/Change every day/)).not.toBeInTheDocument()
+    unmount()
+
+    open(agreementPattern(), ['Monday', 'Wednesday', 'Friday'])
+    startLater()
+    await user.click(screen.getByLabelText('Change every day of this support (Mon, Wed, Fri)'))
+    await user.click(screen.getByRole('button', { name: 'Check the change' }))
+
+    expect(mockChangeMutateAsync).toHaveBeenCalledWith(body(true, true))
+  })
+
+  it('starts a change to an agreement that has not begun on its first day, and says "a new revision" when the version is not known', () => {
+    open(agreementPattern({ effectiveFrom: '2099-01-05', effectiveTo: null, sourceDraftVersion: undefined }))
+    expect(screen.getByRole('status')).toHaveTextContent('From an agreement.')                   // a version it does not know is never made up
+
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
+
+    expect(screen.getByLabelText(/Change starts/)).toHaveValue('2099-01-05')
+    expect(screen.getByText('This changes the service agreement. Saving creates a new revision from Mon 5 Jan 2099, re-priced, for approval.')).toBeInTheDocument()
+  })
+
+  it('says nothing of the kind about a hand-made pattern, or when making a new one, and a hand-made one keeps Delete', () => {
     const { unmount } = open(makePattern())
-    expect(screen.queryByText(/From agreement|From an agreement|came from agreement/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/From agreement|From an agreement|This changes the service agreement/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
     unmount()
 
     open(null)
-    expect(screen.queryByText(/From agreement|From an agreement|came from agreement/)).not.toBeInTheDocument()
-  })
-
-  it("a clash the server refuses (409, a day its block already has) shows the server's words, keeps what was edited, and keeps the warning", async () => {
-    const user = userEvent.setup()
-    const conflict = { response: { status: 409, data: { success: false, errors: ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.'] } } }
-    mockUpdateMutateAsync.mockRejectedValueOnce(conflict)
-    open(agreementPattern())
-
-    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-
-    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-1', data: expect.objectContaining({ participantId: 'participant-1', dayOfWeek: 'Monday', startTime: '10:00', endTime: '17:00' }) })
-    expect(await screen.findByText('This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.')).toBeInTheDocument()
-    expect(screen.getByLabelText(/Start time/)).toHaveValue('10:00')                       // what was typed stays
-    expect(screen.getByText(/You have changed what agreement v2 set/)).toBeInTheDocument()
-  })
-
-  it('brings a refused save into view: the message sits under the last field of a form that scrolls', async () => {
-    const user = userEvent.setup()
-    const scrolled: Element[] = []
-    // jsdom has no scrollIntoView: put one in for this test and take it out again.
-    const proto = Element.prototype as { scrollIntoView?: (arg?: boolean | ScrollIntoViewOptions) => void }
-    const original = proto.scrollIntoView
-    proto.scrollIntoView = function (this: Element, arg?: boolean | ScrollIntoViewOptions) {
-      scrolled.push(this)
-      expect(arg).toEqual({ block: 'nearest' })
-    }
-    try {
-      mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['This agreement already has a pattern for that block, day and worker.'] } } })
-      open(agreementPattern())
-
-      expect(scrolled).toHaveLength(0)                                                       // nothing wrong, nothing scrolled
-      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
-      expect(scrolled).toHaveLength(1)                                                       // the drift warning that the change brought (its own test below)
-      scrolled.length = 0
-      await user.click(screen.getByRole('button', { name: 'Save' }))
-
-      // (The drift warning is an alert too, so the refusal is found by its words.)
-      const refusal = (await screen.findByText(/This agreement already has a pattern/)).closest('[role="alert"]')
-      expect(refusal).not.toBeNull()
-      expect(scrolled).toEqual([refusal])
-    } finally {
-      if (original) proto.scrollIntoView = original
-      else delete proto.scrollIntoView
-    }
-  })
-
-  it('brings the drift warning into view when it appears: it sits at the top of a panel that scrolls, and the field that caused it can be far below', () => {
-    const calls: { text: string; options: unknown }[] = []
-    const proto = Element.prototype as { scrollIntoView?: (arg?: boolean | ScrollIntoViewOptions) => void }
-    const original = proto.scrollIntoView
-    proto.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) { calls.push({ text: this.textContent ?? '', options }) }
-    try {
-      open(agreementPattern())
-      expect(calls).toHaveLength(0)                                                                // nothing changed yet: nothing to show
-
-      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
-      expect(calls).toHaveLength(1)
-      expect(calls[0].text).toMatch(/You have changed what agreement v2 set/)
-      expect(calls[0].options).toEqual({ block: 'nearest' })                                       // brought in only if it is out of view, not dragged to the top
-
-      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '16:00' } })           // a second change: the warning is already there, and the panel is left where it is
-      expect(calls).toHaveLength(1)
-
-      fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '09:00' } })
-      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '17:00' } })           // put back: the warning goes
-      expect(screen.queryByText(/You have changed what agreement v2 set/)).not.toBeInTheDocument()
-      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '15:00' } })           // and when it comes back, it is brought into view again
-      expect(calls).toHaveLength(2)
-    } finally {
-      if (original) proto.scrollIntoView = original
-      else delete proto.scrollIntoView
-    }
+    expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
   })
 
   it('shows what the agreement asks of a worker as chips, which are information and not a field to change', () => {
@@ -518,22 +597,34 @@ describe('PatternSlideOver — a pattern an agreement made', () => {
     expect(chips.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Female worker', 'Driver', 'First aid'])
   })
 
-  it('still saves a change, and sends only the fields it always sent: where the pattern came from is not the form\'s to change', async () => {
+  it('brings the notice into view when it appears, and a refused check: both can be far from the field that caused them', async () => {
     const user = userEvent.setup()
-    mockUpdateMutateAsync.mockResolvedValue({})
-    open(agreementPattern())
+    const scrolled: string[] = []
+    // jsdom has no scrollIntoView: put one in for this test and take it out again.
+    const proto = Element.prototype as { scrollIntoView?: (arg?: boolean | ScrollIntoViewOptions) => void }
+    const original = proto.scrollIntoView
+    proto.scrollIntoView = function (this: Element, arg?: boolean | ScrollIntoViewOptions) {
+      scrolled.push(this.textContent ?? '')
+      expect(arg).toEqual({ block: 'nearest' })
+    }
+    try {
+      mockChangeMutateAsync.mockRejectedValueOnce(badRequest('A change cannot start before today (2026-10-20).'))
+      open(agreementPattern())
+      expect(scrolled).toHaveLength(0)                                                        // nothing changed yet: nothing to show
 
-    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '10:00' } })
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+      startLater()
+      expect(scrolled).toHaveLength(1)
+      expect(scrolled[0]).toMatch(/This changes the service agreement/)
+      fireEvent.change(screen.getByLabelText(/End time/), { target: { value: '16:00' } })      // already there: the panel is left where it is
+      expect(scrolled).toHaveLength(1)
 
-    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
-    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({
-      id: 'pattern-1',
-      data: {
-        participantId: 'participant-1', defaultStaffId: 'staff-1', dayOfWeek: 'Monday', startTime: '10:00', endTime: '17:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
-        effectiveFrom: '2026-01-01', effectiveTo: null, isActive: true, notes: 'From agreement v2: Community access, community',
-      },
-    })
+      await user.click(screen.getByRole('button', { name: 'Check the change' }))
+      await screen.findByText('A change cannot start before today (2026-10-20).')
+      expect(scrolled.at(-1)).toBe('A change cannot start before today (2026-10-20).')
+    } finally {
+      if (original) proto.scrollIntoView = original
+      else delete proto.scrollIntoView
+    }
   })
 })
 

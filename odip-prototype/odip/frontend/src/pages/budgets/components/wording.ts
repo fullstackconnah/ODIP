@@ -68,11 +68,11 @@ export const ROLLED_OVER_LEGEND = 'A bent arrow beside Available means it includ
 export const AGREEMENT_NO_BUDGET = 'No budget recorded for this participant, so there is nothing to compare the agreement against.'
 
 /**
- * The same words when the participant's recorded plan has ended (the Funding tab shows that plan, so the bar must not read as if none were ever recorded): the spec's sentence, then why there is
- * nothing to compare. `endedOn` is the plan's last day, already written ("30 Jun 2026").
+ * The same words when the participant's recorded plan has ended (the Funding tab shows that plan, so the bar must not read as if none were ever recorded): that the plan ended and when, then why
+ * there is no current budget to compare. `endedOn` is the plan's last day, already written ("30 Jun 2026").
  */
 export function agreementNoBudgetEnded(endedOn: string): string {
-  return `No budget recorded for this participant: the recorded plan ended on ${endedOn}, so there is nothing to compare the agreement against.`
+  return `The participant's recorded plan ended on ${endedOn}, so there is no current budget to compare the agreement against.`
 }
 
 /** The same words when a plan is recorded for later (it is on the Funding tab already): when it starts, then why there is nothing to compare yet. `startsOn` is the plan's first day, already written ("1 Nov 2026"). */

@@ -181,15 +181,16 @@ describe('BodyDiagram — recording injuries', () => {
     render(<Harness initial={initial} />)
 
     const table = screen.getByRole('table')
-    const removeButtons = within(table).getAllByRole('button', { name: 'Remove' })
+    const removeButtons = within(table).getAllByRole('button', { name: /^Remove: / })
     expect(removeButtons).toHaveLength(3)
 
-    await userEvent.setup().click(removeButtons[1])
+    // Every row has one, so its name says which injury it removes.
+    await userEvent.setup().click(within(table).getByRole('button', { name: 'Remove: Left hand, Abrasion' }))
 
     expect(within(table).getByText('Bumped head.')).toBeInTheDocument()
     expect(within(table).getByText('Knee swelling.')).toBeInTheDocument()
     expect(within(table).queryByText('Grazed hand.')).not.toBeInTheDocument()
-    expect(within(table).getAllByRole('button', { name: 'Remove' })).toHaveLength(2)
+    expect(within(table).getAllByRole('button', { name: /^Remove: / })).toHaveLength(2)
   })
 
   it('shows an error and does not add when no region has been selected', async () => {

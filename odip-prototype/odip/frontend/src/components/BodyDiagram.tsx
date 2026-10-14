@@ -183,14 +183,11 @@ export function BodyDiagram({ injuries, onAdd, onRemove }: BodyDiagramProps) {
     {
       key: 'actions',
       header: 'Remove',
-      render: (_row, rowIndex) => (
-        <button
-          type="button"
-          onClick={() => onRemove(rowIndex)}
-          className="text-sm font-medium text-[var(--color-destructive)]"
-        >
+      // Every row has one, so its name says which injury it removes.
+      render: (row, rowIndex) => (
+        <Button variant="ghost-danger" size="sm" onClick={() => onRemove(rowIndex)} aria-label={`Remove: ${BODY_REGION_LABELS[row.region]}, ${INJURY_TYPE_LABELS[row.injuryType]}`}>
           Remove
-        </button>
+        </Button>
       ),
     },
   ]

@@ -95,6 +95,27 @@ describe('agreementBudgetView', () => {
     })
   })
 
+  // A person who may record a budget does it here, in the editor over the agreement, instead of leaving for the Funding tab.
+  it('offers to record the plan budget in place when the page can open the editor', () => {
+    const onRecord = vi.fn()
+    const view = agreementBudgetView('p-1', state({ data: noBudgetCheck(), onRecord }))
+
+    expect(view?.noBudgetAction).toEqual({ label: 'Record plan budget', onSelect: onRecord })
+  })
+
+  it('offers to record a new plan in place when the recorded plan ended', () => {
+    const onRecord = vi.fn()
+    const view = agreementBudgetView('p-1', state({ data: noBudgetCheck({ noBudgetReason: 'PlanEnded', planEnd: '2026-06-30' }), onRecord }))
+
+    expect(view?.noBudgetAction).toEqual({ label: 'Record a new plan', onSelect: onRecord })
+  })
+
+  it('still points at the Funding tab for a plan that starts later, even when the page can open the editor', () => {
+    const view = agreementBudgetView('p-1', state({ data: noBudgetCheck({ noBudgetReason: 'NotStarted', planStart: '2027-01-01' }), onRecord: vi.fn() }))
+
+    expect(view?.noBudgetAction).toEqual({ label: 'Open the Funding tab', to: '/participants/p-1?tab=funding' })
+  })
+
   it('reads an answer with no reason, from an older server, as nothing recorded', () => {
     const data = noBudgetCheck() as Partial<ReturnType<typeof noBudgetCheck>>
     delete data.noBudgetReason

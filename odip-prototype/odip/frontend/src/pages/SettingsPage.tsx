@@ -785,9 +785,9 @@ function PublicHolidaysTab({ canEdit }: { canEdit: boolean }) {
                 key: 'actions',
                 header: '',
                 render: (h: PublicHolidayDto) => (
-                  <button onClick={() => setDeletingHoliday(h)} className="text-xs text-[var(--color-destructive)] hover:underline">
+                  <Button variant="ghost-danger" size="sm" onClick={() => setDeletingHoliday(h)} aria-label={`Delete: ${h.name}, ${formatDateAu(h.date)} (${h.state || 'All'})`}>
                     Delete
-                  </button>
+                  </Button>
                 ),
               }]
             : []),

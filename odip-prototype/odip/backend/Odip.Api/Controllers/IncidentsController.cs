@@ -210,22 +210,29 @@ public class IncidentsController : ControllerBase
 
     /// <summary>
     /// INC-04: the authorised-vs-unauthorised determination, computed once at Create time only
-    /// (see <see cref="IncidentReport.IsRestrictivePracticeAuthorised"/> for why Update
-    /// never calls this). Authorised means the involved participant had at least one ACTIVE
-    /// register entry of the reported type at this moment — the same tenant-scoped
-    /// _db.RestrictivePractices set INC-05's picker and RestrictivePracticesController both read,
-    /// so "no matching active entry" (including a participant with only inactive/retired rows of
-    /// that type) is Unauthorised, not "unknown". Returns null — not determinable — when this
-    /// isn't a RestrictivePracticeUse incident or no participant was selected.
+    /// (see <see cref="IncidentReport.IsRestrictivePracticeAuthorised"/> for why Update never
+    /// recomputes it). Every register entry is judged by the one shared rule,
+    /// <see cref="RestrictivePracticeAuthorisation.IsAuthorised"/> (active, with who authorised it and
+    /// when). In order: null (not determinable) when this isn't a RestrictivePracticeUse incident or
+    /// no participant or type was given; Unauthorised when the reporter described a practice that is
+    /// not on the register, or said this use was not authorised (<see cref="CreateIncidentDto.UsedWithoutAuthorisation"/>);
+    /// the linked entry's own state when one was linked; otherwise whether the
+    /// participant has any Authorised entry of the reported type. Reads the same tenant-scoped
+    /// _db.RestrictivePractices set as INC-05's picker. The wizard's banner preview
+    /// (previewRpAuthorisation, lib/incidentPrefill.ts) follows the same order.
     /// </summary>
-    private async Task<bool?> DetermineRestrictivePracticeAuthorisationAsync(
-        IncidentType incidentType, RestrictivePracticeType? rpType, Guid? involvedParticipantId, CancellationToken ct)
+    private async Task<bool?> DetermineRestrictivePracticeAuthorisationAsync(CreateIncidentDto dto, CancellationToken ct)
     {
-        if (incidentType != IncidentType.RestrictivePracticeUse) return null;
-        if (rpType == null || involvedParticipantId == null) return null;
+        if (dto.IncidentType != IncidentType.RestrictivePracticeUse) return null;
+        if (dto.RestrictivePracticeType == null || dto.InvolvedParticipantId == null) return null;
+        if (dto.UsedWithoutAuthorisation || !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails)) return false;
 
-        return await _db.RestrictivePractices.AnyAsync(
-            rp => rp.ParticipantId == involvedParticipantId.Value && rp.Type == rpType.Value && rp.IsActive, ct);
+        // The link was validated to belong to this participant and type, so this is that one entry, or every entry of the type when none is linked.
+        var entries = await _db.RestrictivePractices
+            .Where(rp => rp.ParticipantId == dto.InvolvedParticipantId.Value && rp.Type == dto.RestrictivePracticeType.Value
+                && (dto.RestrictivePracticeId == null || rp.Id == dto.RestrictivePracticeId))
+            .ToListAsync(ct);
+        return entries.Any(RestrictivePracticeAuthorisation.IsAuthorised);
     }
 
     [HttpGet]
@@ -442,7 +449,7 @@ public class IncidentsController : ControllerBase
         // INC-04: determined once here, from the register as it stood right now — see
         // DetermineRestrictivePracticeAuthorisationAsync and the entity field's XML doc for why
         // this never runs again on Update.
-        var isRpAuthorised = await DetermineRestrictivePracticeAuthorisationAsync(dto.IncidentType, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
+        var isRpAuthorised = await DetermineRestrictivePracticeAuthorisationAsync(dto, ct);
 
         var incident = new IncidentReport
         {
@@ -495,6 +502,22 @@ public class IncidentsController : ControllerBase
         // Item 9 of the connection map: raise the IncidentQscReport obligation task when this
         // new incident is already Required-and-unreported.
         await RaiseOrCompleteQscTaskAsync(incident, ct);
+
+        // "None of these" from someone who may not write the register (a support worker): a coordinator is asked to add the practice. Nothing is
+        // written to the register here; adding it stays the separate, role-checked RestrictivePracticesController action. A coordinator has
+        // the "Add to restrictive practice register" button in the wizard instead, so gets no task.
+        if (incident.UnapprovedRestrictivePracticeDetails != null && incident.RestrictivePracticeType.HasValue && incident.InvolvedParticipantId.HasValue
+            && !(User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true))
+        {
+            var participant = await _db.Participants.SingleAsync(p => p.Id == incident.InvolvedParticipantId.Value, ct);
+            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+                SourceKey: $"incident-rp-register:{incident.Id}",
+                Type: TaskType.RestrictivePracticeRegisterAddition,
+                Title: $"Add {RestrictivePracticeAuthorisation.TypePhrase(incident.RestrictivePracticeType.Value)} to {participant.FullName}'s restrictive practice register",
+                DueDate: DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)),
+                LinkTo: $"/incidents/{incident.Id}",
+                IncidentReportId: incident.Id), ct);
+        }
 
         // Item 9: filing an incident against a flagged shift note satisfies the
         // FlaggedNoteFollowUp task raised when that note was created/edited — "decide whether an
@@ -606,6 +629,18 @@ public class IncidentsController : ControllerBase
         // IsRestrictivePracticeAuthorised is deliberately left untouched — it's frozen at whatever
         // Create computed (see the entity field's XML doc). Editing the participant or type here
         // does NOT silently re-run the authorised/unauthorised finding against today's register.
+        // The one exception only ever LOWERS it to false: the editor said this use was not authorised,
+        // relinked the incident to an entry that is Not authorised (e.g. one just added from it), or
+        // switched it to "None of these" (only on that switch, so an old incident saved with its own
+        // text unchanged keeps what it was stored with).
+        if (dto.IncidentType == IncidentType.RestrictivePracticeUse && (dto.UsedWithoutAuthorisation
+            || (string.IsNullOrWhiteSpace(i.UnapprovedRestrictivePracticeDetails) && !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails))
+            || (dto.RestrictivePracticeId.HasValue && dto.RestrictivePracticeId != i.RestrictivePracticeId
+                && !RestrictivePracticeAuthorisation.IsAuthorised(await _db.RestrictivePractices.SingleAsync(rp => rp.Id == dto.RestrictivePracticeId.Value, ct)))))
+            i.IsRestrictivePracticeAuthorised = false;
+        // Linked to a register entry now, so the coordinator's "add it to the register" task is done (a no-op when there is none).
+        if (dto.RestrictivePracticeId.HasValue)
+            await _obligationTasks.CompleteAsync($"incident-rp-register:{i.Id}", ct);
         i.RestrictivePracticeType = dto.RestrictivePracticeType;
         i.RestrictivePracticeId = dto.RestrictivePracticeId;
         // IN-4: same trim/empty->null rule as Create — still frozen against ever creating a

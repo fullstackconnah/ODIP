@@ -131,3 +131,20 @@ export interface TestEmailResultDto {
   sent: boolean
   error?: string
 }
+
+/** One bell item, GET api/v1/notifications/inbox. `title` is plain text built on the server: render it as text, never as HTML.
+ * `linkTo` (an app route) and `readAt` are omitted when null (WhenWritingNull). No event type: the bell doesn't need one. */
+export interface InAppNotificationDto {
+  id: string
+  title: string
+  linkTo?: string
+  createdAt: string
+  readAt?: string
+}
+
+/** GET api/v1/notifications/inbox: the caller's own newest items, their unread count over every item they have, and whether older ones exist. */
+export interface InboxDto {
+  items: InAppNotificationDto[]
+  unreadCount: number
+  hasMore: boolean
+}

@@ -267,28 +267,19 @@ export default function QualificationsPage() {
                         render: (q) => {
                           const isEditing = editingKey === q.key
                           return isEditing ? (
-                            <div className="flex items-center gap-3 justify-end">
-                              <button
-                                onClick={() => handleSave(q)}
-                                disabled={updateStaff.isPending}
-                                className="text-xs font-semibold text-[var(--color-primary)] hover:underline disabled:opacity-50"
-                              >
+                            <div className="flex items-center gap-1.5 pointer-coarse:gap-2 justify-end">
+                              <Button size="sm" onClick={() => handleSave(q)} disabled={updateStaff.isPending}>
                                 {updateStaff.isPending ? 'Saving...' : 'Save'}
-                              </button>
-                              <button
-                                onClick={() => { setEditingKey(null); setSaveError(null) }}
-                                className="text-xs text-[var(--color-muted-foreground)] hover:underline"
-                              >
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setEditingKey(null); setSaveError(null) }}>
                                 Cancel
-                              </button>
+                              </Button>
                             </div>
                           ) : canWrite ? (
-                            <button
-                              onClick={() => handleEdit(q)}
-                              className="text-xs font-medium text-[var(--color-primary)] hover:underline"
-                            >
+                            // Every row has one, so its name says whose credential it edits.
+                            <Button variant="ghost" size="sm" onClick={() => handleEdit(q)} aria-label={`Edit: ${q.qualification}, ${q.staffName}`}>
                               Edit
-                            </button>
+                            </Button>
                           ) : null
                         },
                       },

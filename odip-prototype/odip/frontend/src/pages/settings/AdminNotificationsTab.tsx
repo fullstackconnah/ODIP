@@ -86,7 +86,14 @@ export default function AdminNotificationsTab() {
     {
       key: 'actions', header: '', align: 'right' as const, render: row => (
         row.status === 'Failed' ? (
-          <Button variant="secondary" onClick={() => handleRetry(row)} disabled={retryingId === row.id}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleRetry(row)}
+            disabled={retryingId === row.id}
+            // Named for its row while idle; while it runs, "Retrying..." is the name, so the state is heard.
+            aria-label={retryingId === row.id ? undefined : `Retry: ${NOTIFICATION_EVENT_TYPE_LABELS[row.eventType] ?? row.eventType} to ${row.recipientName ?? row.recipientUserId}`}
+          >
             {retryingId === row.id ? 'Retrying...' : 'Retry'}
           </Button>
         ) : null
