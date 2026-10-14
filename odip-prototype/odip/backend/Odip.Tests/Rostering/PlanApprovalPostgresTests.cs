@@ -395,6 +395,30 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(staff, (await read.Shifts.AsNoTracking().SingleAsync(s => s.Id == target)).UserId);
     }
 
+    [SkippableFact]
+    public async Task ApprovingASplitRevision_MakesItsPatternsUnderTheUniqueKey_CarriesTheUnchangedDays_AndTidiesTheChangedOne_InOneSave()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
+        var v1 = await StoreAsync(cs, tenantId, participantId, 1);
+        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        // What a longer Monday from 2 November saves: the weekday block keeps Tuesday to Friday, and Monday is a block of its own.
+        var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), end: new DateOnly(2026, 12, 20), blocks: new[]
+        {
+            WeekdayBlock(change: b => b with { Days = ApprovalTestSupport.Weekdays.Skip(1).ToArray() }), WeekdayBlock("weekdays-mon", b => b with { Days = new[] { DayOfWeek.Monday }, End = T(14) }),
+        });
+
+        var outcome = await ApproveAsync(cs, tenantId, participantId, v2.Id, clock);
+
+        Assert.Equal((ApprovalStatus.Approved, 5, 20, 5), (outcome.Status, outcome.Approval!.ShiftsCreated, outcome.OldShifts!.Carried, outcome.OldShifts.Removed));
+        await using var read = Open(cs, tenantId);
+        var keys = await read.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == v2.Id).OrderBy(p => p.DayOfWeek).Select(p => p.SourceBlockKey).ToListAsync();
+        Assert.Equal(new[] { "weekdays-mon", "weekdays", "weekdays", "weekdays", "weekdays" }, keys);
+        Assert.Equal(40, await read.Shifts.CountAsync());                                                // five unfilled Mondays went, five new ones came, twenty moved
+        Assert.Equal(25, await read.Shifts.CountAsync(s => read.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v2.Id)));
+    }
+
     // ── Another generation holds the roster ───────────────────────────────────────
 
     [SkippableFact]

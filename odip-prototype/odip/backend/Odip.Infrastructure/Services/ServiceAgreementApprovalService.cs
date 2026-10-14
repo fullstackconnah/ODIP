@@ -198,9 +198,12 @@ public sealed class ServiceAgreementApprovalService
         // ones something is recorded against stay; the answer lists them.
         _db.Shifts.RemoveRange(plan.ToRemove);
 
+        // Carry-over: an unchanged support's shifts move to its new pattern as they are; generation then makes none on their days.
+        foreach (var shift in plan.ToCarry) shift.ShiftPatternId = plan.CarryTo[shift.ShiftPatternId!.Value].Id;
+
         if (plan.Ready && plan.From <= plan.HorizonEnd)
         {
-            var generated = await _generator.AddAsync(_db, plan.NewPatterns, plan.From, plan.HorizonEnd, ct);
+            var generated = await _generator.AddAsync(_db, plan.NewPatterns, plan.From, plan.HorizonEnd, ct, carried: plan.Carried);
             approval.ShiftsCreated = generated.Created;
             approval.FirstShiftDate = generated.FirstDate;
             approval.HorizonEnd = plan.HorizonEnd;
@@ -231,6 +234,12 @@ public sealed class ServiceAgreementApprovalService
         public OldShiftsRemainingDto OldShifts { get; set; } = new();
         /// <summary>The unfilled Draft shifts of the revisions before that approval removes (tracked, so its own save deletes them).</summary>
         public List<Shift> ToRemove { get; set; } = new();
+        /// <summary>The ended patterns whose new pattern is the same support, by the ended pattern's id: their shifts move to it.</summary>
+        public Dictionary<Guid, ShiftPattern> CarryTo { get; set; } = new();
+        /// <summary>The shifts that move (tracked: the approval's own save moves them).</summary>
+        public List<Shift> ToCarry { get; set; } = new();
+        /// <summary>The (new pattern, day) pairs the moved shifts cover: generation makes nothing there.</summary>
+        public HashSet<(Guid PatternId, DateOnly Date)> Carried { get; set; } = new();
         public bool Ready { get; set; }
         public DateOnly From { get; set; }
         public DateOnly HorizonEnd { get; set; }
@@ -247,6 +256,8 @@ public sealed class ServiceAgreementApprovalService
             AlreadyApproved = Existing is not null,
             Reasons = Reasons.ToList(),
             PatternsToCreate = NewPatterns.Count, PatternsToEnd = ToEnd.Count, EndsFromVersion = EndsFromVersion, EndsOn = ToEnd.Count > 0 ? EndsOn : null,
+            // A new pattern no ended one matches is a changed support: it starts with no default staff (a first approval ends nothing, so it has none to count).
+            ChangedPatterns = ToEnd.Count > 0 ? NewPatterns.Count - CarryTo.Values.Distinct().Count() : 0,
             ShiftsToCreate = ShiftsToCreate, ShiftsNote = ShiftsNote,
             OldShiftsRemaining = OldShifts,
             OverlappingPatterns = Overlaps.OrderBy(p => p.DayOfWeek).ThenBy(p => p.StartTime).Select(p => new OverlappingPatternDto
@@ -355,7 +366,7 @@ public sealed class ServiceAgreementApprovalService
         {
             var skipped = quote.HolidayOccurrences.Where(h => h.Skipped).Select(h => (h.BlockId, h.Date)).ToHashSet();
             var occurrences = plan.NewPatterns
-                .SelectMany(pattern => _expander.Occurrences(pattern, plan.From, plan.HorizonEnd).Where(date => !skipped.Contains((pattern.SourceBlockKey!, date))).Select(date => (Pattern: pattern, Date: date))).ToList();
+                .SelectMany(pattern => _expander.Occurrences(pattern, plan.From, plan.HorizonEnd).Where(date => !skipped.Contains((pattern.SourceBlockKey!, date)) && !plan.Carried.Contains((pattern.Id, date))).Select(date => (Pattern: pattern, Date: date))).ToList();
             plan.ShiftsToCreate = occurrences.Count;
 
             // Budget phase 3: what those shifts do to the participant's budget, as a warning on the preview. Only the preview asks (an approval does not need it), and a failure to work it out
@@ -389,9 +400,11 @@ public sealed class ServiceAgreementApprovalService
             var versionOf = earlier.ToDictionary(a => a.DraftId, a => a.DraftVersion);
             var earlierIds = versionOf.Keys.ToList();
             var old = await _db.ShiftPatterns.Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId != null && earlierIds.Contains(p.SourceDraftId.Value)).ToListAsync(ct);
-            plan.ToEnd = old.Where(p => p.EffectiveTo is null || p.EffectiveTo > plan.EndsOn).ToList();
+            plan.ToEnd = old.Where(p => p.EffectiveTo is null || p.EffectiveTo > plan.EndsOn).OrderBy(p => versionOf[p.SourceDraftId!.Value]).ToList();
             plan.EndsFromVersion = plan.ToEnd.Count > 0 ? plan.ToEnd.Max(p => versionOf[p.SourceDraftId!.Value]) : null;
-            (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, lockRows: approving);
+            await CarryOverAsync(draft, plan, ct);
+            (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, approving, plan.ToCarry.Select(s => s.Id).ToHashSet());
+            plan.OldShifts = plan.OldShifts with { Carried = plan.ToCarry.Count };
         }
 
         if (plan.NewPatterns.Count > 0)
@@ -403,12 +416,52 @@ public sealed class ServiceAgreementApprovalService
     }
 
     /// <summary>
+    /// Carry-over: an ended pattern whose new pattern is the same support hands on its default worker, and its shifts from this revision's start (or today) to its end, in whatever state they are in (a worker stays on, a
+    /// cancelled day stays cancelled), and the new pattern makes none on their days. Only what is left over is removed or listed. Approving a revision ends every pattern of the one before and makes them
+    /// all again, so without this every shift of a support that did not change would get a second, open one beside it.
+    /// </summary>
+    private async Task CarryOverAsync(ServiceAgreementDraft draft, Plan plan, CancellationToken ct)
+    {
+        // A default worker is carried only while that user is active: an archived one leaves the support with no default staff.
+        var defaults = plan.ToEnd.Where(p => p.DefaultUserId is not null).Select(p => p.DefaultUserId!.Value).Distinct().ToList();
+        var active = defaults.Count == 0 ? new HashSet<Guid>() : (await _db.Users.Where(u => defaults.Contains(u.Id) && u.IsActive).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+        // plan.ToEnd runs oldest revision first, so when two ended generations are the same support, the newest revision's default worker is the one kept.
+        foreach (var old in plan.ToEnd)
+        {
+            if (plan.NewPatterns.FirstOrDefault(made => SameSupport(old, made)) is not { } same) continue;
+            plan.CarryTo[old.Id] = same;
+            // The same support keeps its default worker too (a coordinator's own choice, not the agreement's); only a changed support starts with none.
+            same.DefaultUserId = old.DefaultUserId is { } user && active.Contains(user) ? user : null;
+        }
+        if (plan.CarryTo.Count == 0) return;
+
+        var from = draft.AgreementStartDate > plan.Today ? draft.AgreementStartDate : plan.Today;
+        var carriedFrom = plan.CarryTo.Keys.ToList();
+        // A day the new revision's plan skips for a public holiday is not carried: its new pattern makes no shift that day, so the old one is removed or listed like any other.
+        var skipped = DraftJson.ReadQuote(draft.PricingJson)?.HolidayOccurrences.Where(h => h.Skipped).Select(h => (h.BlockId, h.Date)).ToHashSet() ?? new();
+        plan.ToCarry = (await _db.Shifts
+            .Where(s => s.ShiftPatternId != null && carriedFrom.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && s.ServiceDate <= draft.AgreementEndDate)
+            .ToListAsync(ct))
+            .Where(s => !skipped.Contains((plan.CarryTo[s.ShiftPatternId!.Value].SourceBlockKey!, s.ServiceDate))).ToList();
+        plan.Carried = plan.ToCarry.Select(s => (plan.CarryTo[s.ShiftPatternId!.Value].Id, s.ServiceDate)).ToHashSet();
+    }
+
+    /// <summary>The same weekly support: the same block, weekday and worker of it, the same times, ratio and kind of night, and the same asks of a worker. A shift of the one is a shift of the other.</summary>
+    private static bool SameSupport(ShiftPattern a, ShiftPattern b) =>
+        a.SourceBlockKey == b.SourceBlockKey && a.DayOfWeek == b.DayOfWeek && a.WorkerSlot == b.WorkerSlot && a.StartTime == b.StartTime && a.EndTime == b.EndTime
+        && a.EndsNextDay == b.EndsNextDay && a.Ratio == b.Ratio && a.NightType == b.NightType && SameAsks(a.RequirementsJson, b.RequirementsJson);
+
+    /// <summary>The same asks of a worker, read as what they mean: PostgreSQL stores them as jsonb, which reads back with its own key order and spacing, so the stored text never equals the mapper's.</summary>
+    private static bool SameAsks(string? a, string? b) =>
+        a == b || (a is not null && b is not null && DraftJson.Write(DraftJson.ReadRequirements(a)) == DraftJson.Write(DraftJson.ReadRequirements(b)));
+
+    /// <summary>
     /// The shifts of the participant's earlier approved revisions dated from the day this one starts (or today, when that is later) that a coordinator can still tidy: drafts and published shifts, not one
     /// that is under way, handed in for review, finished or cancelled. The unfilled Draft ones are what approval removes, unless something is recorded against one; the rest are kept, counted (open when
     /// nobody is assigned) and listed. Tracked: an approval removes the removable ones in its own save. With <paramref name="lockRows"/> (an approval, inside its transaction) the rows are locked
     /// first on PostgreSQL, so what is read is what is removed: EF InMemory has no row locks, so there the read is as before.
     /// </summary>
-    private async Task<(OldShiftsRemainingDto Remaining, List<Shift> Removable)> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct, bool lockRows = false)
+    private async Task<(OldShiftsRemainingDto Remaining, List<Shift> Removable)> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct, bool lockRows = false, IReadOnlySet<Guid>? carried = null)
     {
         var earlier = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
             .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion < draft.Version)
@@ -428,6 +481,8 @@ public sealed class ServiceAgreementApprovalService
         var shifts = patternIds.Count == 0 ? new List<Shift>() : await _db.Shifts.Include(s => s.User)
             .Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published))
             .ToListAsync(ct);
+        // A shift that moves to the new revision's pattern is neither removed nor listed.
+        if (carried is { Count: > 0 }) shifts = shifts.Where(s => !carried.Contains(s.Id)).ToList();
         var recorded = await RecordedAgainstAsync(shifts.Where(Unfilled).Select(s => s.Id).ToList(), ct);
         var removable = shifts.Where(s => Unfilled(s) && !recorded.Contains(s.Id)).ToList();
         var kept = shifts.Except(removable).OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ThenBy(s => s.Id).ToList();

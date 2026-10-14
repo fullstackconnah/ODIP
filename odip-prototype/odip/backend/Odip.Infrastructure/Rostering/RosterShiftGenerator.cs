@@ -66,8 +66,10 @@ public sealed class RosterShiftGenerator
     /// <summary>
     /// Adds the shifts of <paramref name="patterns"/> over [from, to] to <paramref name="db"/> and saves nothing: the caller saves them with its own work, in a transaction that holds the
     /// participant's <see cref="RosterGenerationLock"/> (an approval, whose patterns are not saved yet and so have no shifts to look for).
+    /// <paramref name="carried"/>: days a shift already covers that is not saved under the pattern yet (an approval's carried shifts): counted as there and never made again.
     /// </summary>
-    public async Task<ShiftGeneration> AddAsync(OdipDbContext db, IReadOnlyCollection<ShiftPattern> patterns, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false, DateOnly? providerToday = null)
+    public async Task<ShiftGeneration> AddAsync(OdipDbContext db, IReadOnlyCollection<ShiftPattern> patterns, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false, DateOnly? providerToday = null,
+        IReadOnlySet<(Guid PatternId, DateOnly Date)>? carried = null)
     {
         foreach (var pattern in patterns) Cover(pattern, from, to, onlyWhenContiguous, providerToday);
 
@@ -76,6 +78,7 @@ public sealed class RosterShiftGenerator
 
         var existing = await ExistingAsync(db, occurrences.Where(x => db.Entry(x.Pattern).State != EntityState.Added).Select(x => x.Pattern.Id).ToList(),
             occurrences.SelectMany(x => x.Dates).Min(), occurrences.SelectMany(x => x.Dates).Max(), ct);
+        if (carried is not null) existing.UnionWith(carried);
         var skippedDays = await SkippedHolidaysAsync(db, occurrences.Select(x => x.Pattern), ct);
 
         int created = 0, alreadyThere = 0, holidays = 0;

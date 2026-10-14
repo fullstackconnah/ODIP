@@ -200,6 +200,8 @@ public record OldShiftsRemainingDto
     public int Assigned { get; init; }
     /// <summary>The unfilled Draft shifts approval removes (in a preview) or removed (in the answer to an approval): nobody on them, no notes written on them, nothing recorded against them.</summary>
     public int Removed { get; init; }
+    /// <summary>The shifts handed on to the new patterns because their support did not change: kept as they are, with their workers and states, and not made again.</summary>
+    public int Carried { get; init; }
     /// <summary>The first day of them, removed or kept; absent when there are none.</summary>
     public DateOnly? FirstDate { get; init; }
     /// <summary>The version of the revision they came from (the one whose patterns this approval ends); absent when there is none.</summary>
@@ -254,6 +256,8 @@ public record DraftApprovalPreviewDto
     public List<ApprovalReasonDto> Reasons { get; init; } = [];
     public int PatternsToCreate { get; init; }
     public int PatternsToEnd { get; init; }
+    /// <summary>The new patterns no ended pattern matches (a changed support): they start with no default staff. 0 when the approval ends no pattern, as on a first approval.</summary>
+    public int ChangedPatterns { get; init; }
     /// <summary>The version whose patterns would end.</summary>
     public int? EndsFromVersion { get; init; }
     /// <summary>The day they would end: the day before this revision starts.</summary>

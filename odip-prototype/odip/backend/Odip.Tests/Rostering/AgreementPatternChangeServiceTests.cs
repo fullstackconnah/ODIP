@@ -214,5 +214,10 @@ public class AgreementPatternChangeServiceTests
         Assert.Equal(new[] { (DayOfWeek.Monday, "weekdays-mon", T(14)), (DayOfWeek.Tuesday, "weekdays", T(13)), (DayOfWeek.Wednesday, "weekdays", T(13)), (DayOfWeek.Thursday, "weekdays", T(13)), (DayOfWeek.Friday, "weekdays", T(13)) },
             made.Select(p => (p.DayOfWeek, p.SourceBlockKey!, p.EndTime)));
         Assert.All(made, p => Assert.Equal((Oct19, (DateOnly?)Nov22), (p.EffectiveFrom, p.EffectiveTo)));
+        // The real chain: a change saved by SaveAsync, then approved. The requirements went through save, read-back and the mapper and still match as text, so the unchanged days carry over with their default worker.
+        var old = approved.OldShifts!;
+        Assert.Equal((20, 5, 5), (old.Carried, old.Removed, approved.Approval!.ShiftsCreated));     // Tuesday to Friday, 20 October to 20 November, carried; the five unfilled Mondays from the 19th removed; five new Mondays
+        Assert.Equal(30, await f.Db.Shifts.CountAsync());                                             // 30 - 5 + 5
+        Assert.Equal((Guid?)staff, made.Single(p => p.DayOfWeek == DayOfWeek.Tuesday).DefaultUserId);
     }
 }
