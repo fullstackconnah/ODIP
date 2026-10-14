@@ -340,5 +340,13 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   administrationTimeOutOfRange: 'ADMINISTRATION_TIME_OUT_OF_RANGE',
   /** 409 — the medication is not Active. */
   medicationNotActive: 'MEDICATION_NOT_ACTIVE',
+  /** 400 on Finish (My shifts redesign): the worker's times, reason or kilometres. The finish flow lands each on its times step. */
+  timeAdjustmentTooLarge: 'SHIFT_TIME_ADJUSTMENT_TOO_LARGE',
+  timeAdjustmentReasonRequired: 'SHIFT_TIME_ADJUSTMENT_REASON_REQUIRED',
+  timeAdjustmentReasonTooLong: 'SHIFT_TIME_ADJUSTMENT_REASON_TOO_LONG',
+  actualEndInFuture: 'SHIFT_ACTUAL_END_IN_FUTURE',
+  startNotBeforeEnd: 'SHIFT_START_NOT_BEFORE_END',
+  breakOutsideTimes: 'SHIFT_BREAK_OUTSIDE_TIMES',
+  kilometresOutOfRange: 'SHIFT_KILOMETRES_OUT_OF_RANGE',
 } as const
 export type ShiftPackageErrorCode = typeof SHIFT_PACKAGE_ERROR_CODES[keyof typeof SHIFT_PACKAGE_ERROR_CODES]

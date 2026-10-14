@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { breaksSignature, buildChecklist, clockLabel, endChecklist } from './checklist'
+import {
+  breaksSignature, buildChecklist, clockLabel, endChecklist,
+  FINISH_STEPS, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
+} from './checklist'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
 
 const dose = (over: Partial<PortalDoseSlotDto>): PortalDoseSlotDto => ({
@@ -85,5 +88,116 @@ describe('wording and break signature', () => {
     const a = [{ id: 'b', startedAt: '2026-10-05T01:00:00Z', endedAt: null }]
     expect(breaksSignature(a)).not.toBe(breaksSignature([{ ...a[0], endedAt: '2026-10-05T01:30:00Z' }]))
     expect(breaksSignature(a)).not.toBe(breaksSignature([]))
+  })
+})
+
+describe('the finish flow: steps and step 4', () => {
+  it('has the five steps in order, with the rail labels and the headings (SHAPE §7)', () => {
+    expect(FINISH_STEPS.map(s => [s.key, s.label, s.heading])).toEqual([
+      ['times', 'Times', 'Your times'], ['doses', 'Doses', 'Doses & routines'], ['report', 'Report', 'Anything to report?'],
+      ['handover', 'Handover', 'Note & handover'], ['submit', 'Submit', 'Check and submit'],
+    ])
+  })
+  it("names step 4's missing answers on its forward button, so it is never blocked and never silent", () => {
+    expect(handoverForward(0, false, '', false)).toBe('Nothing to note or hand over')
+    expect(handoverForward(1, false, '', false)).toBe('Nothing to hand over')
+    expect(handoverForward(0, false, 'All settled', false)).toBe('Nothing to note')
+    expect(handoverForward(0, true, '', true)).toBe('Next')
+    expect(handoverForward(2, false, '  ', true)).toBe('Next')
+  })
+  it('sends a refused submit to the step that can fix it', () => {
+    for (const code of ['BREAK_RUNNING', 'SHIFT_TIME_ADJUSTMENT_TOO_LARGE', 'SHIFT_TIME_ADJUSTMENT_REASON_REQUIRED', 'SHIFT_TIME_ADJUSTMENT_REASON_TOO_LONG',
+      'SHIFT_ACTUAL_END_IN_FUTURE', 'SHIFT_START_NOT_BEFORE_END', 'SHIFT_BREAK_OUTSIDE_TIMES', 'SHIFT_KILOMETRES_OUT_OF_RANGE']) {
+      expect(stepForCode(code)).toBe('times')
+    }
+    expect(stepForCode('DOSE_OUTCOME_MISSING')).toBe('doses')
+    expect(stepForCode('SHIFT_NOTE_REQUIRED')).toBe('handover')
+    expect(stepForCode('SHIFT_CANCELLED')).toBeNull()
+    expect(stepForCode(undefined)).toBeNull()
+  })
+  it('summarises doses and routines with only what there is to count', () => {
+    const slot = (status: string | null) => ({ outcome: status ? { status } : null }) as unknown as PortalDoseSlotDto
+    const routine = (isChecked: boolean) => ({ isChecked }) as unknown as PortalShiftRoutineDto
+    expect(dosesSummary([slot('Administered'), slot('Administered'), slot('Administered'), slot('Refused'), slot(null)],
+      [routine(true), routine(true), routine(true), routine(true), routine(false)])).toBe('3 given, 1 refused · 4 of 5 routines ticked')
+    expect(dosesSummary([slot('Missed')], [])).toBe('1 not given')
+    expect(dosesSummary([], [])).toBe('')
+  })
+})
+
+describe('the finish flow: times (Review Focus 1 and 3)', () => {
+  // Brisbane is UTC+10 all year. The stamp is 09:05:40 local; now is 17:00:30 local.
+  const tz = 'Australia/Brisbane'
+  const base: TimesInput = {
+    tz, stampedStart: '2026-08-16T23:05:40Z', startOverride: null, endOverride: null, reason: '', kilometres: '', breaks: [],
+    now: new Date('2026-08-17T07:00:30Z'),
+  }
+
+  it('offers the stamp to the minute ±15 for the start, and from 15 minutes before this minute up to it for the end', () => {
+    expect(timeBounds(base.stampedStart, tz, base.now)).toEqual({
+      start: { stamp: '2026-08-17T09:05', min: '2026-08-17T08:50', max: '2026-08-17T09:20' },
+      end: { now: '2026-08-17T17:00', min: '2026-08-17T16:45', max: '2026-08-17T17:00' },
+    })
+  })
+  it('accepts both edges and refuses a minute past either, naming the window', () => {
+    expect(timesError({ ...base, startOverride: '2026-08-17T08:50', reason: 'Early' })).toBeNull()
+    expect(timesError({ ...base, startOverride: '2026-08-17T09:20', reason: 'Late' })).toBeNull()
+    expect(timesError({ ...base, startOverride: '2026-08-17T08:49', reason: 'x' }))
+      .toEqual({ field: 'start', message: 'Choose a time between 8:50 am and 9:20 am.' })
+    expect(timesError({ ...base, endOverride: '2026-08-17T16:44', reason: 'x' }))
+      .toEqual({ field: 'end', message: 'Choose a time no more than 15 minutes before now.' })
+    expect(timesError({ ...base, endOverride: '2026-08-17T17:01', reason: 'x' }))
+      .toEqual({ field: 'end', message: "Your finish time can't be in the future." })
+    expect(timesError({ ...base, startOverride: '', reason: 'x' })?.field).toBe('start')
+  })
+  it("treats the stamp's minute and this minute as no change: nothing is sent and no reason is needed", () => {
+    const same = { ...base, startOverride: '2026-08-17T09:05', endOverride: '2026-08-17T17:00' }
+    expect(movedTimes(same)).toEqual({ start: null, end: null })
+    expect(timesError(same)).toBeNull()
+  })
+  it('sends a moved time as a UTC instant with Z, and then needs a reason', () => {
+    const moved = { ...base, endOverride: '2026-08-17T16:50' }
+    expect(movedTimes(moved)).toEqual({ start: null, end: '2026-08-17T06:50:00Z' })
+    expect(timesError(moved)).toEqual({ field: 'reason', message: 'Say why your times changed.' })
+    expect(timesError({ ...moved, reason: '   ' })?.field).toBe('reason')
+    expect(timesError({ ...moved, reason: 'Left early' })).toBeNull()
+  })
+  it('refuses a start that is not before the finish', () => {
+    const early = { ...base, now: new Date('2026-08-16T23:15:00Z') }   // ten minutes into the shift
+    expect(timesError({ ...early, startOverride: '2026-08-17T09:17', reason: 'x' }))
+      .toEqual({ field: 'start', message: 'Your start must be before your finish.' })
+  })
+  it('crosses midnight for an overnight shift', () => {
+    const night = { ...base, stampedStart: '2026-08-17T08:00:00Z', now: new Date('2026-08-17T14:05:00Z') }   // 18:00 start, 00:05 now
+    expect(timeBounds(night.stampedStart, tz, night.now).end).toEqual({ now: '2026-08-18T00:05', min: '2026-08-17T23:50', max: '2026-08-18T00:05' })
+    expect(movedTimes({ ...night, endOverride: '2026-08-17T23:55' }).end).toBe('2026-08-17T13:55:00Z')
+  })
+  it('asks for a running break to end first', () => {
+    const running = { id: 'b1', startedAt: '2026-08-17T06:40:00Z', endedAt: null, isRunning: true }
+    expect(timesError({ ...base, breaks: [running] })).toEqual({ field: 'break', breakId: 'b1', message: 'End your break first.' })
+  })
+  it('keeps every break inside the moved times', () => {
+    const brk = { id: 'b1', startedAt: '2026-08-17T06:40:00Z', endedAt: '2026-08-17T06:52:00Z', isRunning: false }
+    expect(timesError({ ...base, breaks: [brk], endOverride: '2026-08-17T16:50', reason: 'Left' })).toEqual({
+      field: 'break', breakId: 'b1', message: 'Your times must include your breaks. Change the break first, or your times.',
+    })
+    expect(timesError({ ...base, breaks: [brk], endOverride: '2026-08-17T16:52', reason: 'Left' })).toBeNull()
+  })
+})
+
+
+describe('the finish flow: kilometres (Review Focus 5)', () => {
+  it.each([['', null], ['   ', null], ['0', 0], ['12.5', 12.5], ['.5', 0.5], ['2000', 2000], ['2000.0', 2000]] as const)('reads %j as %j', (raw, value) => {
+    expect(parseKilometres(raw)).toBe(value)
+  })
+  it.each(['12,5', '1e3', '2000.05', '2000.1', '-1', '12.55', 'abc', '.'])('refuses %j', raw => {
+    expect(parseKilometres(raw)).toBe('invalid')
+  })
+  it('names the field on step 1', () => {
+    const base: TimesInput = {
+      tz: 'Australia/Brisbane', stampedStart: '2026-08-16T23:05:40Z', startOverride: null, endOverride: null, reason: '', kilometres: '12,5', breaks: [],
+      now: new Date('2026-08-17T07:00:30Z'),
+    }
+    expect(timesError(base)).toEqual({ field: 'kilometres', message: 'Enter kilometres from 0 to 2,000.' })
   })
 })
