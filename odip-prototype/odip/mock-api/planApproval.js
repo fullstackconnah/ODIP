@@ -126,16 +126,28 @@ function earlierApproved(store, draft) {
   return (store.drafts[draft.participantId] || []).filter((d) => d.approval && d.version < draft.version)
 }
 
-function oldShifts(store, draft) {
+// The previous approved revisions' shifts a coordinator can still tidy: drafts and published shifts, from the day the new revision starts or today, whichever is later.
+function standingOf(store, draft) {
   const ids = new Set(store.patterns.filter((p) => earlierApproved(store, draft).some((d) => d.id === p.sourceDraftId)).map((p) => p.id))
-  // What a coordinator can still tidy: drafts and published shifts, from the day the new revision starts or today, whichever is later.
   const today = providerToday()
   const from = draft.agreementStartDate > today ? draft.agreementStartDate : today
-  const standing = store.shifts.filter((s) => ids.has(s.shiftPatternId) && s.serviceDate >= from && (s.status === 'Draft' || s.status === 'Published'))
+  return store.shifts.filter((s) => ids.has(s.shiftPatternId) && s.serviceDate >= from && (s.status === 'Draft' || s.status === 'Published'))
+}
+
+// A draft nobody is on and nobody wrote on, as the server reads it (D11, N6).
+const unfilled = (shift) => shift.status === 'Draft' && !shift.staffId && !shift.notes
+
+// As the server answers it: approval removes the unfilled drafts and lists the rest (at most 50). shortcut: the server's carry-over (an unchanged support's shifts move to the new pattern) is not mocked, so here every old shift is removed or listed.
+function oldShifts(store, draft) {
+  const standing = standingOf(store, draft)
+  const kept = standing.filter((s) => !unfilled(s)).sort((a, b) => `${a.serviceDate} ${a.startTime}`.localeCompare(`${b.serviceDate} ${b.startTime}`))
   const versions = earlierApproved(store, draft).map((d) => d.version)
   return {
-    open: standing.filter((s) => !s.staffId).length, assigned: standing.filter((s) => s.staffId).length,
+    open: kept.filter((s) => !s.staffId).length, assigned: kept.filter((s) => s.staffId).length, removed: standing.length - kept.length,
     ...(standing.length > 0 ? { firstDate: standing.map((s) => s.serviceDate).sort()[0] } : {}), ...(versions.length > 0 ? { fromVersion: Math.max(...versions) } : {}),
+    shifts: kept.slice(0, 50).map((s) => ({
+      id: s.id, serviceDate: s.serviceDate, startTime: s.startTime, endTime: s.endTime, endsNextDay: !!s.endsNextDay, status: s.status, ...(s.staffName ? { workerName: s.staffName } : {}),
+    })),
   }
 }
 
@@ -199,6 +211,8 @@ function previewOf(planned, draft) {
   return {
     canApprove: !draft.approval && !planned.superseded && planned.reasons.length === 0, alreadyApproved: !!draft.approval, reasons: planned.reasons,
     patternsToCreate: planned.newPatterns.length, patternsToEnd: planned.toEnd.length,
+    // shortcut: the mock does not match supports (no carry-over), so when patterns end every new one counts as changed; the server counts only the unmatched ones.
+    changedPatterns: planned.toEnd.length > 0 ? planned.newPatterns.length : 0,
     ...(planned.toEnd.length > 0 ? { endsFromVersion: planned.endsFromVersion, endsOn: planned.endsOn } : {}),
     shiftsToCreate: planned.shiftsToCreate, ...(planned.shiftsNote ? { shiftsNote: planned.shiftsNote } : {}), oldShiftsRemaining: old,
     overlappingPatterns: planned.overlapping.map((p) => ({ id: p.id, dayOfWeek: p.dayOfWeek, startTime: p.startTime, endTime: p.endTime, endsNextDay: p.endsNextDay, effectiveFrom: p.effectiveFrom, ...(p.effectiveTo ? { effectiveTo: p.effectiveTo } : {}), ...(p.notes ? { notes: p.notes } : {}) })),
@@ -235,6 +249,9 @@ function approve(store, participantId, draftId, body, caller) {
   const made = patternsOf(draft, () => store.newId('pat'))
   for (const pattern of made) pattern.participantName = participant ? participant.fullName : ''
   for (const old of planned.toEnd) { old.effectiveTo = planned.endsOn; if (planned.endsOn < old.effectiveFrom) old.isActive = false }
+  // As the server does: the replaced revision's unfilled Draft shifts from this one's start go in the same approval.
+  const gone = new Set(standingOf(store, draft).filter(unfilled).map((s) => s.id))
+  for (let i = store.shifts.length - 1; i >= 0; i--) if (gone.has(store.shifts[i].id)) store.shifts.splice(i, 1)
   store.patterns.push(...made)
   const created = []
   if (planned.ready && planned.from <= planned.horizonEnd) {
@@ -258,7 +275,7 @@ function approve(store, participantId, draftId, body, caller) {
     ...(created.length > 0 ? { horizonEnd: planned.horizonEnd, firstShiftDate: created.map((s) => s.serviceDate).sort()[0] } : {}),
     topUpEnabled: topUpEnabled(),
   }
-  return { draft, oldShiftsRemaining: planned.oldShifts || { open: 0, assigned: 0 } }
+  return { draft, oldShiftsRemaining: planned.oldShifts || { open: 0, assigned: 0, removed: 0, shifts: [] } }
 }
 
 function durationOf(pattern) {
