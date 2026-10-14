@@ -23,18 +23,20 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { queryPhase } from '@/lib/queryPhase'
 import { readParticipantActivatedNotice } from './profile/participantActivated'
+import { AgreementsEndingList } from './AgreementsEndingList'
 
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
   Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   Inactive: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
-/** The two views of the register: finalised participants only. A draft is never listed here: it is an Enquiries row (intake open) or an Onboarding row (intake complete). */
-type View = 'active' | 'archived'
+/** The views of the register: finalised participants only (a draft is an Enquiries or an Onboarding row), and, for the roles that manage participants, their agreements ending (agreement PR 2). */
+type View = 'active' | 'archived' | 'ending'
 const VIEW_OPTIONS: { key: View; label: string }[] = [
   { key: 'active', label: 'Active' },
   { key: 'archived', label: 'Archived' },
 ]
+const ENDING_OPTION: { key: View; label: string } = { key: 'ending', label: 'Agreements ending' }
 
 // A care need the phone card must not lose: the table keeps the tick a 'boolean' column draws, the card shows the need as a chip.
 function CareNeed({ label }: { label: string }) {
@@ -77,7 +79,8 @@ export function ParticipantsTable() {
 }
 
 function useParticipantsScreen() {
-  const { canWrite, canViewAlerts } = usePermissions()
+  const { canWrite, canViewAlerts, canManageParticipantLifecycle } = usePermissions()
+  const viewOptions = canManageParticipantLifecycle ? [...VIEW_OPTIONS, ENDING_OPTION] : VIEW_OPTIONS
   const navigate = useNavigate()
   const location = useLocation()
   // A one-off confirmation from the Profile wizard ("{name} is now an active participant."), carried by navigation state when completing a participant's
@@ -197,7 +200,7 @@ function useParticipantsScreen() {
 
   const toolbar = (
     <>
-      <ToggleGroup options={VIEW_OPTIONS} value={view} onChange={key => changeView(key as View)} ariaLabel="Participant list view" />
+      <ToggleGroup options={viewOptions} value={view} onChange={key => changeView(key as View)} ariaLabel="Participant list view" />
       <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." />
     </>
   )
@@ -397,7 +400,9 @@ function useParticipantsScreen() {
         </Callout>
       )}
       {errorNotice}
-      {loadFailed ? (
+      {view === 'ending' ? (
+        <AgreementsEndingList search={term} />
+      ) : loadFailed ? (
         <PageState kind="error" noun="participant list" onRetry={() => refetch()} />
       ) : !isLoading && participants.length === 0 ? (
         emptyState
