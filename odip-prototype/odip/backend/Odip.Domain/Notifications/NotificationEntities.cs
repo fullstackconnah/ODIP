@@ -23,7 +23,8 @@ public enum NotificationEventType
     ServiceAgreementSent = 8,           // reserved — docs/specs/2026-09-08-service-agreements-and-budgets-design.md
     ServiceAgreementSigned = 9,         // reserved — docs/specs/2026-09-08-service-agreements-and-budgets-design.md
     IntegrationDegraded = 10,           // reserved — docs/specs/2026-09-08-integration-framework-design.md
-    IntakeBooked = 11,                  // the assigned staff member of an intake visit: booked, changed or cancelled (payload Kind), intake booking spec 2026-10-14
+    ShiftUnassigned = 11,               // roster drag and drop (2026-10-14): someone taken off a Published shift
+    IntakeBooked = 12,                  // the assigned staff member of an intake visit: booked, changed or cancelled (payload Kind), intake booking spec 2026-10-14
 }
 
 public enum NotificationChannelKind { Email = 0, Sms = 1 }

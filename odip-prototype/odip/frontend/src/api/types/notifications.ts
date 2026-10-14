@@ -22,6 +22,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'ServiceAgreementSent',
   'ServiceAgreementSigned',
   'IntegrationDegraded',
+  'ShiftUnassigned',
   'IntakeBooked',
 ] as const
 export type NotificationEventType = typeof NOTIFICATION_EVENT_TYPES[number]
@@ -39,22 +40,23 @@ export const NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, strin
   ServiceAgreementSent: 'Service agreement sent',
   ServiceAgreementSigned: 'Service agreement signed',
   IntegrationDegraded: 'Integration degraded',
+  ShiftUnassigned: 'Taken off a shift',
   IntakeBooked: 'Intake visits',
 }
 
 /**
  * Grouping for the preference grid (§6: "rows = event types grouped by area (Leave, Rostering,
  * Medications, Caregiver, Incidents)"). `BuildGridAsync` on the backend returns every
- * `NotificationEventType` regardless of whether its trigger point is wired yet (v1 wires 8 of
- * the 12, IntakeBooked included; ShiftCompletion(PendingReview/Returned) is wired but under a sibling PR,
+ * `NotificationEventType` regardless of whether its trigger point is wired yet (v1 wires 9 of
+ * the 13, ShiftUnassigned and IntakeBooked included; ShiftCompletion(PendingReview/Returned) is wired but under a sibling PR,
  * ServiceAgreement(Sent/Signed) and IntegrationDegraded are enum values reserved for later specs)
  * — so the grid still needs a place to show every
  * value. Agreements/Integrations aren't named in §6's example list; grouped here rather than
- * omitted so the grid always accounts for every value the backend can return.
+ * omitted so the grid always accounts for all 13 values the backend can return.
  */
 export const NOTIFICATION_EVENT_TYPE_GROUPS: { label: string; eventTypes: NotificationEventType[] }[] = [
   { label: 'Leave', eventTypes: ['LeaveRequestSubmitted', 'LeaveRequestDecided'] },
-  { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
+  { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftUnassigned', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
   { label: 'Medications', eventTypes: ['WitnessRequested'] },
   { label: 'Caregiver', eventTypes: ['CaregiverSubmissionReceived'] },
   { label: 'Incidents', eventTypes: ['IncidentReported'] },
