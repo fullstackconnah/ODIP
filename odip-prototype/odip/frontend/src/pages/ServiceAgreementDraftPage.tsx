@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
 import {
-  useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useFundingPlans, useParticipant, useRenewAgreement, useServiceAgreementDraft, useServiceAgreementDrafts,
+  useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useAgreementsEnding, useFundingPlans, useParticipant, useRenewAgreement, useServiceAgreementDraft, useServiceAgreementDrafts,
 } from '@/api/hooks'
 import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
@@ -17,7 +17,7 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { agreementIssues, type AgreementIssue } from '@/lib/agreementIssues'
 import { approvalHistory } from '@/lib/agreementHistory'
 import { blocksToShifts, chargeHolidaysByDefault, engineLimits, shiftIdsOfBlock, type Shift } from '@/lib/agreementShifts'
-import { calendarDaysUntil, localIsoDate } from '@/lib/dateOnly'
+import { localIsoDate } from '@/lib/dateOnly'
 import { currentPlanOf, planStatus } from '@/lib/fundingPlan'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
@@ -177,8 +177,10 @@ function DraftPage() {
 
   const unreadableVersion = newest && newest.blocks.some(entry => entry.unreadable) ? newest.version : null
   const locked = canEdit && !!newest?.approval && revisingFrom !== newest.id
-  // An approved agreement within 60 days of its end, or past it, says so on its callout, and an approver may renew it there (D1).
-  const daysLeft = locked && newest ? calendarDaysUntil(newest.agreementEndDate, today) : null
+  // An approved agreement within 60 days of its end, or past it, says so on its callout, and an approver may renew it there (D1). The days are the server's, counted from the provider's today
+  // as the alert counts them, never from the browser's date (fix round 1, CR-B S1).
+  const endingList = useAgreementsEnding(locked)
+  const daysLeft = locked && newest ? endingList.data?.find(row => row.draftId === newest.id)?.daysLeft ?? null : null
   const ending = newest && daysLeft !== null && daysLeft <= 60 ? endingWords(daysLeft, newest.agreementEndDate) : null
   const readOnly = !canEdit || locked
   const plan = planDatesOf(details, recorded)

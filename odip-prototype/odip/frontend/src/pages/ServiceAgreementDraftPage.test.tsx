@@ -7,9 +7,9 @@ import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings } = vi.hoisted(() => ({
+const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows } = vi.hoisted(() => ({
   editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
-  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(),
+  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(), endingRows: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -22,6 +22,7 @@ vi.mock('@/api/hooks', () => ({
   usePlanPricingSettings: () => ({ data: pricingSettings() }),
   useRenewAgreement: () => ({ mutate: renewMutate, isPending: false }),
   useServiceAgreementDraft: () => oldDraft(),
+  useAgreementsEnding: () => endingRows(),
   usePlanBudget: () => budget(),
   useAgreementCheck: () => check(),
 }))
@@ -72,6 +73,7 @@ beforeEach(() => {
   pricingSettings.mockReturnValue(makeSettings())
   oldDraft.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
   renewMutate.mockReset()
+  endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })
 })
 afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
@@ -483,6 +485,19 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
   const renewal = draft({ id: 'd-3', version: 3, agreementStartDate: '2026-11-02', agreementEndDate: '2027-02-28', lines: [line] })
   const showing = (...list: ServiceAgreementDraftDto[]) => drafts.mockReturnValue({ data: list, isLoading: false, isError: false, refetch: refetchDrafts })
   const renewButton = () => screen.getByRole('button', { name: 'Renew agreement' })
+  // The provider's count of days, as the server's ending list has it (fix round 1, CR-B S1): the page never counts from the browser's date.
+  const endsIn = (daysLeft: number, agreementEndDate = '2026-11-01', draftId = 'd-2') => endingRows.mockReturnValue({
+    data: [{ participantId: 'p-1', participantName: 'Marcus Tran', draftId, version: 2, agreementEndDate, daysLeft, renewalVersion: null, status: '' }], isLoading: false, isError: false,
+  })
+  beforeEach(() => endsIn(20))
+
+  it('counts the days from the provider\u0027s today, not the browser\u0027s', () => {
+    endsIn(19)                                                                            // the browser's date would say 20
+    showing(ending)
+    renderPage()
+
+    expect(screen.getByText('Agreement ends in 19 days.')).toBeInTheDocument()
+  })
 
   it('says when an approved agreement ends, and offers Renew to an approver beside Start a new revision', () => {
     showing(ending)
@@ -494,12 +509,14 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
   })
 
   it('says nothing of an end more than 60 days away, and an ended agreement says its shifts stop', () => {
-    showing(draft({ approval }))                                                          // ends 30 June 2027
+    endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })            // ends 30 June 2027: not on the list
+    showing(draft({ approval }))
     const { unmount } = renderPage()
     expect(screen.queryByText(/^Agreement end/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Renew agreement' })).not.toBeInTheDocument()
     unmount()
 
+    endsIn(-1, '2026-10-11')
     showing(draft({ approval, agreementStartDate: '2026-07-01', agreementEndDate: '2026-10-11' }))
     renderPage()
     expect(screen.getByText('Agreement ended Sun 11 Oct 2026: shifts stop after it.')).toBeInTheDocument()
