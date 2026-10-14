@@ -206,3 +206,13 @@ describe('RosterGrid — density', () => {
     expect(container.firstElementChild).toHaveClass('min-[1500px]:[--roster-sticky-col:280px]', 'overflow-auto')
   })
 })
+
+describe('RosterGrid frame with the staff strip (roster drag and drop)', () => {
+  it('grows the frame’s chrome allowance by the staff strip when draggable, and only then', () => {
+    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
+    expect(container.firstElementChild?.className).toContain('2*var(--control-h)')
+    unmount()
+    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
+    expect(plain.container.firstElementChild?.className).not.toContain('2*var(--control-h)')
+  })
+})

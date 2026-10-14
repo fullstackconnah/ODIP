@@ -16,6 +16,8 @@ export type RosterGridProps = {
   onDeleteShift: (shift: ShiftDto) => void
   onAddParticipantShift: (participantId: string, participantName: string, day: string) => void
   onAddStaffShift: (staffId: string, day: string) => void
+  /** Roster drag and drop: the Participant view's rows get grips and drop targets, and the frame makes room for the staff strip the page shows above it. */
+  draggable?: boolean
 }
 
 /**
@@ -52,7 +54,11 @@ const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${R
  * plus the bottom gutter; the 20rem floor keeps a short window usable. `min-[1500px]:[--roster-sticky-col:280px]`
  * is the wide-screen column width (see STICKY_COL).
  */
-const BOARD_FRAME = 'overflow-auto scroll-pt-9 rounded-[var(--radius-md)] border border-border min-[1500px]:[--roster-sticky-col:280px] md:max-h-[max(20rem,calc(100dvh_-_11.5rem))]'
+const FRAME = 'overflow-auto scroll-pt-9 rounded-[var(--radius-md)] border border-border min-[1500px]:[--roster-sticky-col:280px]'
+const BOARD_FRAME = `${FRAME} md:max-h-[max(20rem,calc(100dvh_-_11.5rem))]`
+// With the staff strip above it (StaffStrip: two --control-h rows and a 0.5rem gap, --card-pad top and bottom, a 1px border each side) and the page's --section-gap between them, the
+// chrome allowance grows by exactly that: strip and grid share one viewport, the page never scrolls, and the strip stays in view through a drag.
+const BOARD_FRAME_WITH_STRIP = `${FRAME} md:max-h-[max(20rem,calc(100dvh_-_11.5rem_-_2*var(--control-h)_-_0.5rem_-_2*var(--card-pad)_-_2px_-_var(--section-gap)))]`
 // Keeps a keyboard-focused chip from scrolling to rest underneath the pinned first column.
 const BOARD_FRAME_STYLE = { scrollPaddingLeft: STICKY_COL }
 
@@ -68,11 +74,11 @@ const HEADER_BG_TODAY = 'bg-[color-mix(in_srgb,var(--color-primary)_6%,var(--col
  * Never swap this out for an empty state; guidance for a first-time/empty week belongs in a
  * dismissible hint the caller renders above this component.
  */
-export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onDeleteShift, onAddParticipantShift, onAddStaffShift }: RosterGridProps) {
+export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable }: RosterGridProps) {
   const { days } = board
 
   return (
-    <div className={BOARD_FRAME} style={BOARD_FRAME_STYLE}>
+    <div className={draggable ? BOARD_FRAME_WITH_STRIP : BOARD_FRAME} style={BOARD_FRAME_STYLE}>
       <div className="grid" style={GRID_TEMPLATE}>
         {/* Header row */}
         <div className={`sticky left-0 top-0 z-30 border-b border-r border-border ${HEADER_BG}`} />
@@ -102,6 +108,7 @@ export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onO
               onDelete={onDeleteShift}
               onAddShift={onAddParticipantShift}
               hideCoverageBadge={weekHasNoShifts}
+              draggable={draggable}
             />
           ))
         ) : (
