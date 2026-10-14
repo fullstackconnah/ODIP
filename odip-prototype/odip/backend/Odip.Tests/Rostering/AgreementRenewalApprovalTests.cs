@@ -85,4 +85,33 @@ public class AgreementRenewalApprovalTests
         Assert.Equal((Guid?)null, made[DayOfWeek.Monday]);
         Assert.All(made.Where(entry => entry.Key != DayOfWeek.Monday), entry => Assert.Equal((Guid?)ben, entry.Value));
     }
+
+    /// <summary>
+    /// Fix round 1 (CR-A S2): D12 runs only when the approval ends no pattern, and for a renewal that always holds. Each approval ends every earlier pattern running past its start, only the newest
+    /// revision is approved, and the roster cannot move an agreement pattern's dates (a 409, RosteringPatternUpdateTests). So after a change inside the term is approved, every pattern ends by that
+    /// term's end, and the renewal still ends nothing and takes the newest generation's default staff.
+    /// </summary>
+    [Fact]
+    public async Task After_a_change_inside_the_term_a_renewal_still_ends_nothing_and_takes_the_newest_generations_default_staff()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
+        await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        var (ben, ann) = (await UserAsync(f, "Ben", active: true), await UserAsync(f, "Ann", active: true));
+        foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
+        await f.Db.SaveChangesAsync();
+        var change = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: Nov22);
+        Assert.Equal(5, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, change.Id, false, Admin, CancellationToken.None)).Approval!.PatternsEnded);
+        (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == change.Id && p.DayOfWeek == DayOfWeek.Tuesday)).DefaultUserId = ann;
+        await f.Db.SaveChangesAsync();
+        var renewal = await AddRevisionAsync(f, 3, new[] { WeekdayBlock() }, start: Nov23, end: Jan3);
+
+        var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, renewal.Id, false, Admin, CancellationToken.None);
+
+        Assert.Equal(0, outcome.Approval!.PatternsEnded);
+        var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == renewal.Id).ToDictionaryAsync(p => p.DayOfWeek, p => p.DefaultUserId);
+        Assert.Equal((Guid?)ann, made[DayOfWeek.Tuesday]);                                               // the change's worker, not v1's
+        Assert.All(made.Where(entry => entry.Key != DayOfWeek.Tuesday), entry => Assert.Equal((Guid?)ben, entry.Value));
+        Assert.Empty(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId != renewal.Id && (p.EffectiveTo == null || p.EffectiveTo > Nov22)).ToListAsync());
+    }
 }

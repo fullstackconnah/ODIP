@@ -416,7 +416,8 @@ public sealed class ServiceAgreementApprovalService
             // An approval locks the old shifts before it reads any of them: the carry-over and the removal then both decide on what is committed.
             if (approving) await LockOldShiftsAsync(old.Select(p => p.Id).ToArray(), draft.AgreementStartDate > plan.Today ? draft.AgreementStartDate : plan.Today, ct);
             await CarryOverAsync(draft, plan, ct);
-            // A renewal ends nothing, so the carry-over had nothing to match; only then do the patterns ending the day before it hand on their default workers (D12).
+            // A renewal ends nothing, so the carry-over had nothing to match; only then do the patterns ending the day before it hand on their default workers (D12). A renewal always ends
+            // nothing: only the newest revision is approved, each approval ends every earlier pattern past its start, and the roster cannot move an agreement pattern's dates.
             if (plan.ToEnd.Count == 0) await CarryDefaultsIntoRenewalAsync(plan, old, versionOf, ct);
             if (!approving) plan.HandEdited = await HandEditedAsync(plan, ct);
             (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, plan.ToCarry.Select(s => s.Id).ToHashSet());
