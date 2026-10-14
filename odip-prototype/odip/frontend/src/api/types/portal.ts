@@ -64,6 +64,8 @@ export interface PortalTripAssignmentSummaryDto {
 export interface PortalShiftsResponseDto {
   shifts: PortalShiftSummaryDto[]
   tripAssignments: PortalTripAssignmentSummaryDto[]
+  /** The provider's IANA zone: the shifts' dates and times are wall clock there. */
+  timeZoneId: string
 }
 
 // ── Shift detail ──────────────────────────────────────────

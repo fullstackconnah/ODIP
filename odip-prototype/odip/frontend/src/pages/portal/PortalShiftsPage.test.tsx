@@ -44,6 +44,7 @@ function makeShiftsResponse(overrides: Partial<PortalShiftsResponseDto> = {}): P
       },
     ],
     tripAssignments: [],
+    timeZoneId: 'Australia/Brisbane',
     ...overrides,
   }
 }
@@ -52,7 +53,7 @@ beforeEach(() => {
   mockUseMyShifts.mockReset()
   mockUsePendingWitnessRequests.mockReset().mockReturnValue({ data: [], isLoading: false })
   vi.useFakeTimers({ toFake: ['Date'] })
-  vi.setSystemTime(new Date('2026-08-19T10:00:00'))
+  vi.setSystemTime(new Date('2026-08-19T10:00:00+10:00'))   // 10 am in the fixture's provider zone, whatever the runner's zone
   mockUsePortalShiftDetail.mockReset().mockReturnValue({ data: undefined })
   sessionStorage.clear()
 })
@@ -147,7 +148,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
   const row = (over: Partial<PortalShiftSummaryDto>): PortalShiftSummaryDto => ({ ...makeShiftsResponse().shifts[0], ...over })
   /** The week's query and the card's own query (yesterday to today) answer differently. */
   function answer(week: PortalShiftSummaryDto[], recent: PortalShiftSummaryDto[]) {
-    mockUseMyShifts.mockImplementation((from: string) => ({ data: { shifts: from === '2026-08-18' ? recent : week, tripAssignments: [] }, isLoading: false }))
+    mockUseMyShifts.mockImplementation((from: string) => ({ data: { shifts: from === '2026-08-18' ? recent : week, tripAssignments: [], timeZoneId: 'Australia/Brisbane' }, isLoading: false }))
   }
 
   it('leads with the shift in progress, with one Continue shift link, and does not list it again', () => {

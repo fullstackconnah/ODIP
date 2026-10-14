@@ -1,7 +1,7 @@
 import { addDays, format, parseISO } from 'date-fns'
 import type { PortalShiftSummaryDto, ShiftStatus } from '@/api/types'
 import { NIGHT_TYPE_LABELS, RATIO_LABELS } from '@/pages/rostering/lib/roster'
-import { providerLocalToUtcInstant } from '../shift/shiftTime'
+import { providerLocalToUtcInstant, utcInstantToProviderLocal } from '../shift/shiftTime'
 
 /** OvernightSupportType shares its first four values with SleepoverType (see NIGHT_TYPE_LABELS) plus one extra. */
 export const OVERNIGHT_SUPPORT_LABELS: Record<string, string> = {
@@ -25,22 +25,22 @@ export function portalStatusLabel(s: { status: ShiftStatus; returnCount: number 
   return s.status === 'Published' && s.returnCount > 0 ? 'Returned' : PORTAL_SHIFT_STATUS_LABELS[s.status]
 }
 
-// shortcut: the browser's clock stands in for the provider's zone (the list DTO carries no timeZoneId); upgrade if workers roam zones.
-const wallNow = (now: Date) => format(now, "yyyy-MM-dd'T'HH:mm")
+// The shifts' dates and times are wall clock in the provider's zone, so "now" is read there too, never on the device's clock.
+const wallNow = (now: Date, tz: string) => utcInstantToProviderLocal(now.toISOString(), tz)
 const wallEnd = (s: PortalShiftSummaryDto) =>
   `${s.endsNextDay ? format(addDays(parseISO(s.serviceDate), 1), 'yyyy-MM-dd') : s.serviceDate}T${s.endTime.slice(0, 5)}`
 
 /** Over and done with: submitted, approved or cancelled, or a Rostered shift whose end has passed. A shift in progress never is. */
-export function hasEnded(s: PortalShiftSummaryDto, now: Date): boolean {
+export function hasEnded(s: PortalShiftSummaryDto, now: Date, tz: string): boolean {
   if (s.status === 'InProgress') return false
-  return s.status !== 'Published' || wallEnd(s) <= wallNow(now)
+  return s.status !== 'Published' || wallEnd(s) <= wallNow(now, tz)
 }
 
 /** The list's current-shift card (SHAPE §2): any shift in progress, else today's Rostered shift that has not ended, soonest first. */
-export function pickCurrentShift(shifts: PortalShiftSummaryDto[], now: Date): PortalShiftSummaryDto | null {
-  const today = format(now, 'yyyy-MM-dd')
+export function pickCurrentShift(shifts: PortalShiftSummaryDto[], now: Date, tz: string): PortalShiftSummaryDto | null {
+  const today = wallNow(now, tz).slice(0, 10)
   return shifts.find(s => s.status === 'InProgress')
-    ?? shifts.filter(s => s.status === 'Published' && s.serviceDate === today && !hasEnded(s, now))
+    ?? shifts.filter(s => s.status === 'Published' && s.serviceDate === today && !hasEnded(s, now, tz))
       .sort((a, b) => a.startTime.localeCompare(b.startTime))[0]
     ?? null
 }

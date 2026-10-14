@@ -324,4 +324,15 @@ public class PortalMyShiftsListTests
 
         Assert.Equal(1, Assert.Single(Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value).Data!.Shifts).ReturnCount);
     }
+
+    [Fact]
+    public async Task MyShifts_CarryTheProvidersZone_SoTheListJudgesTodayAndEndedThere()
+    {
+        // Review CR-B Should 2: the list compared provider-local shift times with the device clock.
+        var f = Create(ShiftStatus.Published);
+
+        var ok = Assert.IsType<OkObjectResult>((await f.Controller.GetMyShifts(ServiceDate, ServiceDate, default)).Result);
+
+        Assert.Equal("Australia/Sydney", Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value).Data!.TimeZoneId);   // the fixture provider is NSW
+    }
 }

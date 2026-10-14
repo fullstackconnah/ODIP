@@ -100,13 +100,14 @@ public class PortalController : ControllerBase
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
         var staffId = await ResolveCurrentStaffIdAsync(ct);
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
         if (staffId is null)
         {
             return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
-                new PortalShiftsResponseDto(new List<PortalShiftSummaryDto>(), new List<PortalTripAssignmentSummaryDto>())));
+                new PortalShiftsResponseDto(new List<PortalShiftSummaryDto>(), new List<PortalTripAssignmentSummaryDto>(), provider.Id)));
         }
 
-        var start = from ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var start = from ?? ProviderLocalTime.TodayIn(NowUtc, provider.Zone);
         var end = to ?? start.AddDays(13);
         // INTAKE-08: a draft whose services have not begun ("Begin services") can't have a real shift going forward (Rostering's
         // ValidateRefsAsync gates that at creation) — this filter is defence in depth for the
@@ -132,7 +133,7 @@ public class PortalController : ControllerBase
             a.AssignmentStart, a.AssignmentEnd, a.IsDriver, a.Status)).ToList();
 
         return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
-            new PortalShiftsResponseDto(shiftDtos, tripDtos)));
+            new PortalShiftsResponseDto(shiftDtos, tripDtos, provider.Id)));
     }
 
     /// <summary>

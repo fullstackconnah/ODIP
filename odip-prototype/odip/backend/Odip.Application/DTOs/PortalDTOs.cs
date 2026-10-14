@@ -67,7 +67,9 @@ public record PortalTripAssignmentSummaryDto(
 /// </summary>
 public record PortalShiftsResponseDto(
     List<PortalShiftSummaryDto> Shifts,
-    List<PortalTripAssignmentSummaryDto> TripAssignments);
+    List<PortalTripAssignmentSummaryDto> TripAssignments,
+    /// <summary>The provider's IANA zone: the shifts' dates and times are wall-clock there, so the list judges "today" and "ended" in it.</summary>
+    string TimeZoneId);
 
 /// <summary>
 /// Participant fields a support worker needs on shift — support/risk flags, mobility and

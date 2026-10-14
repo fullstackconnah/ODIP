@@ -122,10 +122,11 @@ export default function PortalShiftsPage() {
   // The card's own query, independent of the browsed week: it catches a Sunday overnight still running on Monday morning (SHAPE §2),
   // and runs to tomorrow so a browser clock a day behind the provider's still finds a shift in progress (plan check S2).
   const { data: recent } = useMyShifts(format(subDays(now, 1), 'yyyy-MM-dd'), format(addDays(now, 1), 'yyyy-MM-dd'))
-  const current = isThisWeek ? pickCurrentShift(recent?.shifts ?? [], now) : null
+  const current = isThisWeek && recent ? pickCurrentShift(recent.shifts, now, recent.timeZoneId) : null
   const rest = shifts.filter(s => s.id !== current?.id)
-  const comingUp = rest.filter(s => !hasEnded(s, now))
-  const earlier = rest.filter(s => hasEnded(s, now))
+  const tz = data?.timeZoneId ?? ''
+  const comingUp = rest.filter(s => !hasEnded(s, now, tz))
+  const earlier = rest.filter(s => hasEnded(s, now, tz))
     .sort((a, b) => b.serviceDate.localeCompare(a.serviceDate) || a.startTime.localeCompare(b.startTime))   // newest day first, each day in time order
 
   return (
