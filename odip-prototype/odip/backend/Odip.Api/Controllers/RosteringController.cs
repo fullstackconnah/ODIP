@@ -763,8 +763,10 @@ public class RosteringController : ControllerBase
             // The person the page carried is no longer on the source (or nobody is): never move somebody else by surprise.
             if (from.UserId is not { } mover || (dto.StaffId is { } carried && carried != mover)) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
             if (to.UserId == mover) return BadRequest(ApiResponse<ShiftDto>.Fail("They are already on that shift."));
-            // Drawn as Needs staff but filled since (Move), or drawn filled but emptied since (Swap): never take somebody off by surprise.
-            if ((dto.Mode == MoveStaffMode.Move && to.UserId is not null) || (dto.Mode == MoveStaffMode.Swap && to.UserId is null))
+            // Drawn as Needs staff but filled since (Move), drawn filled but emptied since (Swap), or someone other than the person drawn there is on it now (Replace, Swap):
+            // never take somebody off, or swap with somebody, by surprise.
+            if ((dto.Mode == MoveStaffMode.Move && to.UserId is not null) || (dto.Mode == MoveStaffMode.Swap && to.UserId is null)
+                || (dto.Mode != MoveStaffMode.Move && dto.ExpectedToStaffId is { } shown && shown != to.UserId))
                 return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
 
             var displaced = to.UserId;

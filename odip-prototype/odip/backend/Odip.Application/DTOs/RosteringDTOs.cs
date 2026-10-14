@@ -344,6 +344,8 @@ public record MoveStaffDto
     public MoveStaffMode Mode { get; init; }
     /// <summary>The person the page carried. When given and someone else is on the source now, the move is refused (409) rather than moving the wrong person.</summary>
     public Guid? StaffId { get; init; }
+    /// <summary>Who the board showed on the target, for Replace and Swap (deep review S4). When given and someone else is on the target now, the move is refused (409) rather than taking off, or swapping with, somebody the coordinator never saw.</summary>
+    public Guid? ExpectedToStaffId { get; init; }
     /// <summary>Required when any finding of the move (a swap has two people's) needs a reason; never enough for a Blocking one.</summary>
     public string? OverrideReason { get; init; }
     public List<string>? AcknowledgedFindingCodes { get; init; }

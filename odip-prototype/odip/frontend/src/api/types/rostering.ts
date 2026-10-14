@@ -443,6 +443,8 @@ export interface MoveStaffDto {
   mode: MoveStaffMode
   /** The person carried: the server refuses with 409 when someone else is on the source now. */
   staffId: string
+  /** Who the board showed on the target (null for nobody): for Replace and Swap the server refuses with 409 when someone else is on it now. */
+  expectedToStaffId: string | null
   overrideReason: string | null
   acknowledgedFindingCodes: string[]
 }

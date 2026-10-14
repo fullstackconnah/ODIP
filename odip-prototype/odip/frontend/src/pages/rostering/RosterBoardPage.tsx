@@ -247,7 +247,8 @@ export default function RosterBoardPage() {
   function dropMove(person: DragCarry, from: ShiftDto, to: ShiftDto, mode: MoveStaffMode) {
     const sentence = mode === 'Swap' ? swappedSentence(person, to) : movedSentence(person, to)
     return dropWrite({ targetId: to.id, sourceId: from.id, staffName: person.staffName }, sentence, (overrideReason, acknowledgedFindingCodes) =>
-      moveStaff.mutateAsync({ fromShiftId: from.id, toShiftId: to.id, mode, staffId: person.staffId, overrideReason, acknowledgedFindingCodes }))
+      // expectedToStaffId: who the board showed on the target; for Replace and Swap the server refuses with 409 if that changed since.
+      moveStaff.mutateAsync({ fromShiftId: from.id, toShiftId: to.id, mode, staffId: person.staffId, expectedToStaffId: to.staffId ?? null, overrideReason, acknowledgedFindingCodes }))
   }
 
   function handleDragStart(event: DragStartEvent) {

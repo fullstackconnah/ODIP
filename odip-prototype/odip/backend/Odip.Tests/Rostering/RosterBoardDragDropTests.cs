@@ -417,6 +417,26 @@ public class RosterBoardDragDropTests
         Assert.Equal(alex.Id, (await Reload(db, to.Id)).UserId);
     }
 
+    [Theory]
+    [InlineData(MoveStaffMode.Replace)]
+    [InlineData(MoveStaffMode.Swap)]
+    public async Task MoveStaff_ReplaceOrSwapWhenSomeoneElseIsOnTheTargetNow_Is409AndChangesNothing(MoveStaffMode mode)   // deep review S4
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var jack = SeedStaff(db, "Jack", "Oh");
+        var jill = SeedStaff(db, "Jill", "Oh");
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, day: Monday);
+        var to = SeedShift(db, mia.Id, jill.Id, day: Monday.AddDays(1));   // the prompt said Jack is on it; Jill was put there since
+
+        var result = await Controller(db).MoveStaff(Move(from, to, mode) with { ExpectedToStaffId = jack.Id }, default);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(sam.Id, (await Reload(db, from.Id)).UserId);
+        Assert.Equal(jill.Id, (await Reload(db, to.Id)).UserId);
+    }
+
     [Fact]
     public async Task MoveStaff_WhenSomeoneElseIsOnTheSourceNow_Is409AndChangesNothing()   // Review Focus 1: the source's side
     {

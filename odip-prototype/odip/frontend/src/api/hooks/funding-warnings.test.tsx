@@ -211,7 +211,7 @@ describe('the writes that move a participant’s money', () => {
   it.each([
     ['assigning a worker to a shift', (client: QueryClient) => run(client, useAssignShift, { id: 's-1', data: { staffId: 'st-1' } as never })],
     ['returning a shift completion', (client: QueryClient) => run(client, useReturnCompletion, { shiftId: 's-1', data: { reason: 'Add the times' } as never })],
-    ['moving a worker between shifts', (client: QueryClient) => run(client, useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Move', staffId: 'st-1', overrideReason: null, acknowledgedFindingCodes: [] })],
+    ['moving a worker between shifts', (client: QueryClient) => run(client, useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Move', staffId: 'st-1', expectedToStaffId: null, overrideReason: null, acknowledgedFindingCodes: [] })],
     ['publishing a week', (client: QueryClient) => run(client, usePublishWeek, '2026-08-17')],
   ])('does not, for a write that moves no money: %s', async (_name, write) => {
     const client = newClient()
@@ -226,7 +226,7 @@ describe('the writes that move a participant’s money', () => {
   // Deep review S5: a refused drop (409 board changed or busy, 422 findings) must leave the board showing the server's truth, not the stale puck that caused it.
   it.each([
     ['an assign', (client: QueryClient) => run(client, useAssignShift, { id: 's-1', data: { staffId: 'st-1' } as never })],
-    ['a move', (client: QueryClient) => run(client, useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Move', staffId: 'st-1', overrideReason: null, acknowledgedFindingCodes: [] })],
+    ['a move', (client: QueryClient) => run(client, useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Move', staffId: 'st-1', expectedToStaffId: null, overrideReason: null, acknowledgedFindingCodes: [] })],
     ['a publish', (client: QueryClient) => run(client, usePublishWeek, '2026-08-17')],
   ])('refetches the board after the server refuses %s', async (_name, write) => {
     const client = newClient()
@@ -239,11 +239,11 @@ describe('the writes that move a participant’s money', () => {
   })
 
   it('sends move-staff and publish-week to their endpoints with the whole body', async () => {
-    await run(newClient(), useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] })
+    await run(newClient(), useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', expectedToStaffId: 'st-9', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] })
     await run(newClient(), usePublishWeek, '2026-08-17')
 
     expect(calls).toEqual([
-      { method: 'post', url: '/rostering/shifts/move-staff', body: { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] } },
+      { method: 'post', url: '/rostering/shifts/move-staff', body: { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', expectedToStaffId: 'st-9', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] } },
       { method: 'post', url: '/rostering/weeks/2026-08-17/publish', body: undefined },
     ])
   })

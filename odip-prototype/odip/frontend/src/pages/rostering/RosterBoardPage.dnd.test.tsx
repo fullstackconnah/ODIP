@@ -121,7 +121,7 @@ describe('RosterBoardPage drag and drop: what a drop sends', () => {
   it('moves a person carried off a puck onto Needs staff in one request', async () => {
     renderPage()
     await drop(samOffWed, onShift(OPEN))
-    expect(h.move).toHaveBeenCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'open', mode: 'Move', staffId: 'staff-2', overrideReason: null, acknowledgedFindingCodes: [] })
+    expect(h.move).toHaveBeenCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'open', mode: 'Move', staffId: 'staff-2', expectedToStaffId: null, overrideReason: null, acknowledgedFindingCodes: [] })
     expect(h.assign).not.toHaveBeenCalled()
     expect(await screen.findByText('Sam Wilson moved to Mia Chen, Tuesday 9am to 3pm. Wednesday 9am to 3pm now needs staff.')).toBeInTheDocument()
   })
@@ -130,7 +130,7 @@ describe('RosterBoardPage drag and drop: what a drop sends', () => {
     renderPage()
     await drop(samOffWed, onShift(ON_LEAVE))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    expect(h.move).toHaveBeenCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'on-leave', mode: 'Replace', staffId: 'staff-2', overrideReason: null, acknowledgedFindingCodes: [] })
+    expect(h.move).toHaveBeenCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'on-leave', mode: 'Replace', staffId: 'staff-2', expectedToStaffId: 'staff-9', overrideReason: null, acknowledgedFindingCodes: [] })
   })
 
   it('asks Replace or Cancel when a strip person lands on a filled puck, and Replace assigns them', async () => {
@@ -162,7 +162,7 @@ describe('RosterBoardPage drag and drop: what a drop sends', () => {
     expect(within(prompt).getByText("Swap: Sam takes it and Alex takes Sam's Wed 19 Aug, 9am–3pm shift with Mia Chen.")).toBeInTheDocument()
     await user.click(within(prompt).getByRole('button', { name: 'Swap' }))
 
-    expect(h.move).toHaveBeenCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'alex-mon', mode: 'Swap', staffId: 'staff-2', overrideReason: null, acknowledgedFindingCodes: [] })
+    expect(h.move).toHaveBeenCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'alex-mon', mode: 'Swap', staffId: 'staff-2', expectedToStaffId: 'staff-9', overrideReason: null, acknowledgedFindingCodes: [] })
   })
 
   it('sends nothing for a locked shift, their own puck, or a drop over nothing', async () => {   // Review Focus 3, the page's side
@@ -187,7 +187,7 @@ describe('RosterBoardPage drag and drop: when the server says no', () => {
     await user.type(within(dialog).getByPlaceholderText('Reason for overriding these warnings'), 'Leave cancelled by phone')
     await user.click(within(dialog).getByRole('button', { name: 'Assign anyway' }))
 
-    expect(h.move).toHaveBeenLastCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'open', mode: 'Move', staffId: 'staff-2', overrideReason: 'Leave cancelled by phone', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] })
+    expect(h.move).toHaveBeenLastCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'open', mode: 'Move', staffId: 'staff-2', expectedToStaffId: null, overrideReason: 'Leave cancelled by phone', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] })
   })
 
   it("shows today's blocked dialog for a blocking finding", async () => {
