@@ -31,19 +31,23 @@ describe.skipIf(!existsSync(DOCKERFILE))('frontend/Dockerfile: the test run', ()
   })
 })
 
-// The step text between "Wait for free memory" and "Build images" in deploy.yml.
+const workflowLines = () => readFileSync(DEPLOY_WORKFLOW, 'utf8').split('\n').map((l) => l.trim())
+
+// The "Wait for free memory" step in deploy.yml: from its name line to the next step's name line.
 const waitStep = () => {
-  const lines = readFileSync(DEPLOY_WORKFLOW, 'utf8').split('\n').map((l) => l.trim())
+  const lines = workflowLines()
   const start = lines.indexOf('- name: Wait for free memory')
-  const end = lines.indexOf('- name: Build images')
   expect(start).toBeGreaterThanOrEqual(0)
-  expect(end).toBeGreaterThan(start)
-  return lines.slice(start, end).join('\n')
+  const next = lines.findIndex((l, i) => i > start && l.startsWith('- name:'))
+  return lines.slice(start, next).join('\n')
 }
 
 describe.skipIf(!existsSync(DEPLOY_WORKFLOW))('.github/workflows/deploy.yml: the memory wait', () => {
-  it('has a "Wait for free memory" step before "Build images"', () => {
-    expect(waitStep()).toContain('MemAvailable')
+  it('runs before the source sync and the image build, so a failed wait changes nothing on the host', () => {
+    const wait = workflowLines().indexOf('- name: Wait for free memory')
+    expect(wait).toBeGreaterThanOrEqual(0)
+    expect(wait).toBeLessThan(workflowLines().indexOf('- name: Sync source into stack directory'))
+    expect(wait).toBeLessThan(workflowLines().indexOf('- name: Build images'))
   })
 
   it('reads MemAvailable from /proc/meminfo', () => {
@@ -52,9 +56,17 @@ describe.skipIf(!existsSync(DEPLOY_WORKFLOW))('.github/workflows/deploy.yml: the
     expect(step).toContain('MemAvailable')
   })
 
-  it('fails the deploy with an error when memory stays short', () => {
+  it('waits for 4 GiB and polls 30 times, 15 minutes in all', () => {
+    const step = waitStep()
+    expect(step).toContain('4 * 1024 * 1024')
+    expect(step).toContain('seq 1 30')
+  })
+
+  it('fails the deploy with an error and exit 1 when memory stays short', () => {
     const step = waitStep()
     expect(step).toContain('::error::')
-    expect(step).toMatch(/exit 1\b/)
+    expect(step).toContain('after 15 minutes')
+    const code = step.split('\n').filter((l) => !l.startsWith('#'))
+    expect(code.some((l) => /\bexit 1\b/.test(l))).toBe(true)
   })
 })
