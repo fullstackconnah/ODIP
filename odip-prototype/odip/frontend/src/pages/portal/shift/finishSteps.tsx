@@ -133,7 +133,7 @@ function TimeField({ label, figure, sub, rostered, tz, id, name, value, bounds, 
             aria-describedby={`${id}-help`} aria-invalid={invalid || undefined} onChange={e => onChange(e.target.value)}
           />
           <p id={`${id}-help`} className="text-xs text-[var(--color-muted-foreground)]">{helper}</p>
-          <Button variant="ghost" size="md" onClick={onReset} aria-label={`Use the recorded time for your ${name}`}>Use the recorded time</Button>
+          <Button variant="secondary" size="md" onClick={onReset} aria-label={`Use the recorded time for your ${name}`}>Use the recorded time</Button>
         </div>
       )}
     </div>
@@ -273,7 +273,7 @@ export function ReportStep({ shift, answer, onYes, onNo }: {
       {answer === 'yes' ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <p>You said yes and opened the incident form.</p>
-          <Button variant="ghost" size="md" onClick={() => onYes(flagged[0])}>Open the form again</Button>
+          <Button variant="secondary" size="md" onClick={() => onYes(flagged[0])}>Open the form again</Button>
         </div>
       ) : (
         <div className="grid gap-2">

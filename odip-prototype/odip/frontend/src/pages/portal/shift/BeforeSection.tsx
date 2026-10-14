@@ -222,7 +222,8 @@ export function MustKnowLine({ shift, onAbout }: { shift: PortalShiftDetailDto; 
       {p.isHighSupport && <Chip>High support</Chip>}
       {p.isIntensiveSupport && <Chip>Intensive support</Chip>}
       {p.hasRestrictivePracticeFlag && <Chip>Restrictive practice</Chip>}
-      <Button variant="ghost" size="md" className={TAP_AREA} onClick={onAbout}>Everything about {p.fullName.split(' ')[0]}</Button>
+      {/* The house link look (BackButton 'link'): a ghost button reads as body text on touch, where nothing hovers. */}
+      <button type="button" className="inline-flex items-center min-h-[var(--tap-min)] rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]" onClick={onAbout}>Everything about {p.fullName.split(' ')[0]}</button>
     </div>
   )
 }

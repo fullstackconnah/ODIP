@@ -229,7 +229,8 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
         {/* Back to shift sits on the heading line, not the rail line: the rail scrolls inside whatever width is left, so a button beside it clipped the last pill on desktop. */}
         <div className="flex items-center justify-between gap-2">
           <WizardStepHeading stepKey={step} label={current.heading} />
-          {step !== 'times' && <Button variant="ghost" size="md" className="shrink-0" onClick={leave}>Back to shift</Button>}
+          {/* The house link look (BackButton 'link'): a ghost button reads as body text on touch, where nothing hovers. */}
+          {step !== 'times' && <button type="button" className="shrink-0 inline-flex items-center min-h-[var(--tap-min)] rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]" onClick={leave}>Back to shift</button>}
         </div>
       </div>
       {opened.breaksChanged && step === 'times' && <Callout tone="info">Your breaks changed. Check your times again.</Callout>}
