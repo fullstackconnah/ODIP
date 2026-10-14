@@ -293,4 +293,38 @@ public class NotificationDispatchBackgroundServiceTests
         Assert.Equal(NotificationOutboxStatus.Skipped, row.Status);
         Assert.Equal("Recipient has no email address", row.LastError);
     }
+
+    [Fact]
+    public async Task An_intake_visit_row_renders_with_its_calendar_invite_and_is_sent()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId, "sam.lee@provider.example");
+            var payload = new IntakeVisitStaffPayload(IntakeWording.Booked, "sam.lee@provider.example", "Sam Lee", "Noah Fitzgerald",
+                new DateTime(2026, 10, 15, 23, 0, 0, DateTimeKind.Utc), 90, "Australia/Sydney", "12 Smith St", null, null, null, "Dana Smith",
+                "dana@provider.example", "Sample Support Co", null, null, "abc@odip", 0, DateTime.UtcNow);
+            db.NotificationOutbox.Add(new NotificationOutbox
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, EventType = NotificationEventType.IntakeBooked, EntityType = "IntakeVisit", EntityId = Guid.NewGuid(),
+                RecipientUserId = user.Id, PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload),
+                Status = NotificationOutboxStatus.Pending, NextAttemptAt = DateTime.UtcNow.AddMinutes(-1), CreatedAt = DateTime.UtcNow.AddMinutes(-1),
+            });
+            db.SaveChanges();
+        }
+        NotificationMessage? sent = null;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, null, null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        using var verifyDb = SeedDb(dbName);
+        Assert.Equal(NotificationOutboxStatus.Sent, (await verifyDb.NotificationOutbox.SingleAsync()).Status);
+        Assert.Equal("Intake visit booked: Noah Fitzgerald, Fri 16 Oct at 10:00 am", sent!.Subject);
+        Assert.Equal("REQUEST", sent.Ics!.Method);
+    }
 }
