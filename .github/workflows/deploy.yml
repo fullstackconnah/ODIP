@@ -108,6 +108,19 @@ jobs:
             "$SRC_DIR"/ "$STACK_DIR"/
           cp deploy/compose.yaml "$STACK_DIR"/compose.yaml
 
+      - name: Wait for free memory
+        # The runner shares this host with other test jobs, and the image's test run needs headroom (frontend/Dockerfile).
+        run: |
+          set -uo pipefail
+          need_kb=$((4 * 1024 * 1024))
+          for i in $(seq 1 60); do
+            avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+            if [ $((i % 2)) -eq 1 ]; then echo "MemAvailable ${avail} kB (need ${need_kb} kB)"; fi
+            if [ "$avail" -ge "$need_kb" ]; then echo "Enough free memory."; exit 0; fi
+            sleep 30
+          done
+          echo "::warning::MemAvailable still ${avail} kB after 30 min; building anyway"
+
       - name: Build images
         # This is the gate. If either image fails to compile the job stops here
         # and the currently running containers are left untouched.
