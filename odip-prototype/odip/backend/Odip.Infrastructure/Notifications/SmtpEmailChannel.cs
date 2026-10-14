@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Odip.Application.Interfaces;
@@ -53,9 +54,7 @@ public sealed class SmtpEmailChannel : INotificationChannel
         var from = _config.GetValue<string>("Notifications:Smtp:From") ?? user ?? "no-reply@odip.local";
         var enableSsl = _config.GetValue("Notifications:Smtp:EnableSsl", true);
 
-        using var mail = new MailMessage(from, message.RecipientAddress, message.Subject, message.PlainTextBody);
-        var htmlView = AlternateView.CreateAlternateViewFromString(message.HtmlBody, null, "text/html");
-        mail.AlternateViews.Add(htmlView);
+        using var mail = BuildMailMessage(message, from);
 
         using var client = new SmtpClient(host, port) { EnableSsl = enableSsl };
         if (!string.IsNullOrEmpty(user))
@@ -89,5 +88,21 @@ public sealed class SmtpEmailChannel : INotificationChannel
             _logger.LogWarning(ex, "Unexpected error sending email to {Recipient}", message.RecipientAddress);
             return new ChannelSendResult(ChannelSendOutcome.TransientFailure, null, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// The message as sent: the plain-text body, an HTML alternate view and, when the message carries one, a <c>text/calendar</c> view whose
+    /// <c>method</c> parameter matches the calendar's METHOD (mail apps show it as an invite card). A Reply-To goes in only when it parses as an
+    /// address, so a blank or malformed coordinator email can never turn a send into an exception. Public so tests can read the views.
+    /// </summary>
+    public static MailMessage BuildMailMessage(NotificationMessage message, string from)
+    {
+        var mail = new MailMessage(from, message.RecipientAddress, message.Subject, message.PlainTextBody);
+        mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(message.HtmlBody, null, "text/html"));
+        if (message.Ics is { } ics)
+            mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(ics.Content, new ContentType($"text/calendar; method={ics.Method}; charset=UTF-8")));
+        if (MailAddress.TryCreate(message.ReplyTo, out var replyTo))
+            mail.ReplyToList.Add(replyTo);
+        return mail;
     }
 }
