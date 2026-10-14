@@ -9,7 +9,7 @@ import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import { rosteredInstants } from '../lib/portal'
-import { breaksLabel, clockLabel, dosesSummary, REASON_MAX, timeBounds, type FinishStepKey, type TimesField } from './checklist'
+import { breaksLabel, clockLabel, FINISH_STEPS, dosesSummary, REASON_MAX, timeBounds, type FinishStepKey, type TimesField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import { Fold } from './ui'
@@ -373,14 +373,15 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
         </section>
       ))}
       <p className="text-sm">A coordinator reviews your shift next. You can still add notes after you submit.</p>
+      {/* scroll-margin: the bar (about 5.5rem with its padding) plus the phone nav plus 16px, so the whole callout clears the bar. */}
       {refusals.length > 0 && (
-        <div id="finish-refusals" tabIndex={-1} className="focus:outline-none">
+        <div id="finish-refusals" tabIndex={-1} className="focus:outline-none scroll-mb-[calc(var(--mobile-nav-h)+5.5rem)] lg:scroll-mb-[5.5rem]">
           <Callout tone="info" title="You can't submit yet">
             <ul className="space-y-1">
               {refusals.map((r, i) => (
                 <li key={i} className="flex flex-wrap items-center gap-2">
                   {r.message}
-                  {r.step && <Button variant="ghost" size="md" onClick={() => go(r.step!)}>Go to step</Button>}
+                  {r.step && <Button variant="secondary" size="lg" onClick={() => go(r.step!)}>Go to {FINISH_STEPS.find(s => s.key === r.step)!.label}</Button>}
                 </li>
               ))}
             </ul>

@@ -87,7 +87,12 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   useEffect(() => { topRef.current?.querySelector<HTMLElement>('h2')?.focus() }, [])
   useEffect(() => { if (error?.focus) document.getElementById(error.focus)?.focus() }, [error])
   // A server refusal is listed under the summary; focus brings it on screen, however long the summary is.
-  useEffect(() => { if (refusals.length) document.getElementById('finish-refusals')?.focus() }, [refusals])
+  useEffect(() => {
+    if (!refusals.length) return
+    const el = document.getElementById('finish-refusals')
+    el?.focus({ preventScroll: true })
+    el?.scrollIntoView?.({ block: 'end' })   // honours its scroll-margin, so the callout ends above the sticky bar
+  }, [refusals])
 
   function go(key: FinishStepKey) {
     refreshClock()

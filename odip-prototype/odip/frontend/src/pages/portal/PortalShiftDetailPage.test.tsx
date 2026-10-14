@@ -682,7 +682,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     await waitFor(() => expect(screen.getByText("You can't submit yet")).toBeInTheDocument())
     expect(screen.getByText('Paracetamol at 12:00 needs an outcome before you finish.')).toBeInTheDocument()
     await waitFor(() => expect(document.getElementById('finish-refusals')).toHaveFocus())   // brought on screen below a long summary
-    fireEvent.click(screen.getByRole('button', { name: 'Go to step' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Doses' }))
     expect(heading('Doses & routines')).toBeInTheDocument()
   })
 
@@ -1076,7 +1076,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     toStepFive()
     forward('Submit shift')
     await waitFor(() => expect(screen.getByText('You can change your times by up to 15 minutes.')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Go to step' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Times' }))
     expect(heading('Your times')).toBeInTheDocument()
     expect(screen.getByLabelText('Your finish time')).toHaveValue('2026-08-17T16:50')   // the entry is kept
   })
