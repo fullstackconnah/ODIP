@@ -58,7 +58,7 @@ export default function ImportDataTab() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       <section className="flex flex-col gap-3" aria-labelledby="import-kinds">
-        <h2 id="import-kinds" className="text-base font-semibold">Bring your records into ODIP</h2>
+        <h3 id="import-kinds" className="text-base font-semibold">Bring your records into ODIP</h3>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Upload a .csv or .xlsx export from your old platform, up to 2,000 rows and 5 MB. Records already in ODIP are skipped and never changed.
         </p>
@@ -78,7 +78,7 @@ export default function ImportDataTab() {
       </section>
 
       <section className="flex flex-col gap-3" aria-labelledby="import-history">
-        <h2 id="import-history" className="text-base font-semibold">Import history</h2>
+        <h3 id="import-history" className="text-base font-semibold">Import history</h3>
         {invited && <InviteResults result={invited.result} fileName={invited.fileName} />}
         {undo.error != null && (
           <Callout tone="danger" title={extractErrorMessage(undo.error, 'The import could not be undone.')}>

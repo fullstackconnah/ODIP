@@ -176,7 +176,7 @@ describe('every routed page has one h1 and a tab title (UI standard 6)', () => {
   it.each([
     ['/staff', 'No staff members yet'], ['/tasks', 'No tasks yet'], ['/incidents', 'No incidents reported'],
     ['/rostering/patterns', 'No recurring patterns yet'], ['/trips', 'No trips yet'], ['/vehicles', 'No vehicles found'],
-    ['/accommodation', 'No properties yet'], ['/settings', 'No event templates yet'],
+    ['/accommodation', 'No properties yet'],
   ])(
     'offers %s one create action, in the header, when the list is empty',
     async (url, empty) => {

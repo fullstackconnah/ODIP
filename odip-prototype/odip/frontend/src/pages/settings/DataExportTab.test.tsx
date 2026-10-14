@@ -50,7 +50,7 @@ describe('DataExportTab', () => {
     expect(screen.queryByText('Not exported yet.')).toBeNull()
     answer.resolve(null)
     expect(await screen.findByText('Not exported yet.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: 'Export all your data' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Export all your data' })).toBeInTheDocument()
   })
 
   it('names who exported last and when', async () => {

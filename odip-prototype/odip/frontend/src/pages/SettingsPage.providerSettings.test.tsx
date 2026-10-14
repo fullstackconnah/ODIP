@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SettingsPage from './SettingsPage'
 import type { ProviderSettingsDto } from '@/api/types'
+import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
 
 // The Provider Settings tab seeds its form from the GET and PUTs the WHOLE form back, so it also carries the readiness check
 // (`participantReadinessMode`) as it was when the tab loaded. The server changes the mode whenever that field is present in the body,
@@ -61,7 +62,7 @@ const HELPER_TEXT =
 
 function renderProviderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings'] })
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings?section=organisation'] })
   render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
@@ -70,8 +71,7 @@ function renderProviderSettings() {
   return { queryClient }
 }
 
-async function openProviderSettings(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('tab', { name: /provider settings/i }))
+async function openProviderSettings() {
   // The form seeds from the GET, so wait for a loaded value before touching anything.
   await screen.findByDisplayValue('Sunrise Support Services')
 }
@@ -106,7 +106,7 @@ beforeEach(() => {
     server = { ...(server as ProviderSettingsDto), ...body }
     return server
   })
-  mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+  mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
 })
 
 afterEach(() => {
@@ -115,9 +115,8 @@ afterEach(() => {
 
 describe('Provider Settings — the readiness check control', () => {
   it('is labelled "Participant readiness check", offers Warn only and Enforce, and explains both in the helper text', async () => {
-    const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     expect(screen.getByRole('heading', { name: 'Participant readiness check' })).toBeInTheDocument()
     expect(within(readinessGroup()).getAllByRole('radio').map(r => r.textContent)).toEqual(['Warn only', 'Enforce'])
@@ -125,20 +124,17 @@ describe('Provider Settings — the readiness check control', () => {
   })
 
   it('shows the organisation\'s current mode: Warn only for Warn, Enforce for Enforce', async () => {
-    const user = userEvent.setup()
     server = makeSettings({ participantReadinessMode: 'Enforce' })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     expect(modeRadio('Enforce')).toHaveAttribute('aria-checked', 'true')
     expect(modeRadio('Warn only')).toHaveAttribute('aria-checked', 'false')
   })
 
   it('treats an organisation with no settings row yet as Warn only', async () => {
-    const user = userEvent.setup()
     server = null
     renderProviderSettings()
-    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
 
     await waitFor(() => expect(modeRadio('Warn only')).toBeEnabled())
     expect(modeRadio('Warn only')).toHaveAttribute('aria-checked', 'true')
@@ -151,7 +147,6 @@ describe('Provider Settings — the readiness check control', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mockApiGet.mockImplementation(async (url: string) => (url === '/provider-settings' ? undefined : []))
     renderProviderSettings()
-    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
 
     await waitFor(() => expect(modeRadio('Enforce')).toBeEnabled())
     expect(modeRadio('Warn only')).toHaveAttribute('aria-checked', 'true')
@@ -161,9 +156,8 @@ describe('Provider Settings — the readiness check control', () => {
   })
 
   it('is editable for a user who can edit provider settings', async () => {
-    const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     expect(readinessGroup()).not.toHaveAttribute('aria-disabled')
     expect(modeRadio('Warn only')).toBeEnabled()
@@ -173,10 +167,10 @@ describe('Provider Settings — the readiness check control', () => {
 
   it('is visible but locked for a user who cannot edit provider settings: the value reads, a click changes nothing, and there is no Save', async () => {
     const user = userEvent.setup()
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
     server = makeSettings({ participantReadinessMode: 'Enforce' })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     expect(readinessGroup()).toHaveAttribute('aria-disabled', 'true')
     expect(modeRadio('Warn only')).toBeDisabled()
@@ -189,10 +183,8 @@ describe('Provider Settings — the readiness check control', () => {
   })
 
   it('is locked while the settings are still loading, so it never offers a value it has not read yet', async () => {
-    const user = userEvent.setup()
     mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
     renderProviderSettings()
-    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
 
     expect(modeRadio('Warn only')).toBeDisabled()
     expect(modeRadio('Enforce')).toBeDisabled()
@@ -203,7 +195,7 @@ describe('Provider Settings — the stale-tab trap (the mode is sent only when t
   it('editing only the manager name sends NO participantReadinessMode, and the full body is the loaded row with the new name', async () => {
     const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.clear(managerNameInput())
     await user.type(managerNameInput(), 'Alex Morgan')
@@ -218,7 +210,7 @@ describe('Provider Settings — the stale-tab trap (the mode is sent only when t
   it('a tab that went stale does not revert a mode another admin set: the server is still on Enforce after an unrelated save', async () => {
     const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
     expect(modeRadio('Warn only')).toHaveAttribute('aria-checked', 'true')
 
     // Another admin switches the organisation to Enforce while this tab sits there still showing what it loaded.
@@ -240,7 +232,7 @@ describe('Provider Settings — the stale-tab trap (the mode is sent only when t
   it('changing the control to Enforce and saving sends participantReadinessMode: Enforce together with every other field', async () => {
     const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Enforce'))
     expect(modeRadio('Enforce')).toHaveAttribute('aria-checked', 'true')
@@ -257,7 +249,7 @@ describe('Provider Settings — the stale-tab trap (the mode is sent only when t
     const user = userEvent.setup()
     server = makeSettings({ participantReadinessMode: 'Enforce' })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Warn only'))
     await user.click(saveButton())
@@ -270,7 +262,7 @@ describe('Provider Settings — the stale-tab trap (the mode is sent only when t
   it('changing the control and changing it back before saving sends no mode at all', async () => {
     const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Enforce'))
     await user.click(modeRadio('Warn only'))
@@ -284,7 +276,7 @@ describe('Provider Settings — the stale-tab trap (the mode is sent only when t
   it('after the user\'s own change has been saved, a later unrelated save sends no mode again, and cannot revert someone else\'s next change', async () => {
     const user = userEvent.setup()
     const { queryClient } = renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Enforce'))
     await user.click(saveButton())
@@ -313,7 +305,7 @@ describe('Provider Settings — a refused save', () => {
       response: { status: 400, data: { success: false, errors: ['Choose a tenant to view as before changing the participant readiness check.'] } },
     })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Enforce'))
     await user.click(saveButton())
@@ -332,7 +324,7 @@ describe('Provider Settings — a refused save', () => {
     const user = userEvent.setup()
     mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['Not allowed right now.'] } } })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Enforce'))
     await user.click(saveButton())
@@ -352,7 +344,7 @@ describe('Provider Settings — a refused save', () => {
       .mockRejectedValueOnce({ response: { status: 403, data: {} } })
       .mockRejectedValueOnce({ response: { status: 400, data: { success: false } } })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(saveButton())
     expect(await screen.findByText(/admin role is required to update provider settings/i)).toBeInTheDocument()
@@ -371,10 +363,9 @@ describe('Provider Settings — the two mode controls together (participant read
   }
 
   it('shows both controls, each reading its own stored value', async () => {
-    const user = userEvent.setup()
     server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Warn' })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     expect(screen.getByRole('heading', { name: 'Participant readiness check' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Medication Competency' })).toBeInTheDocument()
@@ -386,7 +377,7 @@ describe('Provider Settings — the two mode controls together (participant read
     const user = userEvent.setup()
     server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.clear(managerNameInput())
     await user.type(managerNameInput(), 'Alex Morgan')
@@ -404,7 +395,7 @@ describe('Provider Settings — the two mode controls together (participant read
     const user = userEvent.setup()
     server = makeSettings({ participantReadinessMode: 'Enforce' })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await pickCompetency(user, 'Enforce')
     await user.click(saveButton())
@@ -419,7 +410,7 @@ describe('Provider Settings — the two mode controls together (participant read
     const user = userEvent.setup()
     server = makeSettings({ medicationCompetencyMode: 'Enforce' })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Enforce'))
     await user.click(saveButton())
@@ -433,7 +424,7 @@ describe('Provider Settings — the two mode controls together (participant read
   it('changing both sends both together with every other field', async () => {
     const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Enforce'))
     await pickCompetency(user, 'Enforce')
@@ -449,7 +440,7 @@ describe('Provider Settings — the two mode controls together (participant read
   it('a tab that went stale cannot revert either mode another admin set: an unrelated save sends neither', async () => {
     const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     // Another admin switches both checks to Enforce while this tab sits there still showing what it loaded (Warn and Warn).
     server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
@@ -468,7 +459,7 @@ describe('Provider Settings — the two mode controls together (participant read
     const user = userEvent.setup()
     mockApiPut.mockRejectedValueOnce({ response: { status: 500, data: {} } })
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
 
     await user.click(modeRadio('Enforce'))
     await pickCompetency(user, 'Enforce')
@@ -489,9 +480,8 @@ describe('Provider Settings — the two mode controls together (participant read
 // V2-F: the panel's field labels are the house field label (FormField's labelClass: 13px, medium, muted), not a local 12px look-alike.
 describe('Provider settings — field labels', () => {
   it('use the house field label class', async () => {
-    const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
     for (const label of ['ABN', 'Manager Name', 'Account Name']) {
       expect(screen.getByText(label), label).toHaveClass('text-[13px]', 'font-medium', 'mb-1')
     }
@@ -501,9 +491,8 @@ describe('Provider settings — field labels', () => {
 // V-D2 follow-up: the labels sat beside their inputs without naming them, so a screen reader announced every field as an unnamed edit box.
 describe('Provider settings — every field is named by its label', () => {
   it('finds each field by its visible label', async () => {
-    const user = userEvent.setup()
     renderProviderSettings()
-    await openProviderSettings(user)
+    await openProviderSettings()
     const values: [string, string][] = [
       ['Registration Number', '4050012345'], ['ABN', '51824753556'], ['Organisation Name', 'Sunrise Support Services'],
       ['Address', '12 Wattle St, Brisbane QLD 4000'], ['Account Name', 'Sunrise Support'], ['BSB', '064-000'], ['Account Number', '12345678'],

@@ -1,36 +1,156 @@
-import { labelClass } from '@/components/FormField'
-import { useSettings, useUpdateSettings, useProviderSettings, useUpsertProviderSettings } from '@/api/hooks'
-import { useState, useEffect, useRef } from 'react'
-import { Tabs } from '@/components/Tabs'
-import { Dropdown } from '@/components/Dropdown'
-import { ToggleGroup } from '@/components/ToggleGroup'
-import { extractErrorMessage } from '@/lib/utils'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import type { AdminUserDto, TenantSummaryDto } from '@/api/types'
+import { BackButton } from '@/components/BackButton'
 import { PageHeader } from '@/components/PageHeader'
-import { Button } from '@/components/Button'
-import type { MedicationCompetencyMode, ProviderSettingsDto, ParticipantReadinessMode, UpsertProviderSettingsDto } from '@/api/types'
-import type { AxiosError } from 'axios'
-import TenantsTab from '@/pages/settings/TenantsTab'
-import TenantFormPanel from '@/pages/settings/TenantFormPanel'
-import UsersTab from '@/pages/settings/UsersTab'
-import UserFormPanel from '@/pages/settings/UserFormPanel'
-import TenantDetailView from '@/pages/settings/TenantDetailView'
-import NotificationPreferencesTab from '@/pages/settings/NotificationPreferencesTab'
-import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
-import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
-import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
-import type { TenantSummaryDto, AdminUserDto } from '@/api/types'
-import { usePermissions } from '@/lib/permissions'
+import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { useNotices } from '@/hooks/useNotices'
-import { useUiPreferences } from '@/hooks/useUiPreferences'
-import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import { useTabParam } from '@/hooks/useTabParam'
-import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
-import ImportDataTab from '@/pages/settings/ImportDataTab'
+import { usePermissions } from '@/lib/permissions'
+import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
+import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
+import AppearanceSection from '@/pages/settings/AppearanceSection'
+import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
 import DataExportTab from '@/pages/settings/DataExportTab'
-import { Callout } from '@/components/Callout'
 import EventTemplatesSection from '@/pages/settings/EventTemplatesSection'
+import ImportDataTab from '@/pages/settings/ImportDataTab'
+import NotificationPreferencesTab from '@/pages/settings/NotificationPreferencesTab'
+import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
+import ProfileSection from '@/pages/settings/ProfileSection'
 import PublicHolidaysSection from '@/pages/settings/PublicHolidaysSection'
+import SettingsNav from '@/pages/settings/SettingsNav'
+import { SettingsSection, type SectionFrame } from '@/pages/settings/SettingsSection'
+import { requestedSection, visibleSections, type SectionDef, type SectionKey } from '@/pages/settings/settingsSections'
 import SupportCatalogueSection from '@/pages/settings/SupportCatalogueSection'
+import TenantDetailView from '@/pages/settings/TenantDetailView'
+import TenantFormPanel from '@/pages/settings/TenantFormPanel'
+import TenantsTab from '@/pages/settings/TenantsTab'
+import UserFormPanel from '@/pages/settings/UserFormPanel'
+import UsersTab from '@/pages/settings/UsersTab'
+import type { AxiosError } from 'axios'
+import { useProviderSettings, useSettings, useUpdateSettings, useUpsertProviderSettings } from '@/api/hooks'
+import type { MedicationCompetencyMode, ParticipantReadinessMode, ProviderSettingsDto, UpsertProviderSettingsDto } from '@/api/types'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
+import { Dropdown } from '@/components/Dropdown'
+import { labelClass } from '@/components/FormField'
+import { ToggleGroup } from '@/components/ToggleGroup'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import { extractErrorMessage } from '@/lib/utils'
+
+/**
+ * Settings: the shell. The URL names the open section (`?section=`; a legacy `?tab=` is rewritten in place). From md the grouped rail
+ * sits beside the open section; below md the list is a screen of its own and each section opens full-screen with a Back link.
+ * One section is mounted at a time, keyed by its section, so switching always starts the next one fresh.
+ */
+export default function SettingsPage() {
+  const perms = usePermissions()
+  const belowMd = useIsBelowMd()
+  const [params] = useSearchParams()
+  const visible = visibleSections(perms)
+  const asked = requestedSection(params, visible)
+  // Below md bare /settings is the list; from md it opens on Profile, which is first for everyone who can open Settings.
+  const current: SectionDef | null = asked ?? (belowMd ? null : visible[0])
+  const key = current?.key ?? null
+
+  // Only cleanup rewrites the URL in place: a legacy ?tab= becomes ?section= (other params kept), and a key this person can't see is dropped.
+  const tidy = new URLSearchParams(params)
+  tidy.delete('tab')
+  if (asked) tidy.set('section', asked.key)
+  else tidy.delete('section')
+  const tidySearch = tidy.toString()
+
+  // The section shown before this one. A switch moves focus (to the new heading, or back to the list row just left); a first load doesn't.
+  const [shown, setShown] = useState<{ key: SectionKey | null; from: SectionKey | null | undefined }>({ key, from: undefined })
+  if (shown.key !== key) setShown({ key, from: shown.key })
+  const switched = shown.from !== undefined
+
+  const [tenantPanelOpen, setTenantPanelOpen] = useState(false)
+  const [editingTenant, setEditingTenant] = useState<TenantSummaryDto | undefined>()
+  const [tenantDetail, setTenantDetail] = useState<TenantSummaryDto | undefined>()
+  // Leaving Tenants closes a tenant's detail view, as leaving the tab did.
+  if (tenantDetail && key !== 'tenants') setTenantDetail(undefined)
+  const [userPanelOpen, setUserPanelOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<AdminUserDto | undefined>()
+  const [defaultTenantId, setDefaultTenantId] = useState<string | undefined>()
+  // What became of each Users "Send set-password email". Held here, not in the section, because the section is unmounted whenever another
+  // is shown: an unacknowledged failure must still be there on return, and a send that finishes while it is away must still report.
+  const userNotices = useNotices()
+  const addUser = (tenantId?: string) => { setDefaultTenantId(tenantId); setEditingUser(undefined); setUserPanelOpen(true) }
+
+  function body(def: SectionDef): ReactNode {
+    const frame: SectionFrame = { title: def.label, description: def.description, readOnly: def.readOnly?.(perms) ?? false, focusOnMount: switched }
+    // A section with a Save renders the frame itself (its dirty state and the guard live with the form); the page frames the rest.
+    const framed = (content: ReactNode) => <SettingsSection {...frame} wide={def.wide}>{content}</SettingsSection>
+    switch (def.key) {
+      case 'profile': return framed(<ProfileSection />)
+      case 'notifications': return framed(<NotificationPreferencesTab />)
+      case 'appearance': return framed(<AppearanceSection />)
+      // shortcut: one Provider settings form behind all three keys until the split later in this PR (Tasks 11 and 12).
+      case 'organisation': case 'billing': case 'safety': return framed(<ProviderSettingsTab />)
+      case 'alerts': return framed(<QualificationSettingsTab />)
+      case 'pricing': return framed(<PlanPricingSettingsTab />)
+      case 'budgets': return framed(<BudgetSettingsTab />)
+      case 'templates': return framed(<EventTemplatesSection />)
+      case 'activities': return framed(<ActivityLibraryTab />)
+      case 'holidays': return framed(<PublicHolidaysSection canEdit={perms.isSuperAdmin} />)
+      case 'import': return framed(<ImportDataTab />)
+      case 'export': return framed(<DataExportTab />)
+      case 'failed-sends': return framed(<AdminNotificationsTab />)
+      case 'catalogue': return framed(<SupportCatalogueSection />)
+      case 'users': return framed(<UsersTab notices={userNotices} onAddUser={addUser} onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }} />)
+      case 'tenants': return framed(tenantDetail ? (
+        <TenantDetailView
+          tenant={tenantDetail}
+          onBack={() => setTenantDetail(undefined)}
+          onEditTenant={() => { setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
+          onAddUser={addUser}
+          onEditUser={() => { setUserPanelOpen(true) }}
+        />
+      ) : (
+        <TenantsTab
+          onAddTenant={() => { setEditingTenant(undefined); setTenantPanelOpen(true) }}
+          onEditTenant={(t) => { setEditingTenant(t); setTenantPanelOpen(true) }}
+          onViewTenantDetail={(t) => setTenantDetail(t)}
+        />
+      ))
+    }
+  }
+
+  const sectionScreen = belowMd && current !== null
+  return (
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      {tidySearch !== params.toString() && <Navigate replace to={{ pathname: '/settings', search: tidySearch ? `?${tidySearch}` : '' }} />}
+      {/* history={false}: useBackTarget tracks pathnames only, so a history-aware Back would skip the list. */}
+      {sectionScreen && <BackButton variant="link" label="settings" to="/settings" history={false} className="self-start" />}
+      <div className={sectionScreen ? 'sr-only' : undefined}>
+        <PageHeader title="Settings" documentTitle={current ? `${current.label} · Settings` : 'Settings'} />
+      </div>
+      <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:items-start md:gap-8">
+        {!sectionScreen && (
+          <SettingsNav
+            sections={visible}
+            current={belowMd ? null : key}
+            noOrganisation={perms.isSuperAdmin && !perms.hasOrganisation}
+            returnFocusTo={key === null && switched ? shown.from : null}
+          />
+        )}
+        {current && <Fragment key={current.key}>{body(current)}</Fragment>}
+      </div>
+
+      <TenantFormPanel
+        isOpen={tenantPanelOpen}
+        onClose={() => { setTenantPanelOpen(false); setEditingTenant(undefined) }}
+        tenant={editingTenant}
+      />
+      <UserFormPanel
+        isOpen={userPanelOpen}
+        onClose={() => { setUserPanelOpen(false); setEditingUser(undefined); setDefaultTenantId(undefined) }}
+        user={editingUser}
+        defaultTenantId={defaultTenantId}
+      />
+    </div>
+  )
+}
 
 function QualificationSettingsTab() {
   const { data: settings } = useSettings()
@@ -88,141 +208,6 @@ function QualificationSettingsTab() {
       <Button size="md" onClick={handleSave} disabled={updateSettings.isPending}>
         {updateSettings.isPending ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
       </Button>
-    </div>
-  )
-}
-
-function AppearanceSettingsTab() {
-  const { prefs, setPref } = useUiPreferences()
-
-  return (
-    <div className="max-w-md space-y-4">
-      <div>
-        <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Appearance</h2>
-        <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
-          Applies to all tables and is remembered on this device.
-        </p>
-        <label className="flex items-center gap-3 text-sm text-[var(--color-foreground)] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={prefs.tableVerticalDividers}
-            onChange={e => setPref('tableVerticalDividers', e.target.checked)}
-            className="w-4 h-4 accent-[var(--color-primary)]"
-          />
-          Show vertical separators between table columns
-        </label>
-      </div>
-    </div>
-  )
-}
-
-export default function SettingsPage() {
-
-  const { isSuperAdmin, isAdmin, canManageNotifications, canImportData } = usePermissions()
-
-  const [tenantPanelOpen, setTenantPanelOpen] = useState(false)
-  const [editingTenant, setEditingTenant] = useState<TenantSummaryDto | undefined>()
-  const [tenantDetail, setTenantDetail] = useState<TenantSummaryDto | undefined>()
-  const [userPanelOpen, setUserPanelOpen] = useState(false)
-  const [editingUser, setEditingUser] = useState<AdminUserDto | undefined>()
-  const [defaultTenantId, setDefaultTenantId] = useState<string | undefined>()
-  // What became of each Users-tab "Send set-password email". Held here, not in the tab, because the tab is unmounted whenever another tab is
-  // shown: an unacknowledged failure must still be there on return, and a send that finishes while the tab is away must still report.
-  const userNotices = useNotices()
-
-  const allTabs = [
-    { key: 'templates' as const, label: 'Event templates' },
-    { key: 'activities' as const, label: 'Activity library' },
-    { key: 'qualifications' as const, label: 'Qualification warnings' },
-    { key: 'appearance' as const, label: 'Appearance' },
-    { key: 'provider' as const, label: 'Provider settings' },
-    // Settings → Import data: an Admin, or a SuperAdmin viewing as the organisation (ImportsController; an import belongs to one organisation).
-    { key: 'import' as const, label: 'Import data', hidden: !canImportData },
-    // Settings → Data export: the same gate. DataExportController admits Admin and SuperAdmin, and answers 400 to a SuperAdmin who hasn't chosen an organisation.
-    { key: 'export' as const, label: 'Data export', hidden: !canImportData },
-    // The pricing engine's own answers (registration groups, crossing policy, travel rates): the provider's to set, so Admins and SuperAdmins only.
-    { key: 'pricing' as const, label: 'Plan pricing', hidden: !(isAdmin || isSuperAdmin) },
-    // What a budget check does about a one-off shift that would put a participant over budget, and when a participant counts as approaching it (budget phase 1 stores the choice): Admins and SuperAdmins only.
-    { key: 'budgets' as const, label: 'Budgets', hidden: !(isAdmin || isSuperAdmin) },
-    { key: 'catalogue' as const, label: 'Support catalogue', superAdminOnly: true },
-    // Everyone reads the calendar (it prices their plans and claims); only a SuperAdmin changes it, so the tab is read-only for the rest.
-    { key: 'holidays' as const, label: 'Public holidays' },
-    { key: 'tenants' as const, label: 'Tenants', superAdminOnly: true },
-    { key: 'users' as const, label: 'Users', superAdminOnly: true },
-    { key: 'notifications' as const, label: 'Notifications' },
-    { key: 'notifications-admin' as const, label: 'Failed sends', hidden: !canManageNotifications },
-  ]
-  const tabs = allTabs.filter(t => (!t.superAdminOnly || isSuperAdmin) && !t.hidden)
-  // The active tab lives in the URL (?tab=pricing), so a link, a reload and the plan builder's "Confirm in Settings" all land on it; a tab this user cannot see reads as the first.
-  const [tab, setTab] = useTabParam(tabs.map(t => t.key), 'templates')
-
-  return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Settings" />
-
-      <Tabs
-        tabs={tabs.map(t => ({ id: t.key, label: t.label }))}
-        active={tab}
-        onChange={(key) => { setTab(key); if (key !== 'tenants') setTenantDetail(undefined) }}
-        ariaLabel="Settings sections"
-        // Ten tabs do not fit one row at 1440px: one row that scrolls (the active tab scrolled into view) rather than the last tab alone on a second row.
-        overflow="scroll"
-      />
-
-      {tab === 'templates' && <EventTemplatesSection />}
-
-      {tab === 'activities' && <ActivityLibraryTab />}
-
-      {tab === 'qualifications' && <QualificationSettingsTab />}
-      {tab === 'appearance' && <AppearanceSettingsTab />}
-      {tab === 'provider' && <ProviderSettingsTab />}
-      {tab === 'import' && <ImportDataTab />}
-      {tab === 'export' && <DataExportTab />}
-      {tab === 'pricing' && <PlanPricingSettingsTab />}
-      {tab === 'budgets' && <BudgetSettingsTab />}
-      {tab === 'catalogue' && <SupportCatalogueSection />}
-      {tab === 'holidays' && <PublicHolidaysSection canEdit={isSuperAdmin} />}
-      {tab === 'notifications' && <NotificationPreferencesTab />}
-      {tab === 'notifications-admin' && canManageNotifications && <AdminNotificationsTab />}
-
-      {tab === 'tenants' && !tenantDetail && (
-        <TenantsTab
-          onAddTenant={() => { setEditingTenant(undefined); setTenantPanelOpen(true) }}
-          onEditTenant={(t) => { setEditingTenant(t); setTenantPanelOpen(true) }}
-          onViewTenantDetail={(t) => setTenantDetail(t)}
-        />
-      )}
-
-      {tab === 'tenants' && tenantDetail && (
-        <TenantDetailView
-          tenant={tenantDetail}
-          onBack={() => setTenantDetail(undefined)}
-          onEditTenant={() => { setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
-          onAddUser={(tid) => { setDefaultTenantId(tid); setEditingUser(undefined); setUserPanelOpen(true) }}
-          onEditUser={() => { setUserPanelOpen(true) }}
-        />
-      )}
-
-      {tab === 'users' && (
-        <UsersTab
-          notices={userNotices}
-          onAddUser={(tid) => { setDefaultTenantId(tid); setEditingUser(undefined); setUserPanelOpen(true) }}
-          onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }}
-        />
-      )}
-
-      <TenantFormPanel
-        isOpen={tenantPanelOpen}
-        onClose={() => { setTenantPanelOpen(false); setEditingTenant(undefined) }}
-        tenant={editingTenant}
-      />
-
-      <UserFormPanel
-        isOpen={userPanelOpen}
-        onClose={() => { setUserPanelOpen(false); setEditingUser(undefined); setDefaultTenantId(undefined) }}
-        user={editingUser}
-        defaultTenantId={defaultTenantId}
-      />
     </div>
   )
 }
