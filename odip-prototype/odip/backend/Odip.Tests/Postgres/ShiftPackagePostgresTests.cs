@@ -1075,6 +1075,36 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task AFinishWithMovedTimesAndKilometres_StoresTheOriginalsReasonKilometresAndAnswer_OnRealPostgres()
+    {
+        // The migration's five columns, for real: numeric(6,1) keeps the rounded kilometres, and the stamps come back as they were stored.
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var portal = PortalFor(request, tenantId, userId, new DateTime(2026, 7, 14, 7, 30, 0, DateTimeKind.Utc));
+
+        var result = await portal.FinishShift(shiftId, new FinishShiftDto
+        {
+            NothingToNote = true, NothingToHandOver = true,
+            ActualStart = new DateTime(2026, 7, 13, 22, 55, 0, DateTimeKind.Utc), ActualEnd = new DateTime(2026, 7, 14, 7, 20, 0, DateTimeKind.Utc),
+            TimeAdjustmentReason = "Arrived early to help with breakfast.", Kilometres = 12.46m, AnythingToReport = false,
+        }, default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var stored = await verify.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+        Assert.Equal(new DateTime(2026, 7, 13, 22, 55, 0), stored.ActualStart);
+        Assert.Equal(new DateTime(2026, 7, 13, 23, 5, 0), stored.OriginalActualStart);
+        Assert.Equal(new DateTime(2026, 7, 14, 7, 20, 0), stored.ActualEnd);
+        Assert.Equal(new DateTime(2026, 7, 14, 7, 30, 0), stored.OriginalActualEnd);
+        Assert.Equal("Arrived early to help with breakfast.", stored.TimeAdjustmentReason);
+        Assert.Equal(12.5m, stored.Kilometres);
+        Assert.False(stored.AnythingToReport);
+    }
+
+    [SkippableFact]
     public async Task DifferentSlotsOfOneMedication_AreNotSerialisedIntoConflicts_EachGetsItsOwnRecord()
     {
         // The lock is per (medication, slot): recording the 08:00 and the 12:30 dose at the same moment must both succeed.

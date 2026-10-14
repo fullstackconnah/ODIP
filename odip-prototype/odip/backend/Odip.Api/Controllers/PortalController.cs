@@ -291,6 +291,17 @@ public class PortalController : ControllerBase
     /// <summary>How long before the rostered start a worker may tap Start. Earlier taps get 409 SHIFT_START_TOO_EARLY.</summary>
     public const int EarliestStartLeadMinutes = 60;
 
+    /// <summary>How far either actual time may move at Finish (owner decision 3, 2026-10-14). The portal's finish flow mirrors it.</summary>
+    public const int MaxTimeAdjustmentMinutes = 15;
+
+    /// <summary>The longest reason for a moved time; the finish flow's counter mirrors it.</summary>
+    public const int MaxTimeAdjustmentReasonLength = 500;
+
+    /// <summary>Kilometres driven with the participant: 0 to this (owner decision 4).</summary>
+    public const decimal MaxKilometres = 2000m;
+
+    private static DateTime TruncateToMinute(DateTime t) => new(t.Ticks - t.Ticks % TimeSpan.TicksPerMinute, DateTimeKind.Utc);
+
     /// <summary>
     /// Worker taps Start on one of their own Published shifts. ActualStart/StartedAt are the
     /// server's own clock (<see cref="NowUtc"/>) — the client never supplies the "real" timestamp, only an
@@ -442,6 +453,15 @@ public class PortalController : ControllerBase
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                 "Write a handover or confirm there is nothing to hand over, not both.", ShiftErrorCodes.ShiftHandoverConflict));
 
+        // The finish flow's inputs are checked here, each with its own code, not by model validation: a framework 400 has no code for the
+        // portal to land on its times step (the ReturnCompletionDto F2 precedent).
+        if (dto.TimeAdjustmentReason?.Trim().Length > MaxTimeAdjustmentReasonLength)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                $"Keep the reason to {MaxTimeAdjustmentReasonLength} characters.", ShiftErrorCodes.ShiftTimeAdjustmentReasonTooLong));
+        if (dto.Kilometres is < 0m or > MaxKilometres)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                "Enter kilometres from 0 to 2,000.", ShiftErrorCodes.ShiftKilometresOutOfRange));
+
         // The End checklist, ENFORCED: every dose that has come due in the rostered window needs an outcome (or a "not given this
         // shift" reason, which is a Missed record) and no break may still be running. 422 carries the list, and the current
         // shift detail as data so the client can refresh what it shows. See ShiftPackageService for the two rules that keep the
@@ -527,7 +547,48 @@ public class PortalController : ControllerBase
                 "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
         }
 
-        completion.ActualEnd = now;
+        // Owner decision 3: either actual time may move up to MaxTimeAdjustmentMinutes from the server's stamp, with a reason. The worker picks
+        // whole minutes, so both stamps are compared truncated to the minute, and picking the stamp's own minute is no change. The manual-start
+        // path has no start stamp (its ActualStart keeps the F3 bounds above), so only the end rule applies to it.
+        var limit = TimeSpan.FromMinutes(MaxTimeAdjustmentMinutes);
+        var nowMinute = TruncateToMinute(now);
+        var stampMinute = TruncateToMinute(completion.ActualStart);
+        DateTime? askedStart = shift.Status == ShiftStatus.InProgress && dto.ActualStart is { } startIn ? ShiftBreakRules.ToUtc(startIn) : null;
+        DateTime? askedEnd = dto.ActualEnd is { } endIn ? ShiftBreakRules.ToUtc(endIn) : null;
+        if (askedEnd > now + ShiftBreakRules.ClockSkewAllowance)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                "Your finish time can't be in the future.", ShiftErrorCodes.ShiftActualEndInFuture));
+        var startMoved = askedStart is not null && askedStart != stampMinute;
+        var endMoved = askedEnd < nowMinute;   // this minute, or a fast phone's few minutes ahead, is the Finish instant itself
+        if ((startMoved && (askedStart!.Value - stampMinute).Duration() > limit) || (endMoved && nowMinute - askedEnd!.Value > limit))
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                $"You can change your times by up to {MaxTimeAdjustmentMinutes} minutes.", ShiftErrorCodes.ShiftTimeAdjustmentTooLarge));
+
+        var actualStart = startMoved ? askedStart!.Value : completion.ActualStart;
+        var actualEnd = endMoved ? askedEnd!.Value : now;
+        var reason = string.IsNullOrWhiteSpace(dto.TimeAdjustmentReason) ? null : dto.TimeAdjustmentReason.Trim();
+        if (startMoved || endMoved)
+        {
+            if (actualStart >= actualEnd)
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "Your start must be before your finish.", ShiftErrorCodes.ShiftStartNotBeforeEnd));
+            if (reason is null)
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "Say why your times changed.", ShiftErrorCodes.ShiftTimeAdjustmentReasonRequired));
+            // NetWorked would clamp a break to the new span, but the coordinator would still see a break outside the shift.
+            var breaks = await _db.ShiftBreaks.Where(b => b.ShiftCompletionId == completion.Id).ToListAsync(ct);
+            if (breaks.Any(b => b.StartedAt < actualStart || (b.EndedAt ?? actualEnd) > actualEnd))
+                return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
+                    "Your times must include your breaks. Change the break first, or your times.", ShiftErrorCodes.ShiftBreakOutsideTimes));
+            completion.OriginalActualStart = startMoved ? completion.ActualStart : null;
+            completion.OriginalActualEnd = endMoved ? now : null;
+        }
+
+        completion.ActualStart = actualStart;
+        completion.ActualEnd = actualEnd;
+        completion.TimeAdjustmentReason = startMoved || endMoved ? reason : null;
+        completion.Kilometres = dto.Kilometres is { } kmIn ? Math.Round(kmIn, 1, MidpointRounding.AwayFromZero) : null;
+        completion.AnythingToReport = dto.AnythingToReport;
         completion.SubmittedAt = now;
         completion.HandoverText = handoverText;
         completion.NothingToHandOver = dto.NothingToHandOver;

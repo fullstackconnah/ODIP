@@ -27,7 +27,10 @@ public record FinishShiftDto
     [Range(-180.0, 180.0)]
     public decimal? Longitude { get; init; }
     public bool GeolocationDeclined { get; init; }
-    /// <summary>Supplied only on the manual-start path — Start was skipped, so Finish supplies the real ActualStart.</summary>
+    /// <summary>
+    /// On the manual-start path (a Published shift), the real ActualStart. While the shift is in progress, the worker's corrected start:
+    /// within 15 minutes of the stamped start (compared to the minute), with a reason. Null keeps the stamp.
+    /// </summary>
     public DateTime? ActualStart { get; init; }
 
     /// <summary>
@@ -45,6 +48,19 @@ public record FinishShiftDto
     /// 409 SHIFT_NOTE_REQUIRED, unchanged). Stored on the completion only when there really are no notes.
     /// </summary>
     public bool NothingToNote { get; init; }
+
+    /// <summary>The worker's corrected end, a UTC instant: at most 15 minutes before the Finish instant (compared to the minute), and no more than
+    /// the 5-minute clock-skew allowance after it. Null keeps the Finish instant.</summary>
+    public DateTime? ActualEnd { get; init; }
+
+    /// <summary>Why either time moved: required when one did; at most 500 characters (checked by the action, with a code).</summary>
+    public string? TimeAdjustmentReason { get; init; }
+
+    /// <summary>Kilometres driven with the participant, 0 to 2,000; stored to one decimal place. Null when not given.</summary>
+    public decimal? Kilometres { get; init; }
+
+    /// <summary>"Anything to report?": true, false, or null when skipped. Informational only.</summary>
+    public bool? AnythingToReport { get; init; }
 }
 
 /// <summary>
