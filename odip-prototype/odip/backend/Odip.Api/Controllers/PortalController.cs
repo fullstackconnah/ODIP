@@ -458,7 +458,7 @@ public class PortalController : ControllerBase
         if (dto.TimeAdjustmentReason?.Trim().Length > MaxTimeAdjustmentReasonLength)
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                 $"Keep the reason to {MaxTimeAdjustmentReasonLength} characters.", ShiftErrorCodes.ShiftTimeAdjustmentReasonTooLong));
-        if (dto.Kilometres is < 0m or > MaxKilometres)
+        if (dto.Kilometres is < 0d or > (double)MaxKilometres)
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                 "Enter kilometres from 0 to 2,000.", ShiftErrorCodes.ShiftKilometresOutOfRange));
 
@@ -587,7 +587,7 @@ public class PortalController : ControllerBase
         completion.ActualStart = actualStart;
         completion.ActualEnd = actualEnd;
         completion.TimeAdjustmentReason = startMoved || endMoved ? reason : null;
-        completion.Kilometres = dto.Kilometres is { } kmIn ? Math.Round(kmIn, 1, MidpointRounding.AwayFromZero) : null;
+        completion.Kilometres = dto.Kilometres is { } kmIn ? Math.Round((decimal)kmIn, 1, MidpointRounding.AwayFromZero) : null;
         completion.AnythingToReport = dto.AnythingToReport;
         completion.SubmittedAt = now;
         completion.HandoverText = handoverText;

@@ -1089,7 +1089,7 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         {
             NothingToNote = true, NothingToHandOver = true,
             ActualStart = new DateTime(2026, 7, 13, 22, 55, 0, DateTimeKind.Utc), ActualEnd = new DateTime(2026, 7, 14, 7, 20, 0, DateTimeKind.Utc),
-            TimeAdjustmentReason = "Arrived early to help with breakfast.", Kilometres = 12.46m, AnythingToReport = false,
+            TimeAdjustmentReason = "Arrived early to help with breakfast.", Kilometres = 12.46, AnythingToReport = false,
         }, default);
 
         Assert.IsType<OkObjectResult>(result.Result);

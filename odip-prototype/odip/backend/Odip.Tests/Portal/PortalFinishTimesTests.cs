@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
@@ -21,7 +22,7 @@ public class PortalFinishTimesTests
     private static readonly DateTime Stamp = ActualStartUtc;
     private static readonly DateTime Now = DefaultNow.UtcDateTime;
 
-    private static FinishShiftDto Dto(DateTime? start = null, DateTime? end = null, string? reason = null, decimal? km = null, bool? report = null) =>
+    private static FinishShiftDto Dto(DateTime? start = null, DateTime? end = null, string? reason = null, double? km = null, bool? report = null) =>
         new() { NothingToNote = true, ActualStart = start, ActualEnd = end, TimeAdjustmentReason = reason, Kilometres = km, AnythingToReport = report };
 
     private static async Task<ShiftCompletion> Finish(ShiftPackageFixture f, FinishShiftDto dto)
@@ -229,7 +230,7 @@ public class PortalFinishTimesTests
     [InlineData("2000", "2000")]
     public async Task Kilometres_AreStoredToOneDecimalPlace(string given, string stored)
     {
-        var c = await Finish(Create(), Dto(km: decimal.Parse(given, CultureInfo.InvariantCulture)));
+        var c = await Finish(Create(), Dto(km: double.Parse(given, CultureInfo.InvariantCulture)));
 
         Assert.Equal(decimal.Parse(stored, CultureInfo.InvariantCulture), c.Kilometres);
     }
@@ -239,7 +240,18 @@ public class PortalFinishTimesTests
     [InlineData("2000.1")]
     public async Task Kilometres_OutsideZeroTo2000_Are400(string given)
     {
-        Assert.Equal(ShiftErrorCodes.ShiftKilometresOutOfRange, await Refused(Create(), Dto(km: decimal.Parse(given, CultureInfo.InvariantCulture))));
+        Assert.Equal(ShiftErrorCodes.ShiftKilometresOutOfRange, await Refused(Create(), Dto(km: double.Parse(given, CultureInfo.InvariantCulture))));
+    }
+
+    [Fact]
+    public async Task KilometresTooBigForADecimal_StillGetTheCodedRefusal_NotAFrameworkError()
+    {
+        // Review deep N4: a body the decimal can't hold failed model binding with an uncoded 400 the portal can't land on step 1.
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        Odip.Api.Serialization.ApiJsonOptions.Configure(options);
+        var dto = JsonSerializer.Deserialize<FinishShiftDto>("{\"nothingToNote\":true,\"kilometres\":1e30}", options)!;
+
+        Assert.Equal(ShiftErrorCodes.ShiftKilometresOutOfRange, await Refused(Create(), dto));
     }
 
     [Theory]
@@ -259,7 +271,7 @@ public class PortalFinishTimesTests
         f.Shift.ReturnCount = 2;
         f.Db.SaveChanges();
 
-        await Finish(f, Dto(end: Now.AddMinutes(-10), reason: "Left early.", km: 12.5m));
+        await Finish(f, Dto(end: Now.AddMinutes(-10), reason: "Left early.", km: 12.5));
 
         Assert.Equal(2, (await f.Db.Shifts.SingleAsync()).ReturnCount);
     }
@@ -271,7 +283,7 @@ public class PortalFinishTimesTests
         var f = Create();
         var other = f.AddWorker();
 
-        var result = await f.ControllerFor(other.Id).FinishShift(f.Shift.Id, Dto(start: Stamp.AddMinutes(-10), end: Now.AddMinutes(-10), reason: "x", km: 5m, report: true), default);
+        var result = await f.ControllerFor(other.Id).FinishShift(f.Shift.Id, Dto(start: Stamp.AddMinutes(-10), end: Now.AddMinutes(-10), reason: "x", km: 5, report: true), default);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
         var stored = await f.Db.ShiftCompletions.SingleAsync();

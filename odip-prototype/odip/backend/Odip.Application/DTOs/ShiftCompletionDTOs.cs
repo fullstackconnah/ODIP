@@ -56,8 +56,9 @@ public record FinishShiftDto
     /// <summary>Why either time moved: required when one did; at most 500 characters (checked by the action, with a code).</summary>
     public string? TimeAdjustmentReason { get; init; }
 
-    /// <summary>Kilometres driven with the participant, 0 to 2,000; stored to one decimal place. Null when not given.</summary>
-    public decimal? Kilometres { get; init; }
+    /// <summary>Kilometres driven with the participant, 0 to 2,000; stored to one decimal place. Null when not given. A double, not a decimal,
+    /// so any number in the body binds and an out-of-range one gets the action's coded refusal, never an uncoded model-binding 400.</summary>
+    public double? Kilometres { get; init; }
 
     /// <summary>"Anything to report?": true, false, or null when skipped. Informational only.</summary>
     public bool? AnythingToReport { get; init; }
