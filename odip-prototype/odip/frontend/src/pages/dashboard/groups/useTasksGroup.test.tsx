@@ -13,8 +13,15 @@ const task = (o: Record<string, unknown> = {}) => ({
   staffAssignmentId: null, taskType: 'InsuranceConfirmation', title: 'Chase travel insurance certificate', ownerId: 'u-callum', ownerName: 'Callum Radford',
   priority: 'Urgent', dueDate: '2026-10-10', status: 'NotStarted', completedDate: null, notes: 'Plan manager emailed 24 Jul.', ...o,
 })
-const answer = (overdue: unknown[], week: unknown[] = []) =>
-  apiGet.mockImplementation((_url: string, params?: Record<string, string>) => Promise.resolve(params?.status === 'Overdue' ? overdue : week))
+// The two lists, and each task read fresh at Done (GET /tasks/{id}): the stored row as it is now, which may differ from the list (deep S2).
+const answer = (overdue: Array<{ id: unknown }>, week: Array<{ id: unknown }> = [], fresh: Record<string, unknown> = {}) =>
+  apiGet.mockImplementation((url: string, params?: Record<string, string>) => {
+    if (url !== '/tasks') {
+      const id = url.slice('/tasks/'.length)
+      return Promise.resolve(fresh[id] ?? [...overdue, ...week].find((t) => t.id === id))
+    }
+    return Promise.resolve(params?.status === 'Overdue' ? overdue : week)
+  })
 const render = (mayCloseBudgetReview = true) => renderGroup(() => useTasksGroup(true, { today: TODAY, mayCloseBudgetReview }))
 const subjects = () => screen.getAllByRole('listitem').map((li) => li.querySelector('span')!.textContent)
 
@@ -120,5 +127,33 @@ describe('Tasks due group — a refused Done', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Task not found')
     expect(screen.getByText('Chase travel insurance certificate')).toBeInTheDocument()
+  })
+})
+
+describe('Tasks due group — Done reads the task fresh (deep S2)', () => {
+  it('PUTs the task as it is NOW, so a note or a date changed since the list loaded is kept', async () => {
+    const now = task({ notes: 'Insurer called back 14 Oct.', dueDate: '2026-10-12' })
+    answer([task()], [], { t1: now })
+    apiPutRaw.mockResolvedValue({ success: true, data: { ...now, status: 'Completed' } })
+    render()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
+
+    await waitFor(() => expect(apiPutRaw).toHaveBeenCalledWith('/tasks/t1', { ...now, status: 'Completed', completedDate: TODAY }))
+    const getCall = apiGet.mock.calls.findIndex(([url]) => url === '/tasks/t1')
+    expect(apiGet.mock.invocationCallOrder[getCall]).toBeLessThan(apiPutRaw.mock.invocationCallOrder[0])
+  })
+
+  it.each(['Completed', 'Cancelled'])('sends nothing for a task already %s elsewhere: it stays so, the row leaves, the group refetches and says so', async (status) => {
+    answer([task()], [], { t1: task({ status }) })
+    render()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
+
+    await waitFor(() => expect(announcement()).toHaveTextContent(`Already ${status.toLowerCase()} by someone else.`))
+    expect(apiPutRaw).not.toHaveBeenCalled()
+    expect(screen.queryByText('Chase travel insurance certificate')).not.toBeInTheDocument()
+    // The two lists asked again: once on load, once after the stale Done.
+    expect(apiGet.mock.calls.filter(([url, params]) => url === '/tasks' && params?.status === 'Overdue').length).toBeGreaterThan(1)
   })
 })

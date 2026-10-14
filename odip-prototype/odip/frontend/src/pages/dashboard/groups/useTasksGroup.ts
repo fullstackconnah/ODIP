@@ -1,3 +1,4 @@
+import { apiGet } from '@/api/client'
 import { useTasks, useUpdateTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS, type TaskDto, type UpdateTaskDto } from '@/api/types'
 import { formatDayMonth } from '@/lib/dateRange'
@@ -27,8 +28,14 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
     const done: RowAction = {
       kind: 'tap', label: 'Done', busyLabel: 'Saving…', name: `Done: ${t.title}`, failText: "Couldn't mark it done. Try again.",
       run: async () => {
-        // TasksPage's tick: the stored row (the PUT rewrites every field), status Completed and the viewer's today.
-        await updateTask.mutateAsync({ id: t.id, data: { ...t, status: 'Completed', completedDate: today } as UpdateTaskDto })
+        // TasksPage's tick on the stored row as it is NOW (the PUT rewrites every field and the server checks no version, so a list row hours old would
+        // undo a note or a date, or complete a cancelled task: deep S2).
+        const fresh = await apiGet<TaskDto>(`/tasks/${t.id}`)
+        if (!isOpen(fresh)) {
+          void overdue.refetch(); void week.refetch()
+          return { announce: `Already ${fresh.status.toLowerCase()} by someone else.` }
+        }
+        await updateTask.mutateAsync({ id: t.id, data: { ...fresh, status: 'Completed', completedDate: today } as UpdateTaskDto })
         return { announce: `Marked done: ${t.title}.` }
       },
     }
