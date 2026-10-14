@@ -3,6 +3,7 @@ import { formatWallClock, toDatetimeInputValue } from '@/lib/wallClock'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
 import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
 import { parseApiDate } from '@/lib/utils'
+import { plural } from '@/lib/format'
 import { providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 
 /** "8:00 am" from a provider-local wall-clock value; the digits are printed as written. */
@@ -205,4 +206,9 @@ export function dosesSummary(doses: PortalDoseSlotDto[], routines: PortalShiftRo
   const parts = given.length ? [given.join(', ')] : []
   if (routines.length) parts.push(`${routines.filter(r => r.isChecked).length} of ${routines.length} routines ticked`)
   return parts.join(' · ')
+}
+
+/** Step 5's Breaks row: "No breaks", "1 break, 0 min", "2 breaks, 15 min". */
+export function breaksLabel(count: number, minutes: number): string {
+  return count === 0 ? 'No breaks' : `${plural(count, 'break')}, ${minutes} min`
 }

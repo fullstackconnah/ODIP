@@ -12,7 +12,7 @@ import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shi
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import { rosteredInstants } from '../lib/portal'
-import { clockLabel, dosesSummary, REASON_MAX, timeBounds, type FinishStepKey, type TimesField } from './checklist'
+import { breaksLabel, clockLabel, dosesSummary, REASON_MAX, timeBounds, type FinishStepKey, type TimesField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import { Fold } from './ui'
@@ -364,7 +364,7 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
       { label: 'Started', value: c ? (moved.start ? `${clock(moved.start, tz)} (changed from ${clock(c.actualStart, tz)})` : clock(c.actualStart, tz)) : null },
       { label: 'Finishing', value: moved.end ? clock(moved.end, tz) : 'When you submit' },
       ...(moved.start || moved.end ? [{ label: 'Reason', value: draft.adjustmentReason.trim() }] : []),
-      { label: 'Breaks', value: `${shift.breaks.length}, ${breakMinutes} min` },
+      { label: 'Breaks', value: breaksLabel(shift.breaks.length, breakMinutes) },
       { label: 'Time worked', value: formatMinutesSpan(worked) },
       { label: 'Kilometres', value: kilometres === null ? 'None' : `${kilometres} km` },
     ] },

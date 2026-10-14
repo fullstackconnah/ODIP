@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   breaksSignature, buildChecklist, clockLabel,
-  FINISH_STEPS, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
+  FINISH_STEPS, breaksLabel, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
 } from './checklist'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
 
@@ -165,5 +165,13 @@ describe('the finish flow: kilometres (Review Focus 5)', () => {
       now: new Date('2026-08-17T07:00:30Z'),
     }
     expect(timesError(base)).toEqual({ field: 'kilometres', message: 'Enter kilometres from 0 to 2,000.' })
+  })
+})
+
+describe('the finish flow: the Breaks row (finish review fix 6)', () => {
+  it('names the breaks and their minutes, or says there were none', () => {
+    expect(breaksLabel(0, 0)).toBe('No breaks')
+    expect(breaksLabel(1, 0)).toBe('1 break, 0 min')
+    expect(breaksLabel(2, 15)).toBe('2 breaks, 15 min')
   })
 })
