@@ -123,6 +123,26 @@ describe('Organisation profile', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Saved')
   })
 
+  it('a second save before the refetch lands keeps the first save: the cache holds what was saved', async () => {
+    const user = userEvent.setup()
+    renderSection('organisation')
+    const name = await screen.findByLabelText('Organisation name')
+    await user.clear(name)
+    await user.type(name, 'Sunrise Care')
+    // From here every GET of the row hangs: the refetch after the first save never lands.
+    mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
+    await user.click(saveButton())
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+
+    const abn = screen.getByLabelText('ABN')
+    await user.clear(abn)
+    await user.type(abn, '12345678901')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toEqual(rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }))
+  })
+
   it('starts from the row as it is when the section opens, not from an older copy in the cache', async () => {
     const user = userEvent.setup()
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
@@ -349,6 +369,19 @@ describe('Safety checks', () => {
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
     expect(putBody()).toEqual({ ...rowWithoutModes(makeSettings()), participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+  })
+
+  it('says the tightened check is saved as soon as the save lands, without waiting for the refetch', async () => {
+    const user = userEvent.setup()
+    await open()
+    await user.click(radio(readiness(), 'Enforce'))
+    mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
+    await user.click(saveButton())
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Turn on Enforce' }))
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
+    expect(screen.queryByText(/^Not saved yet./)).not.toBeInTheDocument()
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
   })
 
   it('loosens without asking: Enforce back to Warn only is a deliberate change, and is sent', async () => {

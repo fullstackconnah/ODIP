@@ -10,9 +10,10 @@ const REQUIRED_FIELDS = 'Fill in the registration number, ABN, organisation name
 /**
  * The one provider settings row behind Organisation profile, Billing details and Safety checks. Its PUT overwrites every text and flag
  * field from the body, so a section sends the row as the server last gave it with only the fields it changed replaced: an untouched null
- * stays null, and another section's fields go back exactly as they came. The query refetches when a section opens and the form seeds only
- * after that, so "as the server last gave it" is the row as of opening the section (another Admin saving in between can still be
- * overwritten, as before). The two modes are never echoed: Safety checks adds one through `extra` only when the person changed it.
+ * stays null, and another section's fields go back exactly as they came. The query refetches when a section opens (the form seeds only
+ * after that), a save writes what it sent into the cache, and the cache refetches after every save; so "as the server last gave it" is
+ * that cache (another Admin saving in between can still be overwritten, as before). The two modes are never echoed: Safety checks adds
+ * one through `extra` only when the person changed it.
  */
 export function useProviderRow<F extends Record<string, string | boolean>>(pick: (row: ProviderSettingsDto | null) => F) {
   const query = useProviderSettings(true, 'always')

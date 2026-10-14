@@ -25,7 +25,10 @@ export function useUpsertProviderSettings() {
   return useMutation({
     mutationFn: (data: UpsertProviderSettingsDto) =>
       apiPut<ProviderSettingsDto>('/provider-settings', data),
-    onSuccess: () => {
+    onSuccess: (_saved, sent) => {
+      // The PUT answers true, not the row: write what was sent into the cache at once, so a second save before the refetch lands
+      // starts from this one, and nothing on screen waits for the refetch to say it is saved.
+      qc.setQueryData<ProviderSettingsDto | null>(['provider-settings'], old => ({ ...(old ?? {}), ...sent }) as ProviderSettingsDto)
       qc.invalidateQueries({ queryKey: ['provider-settings'] })
       qc.invalidateQueries({ queryKey: ['missed-guidance-contact'] })
     },
