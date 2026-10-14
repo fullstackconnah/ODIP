@@ -10,7 +10,11 @@ const LINK = 'rounded-sm text-[var(--color-primary)] underline underline-offset-
 
 /**
  * The accessibility statement: W3C's minimum contents (a commitment, the standard, a contact, known limits) in plain words.
- * Every "What we do" line is evidenced in DESIGN.md or the code (SHAPE 10.5 lists where); change a line when its evidence changes.
+ * Where each "What we do" line is evidenced, in order (change a line when its evidence changes):
+ * contrast: src/test/toneContrast.test.ts; 44px on touch: --tap-min in index.css (AppLayout.test.tsx) and tapArea.ts (Button.test.tsx);
+ * focus outline: DESIGN.md Focus Ring and src/test/focusRingTokens.test.ts; Escape and focus return: useDialogBehavior.test.tsx and
+ * AppLayout.test.tsx (the drawer); 12px: src/test/textFloor.test.ts; table columns: src/test/dataTableColumnRule.test.ts; the
+ * landing's pause control: welcome/page.test.ts, and its reduced-motion still frame: welcome/canopy.ts (code only, no test).
  */
 export default function AccessibilityPage({ info = PLATFORM_INFO }: { info?: PlatformInfo }) {
   useDocumentTitle('Accessibility')
