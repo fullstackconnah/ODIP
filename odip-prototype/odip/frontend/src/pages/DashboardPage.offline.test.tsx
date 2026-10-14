@@ -122,4 +122,18 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
     expect(apiGet).toHaveBeenCalledWith('/dashboard/summary')
     expect(screen.queryByText('–')).not.toBeInTheDocument()
   })
+
+  it('settles to the field for a Coordinator too, once the summary, the alerts and every group answer at zero', async () => {
+    renderDashboard(newClient())   // the beforeEach signs in a Coordinator
+    expect(screen.queryByText(/All clear/)).not.toBeInTheDocument()
+
+    await act(async () => {
+      onlineManager.setOnline(true)
+    })
+
+    expect(await screen.findByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
+    expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', page: 1, pageSize: 5 })
+    expect(apiGet).toHaveBeenCalledWith('/incidents', { needsAttention: 'true', page: '1', pageSize: '5' })
+    expect(screen.queryByText('–')).not.toBeInTheDocument()
+  })
 })

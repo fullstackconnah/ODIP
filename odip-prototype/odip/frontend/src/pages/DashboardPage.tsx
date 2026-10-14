@@ -20,6 +20,7 @@ import { decisionGates } from './dashboard/decisionGates'
 import { useDecisionGroups } from './dashboard/useDecisionGroups'
 import { useDecisionState } from './dashboard/useDecisionState'
 import { NeedsYourDecision } from './dashboard/NeedsYourDecision'
+import { isPresent } from './dashboard/quickGroup'
 import { BUDGET_OVER_ALERT, budgetsAtRisk } from '@/lib/budgetRisk'
 import { budgetsAtRiskItem } from './budgets/budgetBand'
 import { Link } from 'react-router-dom'
@@ -250,8 +251,9 @@ export default function DashboardPage() {
   }
   // Every item has data and is at zero: the band is clear.
   const bandClear = !!d && attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
-  // Task 12 widens this to the groups: the whole page is clear only when every group and every alert has data and is at zero.
-  const pageClear = bandClear && groups.length === 0
+  // "Nothing needs you" only when it is true: every group and every alert has data and is at zero, and no consequence notice is waiting (SHAPE §6).
+  const groupsClear = groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length))
+  const pageClear = bandClear && groupsClear
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -269,7 +271,7 @@ export default function DashboardPage() {
       {pageClear ? (
         // Same id as the Alerts heading, which it replaces: where focus lands when the last decision turns the page clear (QuickGroup's finish).
         <div id="dashboard-alerts" tabIndex={-1} className="focus:outline-none">
-          <AllClearField labels={attentionItems.map((item) => item.noun ?? item.label)} />
+          <AllClearField labels={[...groups.map((group) => group.noun), ...attentionItems.map((item) => item.noun ?? item.label)]} />
         </div>
       ) : (
         <>
