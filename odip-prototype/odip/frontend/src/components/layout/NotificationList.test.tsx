@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { InAppNotificationDto, InboxDto } from '@/api/types'
+import { TAP_AREA } from '@/components/tapArea'
 import { NotificationList, type NotificationListProps } from './NotificationList'
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
@@ -26,6 +27,7 @@ describe('NotificationList', () => {
     const refetch = vi.fn()
     renderList({ inbox: { data: undefined, isError: true, refetch } })
     expect(screen.getByText("Couldn't load your notifications.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass(...TAP_AREA.split(' ')) // 44px on touch (fix round 1)
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalledTimes(1)
   })

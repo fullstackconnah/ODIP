@@ -104,7 +104,7 @@ describe('NotificationBell: the panel, from lg', () => {
     expect(items[0]).toHaveTextContent(leave.title)
     expect(items[1]).toHaveTextContent(noLink.title)
     expect(items[2]).toHaveTextContent(done.title)
-    expect(within(panel).getByRole('button', { name: 'Mark all as read' })).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Mark all as read' })).toHaveClass(...TAP_AREA.split(' ')) // 44px on a touch screen at lg (fix round 1)
     expect(screen.queryByRole('dialog')).toBeNull()
     await waitFor(() => expect(mockApiGet.mock.calls.length).toBe(callsBefore + 1))
   })
