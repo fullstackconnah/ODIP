@@ -140,7 +140,7 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
 
@@ -157,7 +157,7 @@ describe('CompletionReviewPage', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
 
     expect(screen.getByText(/incidents during this shift/i)).toBeInTheDocument()
     expect(screen.getByText(/missed evening medication dose/i)).toBeInTheDocument()
@@ -168,7 +168,7 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^return$/i }))
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^return$/i }))
 
@@ -212,8 +212,8 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^return$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^approve/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^return/i })).not.toBeInTheDocument()
     expect(screen.getByText(/read-only access/i)).toBeInTheDocument()
   })
 
