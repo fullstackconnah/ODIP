@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { useUnsavedChangesWarning } from './useUnsavedChangesWarning'
@@ -83,5 +83,33 @@ describe('useUnsavedChangesWarning with blockIf and stayCopy', () => {
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(router.state.location.search).toBe('?section=organisation')
+  })
+})
+
+describe('useUnsavedChangesWarning: browser Back and closing the tab', () => {
+  it('asks before the browser Back button leaves a dirty section, and stays put', async () => {
+    const router = createMemoryRouter(
+      [{ path: '/settings', element: <Form dirty /> }],
+      { initialEntries: ['/settings?section=organisation', '/settings?section=billing'], initialIndex: 1 },
+    )
+    render(<RouterProvider router={router} />)
+
+    await act(async () => { await router.navigate(-1) })
+
+    expect(screen.getByRole('alertdialog', { name: 'Leave Billing details without saving?' })).toBeInTheDocument()
+    expect(router.state.location.search).toBe('?section=billing')
+  })
+
+  it('asks the browser to confirm closing or reloading the tab while dirty, and not while clean', () => {
+    const { unmount } = render(<RouterProvider router={createMemoryRouter([{ path: '/settings', element: <Form dirty /> }], { initialEntries: ['/settings?section=billing'] })} />)
+    const dirtyClose = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(dirtyClose)
+    expect(dirtyClose.defaultPrevented).toBe(true)
+    unmount()
+
+    renderForm(false)
+    const cleanClose = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(cleanClose)
+    expect(cleanClose.defaultPrevented).toBe(false)
   })
 })

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
@@ -125,6 +125,19 @@ describe('SettingsSection: switching section with unsaved changes', () => {
 
     await user.click(screen.getByRole('link', { name: 'Settings home' }))
     expect(screen.getByRole('alertdialog', { name: 'Leave Billing details without saving?' })).toBeInTheDocument()
+  })
+
+  it('asks before the browser Back button leaves for the section before', async () => {
+    const router = createMemoryRouter([{ path: '/settings', element: <Harness save={save({ dirty: true })} /> }], {
+      initialEntries: ['/settings?section=organisation', '/settings?section=billing'],
+      initialIndex: 1,
+    })
+    render(<RouterProvider router={router} />)
+
+    await act(async () => { await router.navigate(-1) })
+
+    expect(screen.getByRole('alertdialog', { name: 'Leave Billing details without saving?' })).toBeInTheDocument()
+    expect(router.state.location.search).toBe('?section=billing')
   })
 
   it('never asks from a read-only section, which has no foot', async () => {
