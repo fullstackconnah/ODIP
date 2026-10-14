@@ -59,7 +59,10 @@ public sealed class AgreementRenewalService
             return new RenewalOutcome(null, new[] { string.Create(CultureInfo.InvariantCulture, $"This agreement has a newer revision, v{newest}. Load it first: a renewal would replace it.") }, ConflictVersion: newest);
 
         // The term (D2): a change saved as a revision covers only its last weeks and keeps the end, so the term starts at the earliest approved revision ending on that day.
-        var termStart = revisions.Where(r => r.Approved && r.AgreementEndDate == source.AgreementEndDate).Min(r => r.AgreementStartDate);
+        var termStartOf = revisions.Where(r => r.Approved).GroupBy(r => r.AgreementEndDate).ToDictionary(g => g.Key, g => g.Min(r => r.AgreementStartDate));
+        // A renewal of a renewal runs for the first term's length, walking back while an approved term ends the day before: a renewal the plan cut short does not shorten every later one (fix round 1, deep S4).
+        var (termStart, termEnd) = (termStartOf[source.AgreementEndDate], source.AgreementEndDate);
+        while (termStartOf.TryGetValue(termStart.AddDays(-1), out var earlier)) (termStart, termEnd) = (earlier, termStart.AddDays(-1));
         var start = source.AgreementEndDate.AddDays(1);
 
         // The participant's plan covering the first day (D7). Plans never overlap; the order only makes the answer certain.
@@ -68,7 +71,7 @@ public sealed class AgreementRenewalService
             .OrderBy(p => p.PlanStart).FirstOrDefaultAsync(ct);
         if (plan is null)
             return new RenewalOutcome(null, new[] { string.Create(CultureInfo.InvariantCulture, $"Record the new plan first: no plan of the participant's covers {start:yyyy-MM-dd}, the day the renewal starts.") }, PlanNeeded: true);
-        var end = new[] { SameLengthEnd(termStart, source.AgreementEndDate, start), plan.PlanEnd, start.AddDays(PlanPricingEngine.MaxPeriodDays - 1) }.Min();
+        var end = new[] { SameLengthEnd(termStart, termEnd, start), plan.PlanEnd, start.AddDays(PlanPricingEngine.MaxPeriodDays - 1) }.Min();
 
         var blocks = source.Blocks.OrderBy(b => b.Position).Select(DraftJson.ToDto).ToList();
         if (blocks.Count == 0 || blocks.Any(b => b.Unreadable))

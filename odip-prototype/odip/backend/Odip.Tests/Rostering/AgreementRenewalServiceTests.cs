@@ -190,6 +190,22 @@ public class AgreementRenewalServiceTests
         Assert.Equal("This agreement is not approved for rostering yet, so there is nothing to renew.", Assert.Single((await RenewAsync(unapproved, draft)).Errors));
     }
 
+    /// <summary>Fix round 1 (deep S4, the lead's decision): a renewal cut short by the plan does not shorten the ones after it. The length is the first term's in the chain of terms that each start the day after the one before.</summary>
+    [Fact]
+    public async Task A_renewal_of_a_plan_capped_renewal_runs_for_the_original_terms_length()
+    {
+        var (f, v1) = await ApprovedV1Async(withPlan: false);
+        await using var _ = f;
+        await PlanAsync(f, PlanStart, new DateOnly(2026, 12, 31));
+        var v2 = (await RenewAsync(f, v1)).Draft!;                                       // 23 Nov to 31 Dec: 39 days, cut at the plan's end
+        await MarkApprovedAsync(f.Db, v2);
+        await PlanAsync(f, new DateOnly(2027, 1, 1), new DateOnly(2027, 12, 31));
+
+        var v3 = await StoredAsync(f, (await RenewAsync(f, v2)).Draft!.Id);
+
+        Assert.Equal((3, new DateOnly(2027, 1, 1), new DateOnly(2027, 2, 11)), (v3.Version, v3.AgreementStartDate, v3.AgreementEndDate));   // v1's 42 days, not v2's 39
+    }
+
     /// <summary>Fix round 1 (deep S1): a term of whole calendar months renews for the same months, so a year stays a year across 29 February; any other term keeps its length in days.</summary>
     [Theory]
     [InlineData("2027-07-01", "2028-06-30", "2028-07-01", "2029-06-30")]   // 366 days, holding 29 Feb 2028: a year, not a year and a day
