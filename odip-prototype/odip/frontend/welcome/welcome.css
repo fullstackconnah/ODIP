@@ -195,7 +195,8 @@ main,
   inset: 0 0 auto;
   z-index: 40;
   padding-top: env(safe-area-inset-top, 0px);
-  background: var(--forest);
+  /* A hair short of opaque: Chrome's software compositor culls the canopy canvas behind an opaque fixed layer at the wrong end, leaving a header-tall unpainted band at the foot of the screen. */
+  background: color-mix(in srgb, var(--forest) 99%, transparent);
   border-bottom: 1px solid var(--hairline);
 }
 .site-header__inner {
@@ -1074,7 +1075,7 @@ main,
 }
 .site-footer__brand {
   display: grid;
-  flex: 1 1 16rem;
+  flex: 0 1 24rem;
   align-content: start;
   justify-items: start;
   gap: 12px;

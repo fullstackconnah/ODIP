@@ -408,10 +408,22 @@ describe('the footer: the acknowledgement, the columns and the bound facts', () 
     }
   })
 
+  it('keeps the brand to its own width, so the link columns sit beside it rather than pushed to the far edge', () => {
+    const brand = css.split('\n.site-footer__brand {')[1].split('}')[0]
+    expect(brand).toContain('flex: 0 1 24rem;')
+  })
+
   it('opens Status in a new tab and says so', () => {
     const status = footer.querySelector('[data-platform="statusUrl"] a')!
     expect(status.getAttribute('target')).toBe('_blank')
     expect(status.getAttribute('rel')).toBe('noopener noreferrer')
     expect(squash(status.querySelector('.sr-only')!.textContent)).toBe('(opens in a new tab)')
+  })
+})
+
+describe('the fixed header', () => {
+  it('is a hair short of opaque, so a software compositor never culls the canvas foot behind it (the black band)', () => {
+    const header = css.split('\n.site-header {')[1].split('}')[0]
+    expect(header).toContain('background: color-mix(in srgb, var(--forest) 99%, transparent);')
   })
 })
