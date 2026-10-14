@@ -85,19 +85,19 @@ function ConnectForm() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        {/* The button sits beside the field from sm and drops under it on a phone. */}
-        <div className="flex flex-wrap items-end gap-2">
+        {/* From sm the button sits beside the field with the hint under both; on a phone the hint stays with its field and the button drops below. */}
+        <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
           <FormField label="API key" descriptionId={hintId} className="min-w-0 flex-[1_1_16rem] max-w-[24rem]">
             {/* new-password: a password manager must not offer to save the EH key as a sign-in. */}
             <input type="password" autoComplete="new-password" value={apiKey} onChange={e => { setApiKey(e.target.value); setFound(null) }} />
           </FormField>
+          <p id={hintId} className="basis-full text-xs text-[var(--color-muted-foreground)] sm:order-last">From Employment Hero Payroll. ODIP stores it encrypted and never shows it again.</p>
           {found === null && (
-            <Button variant="secondary" onClick={findBusinesses} disabled={!apiKey.trim() || businesses.isPending}>
+            <Button variant="secondary" className="order-last mt-1 sm:order-none sm:mt-0" onClick={findBusinesses} disabled={!apiKey.trim() || businesses.isPending}>
               {businesses.isPending ? 'Finding…' : 'Find businesses'}
             </Button>
           )}
         </div>
-        <p id={hintId} className="text-xs text-[var(--color-muted-foreground)]">From Employment Hero Payroll. ODIP stores it encrypted and never shows it again.</p>
       </div>
       {found !== null && (found.length === 0 ? (
         <p className={MUTED}>This API key can't see any business in Employment Hero.</p>
@@ -142,7 +142,9 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
         </Callout>
       )}
       {sync.error != null && <Callout tone="danger">{extractErrorMessage(sync.error, "The sync couldn't start. Try again.")}</Callout>}
-      <div className="flex flex-wrap gap-2">
+      {disconnect.error != null && <Callout tone="danger">{extractErrorMessage(disconnect.error, "Employment Hero couldn't be disconnected. Try again.")}</Callout>}
+      {/* One line each on a phone, so the destructive action never sits beside the routine one. */}
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
         <Button variant="secondary" onClick={() => sync.mutate()} disabled={sync.isPending}>{sync.isPending ? 'Syncing…' : 'Sync now'}</Button>
         {/* Apart from Sync now, so the destructive action never sits beside the routine one. */}
         <Button variant="secondary" className="sm:ml-auto" onClick={() => setConfirming(true)}>Disconnect</Button>
@@ -157,7 +159,7 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
         variant="danger"
         loading={disconnect.isPending}
         onCancel={() => setConfirming(false)}
-        onConfirm={() => disconnect.mutate(undefined, { onSettled: () => setConfirming(false) })}
+        onConfirm={() => disconnect.mutate(undefined, { onSuccess: () => setConfirming(false) })}
       />
     </div>
   )
@@ -192,6 +194,9 @@ function Attention({ items }: { items: EmploymentHeroAttentionDto[] }) {
         <Callout tone="danger">{`${failedName ? `${failedName}: ` : ''}${extractErrorMessage(dismiss.error, "That couldn't be saved. Try again.")}`}</Callout>
       )}
       {items.length >= FILTER_FROM && <SearchInput value={query} onChange={setQuery} label="Find a person" placeholder="Find a person" />}
+      {query.trim() && shown.length === 0 && (
+        <p className={`${MUTED} rounded-[var(--radius-md)] border border-[var(--color-border)] py-5 text-center`}>{`No one matches "${query.trim()}".`}</p>
+      )}
       {GROUPS.map(group => {
         const rows = shown.filter(i => i.kind === group.kind)
         if (rows.length === 0) return null
@@ -271,7 +276,8 @@ function LinkPicker({ item, onClose }: { item: EmploymentHeroAttentionDto; onClo
             <SelectField label="Employment Hero employee" value={employeeId} onChange={e => setEmployeeId(e.target.value)} placeholder="Choose an employee"
               options={list.map(e => ({
                 value: e.id,
-                label: `${e.email ? `${e.name} (${e.email})` : e.name}${e.id === item.employeeId ? ' · same name' : ''}`,
+                // Added by sync: Link moves the id from that never-signed-in duplicate and archives it (EmploymentHeroController.Link).
+                label: `${e.email ? `${e.name} (${e.email})` : e.name}${e.id === item.employeeId ? ' · same name' : ''}${e.addedBySync ? ' (added by sync, never signed in)' : ''}`,
               }))} />
           )}
         {link.error != null && <Callout tone="danger">{extractErrorMessage(link.error, "The link couldn't be saved. Try again.")}</Callout>}

@@ -6,7 +6,7 @@ import IntegrationsTab from './IntegrationsTab'
 import type { EmploymentHeroAttentionDto, EmploymentHeroEmployeeDto, EmploymentHeroStatusDto } from '@/api/types'
 
 const { state, calls } = vi.hoisted(() => ({
-  state: { status: undefined as unknown, employees: [] as unknown[], dismissError: null as unknown, dismissVariables: undefined as string | undefined },
+  state: { status: undefined as unknown, employees: [] as unknown[], dismissError: null as unknown, dismissVariables: undefined as string | undefined, disconnectError: null as unknown },
   calls: { businesses: vi.fn(), connect: vi.fn(), sync: vi.fn(), disconnect: vi.fn(), link: vi.fn(), dismiss: vi.fn() },
 }))
 
@@ -15,7 +15,7 @@ vi.mock('@/api/hooks', () => ({
   useEmploymentHeroBusinesses: () => ({ mutateAsync: calls.businesses, isPending: false }),
   useConnectEmploymentHero: () => ({ mutateAsync: calls.connect, isPending: false }),
   useSyncEmploymentHero: () => ({ mutate: calls.sync, isPending: false, error: null }),
-  useDisconnectEmploymentHero: () => ({ mutate: calls.disconnect, isPending: false }),
+  useDisconnectEmploymentHero: () => ({ mutate: calls.disconnect, isPending: false, error: state.disconnectError }),
   useEmploymentHeroEmployees: () => ({ data: state.employees, isLoading: false, isError: false, error: null }),
   useLinkEmploymentHeroStaff: () => ({ mutate: calls.link, isPending: false, error: null }),
   useDismissEmploymentHeroItem: () => ({ mutate: calls.dismiss, isPending: false, error: state.dismissError, variables: state.dismissVariables }),
@@ -40,6 +40,7 @@ afterEach(() => {
   state.employees = []
   state.dismissError = null
   state.dismissVariables = undefined
+  state.disconnectError = null
 })
 
 describe('IntegrationsTab — connecting', () => {
@@ -210,5 +211,36 @@ describe('IntegrationsTab — the approved brief', () => {
     renderTab()
     expect(screen.getByText('Last sync failed')).toBeInTheDocument()
     expect(screen.getByText("Nobody's details changed. ODIP tries again every 30 minutes.")).toBeInTheDocument()
+  })
+})
+
+describe('IntegrationsTab — the review fixes', () => {
+  it('shows a refused disconnect in its own words and keeps the dialog open until it works', async () => {
+    const user = userEvent.setup()
+    state.status = connected()
+    state.disconnectError = { response: { data: { errors: ['A sync for this organisation is already running. Try again in a minute.'] } } }
+    renderTab()
+    expect(screen.getByText('A sync for this organisation is already running. Try again in a minute.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Disconnect' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Disconnect' }))
+    expect(calls.disconnect).toHaveBeenCalledWith(undefined, expect.objectContaining({ onSuccess: expect.any(Function) }))
+    expect(calls.disconnect.mock.calls[0][1]).not.toHaveProperty('onSettled')
+  })
+
+  it('says when nobody matches the filter', async () => {
+    const user = userEvent.setup()
+    state.status = connected({ attention: Array.from({ length: 11 }, (_, i) => item({ id: `n${i}`, name: `Person ${i}` })) })
+    renderTab()
+    await user.type(screen.getByRole('textbox', { name: 'Find a person' }), 'Zed')
+    expect(screen.getByText('No one matches "Zed".')).toBeInTheDocument()
+  })
+
+  it('marks an employee the sync added who never signed in, in the picker', async () => {
+    const user = userEvent.setup()
+    state.status = connected({ attention: [item({ id: 'i1', name: 'Jane Smith', employeeId: null })] })
+    state.employees = [{ id: '302', name: 'Robert Smith', email: 'robert@acme.org.au', addedBySync: true }] satisfies EmploymentHeroEmployeeDto[]
+    renderTab()
+    await user.click(screen.getByRole('button', { name: 'Link to an Employment Hero employee: Jane Smith' }))
+    expect(within(screen.getByRole('dialog')).getByRole('option', { name: 'Robert Smith (robert@acme.org.au) (added by sync, never signed in)' })).toBeInTheDocument()
   })
 })

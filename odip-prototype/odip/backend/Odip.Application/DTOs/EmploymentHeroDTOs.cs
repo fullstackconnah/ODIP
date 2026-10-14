@@ -12,5 +12,6 @@ public record EmploymentHeroAttentionDto(Guid Id, EmploymentHeroAttentionKind Ki
 public record EmploymentHeroKeyDto(string? ApiKey);
 public record EmploymentHeroConnectDto(string? ApiKey, string? BusinessId);
 public record EmploymentHeroBusinessDto(string Id, string Name);
-public record EmploymentHeroEmployeeDto(string Id, string Name, string? Email);
+/// <summary>AddedBySync: the employee is linked to someone the sync itself created who has never signed in, so Link may move the id to the chosen person.</summary>
+public record EmploymentHeroEmployeeDto(string Id, string Name, string? Email, bool AddedBySync = false);
 public record EmploymentHeroLinkDto(string? EmployeeId);

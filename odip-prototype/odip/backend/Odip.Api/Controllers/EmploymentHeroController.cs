@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
 using Odip.Domain.Interfaces;
@@ -165,12 +166,17 @@ public class EmploymentHeroController : ControllerBase
             return Refused(ex);
         }
 
-        var linked = (await _db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null).Select(u => u.ExternalPayrollId!).ToListAsync(ct)).ToHashSet();
+        var linkedUsers = await _db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null)
+            .Select(u => new { u.Id, u.ExternalPayrollId, u.LastLoginAt }).ToListAsync(ct);
+        var movable = await AddedBySyncAsync(linkedUsers.Where(u => u.LastLoginAt == null).Select(u => u.Id).ToList(), ct);
+        var linked = linkedUsers.Where(u => !movable.Contains(u.Id)).Select(u => u.ExternalPayrollId!).ToHashSet();
+        var bySync = linkedUsers.Where(u => movable.Contains(u.Id)).Select(u => u.ExternalPayrollId!).ToHashSet();
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
         return Ok(ApiResponse<List<EmploymentHeroEmployeeDto>>.Ok(employees
             .Where(e => !EmploymentHeroStaffSync.IsLeaver(e, today))
             .Select(e => new EmploymentHeroEmployeeDto(e.Id.ToString(CultureInfo.InvariantCulture), $"{e.FirstName} {e.Surname}".Trim(), e.EmailAddress))
             .Where(e => !linked.Contains(e.Id))
+            .Select(e => e with { AddedBySync = bySync.Contains(e.Id) })
             .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList()));
     }
 
@@ -185,7 +191,9 @@ public class EmploymentHeroController : ControllerBase
         var person = item?.UserId is { } userId ? await _db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, ct) : null;
         if (item is null || person is null) return NotFound(ApiResponse<EmploymentHeroStatusDto>.Fail("That item is no longer waiting. Refresh the page."));
         if (person.ExternalPayrollId is not null) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail($"{person.FullName} is already linked."));
-        if (await _db.Users.AnyAsync(u => u.TenantId == tenantId && u.ExternalPayrollId == employeeId, ct))
+        var holder = await _db.Users.FirstOrDefaultAsync(u => u.TenantId == tenantId && u.ExternalPayrollId == employeeId, ct);
+        // The first sync may have added this person a second time (another name or email). While that duplicate has never signed in, Link takes the id from it.
+        if (holder is not null && (holder.LastLoginAt is not null || (await AddedBySyncAsync([holder.Id], ct)).Count == 0))
             return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in ODIP."));
         if (await SavedKeyAsync(tenantId, ct) is not { } saved) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.KeyUnreadableMessage));
         EhEmployee employee;
@@ -201,17 +209,29 @@ public class EmploymentHeroController : ControllerBase
         if (EmploymentHeroStaffSync.IsLeaver(employee, await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct)))
             return BadRequest(ApiResponse<EmploymentHeroStatusDto>.Fail("Employment Hero has ended that employee's employment, so they can't be linked. Choose their current record."));
 
-        person.ExternalPayrollId = employeeId;
-        _db.EmploymentHeroAttentions.Remove(item);
+        bool linkedNow;
         try
         {
-            await _db.SaveChangesAsync(ct);
+            // One transaction under the sync lock, audited as the Admin: the duplicate gives up the id and is archived, then the person takes it.
+            linkedNow = await EmploymentHeroStaffSync.UnderSyncLockAsync(_db, tenantId, async () =>
+            {
+                if (holder is not null)
+                {
+                    holder.ExternalPayrollId = null;
+                    holder.IsActive = false;
+                    await _db.SaveChangesAsync(ct);   // first, on its own: the payroll-id index allows one holder at a time
+                }
+                person.ExternalPayrollId = employeeId;
+                _db.EmploymentHeroAttentions.Remove(item);
+                await _db.SaveChangesAsync(ct);
+            }, ct);
         }
         catch (DbUpdateException)
         {
             // The sync linked this EH employee between the check above and this save, and the payroll-id index refused the second link.
             return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in ODIP."));
         }
+        if (!linkedNow) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
     }
 
@@ -229,6 +249,12 @@ public class EmploymentHeroController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
     }
+
+    /// <summary>Of these users, the ones the sync itself created: their Created audit row names it. Never signed in, they are the duplicates Link may repair.</summary>
+    private async Task<HashSet<Guid>> AddedBySyncAsync(List<Guid> userIds, CancellationToken ct) =>
+        userIds.Count == 0 ? new() : (await _db.AuditLogs
+            .Where(a => a.EntityType == nameof(User) && a.Action == AuditAction.Created && a.ChangedByName == EmploymentHeroStaffSync.ActorName && userIds.Contains(a.EntityId))
+            .Select(a => a.EntityId).ToListAsync(ct)).ToHashSet();
 
     /// <summary>The organisation's business and its key, decrypted. Null when the organisation is not connected, or this server can't read the key.</summary>
     private async Task<(string BusinessId, string Key)?> SavedKeyAsync(Guid tenantId, CancellationToken ct)

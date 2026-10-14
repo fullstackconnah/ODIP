@@ -371,4 +371,64 @@ public class EmploymentHeroControllerTests
         Assert.Null(jane.ExternalPayrollId);
         Assert.Single(db.EmploymentHeroAttentions);
     }
+
+    /// <summary>Jane waiting (as WaitingJaneAsync), plus Robert, whom the first sync created from EH 302 (a duplicate of Jane under another name), and Hal, whom an Admin added and linked to EH 303.</summary>
+    private static async Task<(OdipDbContext Db, Guid Tenant, User Jane, EmploymentHeroAttention Item, User Robert)> DuplicateFromFirstSyncAsync()
+    {
+        var (db, tenant, jane, item) = await WaitingJaneAsync();
+        var robert = EhFixture.Staff(tenant, "Robert", "Smith", "robert@acme.org.au", "302");
+        db.AuditActorName = EmploymentHeroStaffSync.ActorName;   // as the sync names itself when it creates someone
+        db.Users.Add(robert);
+        await db.SaveChangesAsync();
+        db.AuditActorName = null;
+        db.Users.Add(EhFixture.Staff(tenant, "Hal", "Ng", "hal@acme.org.au", "303"));
+        await db.SaveChangesAsync();
+        return (db, tenant, jane, item, robert);
+    }
+
+    [Fact]
+    public async Task The_picker_also_offers_an_employee_the_sync_added_who_never_signed_in_and_marks_them()
+    {
+        var (db, tenant, _, _, _) = await DuplicateFromFirstSyncAsync();
+        await using var __ = db;
+        var eh = Eh(Employee(301, "Jane", "Smith", "jane.smith@acme.org.au"), Employee(302, "Robert", "Smith", "robert@acme.org.au"), Employee(303, "Hal", "Ng", "hal@acme.org.au"));
+
+        var employees = Data(await Controller(db, tenant, eh).UnlinkedEmployees(CancellationToken.None));
+
+        Assert.Equal(new[] { ("301", false), ("302", true) }, employees.Select(e => (e.Id, e.AddedBySync)).OrderBy(e => e.Id));   // Hal (added by an Admin) is not offered
+    }
+
+    [Fact]
+    public async Task Link_moves_the_id_from_a_sync_added_duplicate_archives_it_and_audits_both()
+    {
+        var (db, tenant, jane, item, robert) = await DuplicateFromFirstSyncAsync();
+        await using var _ = db;
+        var eh = new StubHttpHandler().On("/api/v2/business/777/employee/302/details", HttpStatusCode.OK, Employee(302, "Robert", "Smith", "robert@acme.org.au"));
+
+        var status = Data(await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("302"), CancellationToken.None));
+
+        Assert.Equal("302", jane.ExternalPayrollId);
+        Assert.Equal(((string?)null, false), (robert.ExternalPayrollId, robert.IsActive));
+        Assert.Empty(status.Attention);
+        var audits = await db.AuditLogs.Where(a => a.Action == Odip.Domain.Enums.AuditAction.Updated && (a.EntityId == jane.Id || a.EntityId == robert.Id)).ToListAsync();
+        Assert.Equal(2, audits.Select(a => a.EntityId).Distinct().Count());
+        // Not named for the sync: in a request the interceptor names the Admin (AuditActorNameTests); this fixture context has no request user.
+        Assert.All(audits, a => Assert.NotEqual(EmploymentHeroStaffSync.ActorName, a.ChangedByName));
+    }
+
+    [Fact]
+    public async Task Link_still_refuses_the_id_of_a_sync_added_person_who_has_signed_in()
+    {
+        var (db, tenant, jane, item, robert) = await DuplicateFromFirstSyncAsync();
+        await using var _ = db;
+        robert.LastLoginAt = new DateTime(2026, 10, 13, 22, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+        var eh = new StubHttpHandler().On("/api/v2/business/777/employee/302/details", HttpStatusCode.OK, Employee(302, "Robert", "Smith", "robert@acme.org.au"));
+
+        var result = await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("302"), CancellationToken.None);
+
+        Assert.Equal((409, "That Employment Hero employee is already linked to someone in ODIP."), Refusal(result));
+        Assert.Equal(("302", true), (robert.ExternalPayrollId, robert.IsActive));
+        Assert.Null(jane.ExternalPayrollId);
+    }
 }

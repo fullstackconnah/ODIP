@@ -28,4 +28,5 @@ export interface EmploymentHeroStatusDto {
 }
 
 export interface EmploymentHeroBusinessDto { id: string; name: string }
-export interface EmploymentHeroEmployeeDto { id: string; name: string; email: string | null }
+/** addedBySync: linked to someone the sync added who has never signed in; Link moves the id to the chosen person and archives that duplicate. */
+export interface EmploymentHeroEmployeeDto { id: string; name: string; email: string | null; addedBySync?: boolean }
