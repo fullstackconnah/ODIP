@@ -131,7 +131,8 @@ public static class ShiftCompletionMapper
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
                 completion.VarianceMinutesStart, completion.VarianceMinutesEnd, row.Status,
                 completion.TimeZoneId, isOutlier, varianceReviewMinutes, row.ReturnCount,
-                extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes, completion.StartWasManual));
+                extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes, completion.StartWasManual,
+                completion.OriginalActualStart is not null || completion.OriginalActualEnd is not null));
         }
         return items;
     }
@@ -185,7 +186,9 @@ public static class ShiftCompletionMapper
             IsOutlierVariance(c.VarianceMinutesStart, c.VarianceMinutesEnd, varianceReviewMinutes),
             varianceReviewMinutes, shiftReturnCount, incidents,
             breaks.Select(b => ToBreakDto(b, now, c.ActualEnd)).ToList(), breakMinutes, netMinutes,
-            c.HandoverText, c.NothingToHandOver, c.NothingToNoteConfirmed);
+            c.HandoverText, c.NothingToHandOver, c.NothingToNoteConfirmed,
+            c.OriginalActualStart is not null || c.OriginalActualEnd is not null,
+            c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres, c.AnythingToReport);
     }
 
     /// <summary>

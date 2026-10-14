@@ -360,4 +360,41 @@ public class ShiftCompletionReviewDtoTests
         Assert.Empty(method.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), true));
         Assert.Empty(method.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true));   // no per-action widening
     }
+
+    [Fact]
+    public async Task TheReviewAndTheQueue_ShowTheWorkersMovedTimes_TheReasonTheKilometresAndTheReportAnswer()
+    {
+        var a = Arrange();
+        a.Completion.OriginalActualEnd = ActualEnd.AddMinutes(12);
+        a.Completion.TimeAdjustmentReason = "Left at five past; tapped Finish in the car.";
+        a.Completion.Kilometres = 12.5m;
+        a.Completion.AnythingToReport = true;
+        a.Db.SaveChanges();
+
+        var c = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).Completion;
+        Assert.True(c.TimesAdjusted);
+        Assert.Null(c.OriginalActualStart);
+        Assert.Equal(ActualEnd.AddMinutes(12), c.OriginalActualEnd);
+        Assert.Equal("Left at five past; tapped Finish in the car.", c.TimeAdjustmentReason);
+        Assert.Equal(12.5m, c.Kilometres);
+        Assert.True(c.AnythingToReport);
+
+        var queue = Assert.IsType<OkObjectResult>((await a.Controller.GetCompletions(ShiftStatus.PendingReview, null, null)).Result);
+        Assert.True(Assert.Single(Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(queue.Value).Data!.Items).TimesAdjusted);
+    }
+
+    [Fact]
+    public async Task AnUnmovedCompletion_IsNotFlagged_InTheReviewOrTheQueue()
+    {
+        var a = Arrange();
+
+        var c = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).Completion;
+        Assert.False(c.TimesAdjusted);
+        Assert.Null(c.TimeAdjustmentReason);
+        Assert.Null(c.Kilometres);
+        Assert.Null(c.AnythingToReport);
+
+        var queue = Assert.IsType<OkObjectResult>((await a.Controller.GetCompletions(ShiftStatus.PendingReview, null, null)).Result);
+        Assert.False(Assert.Single(Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(queue.Value).Data!.Items).TimesAdjusted);
+    }
 }

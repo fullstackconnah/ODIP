@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -254,3 +255,18 @@ public class PortalFinishTimesTests
     }
 }
 
+/// <summary>The My shifts list says "Returned" for a shift a coordinator sent back (SHAPE call 6): the summary carries the return count.</summary>
+public class PortalMyShiftsListTests
+{
+    [Fact]
+    public async Task MyShifts_CarryTheReturnCount()
+    {
+        var f = Create(ShiftStatus.Published);
+        f.Shift.ReturnCount = 1;
+        f.Db.SaveChanges();
+
+        var ok = Assert.IsType<OkObjectResult>((await f.Controller.GetMyShifts(ServiceDate, ServiceDate, default)).Result);
+
+        Assert.Equal(1, Assert.Single(Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(ok.Value).Data!.Shifts).ReturnCount);
+    }
+}

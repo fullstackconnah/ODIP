@@ -44,7 +44,9 @@ public record PortalShiftSummaryDto(
     SupportRatio Ratio,
     SleepoverType NightType,
     ShiftStatus Status,
-    string? Notes);
+    string? Notes,
+    /// <summary>How many times a coordinator returned this shift; a Published shift above 0 is shown as Returned.</summary>
+    int ReturnCount);
 
 /// <summary>One of the caller's own upcoming trip staffing assignments — included in the shifts list when cheap; see brief.</summary>
 public record PortalTripAssignmentSummaryDto(

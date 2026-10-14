@@ -1556,5 +1556,13 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         var flagged = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(
             Assert.IsType<OkObjectResult>((await rostering.GetCompletions(null, null, null, 1, 50, default)).Result).Value).Data!.Items;
         Assert.True(flagged.Single(r => r.ShiftId == shiftId).StartWasManual);
+
+        // ...and the "times adjusted by the worker" flag, projected from the new columns in SQL (My shifts redesign).
+        Assert.False(flagged.Single(r => r.ShiftId == shiftId).TimesAdjusted);
+        await db.ShiftCompletions.Where(c => c.Id == completionId)
+            .ExecuteUpdateAsync(c => c.SetProperty(x => x.OriginalActualEnd, new DateTime(2026, 7, 14, 7, 10, 0, DateTimeKind.Utc)));
+        var adjusted = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(
+            Assert.IsType<OkObjectResult>((await rostering.GetCompletions(null, null, null, 1, 50, default)).Result).Value).Data!.Items;
+        Assert.True(adjusted.Single(r => r.ShiftId == shiftId).TimesAdjusted);
     }
 }

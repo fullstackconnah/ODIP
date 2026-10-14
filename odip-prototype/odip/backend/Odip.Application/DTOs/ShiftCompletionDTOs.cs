@@ -127,7 +127,20 @@ public record ShiftCompletionDto(
     /// <summary>The worker confirmed "nothing to hand over".</summary>
     bool NothingToHandOver,
     /// <summary>The worker confirmed "nothing to note" instead of writing a shift note.</summary>
-    bool NothingToNoteConfirmed);
+    bool NothingToNoteConfirmed,
+    // My shifts redesign: what the worker confirmed at Finish (owner decisions 2 to 4).
+    /// <summary>True when the worker moved either actual time at Finish; the originals below then hold the stamps.</summary>
+    bool TimesAdjusted,
+    /// <summary>The server's start stamp when the worker moved the start; null otherwise.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? OriginalActualStart,
+    /// <summary>The Finish instant when the worker moved the end; null otherwise.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? OriginalActualEnd,
+    /// <summary>Why the worker moved a time; null when nothing moved.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? TimeAdjustmentReason,
+    /// <summary>Kilometres driven with the participant, one decimal place; null when not given.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] decimal? Kilometres,
+    /// <summary>"Anything to report?" at Finish: true, false, or null when skipped.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? AnythingToReport);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
@@ -188,7 +201,9 @@ public record CompletionQueueItemDto(
     /// <summary>True when the worker never pressed Start and supplied the start time when finishing (the manual-start path). That path skips the
     /// dose checklist (a Published shift has no route to record a dose), so the queue can flag such a row for a closer look without opening it;
     /// the same flag is on <c>ShiftCompletionDto.startWasManual</c>.</summary>
-    bool StartWasManual);
+    bool StartWasManual,
+    /// <summary>True when the worker moved the start or end at Finish, so the queue can say "Times adjusted by the worker" without opening the row.</summary>
+    bool TimesAdjusted);
 
 public record ReturnCompletionDto
 {

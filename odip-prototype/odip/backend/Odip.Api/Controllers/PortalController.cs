@@ -1446,7 +1446,7 @@ public class PortalController : ControllerBase
 
     private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(
         s.Id, s.ParticipantId, s.Participant?.FullName ?? string.Empty, s.ServiceDate, s.StartTime, s.EndTime,
-        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes);
+        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount);
 
     // These duplicate LeaveController's own ToDto overloads rather than sharing them — matches
     // the codebase's existing precedent of small per-controller mapping/validation helpers (e.g.
