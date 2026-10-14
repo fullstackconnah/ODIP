@@ -12,6 +12,7 @@ const NO_ORGANISATION = 'Choose an organisation to view as before exporting data
 const DIDNT_FINISH: DataExportFailure = {
   title: "The export didn't finish",
   body: 'The download stopped before the file was complete, so nothing was saved. Try again.',
+  retry: true,
 }
 
 /** GET /data-export/last. The API leaves `data` out when nothing has been exported yet: that is null here, never undefined. */
@@ -75,12 +76,12 @@ export async function exportFailure(err: unknown): Promise<DataExportFailure> {
     } catch {
       data = undefined
     }
-    return { title: 'Choose an organisation first', body: extractErrorMessage({ response: { data } }, NO_ORGANISATION) }
+    return { title: 'Choose an organisation first', body: extractErrorMessage({ response: { data } }, NO_ORGANISATION), retry: false }
   }
-  if (response?.status === 403) return { title: "You can't export this organisation's data", body: 'Only an Admin can download a full export.' }
+  if (response?.status === 403) return { title: "You can't export this organisation's data", body: 'Only an Admin can download a full export.', retry: false }
   // A SuperAdmin viewing an organisation that has gone (DataExportController's 404): trying again never helps.
-  if (response?.status === 404) return { title: 'That organisation no longer exists', body: 'Choose another organisation to view as.' }
-  return { title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.' }
+  if (response?.status === 404) return { title: 'That organisation no longer exists', body: 'Choose another organisation to view as.', retry: false }
+  return { title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.', retry: true }
 }
 
 /**

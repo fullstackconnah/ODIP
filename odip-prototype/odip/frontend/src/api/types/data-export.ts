@@ -15,4 +15,6 @@ export interface DataExportSaved {
 export interface DataExportFailure {
   title: string
   body: string
+  /** Whether Try again can work. False when the same request would fail the same way (400, 403, 404). */
+  retry: boolean
 }

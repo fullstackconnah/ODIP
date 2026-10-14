@@ -15,11 +15,13 @@ describe('exportFileName', () => {
   })
 })
 
+// retry: whether Try again can work. The same request fails the same way for 400, 403 and 404 (the lead's call, over SHAPE section 3).
 describe('exportFailure', () => {
   it('a stream that broke, with no response, did not finish and saved nothing', async () => {
     expect(await exportFailure(new AxiosError('Network Error', 'ERR_NETWORK'))).toEqual({
       title: "The export didn't finish",
       body: 'The download stopped before the file was complete, so nothing was saved. Try again.',
+      retry: true,
     })
   })
 
@@ -27,6 +29,7 @@ describe('exportFailure', () => {
     expect(await exportFailure(answered(400, blobOf({ success: false, errors: ['Choose an organisation to view as before exporting data.'] })))).toEqual({
       title: 'Choose an organisation first',
       body: 'Choose an organisation to view as before exporting data.',
+      retry: false,
     })
   })
 
@@ -34,6 +37,7 @@ describe('exportFailure', () => {
     expect(await exportFailure(answered(400, new Blob(['<html>'])))).toEqual({
       title: 'Choose an organisation first',
       body: 'Choose an organisation to view as before exporting data.',
+      retry: false,
     })
   })
 
@@ -41,6 +45,7 @@ describe('exportFailure', () => {
     expect(await exportFailure(answered(403, blobOf({})))).toEqual({
       title: "You can't export this organisation's data",
       body: 'Only an Admin can download a full export.',
+      retry: false,
     })
   })
 
@@ -48,12 +53,13 @@ describe('exportFailure', () => {
     expect(await exportFailure(answered(404, blobOf({ success: false, errors: ['Organisation not found.'] })))).toEqual({
       title: 'That organisation no longer exists',
       body: 'Choose another organisation to view as.',
+      retry: false,
     })
   })
 
   it('anything else before the stream started could not be built', async () => {
-    expect(await exportFailure(answered(500, blobOf({})))).toEqual({ title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.' })
-    expect(await exportFailure(new Error('boom'))).toEqual({ title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.' })
+    expect(await exportFailure(answered(500, blobOf({})))).toEqual({ title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.', retry: true })
+    expect(await exportFailure(new Error('boom'))).toEqual({ title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.', retry: true })
   })
 })
 

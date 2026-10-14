@@ -90,7 +90,7 @@ export default function DataExportTab() {
             </Callout>
           )}
           {failure && (
-            <Callout tone="danger" title={failure.title} announce={false} actions={<Button variant="secondary" onClick={start}>Try again</Button>}>
+            <Callout tone="danger" title={failure.title} announce={false} actions={failure.retry ? <Button variant="secondary" onClick={start}>Try again</Button> : undefined}>
               {failure.body}
             </Callout>
           )}

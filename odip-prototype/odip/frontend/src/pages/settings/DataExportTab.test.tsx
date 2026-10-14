@@ -139,6 +139,17 @@ describe('DataExportTab', () => {
     expect(screen.getByText('Choose an organisation to view as before exporting data.')).toBeInTheDocument()
   })
 
+  it.each([
+    [403, "You can't export this organisation's data"],
+    [404, 'That organisation no longer exists'],
+  ])('a %i offers no Try again, since the same request would fail the same way', async (status, title) => {
+    get.mockRejectedValue(new AxiosError('No', 'ERR_BAD_REQUEST', undefined, undefined, { status, statusText: '', data: new Blob(['{}']), headers: {}, config: { headers: new AxiosHeaders() } } as AxiosResponse))
+    renderTab()
+    await userEvent.click(downloadButton())
+    expect(await screen.findByText(title)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+
   it('a tab switch loses nothing: coming back shows the download still running, then its outcome', async () => {
     const response = deferred<typeof zipResponse>()
     get.mockReturnValue(response.promise)
