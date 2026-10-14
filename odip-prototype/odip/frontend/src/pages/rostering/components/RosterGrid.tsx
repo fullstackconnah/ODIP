@@ -2,7 +2,7 @@ import type { RosterBoardDto, ShiftDto } from '@/api/types'
 import { UnfilledLane } from './UnfilledLane'
 import { StaffRow } from './StaffRow'
 import { ParticipantRow } from './ParticipantRow'
-import { formatDayHeader, isToday, ROSTER_DAY_COL_MIN_WIDTH, ROSTER_STICKY_COL_WIDTH, rosterDayColumnsTemplate } from '../lib/roster'
+import { formatDayHeader, isToday, ROSTER_DAY_COL_MIN, ROSTER_STICKY_COL_WIDTH, rosterDayColumnsTemplate } from '../lib/roster'
 
 export type RosterGridProps = {
   board: RosterBoardDto
@@ -44,7 +44,7 @@ export type RosterGridProps = {
  * columns end up 191px wide, 2px less than with 264px.
  */
 const STICKY_COL = `var(--roster-sticky-col, ${ROSTER_STICKY_COL_WIDTH}px)`
-const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${ROSTER_DAY_COL_MIN_WIDTH}px, 1fr))` }
+const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${ROSTER_DAY_COL_MIN}, 1fr))` }
 
 /**
  * The board's scroll frame. From md up it is height-capped so the board scrolls INSIDE it and the day
