@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -95,6 +95,11 @@ export default function RosterBoardPage() {
   // Decision 6: a person carried off a puck onto an empty day MOVES. Their old shift waits here until the new one saves; the panel's Cancel forgets it.
   const [createMoveSource, setCreateMoveSource] = useState<ShiftDto | null>(null)
   const [announcement, setAnnouncement] = useState('')
+  // The error notice's height, for the board frame (finish review fix 5): with it above the board, strip and grid still share one screen.
+  // shortcut: measured when the message changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
+  const noticeRef = useRef<HTMLDivElement>(null)
+  const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
+  useLayoutEffect(() => { setNoticeHeight(assignError ? noticeRef.current?.offsetHeight ?? 0 : null) }, [assignError])
   const [hintDismissed, setHintDismissed] = useState(() => {
     try {
       return sessionStorage.getItem(HINT_DISMISSED_KEY) === '1'
@@ -342,7 +347,10 @@ export default function RosterBoardPage() {
   )
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+    <div
+      className="flex flex-col gap-[var(--section-gap)] animate-fade-in"
+      style={noticeHeight === null ? undefined : ({ '--roster-notice-h': `calc(${noticeHeight}px + var(--section-gap))` } as React.CSSProperties)}
+    >
       <AnnouncementRegion message={announcement} />
       {/* PageHeader is a fragment, so title row and toolbar sit in one tight block here (title 28px + 8px + toolbar 32px)
           instead of being spaced apart by the page's --section-gap. */}
@@ -374,16 +382,18 @@ export default function RosterBoardPage() {
       </div>
 
       {assignError && (
-        <Callout
-          tone="error"
-          actions={
-            <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
-              <X className="h-4 w-4" />
-            </Button>
-          }
-        >
-          {assignError}
-        </Callout>
+        <div ref={noticeRef}>
+          <Callout
+            tone="error"
+            actions={
+              <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
+                <X className="h-4 w-4" />
+              </Button>
+            }
+          >
+            {assignError}
+          </Callout>
+        </div>
       )}
 
       {isLoading && <RosterGridSkeleton days={days} />}

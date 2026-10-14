@@ -216,3 +216,13 @@ describe('RosterGrid frame with the staff strip (roster drag and drop)', () => {
     expect(plain.container.firstElementChild?.className).not.toContain('2*var(--control-h)')
   })
 })
+
+describe('RosterGrid frame under an error notice (finish review fix 5)', () => {
+  it('takes the notice the page reports (--roster-notice-h) off its height, with and without the strip', () => {
+    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
+    expect(container.firstElementChild?.className).toContain('var(--roster-notice-h,0px)')
+    unmount()
+    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
+    expect(plain.container.firstElementChild?.className).toContain('var(--roster-notice-h,0px)')
+  })
+})

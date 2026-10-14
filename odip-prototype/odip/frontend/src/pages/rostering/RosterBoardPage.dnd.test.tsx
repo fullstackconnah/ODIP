@@ -204,6 +204,17 @@ describe('RosterBoardPage drag and drop: when the server says no', () => {
     await drop(samOffWed, onShift(OPEN))
     expect((await screen.findByText(STALE)).closest('[role="alert"]')).not.toBeNull()
   })
+
+  it('tells the board frame how tall the error notice is, so strip and grid still share one screen (finish review fix 5)', async () => {
+    h.move.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['Another change to the roster is still running.'] } } })
+    const { container } = renderPage()
+    const page = container.querySelector('.animate-fade-in') as HTMLElement
+    expect(page.style.getPropertyValue('--roster-notice-h')).toBe('')
+    await drop(samOffWed, onShift(OPEN))
+    await screen.findByText('Another change to the roster is still running.')
+    // jsdom has no layout (offsetHeight 0); the 1440 capture measures the real thing.
+    expect(page.style.getPropertyValue('--roster-notice-h')).toBe('calc(0px + var(--section-gap))')
+  })
 })
 
 describe('RosterBoardPage drag and drop: a drop on an empty day', () => {
