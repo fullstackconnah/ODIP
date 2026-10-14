@@ -179,3 +179,14 @@ describe('ClaimsTab: several claims marked Rejected at once', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: '2 rows' })).not.toBeInTheDocument())   // the selection cleared: the change settled
   })
 })
+
+describe('ClaimsTab: row actions', () => {
+  it('names each row\'s View and Delete for its claim, and offers Delete only before submission', () => {
+    renderTab([claim('1', 'Draft'), claim('2', 'Submitted')])
+
+    expect(screen.getByRole('link', { name: 'View: TC-1' })).toHaveAttribute('href', '/claims/1')
+    expect(screen.getByRole('link', { name: 'View: TC-2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete: TC-1' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete: TC-2' })).not.toBeInTheDocument()
+  })
+})

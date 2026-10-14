@@ -179,7 +179,7 @@ describe('QualificationsPage: controls by role', () => {
     expect(screen.getByText('12 issues across 4 active staff')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Warning window/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Edit / })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^edit/i })).not.toBeInTheDocument()
   })
 
   it.each(['Admin', 'Coordinator'])('offers %s the Warning window link, the pencil and inline Edit', role => {
@@ -189,6 +189,7 @@ describe('QualificationsPage: controls by role', () => {
 
     expect(screen.getByRole('link', { name: /Warning window/ })).toHaveAttribute('href', '/settings?tab=qualifications')
     expect(screen.getByRole('link', { name: 'Edit Dana Expired' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Edit' }).length).toBeGreaterThan(0)
+    // Every row has an inline Edit, so its name carries the row's credential and person.
+    expect(screen.getAllByRole('button', { name: /^Edit: .+, Dana Expired$/ }).length).toBeGreaterThan(0)
   })
 })

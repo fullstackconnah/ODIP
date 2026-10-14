@@ -473,7 +473,7 @@ export default function LeaveApprovalsPage() {
     return `${who} · ${localIsoDate(parseApiDate(requestedAt))}`
   }
 
-  // Column budget (density §4): the Edit / Decline / Approve buttons take ~260px, so with uncapped text columns this table needed ~1170px
+  // Column budget (density §4): the Edit / Decline / Approve buttons took ~260px at md (~170px now they are sm), so with uncapped text columns this table needed ~1170px
   // against a ~1006px box at 1280 and pushed the buttons off-screen. The text columns are capped (ellipsis, full text in the tooltip);
   // Requested (who asked, and when) stays, and the buttons stay pinned while the table scrolls in its box (DataTable's column rule).
   const columns: Column<ApprovalRow>[] = [
@@ -493,42 +493,44 @@ export default function LeaveApprovalsPage() {
     ) },
     ...(canApproveLeave ? [{
       key: 'actions', header: '', align: 'right' as const, render: (row: ApprovalRow) => {
+        // Every row has these, so each name carries the row's subject: who, and when. sm keeps the row at --row-h.
+        const named = (label: string) => `${label}: ${row.data.userFullName}, ${rowWindow(row)}`
+        const edit = (
+          <Button variant="secondary" size="sm" onClick={() => openEdit(row)} aria-label={named('Edit')}>
+            Edit
+          </Button>
+        )
         if (row.rowKind === 'legacy') {
           return (
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => openEdit(row)}>
-                Edit
-              </Button>
-              <button type="button" onClick={() => setDeleteLegacyTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
+            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
+              {edit}
+              <Button variant="ghost-danger" size="sm" onClick={() => setDeleteLegacyTarget(row)} aria-label={named('Delete')}>
                 Delete
-              </button>
+              </Button>
             </div>
           )
         }
         if (row.data.status === 'Pending') {
           return (
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => openEdit(row)}>
-                Edit
-              </Button>
-              <Button variant="secondary" onClick={() => setDeclineTarget(row)}>
+            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
+              {edit}
+              <Button variant="secondary" size="sm" onClick={() => setDeclineTarget(row)} aria-label={named('Decline')}>
                 Decline
               </Button>
-              <Button onClick={() => setApproveTarget(row)}>
+              <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={named('Approve')}>
                 Approve
               </Button>
             </div>
           )
         }
         if (row.data.status === 'Approved') {
+          const label = row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'
           return (
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => openEdit(row)}>
-                Edit
+            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
+              {edit}
+              <Button variant="ghost-danger" size="sm" onClick={() => setCancelTarget(row)} aria-label={named(label)}>
+                {label}
               </Button>
-              <button type="button" onClick={() => setCancelTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
-                {row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'}
-              </button>
             </div>
           )
         }
