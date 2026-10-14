@@ -343,7 +343,7 @@ describe('Profile wizard: contacts are edited in place with the Contacts tab edi
 
     // The dialog renders inside the wizard's <form>: its Cancel must not be a submit button, or it would
     // fire "Save profile".
-    await user.click(screen.getByRole('button', { name: /^remove$/i }))
+    await user.click(screen.getByRole('button', { name: 'Remove: Pat Citizen, Next of Kin' }))
     const dialog = await screen.findByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
 
