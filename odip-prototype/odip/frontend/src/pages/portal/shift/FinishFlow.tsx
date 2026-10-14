@@ -9,7 +9,8 @@ import { WizardStepHeading } from '@/components/wizard/WizardStepHeading'
 import { WizardStepRail } from '@/components/wizard/WizardStepRail'
 import type { WizardStepDef } from '@/components/wizard/types'
 import { apiErrorCode, apiErrorMessages, apiErrorStatus, finishBlockersFromError, shiftDetailFromError } from '@/lib/shiftPackageErrors'
-import type { ShiftIncidentPrefillState } from '@/lib/incidentPrefill'
+import type { ShiftIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
+import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { breaksSignature, FINISH_STEPS, handoverForward, movedTimes, parseKilometres, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput } from './checklist'
 import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusal } from './finishSteps'
@@ -18,7 +19,7 @@ import { utcInstantToProviderLocal } from './shiftTime'
 import { ActionBar } from './ui'
 import { useNow } from './useNow'
 import type { DoseTarget } from './DoseSheet'
-import type { PortalShiftDetailDto } from '@/api/types'
+import type { PortalShiftDetailDto, ShiftNoteDto } from '@/api/types'
 
 const RAIL: WizardStepDef<Record<string, never>>[] = FINISH_STEPS.map(s => ({ key: s.key, label: s.label, fields: [] }))
 const index = (k: FinishStepKey) => FINISH_STEPS.findIndex(s => s.key === k)
@@ -188,12 +189,19 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
     }
   }
 
-  function reportYes() {
+  /** Yes on step 3: the incident form, filled from the flagged note when there is one, else from the shift; it comes back here after. */
+  function reportYes(note?: ShiftNoteDto) {
     saveEndDraft(shift.id, { ...d, anythingToReport: 'yes' })   // the page unmounts as it navigates: save now
-    const prefill: ShiftIncidentPrefillState = {
+    const returnTo = `/portal/shifts/${shift.id}`
+    const prefill: ShiftIncidentPrefillState | ShiftNoteIncidentPrefillState = note ? {
+      source: 'shift-note', shiftNoteId: note.id, categories: note.flaggedCategories as ShiftNoteFlagCategory[],
+      participantId: shift.participant.id, participantName: shift.participant.fullName, noteBody: note.body,
+      serviceDate: shift.serviceDate, startTime: shift.startTime, endTime: shift.endTime, endsNextDay: shift.endsNextDay,
+      reportedByUserId: currentUserId, shiftId: shift.id, returnTo,
+    } : {
       source: 'shift', shiftId: shift.id, participantId: shift.participant.id, participantName: shift.participant.fullName,
       serviceDate: shift.serviceDate, startTime: shift.startTime, endTime: shift.endTime, endsNextDay: shift.endsNextDay,
-      reportedByUserId: currentUserId, returnTo: `/portal/shifts/${shift.id}`,
+      reportedByUserId: currentUserId, returnTo,
       incidentAt: shift.completion ? utcInstantToProviderLocal(shift.completion.actualStart, shift.timeZoneId) : undefined,
     }
     navigate('/incidents/new', { state: prefill })
@@ -233,7 +241,6 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
           answer={d.anythingToReport}
           onYes={reportYes}
           onNo={() => set({ anythingToReport: 'no', step: 'handover', reached: later(d.reached, 'handover') })}
-          onLeave={() => saveEndDraft(shift.id, { ...d, anythingToReport: 'yes' })}
         />
       )}
       {step === 'handover' && <HandoverStep noteCount={noteCount} draft={d} set={set} onEditNotes={editNotes} />}

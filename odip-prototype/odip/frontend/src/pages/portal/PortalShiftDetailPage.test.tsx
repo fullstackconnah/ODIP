@@ -605,14 +605,18 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     expect(heading('Note & handover')).toBeInTheDocument()
   })
 
-  it('Report incident for a flagged note leaves from step 3 and comes back to it', () => {
+  it('step 3 has one incident path: with a flagged note, Yes carries the note prefill and there is no second button (finish review fix 4)', () => {
     mockUseShiftNotes.mockReturnValue({ data: [noteWith({ flaggedCategories: ['Falls'] })] })
     show(inProgress())
     endShift()
     forward('Confirm times')
     forward('Next')
-    fireEvent.click(screen.getByRole('button', { name: 'Report incident' }))
-    expect(JSON.parse(screen.getByTestId('incident-form').textContent!)).toMatchObject({ source: 'shift-note', returnTo: '/portal/shifts/shift-1' })
+    expect(screen.getByText(/^A note mentions falls/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Report incident' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, report it' }))
+    expect(JSON.parse(screen.getByTestId('incident-form').textContent!)).toMatchObject({
+      source: 'shift-note', shiftNoteId: 'n1', shiftId: 'shift-1', returnTo: '/portal/shifts/shift-1',
+    })
     expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: 'report', anythingToReport: 'yes' })
   })
 

@@ -1,15 +1,12 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Flag } from 'lucide-react'
 import { useDeleteBreak, useEditBreak, useEndBreak, useShiftNotes } from '@/api/hooks'
-import { usePermissions } from '@/lib/permissions'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { FactList, type FactListItem } from '@/components/FactList'
 import { formatWithTimeZone } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
-import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import { rosteredInstants } from '../lib/portal'
 import { breaksLabel, clockLabel, dosesSummary, REASON_MAX, timeBounds, type FinishStepKey, type TimesField } from './checklist'
@@ -104,36 +101,13 @@ export function BreakRow({ shift, brk, online }: { shift: PortalShiftDetailDto; 
   )
 }
 
-export function FlaggedNotePrompt({ shift, note, onLeave }: { shift: PortalShiftDetailDto; note: ShiftNoteDto; onLeave: () => void }) {
-  const navigate = useNavigate()
-  const { id: currentUserId } = usePermissions()
-  function report() {
-    const prefill: ShiftNoteIncidentPrefillState = {
-      source: 'shift-note',
-      shiftNoteId: note.id,
-      categories: note.flaggedCategories as ShiftNoteFlagCategory[],
-      participantId: shift.participant.id,
-      participantName: shift.participant.fullName,
-      noteBody: note.body,
-      serviceDate: shift.serviceDate,
-      startTime: shift.startTime,
-      endTime: shift.endTime,
-      endsNextDay: shift.endsNextDay,
-      reportedByUserId: currentUserId,
-      shiftId: shift.id,
-      returnTo: `/portal/shifts/${shift.id}`,
-    }
-    onLeave()
-    navigate('/incidents/new', { state: prefill })
-  }
+/** A flagged note, as one line of context on step 3: "Yes, report it" files the incident from it, so there is one way to report (finish review fix 4). */
+export function FlaggedNoteLine({ note }: { note: ShiftNoteDto }) {
   return (
-    <Callout
-      tone="info"
-      icon={Flag}
-      actions={<Button size="lg" variant="secondary" onClick={report}>Report incident</Button>}
-    >
-      A note mentions {formatFlaggedCategoryList(note.flaggedCategories as ShiftNoteFlagCategory[])}. You can report an incident now, with the note filled in.
-    </Callout>
+    <p className="flex items-start gap-2 text-sm">
+      <Flag className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+      <span>A note mentions {formatFlaggedCategoryList(note.flaggedCategories as ShiftNoteFlagCategory[])}. Yes fills the report in from that note.</span>
+    </p>
   )
 }
 
@@ -287,24 +261,24 @@ export function DosesStep({ shift, online, canAct, onRecord }: {
 }
 
 /** Step 3, Anything to report? (SHAPE §4): optional. Yes leaves for the incident form; a flagged note keeps its own Report incident. */
-export function ReportStep({ shift, answer, onYes, onNo, onLeave }: {
-  shift: PortalShiftDetailDto; answer: EndDraft['anythingToReport']; onYes: () => void; onNo: () => void; onLeave: () => void
+export function ReportStep({ shift, answer, onYes, onNo }: {
+  shift: PortalShiftDetailDto; answer: EndDraft['anythingToReport']; onYes: (note?: ShiftNoteDto) => void; onNo: () => void
 }) {
   const { data: notes } = useShiftNotes(shift.id)
   const flagged = (notes ?? []).filter(n => n.flaggedCategories.length > 0 && !n.flagsAcknowledgedAt && !n.incidentId)
   return (
     <div className="space-y-3">
       <p className="text-sm">An injury, a fall, a near miss, a complaint, or anything that worried you.</p>
-      {flagged.map(n => <FlaggedNotePrompt key={n.id} shift={shift} note={n} onLeave={onLeave} />)}
+      {flagged.map(n => <FlaggedNoteLine key={n.id} note={n} />)}
       {answer === 'yes' ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <p>You said yes and opened the incident form.</p>
-          <Button variant="ghost" size="md" onClick={onYes}>Open the form again</Button>
+          <Button variant="ghost" size="md" onClick={() => onYes(flagged[0])}>Open the form again</Button>
         </div>
       ) : (
         <div className="grid gap-2">
           {answer === 'no' && <p className="text-sm">You said there's nothing to report.</p>}
-          <Button size="lg" variant="secondary" className="w-full" onClick={onYes}>Yes, report it</Button>
+          <Button size="lg" variant="secondary" className="w-full" onClick={() => onYes(flagged[0])}>Yes, report it</Button>
           <Button size="lg" variant="secondary" className="w-full" onClick={onNo}>No, nothing to report</Button>
         </div>
       )}
