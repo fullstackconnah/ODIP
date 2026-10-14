@@ -258,6 +258,8 @@ public record DraftApprovalPreviewDto
     public int PatternsToEnd { get; init; }
     /// <summary>The new patterns no ended pattern matches (a changed support): they start with no default staff. 0 when the approval ends no pattern, as on a first approval.</summary>
     public int ChangedPatterns { get; init; }
+    /// <summary>The ended patterns a coordinator edited by hand before (their times, ratio or night type are not their block's) that approving puts back to the agreement's times.</summary>
+    public int HandEditedPatterns { get; init; }
     /// <summary>The version whose patterns would end.</summary>
     public int? EndsFromVersion { get; init; }
     /// <summary>The day they would end: the day before this revision starts.</summary>

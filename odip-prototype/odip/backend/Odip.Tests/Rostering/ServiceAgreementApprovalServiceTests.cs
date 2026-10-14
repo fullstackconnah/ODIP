@@ -653,6 +653,26 @@ public class ServiceAgreementApprovalServiceTests
         Assert.Equal(0, preview.ChangedPatterns);
         Assert.Equal(40, await f.Db.Shifts.CountAsync());                                                  // nothing made twice
     }
+    [Fact]
+    public async Task The_preview_counts_the_patterns_edited_by_hand_that_go_back_to_the_agreements_times()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        var first = (await PreviewAsync(f, v1)).Preview!;
+        await ApproveAsync(f, v1);
+        // Before agreement PR 1 a coordinator could move an agreement pattern by hand: Thursday now runs 10:00 to 14:00, while its block still says 09:00 to 13:00.
+        var thursday = await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Thursday);
+        (thursday.StartTime, thursday.EndTime) = (T(10), T(14));
+        await f.Db.SaveChangesAsync();
+        // v2 has the same weekday support as the agreement says it: Thursday goes back to 09:00 to 13:00.
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+
+        var preview = (await PreviewAsync(f, v2)).Preview!;
+
+        Assert.Equal(0, first.HandEditedPatterns);
+        Assert.Equal((1, 1), (preview.HandEditedPatterns, preview.ChangedPatterns));
+    }
+
 
 
     [Fact]

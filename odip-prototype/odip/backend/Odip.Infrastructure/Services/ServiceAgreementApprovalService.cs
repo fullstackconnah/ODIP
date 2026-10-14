@@ -246,6 +246,8 @@ public sealed class ServiceAgreementApprovalService
         public List<Shift> ToCarry { get; set; } = new();
         /// <summary>The (new pattern, day) pairs the moved shifts cover: generation makes nothing there.</summary>
         public HashSet<(Guid PatternId, DateOnly Date)> Carried { get; set; } = new();
+        /// <summary>Ended patterns edited by hand that approving puts back to the agreement's times (preview only).</summary>
+        public int HandEdited { get; set; }
         public bool Ready { get; set; }
         public DateOnly From { get; set; }
         public DateOnly HorizonEnd { get; set; }
@@ -264,6 +266,7 @@ public sealed class ServiceAgreementApprovalService
             PatternsToCreate = NewPatterns.Count, PatternsToEnd = ToEnd.Count, EndsFromVersion = EndsFromVersion, EndsOn = ToEnd.Count > 0 ? EndsOn : null,
             // A new pattern no ended one matches is a changed support: it starts with no default staff (a first approval ends nothing, so it has none to count).
             ChangedPatterns = ToEnd.Count > 0 ? NewPatterns.Count - CarryTo.Values.Distinct().Count() : 0,
+            HandEditedPatterns = HandEdited,
             ShiftsToCreate = ShiftsToCreate, ShiftsNote = ShiftsNote,
             OldShiftsRemaining = OldShifts,
             OverlappingPatterns = Overlaps.OrderBy(p => p.DayOfWeek).ThenBy(p => p.StartTime).Select(p => new OverlappingPatternDto
@@ -411,6 +414,7 @@ public sealed class ServiceAgreementApprovalService
             // An approval locks the old shifts before it reads any of them: the carry-over and the removal then both decide on what is committed.
             if (approving) await LockOldShiftsAsync(old.Select(p => p.Id).ToArray(), draft.AgreementStartDate > plan.Today ? draft.AgreementStartDate : plan.Today, ct);
             await CarryOverAsync(draft, plan, ct);
+            if (!approving) plan.HandEdited = await HandEditedAsync(plan, ct);
             (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, plan.ToCarry.Select(s => s.Id).ToHashSet());
             plan.OldShifts = plan.OldShifts with { Carried = plan.ToCarry.Count };
         }
@@ -477,6 +481,23 @@ public sealed class ServiceAgreementApprovalService
             .ToListAsync(ct))
             .Where(s => !skipped.Contains((plan.CarryTo[s.ShiftPatternId!.Value].SourceBlockKey!, s.ServiceDate))).ToList();
         plan.Carried = plan.ToCarry.Select(s => (plan.CarryTo[s.ShiftPatternId!.Value].Id, s.ServiceDate)).ToHashSet();
+    }
+
+    /// <summary>
+    /// The ended patterns a coordinator edited by hand before agreement PR 1 (their own times, ratio or night type are not what their block says) whose support the new revision has as the agreement
+    /// says it: approving puts them back to the agreement's times, so the preview says how many. Read against each pattern's own source revision, mapped as its approval mapped it.
+    /// </summary>
+    private async Task<int> HandEditedAsync(Plan plan, CancellationToken ct)
+    {
+        var unmatched = plan.ToEnd.Where(p => !plan.CarryTo.ContainsKey(p.Id)).ToList();
+        if (unmatched.Count == 0) return 0;
+        var sourceIds = unmatched.Select(p => p.SourceDraftId!.Value).Distinct().ToList();
+        var sources = await _db.ServiceAgreementDrafts.AsNoTracking().Include(d => d.Blocks).Where(d => sourceIds.Contains(d.Id)).ToListAsync(ct);
+        var agreed = sources.SelectMany(d => AgreementPatternMapper.Map(d, d.Blocks.OrderBy(b => b.Position).Select(DraftJson.ToDto).Where(b => !b.Unreadable).ToList()))
+            .ToDictionary(p => (p.SourceDraftId!.Value, p.SourceBlockKey!, p.DayOfWeek, p.WorkerSlot));
+        return unmatched.Count(p => agreed.TryGetValue((p.SourceDraftId!.Value, p.SourceBlockKey!, p.DayOfWeek, p.WorkerSlot), out var said)
+            && (p.StartTime, p.EndTime, p.EndsNextDay, p.Ratio, p.NightType) != (said.StartTime, said.EndTime, said.EndsNextDay, said.Ratio, said.NightType)
+            && plan.NewPatterns.Any(made => SameSupport(said, made)));
     }
 
     /// <summary>The same weekly support: the same weekday and worker slot, the same times, ratio and kind of night, and the same asks of a worker. A shift of the one is a shift of the other. The block id is not
