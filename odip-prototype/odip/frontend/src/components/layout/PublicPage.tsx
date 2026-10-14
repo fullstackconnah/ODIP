@@ -13,14 +13,17 @@ import { TAP_FLOOR } from '@/components/tapArea'
 export default function PublicPage({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
-      <header className="flex h-12 items-center px-[var(--gutter,20px)]">
-        <a
-          href="/"
-          aria-label="Odip home"
-          className={`${TAP_FLOOR} rounded-sm font-display text-base font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
-        >
-          Odip
-        </a>
+      <header className="flex h-12 items-center">
+        {/* The reading column's own box, so the wordmark lines up with the h1 rather than the window edge. */}
+        <div className="mx-auto w-full max-w-[68ch] px-[var(--gutter,20px)]">
+          <a
+            href="/"
+            aria-label="Odip home"
+            className={`${TAP_FLOOR} rounded-sm font-display text-base font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
+          >
+            Odip
+          </a>
+        </div>
       </header>
       <main className="flex-1">
         <div className="mx-auto max-w-[68ch] px-[var(--gutter,20px)] py-8 text-base leading-[1.6]">{children}</div>

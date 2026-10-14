@@ -21,6 +21,13 @@ describe('AccessibilityPage', () => {
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
     expect(screen.getByRole('contentinfo').closest('main')).toBeNull()
     expect(screen.getByRole('link', { name: 'Odip home' })).toHaveAttribute('href', '/')
+    // The wordmark sits in a box the width of the reading column, so it lines up with the h1 rather than the window edge.
+    const column = screen.getByRole('heading', { level: 1 }).parentElement!
+    const box = screen.getByRole('link', { name: 'Odip home' }).parentElement!
+    for (const cls of ['mx-auto', 'max-w-[68ch]', 'px-[var(--gutter,20px)]']) {
+      expect(box, cls).toHaveClass(cls)
+      expect(column, cls).toHaveClass(cls)
+    }
   })
 
   it('carries W3C minimum contents in order: the target, what we do, known limits, a contact and where to complain', () => {
