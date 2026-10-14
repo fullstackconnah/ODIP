@@ -1465,7 +1465,7 @@ public class RosteringControllerTests
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task AssignShift_SettingStaff_RaisesShiftAssignedForTheAssignedStaffMember()
+    public async Task AssignShift_SettingStaffOnAPublishedShift_RaisesShiftAssignedForTheAssignedStaffMember()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
@@ -1473,6 +1473,9 @@ public class RosteringControllerTests
         var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
         var createResult = await controller.CreateShift(CleanCreateDto(participant.Id, null), CancellationToken.None);
         var shift = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value).Data!;
+        // Decision 9 (roster drag and drop, 2026-10-14): only a Published shift notifies; a new shift is always Draft.
+        (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status = ShiftStatus.Published;
+        await db.SaveChangesAsync();
 
         await controller.AssignShift(shift.Id, new Odip.Application.DTOs.AssignShiftDto { StaffId = staff.Id }, CancellationToken.None);
 
