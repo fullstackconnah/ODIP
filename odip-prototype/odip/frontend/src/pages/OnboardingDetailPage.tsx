@@ -18,6 +18,7 @@ import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { useIntakeCompleteNotice } from './intake/intakeComplete'
 import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
+import { fieldErrors } from '@/lib/fieldErrors'
 import { ACTIVE_TABLE_PATH, participantActivatedState } from './profile/participantActivated'
 
 /**
@@ -164,13 +165,6 @@ function Fix({ item, participantId, canEdit, canOpenDraft, canOpenFunding, onRec
   if (item.key === 'serviceNeeds') return canOpenDraft ? <Button {...look} to={`/participants/${participantId}/agreement-draft?from=onboarding`}>Open agreement draft</Button> : null
   if (item.key === 'agreement') return canEdit ? <Button {...look} onClick={onRecord}>Record it</Button> : null
   return canOpenFunding ? <Button {...look} to={`/participants/${participantId}?tab=funding`}>Funding tab</Button> : null
-}
-
-/** The field errors of a ValidationProblemDetails answer, keyed by field ("signedOn", "noAgreementReason"). */
-function fieldErrors(error: unknown): Record<string, string | undefined> {
-  const errors = (error as { response?: { data?: { errors?: unknown } } } | null)?.response?.data?.errors
-  if (!errors || typeof errors !== 'object' || Array.isArray(errors)) return {}
-  return Object.fromEntries(Object.entries(errors as Record<string, string[]>).map(([key, messages]) => [key, messages?.[0]]))
 }
 
 /** "Signed on <date>" or "No written agreement: <reason>". Exactly one is sent; the server validates it and names the field that is wrong. */
