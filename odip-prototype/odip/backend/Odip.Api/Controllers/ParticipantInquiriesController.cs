@@ -117,7 +117,8 @@ public class ParticipantInquiriesController : ControllerBase
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
         inquiry.FirstName = dto.FirstName.Trim(); inquiry.LastName = dto.LastName.Trim(); inquiry.Phone = Blank(dto.Phone); inquiry.Email = Blank(dto.Email); inquiry.Source = dto.Source; inquiry.Provenance = Blank(dto.Provenance); inquiry.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct); return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
+        return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
     }
 
     [HttpPost("{id:guid}/convert")]
@@ -133,7 +134,7 @@ public class ParticipantInquiriesController : ControllerBase
             else { participant = new Participant { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = inquiry.FirstName, LastName = inquiry.LastName, Phone = inquiry.Phone, Email = inquiry.Email, IsActive = false, IsDraft = true }; _db.Participants.Add(participant); }
             inquiry.ParticipantId = participant.Id; inquiry.UpdatedAt = DateTime.UtcNow;
             if (!await _db.ParticipantOnboardings.AnyAsync(x => x.ParticipantId == participant.Id, ct)) _db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, ParticipantId = participant.Id });
-            await _db.SaveChangesAsync(ct);
+            if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
         }
         else if (dto.ParticipantId is Guid requested && requested != inquiry.ParticipantId) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry has already been converted."));
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
@@ -270,6 +271,22 @@ public class ParticipantInquiriesController : ControllerBase
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>The enquiry as the API sends it. <paramref name="staff"/> is the booked staff member (for their names); <paramref name="timeZoneId"/> is the provider's zone.</summary>
+    private const string ChangedByOther = "Someone else just changed this enquiry. Reload and try again.";
+
+    // The enquiry's intake booking columns IntakeIcsSequence and IntakeUid are concurrency tokens: an edit racing a booking write matches no row.
+    private async Task<bool> SavedAsync(CancellationToken ct)
+    {
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
+
     internal static ParticipantInquiryDto ToDto(ParticipantInquiry x, User? staff = null, string? timeZoneId = null) => new()
     {
         Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName, Phone = x.Phone, Email = x.Email, Source = x.Source,
