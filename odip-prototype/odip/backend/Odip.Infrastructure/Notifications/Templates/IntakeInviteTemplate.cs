@@ -20,12 +20,12 @@ public static class IntakeInviteTemplate
         var end = start.AddMinutes(p.DurationMinutes);
         var call = IntakeWording.CallClause(p.ManagerName, p.ManagerPhone);
         var cancelled = p.Kind == IntakeWording.Cancelled;
-        var subject = p.Kind switch
+        var subject = IntakeWording.OneLine(p.Kind switch
         {
             IntakeWording.Cancelled => $"Cancelled: your intake visit with {p.ProviderName} on {IntakeWording.ShortDay(start)}",
             IntakeWording.Changed => $"Updated: your intake visit with {p.ProviderName} is now {IntakeWording.ShortDay(start)}, {IntakeWording.Time(start)}",
             _ => $"Your intake visit with {p.ProviderName}: {IntakeWording.ShortDay(start)}, {IntakeWording.Time(start)}",
-        };
+        });
 
         var body = new EmailBody().Para("Hello,");
         if (cancelled)

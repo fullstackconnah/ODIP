@@ -19,7 +19,7 @@ public static class IntakeVisitStaffTemplate
         var end = start.AddMinutes(p.DurationMinutes);
         var cancelled = p.Kind == IntakeWording.Cancelled;
         var verb = p.Kind switch { IntakeWording.Cancelled => "cancelled", IntakeWording.Changed => "changed", _ => "booked" };
-        var subject = $"Intake visit {verb}: {p.PersonFullName}, {IntakeWording.ShortDay(start)} at {IntakeWording.Time(start)}";
+        var subject = IntakeWording.OneLine($"Intake visit {verb}: {p.PersonFullName}, {IntakeWording.ShortDay(start)} at {IntakeWording.Time(start)}");
 
         var body = new EmailBody();
         if (cancelled)

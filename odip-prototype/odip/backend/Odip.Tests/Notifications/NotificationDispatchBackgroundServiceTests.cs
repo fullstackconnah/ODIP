@@ -295,6 +295,41 @@ public class NotificationDispatchBackgroundServiceTests
     }
 
     [Fact]
+    public async Task An_intake_visit_for_a_name_with_a_line_break_never_throws_out_of_the_tick()
+    {
+        // Fix round 1, S1: an enquiry name can hold an embedded CR/LF (the API only trims). Through the real SMTP channel the tick must finish.
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId, "sam.lee@provider.example");
+            var payload = new IntakeVisitStaffPayload(IntakeWording.Booked, "sam.lee@provider.example", "Sam Lee", "Noah\r\nFitzgerald",
+                new DateTime(2026, 10, 15, 23, 0, 0, DateTimeKind.Utc), 90, "Australia/Sydney", "12 Smith St", null, null, null, "Dana Smith",
+                "dana@provider.example", "Sample Support Co", null, null, "abc@odip", 0, DateTime.UtcNow);
+            db.NotificationOutbox.Add(new NotificationOutbox
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, EventType = NotificationEventType.IntakeBooked, EntityType = "IntakeVisit", EntityId = Guid.NewGuid(),
+                RecipientUserId = user.Id, PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload),
+                Status = NotificationOutboxStatus.Pending, NextAttemptAt = DateTime.UtcNow.AddMinutes(-1), CreatedAt = DateTime.UtcNow.AddMinutes(-1),
+            });
+            db.SaveChanges();
+        }
+        var smtpConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Notifications:Smtp:Host"] = "127.0.0.1", ["Notifications:Smtp:Port"] = "1",
+        }).Build();
+        var channel = new SmtpEmailChannel(smtpConfig, NullLogger<SmtpEmailChannel>.Instance);
+
+        await BuildService(dbName, channel, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        // The tick finished and saved: the row was tried once and backs off (no SMTP listens on port 1), instead of the batch going unsaved.
+        using var verifyDb = SeedDb(dbName);
+        var row = await verifyDb.NotificationOutbox.SingleAsync();
+        Assert.Equal(1, row.Attempts);
+        Assert.True(row.NextAttemptAt > DateTime.UtcNow);
+    }
+
+    [Fact]
     public async Task An_intake_visit_row_renders_with_its_calendar_invite_and_is_sent()
     {
         var dbName = Guid.NewGuid().ToString();

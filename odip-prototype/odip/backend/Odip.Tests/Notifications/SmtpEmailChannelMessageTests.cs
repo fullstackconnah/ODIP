@@ -1,4 +1,6 @@
 using System.Net.Mail;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Odip.Application.Interfaces;
 using Odip.Infrastructure.Notifications;
 using Xunit;
@@ -48,6 +50,22 @@ public class SmtpEmailChannelMessageTests
         using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>", ReplyTo: "dana@provider.example"), From);
 
         Assert.Equal("dana@provider.example", Assert.Single(mail.ReplyToList).Address);
+    }
+
+    // Fix round 1, S1: MailMessage refuses a line break in a header. A send must report that as a failure the outbox backs off from, never throw
+    // out of the dispatcher's tick (which would leave the rest of the batch unsaved and re-send it every 30 s).
+    [Theory]
+    [InlineData("Noah\r\nFitzgerald")]
+    [InlineData("Noah\nFitzgerald")]
+    public async Task A_subject_with_a_line_break_is_a_transient_failure_not_an_exception(string subject)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:Smtp:Host"] = "127.0.0.1", ["Notifications:Smtp:Port"] = "1" }).Build();
+        var channel = new SmtpEmailChannel(config, NullLogger<SmtpEmailChannel>.Instance);
+
+        var result = await channel.SendAsync(new NotificationMessage("to@example.com", subject, "P", "<p>H</p>"), CancellationToken.None);
+
+        Assert.Equal(ChannelSendOutcome.TransientFailure, result.Outcome);
     }
 
     // User.Email can be "" (the entity's own default). A bad Reply-To must never throw: the booking is already saved when the invite goes.

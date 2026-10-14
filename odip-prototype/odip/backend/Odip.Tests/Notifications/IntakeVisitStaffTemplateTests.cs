@@ -25,6 +25,9 @@ public class IntakeVisitStaffTemplateTests
 
         Assert.Equal("sam.lee@provider.example", message.RecipientAddress);
         Assert.Equal("Intake visit booked: Noah Fitzgerald, Fri 16 Oct at 10:00 am", message.Subject);
+        // Fix round 1, S1: a line break typed into a name never reaches the Subject header.
+        Assert.Equal("Intake visit booked: Noah Fitzgerald, Fri 16 Oct at 10:00 am",
+            IntakeVisitStaffTemplate.Render(Payload() with { PersonFullName = "Noah\r\nFitzgerald" }, BaseUrl).Subject);
         Assert.Contains("When: Friday 16 October 2026, 10:00 am to 11:30 am", message.PlainTextBody);
         Assert.Contains("Where: 12 Smith St, Parramatta", message.PlainTextBody);
         Assert.Contains("Contact: 0412 555 010 · priya.nair@example.com.au", message.PlainTextBody);

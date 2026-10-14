@@ -25,6 +25,9 @@ public static class IntakeWording
     public static string LongDay(DateTime local) => local.ToString("dddd d MMMM yyyy", Inv);
     public static string LongDayNoYear(DateTime local) => local.ToString("dddd d MMMM", Inv);
 
+    /// <summary>A Subject on one line: a name typed with a line break would otherwise make the mail header invalid.</summary>
+    public static string OneLine(string text) => text.Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ');
+
     public static string Duration(int minutes)
     {
         var hours = minutes / 60;

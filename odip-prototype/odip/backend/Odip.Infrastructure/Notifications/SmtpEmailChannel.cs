@@ -54,14 +54,14 @@ public sealed class SmtpEmailChannel : INotificationChannel
         var from = _config.GetValue<string>("Notifications:Smtp:From") ?? user ?? "no-reply@odip.local";
         var enableSsl = _config.GetValue("Notifications:Smtp:EnableSsl", true);
 
-        using var mail = BuildMailMessage(message, from);
-
         using var client = new SmtpClient(host, port) { EnableSsl = enableSsl };
         if (!string.IsNullOrEmpty(user))
             client.Credentials = new NetworkCredential(user, password);
 
         try
         {
+            // Built inside the try: MailMessage throws on a line break in a header, and that must be a failed send, not a throw out of the tick.
+            using var mail = BuildMailMessage(message, from);
             await client.SendMailAsync(mail, ct);
             return new ChannelSendResult(ChannelSendOutcome.Sent, null, null);
         }
