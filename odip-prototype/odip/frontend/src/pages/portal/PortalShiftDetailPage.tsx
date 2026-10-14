@@ -342,23 +342,25 @@ export default function PortalShiftDetailPage() {
     </>
   )
 
+  // At lg the bar spans the main column only: the 22rem About column plus the 1rem grid gap (finish review fix 7).
+  const MAIN_COLUMN_BAR = 'lg:mr-[23rem]'
   let bar: ReactNode = null
   if (canAct && shift.status === 'Published' && canStartNow) {
     bar = (
-      <ActionBar>
-        <Button size="lg" className="flex-1" onClick={handleStart} disabled={startShift.isPending || !online}>
+      <ActionBar className={MAIN_COLUMN_BAR}>
+        <Button size="lg" className="flex-1 lg:flex-none" onClick={handleStart} disabled={startShift.isPending || !online}>
           {startShift.isPending ? 'Starting…' : 'Start shift'}
         </Button>
       </ActionBar>
     )
   } else if (canAct && inProgress && !inFlow && !submitted) {
     bar = (
-      <ActionBar>
-        <Button size="lg" variant={running ? 'primary' : 'secondary'} className="flex-1" onClick={() => handleBreak(running?.id)}
+      <ActionBar className={MAIN_COLUMN_BAR}>
+        <Button size="lg" variant={running ? 'primary' : 'secondary'} className="flex-1 lg:flex-none" onClick={() => handleBreak(running?.id)}
           disabled={!online || startBreak.isPending || endBreak.isPending}>
           {running ? 'End break' : 'Start break'}
         </Button>
-        <Button id="end-shift" size="lg" variant={running ? 'secondary' : 'primary'} className="flex-1" onClick={openFinish}>End shift</Button>
+        <Button id="end-shift" size="lg" variant={running ? 'secondary' : 'primary'} className="flex-1 lg:flex-none" onClick={openFinish}>End shift</Button>
       </ActionBar>
     )
   }

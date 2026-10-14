@@ -263,7 +263,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
         </p>
       )}>
         <Button size="lg" variant="secondary" onClick={back}>{step === 'times' ? 'Back to shift' : 'Back'}</Button>
-        <Button size="lg" className="flex-1" onClick={forward} disabled={submitting || (step === 'submit' && !online)}>{forwardLabel}</Button>
+        <Button size="lg" className="flex-1 lg:flex-none" onClick={forward} disabled={submitting || (step === 'submit' && !online)}>{forwardLabel}</Button>
       </ActionBar>
     </div>
   )
