@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { ShiftChip, type ShiftChipProps } from './ShiftChip'
 import { formatShiftTimeRange } from '../lib/roster'
-import { DropStateContext } from '../lib/rosterDrag'
+import { DropStateContext, type DropState } from '../lib/rosterDrag'
 import { makeShift, makeFinding, makeUnfilledShift } from '../test-fixtures'
 import type { ShiftDto } from '@/api/types'
 
@@ -668,5 +668,88 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
     renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     expect(screen.queryByRole('button', { name: /drag to move/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /actions for/i })).toBeInTheDocument()
+  })
+})
+
+describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the brief, section 3)', () => {
+  const open = makeUnfilledShift({ id: 'open', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', status: 'Draft' })
+  const plusName = 'Assign someone to Tuesday 9am to 3pm for Mia'
+  const chipOf = (shift: ShiftDto, extra: Partial<ShiftChipProps> = {}) => (
+    <ShiftChip key={shift.id} shift={shift} canWrite dashed={!shift.staffId} context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} {...extra} />
+  )
+  function withPick(ui: React.ReactElement, state: Partial<DropState> = {}) {
+    const pick = vi.fn()
+    const result = renderChip(<DropStateContext.Provider value={{ disabled: false, pending: null, pick, pickingId: null, ...state }}>{ui}</DropStateContext.Provider>)
+    return { pick, ...result }
+  }
+
+  it('puts the plus first on a Needs staff chip, named for the day, the time and the participant, and it opens the picker', async () => {
+    const user = userEvent.setup()
+    const { pick } = withPick(chipOf(open))
+    const plus = screen.getByRole('button', { name: plusName })
+    expect(plus).toHaveAttribute('title', plusName)
+    expect(plus).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(plus).toHaveAttribute('aria-expanded', 'false')
+    // Tab order inside the chip: the plus, the open control, the menu.
+    expect(plus.compareDocumentPosition(getOpenButton(open)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await user.click(plus)
+    expect(pick).toHaveBeenCalledWith(open)
+  })
+
+  it('is 18px wide on a fine pointer and a 44px square under a coarse one (the chip is 44px tall there)', () => {
+    withPick(chipOf(open))
+    expect(screen.getByRole('button', { name: plusName })).toHaveClass('w-[18px]', 'pointer-coarse:w-11')
+  })
+
+  it('gives no plus to a filled, an on-leave or a locked chip, or to a reader', () => {
+    withPick(
+      <>
+        {chipOf(makeShift({ id: 'filled', staffName: 'Sam Wilson' }))}
+        {chipOf(makeShift({ id: 'leave', assigneeOnApprovedLeave: true }))}
+        {(['InProgress', 'PendingReview', 'Completed', 'Cancelled'] as const).map(status => chipOf(makeUnfilledShift({ id: status, status })))}
+        {chipOf(makeUnfilledShift({ id: 'ro' }), { canWrite: false })}
+      </>,
+    )
+    expect(screen.queryByRole('button', { name: /^Assign someone/ })).not.toBeInTheDocument()
+  })
+
+  it('gives each chip of a 2:1 pair its own plus', () => {
+    withPick(<>{chipOf(makeUnfilledShift({ ...open, id: 'w1' }))}{chipOf(makeUnfilledShift({ ...open, id: 'w2' }))}</>)
+    expect(screen.getAllByRole('button', { name: plusName })).toHaveLength(2)
+  })
+
+  it('draws no plus where nothing can open a picker (a chip outside the board page)', () => {
+    renderChip(chipOf(open))
+    expect(screen.queryByRole('button', { name: plusName })).not.toBeInTheDocument()
+  })
+
+  it("rings the chip and keeps the plus's hover look while its picker is open", () => {
+    const { container } = withPick(chipOf(open), { pickingId: 'open' })
+    expect(screen.getByRole('button', { name: plusName })).toHaveAttribute('aria-expanded', 'true')
+    expect(container.querySelector('[data-shift-chip="open"]')).toHaveClass('ring-2', 'ring-ring')
+  })
+
+  it('waits while a write is out: every other plus is aria-disabled and faded, and the target shows "Assigning Kim…" with no plus', async () => {
+    const user = userEvent.setup()
+    const { pick } = withPick(<>{chipOf(open)}{chipOf(makeUnfilledShift({ ...open, id: 'other' }))}</>, { disabled: true, pending: { targetId: 'open', staffName: 'Kim Lee' } })
+    const plus = screen.getByRole('button', { name: plusName })   // the other chip's: the target has none
+    expect(plus).toHaveAttribute('aria-disabled', 'true')
+    expect(plus).toHaveClass('opacity-40')
+    await user.click(plus)
+    expect(pick).not.toHaveBeenCalled()
+    expect(screen.getByText('Assigning Kim…')).toBeInTheDocument()
+  })
+
+  it("opens the picker from an unfilled chip's Assign to…, and keeps the panel for a filled chip's Reassign to… (SHAPE departure 13)", async () => {
+    const user = userEvent.setup()
+    const onAssignTo = vi.fn()
+    const { pick } = withPick(<>{chipOf(open, { onAssignTo })}{chipOf(makeShift({ id: 'filled', participantName: 'Jo Park' }), { onAssignTo })}</>)
+    await user.click(screen.getByRole('button', { name: "Actions for Mia Chen's shift" }))
+    await user.click(screen.getByRole('option', { name: 'Assign to…' }))
+    expect(pick).toHaveBeenCalledWith(open)
+    expect(onAssignTo).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: "Actions for Jo Park's shift" }))
+    await user.click(screen.getByRole('option', { name: 'Reassign to…' }))
+    expect(onAssignTo).toHaveBeenCalledTimes(1)
   })
 })

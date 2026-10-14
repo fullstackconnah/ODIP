@@ -1,14 +1,14 @@
 import { useCallback, useContext } from 'react'
 import { Link } from 'react-router-dom'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { AlertOctagon, AlertTriangle, Asterisk, CalendarOff, Check, FileCheck, GripVertical, KeyRound, Lock, MoreVertical, Repeat, ShieldCheck, Siren } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, Asterisk, CalendarOff, Check, FileCheck, GripVertical, KeyRound, Lock, MoreVertical, Repeat, ShieldCheck, Siren, UserPlus } from 'lucide-react'
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
-import { formatShiftTimeRange, RATIO_LABELS, shiftSource } from '../lib/roster'
+import { formatShiftTimeRange, isUnfilledShift, RATIO_LABELS, shiftSource } from '../lib/roster'
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
-import { DropStateContext, dropOutcome, firstName, isLockedShift, lockedWords, type DragCarry, type DropTarget } from '../lib/rosterDrag'
+import { DropStateContext, dropOutcome, firstName, isLockedShift, lockedWords, pickName, type DragCarry, type DropTarget } from '../lib/rosterDrag'
 
 /**
  * Accessible name for the severity marker — states the severity(s) present and their counts, so
@@ -82,7 +82,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
 
   // Roster drag and drop: the grip lifts this shift's person; the chip is a drop target, locked ones included, so a drag over one can say why it is refused.
-  const { disabled: dragsOff, pending } = useContext(DropStateContext)
+  const { disabled: dragsOff, pending, pick, pickingId } = useContext(DropStateContext)
   const locked = isLockedShift(shift)
   const canLift = draggable && canWrite && isFilled && !locked
   const carry: DragCarry = { staffId: shift.staffId ?? '', staffName: shift.staffName ?? '', fromShift: shift }
@@ -96,6 +96,10 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const busy = pending?.targetId === shift.id
   const fading = pending?.sourceId === shift.id
   const lockTitle = `${lockedWords(shift.status)}: can't be changed here`
+  // The plus (spec 2026-10-15, decision C): every Needs staff chip a writer may change, in both views and on phones, wherever the page can open a picker.
+  const canPick = Boolean(pick) && canWrite && isUnfilledShift(shift) && !locked
+  const picking = pickingId === shift.id
+  const pickLabel = pickName(shift)
   // Where the shift came from (spec 2026-10-15, decision B), derived: Agreed, Pattern or Ad hoc. Neutral ink for all three: colour on a chip means something is wrong.
   const source = shiftSource(shift)
   const SourceIcon = SOURCE_ICON[source.kind]
@@ -128,7 +132,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   function handleMenuSelect(value: string) {
     if (value === 'edit') onOpen(shift)
-    else if (value === 'assign') onAssignTo(shift)
+    // An unfilled chip assigns through the picker, as its plus does: one way to assign on one chip (SHAPE departure 13). A filled chip's "Reassign to…" keeps the panel.
+    else if (value === 'assign') { if (!canPick) onAssignTo(shift); else if (!dragsOff) pick?.(shift) }
     else if (value === 'unassign') onUnassign(shift)
     else if (value === 'delete') onDelete(shift)
   }
@@ -193,13 +198,14 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   return (
     <div
       ref={setNodeRef}
+      data-shift-chip={shift.id}
       // On-leave gets the explanation on the whole chip too: on a narrow day column the inline marker
       // below is the first thing to clip, so the hover text must not depend on it being visible.
       title={chipTitle}
       aria-busy={busy || undefined}
       className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] pointer-coarse:min-h-11 items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
         dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
-      } ${isDragging || fading ? 'opacity-50' : ''} ${overKind === 'assign' || overKind === 'move' || overKind === 'prompt' ? 'ring-2 ring-ring' : ''} ${
+      } ${isDragging || fading ? 'opacity-50' : ''} ${overKind === 'assign' || overKind === 'move' || overKind === 'prompt' || picking ? 'ring-2 ring-ring' : ''} ${
         overKind === 'locked' ? 'cursor-not-allowed' : ''
       } ${budgetMarker ? (hasFindings ? 'mb-2' : 'mt-2') : ''}`}
     >
@@ -209,7 +215,25 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           turned "open this shift" into "start a keyboard drag" for anyone tabbing to the chip.
           Splitting them keeps keyboard drag working (from the handle) without hijacking Enter on
           the primary control. */}
-      {canWrite && draggable && (
+      {canPick && !busy ? (
+        // The chip's leading column is the person slot (the brief, section 3): the grip when there is a person to move, this plus when there is nobody, the Lock when nothing can change.
+        // A ghost icon button the full height of the chip: 18px on a fine pointer, a real 44px square under a coarse one (no TAP_AREA pad: it would cover the open control).
+        <button
+          type="button"
+          data-shift-plus={shift.id}
+          aria-label={pickLabel}
+          title={pickLabel}
+          aria-haspopup="dialog"
+          aria-expanded={picking}
+          aria-disabled={dragsOff || undefined}
+          onClick={() => { if (!dragsOff) pick?.(shift) }}
+          className={`flex w-[18px] shrink-0 items-center justify-center rounded-sm text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring pointer-coarse:w-11 ${
+            dragsOff ? 'opacity-40' : 'hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)] aria-expanded:bg-[var(--color-accent)] aria-expanded:text-[var(--color-primary)]'
+          }`}
+        >
+          <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      ) : canWrite && draggable && (
         canLift ? (
           <button
             type="button"

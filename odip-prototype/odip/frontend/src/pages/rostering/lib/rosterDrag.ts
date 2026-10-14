@@ -28,9 +28,12 @@ export type DropOutcome =
 
 /** While a drop's request is out: the target reads "Assigning {first name}…", a move's source fades, and every drag waits. */
 export type PendingDrop = { targetId: string; sourceId?: string; staffName: string }
-export type DropState = { disabled: boolean; pending: PendingDrop | null }
+/**
+ * `pick` opens the staff picker for a Needs staff shift: the chip's plus, and its menu's "Assign to…" (spec 2026-10-15). `pickingId` is the shift whose picker is open; the chip rings it.
+ */
+export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; pickingId?: string | null }
 
-/** Shared by the page with the strip and every puck, so neither is threaded through the grid's rows. Outside a provider (the Staff view, phones) nothing is disabled or pending. */
+/** Shared by the page with the strip and every puck, so neither is threaded through the grid's rows. Outside a provider nothing is disabled or pending, and no chip has a plus. */
 export const DropStateContext = createContext<DropState>({ disabled: false, pending: null })
 
 /** Decision 8: these keep their worker; only the completion endpoints move them on. */
