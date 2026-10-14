@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Armchair, Clock, ScrollText, WifiOff } from 'lucide-react'
@@ -6,6 +6,7 @@ import { usePortalShiftDetail, useShiftNotes, useStartShift, useStartBreak, useE
 import { usePermissions } from '@/lib/permissions'
 import { StatusBadge } from '@/components/StatusBadge'
 import { BackButton } from '@/components/BackButton'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { useTabParam } from '@/hooks/useTabParam'
@@ -80,6 +81,30 @@ function SubmittedSummary({ shift }: { shift: PortalShiftDetailDto }) {
           {' to '}
           {c.actualEnd ? formatWithTimeZone(c.actualEnd, tz, { timeStyle: 'short' }) : 'Not recorded'}
         </dd>
+        {c.originalActualStart && (
+          <>
+            <dt className="text-[var(--color-muted-foreground)]">Start changed from</dt>
+            <dd>{formatWithTimeZone(c.originalActualStart, tz, { hour: 'numeric', minute: '2-digit' })}</dd>
+          </>
+        )}
+        {c.originalActualEnd && (
+          <>
+            <dt className="text-[var(--color-muted-foreground)]">Finish changed from</dt>
+            <dd>{formatWithTimeZone(c.originalActualEnd, tz, { hour: 'numeric', minute: '2-digit' })}</dd>
+          </>
+        )}
+        {c.timeAdjustmentReason && (
+          <>
+            <dt className="text-[var(--color-muted-foreground)]">Reason</dt>
+            <dd>{c.timeAdjustmentReason}</dd>
+          </>
+        )}
+        {c.kilometres != null && (
+          <>
+            <dt className="text-[var(--color-muted-foreground)]">Kilometres</dt>
+            <dd>{c.kilometres} km</dd>
+          </>
+        )}
         <dt className="text-[var(--color-muted-foreground)]">Variance</dt>
         <dd>{formatVarianceMinutes(c.varianceMinutesStart)} start / {formatVarianceMinutes(c.varianceMinutesEnd)} end</dd>
         <dt className="text-[var(--color-muted-foreground)]">Breaks</dt>
@@ -113,6 +138,9 @@ export default function PortalShiftDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   // A draft with an open step means the worker was mid-finish (left for the incident form, or reloaded): open it again at that step.
   const [finishing, setFinishing] = useState(() => !!id && loadEndDraft(id)?.step != null)
+  const [submitted, setSubmitted] = useState(false)
+  const submittedTitle = useRef<HTMLSpanElement>(null)
+  useEffect(() => { if (submitted) submittedTitle.current?.focus() }, [submitted])
   const [sheet, setSheet] = useState<{ target: DoseTarget; notGiven: boolean } | null>(null)
 
   async function handleStart() {
@@ -142,11 +170,17 @@ export default function PortalShiftDetailPage() {
     setTimeout(() => document.getElementById('finish')?.scrollIntoView?.({ block: 'start' }), 0)
   }
 
-  function closeFinish(submitted: boolean) {
+  function closeFinish(done: boolean) {
     setFinishing(false)
-    // Back to shift returns focus to the control that opened the flow (SHAPE §6).
-    if (!submitted) setTimeout(() => document.getElementById('end-shift')?.focus(), 0)
+    if (done) {
+      setSubmitted(true)
+      setTab('now')
+    } else {
+      // Back to shift returns focus to the control that opened the flow (SHAPE §6).
+      setTimeout(() => document.getElementById('end-shift')?.focus(), 0)
+    }
   }
+
 
   // Step 4's "Add or edit notes": close the flow (its entries are saved) and open Notes, focusing its tab as a tap on it would.
   function editNotes() {
@@ -199,6 +233,16 @@ export default function PortalShiftDetailPage() {
 
   const nowContent = (
     <>
+      {submitted && (
+        <Callout
+          tone="success"
+          announce={false}
+          title={<span ref={submittedTitle} tabIndex={-1} className="focus:outline-none">Shift submitted</span>}
+          actions={<Button to="/portal" variant="secondary" size="lg">Back to my shifts</Button>}
+        >
+          A coordinator will review it. You can still add notes.
+        </Callout>
+      )}
       {returned && <Callout tone="info" title="Returned for changes">{shift.lastReturnReason}</Callout>}
       {shift.status === 'Cancelled' && <Callout tone="info">This shift was cancelled.</Callout>}
       {!canAct && <Callout tone="info">You can look at this shift but you can't change it.</Callout>}
@@ -214,7 +258,7 @@ export default function PortalShiftDetailPage() {
       )}
       {inProgress && <DuringSection shift={shift} canAct={canAct} online={online} onRecord={target => setSheet({ target, notGiven: false })} />}
       {showBefore && <ContactsSection shift={shift} compact />}
-      {shift.status === 'PendingReview' && <Callout tone="info">Submitted. It is waiting for a coordinator to review it.</Callout>}
+      {shift.status === 'PendingReview' && !submitted && <Callout tone="info">Submitted. It is waiting for a coordinator to review it.</Callout>}
       {(shift.status === 'PendingReview' || shift.status === 'Completed') && <SubmittedSummary shift={shift} />}
     </>
   )
@@ -305,7 +349,7 @@ export default function PortalShiftDetailPage() {
         </Button>
       </ActionBar>
     )
-  } else if (canAct && inProgress && !finishing) {
+  } else if (canAct && inProgress && !finishing && !submitted) {
     bar = (
       <ActionBar>
         <Button size="lg" variant={running ? 'primary' : 'secondary'} className="flex-1" onClick={() => handleBreak(running?.id)}
@@ -319,6 +363,7 @@ export default function PortalShiftDetailPage() {
 
   return (
     <div className="space-y-4 animate-fade-in pb-4">
+      <AnnouncementRegion message={submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
       <BackButton to="/portal" label="my shifts" variant="link" history={false} className="py-3" />
       <PageHeader
         variant="detail"

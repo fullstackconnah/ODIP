@@ -1054,3 +1054,41 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     expect(screen.getByLabelText('Your finish time')).toHaveValue('2026-08-17T16:50')   // the entry is kept
   })
 })
+
+describe('PortalShiftDetailPage: submitted (SHAPE §4)', () => {
+  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
+  const forward = (name: string | RegExp) => fireEvent.click(bar().getByRole('button', { name }))
+
+  it('leads Now with Shift submitted, moves focus to it, announces once, and shows no bar', async () => {
+    show(makeDetail({ status: 'InProgress', completion: makeCompletion() }))
+    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
+    forward('Confirm times')
+    forward('Next')
+    forward('Skip')
+    forward('Nothing to note or hand over')
+    forward('Submit shift')
+
+    await waitFor(() => expect(screen.getByText('Shift submitted')).toHaveFocus())
+    expect(screen.getByText('Shift submitted').closest('[role="status"],[role="alert"]')).toBeNull()   // the callout itself is quiet
+    expect(screen.getAllByRole('status').some(s => s.textContent === 'Shift submitted. A coordinator will review it.')).toBe(true)
+    expect(screen.getByText('A coordinator will review it. You can still add notes.')).toBeInTheDocument()
+    // The page's BackButton has the same name; this is the callout's, on Now.
+    expect(within(document.getElementById('shift-panel-now')!).getByRole('link', { name: 'Back to my shifts' })).toHaveAttribute('href', '/portal')
+    expect(screen.getByRole('tab', { name: 'Now' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
+  })
+
+  it("the summary shows the worker's changed times with what they replaced, the reason and the kilometres", () => {
+    show(makeDetail({
+      status: 'PendingReview',
+      completion: makeCompletion({
+        actualStart: '2026-08-16T22:55:00Z', originalActualStart: '2026-08-16T23:05:40Z', actualEnd: '2026-08-17T06:50:00Z',
+        originalActualEnd: '2026-08-17T07:00:30Z', timesAdjusted: true, timeAdjustmentReason: 'Left early.', kilometres: 12.5,
+      }),
+    }))
+    expect(screen.getByText('Start changed from')).toBeInTheDocument()
+    expect(screen.getByText('Finish changed from')).toBeInTheDocument()
+    expect(screen.getByText('Left early.')).toBeInTheDocument()
+    expect(screen.getByText('12.5 km')).toBeInTheDocument()
+  })
+})
