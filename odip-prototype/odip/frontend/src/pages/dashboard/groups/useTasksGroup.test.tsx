@@ -38,7 +38,6 @@ describe('Tasks due group — what it lists', () => {
         task({ id: 'd1', title: 'Due today medium', dueDate: TODAY, priority: 'Medium' }),
         task({ id: 'd2', title: 'Due today urgent', dueDate: TODAY, priority: 'Urgent' }),
         task({ id: 'o1', title: 'Overdue older', dueDate: '2026-10-08' }),
-        task({ id: 'd3', title: 'Due tomorrow', dueDate: '2026-10-15' }),
         task({ id: 'd4', title: 'Done today', dueDate: TODAY, status: 'Completed' }),
       ],
     )
@@ -46,7 +45,7 @@ describe('Tasks due group — what it lists', () => {
 
     await screen.findByText('Overdue older')
     expect(apiGet).toHaveBeenCalledWith('/tasks', { status: 'Overdue' })
-    expect(apiGet).toHaveBeenCalledWith('/tasks', { dueThisWeek: 'true' })
+    expect(apiGet).toHaveBeenCalledWith('/tasks', { dueToday: 'true' })
     expect(subjects()).toEqual(['Overdue older', 'Overdue newer', 'Due today urgent', 'Due today medium'])
     expect(screen.getByText('4')).toBeInTheDocument()
     const overdueRow = screen.getByText('Overdue older').closest('li')!
@@ -155,5 +154,16 @@ describe('Tasks due group — Done reads the task fresh (deep S2)', () => {
     expect(screen.queryByText('Chase travel insurance certificate')).not.toBeInTheDocument()
     // The two lists asked again: once on load, once after the stale Done.
     expect(apiGet.mock.calls.filter(([url, params]) => url === '/tasks' && params?.status === 'Overdue').length).toBeGreaterThan(1)
+  })
+})
+
+describe(`Tasks due group — "due today" is the provider's day (deep N4)`, () => {
+  it(`takes the server's due-today list as it is: a task due on the provider's 15 Oct shows while the viewer's clock still says 14 Oct`, async () => {
+    // The server judges "today" in the provider's zone (dueToday=true, the Overdue and dueThisWeek rule); the browser does not cut it again by its own date.
+    answer([], [task({ id: 'd1', title: 'Due on the provider day', dueDate: '2026-10-15', priority: 'Medium' })])
+    render()
+
+    expect(await screen.findByText('Due on the provider day')).toBeInTheDocument()
+    expect(screen.getByText('Due today')).toBeInTheDocument()
   })
 })
