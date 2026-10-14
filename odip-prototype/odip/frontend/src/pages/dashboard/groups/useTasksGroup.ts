@@ -1,7 +1,7 @@
 import { useTasks, useUpdateTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS, type TaskDto, type UpdateTaskDto } from '@/api/types'
 import { formatDayMonth } from '@/lib/dateRange'
-import { groupPhase, type GroupModel, type QuickRow, type RowAction } from '../quickGroup'
+import { groupPhase, type GroupModel, type QuickRow, type RowAction } from '../quickGroupModel'
 
 const PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 }
 const isOpen = (t: TaskDto) => t.status !== 'Completed' && t.status !== 'Cancelled'

@@ -1,7 +1,7 @@
 import { Card } from '@/components/Card'
 import { AllClearRow } from './AttentionBand'
 import { QuickGroup } from './QuickGroup'
-import { isPresent, type GroupModel } from './quickGroup'
+import { isPresent, type GroupModel } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 
 /**

@@ -3,7 +3,7 @@ import { formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 import type { Tone } from '@/lib/tone'
 import { formatWithTimeZone } from '@/lib/utils'
-import { groupPhase, type GroupModel, type QuickRow } from '../quickGroup'
+import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
 
 /** A queue row's review flags, in SHAPE's order (the first two are drawn). */
 export function completionFlags(item: CompletionQueueItemDto): Array<{ label: string; tone: Tone }> {

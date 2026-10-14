@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { QuickGroup } from '../QuickGroup'
 import { useDecisionState } from '../useDecisionState'
-import type { GroupModel } from '../quickGroup'
+import type { GroupModel } from '../quickGroupModel'
 
 // A .ts file (no JSX), so react-refresh's one-components-per-file rule does not read this test helper as a component module.
 

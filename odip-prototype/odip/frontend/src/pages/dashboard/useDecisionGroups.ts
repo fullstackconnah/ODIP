@@ -1,7 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { StaffListDto } from '@/api/types/staff'
 import type { DecisionGates } from './decisionGates'
-import type { GroupModel } from './quickGroup'
+import type { GroupModel } from './quickGroupModel'
 import { useCompletionsGroup } from './groups/useCompletionsGroup'
 import { useLeaveGroup } from './groups/useLeaveGroup'
 import { useIncidentsGroup } from './groups/useIncidentsGroup'

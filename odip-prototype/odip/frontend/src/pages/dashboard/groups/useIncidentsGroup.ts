@@ -2,7 +2,7 @@ import { useIncidents } from '@/api/hooks'
 import { INCIDENT_STATUS_LABELS, INCIDENT_TYPE_LABELS } from '@/api/types'
 import { toneForStatus } from '@/lib/tone'
 import { formatWallClock } from '@/lib/wallClock'
-import { groupPhase, type GroupModel, type QuickRow } from '../quickGroup'
+import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
 
 /**
  * The Incidents group (SHAPE §5, call 12), links only in PR A: what still needs somebody, QSC-overdue first. The QSC-overdue page fills the rows first, the

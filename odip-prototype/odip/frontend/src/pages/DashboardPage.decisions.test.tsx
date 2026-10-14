@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { mockUseDashboard, mockUseDecisionGroups } from './dashboard/dashboardHookMocks'
 import { asRole, installDashboardDefaults, renderPage, showAll, summaryData, tileLabels } from './dashboard/dashboardTestKit'
-import type { GroupKey, GroupModel, QuickRow } from './dashboard/quickGroup'
+import type { GroupKey, GroupModel, QuickRow } from './dashboard/quickGroupModel'
 
 vi.mock('@/api/hooks', async () => (await import('./dashboard/dashboardHookMocks')).hooks)
 vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (await import('./dashboard/dashboardHookMocks')).mockUseDecisionGroups }))

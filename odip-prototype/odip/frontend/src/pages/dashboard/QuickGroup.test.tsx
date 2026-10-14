@@ -5,7 +5,7 @@ import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { ROW_ACTIONS_CARD } from '@/components/tapArea'
 import { QuickGroup } from './QuickGroup'
 import { useDecisionState } from './useDecisionState'
-import type { ActionOutcome, GroupModel, QuickForm, QuickRow, RowAction } from './quickGroup'
+import type { ActionOutcome, GroupModel, QuickForm, QuickRow, RowAction } from './quickGroupModel'
 
 function Harness({ model }: { model: GroupModel }) {
   const state = useDecisionState()

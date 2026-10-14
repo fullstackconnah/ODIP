@@ -5,7 +5,7 @@ import { staffCredentials, type StaffCredential } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, deadlineState, isDeadlineIssue } from '@/lib/deadline'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
-import { groupPhase, type GroupModel, type QuickRow } from '../quickGroup'
+import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
 
 const ORDER = { overdue: 0, today: 1, soon: 2, none: 3, ok: 4 } as const
 

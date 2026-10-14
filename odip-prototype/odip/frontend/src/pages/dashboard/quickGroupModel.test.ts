@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { groupPhase, isPresent, rowKey, shownCount, visibleRows, type GroupModel, type QuickRow } from './quickGroup'
+import { groupPhase, isPresent, rowKey, shownCount, visibleRows, type GroupModel, type QuickRow } from './quickGroupModel'
 
 const row = (id: string): QuickRow => ({ id, subject: `Person ${id}`, meta: [], flags: [], actions: [] })
 const model = (o: Partial<GroupModel> = {}): GroupModel => ({

@@ -7,7 +7,7 @@ import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 import { rosterLink } from '@/lib/rosterLinks'
 import { formatShiftTime } from '@/lib/utils'
-import { groupPhase, type ActionOutcome, type GroupModel, type QuickForm, type QuickRow } from '../quickGroup'
+import { groupPhase, type ActionOutcome, type GroupModel, type QuickForm, type QuickRow } from '../quickGroupModel'
 
 const firstName = (name: string) => name.split(' ')[0]
 
