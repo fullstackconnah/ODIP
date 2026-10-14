@@ -10,7 +10,10 @@ public sealed class ImportRowPlan
     public required string Name { get; set; }
     public ImportRowStatus Status { get; private set; } = ImportRowStatus.Ready;
     public List<string> Reasons { get; } = new();
+    /// <summary>What may be wrong and wants a look before importing (a number that names someone else, a contact left out).</summary>
     public List<string> Warnings { get; } = new();
+    /// <summary>What the row does that is worth knowing but needs no check (categories 01 to 04 added into Core).</summary>
+    public List<string> Notes { get; } = new();
     public string? SkipReason { get; private set; }
     /// <summary>What duplicates are found by (a normalised NDIS number or email), or who a funding row is for; null when the row has none.</summary>
     public string? DuplicateKey { get; init; }
@@ -35,7 +38,7 @@ public sealed class ImportRowPlan
         Reasons.Clear();
     }
 
-    public ImportRowDto ToDto() => new(RowNumber, Name, Status, Reasons, Warnings, SkipReason);
+    public ImportRowDto ToDto() => new(RowNumber, Name, Status, Reasons, Warnings, SkipReason, Notes);
 
     /// <summary>A key seen on an earlier row makes every later row with it Can't import, naming the first row.</summary>
     public static void MarkFileDuplicates(List<ImportRowPlan> plans, string what)

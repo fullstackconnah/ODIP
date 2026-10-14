@@ -72,8 +72,15 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
       // meta on a phone card: one muted line, and a Ready row with nothing to say shows no empty Details label.
       key: 'details', header: 'Details', wrap: true, mobile: 'meta',
       render: r => {
-        const lines = [...(r.skipReason ? [r.skipReason] : []), ...r.reasons, ...r.warnings]
-        return lines.length > 0 && <ul className="text-sm">{lines.map(text => <li key={text}>{text}</li>)}</ul>
+        const plain = [...(r.skipReason ? [r.skipReason] : []), ...r.reasons]
+        return plain.length + r.warnings.length + r.notes.length > 0 && (
+          <ul className="text-sm">
+            {plain.map(text => <li key={text}>{text}</li>)}
+            {/* A warning may mean money on the wrong person: named in words and toned apart from the notes, which need no check. */}
+            {r.warnings.map(text => <li key={text} className="text-[var(--color-on-warning-container)]"><span className="font-semibold">Check: </span>{text}</li>)}
+            {r.notes.map(text => <li key={text} className="text-[var(--color-muted-foreground)]">{text}</li>)}
+          </ul>
+        )
       },
     },
   ]
@@ -93,7 +100,7 @@ export default function ImportWizardPage() {
   const [data, setData] = useState<ImportPreviewDto | null>(null)
   const [mapping, setMapping] = useState<(string | null)[]>([])
   const [landing, setLanding] = useState<ImportLanding | null>(null)
-  const [filter, setFilter] = useState<'all' | ImportRowStatus>('all')
+  const [filter, setFilter] = useState<'all' | ImportRowStatus | 'Check'>('all')
   const [problem, setProblem] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [result, setResult] = useState<ImportResultDto | null>(null)
@@ -227,7 +234,9 @@ export default function ImportWizardPage() {
     )
   }
 
-  const rows = data ? data.rows.filter(r => filter === 'all' || r.status === filter) : []
+  const toCheck = (r: ImportRowDto) => r.status === 'Ready' && r.warnings.length > 0
+  const checkCount = data ? data.rows.filter(toCheck).length : 0
+  const rows = data ? data.rows.filter(r => filter === 'all' || (filter === 'Check' ? toCheck(r) : r.status === filter)) : []
   const onSubmit = (e: FormEvent) => { e.preventDefault(); setConfirming(true) }
 
   return (
@@ -329,6 +338,7 @@ export default function ImportWizardPage() {
                     { key: 'Ready', label: `Ready (${data.readyCount})` },
                     { key: 'Skipped', label: `Skipped (${data.skippedCount})` },
                     { key: 'Invalid', label: `Can't import (${data.invalidCount})` },
+                    ...(checkCount > 0 ? [{ key: 'Check', label: `To check (${checkCount})` }] : []),
                   ]}
                 />
                 <RowsTable rows={rows} />
@@ -342,6 +352,7 @@ export default function ImportWizardPage() {
                 {data.invalidCount > 0 && <p>{kind === 'funding-plans'
                   ? `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import just ${data.invalidCount === 1 ? 'that row' : 'those rows'}. A plan that was imported without one of its rows has to be undone and imported again.`
                   : `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import it again afterwards.`}</p>}
+                {checkCount > 0 && <p>{`Rows to check first: ${checkCount}. Each one says why in the preview.`}</p>}
                 {kind === 'staff' && <p>Nobody is emailed yet: send sign-in invites after the import, now or later from Import history.</p>}
                 <p>{`Every row is checked again as it is imported. You can undo the whole import while ${kind === 'participants' ? 'nothing has been added to its records' : KIND[kind].undoRule}.`}</p>
               </div>

@@ -145,10 +145,11 @@ public class ImportFundingRowsTests
             new[] { (FundingPoolKind.CoreFlexible, 0, PlanType.PlanManaged, 1250.50m), (FundingPoolKind.Stated, 15, PlanType.AgencyManaged, 5000m) },
             ava.Pools!.Select(p => (p.Kind!.Value, p.PaceCategory, p.ManagementType!.Value, p.Periods!.Single().PlanAmount!.Value)));
         Assert.All(ava.Pools!, p => Assert.Equal((new DateOnly(2026, 7, 1), new DateOnly(2027, 6, 30)), (p.Periods![0].PeriodStart!.Value, p.Periods[0].PeriodEnd!.Value)));
-        Assert.Equal("Categories 01 to 04 are one Core (flexible) pool in ODIP: this plan's plan-managed Core comes to $1,250.50.", plans[0].Warnings.Single());
-        Assert.Equal(plans[0].Warnings, plans[1].Warnings);
-        Assert.Empty(plans[2].Warnings);
-        Assert.Empty(plans[3].Warnings);
+        // A note, not a warning: nothing on these rows needs checking.
+        Assert.Equal("Categories 01 to 04 are one Core (flexible) pool in ODIP: this plan's plan-managed Core comes to $1,250.50.", plans[0].Notes.Single());
+        Assert.Equal(plans[0].Notes, plans[1].Notes);
+        Assert.Empty(plans[2].Notes);
+        Assert.All(plans, p => Assert.Empty(p.Warnings));
     }
 
     [Fact]

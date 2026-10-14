@@ -200,7 +200,7 @@ public static class ImportFundingRows
         foreach (var pool in rows.Where(r => r.Funding!.Category is >= 1 and <= 4).GroupBy(r => r.Funding!.Management!.Value))
         {
             var note = $"Categories 01 to 04 are one Core (flexible) pool in ODIP: this plan's {Words(pool.Key)} Core comes to ${Money(pool.Sum(r => r.Funding!.Amount!.Value))}.";
-            foreach (var row in pool) row.Warnings.Add(note);
+            foreach (var row in pool) row.Notes.Add(note);
         }
     }
 
