@@ -53,7 +53,7 @@ describe('NotificationList', () => {
     const noLink = unread('n3', 'You have a new notification.')
     renderList({ onChoose, inbox: loaded([noLink]) })
     fireEvent.click(screen.getByRole('button', { name: 'Unread: You have a new notification. 5 min ago' }))
-    expect(onChoose).toHaveBeenCalledWith(noLink)
+    expect(onChoose).toHaveBeenCalledWith(noLink, false)
   })
 
   it('draws a title as text, never as HTML', () => {

@@ -8,6 +8,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
+import NotificationBell from '@/components/layout/NotificationBell'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import {
@@ -360,16 +361,7 @@ export default function AppLayout() {
             <div className="flex items-center gap-3">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
-              {/* Placeholder pending the notifications feature (next on the roadmap) — disabled
-                  rather than removed, so the control is honest about doing nothing right now
-                  instead of silently absorbing clicks. */}
-              <button
-                className={`${TAP_AREA} w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed`}
-                aria-label="Notifications"
-                disabled
-              >
-                <span className="material-symbols-outlined text-[var(--color-primary)]" aria-hidden="true" style={{ fontSize: '20px' }}>notifications</span>
-              </button>
+              <NotificationBell />
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-white font-bold text-sm shadow-md">
                 {initial}
               </div>

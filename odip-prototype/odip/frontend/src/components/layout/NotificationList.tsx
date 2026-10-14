@@ -7,8 +7,8 @@ import type { InAppNotificationDto, InboxDto } from '@/api/types'
 export type NotificationListProps = {
   /** The inbox query: what the list draws its states from. */
   inbox: { data?: InboxDto; isError: boolean; refetch: () => unknown }
-  /** An item was chosen (before a link navigates). The bell marks it read and decides whether to close. */
-  onChoose: (item: InAppNotificationDto) => void
+  /** An item was chosen (before a link navigates; `navigates` says whether it will). The bell marks it read and closes on a link. */
+  onChoose: (item: InAppNotificationDto, navigates: boolean) => void
   /** "Mark all as read" was refused: show the alert line. */
   markAllFailed: boolean
 }
@@ -69,8 +69,8 @@ export function NotificationList({ inbox, onChoose, markAllFailed }: Notificatio
             return (
               <li key={item.id}>
                 {isAppRoute(item.linkTo)
-                  ? <Link to={item.linkTo} className={ITEM} onClick={() => onChoose(item)}>{body}</Link>
-                  : <button type="button" className={ITEM} onClick={() => onChoose(item)}>{body}</button>}
+                  ? <Link to={item.linkTo} className={ITEM} onClick={() => onChoose(item, true)}>{body}</Link>
+                  : <button type="button" className={ITEM} onClick={() => onChoose(item, false)}>{body}</button>}
               </li>
             )
           })}
