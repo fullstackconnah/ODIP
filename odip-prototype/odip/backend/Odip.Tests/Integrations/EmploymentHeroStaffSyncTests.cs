@@ -449,4 +449,32 @@ public class EmploymentHeroStaffSyncTests
         await RunAsync(db, tenant, eh);
         Assert.Empty(db.EmploymentHeroAttentions);
     }
+
+    [Fact]
+    public async Task A_business_changed_while_EH_was_read_skips_the_run_and_changes_nobody()
+    {
+        var name = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        await using var db = Db(name, tenant);
+        await ConnectAsync(db, tenant);
+        db.Users.Add(EhFixture.Staff(tenant, "Sam", "Lee", "sam@acme.org.au"));
+        await db.SaveChangesAsync();
+        var eh = Eh(Employee(101, "Sam", "Lee", "sam@acme.org.au"), Employee(102, "Ana", "Ruiz", "ana@gmail.com"));
+        // An Admin reconnects to business 888 while business 777's list is being read: 777's ids must not land on 888's connection.
+        eh.BeforeAnswer = _ =>
+        {
+            using var admin = Db(name, tenant);
+            admin.EmploymentHeroConnections.Single().BusinessId = "888";
+            admin.SaveChanges();
+        };
+
+        var result = await RunAsync(db, tenant, eh);
+
+        Assert.Equal(EmploymentHeroSyncOutcome.Skipped, result.Outcome);
+        await using var check = Db(name, tenant);
+        Assert.Null((await check.Users.SingleAsync(u => u.FirstName == "Sam")).ExternalPayrollId);
+        Assert.False(await check.Users.AnyAsync(u => u.FirstName == "Ana"));
+        Assert.Empty(check.EmploymentHeroSyncLogs);
+        Assert.Null((await check.EmploymentHeroConnections.SingleAsync()).LastSyncAt);
+    }
 }

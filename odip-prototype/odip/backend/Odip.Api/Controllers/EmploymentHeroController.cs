@@ -93,24 +93,29 @@ public class EmploymentHeroController : ControllerBase
         }
 
         var businessId = business.Id.ToString(CultureInfo.InvariantCulture);
-        var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
-        var previousBusiness = conn?.BusinessId ?? await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId)
-            .OrderByDescending(l => l.StartedAt).Select(l => l.BusinessId).FirstOrDefaultAsync(ct);
-        // EH employee ids belong to one business. Links made against another business would match unrelated people.
-        if (previousBusiness is not null && previousBusiness != businessId) await ForgetLinksAsync(tenantId, ct);
+        // Under the sync lock, read before anything else: a run in flight finishes (or sees the new business and skips) before the links change here.
+        var saved = await EmploymentHeroStaffSync.UnderSyncLockAsync(_db, tenantId, async () =>
+        {
+            var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
+            var previousBusiness = conn?.BusinessId ?? await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId)
+                .OrderByDescending(l => l.StartedAt).Select(l => l.BusinessId).FirstOrDefaultAsync(ct);
+            // EH employee ids belong to one business. Links made against another business would match unrelated people.
+            if (previousBusiness is not null && previousBusiness != businessId) await ForgetLinksAsync(tenantId, ct);
 
-        if (conn is null) _db.EmploymentHeroConnections.Add(conn = new EmploymentHeroConnection { Id = Guid.NewGuid(), TenantId = tenantId });
-        (conn.ApiKeyCiphertext, conn.ApiKeyNonce) = _keys.Protect(apiKey, tenantId);
-        conn.BusinessId = businessId;
-        var name = (business.Name ?? "").Trim();
-        conn.BusinessName = name.Length > 200 ? name[..200] : name;
-        conn.ConnectedAt = _clock.GetUtcNow().UtcDateTime;
-        conn.ConnectedById = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : null;
-        conn.ConnectedByName = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An Admin";
-        conn.LastSyncError = null;
-        // Never the key itself in AuditLog: only that it changed, and who changed it.
-        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, "API key", null, "changed", User));
-        await _db.SaveChangesAsync(ct);
+            if (conn is null) _db.EmploymentHeroConnections.Add(conn = new EmploymentHeroConnection { Id = Guid.NewGuid(), TenantId = tenantId });
+            (conn.ApiKeyCiphertext, conn.ApiKeyNonce) = _keys.Protect(apiKey, tenantId);
+            conn.BusinessId = businessId;
+            var name = (business.Name ?? "").Trim();
+            conn.BusinessName = name.Length > 200 ? name[..200] : name;
+            conn.ConnectedAt = _clock.GetUtcNow().UtcDateTime;
+            conn.ConnectedById = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : null;
+            conn.ConnectedByName = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An Admin";
+            conn.LastSyncError = null;
+            // Never the key itself in AuditLog: only that it changed, and who changed it.
+            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, "API key", null, "changed", User));
+            await _db.SaveChangesAsync(ct);
+        }, ct);
+        if (!saved) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
     }
 
@@ -119,14 +124,17 @@ public class EmploymentHeroController : ControllerBase
     public async Task<ActionResult<ApiResponse<EmploymentHeroStatusDto>>> Disconnect(CancellationToken ct)
     {
         if (TenantId is not { } tenantId) return BadRequest(ApiResponse<EmploymentHeroStatusDto>.Fail(ChooseOrganisation));
-        var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
-        if (conn is not null)
+        // Under the sync lock, so a run in flight never commits its links and items after the disconnect.
+        var done = await EmploymentHeroStaffSync.UnderSyncLockAsync(_db, tenantId, async () =>
         {
+            var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
+            if (conn is null) return;
             _db.EmploymentHeroConnections.Remove(conn);
             _db.EmploymentHeroAttentions.RemoveRange(await _db.EmploymentHeroAttentions.Where(a => a.TenantId == tenantId).ToListAsync(ct));
             _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, "Connection", "connected", "disconnected", User));
             await _db.SaveChangesAsync(ct);
-        }
+        }, ct);
+        if (!done) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
     }
 

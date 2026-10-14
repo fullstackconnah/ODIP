@@ -1,6 +1,10 @@
 using System.Net;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Odip.Api.Controllers;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
@@ -156,5 +160,35 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal((EmploymentHeroAttentionKind.FixInEmploymentHero, "900"), (item.Kind, item.ExternalEmployeeId));
         Assert.Contains("couldn't save their details", item.Reason);
         Assert.Equal(1, await db.EmploymentHeroSyncLogs.CountAsync());
+    }
+
+    [SkippableFact]
+    public async Task Connect_waits_for_a_sync_in_flight_on_Postgres()
+    {
+        RequirePostgres();
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await using (setup) await ConnectAsync(setup, tenantId);
+        await using var running = PostgresFixture.NewContext(_pg.ConnectionString, ImportTestSupport.Tenant(tenantId));
+        await using var admin = PostgresFixture.NewContext(_pg.ConnectionString, ImportTestSupport.Tenant(tenantId));
+        var eh = new StubHttpHandler().On("/api/v2/business/888", HttpStatusCode.OK, new { id = 888, name = "Acme Care (new)" });
+        var controller = new EmploymentHeroController(admin, ImportTestSupport.Tenant(tenantId), EhFixture.Keys, StubHttpHandler.Client(eh), EhFixture.Sync(eh), EhFixture.Clock())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = ImportTestSupport.Admin() } },
+        };
+        var release = new TaskCompletionSource();
+        var held = new TaskCompletionSource();
+
+        // A run holds the organisation's sync lock (as the half-hourly run does while it applies EH's list).
+        var run = EmploymentHeroStaffSync.UnderSyncLockAsync(running, tenantId, async () => { held.SetResult(); await release.Task; }, CancellationToken.None);
+        await held.Task;
+        var connect = controller.Connect(new EmploymentHeroConnectDto(EhFixture.ApiKey, "888"), CancellationToken.None);
+        await Task.Delay(1500);
+        Assert.False(connect.IsCompleted);   // Connect waits for the run instead of clearing links under it
+
+        release.SetResult();
+        Assert.True(await run);
+        Assert.IsType<OkObjectResult>((await connect).Result);
+        await using var check = PostgresFixture.NewContext(_pg.ConnectionString, ImportTestSupport.Tenant(tenantId));
+        Assert.Equal("888", (await check.EmploymentHeroConnections.SingleAsync()).BusinessId);
     }
 }

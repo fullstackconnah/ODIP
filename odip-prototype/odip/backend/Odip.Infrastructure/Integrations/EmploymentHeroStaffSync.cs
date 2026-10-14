@@ -16,7 +16,8 @@ using Odip.Infrastructure.Services;
 
 namespace Odip.Infrastructure.Integrations;
 
-public enum EmploymentHeroSyncOutcome { NotConnected, Busy, Failed, Done }
+/// <summary>Skipped: the connection moved to another business while EH's list was read, so the list was dropped and nobody changed.</summary>
+public enum EmploymentHeroSyncOutcome { NotConnected, Busy, Failed, Done, Skipped }
 
 /// <summary>What one organisation's sync came to, and its log row (counts, error class) when it ran.</summary>
 public sealed record EmploymentHeroSyncResult(EmploymentHeroSyncOutcome Outcome, EmploymentHeroSyncLog? Log);
@@ -97,6 +98,14 @@ public sealed class EmploymentHeroStaffSync
 
         await using var runLock = await TryLockAsync(db, tenantId, ct);
         if (runLock is null) return new(EmploymentHeroSyncOutcome.Busy, null);
+        // Connect and Disconnect take this lock too, so once it is held the connection cannot move. It may have moved while EH's list was read: then the
+        // list belongs to the old business, and applying it would link this organisation's staff to that business's ids.
+        var businessNow = await db.EmploymentHeroConnections.AsNoTracking().Where(c => c.TenantId == tenantId).Select(c => c.BusinessId).FirstOrDefaultAsync(ct);
+        if (businessNow != log.BusinessId)
+        {
+            _logger.LogInformation("Employment Hero sync for organisation {TenantId} skipped: the connection changed while the list was read", tenantId);
+            return new(businessNow is null ? EmploymentHeroSyncOutcome.NotConnected : EmploymentHeroSyncOutcome.Skipped, null);
+        }
         var added = await ApplyAndRecordAsync(db, tenantId, employees, log, ct);
         if (added > 0)
         {
@@ -110,6 +119,19 @@ public sealed class EmploymentHeroStaffSync
 
     /// <summary>The advisory-lock key for one organisation's sync. It is the import's per-organisation key with "EHSYNC" mixed in, so the two never share a lock.</summary>
     public static long LockKey(Guid tenantId) => OnboardingImportService.LockKey(tenantId) ^ 0x4548_5359_4E43;
+
+    /// <summary>
+    /// Runs a change to the organisation's connection or links (Connect, Disconnect, Link) under the same lock as a sync run, and commits it with the lock,
+    /// so it never lands in the middle of a run. False when a run held the lock for 20 s; then nothing ran.
+    /// </summary>
+    public static async Task<bool> UnderSyncLockAsync(OdipDbContext db, Guid tenantId, Func<Task> work, CancellationToken ct)
+    {
+        await using var syncLock = await TryLockAsync(db, tenantId, ct);
+        if (syncLock is null) return false;
+        await work();
+        await syncLock.CommitAsync(ct);
+        return true;
+    }
 
     private static async Task<CatalogueImportLock?> TryLockAsync(OdipDbContext db, Guid tenantId, CancellationToken ct)
     {
