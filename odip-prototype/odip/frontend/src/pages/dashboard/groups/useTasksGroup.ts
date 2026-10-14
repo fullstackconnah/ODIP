@@ -1,0 +1,67 @@
+import { useTasks, useUpdateTask } from '@/api/hooks'
+import { TASK_TYPE_LABELS, type TaskDto, type UpdateTaskDto } from '@/api/types'
+import { formatDayMonth } from '@/lib/dateRange'
+import { groupPhase, type GroupModel, type QuickRow, type RowAction } from '../quickGroup'
+
+const PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 }
+const isOpen = (t: TaskDto) => t.status !== 'Completed' && t.status !== 'Cancelled'
+const dueDay = (t: TaskDto) => t.dueDate?.slice(0, 10) ?? ''
+
+/** The Tasks due group (SHAPE §5, call 11): overdue, then due today, ticked with TasksPage's own PUT of the stored row. */
+export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }: { today: string; mayCloseBudgetReview: boolean }): GroupModel {
+  // Overdue is the server's own rule (the dashboard's Overdue figure); due today is the server's week cut to the viewer's day. Both are full rows with their
+  // notes, so Done never wipes them (the summary's overdueTasks leave Notes out).
+  const overdue = useTasks({ status: 'Overdue' }, { enabled })
+  const week = useTasks({ dueThisWeek: 'true' }, { enabled })
+  const updateTask = useUpdateTask()
+
+  const late = [...(overdue.data ?? [])].sort((a, b) => dueDay(a).localeCompare(dueDay(b)))
+  const lateIds = new Set(late.map((t) => t.id))
+  const dueToday = (week.data ?? [])
+    .filter((t) => dueDay(t) === today && isOpen(t) && !lateIds.has(t.id))
+    .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9))
+
+  const row = (t: TaskDto, isLate: boolean): QuickRow => {
+    // Only an Admin or SuperAdmin closes the review of an emergency over budget (BudgetReviewAudience.MayAct, TasksPage's mayChange): a Coordinator opens it.
+    const signOff = t.taskType === 'BudgetEmergencyReview' && !mayCloseBudgetReview
+    const done: RowAction = {
+      kind: 'tap', label: 'Done', busyLabel: 'Saving…', name: `Done: ${t.title}`, failText: "Couldn't mark it done. Try again.",
+      run: async () => {
+        // TasksPage's tick: the stored row (the PUT rewrites every field), status Completed and the viewer's today.
+        await updateTask.mutateAsync({ id: t.id, data: { ...t, status: 'Completed', completedDate: today } as UpdateTaskDto })
+        return { announce: `Marked done: ${t.title}.` }
+      },
+    }
+    const actions: RowAction[] =
+      // A leave cover task closes itself when the shift is reassigned: it is never ticked by hand. Its own link (the server writes /rostering?date=<the shift's day>) opens the board there.
+      t.taskType === 'LeaveCoverage' ? [{ kind: 'link', label: 'Open roster', name: `Open roster for: ${t.title}`, to: t.linkTo ?? '/rostering' }]
+      : signOff ? [{ kind: 'link', label: 'Open', name: `Open task: ${t.title}`, to: t.linkTo ?? `/tasks/${t.id}/edit` }]
+      : t.linkTo ? [{ kind: 'link', label: 'Open', name: `Open task: ${t.title}`, to: t.linkTo }, done]
+      : [done]
+    return {
+      id: t.id,
+      subject: t.title,
+      meta: [
+        TASK_TYPE_LABELS[t.taskType],
+        (t.priority === 'High' || t.priority === 'Urgent') && t.priority,
+        isLate && t.dueDate && `due ${formatDayMonth(t.dueDate)}`,
+        t.tripName,
+        signOff && 'An admin signs this off',
+      ],
+      flags: [isLate ? { label: 'Overdue', tone: 'danger' } : { label: 'Due today', tone: 'warning' }],
+      actions,
+    }
+  }
+
+  const rows = [...late.map((t) => row(t, true)), ...dueToday.map((t) => row(t, false))]
+  return {
+    key: 'tasks',
+    title: 'Tasks due',
+    noun: 'tasks due',
+    phase: groupPhase(overdue, week),
+    refetch: () => { void overdue.refetch(); void week.refetch() },
+    count: rows.length,
+    rows,
+    link: { to: '/tasks', openLabel: 'Open Tasks' },
+  }
+}
