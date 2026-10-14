@@ -80,6 +80,9 @@ public class InAppNotificationPostgresTests : IClassFixture<PostgresFixture>
         await using var conn = new NpgsqlConnection(_pg.ConnectionString);
         await conn.OpenAsync();
         await using (var analyze = new NpgsqlCommand("ANALYZE \"InAppNotifications\"", conn)) await analyze.ExecuteNonQueryAsync();
+        // The test table is tiny, so the planner would rightly scan it whole; with sequential scans off it must choose between
+        // the indexes, and the partial one (three unread rows) has to be the cheapest way to the count.
+        await using (var noSeq = new NpgsqlCommand("SET enable_seqscan = off", conn)) await noSeq.ExecuteNonQueryAsync();
 
         await using var def = new NpgsqlCommand(
             "SELECT indexdef FROM pg_indexes WHERE tablename = 'InAppNotifications' AND indexname = 'IX_InAppNotifications_Unread'", conn);
