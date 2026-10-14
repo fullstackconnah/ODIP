@@ -1,7 +1,19 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Npgsql;
+using Odip.Api.Controllers;
+using Odip.Application.Common;
+using Odip.Application.DTOs;
+using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
+using Odip.Domain.Notifications;
+using Odip.Infrastructure.Notifications;
 using Odip.Tests.Postgres;
 using Xunit;
 
@@ -85,5 +97,79 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
 
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, Assert.IsType<PostgresException>(error.InnerException).SqlState);
+    }
+
+    // A SuperAdmin viewing organisation A: the context has NO tenant filter, so only the controller's own TenantId predicates keep B out.
+    private (Odip.Infrastructure.Data.OdipDbContext Db, IntakeBookingsController Controller) SuperAdminViewing(Guid tenantId, Guid userId)
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.SetupGet(t => t.TenantId).Returns(tenantId);
+        tenant.SetupGet(t => t.IsSuperAdmin).Returns(true);
+        var db = PostgresFixture.NewContext(_pg.ConnectionString, tenant.Object);
+        var sender = new IntakeInviteSender([new IntakeBookingsControllerTests.RecordingChannel(ChannelSendOutcome.Skipped)], NullLogger<IntakeInviteSender>.Instance);
+        var controller = new IntakeBookingsController(db, tenant.Object, sender, new NotificationRaiser(db), new IntakeBookingsControllerTests.FixedClock(IntakeBookingsControllerTests.Now))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, userId.ToString()), new Claim(ClaimTypes.Role, "SuperAdmin")], "test")) } },
+        };
+        return (db, controller);
+    }
+
+    [SkippableFact]
+    public async Task A_super_admin_sees_only_the_viewed_organisations_visits_and_the_query_translates()
+    {
+        RequirePostgres();
+        var (dbA, a) = await _pg.NewTenantContextAsync();
+        var (dbB, b) = await _pg.NewTenantContextAsync();
+        await using var _a = dbA;
+        await using var _b = dbB;
+        var samA = Staff(a);
+        var admin = Staff(a, UserRole.Admin, firstName: "Ada");
+        dbA.Users.AddRange(samA, admin);
+        dbA.ParticipantInquiries.Add(Booked(a, samA.Id, IntakeBookingsControllerTests.Start));
+        await dbA.SaveChangesAsync();
+        var kimB = Staff(b, firstName: "Kim");
+        dbB.Users.Add(kimB);
+        dbB.ParticipantInquiries.Add(Booked(b, kimB.Id, IntakeBookingsControllerTests.Start));
+        await dbB.SaveChangesAsync();
+        var (db, controller) = SuperAdminViewing(a, admin.Id);
+        await using var _ = db;
+
+        var result = await controller.Visits(new DateOnly(2026, 10, 16), new DateOnly(2026, 10, 16), null, CancellationToken.None);
+
+        var visit = Assert.Single(IntakeBookingsControllerTests.Ok<List<IntakeVisitDto>>(result.Result!));
+        Assert.Equal(samA.Id, visit.StaffUserId);
+        Assert.Equal("Sam Lee", visit.StaffName);
+    }
+
+    [SkippableFact]
+    public async Task A_super_admin_cannot_send_another_organisations_staff_member()
+    {
+        RequirePostgres();
+        var (dbA, a) = await _pg.NewTenantContextAsync();
+        var (dbB, b) = await _pg.NewTenantContextAsync();
+        await using var _a = dbA;
+        await using var _b = dbB;
+        var kimB = Staff(b, firstName: "Kim");
+        dbB.Users.Add(kimB);
+        await dbB.SaveChangesAsync();
+        var samA = Staff(a);
+        var admin = Staff(a, UserRole.Admin, firstName: "Ada");
+        var noah = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = a, FirstName = "Noah", LastName = "Fitzgerald", Source = "Phone", Email = "noah@example.com" };
+        dbA.Users.AddRange(samA, admin);
+        dbA.ParticipantInquiries.Add(noah);
+        await dbA.SaveChangesAsync();
+        var (db, controller) = SuperAdminViewing(a, admin.Id);
+        await using var _ = db;
+        var body = new SetIntakeBookingDto { StartsAt = IntakeBookingsControllerTests.Start, DurationMinutes = 90, Location = "Home", StaffUserId = kimB.Id };
+
+        var refused = await controller.Set(noah.Id, body, CancellationToken.None);
+        var booked = await controller.Set(noah.Id, body with { StaffUserId = samA.Id }, CancellationToken.None);
+
+        Assert.Equal(new[] { "Choose who's going." }, IntakeBookingsControllerTests.Problems(refused.Result!)["staffUserId"]);
+        Assert.IsType<OkObjectResult>(booked.Result);
+        db.ChangeTracker.Clear();
+        Assert.Equal(samA.Id, (await db.ParticipantInquiries.SingleAsync(x => x.Id == noah.Id)).IntakeStaffUserId);
+        Assert.Single(await db.NotificationOutbox.Where(o => o.RecipientUserId == samA.Id).ToListAsync());
     }
 }

@@ -210,6 +210,57 @@ public class IntakeBookingsController : ControllerBase
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, staff, provider.ZoneId)));
     }
 
+    /// <summary>
+    /// Intake visits starting in [from, to] (provider-local dates; by default today to 12 months on), soonest first, for My shifts and the Schedule
+    /// page. Your own visits are open to anyone signed in. Someone else's, or everyone's (no staff filter), are for the lifecycle roles only,
+    /// because the location is often a home address; anyone else who sends no filter gets their own.
+    /// </summary>
+    [HttpGet("intake-visits")]
+    public async Task<ActionResult<ApiResponse<List<IntakeVisitDto>>>> Visits([FromQuery] DateOnly? from, [FromQuery] DateOnly? to, [FromQuery] Guid? staffUserId, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return Ok(ApiResponse<List<IntakeVisitDto>>.Ok([]));
+        if (!(User.IsInRole("Admin") || User.IsInRole("Coordinator") || User.IsInRole("SuperAdmin")))
+        {
+            Guid? me = _tenant.ViewAsUserId ?? (Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var own) ? own : (Guid?)null);
+            if (me is null) return Ok(ApiResponse<List<IntakeVisitDto>>.Ok([]));
+            if (staffUserId is Guid other && other != me) return StatusCode(403, ApiResponse<List<IntakeVisitDto>>.Fail("You can only see your own intake visits."));
+            staffUserId = me;
+        }
+
+        var zone = await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct);
+        var first = from ?? ProviderLocalTime.TodayIn(NowUtc, zone.Zone);
+        var last = to ?? first.AddMonths(12);
+        var fromUtc = ProviderLocalTime.LocalToUtc(first.ToDateTime(TimeOnly.MinValue), zone.Zone);
+        var toUtc = ProviderLocalTime.LocalToUtc(last.AddDays(1).ToDateTime(TimeOnly.MinValue), zone.Zone);
+        // Keyed on the caller's organisation explicitly: a SuperAdmin's context has no query filter.
+        var rows = await _db.ParticipantInquiries
+            .Where(x => x.TenantId == tenantId && x.IntakeStartsAt != null && x.IntakeStartsAt >= fromUtc && x.IntakeStartsAt < toUtc
+                        && (staffUserId == null || x.IntakeStaffUserId == staffUserId))
+            .OrderBy(x => x.IntakeStartsAt)
+            .Select(x => new { x.Id, x.FirstName, x.LastName, x.ParticipantId, x.IntakeStartsAt, x.IntakeDurationMinutes, x.IntakeLocation, x.IntakeStaffUserId, x.IntakeConfirmedAt })
+            .ToListAsync(ct);
+
+        var participantIds = rows.Where(r => r.ParticipantId != null).Select(r => r.ParticipantId!.Value).Distinct().ToList();
+        var participants = await _db.Participants.Where(p => participantIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.IsDraft, p.IntakeCompletedAt }).ToDictionaryAsync(p => p.Id, ct);
+        var staffIds = rows.Select(r => r.IntakeStaffUserId!.Value).Distinct().ToList();
+        var names = await _db.Users.IgnoreQueryFilters().Where(u => staffIds.Contains(u.Id) && u.TenantId == tenantId)
+            .ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct);
+
+        return Ok(ApiResponse<List<IntakeVisitDto>>.Ok(rows.Select(r =>
+        {
+            var participant = r.ParticipantId is Guid pid ? participants.GetValueOrDefault(pid) : null;
+            return new IntakeVisitDto
+            {
+                InquiryId = r.Id, FirstName = r.FirstName, LastName = r.LastName, ParticipantId = r.ParticipantId,
+                ParticipantIsDraft = participant?.IsDraft, ParticipantIntakeCompletedAt = participant?.IntakeCompletedAt,
+                StartsAt = r.IntakeStartsAt!.Value, DurationMinutes = r.IntakeDurationMinutes ?? DefaultDuration, Location = r.IntakeLocation ?? string.Empty,
+                StaffUserId = r.IntakeStaffUserId!.Value, StaffName = names.GetValueOrDefault(r.IntakeStaffUserId!.Value, string.Empty),
+                ConfirmedAt = r.IntakeConfirmedAt, TimeZoneId = zone.Id,
+            };
+        }).ToList()));
+    }
+
     private sealed record Provider(string ZoneId, string Name, string Address, string? ManagerName, string? ManagerPhone);
 
     // Read by the ENQUIRY's organisation: a SuperAdmin viewing as a tenant has no query filter, and must never get another organisation's settings.
