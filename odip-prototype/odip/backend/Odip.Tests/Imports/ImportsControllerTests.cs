@@ -94,4 +94,18 @@ public class ImportsControllerTests
         var file = Assert.IsType<FileContentResult>(controller.Template("participants"));
         Assert.Equal(("odip-participants-template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), (file.FileDownloadName, file.ContentType));
     }
+
+    [Fact]
+    public async Task Funding_plans_answer_to_their_url_word_with_a_template_and_a_preview()
+    {
+        var (controller, db) = Controller();
+        using var _ = db;
+        var file = Assert.IsType<FileContentResult>(controller.Template("funding-plans"));
+        Assert.Equal("odip-funding-plans-template.xlsx", file.FileDownloadName);
+
+        const string csv = "NDIS number,Plan start,Plan end,Support category,Managed by,Amount\n430000001,01/07/2026,30/06/2027,Core,Self managed,100\n";
+        var preview = Assert.IsType<OkObjectResult>((await controller.Preview("funding-plans", Upload("budgets.csv", csv), null, CancellationToken.None)).Result);
+        var row = Assert.IsType<ApiResponse<ImportPreviewDto>>(preview.Value).Data!.Rows.Single();
+        Assert.Equal("No participant in ODIP has this NDIS number. Import or add them first.", row.Reasons.Single());
+    }
 }

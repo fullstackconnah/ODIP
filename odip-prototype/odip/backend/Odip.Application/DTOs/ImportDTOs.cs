@@ -15,8 +15,9 @@ public record ImportColumnDto(int Index, string Header, string? Field, string? N
 
 public record ImportRowDto(int RowNumber, string Name, ImportRowStatus Status, List<string> Reasons, List<string> Warnings, string? SkipReason);
 
+/// <summary>What a preview found. <see cref="CreateCount"/> is what Import would create: the ready rows or, for funding plans, the plans they make.</summary>
 public record ImportPreviewDto(List<ImportFieldDto> Fields, List<ImportColumnDto> Columns, List<ImportRowDto> Rows,
-    int ReadyCount, int SkippedCount, int InvalidCount, DateTime? PreviouslyImportedAt);
+    int ReadyCount, int SkippedCount, int InvalidCount, DateTime? PreviouslyImportedAt, int CreateCount);
 
 /// <summary>What a commit did. <see cref="Replayed"/>: the idempotency key matched an earlier batch, which is answered instead (with no rows).</summary>
 public record ImportResultDto(Guid BatchId, int CreatedCount, int SkippedCount, int FailedCount, List<ImportRowDto> Rows, bool Replayed);
