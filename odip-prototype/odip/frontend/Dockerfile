@@ -26,6 +26,11 @@ RUN npm ci --no-audit --no-fund \
 
 COPY frontend/ .
 RUN npm test
+# The deployed commit, for the platform footer's "Build 1a2b3c4" (src/lib/platformInfo.ts). Declared after the tests on purpose:
+# every later RUN sees an ARG, so above `npm ci` a new sha each deploy would throw away the cached install. The ARG/ENV pair is
+# needed for the same reason as VITE_DEV_AUTH's above: without the ENV, Vite never sees the value.
+ARG VITE_BUILD_SHA
+ENV VITE_BUILD_SHA=$VITE_BUILD_SHA
 RUN npm run build
 
 # Production stage

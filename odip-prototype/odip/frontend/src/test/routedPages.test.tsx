@@ -97,6 +97,7 @@ const ROUTES: Route[] = [
   { path: '/portal/shifts/:id', url: `/portal/shifts/${ID}`, load: () => import('@/pages/portal/PortalShiftDetailPage') },
   { path: '/portal/witness-approvals', url: '/portal/witness-approvals', load: () => import('@/pages/portal/PortalWitnessApprovalsPage') },
   { path: '/portal/leave', url: '/portal/leave', load: () => import('@/pages/portal/PortalLeavePage') },
+  { path: '/accessibility', url: '/accessibility', load: () => import('@/pages/AccessibilityPage') },
   { path: '*', url: '/no-such-page', load: () => import('@/pages/NotFoundPage') },
 ]
 

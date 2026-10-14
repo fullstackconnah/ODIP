@@ -310,8 +310,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 <span data-submit-label>Request early access</span>
                 <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-forward" /></svg>
               </button>
-              <p class="form__notice" id="form-notice">We will only use these details to reply about early access to Odip.
-                <!-- TODO(release): collection notice. Add who is collecting these details (collector identity) and a contact for privacy questions before this goes public. -->
+              <p class="form__notice" id="form-notice">We will only use these details to reply about early access to Odip.<span data-platform="collector" hidden></span><span data-platform="privacyNotice" hidden> Read our <a href="/legal/privacy">Privacy Policy</a>, which explains how we handle them and how to contact us.</span>
+                <!-- Filled from src/lib/platformInfo.ts (companyName, legalPublished). -->
               </p>
             </form>
 
@@ -330,21 +330,63 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
     <footer class="site-footer" data-canopy>
       <div class="wrap site-footer__inner" data-quiet>
-        <div class="site-footer__brand">
-          <a class="brand" href="#top" aria-label="Odip, back to the top">
-            <span class="brand__tile"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-travel-explore" /></svg></span>
-            <span class="brand__name">Odip</span>
-          </a>
-          <p>NDIS trip management for supported holidays.</p>
-          <a class="signin" href="/login"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-login" /></svg><span>Sign in</span></a>
+        <div class="site-footer__ack">
+          <h2>Acknowledgement of Country</h2>
+          <p>We acknowledge the Aboriginal and Torres Strait Islander Traditional Custodians of Country throughout Australia, and recognise their continuing connection to land, sea, culture and community. We pay our respects to Elders past and present.</p>
+        </div>
+        <div class="site-footer__cols">
+          <div class="site-footer__brand">
+            <a class="brand" href="#top" aria-label="Odip, back to the top">
+              <span class="brand__tile"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-travel-explore" /></svg></span>
+              <span class="brand__name">Odip</span>
+            </a>
+            <p>NDIS trip management for supported holidays.</p>
+            <a class="signin" href="/login"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-login" /></svg><span>Sign in</span></a>
+          </div>
+          <div class="site-footer__col">
+            <h2>Product</h2>
+            <ul>
+              <li><a href="#before">Before the trip</a></li>
+              <li><a href="#during">During the trip</a></li>
+              <li><a href="#after">After the trip</a></li>
+              <li><a href="#early-access">Request early access</a></li>
+            </ul>
+          </div>
+          <div class="site-footer__col" data-platform-group hidden>
+            <h2>Company</h2>
+            <ul>
+              <li data-platform="companyName" hidden></li>
+              <li data-platform="abn" hidden></li>
+            </ul>
+          </div>
+          <div class="site-footer__col">
+            <h2>Legal</h2>
+            <ul>
+              <li data-platform="privacy" hidden><a href="/legal/privacy">Privacy Policy</a></li>
+              <li data-platform="terms" hidden><a href="/legal/terms">Terms of Service</a></li>
+              <li><a href="/accessibility">Accessibility</a></li>
+            </ul>
+          </div>
+          <div class="site-footer__col" data-platform-group hidden>
+            <h2>Support</h2>
+            <ul>
+              <li data-platform="supportEmail" hidden><a></a></li>
+              <li data-platform="statusUrl" hidden><a target="_blank" rel="noopener noreferrer">Status<span class="sr-only"> (opens in a new tab)</span></a></li>
+            </ul>
+          </div>
         </div>
         <div class="site-footer__notes">
-          <h2>Collection notice</h2>
-          <p>We will only use these details to reply about early access to Odip.</p>
-          <!-- TODO(release): name the collector (legal entity) and give a privacy contact here, matching the notice under the form. -->
-          <h2>Sample data</h2>
-          <p>The screens and moments on this page show sample data. The people, trips and organisations in them are fictional, and some on-screen notes were written for the sample.</p>
+          <div>
+            <h2>Collection notice</h2>
+            <p>We will only use these details to reply about early access to Odip.<span data-platform="collector" hidden></span><span data-platform="privacyNotice" hidden> Read our <a href="/legal/privacy">Privacy Policy</a>, which explains how we handle them and how to contact us.</span></p>
+            <!-- Filled from src/lib/platformInfo.ts (companyName, legalPublished). -->
+          </div>
+          <div>
+            <h2>Sample data</h2>
+            <p>The screens and moments on this page show sample data. The people, trips and organisations in them are fictional, and some on-screen notes were written for the sample.</p>
+          </div>
         </div>
+        <p class="site-footer__legal" data-platform="copyright" hidden></p>
       </div>
     </footer>
 
