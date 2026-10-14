@@ -1075,7 +1075,7 @@ main,
 }
 .site-footer__brand {
   display: grid;
-  flex: 0 1 20rem;
+  flex: 0 1 16rem;
   align-content: start;
   justify-items: start;
   gap: 12px;

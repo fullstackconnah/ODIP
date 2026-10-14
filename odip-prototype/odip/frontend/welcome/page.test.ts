@@ -410,7 +410,7 @@ describe('the footer: the acknowledgement, the columns and the bound facts', () 
 
   it('keeps the brand to its own width, so the link columns sit beside it rather than pushed to the far edge', () => {
     const brand = css.split('\n.site-footer__brand {')[1].split('}')[0]
-    expect(brand).toContain('flex: 0 1 20rem;')
+    expect(brand).toContain('flex: 0 1 16rem;')
   })
 
   it('opens Status in a new tab and says so', () => {
