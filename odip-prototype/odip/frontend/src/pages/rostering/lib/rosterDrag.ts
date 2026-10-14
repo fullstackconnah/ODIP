@@ -80,6 +80,8 @@ export function carriedLine(carry: DragCarry, outcome: DropOutcome): string | nu
     case 'move':
       // The one time a shift's own state changes the outcome: a Published shift tells the worker at once.
       if (outcome.shift.status === 'Published') return `Published: notifies ${firstName(carry.staffName)}`
+      // Leaving a Published shift tells its worker at once too (finish review fix 1), even when the target is a Draft.
+      if (outcome.kind === 'move' && outcome.from.status === 'Published') return `Published: tells ${firstName(carry.staffName)}`
       // A hole that is not Published: nobody on it, or a worker on leave (the brief, section 10: "Replace {Alex} (on leave)").
       return isUnfilledShift(outcome.shift) ? 'Assign' : `Replace ${firstName(outcome.shift.staffName)} (on leave)`
     default: return null
@@ -138,6 +140,8 @@ function overSentence(carry: DragCarry, target: DropTarget | undefined): string 
   if (isLockedShift(shift)) return `Over a ${lockedWords(shift.status).toLowerCase()} shift. It can't be changed.`
   const where = `Over ${shift.participantName}, ${formatDayAccessibleName(shift.serviceDate)}, ${spokenRange(shift)}`
   const outcome = dropOutcome(carry, target)
+  if (outcome.kind === 'move' && outcome.from.status === 'Published')
+    return `${where}, needs staff. ${firstName(carry.staffName)}'s current shift is published, so dropping tells ${firstName(carry.staffName)} at once.`
   if (outcome.kind === 'assign' || outcome.kind === 'move') return `${where}, needs staff.`
   // Gap 8: the strip's prompt has no Swap, so the sentence offers none.
   if (outcome.kind === 'prompt') return `${where}, ${shift.staffName}'s shift. Dropping asks to replace${outcome.canSwap ? ' or swap' : ''}.`
@@ -192,6 +196,8 @@ export function replacePromptLines(carry: DragCarry, shift: ShiftDto, canSwap: b
       ? [`Swap: ${you} takes it and ${them} takes ${you}'s ${shortDay(from.serviceDate)}, ${formatShiftTimeRange(from.startTime, from.endTime)} shift with ${from.participantName}.`]
       : []),
     ...(shift.status === 'Published' ? ['This shift is published, so the change goes out now.'] : []),
+    // The shift the person is carried off changes too (Replace leaves it empty, Swap puts the other worker on it): say so when it is already out.
+    ...(from?.status === 'Published' ? [`${you}'s ${shortDay(from.serviceDate)} shift is published, so the change there goes out now.`] : []),
   ]
 }
 

@@ -59,6 +59,30 @@ describe('carriedLine', () => {
   })
 })
 
+// Finish review fix 1: a move or swap OFF a Published shift tells its worker at once too, so the carried puck, the prompt and the announcement say so.
+describe('a Published source shift', () => {
+  const draftHole = makeUnfilledShift({ id: 'open', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', status: 'Draft' })
+  const draftFilled = makeShift({ id: 'filled', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', staffId: 'staff-9', staffName: 'Alex Ng', status: 'Draft' })
+  const publishedSource = onShift(makeShift({ id: 'from', serviceDate: '2026-08-17', staffId: 'staff-2', staffName: 'Sam Wilson', status: 'Published' }))
+  const draftSource = onShift(makeShift({ id: 'from', serviceDate: '2026-08-17', staffId: 'staff-2', staffName: 'Sam Wilson', status: 'Draft' }))
+
+  it('makes the carried line say who is told when a move off it lands on a Draft', () => {
+    expect(carriedLine(publishedSource, { kind: 'move', from: publishedSource.fromShift!, shift: draftHole, mode: 'Move' })).toBe('Published: tells Sam')
+    expect(carriedLine(draftSource, { kind: 'move', from: draftSource.fromShift!, shift: draftHole, mode: 'Move' })).toBe('Assign')
+  })
+
+  it('adds a prompt line for the source, and none when it is a Draft', () => {
+    expect(replacePromptLines(publishedSource, draftFilled, true)).toContain("Sam's Mon 17 Aug shift is published, so the change there goes out now.")
+    expect(replacePromptLines(draftSource, draftFilled, true).join(' ')).not.toMatch(/published/)
+  })
+
+  it('says it in the announcement over the target', () => {
+    const active = { id: 'a', data: { current: publishedSource } } as never
+    const over = { id: 'o', data: { current: { kind: 'shift', shift: draftHole } } } as never
+    expect(rosterAnnouncements.onDragOver({ active, over })).toBe("Over Mia Chen, Tuesday 18 August, 9am to 3pm, needs staff. Sam's current shift is published, so dropping tells Sam at once.")
+  })
+})
+
 describe('staffWeekHours', () => {
   it("adds up each person's shifts in the week, leaving out cancelled and unfilled ones", () => {
     const hours = staffWeekHours([
@@ -160,6 +184,7 @@ describe('sentences', () => {
       'Replace: Sam takes it and Alex comes off.',
       "Swap: Sam takes it and Alex takes Sam's Mon 17 Aug, 9am–3pm shift with Jo Park.",
       'This shift is published, so the change goes out now.',
+      "Sam's Mon 17 Aug shift is published, so the change there goes out now.",
     ])
     expect(replacePromptLines(sam, { ...tue, status: 'Draft' }, false)).toEqual(['Mia Chen, Tue 18 Aug, 9am–3pm.', 'Replace: Sam takes it and Alex comes off.'])
     expect(publishWeekMessage([makeShift({ id: '1', staffId: 'a' }), makeShift({ id: '2', staffId: 'a' }), makeShift({ id: '3', staffId: 'b' }), makeUnfilledShift({ id: '4' })]))
