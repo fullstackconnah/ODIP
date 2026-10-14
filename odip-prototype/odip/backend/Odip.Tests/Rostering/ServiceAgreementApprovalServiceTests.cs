@@ -1012,6 +1012,38 @@ public class ServiceAgreementApprovalServiceTests
         Assert.Equal(40, await f.Db.Shifts.CountAsync());
     }
 
+    /// <summary>Deletes, from another context, the first shift this save moves to a new pattern: the carry's UPDATE then finds no row.</summary>
+    private sealed class CarriedShiftDeletedInterceptor(string dbName) : SaveChangesInterceptor
+    {
+        private bool _fired;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var moved = eventData.Context!.ChangeTracker.Entries<Shift>().FirstOrDefault(entry => entry.State == EntityState.Modified && entry.Property(s => s.ShiftPatternId).IsModified);
+            if (_fired || moved is null) return result;
+            _fired = true;
+            await using var other = NewDb(dbName);
+            other.Shifts.Remove(await other.Shifts.SingleAsync(s => s.Id == moved.Entity.Id, cancellationToken));
+            await other.SaveChangesAsync(cancellationToken);
+            return result;
+        }
+    }
+
+    [Fact]
+    public async Task A_carried_shift_deleted_by_someone_else_mid_approval_is_the_busy_answer_not_a_server_error()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, v1);
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+        await using var racing = NewDb(f.DbName, false, new CarriedShiftDeletedInterceptor(f.DbName));
+
+        var outcome = await new ServiceAgreementApprovalService(racing, new RosterPlacementGate(), new RosterShiftGenerator(), clock: f.Clock).ApproveAsync(TenantA, f.ParticipantId, v2.Id, false, Admin, CancellationToken.None);
+
+        Assert.Equal(ApprovalStatus.Busy, outcome.Status);
+        Assert.Equal(RosterBusyException.Words, Assert.Single(outcome.Errors!));
+    }
+
     private static async Task AssertNothingWrittenAsync(Fixture f, int expectedPatterns = 0)
     {
         Assert.Empty(await f.Db.ServiceAgreementDraftApprovals.ToListAsync());

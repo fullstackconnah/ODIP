@@ -119,6 +119,12 @@ public sealed class ServiceAgreementApprovalService
         {
             return new ApprovalOutcome(ApprovalStatus.Busy, Errors: new[] { busy.Message });
         }
+        // A shift this approval moves to a new pattern was deleted by another request before the save: nothing of this one is kept, and it is the busy answer (try again), not a 500.
+        catch (DbUpdateConcurrencyException)
+        {
+            _db.ChangeTracker.Clear();
+            return new ApprovalOutcome(ApprovalStatus.Busy, Errors: new[] { RosterBusyException.Words });
+        }
         // A request that got past the lock and the checks at the same moment as another lost to the unique approval per revision (or to the unique pattern key): the transaction has been rolled back,
         // nothing of this one is kept, and the answer is the winner's approval, as if this had been the second request to arrive.
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
@@ -402,8 +408,10 @@ public sealed class ServiceAgreementApprovalService
             var old = await _db.ShiftPatterns.Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId != null && earlierIds.Contains(p.SourceDraftId.Value)).ToListAsync(ct);
             plan.ToEnd = old.Where(p => p.EffectiveTo is null || p.EffectiveTo > plan.EndsOn).OrderBy(p => versionOf[p.SourceDraftId!.Value]).ToList();
             plan.EndsFromVersion = plan.ToEnd.Count > 0 ? plan.ToEnd.Max(p => versionOf[p.SourceDraftId!.Value]) : null;
+            // An approval locks the old shifts before it reads any of them: the carry-over and the removal then both decide on what is committed.
+            if (approving) await LockOldShiftsAsync(old.Select(p => p.Id).ToArray(), draft.AgreementStartDate > plan.Today ? draft.AgreementStartDate : plan.Today, ct);
             await CarryOverAsync(draft, plan, ct);
-            (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, approving, plan.ToCarry.Select(s => s.Id).ToHashSet());
+            (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, plan.ToCarry.Select(s => s.Id).ToHashSet());
             plan.OldShifts = plan.OldShifts with { Carried = plan.ToCarry.Count };
         }
 
@@ -412,6 +420,26 @@ public sealed class ServiceAgreementApprovalService
             var handMade = await _db.ShiftPatterns.AsNoTracking()
                 .Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId == null && p.IsActive).ToListAsync(ct);
             plan.Overlaps = handMade.Where(p => plan.NewPatterns.Any(made => Overlap(p, made))).ToList();
+        }
+    }
+
+    /// <summary>
+    /// Locks the rows of the earlier revisions' shifts from <paramref name="from"/> on, inside the approval's transaction and before any of them is read (PostgreSQL; EF InMemory has no row locks). An
+    /// assignment, a publish or a note another request is making waits for this approval, or has committed and is read: a shift is never carried or removed on a stale "nobody is on it". In id order, so two
+    /// lockers of the same rows queue instead of deadlocking, and bounded as the roster lock is: a long wait or a deadlock is the busy answer, never a 500.
+    /// </summary>
+    private async Task LockOldShiftsAsync(Guid[] patternIds, DateOnly from, CancellationToken ct)
+    {
+        if (patternIds.Length == 0 || !_db.Database.IsNpgsql()) return;
+        var sql = string.Create(CultureInfo.InvariantCulture,
+            $@"SET LOCAL lock_timeout = {(int)_generator.LockWait.TotalMilliseconds}; SELECT 1 FROM ""Shifts"" WHERE ""ShiftPatternId"" = ANY({{0}}) AND ""ServiceDate"" >= {{1}} ORDER BY ""Id"" FOR UPDATE; SET LOCAL lock_timeout TO DEFAULT");
+        try
+        {
+            await _db.Database.ExecuteSqlRawAsync(sql, new object[] { patternIds, from }, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.LockNotAvailable or PostgresErrorCodes.DeadlockDetected)
+        {
+            throw new RosterBusyException();
         }
     }
 
@@ -464,10 +492,9 @@ public sealed class ServiceAgreementApprovalService
     /// <summary>
     /// The shifts of the participant's earlier approved revisions dated from the day this one starts (or today, when that is later) that a coordinator can still tidy: drafts and published shifts, not one
     /// that is under way, handed in for review, finished or cancelled. The unfilled Draft ones are what approval removes, unless something is recorded against one; the rest are kept, counted (open when
-    /// nobody is assigned) and listed. Tracked: an approval removes the removable ones in its own save. With <paramref name="lockRows"/> (an approval, inside its transaction) the rows are locked
-    /// first on PostgreSQL, so what is read is what is removed: EF InMemory has no row locks, so there the read is as before.
+    /// nobody is assigned) and listed. Tracked: an approval removes the removable ones in its own save, after <see cref="LockOldShiftsAsync"/> has locked them.
     /// </summary>
-    private async Task<(OldShiftsRemainingDto Remaining, List<Shift> Removable)> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct, bool lockRows = false, IReadOnlySet<Guid>? carried = null)
+    private async Task<(OldShiftsRemainingDto Remaining, List<Shift> Removable)> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct, IReadOnlySet<Guid>? carried = null)
     {
         var earlier = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
             .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion < draft.Version)
@@ -478,12 +505,6 @@ public sealed class ServiceAgreementApprovalService
         var patternIds = await _db.ShiftPatterns.AsNoTracking().Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId != null && earlierIds.Contains(p.SourceDraftId.Value)).Select(p => p.Id).ToListAsync(ct);
         // What a coordinator can still tidy by hand: a shift nobody has started, handed in or finished, on a day that is not past. (The new revision may start in the past.)
         var from = draft.AgreementStartDate > today ? draft.AgreementStartDate : today;
-        // An assignment, a publish or a note another request is making waits for this approval (FOR UPDATE), or has committed and is read below: a shift is never removed on a stale "nobody is on it".
-        if (lockRows && patternIds.Count > 0 && _db.Database.IsNpgsql())
-        {
-            var ids = patternIds.ToArray();
-            await _db.Database.ExecuteSqlInterpolatedAsync($@"SELECT 1 FROM ""Shifts"" WHERE ""ShiftPatternId"" = ANY({ids}) AND ""ServiceDate"" >= {from} FOR UPDATE", ct);
-        }
         var shifts = patternIds.Count == 0 ? new List<Shift>() : await _db.Shifts.Include(s => s.User)
             .Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published))
             .ToListAsync(ct);

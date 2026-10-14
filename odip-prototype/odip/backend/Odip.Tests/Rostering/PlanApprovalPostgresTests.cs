@@ -69,19 +69,19 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         }
     }
 
-    private static async Task<ServiceAgreementDraft> StoreAsync(string connectionString, Guid tenantId, Guid participantId, int version, DateOnly? start = null, DateOnly? end = null, IReadOnlyList<PlanBlock>? blocks = null)
+    private static async Task<ServiceAgreementDraft> StoreAsync(string connectionString, Guid tenantId, Guid participantId, int version, DateOnly? start = null, DateOnly? end = null, IReadOnlyList<PlanBlock>? blocks = null, IEnumerable<HolidayEntry>? holidays = null)
     {
         await using var db = Open(connectionString, tenantId);
-        var draft = BuildRevision(tenantId, participantId, version, blocks ?? new[] { WeekdayBlock() }, start, end, requirements: new Application.DTOs.DraftBlockRequirementsDto { WorkerGender = "Female", Driver = true, Skills = new List<string> { "FirstAid" } });
+        var draft = BuildRevision(tenantId, participantId, version, blocks ?? new[] { WeekdayBlock() }, start, end, requirements: new Application.DTOs.DraftBlockRequirementsDto { WorkerGender = "Female", Driver = true, Skills = new List<string> { "FirstAid" } }, holidays: holidays);
         db.ServiceAgreementDrafts.Add(draft);
         await db.SaveChangesAsync();
         return draft;
     }
 
-    private static async Task<ApprovalOutcome> ApproveAsync(string connectionString, Guid tenantId, Guid participantId, Guid draftId, FakeClock clock, ApprovalCaller? caller = null)
+    private static async Task<ApprovalOutcome> ApproveAsync(string connectionString, Guid tenantId, Guid participantId, Guid draftId, FakeClock clock, ApprovalCaller? caller = null, TimeSpan? lockWait = null)
     {
         await using var db = Open(connectionString, tenantId);
-        return await new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: clock).ApproveAsync(tenantId, participantId, draftId, false, caller ?? Admin, CancellationToken.None);
+        return await new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(lockWait), clock: clock).ApproveAsync(tenantId, participantId, draftId, false, caller ?? Admin, CancellationToken.None);
     }
 
     private static async Task ExecuteAsync(string connectionString, string sql)
@@ -394,6 +394,89 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         await using var read = Open(cs, tenantId);
         Assert.Equal(staff, (await read.Shifts.AsNoTracking().SingleAsync(s => s.Id == target)).UserId);
     }
+    [SkippableFact]
+    public async Task AnAssignmentCommittedDuringTheApproval_OnADayTheNewPlanSkipsForAHoliday_IsKeptNotRemoved()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
+        var holiday = new[] { new HolidayEntry(new DateOnly(2026, 11, 9), "NSW", "Test holiday", null, null, "test") };          // Monday 9 November
+        var v1 = await StoreAsync(cs, tenantId, participantId, 1, blocks: new[] { WeekdayBlock(change: b => b with { OnPublicHoliday = HolidayDecision.Charge }) }, holidays: holiday);
+        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        // The same support, but the 9th is skipped: that day's shift is not carried, so it is one approval may remove.
+        var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), blocks: new[] { WeekdayBlock(change: b => b with { OnPublicHoliday = HolidayDecision.Skip }) }, holidays: holiday);
+        var staff = Guid.NewGuid();
+        Guid target;
+        await using (var db = Open(cs, tenantId))
+        {
+            db.Users.Add(new User { Id = staff, TenantId = tenantId, FirstName = "Ben", LastName = "Turner", Username = $"ben{Guid.NewGuid():N}", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
+            await db.SaveChangesAsync();
+            target = await db.Shifts.Where(s => s.ServiceDate == new DateOnly(2026, 11, 9)).Select(s => s.Id).SingleAsync();
+        }
+
+        // Another request assigns a worker to that shift and has not committed when the approval starts reading the roster.
+        await using var other = new NpgsqlConnection(cs);
+        await other.OpenAsync();
+        await using var assigning = await other.BeginTransactionAsync();
+        await using (var assign = new NpgsqlCommand(@"UPDATE ""Shifts"" SET ""UserId"" = @staff WHERE ""Id"" = @id", other, assigning))
+        {
+            assign.Parameters.AddWithValue("staff", staff);
+            assign.Parameters.AddWithValue("id", target);
+            await assign.ExecuteNonQueryAsync();
+        }
+        var approving = ApproveAsync(cs, tenantId, participantId, v2.Id, clock);
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Assert.False(approving.IsCompleted);                                                     // it waits on the shift rows before it reads any of them
+        await assigning.CommitAsync();
+
+        var outcome = await approving;
+
+        // Without the lock before the carry-over read, the shift was read unfilled, tracked, and deleted after the assignment committed.
+        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
+        Assert.Equal((1, 0), (outcome.OldShifts!.Assigned, outcome.OldShifts.Removed));
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(staff, (await read.Shifts.AsNoTracking().SingleAsync(s => s.Id == target)).UserId);
+    }
+
+    [SkippableFact]
+    public async Task AShiftRowHeldLongerThanTheApprovalWaits_IsTheBusyAnswer_AndNothingIsWritten()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
+        var v1 = await StoreAsync(cs, tenantId, participantId, 1);
+        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), blocks: new[] { WeekdayBlock(change: b => b with { End = T(14) }) });
+        Guid target;
+        await using (var db = Open(cs, tenantId)) target = await db.Shifts.Where(s => s.ServiceDate == new DateOnly(2026, 11, 4)).Select(s => s.Id).SingleAsync();
+
+        // Another request holds one of the old shifts' rows and does not let go.
+        await using var other = new NpgsqlConnection(cs);
+        await other.OpenAsync();
+        await using var holding = await other.BeginTransactionAsync();
+        await using (var hold = new NpgsqlCommand(@"SELECT 1 FROM ""Shifts"" WHERE ""Id"" = @id FOR UPDATE", other, holding))
+        {
+            hold.Parameters.AddWithValue("id", target);
+            await hold.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            var approving = ApproveAsync(cs, tenantId, participantId, v2.Id, clock, lockWait: TimeSpan.FromMilliseconds(500));
+            var finished = await Task.WhenAny(approving, Task.Delay(TimeSpan.FromSeconds(8)));
+
+            // Without a bound the row lock waited for ever (the server's default lock_timeout), and a lock failure there was a raw PostgresException: a 500.
+            Assert.Same(approving, finished);
+            var outcome = await approving;
+            Assert.Equal((ApprovalStatus.Busy, RosterBusyException.Words), (outcome.Status, Assert.Single(outcome.Errors!)));
+        }
+        finally
+        {
+            await holding.RollbackAsync();
+        }
+        await using var read = Open(cs, tenantId);
+        Assert.False(await read.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == v2.Id));
+    }
+
 
     [SkippableFact]
     public async Task ApprovingASplitRevision_MakesItsPatternsUnderTheUniqueKey_CarriesTheUnchangedDays_AndTidiesTheChangedOne_InOneSave()
