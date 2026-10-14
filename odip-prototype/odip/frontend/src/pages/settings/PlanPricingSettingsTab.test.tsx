@@ -192,6 +192,23 @@ describe('Plan pricing settings', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
   })
 
+  it('drops the ticked box once the groups show as confirmed, so Save has nothing left to send', async () => {
+    const user = userEvent.setup()
+    query.current = { data: makeSettings({ registrationGroupsConfirmed: false }), isLoading: false, refetch: vi.fn() }
+    const router = createMemoryRouter([{ path: '/settings', element: <PlanPricingSettingsTab {...FRAME} /> }], { initialEntries: ['/settings'] })
+    render(<RouterProvider router={router} />)
+    await user.click(screen.getByRole('checkbox', { name: 'These are the registration groups we hold' }))
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+
+    query.current = { data: makeSettings({ registrationGroupsConfirmed: true }), isLoading: false, refetch: vi.fn() }   // someone else confirmed them
+    // The refetch lands on the next render: an edit and its undo stand in for it, leaving nothing else changed.
+    await user.click(screen.getByRole('checkbox', { name: 'Claim provider travel' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Claim provider travel' }))
+
+    expect(screen.queryByRole('checkbox', { name: 'These are the registration groups we hold' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+
   it('says Saving… on the one Save while a save is on its way', () => {
     mutation.isPending = true
     setUp()

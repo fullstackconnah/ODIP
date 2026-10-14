@@ -91,6 +91,8 @@ export default function PlanPricingSettingsTab(frame: SectionFrame) {
   const current = form ?? (settings ? formOf(settings) : null)
   const heldNow = groups ?? settings?.registrationGroupsHeld ?? []
   const confirmed = settings?.registrationGroupsConfirmed ?? false
+  // Somebody confirmed them meanwhile: the box is gone, so its tick goes too, and Save has nothing hidden to send.
+  if (confirmed && attest) setAttest(false)
   const groupsChanged = settings ? !sameList(heldNow, settings.registrationGroupsHeld) : false
   // The groups go with the one Save when they changed or were attested. The PUT reads a sent group list as confirmed unless told
   // otherwise, so the flag always goes with them: true once attested here or confirmed before, false while nobody has said so.

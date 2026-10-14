@@ -70,49 +70,53 @@ function CheckBlock({ check, value, saved, disabled, onChange, children }: {
  * Organisation › Safety checks: what ODIP stops and what it only warns about, plus who staff call about a missed dose. Tightening a check
  * (Warn only to Enforce) asks once; loosening saves without asking. Both modes are last-write-wins on the server and audited there.
  */
+/**
+ * A mode kept out of the form on purpose (unchanged from Provider settings). `server` is the server's current value (no row reads as Warn);
+ * the pick is the person's choice with the server value they chose it against. Only a deliberate pick that differs from the server is
+ * sent, and a pick is dropped for good once the server moves on (our own save landed, or another Admin changed it), so a stale section
+ * never pushes an old choice back over a newer one, and always shows the mode the server holds.
+ */
+function useModePick(server: Mode) {
+  const [pick, setPick] = useState<{ value: Mode; base: Mode } | null>(null)
+  if (pick && pick.base !== server) setPick(null)
+  const shown = pick?.value ?? server
+  return { shown, changed: shown !== server, choose: (value: Mode) => setPick({ value, base: server }) }
+}
+
 export default function SafetyChecksSection(frame: SectionFrame) {
-  // The medication mode rides in the form, so useProviderRow sends it only when it differs from what loaded or was last saved.
-  const p = useProviderRow(row => ({
-    managerName: row?.managerName ?? '',
-    managerPhone: row?.managerPhone ?? '',
-    medicationCompetencyMode: (row?.medicationCompetencyMode ?? 'Warn') as MedicationCompetencyMode,
-  }))
-  // The readiness check stays out of the form on purpose (unchanged from Provider settings). serverMode is the server's current value
-  // (no row reads as Warn); modePick is the person's choice with the server value they chose it against. Only a deliberate pick that
-  // differs from the server is sent, and a pick is dropped for good once the server moves on (our own save landed, or another Admin
-  // changed it), so a stale section can never push an old choice back over a newer one.
-  const serverMode: ParticipantReadinessMode = p.row?.participantReadinessMode ?? 'Warn'
-  const [modePick, setModePick] = useState<{ value: ParticipantReadinessMode; base: ParticipantReadinessMode } | null>(null)
-  if (modePick && modePick.base !== serverMode) setModePick(null)
-  const shownMode = modePick?.value ?? serverMode
-  const modeChanged = shownMode !== serverMode
+  const p = useProviderRow(row => ({ managerName: row?.managerName ?? '', managerPhone: row?.managerPhone ?? '' }))
+  const serverReadiness: ParticipantReadinessMode = p.row?.participantReadinessMode ?? 'Warn'
+  const serverMedication: MedicationCompetencyMode = p.row?.medicationCompetencyMode ?? 'Warn'
+  const readinessMode = useModePick(serverReadiness)
+  const medicationMode = useModePick(serverMedication)
   const [confirming, setConfirming] = useState(false)
 
   const locked = frame.readOnly || p.incomplete
-  const medication: Mode = p.form?.medicationCompetencyMode ?? 'Warn'
-  const savedMedication: Mode = p.base?.medicationCompetencyMode ?? 'Warn'
-  const tightens = { readiness: modeChanged && shownMode === 'Enforce', medication: medication === 'Enforce' && savedMedication !== 'Enforce' }
+  const tightens = { readiness: readinessMode.changed && readinessMode.shown === 'Enforce', medication: medicationMode.changed && medicationMode.shown === 'Enforce' }
   const both = tightens.readiness && tightens.medication
 
   const save = () => {
     setConfirming(false)
-    p.save(modeChanged ? { participantReadinessMode: shownMode } : {})
+    p.save({
+      ...(readinessMode.changed ? { participantReadinessMode: readinessMode.shown } : {}),
+      ...(medicationMode.changed ? { medicationCompetencyMode: medicationMode.shown } : {}),
+    })
   }
 
   return (
     <SettingsSection
       {...frame}
-      save={p.form && !p.incomplete ? { dirty: p.dirty || modeChanged, pending: p.pending, result: p.result, onSave: () => (tightens.readiness || tightens.medication ? setConfirming(true) : save()) } : undefined}
+      save={p.form && !p.incomplete ? { dirty: p.dirty || readinessMode.changed || medicationMode.changed, pending: p.pending, result: p.result, onSave: () => (tightens.readiness || tightens.medication ? setConfirming(true) : save()) } : undefined}
     >
       {p.query.isError && !p.form ? <PageState kind="error" noun="safety checks section" onRetry={() => { void p.query.refetch() }} />
         : !p.form ? <PageState kind="loading" noun="safety checks section" />
         : (
           <>
             {p.incomplete && !frame.readOnly && <IncompleteProfileNote />}
-            <CheckBlock check="readiness" value={shownMode} saved={serverMode} disabled={locked} onChange={value => setModePick({ value, base: serverMode })}>
+            <CheckBlock check="readiness" value={readinessMode.shown} saved={serverReadiness} disabled={locked} onChange={readinessMode.choose}>
               <p className={`max-w-prose text-sm ${TONE.warning.ink}`}>{READINESS_CAVEAT}</p>
             </CheckBlock>
-            <CheckBlock check="medication" value={medication} saved={savedMedication} disabled={locked} onChange={value => p.edit({ medicationCompetencyMode: value })} />
+            <CheckBlock check="medication" value={medicationMode.shown} saved={serverMedication} disabled={locked} onChange={medicationMode.choose} />
             <SettingsGroup title="Who staff call about a missed dose">
               <div className={formGrid}>
                 <TextField label="Manager name" placeholder="For example: Priya Sharma" className={span.medium} value={p.form.managerName} readOnly={locked} onChange={e => p.edit({ managerName: e.target.value })} />
