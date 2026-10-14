@@ -108,6 +108,41 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task UpdateShift_WhileTheRosterLockIsHeld_Is409Busy_AndChangesNothing()   // deep review S1: a PUT waits for a publish or a move, then reads
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid samId, leeId, shiftId;
+        Shift seeded;
+        await using (var db = Open(tenantId))
+        {
+            var sam = Worker(db, "Sam");
+            var lee = Worker(db, "Lee");
+            (samId, leeId) = (sam.Id, lee.Id);
+            seeded = ShiftOf(db, Person(db, "Mia").Id, sam.Id, ShiftStatus.Draft, Monday);
+            shiftId = seeded.Id;
+            await db.SaveChangesAsync();
+        }
+
+        // A Publish week or a move of the same organisation, still running.
+        await using (var holder = Open(tenantId))
+        await using (var held = await RosterGenerationLock.AcquireAsync(holder, tenantId, default, scope: "roster-board"))
+        await using (var db = Open(tenantId))
+        {
+            var put = new UpdateShiftDto
+            {
+                ParticipantId = seeded.ParticipantId, StaffId = leeId, ServiceDate = seeded.ServiceDate, StartTime = seeded.StartTime, EndTime = seeded.EndTime,
+                Ratio = seeded.Ratio, NightType = seeded.NightType, Status = ShiftStatus.Draft,
+            };
+            var result = await Controller(db, tenantId, TimeSpan.FromMilliseconds(400)).UpdateShift(shiftId, put, default);
+            var busy = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+            Assert.Equal("Another change to the roster is still running. Wait a moment, then try again.", Assert.Single(busy.Errors!));
+        }
+
+        Assert.Equal(samId, await WorkerOn(tenantId, shiftId));
+    }
+
+    [SkippableFact]
     public async Task MoveStaff_WhileTheRosterLockIsHeld_Is409Busy_AndChangesNothing()
     {
         RequirePostgres();

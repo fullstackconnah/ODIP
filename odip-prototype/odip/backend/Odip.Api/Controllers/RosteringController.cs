@@ -565,6 +565,25 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> UpdateShift(
         Guid id, [FromBody] UpdateShiftDto dto, CancellationToken ct)
     {
+        try
+        {
+            // The board's lock order (deep review S1), as /assign and move-staff take it: a PUT that changes the worker or the status waits for a Publish week or a move
+            // of the same organisation, then reads the shift as it is now, so it never writes over a publish or a move from a stale read and its notices tell the truth.
+            await using var held = await RosterBoardLockAsync(ct);
+            await LockShiftRowsAsync("\"Id\" = {0}", new object[] { id }, ct);
+            var result = await UpdateShiftLockedAsync(id, dto, ct);
+            if (result.Result is OkObjectResult) await held.CommitAsync(ct);
+            return result;
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>The body of <see cref="UpdateShift"/>, run under its locks.</summary>
+    private async Task<ActionResult<ApiResponse<ShiftDto>>> UpdateShiftLockedAsync(Guid id, UpdateShiftDto dto, CancellationToken ct)
+    {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
 
@@ -646,7 +665,8 @@ public class RosteringController : ControllerBase
             await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
         // The slide-over's Staff field is the menus' way to assign (the brief, section 7), so a PUT tells people exactly as a drop does; becoming Published tells the worker (decision 9).
-        // shortcut: a PUT is last-write-wins on the worker (it carries no ExpectedStaffId as the board's drops do); add one if two coordinators editing one shift ever collide.
+        // shortcut: two coordinators editing ONE shift in the slide-over is still last-write-wins on the worker (the PUT carries no ExpectedStaffId as the board's drops do), though the
+        // locks above keep it from writing over a publish or a move; add one if that ever collides.
         await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: previousStatus == ShiftStatus.Published, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
