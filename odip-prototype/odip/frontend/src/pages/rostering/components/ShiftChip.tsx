@@ -57,7 +57,7 @@ const LABEL_LINK =
  * reserved for "something is wrong" — a healthy chip is a neutral surface; only the warning dot and
  * the dashed/unfilled variant carry meaning.
  *
- * At least `--row-h` minus 6px tall (28px at a fine pointer; grows with the row under `pointer: coarse`). Where the chip is 14rem or
+ * At least `--row-h` minus 6px tall (28px at a fine pointer; under `pointer: coarse` at least 44px, the touch target size, where row-h less 6px would be 42px). Where the chip is 14rem or
  * wider it is one line, `time · name`, with the time never clipping and the name yielding first. Narrower (a day column is 123-130px
  * at the board's native widths) the name sits UNDER the time on its own line, because on one line the time, the drag handle and the
  * actions trigger left the name 0-5px: a one-letter link. The chip is its own container (`@container`), so this follows the chip's
@@ -194,7 +194,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       // below is the first thing to clip, so the hover text must not depend on it being visible.
       title={chipTitle}
       aria-busy={busy || undefined}
-      className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
+      className={`group @container relative flex min-h-[calc(var(--row-h)_-_6px)] pointer-coarse:min-h-11 items-stretch rounded-sm border bg-surface-container-low text-[13px] transition-opacity duration-150 ${
         dashed || onApprovedLeave ? 'border-dashed border-border' : 'border-border'
       } ${isDragging || fading ? 'opacity-50' : ''} ${overKind === 'assign' || overKind === 'move' || overKind === 'prompt' ? 'ring-2 ring-ring' : ''} ${
         overKind === 'locked' ? 'cursor-not-allowed' : ''

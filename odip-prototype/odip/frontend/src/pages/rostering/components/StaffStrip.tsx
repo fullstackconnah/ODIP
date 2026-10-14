@@ -71,7 +71,7 @@ function StaffPuck({ person, hours }: { person: StaffListDto; hours: number }) {
       {...listeners}
       {...attributes}
       aria-label={name}
-      className={`relative flex h-[calc(var(--row-h)_-_6px)] max-w-56 cursor-grab touch-manipulation items-center gap-1.5 overflow-hidden rounded-sm border border-border bg-card px-2 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing ${isDragging ? 'opacity-50' : ''}`}
+      className={`relative flex h-[calc(var(--row-h)_-_6px)] pointer-coarse:h-11 max-w-56 cursor-grab touch-manipulation items-center gap-1.5 overflow-hidden rounded-sm border border-border bg-card px-2 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing ${isDragging ? 'opacity-50' : ''}`}
     >
       {/* The chip's own warning mark, in the on-warning ink (ShiftChip): a flagged person can still be carried; the server decides. */}
       {person.hasExpiredQualifications && <AlertTriangle className="h-3 w-3 shrink-0 text-[var(--color-on-warning-container)]" aria-hidden="true" />}

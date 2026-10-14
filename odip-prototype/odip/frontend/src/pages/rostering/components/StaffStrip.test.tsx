@@ -67,6 +67,12 @@ describe('StaffStrip', () => {
     expect(screen.getByText('No staff match “zz”.')).toBeInTheDocument()
   })
 
+  it('makes each puck a 44px target under a coarse pointer (row-h less 6px is 42px there)', () => {
+    renderStrip()
+    // jsdom has no layout, so the class is the evidence here; the 820px tablet capture measures it on a real coarse pointer.
+    for (const puck of screen.getAllByRole('button', { name: /hours this week/ })) expect(puck).toHaveClass('pointer-coarse:h-11')
+  })
+
   it('shows only the chosen region', () => {
     renderStrip({ regionFilter: 'South' })
     expect(screen.getAllByRole('button', { name: /hours this week/ }).map(p => p.getAttribute('aria-label'))).toEqual(['Alex Ng, 40.5 of 38 hours this week'])

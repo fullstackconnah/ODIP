@@ -256,6 +256,13 @@ describe('ShiftChip one-line label', () => {
     // A fixed height would clip the name stacked under the time (below).
     expect(container.firstElementChild).not.toHaveClass('h-[calc(var(--row-h)_-_6px)]')
   })
+
+  it('is at least 44px under a coarse pointer, where row-h less 6px would leave it at 42px', () => {
+    const { container } = renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    // jsdom has no layout, so the class is the evidence here; the 820px tablet capture measures it on a real coarse pointer.
+    expect(container.firstElementChild).toHaveClass('pointer-coarse:min-h-11')
+  })
 })
 
 // Landing-spotted: at the board's native width a day column is 123-130px, and the time, the separator, the drag handle and the actions
