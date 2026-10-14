@@ -162,7 +162,7 @@ describe('QualificationsPage and the Dashboard agree', () => {
 
     render(<MemoryRouter><DashboardPage /></MemoryRouter>)
     // With issues, Qualification Issues is a tall tile: a named group ("Qualification Issues 12") whose figure is the count.
-    const tile = within(screen.getByRole('region', { name: 'Needs attention' })).getByRole('group', { name: /^Qualification Issues \d+$/ })
+    const tile = within(screen.getByRole('region', { name: 'Alerts' })).getByRole('group', { name: /^Qualification Issues \d+$/ })
 
     expect(listTotal).toBe(12)
     expect(tile.querySelector('.text-display')!.textContent).toBe(String(listTotal))

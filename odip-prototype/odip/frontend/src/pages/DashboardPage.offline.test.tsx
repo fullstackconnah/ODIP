@@ -40,7 +40,7 @@ function renderDashboard(client: QueryClient) {
   )
 }
 
-const band = () => screen.getByRole('region', { name: 'Needs attention' })
+const band = () => screen.getByRole('region', { name: 'Alerts' })
 
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', fullName: 'Sarah Mitchell' }))
@@ -64,7 +64,7 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
     // The greeting needs no data, so offline the page still opens with it (and still says nothing about numbers it never had).
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Good (morning|afternoon|evening), Sarah/)
     expect(screen.queryByText(/upcoming trip/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
     expect(screen.queryByText(/All clear/)).not.toBeInTheDocument()
     // The requests really were paused, not answered: this is the state the mocked tests cannot reach.
     expect(apiGet).not.toHaveBeenCalled()

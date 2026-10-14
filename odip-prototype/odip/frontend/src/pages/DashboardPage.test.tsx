@@ -77,7 +77,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     asRole('SupportWorker')
     renderPage()
     expect(screen.queryByText('Qualification Issues')).not.toBeInTheDocument()
-    expect(band().querySelector('a[href="/qualifications"]')).toBeNull()
+    expect(document.querySelector('a[href="/qualifications"]')).toBeNull()
   })
 
   it('spells the accommodation item out (the KPI row abbreviated it to fit a 136px tile)', () => {
@@ -288,11 +288,9 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
 
     const field = screen.getByText('All clear. Nothing needs you right now.').closest('div.rounded-md') as HTMLElement
     expect(field).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
-    expect(band().firstElementChild).toBe(field)
-    // The field IS the band: no tile, no link, no second row.
-    expect(band().querySelector('div.grid')).toBeNull()
-    expect(within(band()).queryAllByRole('link')).toHaveLength(0)
-    expect(within(band()).queryAllByRole('group')).toHaveLength(0)
+    // The field stands in place of the band: no band, no link, no second row.
+    expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
+    expect(within(field).queryAllByRole('link')).toHaveLength(0)
     expect(clearRow()).toBeNull()
     // It names everything it checked, so the claim can be audited.
     expect(screen.getByText(
@@ -312,8 +310,9 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     asRole('Coordinator')
     renderPage()
 
-    expect(band().innerHTML).not.toMatch(/-container\)\]/)
-    expect(band().querySelectorAll('[data-attention]')).toHaveLength(0)
+    expect(document.body.innerHTML).not.toContain('error-container)]')
+    expect(document.body.innerHTML).not.toContain('warning-container)]')
+    expect(document.querySelectorAll('[data-attention]')).toHaveLength(0)
   })
 
   it('goes back to tiles the moment something is above zero: the field is not sticky', () => {
@@ -418,7 +417,7 @@ describe('DashboardPage — needs-attention band: accessibility', () => {
     showAll()
     renderPage()
 
-    expect(screen.getByRole('region', { name: 'Needs attention' })).toBe(band())
+    expect(screen.getByRole('region', { name: 'Alerts' })).toBe(band())
     for (const link of within(band()).getAllByRole('link')) expect(link).toHaveAccessibleName()
     const names = within(band()).getAllByRole('group').map((group) => group.getAttribute('aria-label'))
     expect(names).toEqual(FULL_ORDER.map((label) => `${label} 3`))
@@ -488,6 +487,7 @@ describe('DashboardPage — needs-attention band: responsive shape', () => {
   })
 
   it('keeps the band a peak in the page: it sits between the header and the panels', () => {
+    mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 1 }))
     renderPage()
 
     const page = band().parentElement as HTMLElement

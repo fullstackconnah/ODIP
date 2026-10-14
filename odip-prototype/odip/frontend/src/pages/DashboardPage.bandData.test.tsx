@@ -402,7 +402,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     renderPage()
 
     expect(screen.queryByRole('group', { name: /Budgets at risk/ })).not.toBeInTheDocument()
-    expect(band()).not.toHaveTextContent(/budgets/i)
+    expect(document.body).not.toHaveTextContent(/budgets/i)
   })
 
   it('is not named at zero while the NDIA says the funds ran out for somebody: an all clear about budgets would contradict the Critical tile beside it', () => {

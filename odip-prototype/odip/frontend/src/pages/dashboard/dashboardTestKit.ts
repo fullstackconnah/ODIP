@@ -89,7 +89,7 @@ export const threeAlertsOnTwoParticipants = {
   isLoading: false,
 }
 
-export const band = () => screen.getByRole('region', { name: 'Needs attention' })
+export const band = () => screen.getByRole('region', { name: 'Alerts' })
 export const grid = () => band().querySelector('div.grid') as HTMLElement
 // The band's tiles, in order: each grid cell holds one tile, a named group or (a placeholder that has a page to go to) a link.
 export const tiles = () => [...grid().children].map((cell) => cell.firstElementChild as HTMLElement)

@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import { restoreZone, setZone } from '@/test/timeZone'
 import { mockUseDashboard, mockUseStaff, mockUseParticipantAlertsAggregate } from './dashboard/dashboardHookMocks'
-import { installDashboardDefaults, renderPage, summaryData, asRole, band, tileFor, clearRow } from './dashboard/dashboardTestKit'
+import { installDashboardDefaults, renderPage, summaryData, asRole, tileFor, clearRow } from './dashboard/dashboardTestKit'
 
 vi.mock('@/api/hooks', async () => (await import('./dashboard/dashboardHookMocks')).hooks)
 
@@ -249,7 +249,7 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
     expect(screen.queryByText(/upcoming trip/)).not.toBeInTheDocument()
     expect(screen.queryByText(/active participant/)).not.toBeInTheDocument()
     expect(screen.queryByText(/outstanding task/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
     // The spinner sits UNDER the heading, in the page's own column.
     expect(h1s[0].compareDocumentPosition(container.querySelector('.animate-spin')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     vi.useRealTimers()
@@ -269,7 +269,7 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Good morning, Sarah Friday 2 October')
     expect(screen.getByText('3 upcoming trips')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Needs attention' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Alerts' })).toBeInTheDocument()
     expect(document.querySelector('.animate-spin')).toBeNull()
     vi.useRealTimers()
   })
@@ -283,7 +283,7 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this dashboard.")
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalled()
-    expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
   })
 })
 
@@ -300,7 +300,7 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
 
     expect(container.querySelector('.animate-spin')).not.toBeNull()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sarah')
-    expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
     expect(screen.queryByText(/All clear/)).not.toBeInTheDocument()
   })
 
@@ -309,7 +309,7 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
     const { container } = renderPage()
 
     expect(container.querySelector('.animate-spin')).not.toBeNull()
-    expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
   })
 
   it('shows an en dash, busy, on Qualification Issues and Critical Participant Alerts while their requests are paused, and never names them clear', () => {
@@ -336,7 +336,7 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
     renderPage()
 
     expect(screen.queryByText('–')).not.toBeInTheDocument()
-    expect(band().querySelector('[aria-busy]')).toBeNull()
+    expect(document.querySelector('[aria-busy]')).toBeNull()
   })
 
   it('keeps a failed request a failure, whatever else is true of it', () => {

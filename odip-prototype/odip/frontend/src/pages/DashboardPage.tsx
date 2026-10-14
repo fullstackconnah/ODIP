@@ -14,7 +14,7 @@ import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_FLOOR } from '@/components/tapArea'
-import { AttentionBand, type BandItem } from './dashboard/AttentionBand'
+import { AllClearField, AttentionBand, type BandItem } from './dashboard/AttentionBand'
 import { BUDGET_OVER_ALERT, budgetsAtRisk } from '@/lib/budgetRisk'
 import { budgetsAtRiskItem } from './budgets/budgetBand'
 import { Link } from 'react-router-dom'
@@ -250,6 +250,8 @@ export default function DashboardPage() {
       error: pendingCompletions.error,
     })
   }
+  // Every item has data and is at zero: the whole page is clear, so the field stands in place of the band (DESIGN.md "Attention band").
+  const bandClear = attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -262,7 +264,7 @@ export default function DashboardPage() {
         counts={{ upcomingTrips: d.upcomingTripCount, activeParticipants: d.activeParticipantCount, outstandingTasks: d.outstandingTaskCount }}
       />
 
-      <AttentionBand items={attentionItems} />
+      {bandClear ? <AllClearField labels={attentionItems.map((item) => item.noun ?? item.label)} /> : <AttentionBand items={attentionItems} />}
 
       {/* ── Main Content Grid — Upcoming Trips / Overdue Tasks ──
           One column below xl, then an even split (1920: (1648 − 16) / 2 = 816px each). Each panel
