@@ -8,6 +8,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
@@ -151,5 +152,105 @@ public class RosterBoardDragDropTests
 
         Assert.False(JsonSerializer.Deserialize<AssignShiftDto>("""{ "staffId": null }""", web)!.ExpectsStaff);
         Assert.True(JsonSerializer.Deserialize<AssignShiftDto>("""{ "staffId": null, "expectedStaffId": null }""", web)!.ExpectsStaff);
+    }
+
+    private static async Task<List<(NotificationEventType Type, Guid To)>> Notices(OdipDbContext db) =>
+        (await db.NotificationOutbox.AsNoTracking().ToListAsync()).Select(o => (o.EventType, o.RecipientUserId)).OrderBy(n => n.EventType).ThenBy(n => n.RecipientUserId).ToList();
+
+    private static UpdateShiftDto Put(Shift s, Guid? staffId, ShiftStatus status) => new()
+    {
+        ParticipantId = s.ParticipantId, StaffId = staffId, ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime,
+        EndsNextDay = s.EndsNextDay, Ratio = s.Ratio, NightType = s.NightType, Status = status,
+    };
+
+    // ── Notices only for Published shifts (decision 9) ──
+
+    [Fact]
+    public async Task AssignShift_OnADraft_SendsNothing()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Draft);
+
+        await Controller(db).AssignShift(shift.Id, new AssignShiftDto { StaffId = SeedStaff(db).Id }, default);
+        await Controller(db).AssignShift(shift.Id, new AssignShiftDto { StaffId = null }, default);
+
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task AssignShift_ReplacingOnAPublishedShift_TellsBothPeople()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).AssignShift(shift.Id, new AssignShiftDto { StaffId = sam.Id }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, sam.Id), (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task AssignShift_ClearingAPublishedShift_SendsShiftUnassigned()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).AssignShift(shift.Id, new AssignShiftDto { StaffId = null }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task AssignShift_TheSameWorkerAgain_SendsNothing()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).AssignShift(shift.Id, new AssignShiftDto { StaffId = alex.Id }, default));
+
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_DraftToPublished_TellsTheWorker()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Draft);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published), default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingTheWorkerOnAPublishedShift_TellsBothPeople()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Published), default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, sam.Id), (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.Draft)]
+    [InlineData(ShiftStatus.Cancelled)]
+    public async Task UpdateShift_PublishedToDraftOrCancelled_SendsNothing(ShiftStatus to)
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, to), default));
+
+        Assert.Empty(await Notices(db));
     }
 }

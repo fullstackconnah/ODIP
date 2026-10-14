@@ -624,6 +624,7 @@ public class RosteringController : ControllerBase
         if (rejection != null) return UnprocessableEntity(rejection);
 
         var previousUserId = shift.UserId;
+        var previousStatus = shift.Status;
         // What the shift holds now, for the budget rules: a save that does not decide the budget again keeps the over-budget acknowledgement it already has.
         var previousReason = shift.OverrideReason;
         var previousCodes = shift.AcknowledgedFindingCodes;
@@ -643,6 +644,9 @@ public class RosteringController : ControllerBase
         if (previousUserId != shift.UserId || shift.Status == ShiftStatus.Cancelled)
             await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
+        // The slide-over's Staff field is the menus' way to assign (the brief, section 7), so a PUT tells people exactly as a drop does; becoming Published tells the worker (decision 9).
+        // shortcut: a PUT is last-write-wins on the worker (it carries no ExpectedStaffId as the board's drops do); add one if two coordinators editing one shift ever collide.
+        await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: previousStatus == ShiftStatus.Published, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
     }
@@ -708,23 +712,8 @@ public class RosteringController : ControllerBase
         if (previousUserId != shift.UserId)
             await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
-        // NotificationEventType.ShiftAssigned — only when a staff member is actually being set;
-        // clearing an assignment (dto.StaffId null) has no recipient (design spec §5).
-        if (dto.StaffId.HasValue)
-        {
-            var assignedStaff = await _db.Users.FirstOrDefaultAsync(u => u.Id == dto.StaffId.Value, ct);
-            var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
-                .Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct) ?? "a participant";
-            if (assignedStaff is not null)
-            {
-                await _notificationRaiser.RaiseAsync(
-                    Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", shift.Id,
-                    new[] { assignedStaff.Id },
-                    new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(
-                        assignedStaff.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime),
-                    ct);
-            }
-        }
+        // An assignment leaves the status as it was: only a Published shift tells anybody (decision 9).
+        await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: shift.Status == ShiftStatus.Published, ct);
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
@@ -1715,6 +1704,30 @@ public class RosteringController : ControllerBase
         shift.UserId = userId;
         shift.UpdatedAt = DateTime.UtcNow;
         ApplyOverride(shift, findings, ShiftBudgetGate.Decision.NoEmergency(findings), overrideReason, acknowledgedCodes, previousReason, previousCodes);
+    }
+
+    /// <summary>
+    /// Roster drag and drop (2026-10-14), decision 9: a worker hears about a shift only once it is Published. Call it once the shift holds its new worker and status, before the
+    /// caller's one save, so the outbox rows commit with the change (a refused write sends nothing). The worker on a Published shift gets ShiftAssigned when it is newly theirs or
+    /// has just become Published; whoever came off a shift that was already Published gets ShiftUnassigned. Draft changes, and a Published shift going back to Draft or Cancelled, stay silent.
+    /// </summary>
+    private async Task NotifyStaffChangeAsync(Shift shift, Guid? previousUserId, bool wasPublished, CancellationToken ct)
+    {
+        if (shift.Status != ShiftStatus.Published) return;
+        var assignedTo = shift.UserId is { } now && (now != previousUserId || !wasPublished) ? now : (Guid?)null;
+        var takenOff = wasPublished && previousUserId is { } before && before != shift.UserId ? before : (Guid?)null;
+        if (assignedTo is null && takenOff is null) return;
+
+        var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
+            .Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct) ?? "a participant";
+        if (assignedTo is { } a && await _db.Users.FirstOrDefaultAsync(u => u.Id == a, ct) is { } assigned)
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", shift.Id, new[] { assigned.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(assigned.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime), ct);
+        if (takenOff is { } t && await _db.Users.FirstOrDefaultAsync(u => u.Id == t, ct) is { } removed)
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.ShiftUnassigned, "Shift", shift.Id, new[] { removed.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftUnassignedPayload(removed.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime), ct);
     }
 
     /// <summary>
