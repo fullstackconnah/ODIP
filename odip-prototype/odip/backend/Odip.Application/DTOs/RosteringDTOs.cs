@@ -330,6 +330,25 @@ public record AssignShiftDto
     [System.Text.Json.Serialization.JsonIgnore] public bool ExpectsStaff { get; private init; }
 }
 
+/// <summary>How <c>POST /shifts/move-staff</c> carries a person (roster drag and drop, 2026-10-14). On the wire: "Move", "Swap", "Replace".</summary>
+public enum MoveStaffMode { Move, Swap, Replace }
+
+/// <summary>
+/// One all-or-nothing carry of the person on <see cref="FromShiftId"/> to <see cref="ToShiftId"/>: Move onto an unfilled shift, Replace the worker there, or Swap the two.
+/// The source is left unfilled except in a swap.
+/// </summary>
+public record MoveStaffDto
+{
+    public Guid FromShiftId { get; init; }
+    public Guid ToShiftId { get; init; }
+    public MoveStaffMode Mode { get; init; }
+    /// <summary>The person the page carried. When given and someone else is on the source now, the move is refused (409) rather than moving the wrong person.</summary>
+    public Guid? StaffId { get; init; }
+    /// <summary>Required when any finding of the move (a swap has two people's) needs a reason; never enough for a Blocking one.</summary>
+    public string? OverrideReason { get; init; }
+    public List<string>? AcknowledgedFindingCodes { get; init; }
+}
+
 /// <summary>Dry-run input for <c>POST /shifts/check</c> — the same shape as a candidate shift, minus persistence fields.</summary>
 public record CheckShiftDto
 {

@@ -253,4 +253,203 @@ public class RosterBoardDragDropTests
 
         Assert.Empty(await Notices(db));
     }
+
+    // ── POST /shifts/move-staff: one all-or-nothing request ──
+
+    // As the page sends it: the person it carried is whoever the board showed on the source.
+    private static MoveStaffDto Move(Shift from, Shift to, MoveStaffMode mode, string? reason = null, List<string>? codes = null) =>
+        new() { FromShiftId = from.Id, ToShiftId = to.Id, Mode = mode, StaffId = from.UserId, OverrideReason = reason, AcknowledgedFindingCodes = codes };
+
+    private static List<(NotificationEventType Type, Guid To)> Sorted(params (NotificationEventType Type, Guid To)[] notices) =>
+        notices.OrderBy(n => n.Type).ThenBy(n => n.To).ToList();
+
+    [Fact]
+    public async Task MoveStaff_Move_PutsThePersonOnTheTarget_AndTheSourceNeedsStaff()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, day: Monday);
+        var to = SeedShift(db, mia.Id, null, day: Monday.AddDays(1));
+
+        var dto = Body(await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Move), default));
+
+        Assert.Equal(sam.Id, dto.StaffId);
+        Assert.Equal(sam.Id, (await Reload(db, to.Id)).UserId);
+        Assert.Null((await Reload(db, from.Id)).UserId);
+        Assert.Empty(await Notices(db));   // both Draft: silent
+    }
+
+    [Fact]
+    public async Task MoveStaff_BetweenOverlappingShifts_RaisesNoDoubleBooking()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var from = SeedShift(db, SeedParticipant(db).Id, sam.Id, startHour: 9, endHour: 15);
+        var to = SeedShift(db, SeedParticipant(db, "Jo", "Park").Id, null, startHour: 10, endHour: 14);
+        var controller = Controller(db);
+        // The overlap is real: a dry run of Sam on the target, while Sam is still on the source, says DOUBLE_BOOKED_SHIFT.
+        var dryRun = Body(await controller.CheckShift(new CheckShiftDto
+        {
+            Id = to.Id, ParticipantId = to.ParticipantId, StaffId = sam.Id, ServiceDate = to.ServiceDate,
+            StartTime = to.StartTime, EndTime = to.EndTime, Ratio = to.Ratio, NightType = to.NightType,
+        }, default));
+        Assert.Contains(dryRun, f => f.Code == RosterConflictService.DoubleBookedShift);
+
+        var moved = Body(await controller.MoveStaff(Move(from, to, MoveStaffMode.Move), default));
+
+        Assert.DoesNotContain(moved.Findings, f => f.Code == RosterConflictService.DoubleBookedShift);
+        Assert.DoesNotContain(RosterConflictService.DoubleBookedShift, (await Reload(db, to.Id)).AcknowledgedFindingCodes ?? "");
+    }
+
+    [Fact]
+    public async Task MoveStaff_ReplaceOnPublishedShifts_TellsEachChange()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Published, day: Monday);
+        var to = SeedShift(db, mia.Id, alex.Id, ShiftStatus.Published, day: Monday.AddDays(1));
+
+        Body(await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Replace), default));
+
+        Assert.Equal(sam.Id, (await Reload(db, to.Id)).UserId);
+        Assert.Null((await Reload(db, from.Id)).UserId);
+        Assert.Equal(Sorted((NotificationEventType.ShiftAssigned, sam.Id), (NotificationEventType.ShiftUnassigned, alex.Id), (NotificationEventType.ShiftUnassigned, sam.Id)), await Notices(db));
+    }
+
+    [Fact]
+    public async Task MoveStaff_Swap_ExchangesThePeople()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, day: Monday);
+        var to = SeedShift(db, mia.Id, alex.Id, day: Monday.AddDays(1));
+
+        Body(await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Swap), default));
+
+        Assert.Equal(sam.Id, (await Reload(db, to.Id)).UserId);
+        Assert.Equal(alex.Id, (await Reload(db, from.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task MoveStaff_ASwapWhoseSecondHalfIsBlocked_Is422_AndLeavesBothShiftsAndTheOutboxAlone()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng", screeningValid: false);   // landing anywhere is WSC_EXPIRED: Blocking
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Published, day: Monday);
+        var to = SeedShift(db, mia.Id, alex.Id, ShiftStatus.Published, day: Monday.AddDays(1));
+
+        var result = await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Swap, "Covering a sick call"), default);
+
+        var refused = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<UnprocessableEntityObjectResult>(result.Result).Value);
+        Assert.Contains(refused.Data!, f => f.Code == RosterConflictService.WscExpired);
+        Assert.Equal(sam.Id, (await Reload(db, from.Id)).UserId);
+        Assert.Equal(alex.Id, (await Reload(db, to.Id)).UserId);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task MoveStaff_AWarningThatNeedsAReason_Is422_ThenGoesThroughWithOne()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, day: Monday);
+        var to = SeedShift(db, mia.Id, null, day: Monday.AddDays(1));
+        // Approved leave on the target's day: STAFF_ON_LEAVE, a warning that needs a reason.
+        db.LeaveRequests.Add(new LeaveRequest
+        {
+            Id = Guid.NewGuid(), UserId = sam.Id, LeaveType = LeaveType.Annual, StartDate = to.ServiceDate, EndDate = to.ServiceDate,
+            Status = LeaveStatus.Approved, RequestedByUserId = sam.Id, RequestedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+        var controller = Controller(db);
+
+        var first = await controller.MoveStaff(Move(from, to, MoveStaffMode.Move), default);
+        var findings = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<UnprocessableEntityObjectResult>(first.Result).Value).Data!;
+        Assert.Contains(findings, f => f.Code == RosterConflictService.StaffOnLeave);
+        Assert.Equal(sam.Id, (await Reload(db, from.Id)).UserId);
+
+        Body(await controller.MoveStaff(Move(from, to, MoveStaffMode.Move, "Leave cancelled by phone", findings.Select(f => f.Code).ToList()), default));
+
+        var landed = await Reload(db, to.Id);
+        Assert.Equal(sam.Id, landed.UserId);
+        Assert.Equal("Leave cancelled by phone", landed.OverrideReason);
+        Assert.Null((await Reload(db, from.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task MoveStaff_MoveOntoATargetFilledSinceTheBoardLoaded_Is409AndChangesNothing()   // Review Focus 1
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, day: Monday);
+        var to = SeedShift(db, mia.Id, alex.Id, day: Monday.AddDays(1));   // the page drew it as Needs staff; someone filled it since
+
+        var result = await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Move), default);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(sam.Id, (await Reload(db, from.Id)).UserId);
+        Assert.Equal(alex.Id, (await Reload(db, to.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task MoveStaff_WhenSomeoneElseIsOnTheSourceNow_Is409AndChangesNothing()   // Review Focus 1: the source's side
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var jo = SeedStaff(db, "Jo", "Park");
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, jo.Id, day: Monday);              // the page carried Sam off it; Jo was put on since
+        var to = SeedShift(db, mia.Id, null, day: Monday.AddDays(1));
+
+        var result = await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Move) with { StaffId = sam.Id }, default);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(jo.Id, (await Reload(db, from.Id)).UserId);
+        Assert.Null((await Reload(db, to.Id)).UserId);
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.Completed, true)]
+    [InlineData(ShiftStatus.InProgress, false)]
+    public async Task MoveStaff_WhenEitherShiftIsLocked_Is409(ShiftStatus status, bool lockTheTarget)
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, lockTheTarget ? ShiftStatus.Draft : status, day: Monday);
+        var to = SeedShift(db, mia.Id, null, lockTheTarget ? status : ShiftStatus.Draft, day: Monday.AddDays(1));
+
+        var result = await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Move), default);
+
+        Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
+        Assert.Equal(sam.Id, (await Reload(db, from.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task MoveStaff_OntoAShiftOfAnotherOrganisation_Is404()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift from, to;
+        using (var mine = TestDb.ForTenant(dbName, ours)) from = SeedShift(mine, SeedParticipant(mine).Id, SeedStaff(mine).Id);
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) to = SeedShift(other, SeedParticipant(other).Id, null);
+        using var db = TestDb.ForTenant(dbName, ours);
+
+        var result = await Controller(db, ours).MoveStaff(Move(from, to, MoveStaffMode.Move), default);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        using var all = TestDb.Create(dbName);
+        Assert.Null((await all.Shifts.SingleAsync(s => s.Id == to.Id)).UserId);
+        Assert.NotNull((await all.Shifts.SingleAsync(s => s.Id == from.Id)).UserId);
+    }
 }
