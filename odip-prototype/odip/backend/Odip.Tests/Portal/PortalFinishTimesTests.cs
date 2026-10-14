@@ -252,6 +252,37 @@ public class PortalFinishTimesTests
     }
 
     [Fact]
+    public async Task AFinishWithMovedTimes_KeepsTheShiftsReturnCount()
+    {
+        // Review CR-B Should 3: a returned shift finished again still says how often it was returned.
+        var f = Create();
+        f.Shift.ReturnCount = 2;
+        f.Db.SaveChanges();
+
+        await Finish(f, Dto(end: Now.AddMinutes(-10), reason: "Left early.", km: 12.5m));
+
+        Assert.Equal(2, (await f.Db.Shifts.SingleAsync()).ReturnCount);
+    }
+
+    [Fact]
+    public async Task AnotherWorkersFinish_WithMovedTimes_Is404_AndChangesNothing()
+    {
+        // Review CR-B Should 3: the new inputs never reach a shift the caller doesn't own.
+        var f = Create();
+        var other = f.AddWorker();
+
+        var result = await f.ControllerFor(other.Id).FinishShift(f.Shift.Id, Dto(start: Stamp.AddMinutes(-10), end: Now.AddMinutes(-10), reason: "x", km: 5m, report: true), default);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        var stored = await f.Db.ShiftCompletions.SingleAsync();
+        Assert.Equal(ShiftStatus.InProgress, f.Shift.Status);
+        Assert.Null(stored.ActualEnd);
+        Assert.Null(stored.OriginalActualStart);
+        Assert.Null(stored.Kilometres);
+        Assert.Null(stored.AnythingToReport);
+    }
+
+    [Fact]
     public async Task TheManualStartPath_KeepsItsOwnStartRules_AndTakesOnlyTheEndRule()
     {
         // Published + ActualStart: there is no stamp to adjust, so the start is the manual start (no reason, no original). A moved end still needs one.
