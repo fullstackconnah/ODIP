@@ -17,7 +17,7 @@ import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import ImportInvites from './ImportInvites'
-import { undoBlockers } from './importUndoBlockers'
+import { undoBlockers, undoFirst } from './importUndoBlockers'
 
 const MAX_BYTES = 5 * 1024 * 1024
 const BACK_TO = '/settings?tab=import'
@@ -214,6 +214,7 @@ export default function ImportWizardPage() {
                 {blockers.map(b => <li key={b.entityId}>{b.name} {b.reason}</li>)}
               </ul>
             )}
+            {undoFirst(blockers) && <p>{undoFirst(blockers)}</p>}
           </Callout>
         )}
         {failed.length > 0 && (

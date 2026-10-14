@@ -9,7 +9,7 @@ import type { ImportBatchDto, ImportKind } from '@/api/types'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import ImportInvites, { InviteResults, type InviteResult } from './ImportInvites'
-import { undoBlockers } from './importUndoBlockers'
+import { undoBlockers, undoFirst } from './importUndoBlockers'
 
 /** What the tab offers to import, in order. Each opens the wizard at /settings/import/{kind}. */
 const KINDS: { kind: ImportKind; title: string; text: string; noun: string }[] = [
@@ -102,6 +102,7 @@ export default function ImportDataTab() {
                 {blockers.map(b => <li key={b.entityId}>{b.name} {b.reason}</li>)}
               </ul>
             )}
+            {undoFirst(blockers) && <p>{undoFirst(blockers)}</p>}
           </Callout>
         )}
         <DataTable

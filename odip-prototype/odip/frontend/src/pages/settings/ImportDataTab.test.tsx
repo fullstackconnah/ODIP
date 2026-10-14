@@ -65,6 +65,17 @@ describe('ImportDataTab', () => {
     renderTab()
     expect(screen.getByText('Nothing was undone: 1 record has changed since the import.')).toBeInTheDocument()
     expect(screen.getByText('Ava Stone has shifts')).toBeInTheDocument()
+    expect(screen.queryByText(/Undo the funding plans import first/)).toBeNull()
+  })
+
+  it('says which undo goes first when funding plans hold the participants', () => {
+    undoState.current = {
+      isPending: false,
+      error: { response: { status: 409, data: { success: false, errors: ['Nothing was undone: 1 record has changed since the import.'], data: [{ entityId: 'p1', name: 'Ava Stone', reason: 'has a funding plan' }] } } },
+    }
+    renderTab()
+    expect(screen.getByText('Ava Stone has a funding plan')).toBeInTheDocument()
+    expect(screen.getByText('Undo the funding plans import first, then undo this one.')).toBeInTheDocument()
   })
 
   it('offers a staff import, and invites for a staff batch with the results above the history', async () => {
