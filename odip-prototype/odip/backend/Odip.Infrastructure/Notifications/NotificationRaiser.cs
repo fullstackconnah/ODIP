@@ -8,7 +8,8 @@ namespace Odip.Infrastructure.Notifications;
 
 /// <summary>
 /// See <see cref="INotificationRaiser"/>. Takes the caller's own tracked <see cref="OdipDbContext"/>
-/// — same context, so "same SaveChanges" needs no explicit transaction plumbing.
+/// — same context, so "same SaveChanges" needs no explicit transaction plumbing. Beside each outbox row it adds the
+/// recipient's bell row (<see cref="Odip.Domain.Notifications.InAppNotification"/>), which shares the dedupe and the save.
 ///
 /// TenantId is resolved per-recipient (via <c>Users.IgnoreQueryFilters()</c>) rather than left
 /// to <see cref="OdipDbContext.SaveChangesAsync"/>'s ambient auto-stamp: one v1 trigger
@@ -32,6 +33,8 @@ public sealed class NotificationRaiser : INotificationRaiser
         IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default)
     {
         var payloadJson = JsonSerializer.Serialize(payload);
+        // The bell's text: one per event, the same for every recipient (the payload's own RecipientEmail never reaches it).
+        var (title, linkTo) = InAppNotificationText.Build(type, entityId, payload);
         // 5-minute sliding dedupe window (design spec §1) — a double-click or retry-on-transient-
         // error re-submitting the same action must not raise a second row for the same triple.
         var cutoff = DateTime.UtcNow.AddMinutes(-5);
@@ -69,6 +72,22 @@ public sealed class NotificationRaiser : INotificationRaiser
                 PayloadJson = payloadJson,
                 Status = NotificationOutboxStatus.Pending,
                 NextAttemptAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+            });
+
+            // The bell row (dashboard spec 2026-10-14): beside the outbox row, so it shares the dedupe above and the caller's
+            // SaveChanges. It is written above the dispatcher's Notifications:Enabled gate and whatever the recipient's email
+            // preference (preferences are email-only), so live ODIP, which sends no email, still shows every event.
+            _db.InAppNotifications.Add(new InAppNotification
+            {
+                Id = Guid.NewGuid(),
+                TenantId = recipientUser.TenantId,
+                RecipientUserId = recipientId,
+                EventType = type,
+                EntityType = entityType,
+                EntityId = entityId,
+                Title = title,
+                LinkTo = linkTo,
                 CreatedAt = DateTime.UtcNow,
             });
         }
