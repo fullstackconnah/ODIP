@@ -1,17 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import PortalShiftsPage from './PortalShiftsPage'
-import type { PortalShiftsResponseDto } from '@/api/types'
+import type { PortalShiftsResponseDto, PortalShiftSummaryDto } from '@/api/types'
 
-const { mockUseMyShifts, mockUsePendingWitnessRequests } = vi.hoisted(() => ({
+const { mockUseMyShifts, mockUsePendingWitnessRequests, mockUsePortalShiftDetail } = vi.hoisted(() => ({
   mockUseMyShifts: vi.fn(),
+  mockUsePortalShiftDetail: vi.fn(),
   mockUsePendingWitnessRequests: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useMyShifts: mockUseMyShifts,
   usePendingWitnessRequests: mockUsePendingWitnessRequests,
+  usePortalShiftDetail: mockUsePortalShiftDetail,
 }))
 
 function renderPage() {
@@ -38,6 +40,7 @@ function makeShiftsResponse(overrides: Partial<PortalShiftsResponseDto> = {}): P
         nightType: 'None',
         status: 'Published',
         notes: null,
+        returnCount: 0,
       },
     ],
     tripAssignments: [],
@@ -48,7 +51,13 @@ function makeShiftsResponse(overrides: Partial<PortalShiftsResponseDto> = {}): P
 beforeEach(() => {
   mockUseMyShifts.mockReset()
   mockUsePendingWitnessRequests.mockReset().mockReturnValue({ data: [], isLoading: false })
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-08-19T10:00:00'))
+  mockUsePortalShiftDetail.mockReset().mockReturnValue({ data: undefined })
+  sessionStorage.clear()
 })
+
+afterEach(() => vi.useRealTimers())
 
 describe('PortalShiftsPage', () => {
   it('announces a loading state instead of rendering a blank page while shifts are fetching', () => {
@@ -130,5 +139,85 @@ describe('PortalShiftsPage — the week controls', () => {
     }
     expect(within(week).queryByRole('link', { name: /my leave|witness approvals/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /witness approvals/i })).toHaveAttribute('href', '/portal/witness-approvals')
+  })
+})
+
+describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
+  const today = '2026-08-19'
+  const row = (over: Partial<PortalShiftSummaryDto>): PortalShiftSummaryDto => ({ ...makeShiftsResponse().shifts[0], ...over })
+  /** The week's query and the card's own query (yesterday to today) answer differently. */
+  function answer(week: PortalShiftSummaryDto[], recent: PortalShiftSummaryDto[]) {
+    mockUseMyShifts.mockImplementation((from: string) => ({ data: { shifts: from === '2026-08-18' ? recent : week, tripAssignments: [] }, isLoading: false }))
+  }
+
+  it('leads with the shift in progress, with one Continue shift link, and does not list it again', () => {
+    const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress', participantName: 'Sienna Whitfield' })
+    answer([now], [now])
+    renderPage()
+
+    expect(screen.getByRole('heading', { level: 2, name: 'On shift now' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Continue shift' })).toHaveAttribute('href', '/portal/shifts/shift-2')
+    expect(screen.getAllByText('Sienna Whitfield')).toHaveLength(1)
+  })
+
+  it('shows its state once the detail loads: when it started, overdue doses and a handover to read', () => {
+    const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
+    answer([now], [now])
+    mockUsePortalShiftDetail.mockReturnValue({
+      data: {
+        timeZoneId: 'Australia/Brisbane', breaks: [], completion: { actualStart: '2026-08-18T23:02:00Z' },
+        medicationsDue: [{ state: 'Overdue', outcome: null }, { state: 'Overdue', outcome: null }, { state: 'Due', outcome: null }],
+        handover: { requiresAcknowledgement: true, isRead: false },
+      } as never,
+    })
+    renderPage()
+
+    expect(screen.getByText(/^Started 9:02\s?am · .+ on shift$/i)).toBeInTheDocument()
+    expect(screen.getByText('2 doses overdue')).toBeInTheDocument()
+    expect(screen.getByText('Handover to read')).toBeInTheDocument()
+  })
+
+
+  it("shows today's Rostered shift as Today with Open shift, and Continue finishing once a finish is under way", () => {
+    const later = row({ id: 'shift-3', serviceDate: today, startTime: '15:00:00', endTime: '20:00:00' })
+    answer([later], [later])
+    const { unmount } = renderPage()
+    expect(screen.getByRole('heading', { level: 2, name: 'Today' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open shift' })).toHaveAttribute('href', '/portal/shifts/shift-3')
+    unmount()
+
+    const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
+    answer([now], [now])
+    sessionStorage.setItem('odip-shift-end-draft:shift-2', JSON.stringify({ step: 'times' }))
+    renderPage()
+    expect(screen.getByRole('link', { name: 'Continue finishing' })).toBeInTheDocument()
+  })
+
+  it('shows no card on another week', () => {
+    const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
+    answer([now], [now])
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
+
+    expect(screen.queryByRole('heading', { name: 'On shift now' })).not.toBeInTheDocument()
+  })
+
+  it('splits the week into Coming up and Earlier (newest first), in worker words, with no badge on a plain Rostered shift', () => {
+    answer([
+      row({ id: 'a', serviceDate: '2026-08-17', status: 'Completed', participantName: 'Ava Done' }),
+      row({ id: 'b', serviceDate: '2026-08-18', status: 'PendingReview', participantName: 'Ben Sent' }),
+      row({ id: 'c', serviceDate: '2026-08-20', returnCount: 1, participantName: 'Cara Back' }),
+      row({ id: 'd', serviceDate: '2026-08-21', participantName: 'Dan Later' }),
+    ], [])
+    renderPage()
+
+    const coming = screen.getByRole('region', { name: 'Coming up' })
+    expect(within(coming).getByText('Returned')).toBeInTheDocument()
+    expect(within(coming).getByText('Dan Later')).toBeInTheDocument()
+    expect(within(coming).queryByText('Rostered')).not.toBeInTheDocument()
+    const earlier = screen.getByRole('region', { name: 'Earlier' })
+    expect(within(earlier).getAllByRole('link').map(a => a.textContent)).toEqual([expect.stringContaining('Ben Sent'), expect.stringContaining('Ava Done')])
+    expect(within(earlier).getByText('Submitted')).toBeInTheDocument()
+    expect(within(earlier).getByText('Approved')).toBeInTheDocument()
   })
 })

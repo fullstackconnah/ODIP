@@ -8,7 +8,10 @@ import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, isToday, formatShiftTimeRange, formatEffectiveRange } from '@/pages/rostering/lib/roster'
-import { RATIO_LABELS } from './lib/portal'
+import { addDays, format, subDays } from 'date-fns'
+import { RATIO_LABELS, hasEnded, pickCurrentShift, portalStatusLabel } from './lib/portal'
+import { useNow } from './shift/useNow'
+import { CurrentShiftCard } from './components/CurrentShiftCard'
 import type { PortalShiftSummaryDto } from '@/api/types'
 
 /** Groups a flat, already-date-ordered shift list into per-day buckets, preserving day order. */
@@ -28,11 +31,12 @@ function groupByDay(shifts: PortalShiftSummaryDto[]): Map<string, PortalShiftSum
  * decorative wrapper so screen readers still hear it (nesting it inside an aria-hidden
  * ancestor, as some other loading states in this app do, would silence it).
  */
-function ShiftsSkeleton() {
+function ShiftsSkeleton({ withCurrent }: { withCurrent: boolean }) {
   return (
     <div className="space-y-6">
       <span className="sr-only" role="status" aria-live="polite">Loading your shifts…</span>
       <div aria-hidden="true" className="space-y-6">
+        {withCurrent && <div className="h-44 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] animate-pulse" />}
         {[0, 1].map(group => (
           <div key={group}>
             <div className="h-4 w-40 rounded bg-[var(--color-accent)] animate-pulse mb-2" />
@@ -56,6 +60,54 @@ function ShiftsSkeleton() {
   )
 }
 
+function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
+  return (
+    <Link
+      to={`/portal/shifts/${shift.id}`}
+      className="block bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 hover:border-[var(--color-primary)]/40 transition-colors"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium text-[var(--color-foreground)] truncate">{shift.participantName}</p>
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            {formatShiftTimeRange(shift.startTime, shift.endTime)}
+            {shift.endsNextDay && <span className="ml-1">(+1 day)</span>}
+            {shift.ratio !== 'OneToOne' && <span className="ml-2">{RATIO_LABELS[shift.ratio] ?? shift.ratio}</span>}
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {/* A plain Rostered shift is the default state and says nothing, so it has no badge (SHAPE §2). */}
+          {(shift.status !== 'Published' || shift.returnCount > 0) && <StatusBadge status={shift.status} label={portalStatusLabel(shift)} />}
+          {shift.nightType !== 'None' && (
+            <span className="inline-flex items-center gap-1 text-[13px] text-[var(--color-muted-foreground)]">
+              <Moon className="w-3 h-3" /> {shift.nightType}
+            </span>
+          )}
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+/** A titled run of day groups (Coming up, Earlier); not drawn when empty. The day headings sit under it as h3. */
+function ShiftSection({ id, title, shifts }: { id: string; title: string; shifts: PortalShiftSummaryDto[] }) {
+  if (shifts.length === 0) return null
+  return (
+    <section aria-labelledby={id} className="space-y-3">
+      <h2 id={id} className="text-base font-semibold">{title}</h2>
+      {Array.from(groupByDay(shifts).entries()).map(([day, dayShifts]) => (
+        <div key={day}>
+          <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">
+            {formatDayAccessibleName(day)}
+            {isToday(day) && <span className="ml-2 text-xs font-medium text-[var(--color-primary)]">Today</span>}
+          </h3>
+          <div className="space-y-2">{dayShifts.map(s => <ShiftLink key={s.id} shift={s} />)}</div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 export default function PortalShiftsPage() {
   const [weekStart, setWeekStart] = useState(() => weekStartOf(new Date()))
   const weekEnd = useMemo(() => daysOfWeek(weekStart)[6], [weekStart])
@@ -63,9 +115,18 @@ export default function PortalShiftsPage() {
   const { data, isLoading, isError, refetch } = useMyShifts(weekStart, weekEnd)
   const shifts = useMemo(() => data?.shifts ?? [], [data])
   const tripAssignments = data?.tripAssignments ?? []
-  const byDay = useMemo(() => groupByDay(shifts), [shifts])
   const { data: witnessRequests } = usePendingWitnessRequests()
   const pendingWitnessCount = witnessRequests?.length ?? 0
+  const [now] = useNow(60_000)
+  const isThisWeek = weekStart === weekStartOf(now)
+  // The card's own query, independent of the browsed week: it catches a Sunday overnight still running on Monday morning (SHAPE §2),
+  // and runs to tomorrow so a browser clock a day behind the provider's still finds a shift in progress (plan check S2).
+  const { data: recent } = useMyShifts(format(subDays(now, 1), 'yyyy-MM-dd'), format(addDays(now, 1), 'yyyy-MM-dd'))
+  const current = isThisWeek ? pickCurrentShift(recent?.shifts ?? [], now) : null
+  const rest = shifts.filter(s => s.id !== current?.id)
+  const comingUp = rest.filter(s => !hasEnded(s, now))
+  const earlier = rest.filter(s => hasEnded(s, now))
+    .sort((a, b) => b.serviceDate.localeCompare(a.serviceDate) || a.startTime.localeCompare(b.startTime))   // newest day first, each day in time order
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -105,13 +166,15 @@ export default function PortalShiftsPage() {
         </div>
       </PageHeader>
 
+      {current && <CurrentShiftCard shift={current} />}
+
       {isLoading ? (
-        <ShiftsSkeleton />
+        <ShiftsSkeleton withCurrent={isThisWeek && !current} />
       ) : isError ? (
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
           Couldn't load your shifts. Check your connection and try again.
         </Callout>
-      ) : shifts.length === 0 && tripAssignments.length === 0 ? (
+      ) : shifts.length === 0 && tripAssignments.length === 0 && !current ? (
         <EmptyState
           icon={CalendarCheck2}
           title="Nothing rostered this week"
@@ -119,42 +182,8 @@ export default function PortalShiftsPage() {
         />
       ) : (
         <div className="space-y-6">
-          {Array.from(byDay.entries()).map(([day, dayShifts]) => (
-            <section key={day}>
-              <h2 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">
-                {formatDayAccessibleName(day)}
-                {isToday(day) && <span className="ml-2 text-xs font-medium text-[var(--color-primary)]">Today</span>}
-              </h2>
-              <div className="space-y-2">
-                {dayShifts.map(shift => (
-                  <Link
-                    key={shift.id}
-                    to={`/portal/shifts/${shift.id}`}
-                    className="block bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 hover:border-[var(--color-primary)]/40 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-medium text-[var(--color-foreground)] truncate">{shift.participantName}</p>
-                        <p className="text-sm text-[var(--color-muted-foreground)]">
-                          {formatShiftTimeRange(shift.startTime, shift.endTime)}
-                          {shift.endsNextDay && <span className="ml-1">(+1 day)</span>}
-                          {shift.ratio !== 'OneToOne' && <span className="ml-2">{RATIO_LABELS[shift.ratio] ?? shift.ratio}</span>}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <StatusBadge status={shift.status} />
-                        {shift.nightType !== 'None' && (
-                          <span className="inline-flex items-center gap-1 text-[13px] text-[var(--color-muted-foreground)]">
-                            <Moon className="w-3 h-3" /> {shift.nightType}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          ))}
+          <ShiftSection id="coming-up" title="Coming up" shifts={comingUp} />
+          <ShiftSection id="earlier" title="Earlier" shifts={earlier} />
 
           {tripAssignments.length > 0 && (
             <section>

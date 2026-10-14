@@ -41,6 +41,8 @@ export interface PortalShiftSummaryDto {
   nightType: SleepoverType
   status: ShiftStatus
   notes: string | null
+  /** How many times a coordinator returned this shift; a Published shift above 0 reads "Returned" on the list. */
+  returnCount: number
 }
 
 export interface PortalTripAssignmentSummaryDto {

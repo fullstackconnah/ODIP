@@ -143,18 +143,20 @@ export function formatVarianceMinutes(minutes: number): string {
   return `${minutes > 0 ? '+' : ''}${minutes} min`
 }
 
+/** "40 min" under an hour, else "3h 10m". Never negative. */
+export function formatMinutesSpan(totalMinutes: number): string {
+  const minutes = Math.max(0, totalMinutes)
+  const hours = Math.floor(minutes / 60)
+  return hours === 0 ? `${minutes} min` : `${hours}h ${minutes % 60}m`
+}
+
 /**
  * "Started Xh Ym ago" style elapsed-time text for an InProgress shift's Start/Finish card —
  * floors to whole minutes, never negative (a clock-skew `actualStart` slightly in the future
  * reads as "just now" rather than a nonsensical negative duration).
  */
 export function formatElapsedSince(actualStartIso: string, now: Date = new Date()): string {
-  const startMs = parseApiDate(actualStartIso).getTime()
-  const totalMinutes = Math.max(0, Math.floor((now.getTime() - startMs) / 60_000))
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  if (hours === 0) return `${minutes} min`
-  return `${hours}h ${minutes}m`
+  return formatMinutesSpan(Math.floor((now.getTime() - parseApiDate(actualStartIso).getTime()) / 60_000))
 }
 
 export const NIGHT_TYPE_LABELS: Record<string, string> = {
