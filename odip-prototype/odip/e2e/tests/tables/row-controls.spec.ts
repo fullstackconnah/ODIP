@@ -49,7 +49,8 @@ for (const touch of [false, true]) {
           await page.touchscreen.tap(box!.x + box!.width / 2, box!.y - 2);
         } else {
           // Keyboard modality plus real Tab traversal, rather than programmatic focus.
-          await page.keyboard.press('Control+Home');
+          // Focus is still on the selected Public holidays tab. Home would switch
+          // that ARIA tablist to Event templates; Tab moves into this panel instead.
           for (let i = 0; i < 200 && !(await button.evaluate(el => el === document.activeElement)); i++) {
             await page.keyboard.press('Tab');
           }
@@ -59,7 +60,7 @@ for (const touch of [false, true]) {
           await testInfo.attach('keyboard-focus', { body: await row.screenshot(), contentType: 'image/png' });
           await page.keyboard.press('Enter');
         }
-        const dialog = page.getByRole('dialog', { name: 'Delete Public Holiday', exact: true });
+        const dialog = page.getByRole('alertdialog', { name: 'Delete Public Holiday', exact: true });
         await expect(dialog).toBeVisible();
         await expect(dialog).toContainText(name);
         await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
