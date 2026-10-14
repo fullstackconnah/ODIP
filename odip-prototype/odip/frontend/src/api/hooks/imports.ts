@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
+import { refreshBudgetWarnings } from './funding-ledger'
 import type { ImportBatchDto, ImportInvitesDto, ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto } from '../types'
 
 const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' } }
@@ -26,9 +27,10 @@ export function usePreviewImport() {
   })
 }
 
-/** The lists an import or an undo changes. A funding plans import also changes each participant's Funding tab and the onboarding "Funding recorded" gate. */
+/** The lists an import or an undo changes. A funding plans import also changes each participant's Funding tab, the onboarding "Funding recorded" gate and the Budgets list. */
 function refreshAfterImport(qc: ReturnType<typeof useQueryClient>) {
   for (const key of ['imports', 'participants', 'staff', 'participant-funding', 'onboarding', 'participant-onboarding-worklist']) qc.invalidateQueries({ queryKey: [key] })
+  refreshBudgetWarnings(qc)
 }
 
 /** POST /imports/{kind}/commit. A retry with the same idempotency key answers with the batch the first request made. */

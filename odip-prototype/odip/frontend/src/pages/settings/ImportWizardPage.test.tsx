@@ -210,6 +210,8 @@ describe('ImportWizardPage', () => {
 
     expect(commit).toHaveBeenCalledWith({ kind: 'funding-plans', file, mapping: ['firstName', 'lastName'], landing: undefined, idempotencyKey: expect.any(String) })
     expect(await screen.findByText('Imported 1 funding plan')).toBeInTheDocument()
+    // The participants list shows no plans; Budgets lists every participant's plan in force.
+    expect(screen.getByRole('link', { name: 'View budgets' })).toHaveAttribute('href', '/budgets')
     // Plans were created, but rows were skipped or refused: each count names its unit.
     expect(screen.getByText("1 row skipped, 2 rows couldn't be imported.")).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))

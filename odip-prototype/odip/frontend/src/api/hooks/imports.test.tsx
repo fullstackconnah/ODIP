@@ -53,6 +53,6 @@ describe('import hooks', () => {
     await result.current.mutateAsync({ kind: 'funding-plans', file: new File(['x'], 'budgets.csv'), mapping: ['amount'], idempotencyKey: 'k-2' })
     expect(mockPost.mock.calls[0][0]).toBe('/imports/funding-plans/commit')
     expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey?.[0])).toEqual(
-      expect.arrayContaining(['imports', 'participants', 'participant-funding', 'onboarding', 'participant-onboarding-worklist']))
+      expect.arrayContaining(['imports', 'participants', 'participant-funding', 'onboarding', 'participant-onboarding-worklist', 'budget-list']))
   })
 })

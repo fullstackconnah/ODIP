@@ -55,7 +55,8 @@ test('an Admin imports funding plans for imported participants, finds the plan o
     `${ndis},${start},${end},15,NDIA managed,5000`,
   ], 'Import 1 funding plan', 'Imported 1 funding plan');
 
-  await page.getByRole('link', { name: 'View participants' }).click();
+  await expect(page.getByRole('link', { name: 'View budgets' })).toHaveAttribute('href', '/budgets');
+  await page.goto('/participants?tab=active');
   await page.getByPlaceholder('Search participants...').fill(token);
   await page.getByRole('row').filter({ hasText: token }).getByRole('cell').nth(1).click();
   await page.waitForURL(/\/participants\/[0-9a-f-]{36}/);

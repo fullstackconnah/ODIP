@@ -44,7 +44,8 @@ const KIND: Record<ImportKind, { noun: string; title: string; listNoun: string; 
     undoNote: ' Anyone already sent a sign-in invite will find it no longer works until they are imported again.',
   },
   'funding-plans': {
-    noun: 'funding plan', title: 'Import funding plans', listNoun: 'participants', listTo: () => '/participants?tab=active',
+    // The participants list shows no plans; Budgets lists every participant's plan in force.
+    noun: 'funding plan', title: 'Import funding plans', listNoun: 'budgets', listTo: () => '/budgets',
     undone: 'deleted', undoRule: 'none of its plans has been changed, or used by a shift or a service agreement, since the import', undoNote: '',
   },
 }
