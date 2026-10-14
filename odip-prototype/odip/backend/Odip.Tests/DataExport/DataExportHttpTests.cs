@@ -143,21 +143,38 @@ public class DataExportHttpTests
     [Fact]
     public async Task A_client_that_leaves_after_the_last_byte_still_gets_its_audit_row()
     {
+        // The client reads the ZIP to its last byte, then closes the connection. Only then is the row saved: the server sees the client go
+        // (RequestAborted), and the save is handed a token that Npgsql would honour. (Faking the leave with a server-side Abort raced the
+        // client: the reset made the client drop bytes it hadn't read yet, the headers included, on a fast machine.)
+        var clientLeft = new ManualResetEventSlim();
+        var serverSawTheClientGo = false;
         await using var host = await Host.StartAsync(new OnAuditSave(token =>
         {
-            // The client leaves just as the row is saved. Kestrel cancels RequestAborted on the thread pool, so wait for it, then do what
-            // Npgsql does with a cancelled token.
-            var http = new HttpContextAccessor().HttpContext!;
-            http.Abort();
-            http.RequestAborted.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
+            clientLeft.Wait(TimeSpan.FromSeconds(20));
+            serverSawTheClientGo = new HttpContextAccessor().HttpContext!.RequestAborted.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
             token.ThrowIfCancellationRequested();
         }));
         var tenantId = await host.SeedAsync("Sunrise Care");
 
-        using var response = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead);
-        await Record.ExceptionAsync(() => response.Content.ReadAsByteArrayAsync()); // the connection is gone, however the read ends
+        var zip = new MemoryStream();
+        using (var response = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead))
+        {
+            await using var body = await response.Content.ReadAsStreamAsync();
+            var buffer = new byte[8192];
+            // The ZIP's last 22 bytes are its end-of-central-directory record (PK 05 06, no comment): once they are here, the client has it all.
+            while (!(zip.Length >= 22 && zip.GetBuffer().AsSpan((int)zip.Length - 22, 4).SequenceEqual(new byte[] { 0x50, 0x4B, 0x05, 0x06 })))
+            {
+                var read = await body.ReadAsync(buffer);
+                Assert.True(read > 0, "The response ended before the ZIP was complete.");
+                zip.Write(buffer, 0, read);
+            }
+        } // the client closes the connection here, with the whole ZIP and before the response has formally ended
+        clientLeft.Set();
 
+        zip.Position = 0;
+        using (var archive = new ZipArchive(zip, ZipArchiveMode.Read)) Assert.Equal(DataExportWriter.ManifestName, archive.Entries[^1].FullName);
         Assert.Single(await host.ExportRowsEventuallyAsync(tenantId));
+        Assert.True(serverSawTheClientGo, "The server never saw the client leave, so the save was not tested with a cancelled request.");
     }
 
     [Fact]
