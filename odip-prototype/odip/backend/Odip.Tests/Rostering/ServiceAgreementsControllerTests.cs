@@ -1,10 +1,12 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Tests.Support;
 using Xunit;
@@ -27,9 +29,18 @@ public class ServiceAgreementsControllerTests
     private static async Task ApprovedEndingAsync(Fixture f, Guid participantId, DateOnly end, Guid? tenantId = null) =>
         await MarkApprovedAsync(f.Db, await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: end.AddDays(-27), end: end, tenantId: tenantId, participantId: participantId));
 
-    private static async Task<List<AgreementEndingDto>> EndingAsync(OdipDbContext db, Fixture f)
+    /// <summary>The caller: an organisation user, or a SuperAdmin acting for one (view-as) or for none.</summary>
+    private static ICurrentTenant Caller(Guid? tenantId, bool superAdmin = false)
     {
-        var response = await new ServiceAgreementsController(db, f.Clock).Ending(CancellationToken.None);
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(superAdmin);
+        return tenant.Object;
+    }
+
+    private static async Task<List<AgreementEndingDto>> EndingAsync(OdipDbContext db, Fixture f, Guid? tenantId = null, bool superAdmin = false)
+    {
+        var response = await new ServiceAgreementsController(db, Caller(tenantId ?? TenantA, superAdmin), f.Clock).Ending(CancellationToken.None);
         return Assert.IsType<ApiResponse<List<AgreementEndingDto>>>(Assert.IsType<OkObjectResult>(response.Result).Value).Data!;
     }
 
@@ -67,7 +78,24 @@ public class ServiceAgreementsControllerTests
         await using (var tenantA = TestDb.ForTenant(f.DbName, TenantA))
             Assert.Equal(new[] { f.ParticipantId }, (await EndingAsync(tenantA, f)).Select(r => r.ParticipantId));
         await using (var tenantB = TestDb.ForTenant(f.DbName, TenantB))
-            Assert.Equal(new[] { other }, (await EndingAsync(tenantB, f)).Select(r => r.ParticipantId));
+            Assert.Equal(new[] { other }, (await EndingAsync(tenantB, f, TenantB)).Select(r => r.ParticipantId));
+    }
+
+    /// <summary>Fix round 1 (CR-A M1): a SuperAdmin's context has no tenant filter, so the list names the organisation itself, and asks for one.</summary>
+    [Fact]
+    public async Task A_super_admin_sees_only_the_organisation_they_act_for_and_must_choose_one()
+    {
+        await using var f = await SetUpAsync();
+        await ApprovedEndingAsync(f, f.ParticipantId, Today.AddDays(20));
+        var other = await ParticipantAsync(f, "Other", TenantB);
+        await ApprovedEndingAsync(f, other, Today.AddDays(5), tenantId: TenantB);
+
+        // f.Db is unfiltered, as a SuperAdmin's context is.
+        Assert.Equal(new[] { f.ParticipantId }, (await EndingAsync(f.Db, f, TenantA, superAdmin: true)).Select(r => r.ParticipantId));
+        Assert.Equal(new[] { other }, (await EndingAsync(f.Db, f, TenantB, superAdmin: true)).Select(r => r.ParticipantId));
+
+        var none = await new ServiceAgreementsController(f.Db, Caller(null, superAdmin: true), f.Clock).Ending(CancellationToken.None);
+        Assert.Equal("A tenant context is required.", Assert.Single(Assert.IsType<ApiResponse<List<AgreementEndingDto>>>(Assert.IsType<BadRequestObjectResult>(none.Result).Value).Errors!));
     }
 
     [Fact]

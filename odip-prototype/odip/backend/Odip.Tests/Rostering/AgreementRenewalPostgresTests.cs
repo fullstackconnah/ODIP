@@ -82,7 +82,7 @@ public class AgreementRenewalPostgresTests : IClassFixture<PostgresFixture>
         await StoreAsync(cs, tenantId, participantId, 1, new DateOnly(2026, 10, 3), new DateOnly(2026, 10, 30), approved: true);
 
         await using var db = Open(cs, tenantId);
-        var response = await new ServiceAgreementsController(db, FakeClock.AtUtc(2026, 10, 10, 2, 0)).Ending(CancellationToken.None);
+        var response = await new ServiceAgreementsController(db, Mock.Of<ICurrentTenant>(t => t.TenantId == tenantId), FakeClock.AtUtc(2026, 10, 10, 2, 0)).Ending(CancellationToken.None);
 
         var row = Assert.Single(Assert.IsType<ApiResponse<List<AgreementEndingDto>>>(Assert.IsType<OkObjectResult>(response.Result).Value).Data!);
         Assert.Equal((participantId, "Amy Ng", 20, "Agreement ends in 20 days"), (row.ParticipantId, row.ParticipantName, row.DaysLeft, row.Status));
