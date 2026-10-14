@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ServiceAgreementDraftLineDto } from '@/api/types'
-import { renewalComparison, renewalTotals } from './renewalComparison'
+import type { DraftBlock, ServiceAgreementDraftLineDto } from '@/api/types'
+import { matchBlocks, renewalComparison, renewalTotals } from './renewalComparison'
 
 const line = (over: Partial<ServiceAgreementDraftLineDto>): ServiceAgreementDraftLineDto => ({
   serviceType: 'Community access', hours: 120, itemCode: '04_104_0125_6_1', unitPrice: 73.58, catalogueVersion: '2026-27', catalogueEffectiveFrom: '2026-07-01', catalogueEffectiveTo: null,
@@ -41,5 +41,31 @@ describe('renewalComparison', () => {
     const rows = renewalComparison([line({ total: 0.1 }), line({ blockId: 'b', total: 0.2 })], [line({ total: 0.2 }), line({ blockId: 'b', total: 0.1 })])
 
     expect(renewalTotals(rows)).toEqual({ old: 0.3, renewal: 0.3 })
+  })
+})
+
+// Fix round 1 (deep S2, CR-A S1): the agreement builder renumbers block ids on every save, so an edited renewal's ids no longer name v1's supports.
+const block = (id: string, days: string[], start = '09:00') => ({ block: { id, supportType: 'PersonalCare', days, start, end: '15:00' }, requirements: {} }) as unknown as DraftBlock
+
+describe('matchBlocks', () => {
+  it('pairs the blocks of the same support whatever their ids, and leaves out a block the renewal no longer has', () => {
+    const was = [block('b1', ['Monday', 'Friday']), block('b2', ['Saturday']), block('b3', ['Sunday'])]
+    const now = [block('b1', ['Friday', 'Monday']), block('b2', ['Sunday']), block('b3', ['Saturday'], '10:00')]   // Saturday now starts at 10:00: a changed support
+
+    expect([...matchBlocks(was, now)]).toEqual([['b1', 'b1'], ['b3', 'b2']])
+  })
+
+  it('pairs the lines through it, so a renumbered block still lines up and a removed one pairs with nothing', () => {
+    const was = [block('b1', ['Monday']), block('b2', ['Saturday']), block('b3', ['Sunday'])]
+    const now = [block('b1', ['Monday']), block('b2', ['Sunday'])]
+    const rows = renewalComparison(
+      [line({ blockId: 'b1' }), line({ blockId: 'b2', band: 'Saturday', itemCode: '01_013' }), line({ blockId: 'b3', band: 'Sunday', itemCode: '01_014' })],
+      [line({ blockId: 'b1' }), line({ blockId: 'b2', band: 'Sunday', itemCode: '01_014' })],
+      matchBlocks(was, now),
+    )
+
+    expect(rows.map(row => [row.itemCode, row.blockId, row.old !== null, row.renewal !== null])).toEqual([
+      ['04_104_0125_6_1', 'b1', true, true], ['01_014', 'b2', true, true], ['01_013', null, true, false],
+    ])
   })
 })

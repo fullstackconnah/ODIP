@@ -1,10 +1,10 @@
-import type { ServiceAgreementDraftDto, ServiceAgreementDraftLineDto } from '@/api/types'
+import type { DraftBlock, ServiceAgreementDraftDto, ServiceAgreementDraftLineDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatServiceDate } from '@/lib/planQuote'
-import { renewalComparison, renewalTotals, type RenewalRow, type RenewalSide } from '@/lib/renewalComparison'
+import { matchBlocks, renewalComparison, renewalTotals, type RenewalRow, type RenewalSide } from '@/lib/renewalComparison'
 import { formatCurrency } from '@/lib/utils'
 
 interface RenewalReviewProps {
@@ -14,6 +14,8 @@ interface RenewalReviewProps {
   renewedFrom: ServiceAgreementDraftDto
   /** That revision's lines, read in full; undefined while they are read. */
   oldLines: ServiceAgreementDraftLineDto[] | undefined
+  /** That revision's blocks, read with its lines: the lines are paired by support, not by block id, which a save renumbers. */
+  oldBlocks?: DraftBlock[]
   oldFailed: boolean
   onRetry: () => void
 }
@@ -24,10 +26,10 @@ const money = (side: RenewalSide | null, pick: (side: RenewalSide) => number) =>
  * The renewal review (agreement PR 2): the renewal's lines beside those of the agreement it renews, matched line by line (D10), each as it was priced when it was saved. A line the new price list has
  * not got is marked here; the engine's own issue for it is in "To look at" below and keeps approval closed, as for any revision. The budget fit is the Check step's own comparison, below this.
  */
-export function RenewalReview({ renewal, renewedFrom, oldLines, oldFailed, onRetry }: RenewalReviewProps) {
+export function RenewalReview({ renewal, renewedFrom, oldLines, oldBlocks, oldFailed, onRetry }: RenewalReviewProps) {
   const was = `v${renewedFrom.version}`
   const now = `v${renewal.version}`
-  const rows = oldLines ? renewalComparison(oldLines, renewal.lines) : []
+  const rows = oldLines ? renewalComparison(oldLines, renewal.lines, oldBlocks && matchBlocks(oldBlocks, renewal.blocks)) : []
   const totals = renewalTotals(rows)
   // An old line with no partner is missing from the price list only when the renewal's own pricing says its block has no item; otherwise its days (a public holiday, say) just do not fall in the renewal's dates.
   const withdrawn = new Set((renewal.pricing?.issues ?? []).filter(issue => issue.reason === 'NoItem' || issue.reason === 'CatalogueNotFound').map(issue => issue.blockId))

@@ -455,7 +455,7 @@ function DraftPage() {
           {step === 'check' && (
             <div className="flex flex-col gap-[var(--section-gap)]">
               {renewedFrom && onScreen && (
-                <RenewalReview renewal={onScreen} renewedFrom={renewedFrom} oldLines={renewedLines.data?.lines} oldFailed={renewedLines.isError} onRetry={() => { void renewedLines.refetch() }} />
+                <RenewalReview renewal={onScreen} renewedFrom={renewedFrom} oldLines={renewedLines.data?.lines} oldBlocks={renewedLines.data?.blocks} oldFailed={renewedLines.isError} onRetry={() => { void renewedLines.refetch() }} />
               )}
               <CheckStep
                 pricing={pricing} issues={issues} readOnly={readOnly} onFix={fix} onChangeHolidays={selectShiftsOf} budgetHeadingRef={budgetHeadingRef}

@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { ServiceAgreementDraftDto, ServiceAgreementDraftLineDto } from '@/api/types'
+import type { DraftBlock, ServiceAgreementDraftDto, ServiceAgreementDraftLineDto } from '@/api/types'
 import { formatCurrency } from '@/lib/utils'
 import { RenewalReview } from './RenewalReview'
 
@@ -41,6 +41,28 @@ describe('RenewalReview', () => {
     expect(within(holidayRow).getByText("Not in v2's dates")).toBeInTheDocument()
     expect(screen.queryByText('Not in the new price list')).not.toBeInTheDocument()
     expect(screen.queryByText(/cannot be approved yet/)).not.toBeInTheDocument()
+  })
+
+  it('still pairs the lines once the renewal is edited and saved, though the builder renumbered its blocks (fix round 1, deep S2)', () => {
+    const block = (id: string, days: string[]) => ({ block: { id, supportType: 'PersonalCare', days, start: '09:00', end: '15:00' }, requirements: {} }) as unknown as DraftBlock
+    const saturday = line({ blockId: 'b2', itemCode: '01_013_0107_1_1', band: 'Saturday', unitPrice: 103.14, total: 618.84 })
+    const sunday = line({ blockId: 'b3', itemCode: '01_014_0107_1_1', band: 'Sunday', unitPrice: 132.69, total: 796.14 })
+    // v1 had weekdays, Saturday and Sunday. The renewal was edited to drop Saturday and saved: Sunday is b2 now, and the new price list has withdrawn its item.
+    const edited = {
+      ...revision(2, '2026-11-23', '2027-01-03', [line({ blockId: 'b1' })]), blocks: [block('b1', ['Monday']), block('b2', ['Sunday'])],
+      pricing: { issues: [{ blockId: 'b2', reason: 'CatalogueNotFound', message: 'No price list item.', count: 6 }] },
+    } as unknown as ServiceAgreementDraftDto
+    render(<RenewalReview renewal={edited} renewedFrom={renewedFrom} oldBlocks={[block('b1', ['Monday']), block('b2', ['Saturday']), block('b3', ['Sunday'])]}
+      oldLines={[line({ blockId: 'b1', unitPrice: 70.23, total: 8427.6 }), saturday, sunday]} oldFailed={false} onRetry={vi.fn()} />)
+
+    const [weekdays, removed, withdrawn] = screen.getAllByRole('row').slice(1)
+    expect(within(weekdays).getByText(formatCurrency(70.23))).toBeInTheDocument()                     // paired: the old price beside the new
+    expect(within(weekdays).getByText(formatCurrency(73.58))).toBeInTheDocument()
+    expect(within(removed).getByText('01_013_0107_1_1 · Saturday')).toBeInTheDocument()
+    expect(within(removed).getByText("Not in v2's dates")).toBeInTheDocument()                      // removed on purpose: nothing withdrawn
+    expect(within(withdrawn).getByText('01_014_0107_1_1 · Sunday')).toBeInTheDocument()
+    expect(within(withdrawn).getByText('Not in the new price list')).toBeInTheDocument()
+    expect(screen.getByText(/^1 line of v1 is not in the new price list/)).toBeInTheDocument()
   })
 
   it('says nothing about lines while the old ones are read, and offers a retry when they could not be', async () => {

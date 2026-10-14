@@ -1,4 +1,4 @@
-import type { ServiceAgreementDraftLineDto } from '@/api/types'
+import type { DraftBlock, ServiceAgreementDraftLineDto } from '@/api/types'
 
 /** One side of a review row: what the agreement charges for the line. */
 export interface RenewalSide {
@@ -19,6 +19,8 @@ export interface RenewalRow {
   renewal: RenewalSide | null
 }
 
+/** Marks an old line's block the renewal no longer has, so it pairs with nothing. */
+const GONE = 'gone:'
 const keyOf = (line: ServiceAgreementDraftLineDto) => `${line.blockId ?? ''}|${line.itemCode}|${line.band ?? ''}|${line.unit}`
 const toCents = (amount: number) => Math.round(amount * 100) / 100
 
@@ -35,15 +37,32 @@ function side(lines: ServiceAgreementDraftLineDto[] | undefined): RenewalSide | 
   return { unitPrice: newest.unitPrice, total: toCents(lines.reduce((sum, line) => sum + line.total, 0)), catalogueVersion: newest.catalogueVersion }
 }
 
-/** The review's rows: the renewal's lines in its order, each beside the old line it matches, then the old lines the renewal has not got, last. */
-export function renewalComparison(oldLines: readonly ServiceAgreementDraftLineDto[], newLines: readonly ServiceAgreementDraftLineDto[]): RenewalRow[] {
-  const before = grouped(oldLines)
+const supportOf = ({ block }: DraftBlock) => `${block.supportType}|${[...block.days].sort().join(',')}|${block.start}|${block.end}`
+
+/**
+ * Which renewal block each old block is (fix round 1, deep S2): the agreement builder renumbers block ids on every save, so blocks are paired by what they are, the support, days and times. Two
+ * blocks the same on all of those would overlap, which the engine refuses, so a pair is never in doubt. A block the renewal no longer has is left out.
+ */
+export function matchBlocks(oldBlocks: readonly DraftBlock[], newBlocks: readonly DraftBlock[]): Map<string, string> {
+  const byKey = new Map(newBlocks.map(entry => [supportOf(entry), entry.block.id]))
+  return new Map(oldBlocks.flatMap(entry => {
+    const id = byKey.get(supportOf(entry))
+    return id ? [[entry.block.id, id] as const] : []
+  }))
+}
+
+/**
+ * The review's rows: the renewal's lines in its order, each beside the old line it matches, then the old lines the renewal has not got, last. With `oldToNew` (matchBlocks), an old line is keyed by
+ * the renewal block it became, and a line of a block the renewal no longer has pairs with nothing (its row's blockId is null).
+ */
+export function renewalComparison(oldLines: readonly ServiceAgreementDraftLineDto[], newLines: readonly ServiceAgreementDraftLineDto[], oldToNew?: ReadonlyMap<string, string>): RenewalRow[] {
+  const before = grouped(oldToNew ? oldLines.map(line => ({ ...line, blockId: oldToNew.get(line.blockId ?? '') ?? `${GONE}${line.blockId ?? ''}` })) : oldLines)
   const after = grouped(newLines)
   const keys = [...after.keys(), ...[...before.keys()].filter(key => !after.has(key))]
   return keys.map(key => {
     const sample = (after.get(key) ?? before.get(key)!)[0]
     return {
-      key, blockId: sample.blockId ?? null, itemCode: sample.itemCode, band: sample.band ?? null, unit: sample.unit, serviceType: sample.serviceType,
+      key, blockId: sample.blockId?.startsWith(GONE) ? null : sample.blockId ?? null, itemCode: sample.itemCode, band: sample.band ?? null, unit: sample.unit, serviceType: sample.serviceType,
       old: side(before.get(key)), renewal: side(after.get(key)),
     }
   })
