@@ -111,6 +111,7 @@ export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onO
               onAddShift={onAddParticipantShift}
               hideCoverageBadge={weekHasNoShifts}
               draggable={draggable}
+              pendingAgreement={board.pendingAgreements?.find(p => p.participantId === row.participantId)}
             />
           ))
         ) : (

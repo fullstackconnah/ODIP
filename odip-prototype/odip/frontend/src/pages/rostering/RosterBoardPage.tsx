@@ -20,7 +20,7 @@ import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useDelete
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode } from '@/api/types'
 import {
-  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker,
+  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, PendingAgreementNotice,
   type ShiftSlideOverTarget,
 } from './components'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan } from './lib/roster'
@@ -97,11 +97,6 @@ export default function RosterBoardPage() {
   // The staff picker (spec 2026-10-15, decision C): one at a time, for a Needs staff shift. Stored as the shift that opened it; read back from the CURRENT board below.
   const [pickerTarget, setPickerTarget] = useState<ShiftDto | null>(null)
   const [announcement, setAnnouncement] = useState('')
-  // The error notice's height, for the board frame (finish review fix 5): with it above the board, strip and grid still share one screen.
-  // shortcut: measured when the message changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
-  const noticeRef = useRef<HTMLDivElement>(null)
-  const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
-  useLayoutEffect(() => { setNoticeHeight(assignError ? noticeRef.current?.offsetHeight ?? 0 : null) }, [assignError])
   // How much taller than one row of controls the toolbar is: it wraps to two rows at 1280, which the board frame's fixed allowance does not know (finish review).
   // Re-measured whenever the toolbar resizes, since the wrap follows the window's width.
   const headerRef = useRef<HTMLDivElement>(null)
@@ -184,6 +179,17 @@ export default function RosterBoardPage() {
         .map(row => ({ ...row, shifts: row.shifts.filter(matchesParticipant) })),
     }
   }, [board, participantFilter, regionFilter, staffRegionById, unfilledOnly])
+
+  // Who waits for an approval for rostering (spec 2026-10-15, decision A; L10), with a row or not, in name order. With the participant filter on, only that participant. Participant view only.
+  const waiting = useMemo(() => (board?.groupBy === 'Participant'
+    ? (board.pendingAgreements ?? []).filter(p => !participantFilter || p.participantId === participantFilter).sort((a, b) => a.displayName.localeCompare(b.displayName))
+    : []), [board, participantFilter])
+  const hasNotice = waiting.length > 0
+  // The height of what stands above the board (the waiting notice and the error notice, in one wrapper), for the board frame (finish review fix 5): with them above it, strip and grid still share one screen.
+  // shortcut: measured when either changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
+  const noticeRef = useRef<HTMLDivElement>(null)
+  const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
+  useLayoutEffect(() => { setNoticeHeight(assignError || hasNotice ? noticeRef.current?.offsetHeight ?? 0 : null) }, [assignError, hasNotice, waiting])
 
   // Decisions 1 and 10: drag and drop is the Participant view's, for writers, from md up; the Staff view and phones keep click and the menus.
   const dragOn = canWrite && groupBy === 'participant' && !belowMd
@@ -431,18 +437,22 @@ export default function RosterBoardPage() {
         />
       </div>
 
-      {assignError && (
-        <div ref={noticeRef}>
-          <Callout
-            tone="error"
-            actions={
-              <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
-                <X className="h-4 w-4" />
-              </Button>
-            }
-          >
-            {assignError}
-          </Callout>
+      {/* The standing notice first, then the error, in ONE wrapper measured for the board frame: the notice never jumps when an error comes and goes (the brief, section 6). */}
+      {(hasNotice || assignError) && (
+        <div ref={noticeRef} className="flex flex-col gap-[var(--section-gap)]">
+          {hasNotice && <PendingAgreementNotice waiting={waiting} />}
+          {assignError && (
+            <Callout
+              tone="error"
+              actions={
+                <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
+                  <X className="h-4 w-4" />
+                </Button>
+              }
+            >
+              {assignError}
+            </Callout>
+          )}
         </div>
       )}
 
@@ -468,7 +478,7 @@ export default function RosterBoardPage() {
       {/* The grid always renders, even for a week with zero shifts — that empty grid is the
           add-a-shift affordance. Guidance for a first-time/empty week is this dismissible hint
           above the grid, never a replacement for it. */}
-      {!isLoading && !isError && filteredBoard && weekHasNoShifts && !hintDismissed && (
+      {!isLoading && !isError && filteredBoard && weekHasNoShifts && !hintDismissed && !hasNotice && (
         <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface-container-low p-[var(--card-pad)]">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
