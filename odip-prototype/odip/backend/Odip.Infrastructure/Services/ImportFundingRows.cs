@@ -8,12 +8,15 @@ using Odip.Domain.Funding;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>
-/// One funding row as read from the file. Category 0 is Core. Category, Management and Amount are null on a row that can't be imported; the line is
-/// still set when the row says who and when, so that row keeps the rest of its plan out. <see cref="ParticipantId"/> is filled by ImportFundingRows.Match.
+/// One funding row as read from the file. Category 0 is Core. The dates, Category, Management and Amount are null on a row that can't be imported; the
+/// line is still set when the row names anyone, so that row keeps the rest of its participant's plan out. <see cref="ParticipantId"/> is filled by
+/// ImportFundingRows.Match.
 /// </summary>
-public sealed record ImportFundingLine(string? NdisKey, string FullName, DateOnly? DateOfBirth, DateOnly PlanStart, DateOnly PlanEnd, int? Category, PlanType? Management, decimal? Amount)
+public sealed record ImportFundingLine(string? NdisKey, string FullName, DateOnly? DateOfBirth, DateOnly? PlanStart, DateOnly? PlanEnd, int? Category, PlanType? Management, decimal? Amount)
 {
     public Guid ParticipantId { get; init; }
+    /// <summary>What the NDIS cell held when it isn't a 9-digit number ("43000O001"): never a key, only a hint for which participant a bad row was for.</summary>
+    public string? UnreadNdis { get; init; }
 }
 
 /// <summary>A participant as the funding import matches them: by NDIS number, else by full name and date of birth.</summary>
@@ -61,12 +64,23 @@ public static class ImportFundingRows
         // Only real numbers: a participant saved with "-" or "TBC" is never found by it.
         var byNdis = participants.Where(p => p.NdisNumber != null && IsNdisNumber(ImportParticipantRows.NdisKey(p.NdisNumber))).ToLookup(p => ImportParticipantRows.NdisKey(p.NdisNumber!));
         var byName = participants.Where(p => p.DateOfBirth is not null).ToLookup(p => (NameKey($"{p.FirstName} {p.LastName}"), p.DateOfBirth!.Value));
-        foreach (var plan in plans.Where(p => p.Status == ImportRowStatus.Ready))
+        foreach (var plan in plans.Where(p => p.Funding != null && p.Status != ImportRowStatus.Skipped))
         {
             var line = plan.Funding!;
-            var found = line.NdisKey is { } key ? byNdis[key].ToList() : byName[(NameKey(line.FullName), line.DateOfBirth!.Value)].ToList();
+            var found = line.NdisKey is { } key ? byNdis[key].ToList()
+                : line.DateOfBirth is { } born && line.FullName.Length > 0 ? byName[(NameKey(line.FullName), born)].ToList() : [];
+            if (plan.Status != ImportRowStatus.Ready)
+            {
+                // A row that can't be imported still says whose plan it belongs to, so Check can keep the rest of that plan out.
+                if (found.Count == 1) plan.Name = $"{found[0].FirstName} {found[0].LastName}";
+                if ((found.Count == 1 ? found[0] : Likely(line, participants)) is { } owner) plan.Funding = line with { ParticipantId = owner.Id };
+                continue;
+            }
             if (found.Count == 0)
+            {
                 plan.Refuse($"No participant in ODIP has {(line.NdisKey is null ? "this name and date of birth" : "this NDIS number")}. Import or add them first.");
+                if (Likely(line, participants) is { } owner) plan.Funding = line with { ParticipantId = owner.Id };
+            }
             else if (found.Count > 1)
                 plan.Refuse(line.NdisKey is null
                     ? $"{found.Count} participants in ODIP have this name and date of birth. Add their NDIS number to the row."
@@ -88,21 +102,39 @@ public static class ImportFundingRows
     }
 
     /// <summary>
+    /// Who a row that matched nobody was most likely meant for: the participant whose NDIS number is one character off a cell that can't be a number
+    /// ("43000O001"), or whose name (and date of birth, when the row gives one) is the row's. A valid number nobody holds links to nobody: it is most
+    /// likely someone not imported yet, and numbers run close together. Null unless exactly one fits. It only keeps that participant's plan out.
+    /// </summary>
+    private static ImportParticipantMatch? Likely(ImportFundingLine line, IReadOnlyList<ImportParticipantMatch> participants)
+    {
+        var fits = participants.Where(p =>
+                (line.UnreadNdis != null && p.NdisNumber != null && OneOff(line.UnreadNdis, ImportParticipantRows.NdisKey(p.NdisNumber)))
+                || (line.FullName.Contains(' ') && NameKey($"{p.FirstName} {p.LastName}") == NameKey(line.FullName) && (line.DateOfBirth is null || line.DateOfBirth == p.DateOfBirth)))
+            .Take(2).ToList();
+        return fits.Count == 1 ? fits[0] : null;
+    }
+
+    private static bool OneOff(string typed, string number) =>
+        IsNdisNumber(number) && typed.Length == number.Length && typed.Zip(number).Count(pair => pair.First != pair.Second) <= 1;
+
+    /// <summary>
     /// The plan rules, over the rows grouped into plans:
     /// - one row per category and management (Core is one amount, or categories 01 to 04, never both);
-    /// - no overlap with the participant's plans already in ODIP, or with an earlier plan in the file;
+    /// - no overlap with the participant's plans already in ODIP, or with another of their plans in the file (a re-plan or a mistyped date: both are left out);
     /// - the Funding tab's own validator.
     /// A plan with any row that can't be imported is left out whole, so no plan lands with a category missing.
     /// </summary>
     public static void Check(List<ImportRowPlan> plans, IReadOnlyCollection<(Guid ParticipantId, DateOnly Start, DateOnly End)> existing)
     {
-        var accepted = new List<(Guid ParticipantId, DateOnly Start, DateOnly End, int Row)>();
-        // A row that says who but not when belongs to no plan, so every plan of that participant in the file is left out.
-        var undated = plans.Where(p => p.Status == ImportRowStatus.Invalid && p.Funding == null && p.DuplicateKey != null)
-            .GroupBy(p => p.DuplicateKey!).ToDictionary(g => g.Key, g => g.First().RowNumber);
-        foreach (var rows in Groups(plans))
+        // A row of a participant's whose plan dates can't be read belongs to no plan, so every plan of that participant in the file is left out.
+        var undated = plans.Where(p => p.Status == ImportRowStatus.Invalid && p.Funding is { } line && line.ParticipantId != Guid.Empty && (line.PlanStart is null || line.PlanEnd is null))
+            .GroupBy(p => p.Funding!.ParticipantId).ToDictionary(g => g.Key, g => g.First().RowNumber);
+        var groups = Groups(plans);
+        foreach (var rows in groups)
         {
-            if (undated.TryGetValue(rows[0].DuplicateKey!, out var undatedRow))
+            var (participantId, start, end) = (rows[0].Funding!.ParticipantId, rows[0].Funding!.PlanStart!.Value, rows[0].Funding!.PlanEnd!.Value);
+            if (undated.TryGetValue(participantId, out var undatedRow))
             {
                 Refuse(rows.Where(r => r.Status == ImportRowStatus.Ready).ToList(), $"Row {undatedRow} for this participant can't be imported, so their plans in this file are left out.");
                 continue;
@@ -113,19 +145,18 @@ public static class ImportFundingRows
                 Refuse(rows.Where(r => r.Status == ImportRowStatus.Ready).ToList(), $"Row {bad.RowNumber} of this plan can't be imported, so the whole plan is left out.");
                 continue;
             }
-            var (participantId, start, end) = (rows[0].Funding!.ParticipantId, rows[0].Funding!.PlanStart, rows[0].Funding!.PlanEnd);
             var inOdip = existing.Where(p => p.ParticipantId == participantId && p.Start <= end && start <= p.End)
                 .Select(p => $"{Say(p.Start)} to {Say(p.End)}").FirstOrDefault();
-            var inFile = accepted.Where(p => p.ParticipantId == participantId && p.Start <= end && start <= p.End).Select(p => (int?)p.Row).FirstOrDefault();
+            var inFile = groups.Where(g => g != rows && g[0].Funding!.ParticipantId == participantId && g[0].Funding!.PlanStart <= end && start <= g[0].Funding!.PlanEnd)
+                .Select(g => (int?)g[0].RowNumber).FirstOrDefault();
             if (inOdip != null)
                 Refuse(rows, $"This participant already has a plan in ODIP from {inOdip}, which overlaps these dates. Change that plan on their Funding tab, or leave these rows out.");
             else if (inFile != null)
-                Refuse(rows, $"This plan overlaps the plan on row {inFile} for the same participant.");
+                Refuse(rows, $"This plan overlaps the plan on row {inFile} for the same participant, so both are left out. Check the plan dates on those rows.");
             else
                 foreach (var error in FundingPlanValidator.Validate(ToDto(rows))) Refuse(rows, error);
             if (rows[0].Status != ImportRowStatus.Ready) continue;
             NoteCore(rows);
-            accepted.Add((participantId, start, end, rows[0].RowNumber));
         }
     }
 
@@ -133,10 +164,13 @@ public static class ImportFundingRows
     public static List<ImportFundingPlan> Plans(IEnumerable<ImportRowPlan> plans) =>
         Groups(plans.Where(p => p.Status == ImportRowStatus.Ready)).Select(rows => new ImportFundingPlan(rows[0].Funding!.ParticipantId, rows, ToDto(rows))).ToList();
 
-    /// <summary>The rows (not skipped) of each plan, by who the file says the row is for and the plan dates, in file order.</summary>
+    /// <summary>
+    /// The rows (not skipped) of each plan, by the participant they were matched or linked to and the plan dates, in file order: rows of one participant
+    /// found by number and by name are one plan.
+    /// </summary>
     private static List<List<ImportRowPlan>> Groups(IEnumerable<ImportRowPlan> plans) =>
-        plans.Where(p => p.Funding != null && p.Status != ImportRowStatus.Skipped)
-            .GroupBy(p => (p.DuplicateKey!, p.Funding!.PlanStart, p.Funding.PlanEnd))
+        plans.Where(p => p.Funding is { PlanStart: not null, PlanEnd: not null } line && line.ParticipantId != Guid.Empty && p.Status != ImportRowStatus.Skipped)
+            .GroupBy(p => (p.Funding!.ParticipantId, p.Funding.PlanStart, p.Funding.PlanEnd))
             .Select(g => g.ToList())
             .ToList();
 
@@ -173,7 +207,7 @@ public static class ImportFundingRows
     /// <summary>The plan as the Funding tab saves it: one pool per category and management (01 to 04 added into Core), each with one period equal to the plan.</summary>
     private static SaveFundingPlanDto ToDto(List<ImportRowPlan> rows)
     {
-        var (start, end) = (rows[0].Funding!.PlanStart, rows[0].Funding!.PlanEnd);
+        var (start, end) = (rows[0].Funding!.PlanStart!.Value, rows[0].Funding!.PlanEnd!.Value);
         return new SaveFundingPlanDto
         {
             PlanStart = start, PlanEnd = end, Evidence = BudgetEvidenceSource.Other,
@@ -245,8 +279,11 @@ public static class ImportFundingRows
         {
             RowNumber = rowNumber, Name = fullName.Length > 0 ? fullName : ndisKey != null ? $"NDIS {ndis}" : $"Row {rowNumber}", DuplicateKey = who,
         };
-        if (known && start is { } s && end is { } e)
-            plan.Funding = new ImportFundingLine(ndisKey, fullName, dateOfBirth, s, e, category, management, amount);
+        if (known || ndis.Length > 0)
+            plan.Funding = new ImportFundingLine(ndisKey, fullName, dateOfBirth, start, end, category, management, amount)
+            {
+                UnreadNdis = ndisKey is null && ImportParticipantRows.NdisKey(ndis) is { Length: > 0 } typed ? typed : null,
+            };
         if (ndis.Length > 0 && ndisKey is null && known) plan.Warnings.Add("The NDIS number isn't 9 digits, so this row finds its participant by name and date of birth.");
         if (first == ImportParticipantRows.ExampleFirstName && last == ImportParticipantRows.ExampleLastName) plan.Skip("This is the template's example row.");
         else if (category == RecurringTransport) plan.Skip("Recurring Transport (18) is paid to the participant and never claimed by providers, so ODIP doesn't record it.");

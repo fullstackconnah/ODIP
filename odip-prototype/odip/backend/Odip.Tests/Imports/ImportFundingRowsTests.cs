@@ -241,18 +241,56 @@ public class ImportFundingRowsTests
     }
 
     [Fact]
-    public void A_plan_that_overlaps_an_earlier_plan_in_the_file_is_refused()
+    public void Plans_of_one_participant_that_overlap_in_the_file_are_all_left_out()
     {
+        // A re-plan, or one plan whose dates were mistyped on some rows: either way, neither lands in part.
         var plans = Checked(NoPlans,
             Line("430000001", "Core", "Plan managed", "1000"),
             Line("430000001", "Core", "Plan managed", "800", start: "01/01/2027", end: "31/12/2027"),
-            Line("430000001", "Core", "Plan managed", "900", start: "01/07/2027", end: "30/06/2028"));
+            Line("430000001", "Core", "Plan managed", "900", start: "01/07/2027", end: "30/06/2028"),
+            Line("", "Core", "Self managed", "300", first: "Ben", last: "Lee", dob: "02/01/1985"));
 
-        Assert.Equal(ImportRowStatus.Ready, plans[0].Status);
-        Assert.Equal("This plan overlaps the plan on row 2 for the same participant.", plans[1].Reasons.Single());
-        // Row 4 overlaps only the refused plan on row 3, so it stands.
-        Assert.Equal(ImportRowStatus.Ready, plans[2].Status);
-        Assert.Equal(2, ImportFundingRows.Plans(plans).Count);
+        Assert.Equal("This plan overlaps the plan on row 3 for the same participant, so both are left out. Check the plan dates on those rows.", plans[0].Reasons.Single());
+        Assert.Equal("This plan overlaps the plan on row 2 for the same participant, so both are left out. Check the plan dates on those rows.", plans[1].Reasons.Single());
+        Assert.Equal("This plan overlaps the plan on row 3 for the same participant, so both are left out. Check the plan dates on those rows.", plans[2].Reasons.Single());
+        Assert.Equal(Ben, ImportFundingRows.Plans(plans).Single().ParticipantId);
+    }
+
+    [Fact]
+    public void A_mistyped_plan_end_on_one_row_leaves_the_whole_plan_out()
+    {
+        var plans = Checked(NoPlans,
+            Line("430000001", "01", "Plan managed", "1000"),
+            Line("430000001", "15", "Plan managed", "500", end: "29/06/2027"));
+
+        Assert.All(plans, p => Assert.Equal(ImportRowStatus.Invalid, p.Status));
+        Assert.Empty(ImportFundingRows.Plans(plans));
+    }
+
+    [Theory]
+    [InlineData("43000O001", "", "")]
+    [InlineData("430000002", "Ava", "Stone")]
+    public void A_mistyped_NDIS_number_on_one_row_leaves_the_whole_plan_out(string typo, string first, string last)
+    {
+        var plans = Checked(NoPlans,
+            Line("430000001", "01", "Plan managed", "1000"),
+            Line("430000001", "02", "Plan managed", "200"),
+            Line(typo, "15", "Plan managed", "500", first: first, last: last));
+
+        Assert.Equal("Row 4 of this plan can't be imported, so the whole plan is left out.", plans[0].Reasons.Single());
+        Assert.Equal(ImportRowStatus.Invalid, plans[2].Status);
+        Assert.Empty(ImportFundingRows.Plans(plans));
+    }
+
+    [Fact]
+    public void Rows_for_one_participant_found_by_number_and_by_name_make_one_plan()
+    {
+        var plans = Checked(NoPlans,
+            Line("430000001", "01", "Plan managed", "1000"),
+            Line("", "15", "Plan managed", "500", first: "Ava", last: "Stone", dob: "03/04/1990"));
+
+        var made = ImportFundingRows.Plans(plans).Single();
+        Assert.Equal((Ava, 2), (made.ParticipantId, made.Plan.Pools!.Count));
     }
 
     [Fact]
@@ -284,4 +322,11 @@ public class ImportFundingRowsTests
     [InlineData("4300000012")]
     public void Anything_but_nine_digits_is_not_an_NDIS_number(string ndis) =>
         Assert.Null(Read(Line(ndis, "Core", "Self managed", "100", first: "Ava", last: "Stone", dob: "03/04/1990")).Single().Funding!.NdisKey);
+
+    [Fact]
+    public void A_valid_number_nobody_holds_is_someone_else_and_never_keeps_a_neighbours_plan_out()
+    {
+        var plans = Checked(NoPlans, Line("430000001", "01", "Plan managed", "1000"), Line("430000002", "15", "Plan managed", "500"));
+        Assert.Equal((ImportRowStatus.Ready, Ava), (plans[0].Status, ImportFundingRows.Plans(plans).Single().ParticipantId));
+    }
 }
