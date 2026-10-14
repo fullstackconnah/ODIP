@@ -1,0 +1,101 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { useStaff } from '@/api/hooks'
+import { renderGroup, announcement } from './groupHarness'
+import { useComplianceGroup } from './useComplianceGroup'
+
+vi.mock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: true }))
+const { apiGet, apiPutRaw } = vi.hoisted(() => ({ apiGet: vi.fn(), apiPutRaw: vi.fn() }))
+vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiGet, apiPutRaw }))
+
+const TODAY = '2026-10-14'
+const member = (o: Record<string, unknown> = {}) => ({
+  id: 's1', firstName: 'Sam', lastName: 'Lee', fullName: 'Sam Lee', role: 'SupportWorker', position: 'SupportWorker', email: 'sam@example.com',
+  mobile: '0400 000 000', region: 'Brisbane', isDriverEligible: false, isFirstAidQualified: true, isMedicationCompetent: false, isManualHandlingCompetent: false,
+  isOvernightEligible: false, isActive: true, notes: 'Prefers mornings.', firstAidExpiryDate: '2026-10-03', driverLicenceExpiryDate: null,
+  manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: 'WS-1', workerScreeningExpiryDate: null, ...o,
+})
+const render = () => renderGroup(() => useComplianceGroup(true, { staff: useStaff({ isActive: 'true' }), today: TODAY, warningDays: 30 }))
+const UPDATE_SAM = 'Update expiry: Sam Lee, first aid'
+
+beforeEach(() => {
+  apiGet.mockReset()
+  apiPutRaw.mockReset()
+})
+
+describe('Staff compliance group — what it lists', () => {
+  it('lists one row per credential that needs action: expired first, then today, then soonest, then undated, counted as the old tile counted', async () => {
+    apiGet.mockResolvedValue([
+      member({ id: 'b', fullName: 'Ben Ito', firstAidExpiryDate: '2026-10-30' }),
+      member({ id: 'c', fullName: 'Cy Moss', firstAidExpiryDate: '2027-05-01', isDriverEligible: true }),
+      member(),
+      member({ id: 'a', fullName: 'Ana Ruiz', firstAidExpiryDate: TODAY }),
+    ])
+    render()
+
+    await screen.findByText('Sam Lee')
+    expect(apiGet).toHaveBeenCalledWith('/staff', { isActive: 'true' })
+    expect(screen.getAllByRole('listitem').map((li) => li.querySelector('span')!.textContent)).toEqual(['Sam Lee', 'Ana Ruiz', 'Ben Ito', 'Cy Moss'])
+    expect(screen.getByText('First Aid · expired 3 Oct')).toBeInTheDocument()
+    expect(screen.getByText('First Aid · expires 30 Oct')).toBeInTheDocument()
+    for (const flag of ['Expired', 'Expires today', '16 days', 'No date set']) expect(screen.getByText(flag)).toBeInTheDocument()
+    expect(screen.getByText('4')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add expiry: Cy Moss, driver licence' })).toBeInTheDocument()
+  })
+})
+
+describe('Staff compliance group — Update expiry', () => {
+  it('saves through useUpdateStaff with the WHOLE staff record (the PUT rewrites it), takes the row away and announces the new date', async () => {
+    // Two other dates on the record (a licence not flagged, a screening still current) must survive the save untouched.
+    apiGet.mockResolvedValue([member({ driverLicenceExpiryDate: '2028-06-30', workerScreeningExpiryDate: '2029-01-01' })])
+    apiPutRaw.mockResolvedValue({ success: true, data: member({ firstAidExpiryDate: '2027-10-03' }) })
+    render()
+
+    fireEvent.click(await screen.findByRole('button', { name: UPDATE_SAM }))
+    const field = screen.getByLabelText(/Expiry date/)
+    expect(field).toHaveValue('2026-10-03')
+    fireEvent.change(field, { target: { value: '2027-10-03' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    // The WHOLE body, written out field by field (toUpdateStaffDto's 20 fields): the PUT rewrites the staff record, so nothing may be dropped.
+    await waitFor(() => expect(apiPutRaw).toHaveBeenCalledWith('/staff/s1', {
+      firstName: 'Sam', lastName: 'Lee', email: 'sam@example.com', role: 'SupportWorker', position: 'SupportWorker',
+      mobile: '0400 000 000', region: 'Brisbane',
+      isDriverEligible: false, isFirstAidQualified: true, isMedicationCompetent: false, isManualHandlingCompetent: false, isOvernightEligible: false, isActive: true,
+      notes: 'Prefers mornings.',
+      firstAidExpiryDate: '2027-10-03', driverLicenceExpiryDate: '2028-06-30', manualHandlingExpiryDate: undefined, medicationCompetencyExpiryDate: undefined,
+      workerScreeningNumber: 'WS-1', workerScreeningExpiryDate: '2029-01-01',
+    }))
+    await waitFor(() => expect(announcement()).toHaveTextContent("Saved Sam Lee's first aid: expires 3 Oct 2027."))
+    expect(screen.queryByText('Sam Lee')).not.toBeInTheDocument()
+  })
+
+  it('keeps the row, and says so, when the new date is still inside the window', async () => {
+    apiGet.mockResolvedValue([member()])
+    apiPutRaw.mockResolvedValue({ success: true, data: member({ firstAidExpiryDate: '2026-11-01' }) })
+    render()
+
+    fireEvent.click(await screen.findByRole('button', { name: UPDATE_SAM }))
+    fireEvent.change(screen.getByLabelText(/Expiry date/), { target: { value: '2026-11-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(announcement()).toHaveTextContent("Saved Sam Lee's first aid: expires 1 Nov 2026. It's still due within 30 days."))
+    expect(screen.getByText('Sam Lee')).toBeInTheDocument()
+  })
+
+  it('asks for a date before sending anything, and keeps the date on a refusal', async () => {
+    apiGet.mockResolvedValue([member({ firstAidExpiryDate: null })])
+    apiPutRaw.mockRejectedValue({ response: { data: { message: 'Staff member not found.' } } })
+    render()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add expiry: Sam Lee, first aid' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose the expiry date.')
+    expect(apiPutRaw).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText(/Expiry date/), { target: { value: '2027-01-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Staff member not found.')
+    expect(screen.getByLabelText(/Expiry date/)).toHaveValue('2027-01-01')
+  })
+})
