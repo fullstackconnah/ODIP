@@ -89,8 +89,8 @@ export default function SettingsPage() {
       // shortcut: one Provider settings form behind all three keys until the split later in this PR (Tasks 11 and 12).
       case 'organisation': case 'billing': case 'safety': return framed(<ProviderSettingsTab />)
       case 'alerts': return <AlertWindowsSection {...frame} />
-      case 'pricing': return framed(<PlanPricingSettingsTab />)
-      case 'budgets': return framed(<BudgetSettingsTab />)
+      case 'pricing': return <PlanPricingSettingsTab {...frame} />
+      case 'budgets': return <BudgetSettingsTab {...frame} />
       case 'templates': return framed(<EventTemplatesSection />)
       case 'activities': return framed(<ActivityLibraryTab />)
       case 'holidays': return framed(<PublicHolidaysSection canEdit={perms.isSuperAdmin} />)
