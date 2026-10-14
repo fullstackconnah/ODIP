@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -238,5 +238,227 @@ describe('Billing details', () => {
     expect(await screen.findByRole('checkbox', { name: 'Registered for GST' })).toBeDisabled()
     expect(screen.queryByLabelText('Account name')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Safety checks', () => {
+  const readiness = () => screen.getByRole('radiogroup', { name: 'Participant readiness check' })
+  const medication = () => screen.getByRole('radiogroup', { name: 'Medication competency check' })
+  const radio = (group: HTMLElement, name: 'Warn only' | 'Enforce') => within(group).getByRole('radio', { name })
+  const managerName = () => screen.getByLabelText('Manager name') as HTMLInputElement
+  async function open() {
+    renderSection('safety')
+    await screen.findByLabelText('Manager name')
+  }
+
+  it('gives each check its own block: when it applies, both modes in words, and the current mode chosen', async () => {
+    server = makeSettings({ participantReadinessMode: 'Enforce' })
+    await open()
+    expect(screen.getByRole('heading', { level: 3, name: 'Participant readiness check' })).toBeInTheDocument()
+    expect(screen.getByText('Before a participant is rostered, booked or activated.')).toBeInTheDocument()
+    expect(screen.getByText(/Participants must be fully ready first, including a signed service agreement\./)).toBeInTheDocument()
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(radio(medication(), 'Warn only')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText(/The dose is refused\./)).toBeInTheDocument()
+    expect(managerName()).toHaveValue('Priya Sharma')
+    expect(screen.getByLabelText('Manager phone')).toHaveValue('0412 345 007')
+  })
+
+  it('keeps the warning that Enforce would block everyone while signed agreements cannot be recorded', async () => {
+    await open()
+    expect(screen.getByText(/Signed agreements can.t be recorded yet, so Enforce would block every participant/)).toBeInTheDocument()
+  })
+
+  it('says a picked mode is not saved yet, and what it will do from the save', async () => {
+    const user = userEvent.setup()
+    await open()
+    await user.click(radio(readiness(), 'Enforce'))
+    expect(screen.getByText('Not saved yet. From when you save: Participants must be fully ready first, including a signed service agreement.')).toBeInTheDocument()
+  })
+
+  it('editing only the manager name sends neither mode: the body is the row with the new name', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    await open()
+
+    await user.clear(managerName())
+    await user.type(managerName(), 'Alex Morgan')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { managerName: 'Alex Morgan' }))
+    expect(server).toMatchObject({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce', managerName: 'Alex Morgan' })
+  })
+
+  it('a section that went stale does not revert a mode another Admin set, and shows the truth after its save', async () => {
+    const user = userEvent.setup()
+    await open()
+    expect(radio(readiness(), 'Warn only')).toHaveAttribute('aria-checked', 'true')
+    server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })   // another Admin, meanwhile
+
+    await user.clear(managerName())
+    await user.type(managerName(), 'Alex Morgan')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).not.toHaveProperty('participantReadinessMode')
+    expect(putBody()).not.toHaveProperty('medicationCompetencyMode')
+    expect(server).toMatchObject({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    await waitFor(() => expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true'))
+  })
+
+  it('asks once before tightening the readiness check, then sends it with the row', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(saveButton())
+    const dialog = screen.getByRole('alertdialog', { name: 'Turn on Enforce for the readiness check?' })
+    expect(dialog).toHaveTextContent("From now on, a participant who isn't fully ready can't be rostered, booked or activated.")
+    expect(mockApiPut).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Turn on Enforce' }))
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual({ ...rowWithoutModes(makeSettings()), participantReadinessMode: 'Enforce' })
+  })
+
+  it('keeps the edit unsaved when the confirm is cancelled', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(saveButton())
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Turn on Enforce for medication competency?' })).getByRole('button', { name: 'Cancel' }))
+
+    expect(mockApiPut).not.toHaveBeenCalled()
+    expect(radio(medication(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes')
+  })
+
+  it('asks once for both when both are tightened, and sends both', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(saveButton())
+    const dialog = screen.getByRole('alertdialog', { name: 'Turn on Enforce for both checks?' })
+    expect(dialog).toHaveTextContent("can't be rostered, booked or activated")
+    expect(dialog).toHaveTextContent("Check your team's competencies first.")
+    await user.click(within(dialog).getByRole('button', { name: 'Turn on Enforce for both' }))
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual({ ...rowWithoutModes(makeSettings()), participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+  })
+
+  it('loosens without asking: Enforce back to Warn only is a deliberate change, and is sent', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ participantReadinessMode: 'Enforce' })
+    await open()
+
+    await user.click(radio(readiness(), 'Warn only'))
+    await user.click(saveButton())
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toMatchObject({ participantReadinessMode: 'Warn' })
+  })
+
+  it('sends a mode once: after its own change saved, a later unrelated save sends no mode', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(saveButton())
+    await user.click(screen.getByRole('button', { name: 'Turn on Enforce' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    await user.type(managerName(), '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(0)).toHaveProperty('medicationCompetencyMode', 'Enforce')
+    expect(putBody(1)).not.toHaveProperty('medicationCompetencyMode')
+    expect(putBody(1)).not.toHaveProperty('participantReadinessMode')
+  })
+
+  it('sends no mode when one was changed and changed back before saving', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(radio(readiness(), 'Warn only'))
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(radio(medication(), 'Warn only'))
+    await user.type(managerName(), '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { managerName: 'Priya Sharma!' }))
+  })
+
+  it('keeps both choices after a failed save, and the retry sends both', async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 500, data: {} } })
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(saveButton())
+    await user.click(screen.getByRole('button', { name: 'Turn on Enforce for both' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Check your connection and try again.')
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(radio(medication(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+
+    await user.click(saveButton())
+    await user.click(screen.getByRole('button', { name: 'Turn on Enforce for both' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toEqual({ ...rowWithoutModes(makeSettings()), participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+  })
+
+  it("shows the server's own words for a refused save, and keeps the choice", async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['Choose a tenant to view as before changing the participant readiness check.'] } } })
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(saveButton())
+    await user.click(screen.getByRole('button', { name: 'Turn on Enforce' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Choose a tenant to view as before changing the participant readiness check.')
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(server?.participantReadinessMode).toBe('Warn')
+  })
+
+  it('with no row yet: reads Warn only for both, locked, under the profile note, with no Save', async () => {
+    server = null
+    mockApiGet.mockImplementation(async (url: string) => (url === '/provider-settings' ? undefined : []))
+    await open()
+
+    expect(screen.getByText('Fill in the organisation profile first. These settings are saved with it.')).toBeInTheDocument()
+    expect(radio(readiness(), 'Warn only')).toHaveAttribute('aria-checked', 'true')
+    expect(radio(readiness(), 'Enforce')).toBeDisabled()
+    expect(radio(medication(), 'Enforce')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  it('is locked for a Coordinator: the value reads, a click changes nothing, and there is no Save', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    server = makeSettings({ participantReadinessMode: 'Enforce' })
+    await open()
+
+    expect(readiness()).toHaveAttribute('aria-disabled', 'true')
+    await user.click(radio(readiness(), 'Warn only'))
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(managerName()).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(mockApiPut).not.toHaveBeenCalled()
+  })
+
+  it('offers no control until the row has loaded, so it never shows a value it has not read', () => {
+    mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
+    renderSection('safety')
+    expect(screen.getByText('Loading safety checks section…')).toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
   })
 })

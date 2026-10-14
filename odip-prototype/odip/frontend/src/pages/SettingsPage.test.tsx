@@ -7,14 +7,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSettings, mockUpsertMutate, mockSyncMutate, holidayRows, screenSize } = vi.hoisted(() => ({
+const { mockUsePermissions, mockUseEventTemplates, settingsData, mockSyncMutate, holidayRows, screenSize } = vi.hoisted(() => ({
   mockUsePermissions: vi.fn(),
   screenSize: { belowMd: false },
   // The Public Holidays tab: the rows usePublicHolidays returns (a stable reference, like a cached query).
   holidayRows: { current: [] as unknown[] },
-  // The Provider Settings tab: what useProviderSettings returns (a stable reference, like a cached query) and the captured save mutation.
-  providerSettings: { current: {} as Record<string, unknown> },
-  mockUpsertMutate: vi.fn(),
   // The Public Holidays tab's sync mutation.
   mockSyncMutate: vi.fn(),
   // Event Templates tab data; defaults to "no templates" (see beforeEach).
@@ -27,7 +24,7 @@ const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSetting
   settingsData: { qualificationWarningDays: 30 },
 }))
 
-// SettingsPage's Qualification Warnings and Provider Settings tabs now call
+// Settings sections with a Save call
 // useUnsavedChangesWarning (PP-77), which uses react-router 7's useBlocker — that throws under
 // a plain declarative <MemoryRouter>/<Routes>, so this needs a data router (same pattern
 // StaffCreatePage.test.tsx documents).
@@ -57,8 +54,6 @@ vi.mock('@/api/hooks', () => ({
   useActivities: () => ({ data: [] }),
   useSettings: () => ({ data: settingsData }),
   useUpdateSettings: () => ({ mutate: vi.fn((_vars, opts) => opts?.onSuccess?.()), isPending: false }),
-  useProviderSettings: () => ({ data: providerSettings.current }),
-  useUpsertProviderSettings: () => ({ mutate: mockUpsertMutate, isPending: false }),
   useSupportCatalogue: () => ({ data: [] }),
   usePublicHolidays: () => ({ data: holidayRows.current }),
   useCreatePublicHoliday: () => ({ mutate: vi.fn(), isPending: false }),
@@ -115,9 +110,7 @@ beforeEach(() => {
   mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
   screenSize.belowMd = false
   mockUseEventTemplates.mockReturnValue({ data: [] })
-  providerSettings.current = {}
   holidayRows.current = []
-  mockUpsertMutate.mockReset()
   mockSyncMutate.mockReset()
 })
 
@@ -302,32 +295,7 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     expect(screen.queryByText(/leave without saving\?/i)).not.toBeInTheDocument()
   })
 
-  it('warns before navigating away from an edited Provider Settings form', async () => {
-    const user = userEvent.setup()
-    const { router } = renderSettingsPage('/settings?section=safety')
 
-    // ProviderSettingsTab's labels aren't associated via htmlFor/id, so select the input
-    // relative to its label text instead of by accessible label.
-    const abnInput = screen.getByLabelText('ABN') as HTMLInputElement
-    await user.type(abnInput, '12345678901')
-
-    await act(async () => { router.navigate('/elsewhere') })
-
-    expect(await screen.findByText(/leave without saving\?/i)).toBeInTheDocument()
-  })
-
-  // The single-line inputs take a fixed `--control-h` height. A textarea that reuses that class ignores `rows` (an explicit
-  // height beats it) and, with `resize-none`, could not be enlarged either: Invoice Footer Notes was stuck at one line.
-  it('Invoice Footer Notes keeps its 3 rows and can be resized vertically', async () => {
-    renderSettingsPage('/settings?section=safety')
-
-    const notes = screen.getByPlaceholderText(/NDIS Code of Conduct/i)
-
-    expect(notes).toHaveAttribute('rows', '3')
-    expect(notes.className).not.toMatch(/(^|\s)h-\[var\(--control-h\)\]/)
-    expect(notes).toHaveClass('h-auto', 'min-h-[var(--control-h)]', 'resize-y')
-    expect(notes).not.toHaveClass('resize-none')
-  })
 
   it('asks before switching to another section with an edited alert window, and stays on it after "Keep editing"', async () => {
     const user = userEvent.setup()
@@ -345,148 +313,6 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
   })
 })
 
-describe('SettingsPage — Provider Settings: medication competency check', () => {
-  const saved = {
-    id: 'ps-1', registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW',
-    gstRegistered: false, isPaceProvider: false, bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
-    managerName: null, managerPhone: null, medicationCompetencyMode: 'Warn',
-  }
-
-  async function openProviderSettings() {
-    const user = userEvent.setup()
-    renderSettingsPage('/settings?section=safety')
-    return user
-  }
-
-  it('shows the saved mode, and saves a change to Enforce together with the rest of the form', async () => {
-    providerSettings.current = saved
-    const user = await openProviderSettings()
-
-    const control = screen.getByRole('button', { name: /medication competency check/i })
-    expect(control).toHaveTextContent('Warn only')
-    await user.click(control)
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
-    expect(mockUpsertMutate.mock.calls[0][0]).toEqual(expect.objectContaining({
-      registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW', medicationCompetencyMode: 'Enforce',
-    }))
-  })
-
-  it('shows an Enforce setting as Enforce', async () => {
-    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }
-    await openProviderSettings()
-
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
-  })
-
-  it('reads as Warn only when the server does not send the setting, and then does not send one back', async () => {
-    const older: Record<string, unknown> = { ...saved }
-    delete older.medicationCompetencyMode
-    providerSettings.current = older
-    const user = await openProviderSettings()
-
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Warn only')
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
-  })
-
-  // ── the mode is sent only when the user changed it (review 3 finding M1) ──
-
-  it('does not send the mode when only Manager Phone was edited: an Enforce setting stays Enforce', async () => {
-    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }
-    const user = await openProviderSettings()
-
-    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
-    const body = mockUpsertMutate.mock.calls[0][0]
-    expect(body).toEqual(expect.objectContaining({
-      registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW', managerPhone: '0412000111',
-    }))
-    expect(body).not.toHaveProperty('medicationCompetencyMode')
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
-  })
-
-  it('does not undo another admin: the form loaded Warn, the server has since become Enforce, and an unrelated edit leaves it alone', async () => {
-    providerSettings.current = saved   // this form loads Warn only
-    const user = await openProviderSettings()
-    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }   // another admin sets Enforce; the query refetches, the open form does not reset
-
-    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
-  })
-
-  it('does not send the mode when it was changed and changed back to the value that loaded', async () => {
-    providerSettings.current = saved
-    const user = await openProviderSettings()
-
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Warn only' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
-  })
-
-  it('sends a change once: after it saved, a later save of something else does not send the mode again', async () => {
-    providerSettings.current = saved
-    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onSuccess?.())
-    const user = await openProviderSettings()
-
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
-    await user.click(screen.getByRole('button', { name: /^save/i }))   // the label reads Saved! for two seconds after a save
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(2)
-    expect(mockUpsertMutate.mock.calls[0][0]).toHaveProperty('medicationCompetencyMode', 'Enforce')
-    expect(mockUpsertMutate.mock.calls[1][0]).not.toHaveProperty('medicationCompetencyMode')
-  })
-
-  it('still sends the change after a rejected save, so a retry is not silently dropped', async () => {
-    providerSettings.current = saved
-    mockUpsertMutate.mockImplementationOnce((_body, opts) => opts?.onError?.({ response: { status: 500, data: {} } }))
-    const user = await openProviderSettings()
-
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(2)
-    expect(mockUpsertMutate.mock.calls[1][0]).toHaveProperty('medicationCompetencyMode', 'Enforce')
-  })
-
-  it('is read-only for a role that cannot edit provider settings', async () => {
-    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
-    providerSettings.current = saved
-    await openProviderSettings()
-
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument()
-  })
-
-  it('keeps the chosen mode and shows the error when the save is rejected', async () => {
-    providerSettings.current = saved
-    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onError?.({ response: { status: 403, data: {} } }))
-    const user = await openProviderSettings()
-
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(await screen.findByText(/admin role is required/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
-  })
-})
 
 describe('SettingsPage — catalogue import preview', () => {
   // Rows exactly as the API sends them: defaults (false, 0) and nulls are left out of the JSON.
@@ -614,17 +440,6 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
   }
 
 
-  it('Provider Settings: the "Saved!" reset', async () => {
-    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onSuccess?.())
-    const user = userEvent.setup()
-    const { unmount } = renderSettingsPage('/settings?section=safety')
-    await user.type(screen.getByLabelText('ABN') as HTMLInputElement, '1')
-
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ }), unmount)
-
-    expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
-  })
 
   it('Public Holidays: the sync result line', async () => {
     mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
