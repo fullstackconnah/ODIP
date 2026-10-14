@@ -27,7 +27,7 @@ import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledS
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedSentence, replacePromptLines, rosterAnnouncements,
-  rosterCollision, staffWeekHours, swappedSentence, type DragCarry, type DropTarget, type PendingDrop,
+  rosterCollision, staffWeekHours, swappedSentence, keepInWindow, type DragCarry, type DropTarget, type PendingDrop,
 } from './lib/rosterDrag'
 
 /** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
@@ -448,7 +448,7 @@ export default function RosterBoardPage() {
             {/* A portal (the brief, section 5), so no ancestor's overflow or transform clips or shifts it. No drop animation: the default flies the puck back to its source, which reads as a refusal.
                 pointer-events-none: rosterCollision asks what is on top at the pointer, and that must never be the carried puck itself. */}
             {createPortal(
-              <DragOverlay className="pointer-events-none" dropAnimation={null} modifiers={[liftAboveFinger]}>
+              <DragOverlay className="pointer-events-none" style={{ width: 'max-content', height: 'auto' }} dropAnimation={null} modifiers={[liftAboveFinger, keepInWindow]}>
                 {carry && <CarriedPuck carry={carry} hours={hours.get(carry.staffId) ?? 0} />}
               </DragOverlay>,
               document.body,

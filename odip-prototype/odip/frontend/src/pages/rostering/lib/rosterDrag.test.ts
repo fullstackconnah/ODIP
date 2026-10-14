@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect } from 'vitest'
 import { makeShift, makeUnfilledShift } from '../test-fixtures'
 import {
-  assignedSentence, carriedLine, dropOutcome, movedSentence, publishedSentence, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
+  assignedSentence, carriedLine, dropOutcome, keepInWindow, movedSentence, publishedSentence, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
   staffWeekHours, swappedSentence, type DragCarry, type DropTarget,
 } from './rosterDrag'
 
@@ -80,6 +80,30 @@ describe('a Published source shift', () => {
     const active = { id: 'a', data: { current: publishedSource } } as never
     const over = { id: 'o', data: { current: { kind: 'shift', shift: draftHole } } } as never
     expect(rosterAnnouncements.onDragOver({ active, over })).toBe("Over Mia Chen, Tuesday 18 August, 9am to 3pm, needs staff. Sam's current shift is published, so dropping tells Sam at once.")
+  })
+})
+
+// Finish review fix 3: the carried puck never leaves the window (it ran off the right edge on an 820px tablet).
+describe('keepInWindow', () => {
+  const windowRect = { top: 0, left: 0, width: 820, height: 1180, right: 820, bottom: 1180 }
+  const puckAt = (left: number, top: number) => ({ left, top, width: 200, height: 44, right: left + 200, bottom: top + 44 })
+  const args = (transform: { x: number; y: number }, rect = puckAt(500, 300)) =>
+    ({ transform: { ...transform, scaleX: 1, scaleY: 1 }, overlayNodeRect: rect, draggingNodeRect: rect, windowRect }) as unknown as Parameters<typeof keepInWindow>[0]
+
+  it('leaves a move inside the window alone', () => {
+    expect(keepInWindow(args({ x: 50, y: -40 }))).toMatchObject({ x: 50, y: -40 })
+  })
+
+  it('stops the puck at the right, left, top and bottom edges', () => {
+    expect(keepInWindow(args({ x: 300, y: 0 }))).toMatchObject({ x: 120 })      // 500 + 200 would end at 1000; it may end at 820
+    expect(keepInWindow(args({ x: -600, y: 0 }))).toMatchObject({ x: -500 })
+    expect(keepInWindow(args({ x: 0, y: -400 }))).toMatchObject({ y: -300 })
+    expect(keepInWindow(args({ x: 0, y: 900 }))).toMatchObject({ y: 836 })
+  })
+
+  it('does nothing before anything is measured', () => {
+    const unmeasured = { transform: { x: 999, y: 999, scaleX: 1, scaleY: 1 }, overlayNodeRect: null, draggingNodeRect: null, windowRect: null } as unknown as Parameters<typeof keepInWindow>[0]
+    expect(keepInWindow(unmeasured)).toMatchObject({ x: 999, y: 999 })
   })
 })
 

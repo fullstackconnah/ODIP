@@ -1,5 +1,5 @@
 import { createContext } from 'react'
-import { closestCenter, pointerWithin, type Announcements, type CollisionDetection, type ScreenReaderInstructions } from '@dnd-kit/core'
+import { closestCenter, pointerWithin, type Announcements, type CollisionDetection, type Modifier, type ScreenReaderInstructions } from '@dnd-kit/core'
 import { format, parseISO } from 'date-fns'
 import type { PublishWeekResultDto, ShiftDto, ShiftStatus } from '@/api/types'
 import { plural } from '@/lib/format'
@@ -118,6 +118,21 @@ export const rosterCollision: CollisionDetection = args => {
     const node = droppableContainers.find(container => container.id === hit.id)?.node.current
     return Boolean(top && node?.contains(top))
   })
+}
+
+/**
+ * Keeps the carried puck inside the window (finish review fix 3: on an 820px tablet it ran off the right edge). The same clamp as @dnd-kit/modifiers' restrictToWindowEdges, which
+ * is not installed; it measures the overlay itself, which sizes to its content, so a puck wider than the strip puck it came from still stops at the edge.
+ */
+export const keepInWindow: Modifier = ({ transform, overlayNodeRect, draggingNodeRect, windowRect }) => {
+  const rect = overlayNodeRect ?? draggingNodeRect
+  if (!rect || !windowRect) return transform
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+  return {
+    ...transform,
+    x: clamp(transform.x, windowRect.left - rect.left, windowRect.left + windowRect.width - rect.left - rect.width),
+    y: clamp(transform.y, windowRect.top - rect.top, windowRect.top + windowRect.height - rect.top - rect.height),
+  }
 }
 
 const spokenRange = (s: ShiftDto) => `${formatShiftTime(s.startTime)} to ${formatShiftTime(s.endTime)}`
