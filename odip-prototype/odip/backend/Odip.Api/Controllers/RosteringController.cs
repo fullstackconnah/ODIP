@@ -1866,12 +1866,12 @@ public class RosteringController : ControllerBase
     /// <summary>
     /// Roster drag and drop (2026-10-14), decision 9: a worker hears about a shift only once it is Published. Call it once the shift holds its new worker and status, before the
     /// caller's one save, so the outbox rows commit with the change (a refused write sends nothing). The worker on a Published shift gets ShiftAssigned when it is newly theirs or
-    /// has just become Published; whoever came off a shift that was already Published gets ShiftUnassigned. Draft changes, and a Published shift going back to Draft or Cancelled, stay silent.
+    /// has just become Published; whoever came off a shift that was already Published gets ShiftUnassigned, even when the same save takes it off Published (deep review S2). Draft changes, and a
+    /// Published shift going back to Draft or Cancelled with its worker kept, stay silent.
     /// </summary>
     private async Task NotifyStaffChangeAsync(Shift shift, Guid? previousUserId, bool wasPublished, CancellationToken ct)
     {
-        if (shift.Status != ShiftStatus.Published) return;
-        var assignedTo = shift.UserId is { } now && (now != previousUserId || !wasPublished) ? now : (Guid?)null;
+        var assignedTo = shift.Status == ShiftStatus.Published && shift.UserId is { } now && (now != previousUserId || !wasPublished) ? now : (Guid?)null;
         var takenOff = wasPublished && previousUserId is { } before && before != shift.UserId ? before : (Guid?)null;
         if (assignedTo is null && takenOff is null) return;
 

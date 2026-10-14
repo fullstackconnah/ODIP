@@ -243,6 +243,22 @@ public class RosterBoardDragDropTests
     [Theory]
     [InlineData(ShiftStatus.Draft)]
     [InlineData(ShiftStatus.Cancelled)]
+    public async Task UpdateShift_ChangingTheWorkerAndLeavingPublished_TellsTheOneTakenOff(ShiftStatus to)   // deep review S2
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, to), default));
+
+        // Alex was told they were on a Published shift, so they hear they are off it; Sam is on a shift that is no longer out, so hears nothing yet.
+        Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.Draft)]
+    [InlineData(ShiftStatus.Cancelled)]
     public async Task UpdateShift_PublishedToDraftOrCancelled_SendsNothing(ShiftStatus to)
     {
         using var db = TestDb.Create();
