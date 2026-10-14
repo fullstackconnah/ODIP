@@ -74,6 +74,59 @@ public class NotificationsController : ControllerBase
         return Ok(ApiResponse<NotificationPreferenceGridDto>.Ok(await BuildGridAsync(callerId.Value, ct)));
     }
 
+    /// <summary>
+    /// The bell (dashboard spec 2026-10-14): the caller's own newest items, newest first, and their unread count. Own rows are
+    /// the JWT subject's, never X-View-As-User's (lead decision 1); the tenant filter applies as well. `take` is clamped to
+    /// 1..50, and HasMore comes from asking for one row more than is returned.
+    /// </summary>
+    [HttpGet("inbox")]
+    public async Task<ActionResult<ApiResponse<InboxDto>>> GetInbox([FromQuery] int take = 30, CancellationToken ct = default)
+    {
+        var callerId = ResolveCallerId();
+        if (callerId is null) return Unauthorized(ApiResponse<InboxDto>.Fail("Caller identity could not be resolved."));
+
+        take = Math.Clamp(take, 1, 50);
+        var mine = _db.InAppNotifications.Where(n => n.RecipientUserId == callerId.Value);
+        var rows = await mine
+            .OrderByDescending(n => n.CreatedAt).ThenByDescending(n => n.Id)
+            .Take(take + 1)
+            .Select(n => new InAppNotificationDto { Id = n.Id, Title = n.Title, LinkTo = n.LinkTo, CreatedAt = n.CreatedAt, ReadAt = n.ReadAt })
+            .ToListAsync(ct);
+        var unread = await mine.CountAsync(n => n.ReadAt == null, ct);
+
+        return Ok(ApiResponse<InboxDto>.Ok(new InboxDto { Items = rows.Take(take).ToList(), UnreadCount = unread, HasMore = rows.Count > take }));
+    }
+
+    /// <summary>Marks one of the caller's own items read. Idempotent: an item already read keeps its first ReadAt. Anyone else's item, or another organisation's, is 404.</summary>
+    [HttpPost("inbox/{id:guid}/read")]
+    public async Task<IActionResult> MarkInboxRead(Guid id, CancellationToken ct)
+    {
+        var callerId = ResolveCallerId();
+        if (callerId is null) return Unauthorized(ApiResponse<object>.Fail("Caller identity could not be resolved."));
+
+        var row = await _db.InAppNotifications.FirstOrDefaultAsync(n => n.Id == id && n.RecipientUserId == callerId.Value, ct);
+        if (row is null) return NotFound(ApiResponse<object>.Fail("Notification not found."));
+
+        row.ReadAt ??= DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    /// <summary>Marks every unread item of the caller's read.</summary>
+    [HttpPost("inbox/read-all")]
+    public async Task<IActionResult> MarkAllInboxRead(CancellationToken ct)
+    {
+        var callerId = ResolveCallerId();
+        if (callerId is null) return Unauthorized(ApiResponse<object>.Fail("Caller identity could not be resolved."));
+
+        // shortcut: loads every unread row, because EF InMemory (the controller tests) has no ExecuteUpdate; move to ExecuteUpdateAsync if inboxes reach thousands unread.
+        var now = DateTime.UtcNow;
+        foreach (var row in await _db.InAppNotifications.Where(n => n.RecipientUserId == callerId.Value && n.ReadAt == null).ToListAsync(ct))
+            row.ReadAt = now;
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     /// <summary>Every event x channel, `enabled` = the user's own row if one exists, else the documented default (ON) — design spec §1.</summary>
     private async Task<NotificationPreferenceGridDto> BuildGridAsync(Guid userId, CancellationToken ct)
     {

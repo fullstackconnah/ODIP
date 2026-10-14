@@ -13,11 +13,12 @@ import { TAP_AREA } from '@/components/tapArea'
 // still imported transitively) so this suite doesn't need a QueryClientProvider or a real
 // network call, matching how the other hook-backed page tests in this codebase mock
 // '@/api/hooks' rather than provide a live client.
-const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockEndSession } = vi.hoisted(() => ({
+const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockUseInbox, mockEndSession } = vi.hoisted(() => ({
   mockEndSession: vi.fn(),
   mockUsePendingLeaveCount: vi.fn(() => 0),
   mockUsePendingWitnessRequests: vi.fn(() => ({ data: [] as unknown[], isLoading: false })),
   mockUsePendingCompletionCount: vi.fn(() => 0),
+  mockUseInbox: vi.fn(() => ({ data: undefined as { items: unknown[]; unreadCount: number; hasMore: boolean } | undefined, isError: false, refetch: vi.fn() })),
 }))
 
 vi.mock('@/api/hooks', async (importOriginal) => {
@@ -30,6 +31,10 @@ vi.mock('@/api/hooks', async (importOriginal) => {
     // entry would call the real usePendingCompletionCount, which calls useQuery and needs a
     // QueryClientProvider this suite doesn't set up.
     usePendingCompletionCount: mockUsePendingCompletionCount,
+    // The header bell (NotificationBell) polls the inbox and marks items read: stubbed for the same reason as the counts above.
+    useInbox: mockUseInbox,
+    useMarkInboxRead: () => ({ mutate: vi.fn() }),
+    useMarkAllInboxRead: () => ({ mutate: vi.fn(), reset: vi.fn(), isError: false }),
   }
 })
 
@@ -267,11 +272,11 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...pad)
   })
 
-  it('pads the header "Notifications" button (32px, disabled placeholder)', () => {
+  it('pads the header "Notifications" bell (32px), a working button now', () => {
     renderAt('/trips')
     const bell = screen.getByRole('button', { name: 'Notifications' })
     expect(bell).toHaveClass(...pad, 'w-8', 'h-8')
-    expect(bell).toBeDisabled()
+    expect(bell).toBeEnabled()
   })
 
   it('gives every mobile bottom-nav cell, "More" included, a --tap-min floor each way, its content centred, so the 42px cells are 44px', () => {
@@ -1172,5 +1177,24 @@ describe('AppLayout — only the current group and the saved ones stay open', ()
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(toggle).not.toHaveClass('font-bold')
     expect(within(mainNav()).getByRole('link', { current: 'page' })).toHaveClass('font-bold')
+  })
+})
+
+describe('AppLayout — the notifications bell is in the header for every role', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockUseInbox.mockImplementation(() => ({ data: undefined, isError: false, refetch: vi.fn() }))
+  })
+
+  it.each([
+    ['Admin', '/trips'],
+    ['Coordinator', '/trips'],
+    ['ReadOnly', '/trips'],
+    ['SupportWorker', '/portal'],
+  ])('%s on %s sees it, named with the unread count', (role, path) => {
+    signIn(role)
+    mockUseInbox.mockImplementation(() => ({ data: { items: [], unreadCount: 3, hasMore: false }, isError: false, refetch: vi.fn() }))
+    renderAt(path)
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: '3 unread, Notifications' })).toBeInTheDocument()
   })
 })
