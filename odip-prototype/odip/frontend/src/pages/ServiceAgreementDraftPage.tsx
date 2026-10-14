@@ -398,6 +398,8 @@ function DraftPage() {
       >
         {ending && <strong ref={endingRef} tabIndex={-1} className="block focus:outline-none">{ending}</strong>}
         This agreement is read only: the roster was made from it. A new revision changes nothing until you save it.
+        {/* Fix round 1 (deep S3): a known limit. Once a renewal exists, this term changes only through a revision with its dates, and approving that ends the renewal's patterns. */}
+        {ending && mayApprove && <span className="mt-2 block">Make any change this agreement needs before you renew it: once it is renewed, a change to it replaces the renewal.</span>}
       </Callout>
     )}
     {renewNotice?.kind === 'plan' && (

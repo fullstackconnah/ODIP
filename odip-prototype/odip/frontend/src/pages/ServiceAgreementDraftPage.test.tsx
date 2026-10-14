@@ -506,6 +506,8 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
     expect(screen.getByText('Agreement ends in 20 days.')).toBeInTheDocument()
     expect(renewButton()).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start a new revision' })).toBeInTheDocument()
+    // Fix round 1 (deep S3), a known limit said where it bites: once renewed, this term can only be changed by a revision that replaces the renewal.
+    expect(screen.getByText('Make any change this agreement needs before you renew it: once it is renewed, a change to it replaces the renewal.')).toBeInTheDocument()
   })
 
   it('says nothing of an end more than 60 days away, and an ended agreement says its shifts stop', () => {
