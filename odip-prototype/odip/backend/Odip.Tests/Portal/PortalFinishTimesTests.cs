@@ -136,6 +136,18 @@ public class PortalFinishTimesTests
     }
 
     [Fact]
+    public async Task MovedTimesSentWithSeconds_AreStoredToTheMinute_AndSecondsInsideTheStampsMinuteAreNoChange()
+    {
+        // Review CR-B Should 1: the app sends whole minutes, but the server rule must not depend on it.
+        var c = await Finish(Create(), Dto(start: Stamp.AddSeconds(30), end: Now.AddMinutes(-10).AddSeconds(30), reason: "Left at ten to."));
+
+        Assert.Equal(Stamp, c.ActualStart);   // 23:05:30 is the stamp's own minute: no move
+        Assert.Null(c.OriginalActualStart);
+        Assert.Equal(Now.AddMinutes(-10), c.ActualEnd);
+        Assert.Equal(Now, c.OriginalActualEnd);
+    }
+
+    [Fact]
     public async Task TheEndBoundCountsFromTheMinuteOfTheFinish_AndThatMinuteIsNoChange()
     {
         var f = Create(now: DefaultNow.AddSeconds(30));

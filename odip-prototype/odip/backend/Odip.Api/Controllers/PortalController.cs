@@ -553,8 +553,8 @@ public class PortalController : ControllerBase
         var limit = TimeSpan.FromMinutes(MaxTimeAdjustmentMinutes);
         var nowMinute = TruncateToMinute(now);
         var stampMinute = TruncateToMinute(completion.ActualStart);
-        DateTime? askedStart = shift.Status == ShiftStatus.InProgress && dto.ActualStart is { } startIn ? ShiftBreakRules.ToUtc(startIn) : null;
-        DateTime? askedEnd = dto.ActualEnd is { } endIn ? ShiftBreakRules.ToUtc(endIn) : null;
+        DateTime? askedStart = shift.Status == ShiftStatus.InProgress && dto.ActualStart is { } startIn ? TruncateToMinute(ShiftBreakRules.ToUtc(startIn)) : null;
+        DateTime? askedEnd = dto.ActualEnd is { } endIn ? TruncateToMinute(ShiftBreakRules.ToUtc(endIn)) : null;   // whole minutes, as the worker picks them
         if (askedEnd > now + ShiftBreakRules.ClockSkewAllowance)
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                 "Your finish time can't be in the future.", ShiftErrorCodes.ShiftActualEndInFuture));
