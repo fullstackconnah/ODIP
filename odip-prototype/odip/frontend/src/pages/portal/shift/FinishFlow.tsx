@@ -10,7 +10,7 @@ import { WizardStepRail } from '@/components/wizard/WizardStepRail'
 import type { WizardStepDef } from '@/components/wizard/types'
 import { apiErrorCode, apiErrorMessages, apiErrorStatus, finishBlockersFromError, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import type { ShiftIncidentPrefillState } from '@/lib/incidentPrefill'
-import { breaksSignature, FINISH_STEPS, handoverForward, stepForCode, type FinishStepKey } from './checklist'
+import { breaksSignature, FINISH_STEPS, handoverForward, movedTimes, parseKilometres, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput } from './checklist'
 import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusal } from './finishSteps'
 import { requestGeolocation } from './geolocation'
@@ -56,13 +56,28 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   const [opened] = useState(() => openDraft(shift))
   const [d, setD] = useState<EndDraft>(opened.draft)
   const set = (patch: Partial<EndDraft>) => setD(prev => ({ ...prev, ...patch }))
-  const [error, setError] = useState<{ message: string; focus?: string } | null>(null)
+  const [error, setError] = useState<{ message: string; focus?: string; field?: TimesField } | null>(null)
   const [refusals, setRefusals] = useState<Refusal[]>([])
   const [networkError, setNetworkError] = useState(false)
   // Set from the tap, through the location wait (up to 5 s), to the answer: one Finish per tap (plan check S5).
   const [submitting, setSubmitting] = useState(false)
   const topRef = useRef<HTMLDivElement>(null)
   const step = d.step ?? 'times'
+  // Render reads the flow's clock (`tick`, refreshed on every step change and every 30 s); the step-1 gate and submit read the clock at the tap,
+  // because the server judges the end against its own clock at submit (Review Focus 2).
+  const timesInput = (at: Date): TimesInput | null => shift.completion ? {
+    tz: shift.timeZoneId, stampedStart: shift.completion.actualStart, startOverride: d.startOverride, endOverride: d.endOverride,
+    reason: d.adjustmentReason, kilometres: d.kilometres, breaks: shift.breaks, now: at,
+  } : null
+  const live = timesInput(tick)
+  const moved = live ? movedTimes(live) : { start: null, end: null }
+  const km = parseKilometres(d.kilometres)
+  const drifted = step === 'submit' && !!live && timesError(live)?.field === 'end'
+  /** The element to fix for a step-1 refusal: the field, or the break (its End break while it runs, else its Edit). */
+  const focusFor = (p: { field: TimesField; breakId?: string }) =>
+    p.field === 'break'
+      ? (shift.breaks.find(x => x.id === p.breakId)?.isRunning ? `brk-end-now-${p.breakId}` : `brk-edit-${p.breakId}`)
+      : p.field === 'kilometres' ? 'finish-km' : `finish-${p.field}`
 
   useEffect(() => { saveEndDraft(shift.id, d) }, [shift.id, d])
   // WizardStepHeading moves focus on a step change but skips its first mount, so opening (or resuming) the flow focuses the heading here.
@@ -96,9 +111,15 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
     refreshClock()
     setError(null)
     if (step === 'times') {
-      const running = shift.breaks.find(b => b.isRunning)
-      if (running) return setError({ message: 'End your break first.', focus: `brk-end-now-${running.id}` })
-      return set({ step: 'doses', reached: later(d.reached, 'doses'), timesSig: breaksSignature(shift.breaks) })
+      const atTap = timesInput(new Date())
+      const problem = atTap && timesError(atTap)
+      if (problem) return setError({ message: problem.message, focus: focusFor(problem), field: problem.field })
+      const kept = atTap ? movedTimes(atTap) : { start: null, end: null }
+      // A Change left on the recorded minute is no change: drop it now, so it can't become a move as the clock runs on.
+      return set({
+        step: 'doses', reached: later(d.reached, 'doses'), timesSig: breaksSignature(shift.breaks),
+        startOverride: kept.start ? d.startOverride : null, endOverride: kept.end ? d.endOverride : null,
+      })
     }
     if (step === 'doses') {
       const missing = shift.finishBlockers.filter(b => b.code === 'DOSE_OUTCOME_MISSING').length
@@ -118,6 +139,14 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   }
 
   async function submit() {
+    const atSubmit = timesInput(new Date())
+    const problem = atSubmit && timesError(atSubmit)
+    if (problem) {   // the clock ran on past the window: the server would refuse the same way, so say it on step 1
+      go('times')
+      setError({ message: problem.message, focus: focusFor(problem), field: problem.field })
+      return
+    }
+    const sent = atSubmit ? movedTimes(atSubmit) : { start: null, end: null }
     setRefusals([])
     setNetworkError(false)
     setSubmitting(true)
@@ -127,10 +156,10 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
         id: shift.id,
         data: {
           ...geo,
-          actualStart: null,
-          actualEnd: null,
-          timeAdjustmentReason: null,
-          kilometres: null,
+          actualStart: sent.start,
+          actualEnd: sent.end,
+          timeAdjustmentReason: sent.start || sent.end ? d.adjustmentReason.trim() : null,
+          kilometres: km === 'invalid' ? null : km,
           anythingToReport: d.anythingToReport === null ? null : d.anythingToReport === 'yes',
           handoverText: d.nothingToHandOver ? null : d.handoverText.trim() || null,
           nothingToHandOver: d.nothingToHandOver,
@@ -190,7 +219,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
         <WizardStepHeading stepKey={step} label={current.heading} />
       </div>
       {opened.breaksChanged && step === 'times' && <Callout tone="info">Your breaks changed. Check your times again.</Callout>}
-      {step === 'times' && <TimesStep shift={shift} online={online} now={tick} />}
+      {step === 'times' && <TimesStep shift={shift} online={online} now={tick} draft={d} set={set} invalid={error?.field} />}
       {step === 'doses' && <DosesStep shift={shift} online={online} canAct={canAct} onRecord={onRecord} />}
       {step === 'report' && (
         <ReportStep
@@ -202,7 +231,13 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
         />
       )}
       {step === 'handover' && <HandoverStep noteCount={noteCount} draft={d} set={set} onEditNotes={editNotes} />}
-      {step === 'submit' && <SubmitStep shift={shift} draft={d} noteCount={noteCount} now={tick} refusals={refusals} go={go} />}
+      {step === 'submit' && (
+        <SubmitStep
+          shift={shift} draft={d} noteCount={noteCount} now={tick} refusals={refusals} go={go}
+          moved={moved} kilometres={km === 'invalid' ? null : km} drifted={drifted}
+          onUseSubmitTime={() => set({ endOverride: null })} onChangeTimes={() => go('times')}
+        />
+      )}
       {error && <p role="alert" className="text-sm text-[var(--color-destructive)]">{error.message}</p>}
       {networkError && <p role="alert" className="text-sm text-[var(--color-destructive)]">Couldn't submit. Check your connection. Your entries are kept: try again.</p>}
       <ActionBar>

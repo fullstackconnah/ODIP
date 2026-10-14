@@ -889,3 +889,168 @@ describe('PortalShiftDetailPage: the sticky bar by state (SHAPE §3)', () => {
     expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
   })
 })
+
+describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 1, 2, 3, 5)', () => {
+  // Brisbane, UTC+10: stamped 09:05:40, now 17:00:30.
+  const stamped = () => makeCompletion({ actualStart: '2026-08-16T23:05:40Z' })
+  const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: stamped(), ...over })
+  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
+  const forward = (name: string | RegExp) => fireEvent.click(bar().getByRole('button', { name }))
+  const heading = (name: string) => screen.getByRole('heading', { level: 2, name })
+  const open = (over: Partial<PortalShiftDetailDto> = {}) => {
+    show(inProgress(over))
+    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
+  }
+  const change = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  const moveFinish = (value: string, reason = 'Left early.') => {
+    fireEvent.click(screen.getByRole('button', { name: 'Change your finish time' }))
+    change('Your finish time', value)
+    change('Why did your times change?', reason)
+  }
+  const toStepFive = () => { forward('Confirm times'); forward('Next'); forward('Skip'); forward('Nothing to note or hand over') }
+
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-08-17T07:00:30Z')) })
+  afterEach(() => vi.useRealTimers())
+
+  it('Change offers the window the server accepts, and the reason appears once a time is open', () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
+    const start = screen.getByLabelText('Your start time')
+    expect(start).toHaveValue('2026-08-17T09:05')
+    expect(start).toHaveAttribute('min', '2026-08-17T08:50')
+    expect(start).toHaveAttribute('max', '2026-08-17T09:20')
+    expect(screen.getByText('Between 8:50 am and 9:20 am')).toBeInTheDocument()
+    expect(screen.getByLabelText('Why did your times change?')).toHaveAttribute('maxlength', '500')
+    fireEvent.click(screen.getByRole('button', { name: 'Change your finish time' }))
+    expect(screen.getByLabelText('Your finish time')).toHaveAttribute('max', '2026-08-17T17:00')
+    expect(screen.getByText('Up to 15 minutes before you submit.')).toBeInTheDocument()
+  })
+
+  it('refuses a start outside the window, naming it and focusing the field', async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
+    change('Your start time', '2026-08-17T08:40')
+    change('Why did your times change?', 'Early')
+    forward('Confirm times')
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a time between 8:50 am and 9:20 am.')
+    await waitFor(() => expect(screen.getByLabelText('Your start time')).toHaveFocus())
+    expect(heading('Your times')).toBeInTheDocument()
+  })
+
+  it('asks why when a time moved, and focuses the reason', async () => {
+    open()
+    moveFinish('2026-08-17T16:50', '')
+    forward('Confirm times')
+    expect(screen.getByRole('alert')).toHaveTextContent('Say why your times changed.')
+    await waitFor(() => expect(screen.getByLabelText('Why did your times change?')).toHaveFocus())
+  })
+
+
+  it('Use the recorded time takes a change back: no reason is needed and nothing is sent', () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
+    change('Your start time', '2026-08-17T08:55')
+    fireEvent.click(screen.getByRole('button', { name: 'Use the recorded time for your start' }))
+    expect(screen.queryByLabelText('Your start time')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Why did your times change?')).not.toBeInTheDocument()
+    forward('Confirm times')
+    expect(heading('Doses & routines')).toBeInTheDocument()
+  })
+
+  it('a moved start and finish, the reason and the kilometres reach the server as Z instants and numbers', async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
+    change('Your start time', '2026-08-17T08:55')
+    moveFinish('2026-08-17T16:50', '  Arrived early, left at ten to five.  ')
+    change('Kilometres driven with Mia (optional)', '12.5')
+    toStepFive()
+    expect(screen.getByText(/^8:55\s?am \(changed from 9:05\s?am\)$/i)).toBeInTheDocument()
+    expect(screen.getByText('12.5 km')).toBeInTheDocument()
+    forward('Submit shift')
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
+      id: 'shift-1',
+      data: {
+        geolocationDeclined: true, actualStart: '2026-08-16T22:55:00Z', actualEnd: '2026-08-17T06:50:00Z',
+        timeAdjustmentReason: 'Arrived early, left at ten to five.', kilometres: 12.5, anythingToReport: null,
+        handoverText: null, nothingToHandOver: true, nothingToNote: true,
+      },
+    }))
+  })
+
+  it("a Change left on the recorded minute sends nothing and needs no reason; '0' km sends 0", async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change your finish time' }))
+    change('Kilometres driven with Mia (optional)', '0')
+    toStepFive()
+    forward('Submit shift')
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
+      id: 'shift-1',
+      data: {
+        geolocationDeclined: true, actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: 0, anythingToReport: null,
+        handoverText: null, nothingToHandOver: true, nothingToNote: true,
+      },
+    }))
+  })
+
+  it("refuses kilometres it can't read, on step 1 with focus on the field", async () => {
+    open()
+    change('Kilometres driven with Mia (optional)', '12,5')
+    forward('Confirm times')
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
+    await waitFor(() => expect(screen.getByLabelText('Kilometres driven with Mia (optional)')).toHaveFocus())
+  })
+
+  it("refuses moved times that leave a break outside, focusing that break's Edit", async () => {
+    open({ breaks: [{ id: 'b1', startedAt: '2026-08-17T06:40:00Z', endedAt: '2026-08-17T06:52:00Z', isRunning: false, minutes: 12, editedAt: null, createdByUserId: 'u' }] })
+    moveFinish('2026-08-17T16:50')
+    forward('Confirm times')
+    expect(screen.getByRole('alert')).toHaveTextContent('Your times must include your breaks. Change the break first, or your times.')
+    await waitFor(() => expect(document.getElementById('brk-edit-b1')).toHaveFocus())
+  })
+
+
+  it('drift: an end chosen earlier that slips past 15 minutes is caught on step 5 with two choices (Review Focus 2)', async () => {
+    open()
+    moveFinish('2026-08-17T16:50')
+    forward('Confirm times')
+    forward('Next')
+    forward('Skip')
+    vi.setSystemTime(new Date('2026-08-17T07:06:30Z'))   // six minutes later, 16:50 is 16 minutes back
+    forward('Nothing to note or hand over')
+    expect(screen.getByText('Your finish time is now more than 15 minutes ago.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Use the time I submit' }))
+    expect(screen.queryByText('Your finish time is now more than 15 minutes ago.')).not.toBeInTheDocument()
+    forward('Submit shift')
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
+      id: 'shift-1',
+      data: expect.objectContaining({ actualEnd: null, timeAdjustmentReason: null }),
+    }))
+  })
+
+  it('drift: Change it goes back to step 1, and Submit checks the clock again itself', () => {
+    open()
+    moveFinish('2026-08-17T16:50')
+    toStepFive()
+    expect(screen.queryByText('Your finish time is now more than 15 minutes ago.')).not.toBeInTheDocument()
+    vi.setSystemTime(new Date('2026-08-17T07:06:30Z'))
+    forward('Submit shift')
+    expect(heading('Your times')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a time no more than 15 minutes before now.')
+    expect(finishMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it("a time the server refuses lands back on step 1 through Go to step", async () => {
+    finishMutateAsync.mockRejectedValueOnce({
+      response: { status: 400, data: { success: false, code: 'SHIFT_TIME_ADJUSTMENT_TOO_LARGE', errors: ['You can change your times by up to 15 minutes.'] } },
+    })
+    open()
+    moveFinish('2026-08-17T16:50')
+    toStepFive()
+    forward('Submit shift')
+    await waitFor(() => expect(screen.getByText('You can change your times by up to 15 minutes.')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Go to step' }))
+    expect(heading('Your times')).toBeInTheDocument()
+    expect(screen.getByLabelText('Your finish time')).toHaveValue('2026-08-17T16:50')   // the entry is kept
+  })
+})

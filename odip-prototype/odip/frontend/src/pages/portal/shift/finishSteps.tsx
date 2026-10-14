@@ -12,7 +12,7 @@ import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shi
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import { rosteredInstants } from '../lib/portal'
-import { dosesSummary, type FinishStepKey } from './checklist'
+import { clockLabel, dosesSummary, REASON_MAX, timeBounds, type FinishStepKey, type TimesField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import { Fold } from './ui'
@@ -137,35 +137,96 @@ export function FlaggedNotePrompt({ shift, note, onLeave }: { shift: PortalShift
   )
 }
 
-/** Step 1, Your times (SHAPE §4): the recorded start, the finish (when you submit), the breaks, editable here, and the time worked. */
-export function TimesStep({ shift, online, now }: { shift: PortalShiftDetailDto; online: boolean; now: Date }) {
+/** One recorded time and its Change control (SHAPE §4, step 1): a datetime-local held to the server's window, the stamp to the minute ±15 or the end's 15 minutes. */
+function TimeField({ label, figure, sub, rostered, tz, id, name, value, bounds, helper, invalid, onOpen, onChange, onReset }: {
+  label: string; figure: string; sub?: string; rostered: string | null; tz: string
+  id: string; name: 'start' | 'finish'; value: string | null; bounds: { min: string; max: string } | null; helper: string; invalid: boolean
+  onOpen: () => void; onChange: (value: string) => void; onReset: () => void
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-[var(--color-muted-foreground)]">{label}</p>
+      <p className="text-xl font-bold tabular-nums">{figure}</p>
+      {sub && <p className="text-sm">{sub}</p>}
+      {rostered && <p className="text-xs text-[var(--color-muted-foreground)]">Rostered {clock(rostered, tz)}</p>}
+      {value === null ? (
+        <Button variant="secondary" size="md" onClick={onOpen} disabled={!bounds} aria-label={`Change your ${name} time`}>Change</Button>
+      ) : (
+        <div className="space-y-1">
+          <label htmlFor={id} className="sr-only">{`Your ${name} time`}</label>
+          <input
+            id={id} type="datetime-local" className={fieldClass} value={value} min={bounds?.min} max={bounds?.max}
+            aria-describedby={`${id}-help`} aria-invalid={invalid || undefined} onChange={e => onChange(e.target.value)}
+          />
+          <p id={`${id}-help`} className="text-xs text-[var(--color-muted-foreground)]">{helper}</p>
+          <Button variant="ghost" size="md" onClick={onReset} aria-label={`Use the recorded time for your ${name}`}>Use the recorded time</Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Step 1, Your times (SHAPE §4): change either time by up to 15 minutes with a reason, correct the breaks, add kilometres. */
+export function TimesStep({ shift, online, now, draft, set, invalid }: {
+  shift: PortalShiftDetailDto; online: boolean; now: Date; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField
+}) {
   const tz = shift.timeZoneId
   const c = shift.completion
   const rostered = rosteredInstants(shift)
-  const breakMinutes = shift.breaks.reduce((sum, b) => sum + b.minutes, 0)
-  const worked = c ? Math.max(0, minutesBetween(c.actualStart, now.toISOString()) - breakMinutes) : 0
+  const b = c ? timeBounds(c.actualStart, tz, now) : null
+  const first = shift.participant.fullName.split(' ')[0]
+  const instant = (local: string | null) => (local ? providerLocalToUtcInstant(local, tz) : null)
+  const startIso = instant(draft.startOverride) ?? c?.actualStart ?? null
+  const endIso = instant(draft.endOverride) ?? now.toISOString()
+  const breakMinutes = shift.breaks.reduce((sum, x) => sum + x.minutes, 0)
+  const worked = startIso ? Math.max(0, minutesBetween(startIso, endIso) - breakMinutes) : 0
+  const say = (local: string) => clockLabel(`${local}:00`)
+  const muted = 'text-xs text-[var(--color-muted-foreground)]'
+
   return (
     <div className="space-y-4">
+      <p className="text-sm">Check when you started and finished. You can change either by up to 15 minutes.</p>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1">
-          <p className="text-sm text-[var(--color-muted-foreground)]">Started</p>
-          <p className="text-xl font-bold tabular-nums">{c ? clock(c.actualStart, tz) : 'Not recorded'}</p>
-          {rostered.start && <p className="text-xs text-[var(--color-muted-foreground)]">Rostered {clock(rostered.start, tz)}</p>}
-        </div>
-        <div className="space-y-1">
-          <p className="text-sm text-[var(--color-muted-foreground)]">Finished</p>
-          <p className="text-xl font-bold">When you submit</p>
-          <p className="text-sm">now {clock(now.toISOString(), tz)}</p>
-          {rostered.end && <p className="text-xs text-[var(--color-muted-foreground)]">Rostered {clock(rostered.end, tz)}</p>}
-        </div>
+        <TimeField
+          label="Started" figure={c ? clock(c.actualStart, tz) : 'Not recorded'} rostered={rostered.start} tz={tz}
+          id="finish-start" name="start" value={draft.startOverride} bounds={b && b.start} invalid={invalid === 'start'}
+          helper={b ? `Between ${say(b.start.min)} and ${say(b.start.max)}` : ''}
+          onOpen={() => b && set({ startOverride: b.start.stamp })} onChange={v => set({ startOverride: v })} onReset={() => set({ startOverride: null })}
+        />
+        <TimeField
+          label="Finished" figure="When you submit" sub={`now ${clock(now.toISOString(), tz)}`} rostered={rostered.end} tz={tz}
+          id="finish-end" name="finish" value={draft.endOverride} bounds={b && b.end} invalid={invalid === 'end'}
+          helper="Up to 15 minutes before you submit."
+          onOpen={() => b && set({ endOverride: b.end.max })} onChange={v => set({ endOverride: v })} onReset={() => set({ endOverride: null })}
+        />
       </div>
+      {(draft.startOverride !== null || draft.endOverride !== null) && (
+        <div className="space-y-1">
+          <label htmlFor="finish-reason" className="text-sm font-medium">Why did your times change?</label>
+          <p id="finish-reason-help" className={muted}>Your coordinator sees this.</p>
+          <textarea
+            id="finish-reason" rows={3} maxLength={REASON_MAX} className={fieldClass} aria-describedby="finish-reason-help"
+            aria-invalid={invalid === 'reason' || undefined} value={draft.adjustmentReason} onChange={e => set({ adjustmentReason: e.target.value })}
+          />
+          <p className={muted}>{draft.adjustmentReason.length} of {REASON_MAX}</p>
+        </div>
+      )}
       <section aria-labelledby="finish-breaks" className="space-y-2">
         <h3 id="finish-breaks" className="text-sm font-semibold">Breaks</h3>
         {shift.breaks.length === 0
           ? <p className="text-sm text-[var(--color-muted-foreground)]">No breaks taken.</p>
-          : <ul className="space-y-2">{shift.breaks.map(b => <BreakRow key={b.id} shift={shift} brk={b} online={online} />)}</ul>}
+          : <ul className="space-y-2">{shift.breaks.map(x => <BreakRow key={x.id} shift={shift} brk={x} online={online} />)}</ul>}
       </section>
       <p className="text-sm">Time worked <span className="font-semibold tabular-nums">{formatMinutesSpan(worked)}</span></p>
+      <section aria-labelledby="finish-travel" className="space-y-1">
+        <h3 id="finish-travel" className="text-sm font-semibold">Travel</h3>
+        <label htmlFor="finish-km" className="text-sm font-medium">Kilometres driven with {first} (optional)</label>
+        <p id="finish-km-help" className={muted}>Only driving with {first}, not your trip to or from the shift.</p>
+        <input
+          id="finish-km" inputMode="decimal" className={fieldClass} aria-describedby="finish-km-help"
+          aria-invalid={invalid === 'kilometres' || undefined} value={draft.kilometres} onChange={e => set({ kilometres: e.target.value })}
+        />
+      </section>
     </div>
   )
 }
@@ -288,20 +349,23 @@ export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
 }
 
 /** Step 5, Check and submit (SHAPE §4): what will be sent, grouped by step with a way back to each, then the server's answer if it refused. */
-export function SubmitStep({ shift, draft, noteCount, now, refusals, go }: {
+export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, kilometres, drifted, onUseSubmitTime, onChangeTimes }: {
   shift: PortalShiftDetailDto; draft: EndDraft; noteCount: number; now: Date; refusals: Refusal[]; go: (step: FinishStepKey) => void
+  moved: { start: string | null; end: string | null }; kilometres: number | null; drifted: boolean; onUseSubmitTime: () => void; onChangeTimes: () => void
 }) {
   const tz = shift.timeZoneId
   const c = shift.completion
   const breakMinutes = shift.breaks.reduce((sum, b) => sum + b.minutes, 0)
-  const worked = c ? Math.max(0, minutesBetween(c.actualStart, now.toISOString()) - breakMinutes) : 0
+  const worked = c ? Math.max(0, minutesBetween(moved.start ?? c.actualStart, moved.end ?? now.toISOString()) - breakMinutes) : 0
   const handover = draft.handoverText.trim()
   const groups: { step: FinishStepKey; title: string; items: FactListItem[] }[] = [
     { step: 'times', title: 'Times', items: [
-      { label: 'Started', value: c ? clock(c.actualStart, tz) : null },
-      { label: 'Finishing', value: 'When you submit' },
+      { label: 'Started', value: c ? (moved.start ? `${clock(moved.start, tz)} (changed from ${clock(c.actualStart, tz)})` : clock(c.actualStart, tz)) : null },
+      { label: 'Finishing', value: moved.end ? clock(moved.end, tz) : 'When you submit' },
+      ...(moved.start || moved.end ? [{ label: 'Reason', value: draft.adjustmentReason.trim() }] : []),
       { label: 'Breaks', value: `${shift.breaks.length}, ${breakMinutes} min` },
       { label: 'Time worked', value: formatMinutesSpan(worked) },
+      { label: 'Kilometres', value: kilometres === null ? 'None' : `${kilometres} km` },
     ] },
     { step: 'doses', title: 'Doses and routines', items: [{ label: 'Recorded', value: dosesSummary(shift.medicationsDue, shift.shiftRoutines) || 'Nothing due' }] },
     { step: 'report', title: 'Report', items: [{ label: 'Anything to report', value: draft.anythingToReport === 'yes' ? 'Yes' : draft.anythingToReport === 'no' ? 'No' : 'Not answered' }] },
@@ -312,6 +376,18 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go }: {
   ]
   return (
     <div className="space-y-4">
+      {drifted && (
+        <Callout
+          tone="warning"
+          title="Your finish time is now more than 15 minutes ago."
+          actions={(
+            <>
+              <Button variant="secondary" size="md" onClick={onUseSubmitTime}>Use the time I submit</Button>
+              <Button variant="ghost" size="md" onClick={onChangeTimes}>Change it</Button>
+            </>
+          )}
+        />
+      )}
       {groups.map(g => (
         <section key={g.step} aria-labelledby={`finish-check-${g.step}`} className="space-y-1">
           <div className="flex items-center justify-between gap-2">
