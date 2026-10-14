@@ -79,6 +79,9 @@ export function usePermissions() {
   // always matches who the server will actually attribute a new record to. Used for read-only
   // "administered by" style displays (see RecordAdministrationModal) rather than any write path.
   const fullName = (user.fullName ?? null) as string | null;
+  // The signed-in user's sign-in name and organisation, from the same odip_user blob (AuthResponseDto). Settings › Profile shows them.
+  const username = (user.username ?? null) as string | null;
+  const tenantName = (user.tenantName ?? null) as string | null;
 
   const isSuperAdmin = role === 'SuperAdmin';
   const isAdmin = role === 'Admin';
@@ -90,6 +93,8 @@ export function usePermissions() {
     role,
     id,
     fullName,
+    username,
+    tenantName,
     isSuperAdmin,
     isAdmin,
     isCoordinator,
@@ -269,6 +274,12 @@ export function usePermissions() {
      * not viewing an organisation (an import belongs to one), so: an Admin, or a SuperAdmin viewing as an organisation.
      */
     canImportData: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+
+    /**
+     * Whether an organisation's settings are in scope: an Admin or a Coordinator always has one, a SuperAdmin only while viewing one
+     * (the tenant switcher's odip_viewing_tenant). Settings shows its Organisation, Pricing and budgets, Content and Data groups only then.
+     */
+    hasOrganisation: isAdmin || isCoordinator || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
 
     /**
      * A participant's plan budget (the Funding tab, and the budget card on Intake and the Profile wizard). It is money, and money is never visible to SupportWorker or ReadOnly:

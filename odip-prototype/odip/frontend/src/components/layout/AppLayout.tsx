@@ -13,7 +13,7 @@ import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import PlatformFooter from '@/components/layout/PlatformFooter'
 import {
-  barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, navItems, resolveNav, toBarItem,
+  barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, NAV_ACTIVE, NAV_IDLE, navItems, resolveNav, toBarItem,
   type BarAudience, type BarItem, type NavCounts, type NavGroup, type NavLeaf,
 } from '@/components/layout/navConfig'
 import { readStoredOpenGroups, storeGroupOpen } from '@/components/layout/navOpenGroups'
@@ -30,10 +30,6 @@ import { endSession } from '@/api/client'
  * link, and a floor cannot. Nothing changes on a mouse.
  */
 const MOBILE_NAV_LINK = 'flex flex-1 min-h-[var(--tap-min)] min-w-[var(--tap-min)] flex-col items-center justify-center gap-1'
-
-/** The lit item of the sidebar, the drawer and the bar's links: Pale Sprout with near-black bold text. */
-const NAV_ACTIVE = 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-const NAV_IDLE = 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
 
 /**
  * The groups to show open: the ones already open, plus any group that holds the current page. The page you are on is never hidden
