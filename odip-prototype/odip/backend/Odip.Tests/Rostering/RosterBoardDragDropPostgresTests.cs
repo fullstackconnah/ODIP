@@ -244,6 +244,41 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task TwoEmptyDayMovesOffOneShiftAtOnce_OneWinsTheOtherIs409_AndOnlyOneShiftIsMade()   // post-merge review N3: the moving create under contention
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid samId, sourceId, miaId;
+        await using (var db = Open(tenantId))
+        {
+            var sam = Worker(db, "Sam");
+            var mia = Person(db, "Mia");
+            (samId, miaId) = (sam.Id, mia.Id);
+            sourceId = ShiftOf(db, mia.Id, sam.Id, ShiftStatus.Draft, Monday).Id;
+            await db.SaveChangesAsync();
+        }
+
+        // Two boards carried Sam off Monday onto two different empty days, and both saved the panel at once.
+        CreateShiftDto MoveTo(DateOnly day) => new()
+        {
+            ParticipantId = miaId, StaffId = samId, ServiceDate = day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(15, 0),
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, MoveFromShiftId = sourceId,
+        };
+        await using var one = Open(tenantId);
+        await using var two = Open(tenantId);
+        var results = await Task.WhenAll(
+            Controller(one, tenantId).CreateShift(MoveTo(Monday.AddDays(2)), default),
+            Controller(two, tenantId).CreateShift(MoveTo(Monday.AddDays(3)), default));
+
+        Assert.Single(results, r => r.Result is OkObjectResult);
+        Assert.Single(results, r => r.Result is ConflictObjectResult);
+        Assert.Null(await WorkerOn(tenantId, sourceId));
+        await using var check = Open(tenantId);
+        Assert.Equal(1, await check.Shifts.CountAsync(s => s.UserId == samId));   // Sam is on exactly one new shift, never two
+        Assert.Equal(2, await check.Shifts.CountAsync());
+    }
+
+    [SkippableFact]
     public async Task TwoMovesOntoOneNeedsStaffShiftAtOnce_OneWinsTheOtherIs409()   // Review Focus 1
     {
         RequirePostgres();

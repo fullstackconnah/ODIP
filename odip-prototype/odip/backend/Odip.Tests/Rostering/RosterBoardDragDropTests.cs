@@ -582,6 +582,78 @@ public class RosterBoardDragDropTests
         Assert.Equal(1, await db.Shifts.CountAsync());
     }
 
+    [Fact]
+    public async Task CreateShift_MovingFromALockedShift_Is409AndCreatesNothing()   // post-merge review N3 (RC:538)
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var source = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Completed);
+
+        var result = await Controller(db).CreateShift(NewShiftFor(mia.Id, sam.Id, Monday.AddDays(1), 9, 15, source.Id), default);
+
+        Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
+        Assert.Equal(sam.Id, (await Reload(db, source.Id)).UserId);
+        Assert.Equal(1, await db.Shifts.CountAsync());
+    }
+
+    // ── Another organisation's shift id gets 404 and nothing changes (post-merge review N3) ──
+
+    [Fact]
+    public async Task AssignShift_OnAShiftOfAnotherOrganisation_Is404AndChangesNothing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift theirs;
+        Guid sam;
+        using (var mine = TestDb.ForTenant(dbName, ours)) sam = SeedStaff(mine).Id;
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) theirs = SeedShift(other, SeedParticipant(other).Id, null);
+        using var db = TestDb.ForTenant(dbName, ours);
+
+        var result = await Controller(db, ours).AssignShift(theirs.Id, new AssignShiftDto { StaffId = sam, ExpectedStaffId = null }, default);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        using var all = TestDb.Create(dbName);
+        Assert.Null((await all.Shifts.SingleAsync(s => s.Id == theirs.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task UpdateShift_OnAShiftOfAnotherOrganisation_Is404AndChangesNothing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift theirs;
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) theirs = SeedShift(other, SeedParticipant(other).Id, SeedStaff(other).Id);
+        using var db = TestDb.ForTenant(dbName, ours);
+
+        var result = await Controller(db, ours).UpdateShift(theirs.Id, Put(theirs, theirs.UserId, ShiftStatus.Cancelled) with { Notes = "not ours" }, default);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        using var all = TestDb.Create(dbName);
+        var after = await all.Shifts.SingleAsync(s => s.Id == theirs.Id);
+        Assert.Equal(ShiftStatus.Draft, after.Status);
+        Assert.Null(after.Notes);
+    }
+
+    [Fact]
+    public async Task CreateShift_MovingFromAShiftOfAnotherOrganisation_Is404AndCreatesNothing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift theirs;
+        Guid mia;
+        using (var mine = TestDb.ForTenant(dbName, ours)) mia = SeedParticipant(mine).Id;
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) theirs = SeedShift(other, SeedParticipant(other).Id, SeedStaff(other).Id);
+        using var db = TestDb.ForTenant(dbName, ours);
+
+        var result = await Controller(db, ours).CreateShift(NewShiftFor(mia, theirs.UserId!.Value, Monday.AddDays(1), 9, 15, theirs.Id), default);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        using var all = TestDb.Create(dbName);
+        Assert.Equal(1, await all.Shifts.CountAsync());
+        Assert.Equal(theirs.UserId, (await all.Shifts.SingleAsync(s => s.Id == theirs.Id)).UserId);
+    }
+
     // ── Publish week ──
 
     [Fact]
