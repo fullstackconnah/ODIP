@@ -56,7 +56,10 @@ describe('DataExportTab', () => {
   it('names who exported last and when', async () => {
     getWithDefault.mockResolvedValue(jordan)
     renderTab()
-    expect(await screen.findByText(`Last exported by Jordan Lee on ${formatDateTimeAu(jordan.exportedAt)}`)).toBeInTheDocument()
+    const line = await screen.findByText(/^Last exported by Jordan Lee on$/)
+    expect(line).toHaveTextContent(`Last exported by Jordan Lee on ${formatDateTimeAu(jordan.exportedAt)}`)
+    // At 390 the line wraps; the date and time wrap as one, so "04:04" never sits apart from its "pm".
+    expect(screen.getByText(formatDateTimeAu(jordan.exportedAt))).toHaveClass('whitespace-nowrap')
   })
 
   it("says it couldn't check the last export, and the button still works", async () => {
@@ -105,7 +108,7 @@ describe('DataExportTab', () => {
     expect(screen.getByText('Saved as odip-export-sunrise-care-2026-10-14.zip (2 KB). Your browser lists it in its downloads.')).toBeInTheDocument()
     expect(saved).toEqual(['odip-export-sunrise-care-2026-10-14.zip'])
     expect(screen.getByRole('status')).toHaveTextContent('Export saved.')
-    expect(await screen.findByText(/^Last exported by Jordan Lee on /)).toBeInTheDocument()
+    expect(await screen.findByText(/^Last exported by Jordan Lee on$/)).toBeInTheDocument()
     expect(getWithDefault).toHaveBeenCalledTimes(2)
   })
 

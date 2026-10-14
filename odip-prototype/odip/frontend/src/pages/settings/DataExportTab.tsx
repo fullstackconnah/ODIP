@@ -43,13 +43,14 @@ export default function DataExportTab() {
     : phase === 'downloading' ? `Downloading… ${formatBytes(bytes ?? 0)} so far. Keep this page open until it's saved.`
     : phase === 'resumed' ? "Still downloading. Keep this page open until it's saved."
     : null
-  // No claim before the answer is in: nothing while the last export is loading.
+  // No claim before the answer is in: nothing while the last export is loading. The date and time wrap as one, so "04:04" keeps its "pm".
+  const when = last.data && <span className="whitespace-nowrap">{formatDateTimeAu(last.data.exportedAt)}</span>
   const lastLine =
     last.isPending ? null
     : last.isError ? "Couldn't check the last export."
     : !last.data ? 'Not exported yet.'
-    : last.data.exportedByName ? `Last exported by ${last.data.exportedByName} on ${formatDateTimeAu(last.data.exportedAt)}`
-    : `Last exported on ${formatDateTimeAu(last.data.exportedAt)}`
+    : last.data.exportedByName ? <>Last exported by {last.data.exportedByName} on {when}</>
+    : <>Last exported on {when}</>
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
