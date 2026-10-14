@@ -130,8 +130,10 @@ describe('PortalLeavePage', () => {
     })
     renderPage()
 
-    const withdrawButtons = screen.getAllByRole('button', { name: /withdraw/i })
+    const withdrawButtons = screen.getAllByRole('button', { name: /^withdraw: /i })
     expect(withdrawButtons).toHaveLength(1)
+    // Each row has its own, so the name says which request it withdraws.
+    expect(withdrawButtons[0]).toHaveAccessibleName('Withdraw: 14 Sep 2026 – 18 Sep 2026')
 
     await user.click(withdrawButtons[0])
     const dialog = screen.getByRole('alertdialog')
@@ -151,7 +153,7 @@ describe('PortalLeavePage', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /withdraw/i }))
+    await user.click(screen.getByRole('button', { name: /^withdraw: /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^withdraw$/i }))
 
