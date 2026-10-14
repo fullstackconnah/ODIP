@@ -693,7 +693,6 @@ const ROW_ACTIONS_LEGACY_ICONS = [
   '[&>div>:is(a,button)]:h-[var(--control-h-sm)] [&>div>:is(a,button)]:w-[var(--control-h-sm)] [&>div>:is(a,button)]:p-0',
 ].join(' ')
 
-
 // Overlay mode: on a mouse (`pointer-fine`) at md+ the cluster leaves the table's flow and sits on
 // top of the row's last data cells, so its column costs no width — a cluster with "Change status"
 // in it reserved ~200px of every row and was what squeezed the other columns at 1280-1440. It is

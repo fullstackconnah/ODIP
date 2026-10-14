@@ -76,6 +76,8 @@ describe('IntakeBookingPanel: a new booking', () => {
     mocks.save.mockRejectedValue({ isAxiosError: true, response: { status: 400, data: { errors: { staffUserId: ["Dana can't do intakes. Choose an active coordinator or admin."] } } } })
     panel(newRow())
     await fillNewBooking(user)
+    fireEvent.change(screen.getByLabelText(/^How long/), { target: { value: '120' } })
+    await user.type(screen.getByLabelText(/^Notes for your team/), 'Side gate')
 
     await user.click(screen.getByRole('button', { name: 'Send invite' }))
 
@@ -84,6 +86,9 @@ describe('IntakeBookingPanel: a new booking', () => {
     expect(screen.getByLabelText(/^Date/)).toHaveValue('2030-10-16')
     expect(screen.getByLabelText(/^Start time/)).toHaveValue('10:00')
     expect(screen.getByLabelText(/^Where/)).toHaveValue('Library')
+    expect(screen.getByLabelText(/^How long/)).toHaveValue('120')
+    expect(screen.getByLabelText(/^Notes for your team/)).toHaveValue('Side gate')
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ staffUserId: 'dana', durationMinutes: 120, notes: 'Side gate' }) }))
   })
 
   it('says the connection failed and keeps the entries', async () => {
