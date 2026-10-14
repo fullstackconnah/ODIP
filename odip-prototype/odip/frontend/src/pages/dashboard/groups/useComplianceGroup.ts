@@ -1,6 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query'
+import { apiGet } from '@/api/client'
 import { useUpdateStaff } from '@/api/hooks'
-import { toUpdateStaffDto, type StaffListDto } from '@/api/types/staff'
+import { toUpdateStaffDto, type StaffDetailDto, type StaffListDto } from '@/api/types/staff'
 import { staffCredentials, type StaffCredential } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, deadlineState, isDeadlineIssue } from '@/lib/deadline'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
@@ -20,10 +21,12 @@ export function complianceIssues(staff: StaffListDto[], options: { warnDays: num
 }
 
 /** The Staff compliance group (SHAPE §5): credentials expired or due within the warning window, fixed with the Qualifications page's own save. */
-export function useComplianceGroup(enabled: boolean, { staff, today, warningDays }: {
+export function useComplianceGroup(enabled: boolean, { staff, today, warningDays, mayEditAdmins }: {
   staff: UseQueryResult<StaffListDto[]>
   today: string
   warningDays: number
+  /** Only an Admin or SuperAdmin may save an Admin's record (the server's role guard refuses anyone else, even with the role unchanged). */
+  mayEditAdmins: boolean
 }): GroupModel {
   const updateStaff = useUpdateStaff()
   const issues = enabled ? complianceIssues(staff.data ?? [], { warnDays: warningDays, today }) : []
@@ -32,6 +35,8 @@ export function useComplianceGroup(enabled: boolean, { staff, today, warningDays
     const name = credential.label.toLowerCase()
     const status = credential.state.status
     const verb = credential.expiryDate ? 'Update' : 'Add'
+    // An Admin's record is saved by an Admin: a Coordinator opens the person instead of an editor every save of which the server refuses.
+    const adminOnly = member.role === 'Admin' && !mayEditAdmins
     return {
       id: `${member.id}:${credential.field}`,
       subject: member.fullName,
@@ -39,14 +44,17 @@ export function useComplianceGroup(enabled: boolean, { staff, today, warningDays
         credential.label,
         status === 'overdue' && `expired ${formatDayMonth(credential.expiryDate)}`,
         status === 'soon' && `expires ${formatDayMonth(credential.expiryDate)}`,
+        adminOnly && 'An admin updates this',
       ],
       flags: [{ label: deadlineLabel(credential.state, 'compact'), tone: DEADLINE_TONE[status] }],
-      actions: [{ kind: 'form', label: `${verb} expiry`, name: `${verb} expiry: ${member.fullName}, ${name}`, form: {
+      actions: adminOnly ? [{ kind: 'link', label: 'Open', name: `Open staff member: ${member.fullName}`, to: `/staff/${member.id}` }] : [{ kind: 'form', label: `${verb} expiry`, name: `${verb} expiry: ${member.fullName}, ${name}`, form: {
         field: 'date', label: 'Expiry date', initial: credential.expiryDate?.slice(0, 10) ?? '', required: 'Choose the expiry date.',
         submitLabel: 'Save', busyLabel: 'Saving…', failText: "Couldn't save. Try again.",
         submit: async (date) => {
-          // The PUT rewrites the whole staff record: built from the full record the staff list holds, never from the row (SHAPE §5).
-          await updateStaff.mutateAsync({ id: member.id, data: toUpdateStaffDto(member, { [credential.field]: date }) })
+          // The PUT rewrites the whole staff record, so it is built from the record as it is NOW, read fresh: the list may be hours old, and a stale body would
+          // undo an archive or a role change made since (deep S1).
+          const fresh = await apiGet<StaffDetailDto>(`/staff/${member.id}`)
+          await updateStaff.mutateAsync({ id: member.id, data: toUpdateStaffDto(fresh, { [credential.field]: date }) })
           const next = deadlineState(date, { warnDays: warningDays, today })
           const still = isDeadlineIssue(next)
           const tail = !still ? '' : next.status === 'overdue' ? ' It has already expired.' : ` It's still due within ${plural(warningDays, 'day')}.`

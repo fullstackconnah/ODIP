@@ -24,7 +24,8 @@ export function useDecisionGroups(gates: DecisionGates, ctx: {
   const leave = useLeaveGroup(gates.leave, ctx.viewerId)
   const incidents = useIncidentsGroup(gates.incidents)
   const tasks = useTasksGroup(gates.tasks, { today: ctx.today, mayCloseBudgetReview: ctx.mayCloseBudgetReview })
-  const compliance = useComplianceGroup(gates.compliance, { staff: ctx.staff, today: ctx.today, warningDays: ctx.warningDays })
+  // The same right as closing a budget review: Admin or SuperAdmin.
+  const compliance = useComplianceGroup(gates.compliance, { staff: ctx.staff, today: ctx.today, warningDays: ctx.warningDays, mayEditAdmins: ctx.mayCloseBudgetReview })
   const ordered: Array<[boolean, GroupModel]> = [
     [gates.completions, completions], [gates.leave, leave], [gates.incidents, incidents], [gates.tasks, tasks], [gates.compliance, compliance],
   ]
