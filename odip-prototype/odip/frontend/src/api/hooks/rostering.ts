@@ -8,6 +8,8 @@ import type {
   CreateShiftDto,
   UpdateShiftDto,
   AssignShiftDto,
+  MoveStaffDto,
+  PublishWeekResultDto,
   CheckShiftDto,
   ShiftCheckResult,
   RosterFindingDto,
@@ -97,6 +99,24 @@ export function useAssignShift() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: AssignShiftDto }) =>
       apiPost<ShiftDto>(`/rostering/shifts/${id}/assign`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/** Roster drag and drop: carries the person on one shift to another in one all-or-nothing request (move, swap, or replace the worker there). Who works a shift moves no money (the ledger counts Draft and Published alike), so only the board refreshes. */
+export function useMoveStaff() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: MoveStaffDto) => apiPost<ShiftDto>('/rostering/shifts/move-staff', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/** Publish week: every Draft shift of the week (all participants, unfilled ones too) becomes Published, and the server tells their workers. `weekStart` is the board's Monday, yyyy-MM-dd. */
+export function usePublishWeek() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (weekStart: string) => apiPost<PublishWeekResultDto>(`/rostering/weeks/${weekStart}/publish`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }

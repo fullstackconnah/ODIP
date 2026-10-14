@@ -429,6 +429,30 @@ export interface AssignShiftDto {
   staffId: string | null
   overrideReason: string | null
   acknowledgedFindingCodes: string[]
+  /** Roster drag and drop: who the board showed on the shift when the drop was made (null for nobody). Sent by the board's drops only; the server refuses with 409 when the shift changed since. */
+  expectedStaffId?: string | null
+}
+
+/** How POST /rostering/shifts/move-staff carries a person (roster drag and drop): onto an unfilled shift, replacing the worker there, or swapping the two. */
+export type MoveStaffMode = 'Move' | 'Swap' | 'Replace'
+
+/** One all-or-nothing carry of the person on `fromShiftId` to `toShiftId`. The server judges each person where they land, ignoring the shift they leave. */
+export interface MoveStaffDto {
+  fromShiftId: string
+  toShiftId: string
+  mode: MoveStaffMode
+  /** The person carried: the server refuses with 409 when someone else is on the source now. */
+  staffId: string
+  overrideReason: string | null
+  acknowledgedFindingCodes: string[]
+}
+
+/** What Publish week did: Draft shifts now Published (unfilled ones too), how many different workers were told, how many went out needing staff, and how many stayed Draft because their worker now has a blocking problem. */
+export interface PublishWeekResultDto {
+  published: number
+  notified: number
+  unfilled: number
+  skipped: number
 }
 
 /** Dry-run candidate for POST /shifts/check — no writes, no override fields. */

@@ -67,6 +67,16 @@ export function formatWeekRange(days: string[]): string {
     : `${format(first, 'd MMM')} – ${format(last, 'd MMM yyyy')}`
 }
 
+/** "12–18 Oct", or "28 Sep–4 Oct" across a month end: the short week a title names (Publish week's confirm). */
+export function formatWeekSpan(days: string[]): string {
+  if (days.length === 0) return ''
+  const first = parseISO(days[0])
+  const last = parseISO(days[days.length - 1])
+  return first.getMonth() === last.getMonth()
+    ? `${format(first, 'd')}–${format(last, 'd MMM')}`
+    : `${format(first, 'd MMM')}–${format(last, 'd MMM')}`
+}
+
 export function formatDayHeader(iso: string): { weekday: string; day: string } {
   const d = parseISO(iso)
   return { weekday: format(d, 'EEE'), day: format(d, 'd') }
