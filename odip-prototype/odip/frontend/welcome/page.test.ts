@@ -358,3 +358,10 @@ describe('structure, actions and accessibility', () => {
     expect(indexHtml).toMatch(/<!-- TODO\(release\): name the collector/)
   })
 })
+
+describe('the app page (frontend/index.html)', () => {
+  it('declares Australian English, like the landing', () => {
+    expect(appIndexHtml).toMatch(/<html lang="en-AU">/)
+    expect(doc.documentElement.getAttribute('lang')).toBe('en-AU')
+  })
+})
