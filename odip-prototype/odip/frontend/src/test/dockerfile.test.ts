@@ -52,9 +52,9 @@ describe.skipIf(!existsSync(DEPLOY_WORKFLOW))('.github/workflows/deploy.yml: the
     expect(step).toContain('MemAvailable')
   })
 
-  it('warns and carries on when memory stays short, rather than exiting 1', () => {
+  it('fails the deploy with an error when memory stays short', () => {
     const step = waitStep()
-    expect(step).toContain('::warning::')
-    expect(step).not.toMatch(/exit 1\b/)
+    expect(step).toContain('::error::')
+    expect(step).toMatch(/exit 1\b/)
   })
 })

@@ -119,7 +119,8 @@ jobs:
             if [ "$avail" -ge "$need_kb" ]; then echo "Enough free memory."; exit 0; fi
             sleep 30
           done
-          echo "::warning::MemAvailable still ${avail} kB after 30 min; building anyway"
+          echo "::error::Deploy host still has under 4 GiB available after 30 minutes; not building. Re-run the deploy when the test runner is quiet."
+          exit 1
 
       - name: Build images
         # This is the gate. If either image fails to compile the job stops here
