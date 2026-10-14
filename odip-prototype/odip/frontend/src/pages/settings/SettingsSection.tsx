@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Location } from 'react-router-dom'
 import { Check, Lock } from 'lucide-react'
 import { Button } from '@/components/Button'
@@ -100,7 +101,8 @@ function SaveFoot({ title, dirty, pending, result, problems = 0, onSave }: Secti
 
   return (
     <div className="sticky bottom-[var(--mobile-nav-h)] z-10 mt-[var(--section-gap)] flex items-center gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)]/80 py-3 backdrop-blur-xl lg:bottom-0">
-      {dialog}
+      {/* Portalled: the foot's backdrop blur would make it the containing block of the prompt's fixed scrim. */}
+      {dialog && createPortal(dialog, document.body)}
       <div className="min-w-0 flex-1 text-[13px]">
         <p role="status" className={saved ? `inline-flex items-center gap-1 ${TONE.success.ink}` : 'text-[var(--color-muted-foreground)]'}>
           {saved && <Check className="h-4 w-4" aria-hidden="true" />}

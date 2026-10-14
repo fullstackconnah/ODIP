@@ -127,6 +127,16 @@ describe('SettingsSection: switching section with unsaved changes', () => {
     expect(screen.getByRole('alertdialog', { name: 'Leave Billing details without saving?' })).toBeInTheDocument()
   })
 
+  // The foot blurs what scrolls under it, and a backdrop filter traps a fixed child: the prompt would cover the foot band only.
+  it('draws the prompt over the whole page, not inside the sticky foot', async () => {
+    const user = userEvent.setup()
+    renderFrame({ save: save({ dirty: true }) })
+    await user.click(screen.getByRole('link', { name: 'Organisation profile' }))
+
+    const scrim = screen.getByRole('alertdialog').closest('[role="presentation"]')
+    expect(scrim?.parentElement).toBe(document.body)
+  })
+
   it('asks before the browser Back button leaves for the section before', async () => {
     const router = createMemoryRouter([{ path: '/settings', element: <Harness save={save({ dirty: true })} /> }], {
       initialEntries: ['/settings?section=organisation', '/settings?section=billing'],
