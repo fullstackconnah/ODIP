@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasEnded, pickCurrentShift, portalStatusLabel } from './portal'
+import { hasEnded, pickCurrentShift, portalStatusLabel, rosteredInstants } from './portal'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import type { PortalShiftSummaryDto } from '@/api/types'
 
@@ -39,4 +39,9 @@ describe('the list rules', () => {
     expect(formatMinutesSpan(190)).toBe('3h 10m')
     expect(formatMinutesSpan(-5)).toBe('0 min')
   })
+})
+
+it('reads the rostered times in the provider zone, the end on the next day overnight', () => {
+  expect(rosteredInstants({ serviceDate: '2026-08-17', startTime: '22:00:00', endTime: '07:00:00', endsNextDay: true, timeZoneId: 'Australia/Brisbane' }))
+    .toEqual({ start: '2026-08-17T12:00:00Z', end: '2026-08-17T21:00:00Z' })
 })

@@ -1,6 +1,7 @@
 import { addDays, format, parseISO } from 'date-fns'
 import type { PortalShiftSummaryDto, ShiftStatus } from '@/api/types'
 import { NIGHT_TYPE_LABELS, RATIO_LABELS } from '@/pages/rostering/lib/roster'
+import { providerLocalToUtcInstant } from '../shift/shiftTime'
 
 /** OvernightSupportType shares its first four values with SleepoverType (see NIGHT_TYPE_LABELS) plus one extra. */
 export const OVERNIGHT_SUPPORT_LABELS: Record<string, string> = {
@@ -42,4 +43,16 @@ export function pickCurrentShift(shifts: PortalShiftSummaryDto[], now: Date): Po
     ?? shifts.filter(s => s.status === 'Published' && s.serviceDate === today && !hasEnded(s, now))
       .sort((a, b) => a.startTime.localeCompare(b.startTime))[0]
     ?? null
+}
+
+/** Mirrors PortalController.EarliestStartLeadMinutes: Start opens this long before the rostered start. The server stays the floor (its "too early" message shows if clocks disagree). */
+export const EARLIEST_START_LEAD_MINUTES = 60
+
+/** The rostered start and end as instants, read in the provider's zone (the end on the next day for an overnight shift). */
+export function rosteredInstants(s: { serviceDate: string; startTime: string; endTime: string; endsNextDay: boolean; timeZoneId: string }) {
+  const endDate = s.endsNextDay ? format(addDays(parseISO(s.serviceDate), 1), 'yyyy-MM-dd') : s.serviceDate
+  return {
+    start: providerLocalToUtcInstant(`${s.serviceDate}T${s.startTime.slice(0, 5)}`, s.timeZoneId),
+    end: providerLocalToUtcInstant(`${endDate}T${s.endTime.slice(0, 5)}`, s.timeZoneId),
+  }
 }

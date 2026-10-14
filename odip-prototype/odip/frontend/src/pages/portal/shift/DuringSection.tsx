@@ -7,7 +7,7 @@ import { TONE } from '@/lib/tone'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { buildChecklist, clockLabel, type ChecklistItem } from './checklist'
-import { Chip, Section } from './ui'
+import { Chip, Fold, Section } from './ui'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalDoseSlotDto, PortalPrnDto, PortalShiftDetailDto, PortalShiftRoutineDto } from '@/api/types'
 
@@ -168,19 +168,25 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
         <p role="status" className="text-sm">{shift.canRecordDosesReason}</p>
       )}
       {shift.medicationsDue.length === 0 && <p className="text-sm text-[var(--color-muted-foreground)]">No doses due this shift.</p>}
-      {groups.map(group => (
-        <div key={group.id} className="space-y-2">
-          <h3 className={`text-sm font-semibold ${group.tone === 'warning' ? TONE.warning.ink : ''}`}>{group.label}</h3>
-          <ul className="space-y-2">{group.items.map(renderItem)}</ul>
-        </div>
-      ))}
+      {groups.map(group => {
+        const list = <ul className="space-y-2">{group.items.map(renderItem)}</ul>
+        // A time whose every dose and routine is settled folds to one line (SHAPE §3); the overdue group never does.
+        const done = group.tone === 'neutral' && group.items.every(i => (i.kind === 'dose' ? !!i.slot.outcome : i.routine.isChecked))
+        return done
+          ? <Fold key={group.id} summary={`${group.label} · ${group.items.length} done`}>{list}</Fold>
+          : (
+            <div key={group.id} className="space-y-2">
+              <h3 className={`text-sm font-semibold ${group.tone === 'warning' ? TONE.warning.ink : ''}`}>{group.label}</h3>
+              {list}
+            </div>
+          )
+      })}
       {shift.prn.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">As needed</h3>
+        <Fold summary={`As needed · ${shift.prn.length} medicine${shift.prn.length === 1 ? '' : 's'}`}>
           <ul className="space-y-2">
             {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={tz} canAct={canRecord} onRecord={onRecord} />)}
           </ul>
-        </div>
+        </Fold>
       )}
     </Section>
   )

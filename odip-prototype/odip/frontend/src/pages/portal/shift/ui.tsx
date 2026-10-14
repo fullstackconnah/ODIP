@@ -44,3 +44,29 @@ export function Fact({ label, value }: { label: string; value: string | null | u
     </div>
   )
 }
+
+/** The page's one sticky action bar (SHAPE §3): above the phone's bottom nav, at the foot from lg. Its buttons change with the state; it never stacks with a second bar. */
+export function ActionBar({ children }: { children: ReactNode }) {
+  return (
+    <div
+      role="toolbar"
+      aria-label="Shift actions"
+      className="sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-20 -mx-4 flex gap-2 border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 lg:mx-0 lg:rounded-lg lg:border"
+    >
+      {children}
+    </div>
+  )
+}
+
+/** A group folded to one line with Show, Section's collapse idea inside a card: done work and the as-needed list, out of the way (SHAPE §3). */
+export function Fold({ summary, children }: { summary: ReactNode; children: ReactNode }) {
+  return (
+    <details>
+      <summary className="cursor-pointer min-h-[44px] flex items-center gap-2 text-sm list-none [&::-webkit-details-marker]:hidden">
+        <span className="font-semibold">{summary}</span>
+        <span className="underline text-[var(--color-muted-foreground)]">Show</span>
+      </summary>
+      <div className="space-y-2 pt-2">{children}</div>
+    </details>
+  )
+}

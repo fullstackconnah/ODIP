@@ -47,11 +47,11 @@ vi.mock('./components/ShiftNotesSection', () => ({
   ShiftNotesSection: ({ shiftId }: { shiftId: string }) => <div data-testid="shift-notes-section">{shiftId}</div>,
 }))
 
-function renderAt(id: string) {
+function renderAt(id: string, search = '') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[`/portal/shifts/${id}`]}>
+      <MemoryRouter initialEntries={[`/portal/shifts/${id}${search}`]}>
         <Routes>
           <Route path="/portal/shifts/:id" element={<PortalShiftDetailPage />} />
         </Routes>
@@ -200,6 +200,7 @@ beforeEach(() => {
 
 afterEach(() => {
   localStorage.removeItem('odip_user')
+  vi.unstubAllGlobals()
   // @ts-expect-error - test-only cleanup of a property the suites define per-test
   delete global.navigator.geolocation
 })
@@ -230,16 +231,24 @@ const dose = (over: Record<string, unknown> = {}) => ({
   witness: { required: false, status: null, witnessName: null, requestedAt: null, respondedAt: null }, ...over,
 })
 
-function show(detail: PortalShiftDetailDto) {
+function show(detail: PortalShiftDetailDto, search = '') {
   mockUsePortalShiftDetail.mockReturnValue({ data: detail, isLoading: false, isError: false })
-  return renderAt('shift-1')
+  return renderAt('shift-1', search)
 }
+
+/** A desktop viewport: useIsBelowLg reads this query (jsdom has no matchMedia, which reads as a phone). */
+function desktop() {
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(min-width: 64rem)', media: query, addEventListener: () => {}, removeEventListener: () => {} }))
+}
+
+/** A glance cell: the label's line, then the cell that holds it (FactBar glance markup). */
+const glanceCell = (label: string) => screen.getByText(label).parentElement!.parentElement!
 
 describe('PortalShiftDetailPage', () => {
   it('renders the header: participant, window, state and flags', () => {
     show(makeDetail())
-    expect(screen.getByRole('heading', { name: 'Mia Chen' })).toBeInTheDocument()
-    expect(screen.getByText('Published')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Mia Chen' })).toBeInTheDocument()
+    expect(screen.getByText('Rostered')).toBeInTheDocument()
     expect(screen.getByText(/high support/i)).toBeInTheDocument()
   })
 
@@ -315,7 +324,7 @@ describe('PortalShiftDetailPage: Before', () => {
   })
 
   it('shows At a glance in the fixed order with an explicit Not recorded on every empty field', () => {
-    show(makeDetail())
+    show(makeDetail(), '?tab=about')
     const glance = screen.getByRole('region', { name: 'At a glance' })
     const headings = within(glance).getAllByRole('heading', { level: 3 }).map(h => h.textContent)
     expect(headings).toEqual(['Allergies', 'Diet', 'Communication', 'Behaviour', 'HIDPA flags', 'Address'])
@@ -336,20 +345,23 @@ describe('PortalShiftDetailPage: Before', () => {
         { id: 'c1', name: 'First Person', relationship: 'Mother', phone: '07 3000 1111', mobile: '0400 000 111', isPrimary: true, priorityOrder: 1, roleType: 'EmergencyContact', roleLabel: 'Emergency contact' },
       ],
     }))
-    const region = screen.getByRole('region', { name: 'Emergency contacts' })
-    const names = within(region).getAllByRole('listitem').map(li => li.textContent ?? '')
+    const region = document.getElementById('before-contacts')!
+    const names = within(region).getAllByRole('listitem', { hidden: true }).map(li => li.textContent ?? '')
     expect(names[0]).toContain('First Person')
-    expect(within(region).getByRole('link', { name: /call mobile 0400 000 111/i })).toHaveAttribute('href', 'tel:0400000111')
-    expect(within(region).getByRole('link', { name: /call mobile 0411 000 222/i })).toHaveAttribute('href', 'tel:0411000222')
+    expect(within(region).getByRole('link', { name: /call mobile 0400 000 111/i, hidden: true })).toHaveAttribute('href', 'tel:0400000111')
+    expect(within(region).getByRole('link', { name: /call mobile 0411 000 222/i, hidden: true })).toHaveAttribute('href', 'tel:0411000222')
   })
 
   it('shows the withheld reason instead of the handover, contacts and address', () => {
     const base = emptyShiftPackage()
-    show(makeDetail({
+    const withheld = makeDetail({
       handover: null, emergencyContacts: null, atAGlance: { ...base.atAGlance, address: null },
       sensitiveInfoWithheldReason: 'Handover and contacts show from 9:00 am on Sat 15 Aug.',
-    }))
+    })
+    const { unmount } = show(withheld)
     expect(screen.getAllByText('Handover and contacts show from 9:00 am on Sat 15 Aug.').length).toBe(2)
+    unmount()
+    show(withheld, '?tab=about')
     expect(screen.queryByRole('heading', { name: 'Address' })).not.toBeInTheDocument()
   })
 
@@ -373,7 +385,7 @@ describe('PortalShiftDetailPage: During', () => {
     const during = screen.getByRole('region', { name: 'During the shift' })
     const headings = within(during).getAllByRole('heading', { level: 3 }).map(h => h.textContent)
     expect(headings[0]).toBe('Overdue')
-    expect(headings).toContain('As needed')
+    expect(within(during).getByText('As needed · 1 medicine')).toBeInTheDocument()
     expect(within(during).getByText(/Overdue\. Give by 8:00 am/)).toBeInTheDocument()
   })
 
@@ -397,7 +409,7 @@ describe('PortalShiftDetailPage: During', () => {
   it('shows the elapsed time and the break state in the header', () => {
     show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T10:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u' }] }))
     expect(screen.getByLabelText('Time on shift')).toBeInTheDocument()
-    expect(screen.getByText('On break')).toBeInTheDocument()
+    expect(screen.getByText(/^On a break since \d/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'End break' })).toBeInTheDocument()
   })
 
@@ -419,30 +431,29 @@ describe('PortalShiftDetailPage: During', () => {
   })
 })
 
-describe('PortalShiftDetailPage: mid-shift on a phone', () => {
+describe('PortalShiftDetailPage: what sits where on a phone', () => {
   const mid = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
   const read = { completionId: 'c', text: 'x', nothingToHandOver: false, authorUserId: 'a', authorName: 'Sam', shiftDate: '2026-08-16', submittedAt: '2026-08-16T23:00:00Z', requiresAcknowledgement: true, isRead: true, readAt: '2026-08-17T08:00:00Z' }
 
-  it('folds the read handover, At a glance and contacts, keeping the anaphylaxis chip and HIDPA flags on the line', () => {
+  it('moves a read handover to Notes, folds contacts on Now, and keeps anaphylaxis and HIDPA on the must-know line', () => {
     const base = emptyShiftPackage()
     show(mid({ handover: read, atAGlance: { ...base.atAGlance, allergies: { detail: 'Nuts', isAnaphylaxisRisk: true, managementNotes: null }, hidpa: { epilepsy: true, enteralFeeding: false, dysphagia: false } } }))
-    const folded = Array.from(document.querySelectorAll('details[data-collapsed-section]'))
-    expect(folded.map(d => d.id)).toEqual(['before-handover', 'before-glance', 'before-contacts'])
-    expect(folded.every(d => !(d as HTMLDetailsElement).open)).toBe(true)
-    expect(screen.getByText('Handover read')).toBeInTheDocument()
-    const glance = document.getElementById('before-glance')!
-    expect(within(glance).getAllByText('Anaphylaxis risk').length).toBeGreaterThan(0)
-    expect(within(glance).getByText('HIDPA: Epilepsy')).toBeInTheDocument()
+    const now = document.getElementById('shift-panel-now')!
+    expect(within(now).getByText('HIDPA: Epilepsy')).toBeInTheDocument()
+    expect(within(now).getAllByText('Anaphylaxis risk').length).toBeGreaterThan(0)
+    expect(document.getElementById('before-contacts')?.tagName).toBe('DETAILS')
+    expect(within(document.getElementById('shift-panel-notes')!).getByText('From the last shift')).toBeInTheDocument()
   })
 
-  it('keeps an unread handover open so it cannot be skipped', () => {
+  it('keeps an unread handover open on Now so it cannot be skipped', () => {
     show(mid({ handover: { ...read, isRead: false, readAt: null } }))
-    expect(document.getElementById('before-handover')?.tagName).toBe('SECTION')
+    expect(within(document.getElementById('shift-panel-now')!).getByRole('region', { name: 'Handover' })).toBeInTheDocument()
   })
 
-  it('does not fold anything before the shift starts', () => {
-    show(makeDetail())
-    expect(document.querySelectorAll('details[data-collapsed-section]').length).toBe(0)
+  it('before the start, reads the handover on Now and folds the contacts to a count', () => {
+    show(makeDetail({ emergencyContacts: [{ id: 'c1', name: 'First Person', relationship: 'Mother', phone: null, mobile: '0400 000 111', isPrimary: true, priorityOrder: 1, roleType: 'EmergencyContact', roleLabel: 'Emergency contact' }] }))
+    expect(within(document.getElementById('shift-panel-now')!).getByText(/no handover from a previous shift/i)).toBeInTheDocument()
+    expect(screen.getByText('1 to call')).toBeInTheDocument()
   })
 })
 
@@ -590,9 +601,9 @@ describe('PortalShiftDetailPage: other states', () => {
     expect(screen.getAllByText(/Overnight/).length).toBeGreaterThan(0)
   })
 
-  it('shows the start variance once started', () => {
-    show(makeDetail({ status: 'InProgress', completion: makeCompletion({ varianceMinutesStart: 12 }) }))
-    expect(screen.getByText('Start +12 min')).toBeInTheDocument()
+  it('shows the start variance once submitted', () => {
+    show(makeDetail({ status: 'PendingReview', completion: makeCompletion({ varianceMinutesStart: 12, actualEnd: '2026-08-17T17:00:00Z' }) }))
+    expect(screen.getByText(/\+12 min start/)).toBeInTheDocument()
   })
 
   it('shows an offline banner and switches the actions off', () => {
@@ -610,5 +621,111 @@ describe('PortalShiftDetailPage: other states', () => {
     mockUsePortalShiftDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 403 } } })
     renderAt('shift-1')
     expect(screen.getByText(/can't open this shift/i)).toBeInTheDocument()
+  })
+})
+
+describe('PortalShiftDetailPage: header, glance and segments (SHAPE §3)', () => {
+  const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
+
+  it('makes the participant the one h1, with a meta row of status, day and times', () => {
+    show(makeDetail({ ratio: 'OneToTwo' as never }))
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByText('Rostered')).toBeInTheDocument()
+    expect(screen.getByText('Mon 17 Aug')).toBeInTheDocument()
+    expect(screen.getByText('9am–5pm')).toBeInTheDocument()   // the house shift-time format
+  })
+
+  it('shows two glance figures by state: Starts and Due this shift before the start', () => {
+    show(makeDetail({ medicationsDue: [dose()] as never }))
+    expect(within(glanceCell('Starts')).getByText(/9:00\s?am/i)).toBeInTheDocument()
+    expect(within(glanceCell('Due this shift')).getByText('1')).toBeInTheDocument()
+  })
+
+  it('in progress: On shift, and Due now tinted with Overdue only when a dose is overdue, else All done at zero', () => {
+    const blocker = { code: 'DOSE_OUTCOME_MISSING', message: 'x', medicationId: 'med-1', medicationName: 'Paracetamol', scheduledAt: '2026-08-17T12:00:00' }
+    const { unmount } = show(inProgress({ medicationsDue: [dose({ state: 'Overdue', isOverdue: true })] as never, finishBlockers: [blocker] as never }))
+    expect(glanceCell('On shift')).toBeInTheDocument()
+    expect(within(glanceCell('Due now')).getByText('Overdue')).toBeInTheDocument()
+    expect(glanceCell('Due now')).toHaveAttribute('data-attention', 'warning')
+    unmount()
+
+    show(inProgress())
+    expect(within(glanceCell('Due now')).getByText('All done')).toBeInTheDocument()
+    expect(glanceCell('Due now')).not.toHaveAttribute('data-attention')
+  })
+
+  it('after submitting: Time worked and Breaks', () => {
+    show(makeDetail({ status: 'PendingReview', completion: makeCompletion({ actualEnd: '2026-08-17T17:00:00Z', breakMinutes: 30, netWorkedMinutes: 450 } as never) }))
+    expect(screen.getByText('7h 30m')).toBeInTheDocument()
+    expect(screen.getByText('30 min')).toBeInTheDocument()
+  })
+
+
+  it('splits the page into Now, About and Notes real tabs on a phone, with every panel kept mounted', () => {
+    show(inProgress())
+    const tabs = within(screen.getByRole('tablist', { name: 'Shift' })).getAllByRole('tab').map(t => t.textContent)
+    expect(tabs).toEqual(['Now', 'About', 'Notes'])
+    expect(screen.getByRole('tabpanel', { name: 'Now' })).toBeVisible()
+    expect(screen.queryByRole('region', { name: 'At a glance' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'About' }))
+    expect(screen.getByRole('region', { name: 'At a glance' })).toBeInTheDocument()
+    const notes = document.getElementById('shift-panel-notes')!
+    expect(notes).toHaveAttribute('hidden')
+    expect(within(notes).getByTestId('shift-notes-section')).toBeInTheDocument()   // still mounted: a half-typed note survives
+  })
+
+  it('keeps the Notes panel mounted, only hidden, once End shift is tapped, so a half-typed note survives (plan check S1)', () => {
+    show(inProgress())
+    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
+    const notes = document.getElementById('shift-panel-notes')!
+    expect(notes).toHaveAttribute('hidden')
+    expect(within(notes).getByTestId('shift-notes-section')).toBeInTheDocument()
+  })
+
+  it('lands on the tab in the URL', () => {
+    show(inProgress(), '?tab=notes')
+    expect(screen.getByRole('tab', { name: /Notes/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('the must-know link selects About and moves focus to its tab', async () => {
+    show(inProgress())
+    fireEvent.click(screen.getByRole('button', { name: 'Everything about Mia' }))
+    expect(screen.getByRole('tab', { name: 'About' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'About' })).toHaveFocus())
+  })
+
+  it('folds a time whose doses and routines are all done, and the As needed medicines', () => {
+    const given = { status: 'Administered', administeredAt: '2026-08-16T22:05:00Z', administeredAtTimeZone: null, recordedByName: 'Jack', reason: null, recordedWithoutCompetency: false }
+    show(inProgress({
+      medicationsDue: [dose({ scheduledAt: '2026-08-17T08:00:00', state: 'Recorded', outcome: given })] as never,
+      shiftRoutines: [{ id: 'r1', title: 'Breakfast', description: '', category: 'PersonalCare', isCritical: false, startTime: null, endTime: null, occursAt: '2026-08-17T08:00:00', afterMidnight: false, isChecked: true, checkedAt: '2026-08-16T22:10:00Z', checkedByName: 'Jack', fromTickSnapshot: false }] as never,
+    }))
+    expect(screen.getByText('8:00 am · 2 done')).toBeInTheDocument()
+  })
+
+  it('on a desktop there are no tabs: About sits beside Now and Notes, all on screen', () => {
+    desktop()
+    show(inProgress())
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'At a glance' })).toBeInTheDocument()
+  })
+})
+
+describe('PortalShiftDetailPage: the sticky bar by state (SHAPE §3)', () => {
+  it('offers Start from an hour before the rostered start, and says when it opens before that', () => {
+    const { unmount } = show(makeDetail())   // 17 Aug 2026 is past: the window is open
+    expect(within(screen.getByRole('toolbar', { name: 'Shift actions' })).getByRole('button', { name: 'Start shift' })).toBeInTheDocument()
+    unmount()
+
+    show(makeDetail({ serviceDate: '2099-08-17' }))
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
+    expect(screen.getByText(/^You can start from 8:00\s?am\.$/i)).toBeInTheDocument()
+  })
+
+  it('has no bar once the shift is submitted', () => {
+    show(makeDetail({ status: 'PendingReview', completion: makeCompletion({ actualEnd: '2026-08-17T17:00:00Z' }) }))
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
   })
 })
