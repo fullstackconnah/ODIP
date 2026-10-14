@@ -1536,6 +1536,8 @@ const completionQueueItems = Object.values(portalShiftBase)
       breakMinutes: (packageHistoryBreaks[base.id] || []).reduce((sum, b) => sum + Math.round((Date.parse(b.endedAt) - Date.parse(b.startedAt)) / 60000), 0),
       // True on the manual-start path (the worker never pressed Start and supplied the start time at Finish), which skips the dose checklist.
       startWasManual: !!completion.startWasManual,
+      // The incidents the completion's own detail lists (its fixture's `incidents`): what the server's queue counts.
+      incidentCount: (completion.incidents || []).length,
     }
   })
   .filter(Boolean)
