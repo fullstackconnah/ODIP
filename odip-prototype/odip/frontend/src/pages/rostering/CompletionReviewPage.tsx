@@ -205,7 +205,7 @@ export default function CompletionReviewPage() {
     { key: 'times', header: 'Rostered vs actual', render: rosteredVsActual },
     {
       key: 'variance', header: 'Variance', render: row => (
-        <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-1">   {/* the badges wrap in a narrow column instead of running under the buttons */}
           <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${varianceBadgeClass(row.isOutlierVariance)}`}>
             {formatVarianceMinutes(row.varianceMinutesStart)} / {formatVarianceMinutes(row.varianceMinutesEnd)}
           </span>
