@@ -395,6 +395,12 @@ describe('PortalShiftDetailPage: During', () => {
     expect(within(during).getByText(/Overdue\. Give by 8:00 am/)).toBeInTheDocument()
   })
 
+  it('shows no leading separator when a dose has no description', () => {
+    show(inProgress({ medicationsDue: [dose({ doseDescription: '', scheduledAt: '2026-08-17T20:00:00' })] as never }))
+    const give = within(screen.getByRole('region', { name: 'During the shift' })).getByText(/Give by/)
+    expect(give.parentElement?.textContent?.trim()).toMatch(/^Give by/)
+  })
+
   it('says when no doses are due', () => {
     show(inProgress())
     expect(screen.getByText('No doses due this shift.')).toBeInTheDocument()
