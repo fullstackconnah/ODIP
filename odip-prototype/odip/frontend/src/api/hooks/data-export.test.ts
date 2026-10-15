@@ -49,6 +49,12 @@ describe('exportFailure', () => {
     })
   })
 
+  it("a 429 says an export is already running, in the server's words, and Try again can work once it has finished", async () => {
+    const busy = 'An export for this organisation is already running. Try again when it finishes.'
+    expect(await exportFailure(answered(429, blobOf({ success: false, errors: [busy] })))).toEqual({ title: 'An export is already running', body: busy, retry: true })
+    expect(await exportFailure(answered(429, new Blob(['<html>'])))).toEqual({ title: 'An export is already running', body: busy, retry: true })
+  })
+
   it('a 404 says the organisation no longer exists, since trying again never helps', async () => {
     expect(await exportFailure(answered(404, blobOf({ success: false, errors: ['Organisation not found.'] })))).toEqual({
       title: 'That organisation no longer exists',

@@ -1,7 +1,7 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { call, test } from '../../support/fixtures';
-import { expectStatus, login, type ApiResult, type Session } from '../../support/api';
-import { SEEDED } from '../../support/env';
+import { expectStatus, type ApiResult, type Session } from '../../support/api';
+import { ensureProviderSettings } from '../../support/data';
 import { addDays, nextWednesday, sydneyToday } from '../../support/dates';
 
 // PR193 browser acceptance, run against the real candidate API and PostgreSQL in real Chromium.
@@ -241,39 +241,6 @@ async function previewClaim(page: Page): Promise<Locator> {
   const preview = page.getByRole('dialog', { name: 'Claim Preview' });
   await expect(preview, 'the preview step replaces the input step').toBeVisible();
   return preview;
-}
-
-/** The claim engine will not price anything without provider settings ("Provider settings are not
- *  configured", ClaimGenerationService) and prices the trip in the organisation's own state. The scratch
- *  database's seeded provider row is replaced once, by the SuperAdmin, if it is missing -- API setup against
- *  this isolated app only. The claim itself is still generated through the UI. */
-async function ensureProviderSettings(session: Session): Promise<void> {
-  const sa: Session = await login(SEEDED.superAdmin);
-  const current: ApiResult = await expectStatus(
-    'GET provider-settings',
-    200,
-    await call(sa, 'GET', '/provider-settings'),
-  );
-  if (current.data?.organisationName) return;
-  await expectStatus(
-    'PUT provider-settings',
-    [200, 201],
-    await call(sa, 'PUT', '/provider-settings', {
-      registrationNumber: 'E2E-0000-01',
-      abn: '00000000000',
-      organisationName: 'E2E Browser Acceptance (SYNTHETIC)',
-      address: '1 Example Street, Newtown NSW 2042',
-      state: 'NSW',
-      gstRegistered: true,
-      isPaceProvider: false,
-      bankAccountName: 'E2E Browser Acceptance',
-      bsb: '000000',
-      accountNumber: '00000000',
-      invoiceFooterNotes: 'SYNTHETIC E2E TEST DATA.',
-      managerName: 'E2E Manager',
-      managerPhone: '0412345678',
-    }),
-  );
 }
 
 /** The Funding tab's ledger region for the pool's current period, addressed by its own aria-label. */

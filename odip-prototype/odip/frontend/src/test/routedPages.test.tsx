@@ -33,6 +33,8 @@ const DETAIL = new RegExp(`/(trips|participants|staff|accommodation|vehicles|tas
 const WRAPPED: [RegExp, unknown][] = [
   [new RegExp(`/staff/${ID}/overview$`), { staff: RECORD, availability: [], recentCompletions: [], recentIncidents: [] }],
   [new RegExp(`/inquiries/${ID}/onboarding$`), { ...RECORD, items: [] }],
+  // The dashboard summary is an object, not a list: with the list shape the page crashed on `upcomingTrips` as soon as it arrived (a race this test used to win).
+  [/\/dashboard\/summary$/, { upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0, overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [] }],
 ]
 
 function answer(url: string): unknown {

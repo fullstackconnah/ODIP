@@ -10,6 +10,7 @@ import {
   isUnfilledShift,
   formatWeekSpan,
   rosterDayColumnsTemplate,
+  shiftSource,
 } from './roster'
 
 describe('countPatternOccurrences', () => {
@@ -154,5 +155,20 @@ describe('formatWeekSpan', () => {
 describe('rosterDayColumnsTemplate', () => {
   it('takes the day-column floor from --roster-day-col-min, 127px unless a coarse pointer widens it (finish review fix 4)', () => {
     expect(rosterDayColumnsTemplate(7)).toBe('repeat(7, minmax(var(--roster-day-col-min, 127px), 1fr))')
+  })
+})
+
+describe('shiftSource (spec 2026-10-15, decision B)', () => {
+  it('is Agreed for a shift from an agreement, with the version when it is known', () => {
+    expect(shiftSource({ shiftPatternId: 'pat-1', fromAgreement: true, sourceDraftVersion: 2 })).toEqual({ kind: 'agreed', word: 'Agreed', title: 'From agreement v2' })
+    expect(shiftSource({ shiftPatternId: 'pat-1', fromAgreement: true }).title).toBe('From an agreement')
+  })
+
+  it('is Pattern for a hand-made pattern', () => {
+    expect(shiftSource({ shiftPatternId: 'pat-2' })).toEqual({ kind: 'pattern', word: 'Pattern', title: 'From a pattern' })
+  })
+
+  it('is Ad hoc with no pattern, which covers hand-made one-offs and the demo shifts too', () => {
+    expect(shiftSource({ shiftPatternId: null })).toEqual({ kind: 'adhoc', word: 'Ad hoc', title: 'Ad hoc: not from an agreement or a pattern' })
   })
 })

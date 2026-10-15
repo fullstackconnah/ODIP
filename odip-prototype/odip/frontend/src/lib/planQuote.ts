@@ -91,7 +91,7 @@ export const REASON_COPY: Record<PlanFailureReason, ReasonCopy> = {
   RegistrationGroupNotHeld: { title: 'Your organisation does not hold this registration group', advice: 'Choose another support type, or an Admin can record the groups you hold in Settings, Plan pricing.', step: 'requirements', refusal: true },
   StaLegacyNotSupported: { title: 'Short-term accommodation is set to the legacy per-day items', advice: 'Those items end on 30 June 2027. An Admin can switch to the hourly items plus accommodation nights in Settings, Plan pricing.', refusal: true },
   NoItem: { title: 'Part of this block has no price item', advice: 'That part is left out of every total. Community access and group activities have no item between 00:00 and 06:00 on a weekday: keep the block clear of those hours, or use personal care.', step: 'times', refusal: false },
-  CatalogueNotFound: { title: 'No catalogue prices for part of the agreement', advice: 'The support catalogue has not been imported for some of these dates, so those lines have no price. A SuperAdmin can import it in Settings, or shorten the agreement.', refusal: false },
+  CatalogueNotFound: { title: 'No catalogue prices for part of the agreement', advice: 'No price list row covers this support on some of these dates. If the item was withdrawn from the price list, choose a current support on the Week step; if the price list for those dates is not imported yet, a SuperAdmin can import it in Settings.', refusal: false },
   CatalogueAmbiguous: { title: 'Two catalogue prices clash', advice: 'Two rows of one catalogue version are valid on the same date. A SuperAdmin needs to fix the catalogue before this can be priced.', refusal: false },
   ZoneNotEligible: { title: 'This item has no price for the delivery zone', advice: 'The catalogue lists no price for this item in the price zone. Check the zone in the agreement details.', refusal: false },
   CatalogueNotPriced: { title: 'This item has no price limit', advice: 'The catalogue marks this item as quotable, so there is no maximum to price from.', refusal: false },
@@ -303,4 +303,21 @@ export function describeSaveError(error: unknown): SaveFailure {
   if (status === 413) return { title: 'The plan is too large to save', messages: ['Save fewer blocks, or split the agreement.'] }
   if (status === 400 || status === 404) return { title: 'The draft was not saved', messages: messages.length > 0 ? [...new Set(messages.map(plain))] : ['The server refused the draft.'] }
   return { title: 'The draft was not saved', messages: ['The server could not price and save this draft. Check your connection and try again; nothing you entered is lost.'] }
+}
+
+/** The words of a renewal refused because no plan of the participant's covers its first day (409, code "plan-needed"), or null for any other failure (agreement PR 2). */
+export function planNeededMessageOf(error: unknown): string | null {
+  const response = (error as AxiosError<{ code?: string; errors?: unknown }> | undefined)?.response
+  if (response?.status !== 409 || response.data?.code !== 'plan-needed') return null
+  // The server names the day in ISO; the screen says it as it says every date (fix round 2).
+  return messagesOf(error)[0]?.replace(/\d{4}-\d{2}-\d{2}/, iso => formatServiceDate(iso)) ?? null
+}
+
+/** What a refused renewal says. The two 409s (a newer revision, no plan for the first day) are read apart, by conflictVersionOf and planNeededMessageOf. */
+export function describeRenewError(error: unknown): SaveFailure {
+  const status = statusOf(error)
+  const messages = messagesOf(error)
+  if (status === 429) return { title: 'The server is busy', messages: ['Too many requests just now. Wait a moment and renew again.'] }
+  if ((status === 400 || status === 403 || status === 404) && messages.length > 0) return { title: 'The agreement was not renewed', messages: [...new Set(messages.map(plain))] }
+  return { title: 'The agreement was not renewed', messages: ['It could not be renewed just now. Check your connection and try again.'] }
 }

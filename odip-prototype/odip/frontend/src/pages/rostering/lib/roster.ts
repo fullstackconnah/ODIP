@@ -1,6 +1,7 @@
 import { addDays, addWeeks, format, isValid, parseISO, startOfWeek } from 'date-fns'
 import { formatShiftTime, parseApiDate } from '@/lib/utils'
 import { formatRatio } from '@/lib/format'
+import type { ShiftDto } from '@/api/types'
 
 // Re-exported so existing `from '../lib/roster'` imports across the rostering feature keep
 // working unchanged — the implementation itself now lives in the shared lib alongside
@@ -234,4 +235,14 @@ export function countPatternOccurrences(
     current = addDays(current, 7)
   }
   return count
+}
+
+/** Where a shift came from, derived and never stored (spec 2026-10-15, decision B): an agreement's pattern, a hand-made pattern, or neither. */
+export type ShiftSourceKind = 'agreed' | 'pattern' | 'adhoc'
+
+/** The kind, its word on the chip, and the words of its title, the chip's accessible name and the shift panel. */
+export function shiftSource(shift: Pick<ShiftDto, 'shiftPatternId' | 'fromAgreement' | 'sourceDraftVersion'>): { kind: ShiftSourceKind; word: string; title: string } {
+  if (shift.fromAgreement) return { kind: 'agreed', word: 'Agreed', title: shift.sourceDraftVersion !== undefined ? `From agreement v${shift.sourceDraftVersion}` : 'From an agreement' }
+  if (shift.shiftPatternId) return { kind: 'pattern', word: 'Pattern', title: 'From a pattern' }
+  return { kind: 'adhoc', word: 'Ad hoc', title: 'Ad hoc: not from an agreement or a pattern' }
 }

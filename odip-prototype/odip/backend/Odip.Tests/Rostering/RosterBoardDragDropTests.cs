@@ -384,6 +384,46 @@ public class RosterBoardDragDropTests
         Assert.DoesNotContain(RosterConflictService.DoubleBookedShift, (await Reload(db, to.Id)).AcknowledgedFindingCodes ?? "");
     }
 
+    // Overnight shifts across the week edge (picker review S1): the check loads the day either side of the week.
+    [Fact]
+    public async Task CheckShift_OvernightShiftFromTheWeekBefore_RaisesDoubleBooking()
+    {
+        using var db = TestDb.Create();
+        var jo = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var sundayBefore = SeedShift(db, mia.Id, jo.Id, day: Monday.AddDays(-1), startHour: 22, endHour: 6);
+        sundayBefore.EndsNextDay = true;
+        await db.SaveChangesAsync();
+        var target = SeedShift(db, mia.Id, null, startHour: 5, endHour: 9);
+
+        var findings = Body(await Controller(db).CheckShift(new CheckShiftDto
+        {
+            Id = target.Id, ParticipantId = mia.Id, StaffId = jo.Id, ServiceDate = target.ServiceDate,
+            StartTime = target.StartTime, EndTime = target.EndTime, Ratio = target.Ratio, NightType = target.NightType,
+        }, default));
+
+        Assert.Contains(findings, f => f.Code == RosterConflictService.DoubleBookedShift);
+    }
+
+    [Fact]
+    public async Task CheckShift_OvernightTargetOnSunday_RaisesDoubleBookingAgainstNextWeeksMonday()
+    {
+        using var db = TestDb.Create();
+        var jo = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        SeedShift(db, mia.Id, jo.Id, day: Monday.AddDays(7), startHour: 5, endHour: 9);
+        var sunday = Monday.AddDays(6);
+        var target = SeedShift(db, mia.Id, null, day: sunday, startHour: 22, endHour: 6);
+
+        var findings = Body(await Controller(db).CheckShift(new CheckShiftDto
+        {
+            Id = target.Id, ParticipantId = mia.Id, StaffId = jo.Id, ServiceDate = sunday,
+            StartTime = target.StartTime, EndTime = target.EndTime, EndsNextDay = true, Ratio = target.Ratio, NightType = target.NightType,
+        }, default));
+
+        Assert.Contains(findings, f => f.Code == RosterConflictService.DoubleBookedShift);
+    }
+
     [Fact]
     public async Task MoveStaff_ReplaceOnPublishedShifts_TellsEachChange()
     {

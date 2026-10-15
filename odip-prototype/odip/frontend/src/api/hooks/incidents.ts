@@ -16,10 +16,11 @@ import type {
  * `pageSize` themselves via `params` rather than this hook requesting a fixed ceiling (contrast
  * `useParticipants`/`useTrips`, which fetch one large unpaginated page).
  */
-export function useIncidents(params?: Record<string, string>) {
+export function useIncidents(params?: Record<string, string>, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['incidents', params],
     queryFn: () => fetchPagedList<IncidentListDto>('/incidents', params),
+    enabled: options?.enabled ?? true,
   })
 }
 

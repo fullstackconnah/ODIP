@@ -5,7 +5,8 @@ import { MemoryRouter } from 'react-router-dom'
 import ImportDataTab from './ImportDataTab'
 import type { ImportBatchDto } from '@/api/types'
 
-const { history, undoMutate, templateMutate, undoState, invites } = vi.hoisted(() => ({
+const { history, undoMutate, templateMutate, undoState, invites, providerSettings } = vi.hoisted(() => ({
+  providerSettings: { current: undefined as { employmentHeroConnected?: boolean } | undefined },
   invites: vi.fn(),
   history: { current: [] as ImportBatchDto[] },
   undoMutate: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('@/api/hooks', () => ({
   useUndoImport: () => ({ mutate: undoMutate, ...undoState.current }),
   useDownloadImportTemplate: () => ({ mutate: templateMutate, isPending: false }),
   useImportInvites: () => ({ mutateAsync: invites, isPending: false }),
+  useProviderSettings: () => ({ data: providerSettings.current }),
 }))
 
 const batch = (overrides: Partial<ImportBatchDto> = {}): ImportBatchDto => ({
@@ -28,7 +30,7 @@ const batch = (overrides: Partial<ImportBatchDto> = {}): ImportBatchDto => ({
 const renderTab = () => render(<MemoryRouter><ImportDataTab /></MemoryRouter>)
 
 beforeEach(() => { history.current = [batch()]; undoState.current = { isPending: false, error: null } })
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.clearAllMocks(); providerSettings.current = undefined })
 
 describe('ImportDataTab', () => {
   it('starts a participant import and downloads its template', async () => {
@@ -97,5 +99,14 @@ describe('ImportDataTab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
 
     expect(screen.queryByText(/no invites were sent/)).toBeNull()
+  })
+
+  it('drops the staff card and says why when staff come from Employment Hero', () => {
+    providerSettings.current = { employmentHeroConnected: true }
+    renderTab()
+    expect(screen.getByRole('link', { name: 'Import participants' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Import staff' })).toBeNull()
+    expect(screen.getByText('Staff come from Employment Hero for this organisation, so they are not imported here.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Integrations' })).toHaveAttribute('href', '/settings?tab=integrations')
   })
 })

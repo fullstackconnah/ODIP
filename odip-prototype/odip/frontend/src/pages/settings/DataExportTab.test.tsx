@@ -153,6 +153,16 @@ describe('DataExportTab', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
   })
 
+  it('a 429 says another export of this organisation is running, and offers Try again', async () => {
+    const data = new Blob([JSON.stringify({ success: false, errors: ['An export for this organisation is already running. Try again when it finishes.'] })])
+    get.mockRejectedValue(new AxiosError('Busy', 'ERR_BAD_REQUEST', undefined, undefined, { status: 429, statusText: '', data, headers: {}, config: { headers: new AxiosHeaders() } } as AxiosResponse))
+    renderTab()
+    await userEvent.click(downloadButton())
+    expect(await screen.findByText('An export is already running')).toBeInTheDocument()
+    expect(screen.getByText('An export for this organisation is already running. Try again when it finishes.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
   it('a tab switch loses nothing: coming back shows the download still running, then its outcome', async () => {
     const response = deferred<typeof zipResponse>()
     get.mockReturnValue(response.promise)

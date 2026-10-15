@@ -58,7 +58,9 @@ public class TasksController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<TaskDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] TaskItemStatus? status,
-        [FromQuery] bool? dueThisWeek, [FromQuery] Guid? ownerId, CancellationToken ct)
+        [FromQuery] bool? dueThisWeek, [FromQuery] Guid? ownerId, CancellationToken ct,
+        // Last, so every existing caller keeps compiling; bound by name like the others. The dashboard's Tasks due group: due on the provider's today.
+        [FromQuery] bool? dueToday = null)
     {
         var query = _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner).AsQueryable();
         // The Admin's review of an emergency over budget names a participant whose budget is spent: only the roles that see budget standing elsewhere see it (the phase 3 review, C7).
@@ -77,6 +79,12 @@ public class TasksController : ControllerBase
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             var weekEnd = today.AddDays(7);
             query = query.Where(t => t.DueDate != null && t.DueDate >= today && t.DueDate <= weekEnd);
+        }
+        if (dueToday == true)
+        {
+            // The same provider today as Overdue and dueThisWeek, so the client never judges the day in its own zone.
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+            query = query.Where(t => t.DueDate == today);
         }
 
         var items = await query.OrderBy(t => t.DueDate).ThenByDescending(t => t.Priority)

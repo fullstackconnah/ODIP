@@ -1,6 +1,6 @@
-import { call, expectStatus, Session } from './api';
+import { call, expectStatus, login, type ApiResult, Session } from './api';
 import { addDays } from './dates';
-import { DEMO_EMAIL_DOMAIN } from './env';
+import { DEMO_EMAIL_DOMAIN, SEEDED } from './env';
 
 let counter = 0;
 const RUN = Date.now().toString(36).toUpperCase();
@@ -80,4 +80,63 @@ export async function assignShift(coord: Session, shiftId: string, staffId: stri
 export async function publishShift(coord: Session, shiftId: string, participantId: string, serviceDate: string) {
   return expectStatus('publish shift', 200, await call(coord, 'PUT', `/rostering/shifts/${shiftId}`,
     shiftBody(participantId, serviceDate, { status: 'Published' })));
+}
+
+/** The claim engine will not price anything without provider settings ("Provider settings are not
+ *  configured", ClaimGenerationService) and prices the trip in the organisation's own state. The scratch
+ *  database's seeded provider row is replaced once, by the SuperAdmin, if it is missing -- API setup against
+ *  this isolated app only. The claim itself is still generated through the UI. */
+export async function ensureProviderSettings(session: Session): Promise<void> {
+  const sa: Session = await login(SEEDED.superAdmin);
+  const current: ApiResult = await expectStatus(
+    'GET provider-settings',
+    200,
+    await call(sa, 'GET', '/provider-settings'),
+  );
+  if (current.data?.organisationName) return;
+  await expectStatus(
+    'PUT provider-settings',
+    [200, 201],
+    await call(sa, 'PUT', '/provider-settings', {
+      registrationNumber: 'E2E-0000-01',
+      abn: '00000000000',
+      organisationName: 'E2E Browser Acceptance (SYNTHETIC)',
+      address: '1 Example Street, Newtown NSW 2042',
+      state: 'NSW',
+      gstRegistered: true,
+      isPaceProvider: false,
+      bankAccountName: 'E2E Browser Acceptance',
+      bsb: '000000',
+      accountNumber: '00000000',
+      invoiceFooterNotes: 'SYNTHETIC E2E TEST DATA.',
+      managerName: 'E2E Manager',
+      managerPhone: '0412345678',
+    }),
+  );
+}
+
+/**
+ * A service agreement revision saved from one support block, as the plan builder saves it (the server prices it).
+ * The block is Community access in the community, on `days` from 9am to 3pm, Skip on a public holiday (the default Review would hold up the approval), in NSW, the provider's state.
+ * shortcut: the plan is the seeded catalogue's year (2026-27); move it when the seed moves to 2027-28.
+ */
+export async function saveBlocksDraft(coord: Session, participantId: string, days: string[], from: string, to: string): Promise<Created> {
+  const res = await expectStatus('save agreement draft', 200, await call(coord, 'POST', `/participants/${participantId}/service-agreement-drafts`, {
+    planStartDate: '2026-07-01', planEndDate: '2027-06-30', agreementStartDate: from, agreementEndDate: to, state: 'NSW', serviceTypes: [], baseVersion: 0,
+    blocks: [{
+      block: {
+        id: 'e2e-block', supportType: 'CommunityAccess', intensity: 'Standard', days, start: '09:00:00', end: '15:00:00', workers: 1, participantsPresent: 1,
+        setting: 'Community', location: { state: 'NSW', zone: 'National' }, onPublicHoliday: 'Skip',
+      },
+      requirements: {},
+    }],
+  }));
+  return { ...res.data, id: res.data.id, token: '' };
+}
+
+/** Approves a revision for rostering, as the agreement page's dialog does. The preview's reasons come first, so a refused approval says why. */
+export async function approveDraft(coord: Session, participantId: string, draftId: string) {
+  const preview = await expectStatus('approval preview', 200, await call(coord, 'GET', `/participants/${participantId}/service-agreement-drafts/${draftId}/approval-preview`));
+  if (!preview.data.canApprove) throw new Error(`the draft cannot be approved: ${JSON.stringify(preview.data.reasons)}`);
+  return expectStatus('approve draft', 200, await call(coord, 'POST', `/participants/${participantId}/service-agreement-drafts/${draftId}/approve`, {}));
 }

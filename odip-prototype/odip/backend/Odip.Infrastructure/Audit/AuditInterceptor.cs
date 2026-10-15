@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Audit;
 
@@ -53,7 +54,12 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
         Guid? changedById = null;
         string? changedByName = null;
 
-        if (user?.Identity?.IsAuthenticated == true)
+        // Work no person did (the Employment Hero sync) names itself, even inside a request a person made (Sync now).
+        if (context is OdipDbContext { AuditActorName: { } systemActor })
+        {
+            changedByName = systemActor;
+        }
+        else if (user?.Identity?.IsAuthenticated == true)
         {
             var idClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (Guid.TryParse(idClaim, out var userId))

@@ -7,6 +7,8 @@ export type ReadinessNoteVariant = 'chip' | 'line'
 export type ReadinessNoteProps = {
   /** What is still missing, in the server's own words ("Intake not complete"). Renders nothing while this is empty, null or undefined. */
   issues?: readonly string[] | null
+  /** The organisation enforces readiness and refuses this participant (the roster board's Enforce row): the note says so in words, and shows even when no issue is listed. */
+  blocked?: boolean
   /** `line` (default): a quiet line under a field. `chip`: a small pill for a table row or a header's meta row. */
   variant?: ReadinessNoteVariant
   className?: string
@@ -26,22 +28,26 @@ const CHIP = `inline-flex h-5 min-w-0 max-w-full flex-wrap content-start items-c
 const LINE = `flex min-w-0 items-start gap-1.5 text-xs font-medium ${TONE.warning.ink}`
 
 /**
- * A quiet, never-blocking note that a participant is not fully ready yet: "Not ready: Intake not complete · No signed service agreement".
+ * A quiet note that a participant is not fully ready yet. In Warn it never blocks; in an organisation that enforces readiness (`blocked`) it says what the server refuses.
+ * "Not ready: Intake not complete · No signed service agreement".
  * In Warn mode the server lets rostering, booking and activation go ahead and reports what is missing; this is how that shows.
  *
  * It is informational. It is not an alert (no `role="alert"`), it never disables or hides a control, and colour is not its only cue
  * (the words are always printed). It draws nothing when there is nothing missing, so a ready participant looks exactly as before.
  */
-export function ReadinessNote({ issues, variant = 'line', className }: ReadinessNoteProps) {
-  if (!issues || issues.length === 0) return null
+export function ReadinessNote({ issues, blocked = false, variant = 'line', className }: ReadinessNoteProps) {
+  const reasons = issues && issues.length > 0 ? issues.join(' · ') : null
+  if (!blocked && !reasons) return null
 
-  const text = `Not ready: ${issues.join(' · ')}`
+  // In Enforce the server refuses new shifts and assignments, so the note says so (the brief, section 6). The note itself still disables nothing: the server refuses.
+  const text = blocked ? `Not ready for rostering${reasons ? `: ${reasons}` : ''}` : `Not ready: ${reasons}`
+  const title = blocked ? `${text}. New shifts and assignments are refused until this is done.` : text
   const isChip = variant === 'chip'
   const Tag = isChip ? 'span' : 'p'
 
   return (
     <Tag
-      title={text}
+      title={title}
       // A line appears when the user picks a participant, so it is announced politely; a chip is part of a row or a header and is not.
       role={isChip ? undefined : 'status'}
       className={cn(isChip ? CHIP : LINE, className)}

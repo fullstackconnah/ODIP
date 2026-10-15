@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Net;
 using System.Reflection;
@@ -7,6 +8,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -15,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Odip.Api.Controllers;
 using Odip.Api.Middleware;
+using Odip.Api.RateLimiting;
 using Odip.Api.Serialization;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -85,6 +88,160 @@ public class DataExportHttpTests
         Assert.True(error is HttpRequestException or IOException,
             $"The client must see a broken download, never a clean end of a truncated ZIP; it saw {error?.GetType().Name ?? "a clean end"}.");
         Assert.Empty(await host.ExportRowsAsync(tenantId));
+    }
+
+    [Fact]
+    public async Task A_second_export_of_one_organisation_while_one_runs_gets_429_and_another_organisation_still_exports()
+    {
+        var release = new ManualResetEventSlim();
+        Guid? hold = null;
+        await using var host = await Host.StartAsync(new OnVehicle(v => { if (v.TenantId == hold) release.Wait(TimeSpan.FromSeconds(20)); }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+        var otherTenantId = await host.SeedAsync("Bravo Care");
+        hold = tenantId;
+
+        // Its 200 is sent from inside the action, so once the headers are here the first export holds the organisation's slot.
+        using var running = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead);
+        Assert.Equal(HttpStatusCode.OK, running.StatusCode);
+
+        using (var refused = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+            using var json = JsonDocument.Parse(await refused.Content.ReadAsStringAsync());
+            Assert.Equal("An export for this organisation is already running. Try again when it finishes.", json.RootElement.GetProperty("errors")[0].GetString());
+        }
+        using (var other = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: otherTenantId))
+        {
+            Assert.Equal(HttpStatusCode.OK, other.StatusCode);
+            using var zip = new ZipArchive(new MemoryStream(await other.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
+            Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
+        }
+
+        release.Set();
+        await running.Content.ReadAsByteArrayAsync();
+    }
+
+    [Fact]
+    public async Task The_organisations_slot_is_free_again_after_a_failed_export_and_after_a_finished_one()
+    {
+        var failNext = true;
+        await using var host = await Host.StartAsync(new OnVehicle(_ =>
+        {
+            if (!failNext) return;
+            failNext = false;
+            throw new InvalidOperationException("The disk went away");
+        }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        using (var failed = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead))
+            await Record.ExceptionAsync(() => failed.Content.ReadAsByteArrayAsync()); // aborted part-way
+
+        using (var afterFailure = await host.ExportOnceTheSlotIsFreeAsync(tenantId)) Assert.Equal(HttpStatusCode.OK, afterFailure.StatusCode);
+        using (var afterSuccess = await host.ExportOnceTheSlotIsFreeAsync(tenantId)) Assert.Equal(HttpStatusCode.OK, afterSuccess.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_client_that_leaves_after_the_last_byte_still_gets_its_audit_row()
+    {
+        // The client reads the ZIP to its last byte, then closes the connection. Only then is the row saved: the server sees the client go
+        // (RequestAborted), and the save is handed a token that Npgsql would honour. (Faking the leave with a server-side Abort raced the
+        // client: the reset made the client drop bytes it hadn't read yet, the headers included, on a fast machine.)
+        var clientLeft = new ManualResetEventSlim();
+        var serverSawTheClientGo = false;
+        await using var host = await Host.StartAsync(new OnAuditSave(token =>
+        {
+            clientLeft.Wait(TimeSpan.FromSeconds(20));
+            serverSawTheClientGo = new HttpContextAccessor().HttpContext!.RequestAborted.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
+            token.ThrowIfCancellationRequested();
+        }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        var zip = new MemoryStream();
+        using (var response = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead))
+        {
+            await using var body = await response.Content.ReadAsStreamAsync();
+            var buffer = new byte[8192];
+            // The ZIP's last 22 bytes are its end-of-central-directory record (PK 05 06, no comment): once they are here, the client has it all.
+            while (!(zip.Length >= 22 && zip.GetBuffer().AsSpan((int)zip.Length - 22, 4).SequenceEqual(new byte[] { 0x50, 0x4B, 0x05, 0x06 })))
+            {
+                var read = await body.ReadAsync(buffer);
+                Assert.True(read > 0, "The response ended before the ZIP was complete.");
+                zip.Write(buffer, 0, read);
+            }
+        } // the client closes the connection here, with the whole ZIP and before the response has formally ended
+        clientLeft.Set();
+
+        zip.Position = 0;
+        using (var archive = new ZipArchive(zip, ZipArchiveMode.Read)) Assert.Equal(DataExportWriter.ManifestName, archive.Entries[^1].FullName);
+        Assert.Single(await host.ExportRowsEventuallyAsync(tenantId));
+        Assert.True(serverSawTheClientGo, "The server never saw the client leave, so the save was not tested with a cancelled request.");
+    }
+
+    [Fact]
+    public async Task An_audit_save_that_fails_after_a_complete_zip_is_logged_and_the_client_keeps_its_whole_zip()
+    {
+        await using var host = await Host.StartAsync(new OnAuditSave(_ => throw new InvalidOperationException("The audit table is locked")));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        using var response = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId);
+
+        using var zip = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
+        Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
+        Assert.Contains(host.Logs, l => l.Category == typeof(DataExportController).FullName && l.Level == LogLevel.Error
+            && l.Message.Contains("audit row not written") && l.Message.Contains(tenantId.ToString()));
+        Assert.Empty(await host.ExportRowsAsync(tenantId));
+    }
+
+    [Fact]
+    public async Task An_audit_save_that_hangs_is_cut_off_by_its_own_timeout_logged_and_the_client_keeps_its_whole_zip()
+    {
+        // A save that never finishes on its own (a lock, a dead connection) and gives up only when its token is cancelled, as Npgsql does.
+        await using var host = await Host.StartAsync(new OnAuditSave(token =>
+        {
+            token.WaitHandle.WaitOne(TimeSpan.FromSeconds(60));
+            token.ThrowIfCancellationRequested();
+        }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        using var response = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId);
+
+        using var zip = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
+        Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30), $"The audit save is bounded at about 15 s; the request took {watch.Elapsed.TotalSeconds:0} s.");
+        Assert.Contains(host.Logs, l => l.Category == typeof(DataExportController).FullName && l.Level == LogLevel.Error
+            && l.Message.Contains("audit row not written") && l.Message.Contains(tenantId.ToString()));
+    }
+
+    [Fact]
+    public async Task The_organisations_slot_is_free_again_after_the_client_cancels_a_download()
+    {
+        // The first export is held at its vehicles until the server itself has seen the client go. Released any earlier, the rest of a small
+        // ZIP fits in the socket buffers, the export finishes and is recorded: TCP can't tell a client that left from one that got every byte.
+        var holdFirst = true;
+        await using var host = await Host.StartAsync(new OnVehicle(_ =>
+        {
+            if (!holdFirst) return;
+            holdFirst = false;
+            new HttpContextAccessor().HttpContext!.RequestAborted.WaitHandle.WaitOne(TimeSpan.FromSeconds(20));
+        }));
+        var tenantId = await host.SeedAsync("Sunrise Care");
+
+        using (var cancelled = new CancellationTokenSource())
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/data-export");
+            request.Headers.Add("X-Test-Role", "Admin");
+            request.Headers.Add("X-Test-Tenant", tenantId.ToString());
+            using var running = await host.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancelled.Token);
+            Assert.Equal(HttpStatusCode.OK, running.StatusCode); // it holds the slot
+            cancelled.Cancel(); // the browser tab is closed mid-download
+        }
+
+        using var next = await host.ExportOnceTheSlotIsFreeAsync(tenantId);
+        Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+        // The cancel was seen: the cancelled export logged the client going away and wrote no row; only the next one did.
+        Assert.Contains(host.Logs, l => l.Category == typeof(DataExportController).FullName && l.Level == LogLevel.Information && l.Message.Contains("stopped: the client went away"));
+        Assert.Single(await host.ExportRowsEventuallyAsync(tenantId));
     }
 
     [Theory]
@@ -223,6 +380,42 @@ public class DataExportHttpTests
         }
     }
 
+    /// <summary>Runs <paramref name="onEach"/> as each vehicle is read, with the row, so a test can hold or fail one organisation's export.</summary>
+    private sealed class OnVehicle(Action<Vehicle> onEach) : IMaterializationInterceptor
+    {
+        public object InitializedInstance(MaterializationInterceptionData materializationData, object entity)
+        {
+            if (entity is Vehicle vehicle) onEach(vehicle);
+            return entity;
+        }
+    }
+
+    /// <summary>Runs <paramref name="onSave"/> with the save's token as the export's audit row is saved; seeding saves pass straight through.</summary>
+    private sealed class OnAuditSave(Action<CancellationToken> onSave) : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<AuditLog>().Any(e => e.State == EntityState.Added)) onSave(cancellationToken);
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    /// <summary>Every log entry the host writes, so a test can see what the controller logged.</summary>
+    private sealed class CapturedLogs : ILoggerProvider
+    {
+        public ConcurrentQueue<(string Category, LogLevel Level, string Message)> Entries { get; } = new();
+        public ILogger CreateLogger(string categoryName) => new Logger(this, categoryName);
+        public void Dispose() { }
+
+        private sealed class Logger(CapturedLogs logs, string category) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                logs.Entries.Enqueue((category, logLevel, formatter(state, exception)));
+        }
+    }
+
     private sealed class OnlyDataExportController : ApplicationPart, IApplicationPartTypeProvider
     {
         public override string Name => nameof(OnlyDataExportController);
@@ -249,9 +442,13 @@ public class DataExportHttpTests
         public static readonly Guid CallerId = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
         private readonly WebApplication _app;
 
-        private Host(WebApplication app, HttpClient client) { _app = app; Client = client; }
+        private readonly CapturedLogs _logs;
+
+        private Host(WebApplication app, HttpClient client, CapturedLogs logs) { _app = app; Client = client; _logs = logs; }
 
         public HttpClient Client { get; }
+
+        public IReadOnlyCollection<(string Category, LogLevel Level, string Message)> Logs => _logs.Entries;
 
         public static async Task<Host> StartAsync(params IInterceptor[] interceptors)
         {
@@ -259,9 +456,17 @@ public class DataExportHttpTests
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
             builder.WebHost.UseUrls("http://127.0.0.1:0");
             builder.Logging.ClearProviders();
-            builder.Services.AddDbContext<OdipDbContext>(o => o.UseInMemoryDatabase(databaseName).AddInterceptors(interceptors));
+            var logs = new CapturedLogs();
+            builder.Logging.AddProvider(logs);
+            // Each host passes its own interceptor instances, and EF builds an internal service provider per distinct set; past twenty in one test
+            // process it raises ManyServiceProvidersCreatedWarning as an error. That is expected for these hosts, so it is switched off here only.
+            builder.Services.AddDbContext<OdipDbContext>(o => o.UseInMemoryDatabase(databaseName).AddInterceptors(interceptors)
+                .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
+            // As Program.cs registers them: the download's one-export-per-organisation filter.
+            builder.Services.AddKeyedSingleton(DataExportConcurrencyFilter.LimiterKey, (_, _) => new PlanQuoteConcurrencyLimiter(DataExportConcurrencyFilter.PermitsPerOrganisation));
+            builder.Services.AddScoped<DataExportConcurrencyFilter>();
             builder.Services.AddAuthentication(HeaderAuth.Scheme).AddScheme<AuthenticationSchemeOptions, HeaderAuth>(HeaderAuth.Scheme, _ => { });
             builder.Services.AddAuthorization();
             builder.Services.AddControllers()
@@ -275,7 +480,7 @@ public class DataExportHttpTests
             app.UseAuthorization();
             app.MapControllers();
             await app.StartAsync();
-            return new Host(app, new HttpClient { BaseAddress = new Uri(app.Urls.Single()), Timeout = TimeSpan.FromSeconds(60) });
+            return new Host(app, new HttpClient { BaseAddress = new Uri(app.Urls.Single()), Timeout = TimeSpan.FromSeconds(60) }, logs);
         }
 
         public Task<HttpResponseMessage> GetAsync(string path, string role, Guid? tenantClaim, Guid? viewAs = null,
@@ -312,6 +517,28 @@ public class DataExportHttpTests
             var other = DataExportTestKit.Plant(db, b, "43100000001");
             var own = DataExportTestKit.Plant(db, a, "43100000002");
             return (own, other);
+        }
+
+        /// <summary>A whole export for the organisation, retried while it answers 429: the client can have the last byte a moment before the slot is released.</summary>
+        public async Task<HttpResponseMessage> ExportOnceTheSlotIsFreeAsync(Guid tenantId)
+        {
+            var until = DateTime.UtcNow.AddSeconds(10);
+            while (true)
+            {
+                var response = await GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId);
+                if (response.StatusCode != HttpStatusCode.TooManyRequests || DateTime.UtcNow > until) return response;
+                response.Dispose();
+                await Task.Delay(50);
+            }
+        }
+
+        /// <summary>The export rows, waiting up to 10 s for one: the server finishes a request after the client has stopped reading.</summary>
+        public async Task<List<AuditLog>> ExportRowsEventuallyAsync(Guid tenantId)
+        {
+            var until = DateTime.UtcNow.AddSeconds(10);
+            List<AuditLog> rows;
+            while ((rows = await ExportRowsAsync(tenantId)).Count == 0 && DateTime.UtcNow < until) await Task.Delay(100);
+            return rows;
         }
 
         public async Task<List<AuditLog>> ExportRowsAsync(Guid tenantId)
