@@ -458,7 +458,10 @@ public class DataExportHttpTests
             builder.Logging.ClearProviders();
             var logs = new CapturedLogs();
             builder.Logging.AddProvider(logs);
-            builder.Services.AddDbContext<OdipDbContext>(o => o.UseInMemoryDatabase(databaseName).AddInterceptors(interceptors));
+            // Each host passes its own interceptor instances, and EF builds an internal service provider per distinct set; past twenty in one test
+            // process it raises ManyServiceProvidersCreatedWarning as an error. That is expected for these hosts, so it is switched off here only.
+            builder.Services.AddDbContext<OdipDbContext>(o => o.UseInMemoryDatabase(databaseName).AddInterceptors(interceptors)
+                .ConfigureWarnings(w => w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
             // As Program.cs registers them: the download's one-export-per-organisation filter.
