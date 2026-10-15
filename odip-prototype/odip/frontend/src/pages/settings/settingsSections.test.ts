@@ -27,9 +27,9 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
-    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'failed-sends'])
+    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
     expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'templates', 'activities', 'holidays'])
-    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends'])
+    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends'])
   })
 
@@ -54,7 +54,7 @@ describe('who sees which section', () => {
 
 // Old ?tab= key → where each role lands at md and up. 'profile' is the fallback for a key the role can't see (below md it is the list).
 // Columns: Admin, Coordinator, SuperAdmin viewing an organisation, SuperAdmin with none. 14 keys from main plus export, integrations and
-// retention (the last two have no section yet: Task 14 points integrations at its section once EH PR 1 is on the branch).
+// retention (retention has no section yet; ?tab=integrations is baked into sent emails).
 const LEGACY: [string, SectionKey, SectionKey, SectionKey, SectionKey][] = [
   ['templates', 'templates', 'templates', 'templates', 'profile'],
   ['activities', 'activities', 'activities', 'activities', 'profile'],
@@ -71,7 +71,7 @@ const LEGACY: [string, SectionKey, SectionKey, SectionKey, SectionKey][] = [
   ['notifications', 'notifications', 'notifications', 'notifications', 'notifications'],
   ['notifications-admin', 'failed-sends', 'profile', 'failed-sends', 'failed-sends'],
   ['export', 'export', 'profile', 'export', 'profile'],
-  ['integrations', 'profile', 'profile', 'profile', 'profile'],
+  ['integrations', 'integrations', 'profile', 'integrations', 'profile'],
   ['retention', 'profile', 'profile', 'profile', 'profile'],
 ]
 
@@ -100,7 +100,7 @@ describe('every legacy ?tab= key, for every role that opens Settings (the plan b
 })
 
 describe('the permissions fixture other Settings tests mock with', () => {
-  const FLAGS = ['isAdmin', 'isCoordinator', 'isSuperAdmin', 'hasOrganisation', 'canEditProviderSettings', 'canImportData', 'showBankDetails', 'canManageNotifications'] as const
+  const FLAGS = ['isAdmin', 'isCoordinator', 'isSuperAdmin', 'hasOrganisation', 'canEditProviderSettings', 'canImportData', 'showBankDetails', 'canManageNotifications', 'canManageIntegrations'] as const
   const pick = (p: SettingsPerms & { showBankDetails: boolean; canManageNotifications: boolean }) => Object.fromEntries(FLAGS.map(f => [f, p[f]]))
 
   it.each(ROLE_CASES)('matches the real usePermissions() for %s', role => {

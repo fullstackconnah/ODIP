@@ -75,6 +75,7 @@ function rowWithoutModes(row: ProviderSettingsDto, overrides: Partial<ProviderSe
   const body: Partial<ProviderSettingsDto> = { ...row, ...overrides }
   delete body.participantReadinessMode
   delete body.medicationCompetencyMode
+  delete body.employmentHeroConnected
   return body
 }
 
@@ -141,6 +142,17 @@ describe('Organisation profile', () => {
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
     expect(putBody(1)).toEqual(rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }))
+  })
+
+  it('never writes back the Employment Hero flag the GET computes', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ employmentHeroConnected: true })
+    renderSection('organisation')
+    await user.type(await screen.findByLabelText('Organisation name'), '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).not.toHaveProperty('employmentHeroConnected')
   })
 
   it('starts from the row as it is when the section opens, not from an older copy in the cache', async () => {

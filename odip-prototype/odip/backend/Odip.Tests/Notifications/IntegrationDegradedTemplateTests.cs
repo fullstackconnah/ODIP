@@ -17,8 +17,8 @@ public class IntegrationDegradedTemplateTests
         Assert.Equal("ada@acme.org.au", message.RecipientAddress);
         Assert.Equal("Employment Hero needs attention", message.Subject);
         Assert.Contains("2 staff members need attention after the Employment Hero sync.", message.PlainTextBody);
-        Assert.Contains("https://odip.test/settings?tab=integrations", message.PlainTextBody);
-        Assert.Contains("href=\"https://odip.test/settings?tab=integrations\"", message.HtmlBody);
+        Assert.Contains("https://odip.test/settings?section=integrations", message.PlainTextBody);
+        Assert.Contains("href=\"https://odip.test/settings?section=integrations\"", message.HtmlBody);
     }
 
     [Fact]

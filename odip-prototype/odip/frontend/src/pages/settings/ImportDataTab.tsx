@@ -70,13 +70,13 @@ export default function ImportDataTab() {
             <section key={k.kind} aria-labelledby={`import-kind-${k.kind}`} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">
               {/* Grows beside the actions and wraps its own text, so a longer description never pushes the actions under it on a wide screen. */}
               <div className="min-w-0 flex-[1_1_20rem]">
-                <h3 id={`import-kind-${k.kind}`} className="text-sm font-semibold">{k.title}</h3>
+                <h4 id={`import-kind-${k.kind}`} className="text-sm font-semibold">{k.title}</h4>
                 <p className="text-sm text-[var(--color-muted-foreground)]">
                   {fromPayroll ? 'Staff come from Employment Hero for this organisation, so they are not imported here.' : k.text}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {fromPayroll ? <Button variant="secondary" to="/settings?tab=integrations">Open Integrations</Button> : (
+                {fromPayroll ? <Button variant="secondary" to="/settings?section=integrations">Open Integrations</Button> : (
                   <>
                     <Button variant="secondary" onClick={() => template.mutate(k.kind)}>Download template</Button>
                     <Button to={`/settings/import/${k.kind}`}>Import {k.title.toLowerCase()}</Button>

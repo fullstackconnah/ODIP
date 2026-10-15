@@ -15,6 +15,7 @@ import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
 import DataExportTab from '@/pages/settings/DataExportTab'
 import EventTemplatesSection from '@/pages/settings/EventTemplatesSection'
 import ImportDataTab from '@/pages/settings/ImportDataTab'
+import IntegrationsTab from '@/pages/settings/IntegrationsTab'
 import NotificationPreferencesTab from '@/pages/settings/NotificationPreferencesTab'
 import OrganisationProfileSection from '@/pages/settings/OrganisationProfileSection'
 import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
@@ -90,6 +91,7 @@ export default function SettingsPage() {
       case 'holidays': return framed(<PublicHolidaysSection canEdit={perms.isSuperAdmin} />)
       case 'import': return framed(<ImportDataTab />)
       case 'export': return framed(<DataExportTab />)
+      case 'integrations': return framed(<IntegrationsTab />)
       case 'failed-sends': return framed(<AdminNotificationsTab />)
       case 'catalogue': return framed(<SupportCatalogueSection />)
       case 'users': return framed(<UsersTab notices={userNotices} onAddUser={addUser} onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }} />)

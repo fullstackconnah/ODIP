@@ -5,7 +5,7 @@ import { extractErrorMessage } from '@/lib/utils'
 /** What Settings reads from usePermissions() to decide who sees, and who may change, each section. */
 export type SettingsPerms = Pick<
   ReturnType<typeof usePermissions>,
-  'isSuperAdmin' | 'isAdmin' | 'isCoordinator' | 'hasOrganisation' | 'canEditProviderSettings' | 'canImportData'
+  'isSuperAdmin' | 'isAdmin' | 'isCoordinator' | 'hasOrganisation' | 'canEditProviderSettings' | 'canImportData' | 'canManageIntegrations'
 >
 
 export type SectionKey =
@@ -13,7 +13,7 @@ export type SectionKey =
   | 'organisation' | 'billing' | 'safety' | 'alerts'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'holidays'
-  | 'import' | 'export' | 'failed-sends'
+  | 'import' | 'export' | 'integrations' | 'failed-sends'
   | 'tenants' | 'users' | 'catalogue'
 
 export type SectionGroup = 'My account' | 'Organisation' | 'Pricing and budgets' | 'Content' | 'Data' | 'Platform'
@@ -58,6 +58,8 @@ export const SECTIONS: SectionDef[] = [
   { key: 'import', label: 'Import data', group: 'Data', wide: true, visible: p => p.canImportData, description: 'Bring participants and staff in from a spreadsheet, and undo an import that went wrong.' },
   // Data export (#243): the same gate as Import data. DataExportController admits an Admin, or a SuperAdmin viewing an organisation.
   { key: 'export', label: 'Data export', group: 'Data', visible: p => p.canImportData, description: 'Download everything your organisation has in ODIP, as CSV files.' },
+  // Employment Hero (EH PR 1): EmploymentHeroController admits an Admin, or a SuperAdmin viewing an organisation.
+  { key: 'integrations', label: 'Integrations', group: 'Data', wide: true, visible: p => p.canManageIntegrations, description: 'Connect ODIP to the other systems you use, such as Employment Hero.' },
   { key: 'failed-sends', label: 'Failed sends', group: 'Data', wide: true, visible: p => p.isAdmin, description: "Emails ODIP couldn't deliver for your organisation. Retry one, or send a test email to check sending works." },
   { key: 'tenants', label: 'Tenants', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: 'Every organisation on ODIP. Create one, edit its details, or see its users.' },
   { key: 'users', label: 'Users', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: 'Everyone who can sign in, across every organisation.' },

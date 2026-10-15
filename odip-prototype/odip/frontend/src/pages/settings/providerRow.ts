@@ -37,6 +37,7 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
     const body: Partial<ProviderSettingsDto> = { ...row }
     delete body.participantReadinessMode
     delete body.medicationCompetencyMode
+    delete body.employmentHeroConnected   // computed by the server on GET; never written
     for (const k of changed) Object.assign(body, { [k]: form[k] })
     setResult(null)
     upsert.mutate({ ...body, ...extra } as UpsertProviderSettingsDto, {
