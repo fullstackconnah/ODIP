@@ -5,8 +5,9 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ImportWizardPage from './ImportWizardPage'
 import type { ImportPreviewDto } from '@/api/types'
 
-const { preview, commit, undo, template, invites } = vi.hoisted(() => ({
+const { preview, commit, undo, template, invites, providerSettings } = vi.hoisted(() => ({
   preview: vi.fn(), commit: vi.fn(), undo: vi.fn(), template: vi.fn(), invites: vi.fn(),
+  providerSettings: { current: undefined as { employmentHeroConnected?: boolean } | undefined },
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -15,6 +16,7 @@ vi.mock('@/api/hooks', () => ({
   useUndoImport: () => ({ mutateAsync: undo, isPending: false }),
   useDownloadImportTemplate: () => ({ mutate: template, isPending: false }),
   useImportInvites: () => ({ mutateAsync: invites, isPending: false }),
+  useProviderSettings: () => ({ data: providerSettings.current }),
 }))
 
 const FIELDS = [
@@ -47,7 +49,7 @@ async function upload(name = 'people.csv', size = 10) {
 }
 
 beforeEach(() => { preview.mockResolvedValue(previewOf(['firstName', 'lastName'])) })
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.clearAllMocks(); providerSettings.current = undefined })
 
 describe('ImportWizardPage', () => {
   it('walks upload, match, preview and import, and shows what was created', async () => {
@@ -183,6 +185,16 @@ describe('ImportWizardPage', () => {
     expect(screen.getByRole('button', { name: 'Send sign-in invites (1)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
     expect(within(screen.getByRole('alertdialog')).getByText('The 1 staff member it created is removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
+  })
+
+  it('sends /settings/import/staff back to Settings when staff come from Employment Hero', () => {
+    providerSettings.current = { employmentHeroConnected: true }
+    const router = createMemoryRouter(
+      [{ path: '/settings/import/:kind', element: <ImportWizardPage /> }, { path: '/settings', element: <p>Settings</p> }],
+      { initialEntries: ['/settings/import/staff'] },
+    )
+    render(<RouterProvider router={router} />)
+    expect(screen.getByText('Settings')).toBeInTheDocument()
   })
 })
 

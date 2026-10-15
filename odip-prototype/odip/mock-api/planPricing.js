@@ -21,6 +21,11 @@ const OVERRIDES_THROUGH = '2027-04-25'
 
 // The codes and prices are the 2026-27 catalogue's (the same rows PlanQuoteFrontendFixtureTests prices against); mockMoneyParity.test.ts holds the ones a fixture covers to the engine.
 // `high` is the separate 0104 high intensity item for each band (the engine looks these up, it never scales a standard price).
+// The price list's withdrawals (agreement PR 2, fix round 1): an item and the first day it is no longer in the price list, as the real catalogue ends an item's rows. The mock has one
+// price list, so server.js names the one it withdraws, for the renewal review's captures.
+const WITHDRAWN = new Map()
+function withdraw(itemCode, from) { WITHDRAWN.set(itemCode, from) }
+
 const FAMILY = {
   CommunityAccess: { day: ['04_104_0125_6_1', 73.58], evening: ['04_103_0125_6_1', 81.07], night: null, Saturday: ['04_105_0125_6_1', 103.54], Sunday: ['04_106_0125_6_1', 133.5], holiday: ['04_102_0125_6_1', 163.46], pace: 4, group: '0125',
     high: { day: ['04_400_0104_1_1', 79.6], evening: ['04_401_0104_1_1', 87.7], night: null, Saturday: ['04_402_0104_1_1', 112.01], Sunday: ['04_403_0104_1_1', 144.42], holiday: ['04_404_0104_1_1', 176.84] } },
@@ -236,6 +241,11 @@ function quote(request, settings) {
             occurrenceLines.push(finish(lineBase(block, part.date, { itemCode: undefined, unpriced: 'NoItem', qty: part.minutes / 60, band: part.band, review: true, isPriced: false, startTime: clockOf(part.from), endDate: part.date, endTime: clockOf(part.to), trace: traceOf(block, ['unpriced:no-item'], 'No catalogue item exists for this band.', undefined, []) })))
             continue
           }
+          if (WITHDRAWN.has(item[0]) && part.date >= WITHDRAWN.get(item[0])) {
+            addIssue(block.id, 'CatalogueNotFound', `The price list withdraws ${item[0]} (${FAMILY_WORDS[block.supportType] || block.supportType} ${part.band}) from ${WITHDRAWN.get(item[0])}: no catalogue row is valid for it after that.`, part.date)
+            occurrenceLines.push(finish(lineBase(block, part.date, { itemCode: undefined, unpriced: 'CatalogueNotFound', qty: part.minutes / 60, band: part.band, review: true, isPriced: false, startTime: clockOf(part.from), endDate: part.date, endTime: clockOf(part.to), trace: traceOf(block, ['unpriced:catalogue-not-found'], 'The price list has withdrawn this item.', undefined, []) })))
+            continue
+          }
           const holiday = !!part.holiday
           const unit = floorCents(item[1] * block.workers / block.participantsPresent)
           const total = floorCents(unit * part.minutes / 60)
@@ -373,4 +383,4 @@ function groupLines(lines, blocks) {
   }))
 }
 
-module.exports = { quote, groupLines, defaultSettings, validate, MAX_BLOCKS, MAX_LINES, FAMILY }
+module.exports = { quote, groupLines, defaultSettings, validate, withdraw, MAX_BLOCKS, MAX_LINES, FAMILY }

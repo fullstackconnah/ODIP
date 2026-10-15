@@ -1082,7 +1082,7 @@ public class RosteringController : ControllerBase
         var extras = await ShiftCompletionMapper.QueueExtrasAsync(
             _db,
             pageRows.Select(r => new ShiftCompletionMapper.QueueExtrasInput(
-                r.CompletionId, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay, r.ActualStart, r.ActualEnd)).ToList(),
+                r.Id, r.CompletionId, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay, r.ActualStart, r.ActualEnd)).ToList(),
             ct);
 
         var items = pageRows.Select(row =>
@@ -1098,7 +1098,8 @@ public class RosteringController : ControllerBase
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, row.ActualStart, row.ActualEnd,
                 row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Status,
                 row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount,
-                extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual);
+                extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual,
+                extras[row.CompletionId].IncidentCount);
         }).ToList();
 
         return Ok(ApiResponse<PagedResult<CompletionQueueItemDto>>.Ok(

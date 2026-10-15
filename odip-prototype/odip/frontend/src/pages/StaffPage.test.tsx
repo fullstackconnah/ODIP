@@ -5,16 +5,18 @@ import { MemoryRouter } from 'react-router-dom'
 import StaffPage from './StaffPage'
 import type { StaffListDto } from '@/api/types/staff'
 
-const { mockUseStaff, mockDeleteMutate, mockUpdateMutate } = vi.hoisted(() => ({
+const { mockUseStaff, mockDeleteMutate, mockUpdateMutate, providerSettings } = vi.hoisted(() => ({
   mockUseStaff: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
+  providerSettings: { current: undefined as { employmentHeroConnected?: boolean } | undefined },
 }))
 
 vi.mock('@/api/hooks', () => ({
   useStaff: mockUseStaff,
   useDeleteStaff: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useUpdateStaff: () => ({ mutate: mockUpdateMutate, isPending: false }),
+  useProviderSettings: () => ({ data: providerSettings.current }),
 }))
 
 function setUserRole(role: string) {
@@ -43,6 +45,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  providerSettings.current = undefined
   mockUseStaff.mockReset()
   mockDeleteMutate.mockReset()
   mockUpdateMutate.mockReset()
@@ -443,6 +446,13 @@ describe('StaffPage — import', () => {
     unmount()
     setUserRole('Coordinator')
     renderPage()
+    expect(screen.queryByRole('link', { name: 'Import' })).toBeNull()
+  })
+
+  it('offers neither New staff member nor Import when staff come from Employment Hero', () => {
+    providerSettings.current = { employmentHeroConnected: true }
+    renderPage()
+    expect(screen.queryByRole('link', { name: /New staff member/ })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Import' })).toBeNull()
   })
 })

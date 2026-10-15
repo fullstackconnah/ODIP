@@ -12,6 +12,7 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
@@ -492,6 +493,9 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> Create([FromBody] CreateStaffDto dto, CancellationToken ct)
     {
+        // A connected organisation's staff come from Employment Hero, the master list (EmploymentHeroStaffSync). The frontend hides the button; this is the rule.
+        if (await EmploymentHeroStaffSync.IsConnectedAsync(_db, _currentTenant?.TenantId, ct))
+            return Conflict(ApiResponse<StaffDetailDto>.Fail(EmploymentHeroStaffSync.StaffFromEmploymentHeroMessage));
         var staged = await _staffCreator.StageAsync(dto, User, _currentTenant?.TenantId, ct);
         if (staged.IsConflict) return Conflict(ApiResponse<StaffDetailDto>.Fail(staged.Error!));
         if (staged.ErrorCode is { } code) return BadRequest(ApiResponse<StaffDetailDto>.Fail(staged.Error!, code));

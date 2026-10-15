@@ -1,4 +1,4 @@
-import { useStaff, useDeleteStaff, useUpdateStaff } from '@/api/hooks'
+import { useStaff, useDeleteStaff, useUpdateStaff, useProviderSettings } from '@/api/hooks'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
@@ -61,6 +61,8 @@ function Qualifications({ staff }: { staff: StaffListDto }) {
 
 export default function StaffPage() {
   const { canWrite, canAccessPage, canImportData } = usePermissions()
+  // Staff come from Employment Hero for a connected organisation: ODIP's own create and import are hidden, and the server refuses them.
+  const staffFromPayroll = useProviderSettings(canWrite).data?.employmentHeroConnected === true
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
   const deleteStaff = useDeleteStaff()
   const updateStaff = useUpdateStaff()
@@ -179,7 +181,7 @@ export default function StaffPage() {
         <PageHeader
           title="Staff"
           subtitle={plural(staff.length, 'staff member')}
-          action={!showArchived && (canWrite || canImportData) && (
+          action={!showArchived && !staffFromPayroll && (canWrite || canImportData) && (
             // One cluster, as on the Participants hub: PageHeader dissolves its wrapper from md, and loose buttons would be spread apart.
             <div className="flex shrink-0 items-center gap-2">
               {canImportData && <Button to="/settings/import/staff" variant="secondary" size="md">Import</Button>}

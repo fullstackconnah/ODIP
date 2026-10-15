@@ -276,6 +276,12 @@ export function usePermissions() {
     canImportData: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
 
     /**
+     * Settings → Integrations (Employment Hero). EmploymentHeroController admits Admin and SuperAdmin and refuses a SuperAdmin who is not viewing an
+     * organisation (an integration belongs to one), as the import does.
+     */
+    canManageIntegrations: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+
+    /**
      * Whether an organisation's settings are in scope: an Admin or a Coordinator always has one, a SuperAdmin only while viewing one
      * (the tenant switcher's odip_viewing_tenant). Settings shows its Organisation, Pricing and budgets, Content and Data groups only then.
      */

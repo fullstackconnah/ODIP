@@ -5,15 +5,18 @@ import QualificationsPage from './QualificationsPage'
 import DashboardPage from './DashboardPage'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseStaff, mockUseSettings } = vi.hoisted(() => ({
+const { mockUseStaff, mockUseSettings, providerSettings } = vi.hoisted(() => ({
   mockUseStaff: vi.fn(),
   mockUseSettings: vi.fn(),
+  providerSettings: { current: undefined as { employmentHeroConnected?: boolean } | undefined },
 }))
 
+vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
   useStaff: mockUseStaff,
   useSettings: mockUseSettings,
   useUpdateStaff: () => ({ mutate: vi.fn(), isPending: false }),
+  useProviderSettings: () => ({ data: providerSettings.current }),
   // The dashboard's own request, answered with a real summary of zeros (the page no longer makes one up).
   useDashboard: () => ({
     data: {
@@ -160,9 +163,11 @@ describe('QualificationsPage and the Dashboard agree', () => {
     const listTotal = screen.getAllByText(/^\d+ issues?$/).reduce((sum, el) => sum + Number.parseInt(el.textContent!, 10), 0)
     unmount()
 
+    // A Coordinator now updates these in the Staff compliance group (the same sum); the tile is a SuperAdmin's with no organisation (SHAPE call 6).
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     render(<MemoryRouter><DashboardPage /></MemoryRouter>)
     // With issues, Qualification Issues is a tall tile: a named group ("Qualification Issues 12") whose figure is the count.
-    const tile = within(screen.getByRole('region', { name: 'Needs attention' })).getByRole('group', { name: /^Qualification Issues \d+$/ })
+    const tile = within(screen.getByRole('region', { name: 'Alerts' })).getByRole('group', { name: /^Qualification Issues \d+$/ })
 
     expect(listTotal).toBe(12)
     expect(tile.querySelector('.text-display')!.textContent).toBe(String(listTotal))
@@ -191,5 +196,19 @@ describe('QualificationsPage: controls by role', () => {
     expect(screen.getByRole('link', { name: 'Edit Dana Expired' })).toBeInTheDocument()
     // Every row has an inline Edit, so its name carries the row's credential and person.
     expect(screen.getAllByRole('button', { name: /^Edit: .+, Dana Expired$/ }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('QualificationsPage — staff from Employment Hero', () => {
+  afterEach(() => { providerSettings.current = undefined; localStorage.clear() })
+
+  it('has no New staff member action on the empty page when staff come from Employment Hero', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    providerSettings.current = { employmentHeroConnected: true }
+    mockUseStaff.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 30 } })
+    render(<MemoryRouter><QualificationsPage /></MemoryRouter>)
+    expect(screen.getByText('No staff members yet')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'New staff member' })).toBeNull()
   })
 })

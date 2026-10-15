@@ -7,8 +7,9 @@ import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor } = vi.hoisted(() => ({
+const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows } = vi.hoisted(() => ({
   editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
+  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(), endingRows: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -18,7 +19,10 @@ vi.mock('@/api/hooks', () => ({
   useFundingPlans: () => plans(),
   useApprovalPreview: (_participantId: string, draftId: string) => previewFor(draftId) ?? { data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() },
   useApproveServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
-  usePlanPricingSettings: () => ({ data: makeSettings() }),
+  usePlanPricingSettings: () => ({ data: pricingSettings() }),
+  useRenewAgreement: () => ({ mutate: renewMutate, isPending: false }),
+  useServiceAgreementDraft: () => oldDraft(),
+  useAgreementsEnding: () => endingRows(),
   usePlanBudget: () => budget(),
   useAgreementCheck: () => check(),
 }))
@@ -66,6 +70,10 @@ beforeEach(() => {
   check.mockReturnValue({ data: agreementCheck(0), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
   refetchDrafts.mockResolvedValue({ data: [], isError: false })
   createMutate.mockReset(); downloadMutate.mockReset(); previewFor.mockReset(); editor.mockReset()
+  pricingSettings.mockReturnValue(makeSettings())
+  oldDraft.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+  renewMutate.mockReset()
+  endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })
 })
 afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
@@ -464,5 +472,172 @@ describe('ServiceAgreementDraftPage: recording the plan budget in place', () => 
     expect(screen.getByText('NDIS plan')).toBeInTheDocument()
     expect(screen.queryByText(/No funding plan is recorded/)).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Record the plan' })).not.toBeInTheDocument()
+  })
+})
+
+describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', () => {
+  // v2, approved, ends on Sunday 1 November 2026: 20 days after the fixed today, Monday 12 October.
+  const ending = draft({ approval, agreementStartDate: '2026-07-01', agreementEndDate: '2026-11-01' })
+  const line = {
+    serviceType: 'Community access', hours: 120, itemCode: '04_104_0125_6_1', unitPrice: 73.58, catalogueVersion: '2026-27', catalogueEffectiveFrom: '2026-07-01', catalogueEffectiveTo: null,
+    blockId: 'b1', band: 'Daytime', unit: 'H', total: 8829.6, occurrences: 30, flags: 'None',
+  }
+  const renewal = draft({ id: 'd-3', version: 3, agreementStartDate: '2026-11-02', agreementEndDate: '2027-02-28', lines: [line] })
+  const showing = (...list: ServiceAgreementDraftDto[]) => drafts.mockReturnValue({ data: list, isLoading: false, isError: false, refetch: refetchDrafts })
+  const renewButton = () => screen.getByRole('button', { name: 'Renew agreement' })
+  // The provider's count of days, as the server's ending list has it (fix round 1, CR-B S1): the page never counts from the browser's date.
+  const endsIn = (daysLeft: number, agreementEndDate = '2026-11-01', draftId = 'd-2') => endingRows.mockReturnValue({
+    data: [{ participantId: 'p-1', participantName: 'Marcus Tran', draftId, version: 2, agreementEndDate, daysLeft, renewalVersion: null, status: '' }], isLoading: false, isError: false,
+  })
+  beforeEach(() => endsIn(20))
+
+  it('counts the days from the provider\u0027s today, not the browser\u0027s', () => {
+    endsIn(19)                                                                            // the browser's date would say 20
+    showing(ending)
+    renderPage()
+
+    expect(screen.getByText('Agreement ends in 19 days.')).toBeInTheDocument()
+  })
+
+  it('says when an approved agreement ends, and offers Renew to an approver beside Start a new revision', () => {
+    showing(ending)
+    renderPage()
+
+    expect(screen.getByText('Agreement ends in 20 days.')).toBeInTheDocument()
+    expect(renewButton()).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start a new revision' })).toBeInTheDocument()
+    // Fix round 1 (deep S3), a known limit said where it bites: once renewed, this term can only be changed by a revision that replaces the renewal.
+    expect(screen.getByText('Make any change this agreement needs before you renew it: once it is renewed, a change to it replaces the renewal.')).toBeInTheDocument()
+  })
+
+  // Fix round 2 (finish, Tone Rule): one fact, one tone. The callout's container carries the house Callout tone, so the test reads it from there.
+  const lockedTone = () => {
+    const box = screen.getByText('Approved for rostering').parentElement!.parentElement!.className
+    return box.includes('--color-destructive') ? 'error' : box.includes('--color-warning-container') ? 'warning' : 'info'
+  }
+
+  it('says when it could not check whether the agreement is ending, and tries again, rather than dropping Renew silently', async () => {
+    const refetch = vi.fn()
+    endingRows.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    showing(ending)
+    renderPage()
+
+    expect(screen.getByText("Couldn't check whether this agreement is ending.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Renew agreement' })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('is in the error tone once the agreement has ended, warning while it is ending, and info otherwise', () => {
+    endsIn(-1, '2026-10-11')
+    showing(draft({ approval, agreementStartDate: '2026-07-01', agreementEndDate: '2026-10-11' }))
+    const { unmount } = renderPage()
+    expect(lockedTone()).toBe('error')
+    unmount()
+
+    endsIn(20)
+    showing(ending)
+    const second = renderPage()
+    expect(lockedTone()).toBe('warning')
+    second.unmount()
+
+    endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })
+    showing(draft({ approval }))
+    renderPage()
+    expect(lockedTone()).toBe('info')
+  })
+
+  it('says nothing of an end more than 60 days away, and an ended agreement says its shifts stop', () => {
+    endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })            // ends 30 June 2027: not on the list
+    showing(draft({ approval }))
+    const { unmount } = renderPage()
+    expect(screen.queryByText(/^Agreement end/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Renew agreement' })).not.toBeInTheDocument()
+    unmount()
+
+    endsIn(-1, '2026-10-11')
+    showing(draft({ approval, agreementStartDate: '2026-07-01', agreementEndDate: '2026-10-11' }))
+    renderPage()
+    expect(screen.getByText('Agreement ended Sun 11 Oct 2026: shifts stop after it.')).toBeInTheDocument()
+    expect(renewButton()).toBeInTheDocument()
+    // Fix round 2: there is nothing left of an ended agreement to change before renewing it.
+    expect(screen.queryByText(/^Make any change this agreement needs/)).not.toBeInTheDocument()
+  })
+
+  it('tells a coordinator the organisation does not let approve when it ends, without offering Renew', () => {
+    asRole('Coordinator')
+    pricingSettings.mockReturnValue(makeSettings({ approverRoles: ['Admin'] }))
+    showing(ending)
+    renderPage()
+
+    expect(screen.getByText('Agreement ends in 20 days.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Renew agreement' })).not.toBeInTheDocument()
+  })
+
+
+  it('renews, then opens the renewal on the Check step beside the agreement it renews', async () => {
+    showing(ending)
+    oldDraft.mockReturnValue({ data: { ...ending, lines: [{ ...line, unitPrice: 70.23 }] }, isLoading: false, isError: false, refetch: vi.fn() })
+    refetchDrafts.mockResolvedValue({ data: [renewal, { ...ending, isSummary: true }], isError: false })
+    renewMutate.mockImplementation((_request, options) => { showing(renewal, { ...ending, isSummary: true }); options.onSuccess(renewal) })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(renewButton())
+
+    expect(renewMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-2' }, expect.anything())
+    expect(await screen.findByRole('heading', { level: 2, name: 'Check' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Renewal of v2' })).toBeInTheDocument()
+    expect(screen.queryByText('Approved for rostering')).not.toBeInTheDocument()   // the renewal is a draft, open to change
+  })
+
+  it('with no plan for the first day, says so, opens the editor after the plan that ends, and then leaves Renew to be pressed again', async () => {
+    plans.mockReturnValue({ data: { plans: [{ id: 'f-1', participantId: 'p-1', planStart: '2025-11-02', planEnd: '2026-11-01' }] }, isLoading: false, isError: false })
+    showing(ending)
+    const words = "Record the new plan first: no plan of the participant's covers 2026-11-02, the day the renewal starts."
+    renewMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'plan-needed', errors: [words] } } }))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(renewButton())
+    expect(screen.getByText("Record the new plan first: no plan of the participant's covers Mon 2 Nov 2026, the day the renewal starts.")).toBeInTheDocument()
+    expect(screen.getByText('Approved for rostering')).toBeInTheDocument()            // nothing else on the page changed
+    await user.click(screen.getByRole('button', { name: 'Record a new plan' }))
+    expect(screen.getByTestId('editor')).toHaveAttribute('data-previous', 'f-1')
+    expect(screen.getByTestId('editor')).toHaveAttribute('data-plan', 'new')
+    await user.click(screen.getByRole('button', { name: 'Save the plan' }))
+
+    expect(screen.queryByText(/^Record the new plan first/)).not.toBeInTheDocument()
+    expect(screen.getByText('Agreement ends in 20 days.')).toHaveFocus()
+    expect(renewButton()).toBeInTheDocument()
+  })
+
+  it('names a newer revision that waits, and Load v3 reads it in', async () => {
+    showing(ending)
+    const waiting = draft({ id: 'd-3', version: 3, agreementStartDate: '2026-10-20', agreementEndDate: '2026-11-01' })
+    renewMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { success: false, code: 'draft-version-conflict', data: { currentVersion: 3 }, errors: ['A newer one.'] } } }))
+    refetchDrafts.mockImplementation(async () => { showing(waiting, ending); return { data: [waiting, ending], isError: false } })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(renewButton())
+    expect(screen.getByText('This agreement has a newer revision, v3. Load it first: a renewal would replace it.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Load v3' }))
+
+    expect(await screen.findByLabelText('Agreement starts')).toHaveValue('2026-10-20')   // v3 waits for approval, so it is open to change
+  })
+
+  it('a refusal says the server\'s words and keeps the page as it was', async () => {
+    showing(ending)
+    const words = 'Your role cannot renew agreements in your organisation. An Admin can change who may approve in Settings, Plan pricing.'
+    renewMutate.mockImplementation((_request, options) => options.onError({ response: { status: 403, data: { success: false, errors: [words] } } }))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(renewButton())
+
+    expect(screen.getByText('The agreement was not renewed')).toBeInTheDocument()
+    expect(screen.getByText(words)).toBeInTheDocument()
+    expect(screen.getByText('Approved for rostering')).toBeInTheDocument()
   })
 })

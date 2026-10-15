@@ -65,12 +65,12 @@ afterEach(() => {
 })
 
 describe('ParticipantsHubPage (wire) — the register has its controls back', () => {
-  it('shows the Active / Archived views, no Drafts view, and a search box on the participants tab', async () => {
+  it('shows the Active, Archived and Agreements ending views, no Drafts view, and a search box on the participants tab', async () => {
     renderHub()
 
     await screen.findByText('Jamie Smith')
     const views = screen.getByRole('radiogroup', { name: /participant list view/i })
-    expect(within(views).getAllByRole('radio').map(r => r.getAttribute('aria-label') ?? r.textContent)).toEqual(['Active', 'Archived'])
+    expect(within(views).getAllByRole('radio').map(r => r.getAttribute('aria-label') ?? r.textContent)).toEqual(['Active', 'Archived', 'Agreements ending'])
     expect(screen.getByRole('radio', { name: 'Active' })).toBeChecked()
     expect(screen.getByRole('textbox', { name: /search participants/i })).toBeInTheDocument()
   })
