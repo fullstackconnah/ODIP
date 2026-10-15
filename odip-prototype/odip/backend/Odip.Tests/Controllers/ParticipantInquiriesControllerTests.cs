@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -5,6 +7,7 @@ using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
@@ -182,4 +185,63 @@ public class ParticipantInquiriesControllerTests
 
     private static T Data<T>(IActionResult result) =>
         Assert.IsType<ApiResponse<T>>(Assert.IsType<OkObjectResult>(result).Value).Data!;
+
+    private static readonly DateTime VisitStart = new(2026, 10, 16, 0, 0, 0, DateTimeKind.Utc);
+
+    // One booked enquiry, read by a caller in the given role.
+    private static async Task<List<ParticipantInquiryDto>> BookedFeedAs(string role, Guid staffId)
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, tenant) = CreateDb(tenantId);
+        db.Users.Add(new User { Id = staffId, TenantId = tenantId, Username = "sam", Email = "sam@example.com", FirstName = "Sam", LastName = "Lee", Role = UserRole.Coordinator, IsActive = true });
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, State = "QLD" });
+        db.ParticipantInquiries.Add(new ParticipantInquiry
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Noah", LastName = "Fitzgerald", Source = "Phone",
+            IntakeStartsAt = VisitStart, IntakeDurationMinutes = 90, IntakeLocation = "12 Smith St", IntakeStaffUserId = staffId,
+            IntakeNotes = "Gate code 1234", IntakeInviteError = "NotConfigured", IntakeConfirmedAt = VisitStart.AddDays(-1),
+        });
+        await db.SaveChangesAsync();
+        var controller = new ParticipantInquiriesController(db, tenant.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test")) } },
+        };
+        return Data<List<ParticipantInquiryDto>>((await controller.GetAll(CancellationToken.None)).Result!);
+    }
+
+    // The location is often a home address, and the notes are internal: like /intake-visits, they are for the lifecycle roles. Everyone who can open
+    // the Enquiries tab still sees when the visit is, the staff member's first name and what the invite did.
+    [Fact]
+    public async Task GetAll_keeps_a_visits_address_notes_and_staff_name_from_roles_outside_the_lifecycle()
+    {
+        var row = Assert.Single(await BookedFeedAs("SupportWorker", Guid.NewGuid()));
+
+        Assert.Equal(VisitStart, row.IntakeStartsAt);
+        Assert.Equal("Sam", row.IntakeStaffFirstName);
+        Assert.Equal("NotConfigured", row.IntakeInviteError);
+        Assert.Null(row.IntakeLocation);
+        Assert.Null(row.IntakeNotes);
+        Assert.Null(row.IntakeStaffName);
+    }
+
+    [Fact]
+    public async Task GetAll_carries_the_booking_the_staff_names_and_the_providers_zone()
+    {
+        var staffId = Guid.NewGuid();
+        var start = VisitStart;
+
+        var rows = await BookedFeedAs("Coordinator", staffId);
+
+        var row = Assert.Single(rows);
+        Assert.Equal(start, row.IntakeStartsAt);
+        Assert.Equal(90, row.IntakeDurationMinutes);
+        Assert.Equal("12 Smith St", row.IntakeLocation);
+        Assert.Equal(staffId, row.IntakeStaffUserId);
+        Assert.Equal("Sam", row.IntakeStaffFirstName);
+        Assert.Equal("Sam Lee", row.IntakeStaffName);
+        Assert.Equal("Gate code 1234", row.IntakeNotes);
+        Assert.Equal("NotConfigured", row.IntakeInviteError);
+        Assert.Equal(start.AddDays(-1), row.IntakeConfirmedAt);
+        Assert.Equal("Australia/Brisbane", row.TimeZoneId);
+    }
 }

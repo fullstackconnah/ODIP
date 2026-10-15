@@ -6,6 +6,11 @@ import { InquiriesTable } from './InquiriesPage'
 
 const mocks = vi.hoisted(() => ({ inquiries: vi.fn(), create: vi.fn(), update: vi.fn(), convert: vi.fn(), refetch: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
+  useConfirmIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSetIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useResendIntakeInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useStaff: () => ({ data: [], isLoading: false }),
   useParticipantInquiries: mocks.inquiries,
   useCreateParticipantInquiry: () => ({ mutate: mocks.create, isPending: false }),
   useUpdateParticipantInquiry: () => ({ mutate: mocks.update, isPending: false }),
@@ -46,7 +51,7 @@ describe('InquiriesPage lifecycle handoff', () => {
     mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
     mocks.convert.mockImplementation((_data: unknown, options: { onSuccess: (value: unknown) => void }) => options.onSuccess(inquiry({ participantId: 'draft-9' })))
     page()
-    await user.click(screen.getByRole('button', { name: 'Start intake' }))
+    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
     expect(mocks.convert).toHaveBeenCalledWith({ id: 'inquiry-1' }, expect.any(Object))
     expect(screen.getByText('Draft intake destination')).toBeInTheDocument()
   })
@@ -55,9 +60,9 @@ describe('InquiriesPage lifecycle handoff', () => {
     const user = userEvent.setup()
     mocks.inquiries.mockReturnValue({ data: [inquiry({ participantId: 'draft-3' })], isLoading: false })
     page()
-    expect(screen.getByRole('button', { name: 'Edit enquiry' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Start intake' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Resume intake' }))
+    expect(screen.getByRole('button', { name: /^Edit enquiry/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Start intake/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Resume intake/ }))
     expect(screen.getByText('Draft intake destination')).toBeInTheDocument()
   })
 
@@ -82,7 +87,7 @@ describe('InquiriesPage lifecycle handoff', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
     page()
-    expect(screen.getByRole('status')).toHaveTextContent(/cannot capture, edit, or start/i)
+    expect(screen.getByText(/cannot capture, edit, or start/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /capture enquiry|edit enquiry|start intake/i })).not.toBeInTheDocument()
   })
 
@@ -95,7 +100,7 @@ describe('InquiriesPage lifecycle handoff', () => {
     mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
     mocks.convert.mockImplementation((_data: unknown, options: { onError: () => void }) => options.onError())
     page()
-    await user.click(screen.getByRole('button', { name: 'Start intake' }))
+    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
     expect(screen.getByRole('alert')).toHaveTextContent('Could not start intake. Please try again.')
   })
 
@@ -141,12 +146,12 @@ describe('InquiriesPage lifecycle handoff', () => {
       { id: 'q-1', firstName: 'Row', lastName: 'Order', phone: '0400', source: 'Phone', provenance: LONG_PROVENANCE, participantId: 'p-1' },
     ], isLoading: false })
     page()
-    const resume = screen.getByRole('button', { name: 'Resume intake' })
-    const editBtn = screen.getByRole('button', { name: 'Edit enquiry' })
+    const resume = screen.getByRole('button', { name: /^Resume intake/ })
+    const editBtn = screen.getByRole('button', { name: /^Edit enquiry/ })
     // the primary CTA must precede the outlined secondary in DOM reading order
     expect(resume.compareDocumentPosition(editBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // provenance is truncated and carries the full text for hover
+    // provenance is truncated and carries the full text for hover; capped at 9.5rem so the table, Intake on two lines and one-row Actions included, fits at 1440
     const prov = screen.getByTitle(LONG_PROVENANCE)
-    expect(prov).toHaveClass('truncate', 'max-w-[280px]')
+    expect(prov).toHaveClass('truncate', 'max-w-[9.5rem]')
   })
 })

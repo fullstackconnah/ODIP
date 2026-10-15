@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff } from 'lucide-react'
-import { useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
+import { useIntakeVisits, useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { PageHeader } from '@/components/PageHeader'
@@ -10,6 +10,9 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, isToday, formatShiftTimeRange, formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { RATIO_LABELS } from './lib/portal'
 import type { PortalShiftSummaryDto } from '@/api/types'
+import { usePermissions } from '@/lib/permissions'
+import { visitsByDay, withVisits } from '@/lib/intakeBooking'
+import { IntakeVisitCard } from './IntakeVisitCard'
 
 /** Groups a flat, already-date-ordered shift list into per-day buckets, preserving day order. */
 function groupByDay(shifts: PortalShiftSummaryDto[]): Map<string, PortalShiftSummaryDto[]> {
@@ -64,6 +67,12 @@ export default function PortalShiftsPage() {
   const shifts = useMemo(() => data?.shifts ?? [], [data])
   const tripAssignments = data?.tripAssignments ?? []
   const byDay = useMemo(() => groupByDay(shifts), [shifts])
+  // Intake visits you are going to, in the browsed week: their own query beside the shifts (a non-shift entry, not billable work).
+  const { id: myId } = usePermissions()
+  const visitsQuery = useIntakeVisits({ from: weekStart, to: weekEnd, staffUserId: myId ?? undefined }, !!myId)
+  const visits = useMemo(() => visitsQuery.data ?? [], [visitsQuery.data])
+  const visitDays = useMemo(() => visitsByDay(visits), [visits])
+  const days = useMemo(() => [...new Set([...byDay.keys(), ...visitDays.keys()])].sort(), [byDay, visitDays])
   const { data: witnessRequests } = usePendingWitnessRequests()
   const pendingWitnessCount = witnessRequests?.length ?? 0
 
@@ -105,13 +114,13 @@ export default function PortalShiftsPage() {
         </div>
       </PageHeader>
 
-      {isLoading ? (
+      {isLoading || visitsQuery.isLoading ? (
         <ShiftsSkeleton />
       ) : isError ? (
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
           Couldn't load your shifts. Check your connection and try again.
         </Callout>
-      ) : shifts.length === 0 && tripAssignments.length === 0 ? (
+      ) : shifts.length === 0 && tripAssignments.length === 0 && visits.length === 0 && !visitsQuery.isError ? (
         <EmptyState
           icon={CalendarCheck2}
           title="Nothing rostered this week"
@@ -119,14 +128,22 @@ export default function PortalShiftsPage() {
         />
       ) : (
         <div className="space-y-6">
-          {Array.from(byDay.entries()).map(([day, dayShifts]) => (
+          {visitsQuery.isError && (
+            <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => visitsQuery.refetch()}>Try again</Button>}>
+              Couldn't load your intake visits.
+            </Callout>
+          )}
+          {days.map(day => (
             <section key={day}>
               <h2 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">
                 {formatDayAccessibleName(day)}
                 {isToday(day) && <span className="ml-2 text-xs font-medium text-[var(--color-primary)]">Today</span>}
               </h2>
               <div className="space-y-2">
-                {dayShifts.map(shift => (
+                {withVisits(byDay.get(day) ?? [], visitDays.get(day) ?? []).map(entry => {
+                  if (entry.kind === 'visit') return <IntakeVisitCard key={`visit-${entry.visit.inquiryId}`} visit={entry.visit} />
+                  const shift = entry.shift
+                  return (
                   <Link
                     key={shift.id}
                     to={`/portal/shifts/${shift.id}`}
@@ -151,7 +168,8 @@ export default function PortalShiftsPage() {
                       </div>
                     </div>
                   </Link>
-                ))}
+                  )
+                })}
               </div>
             </section>
           ))}

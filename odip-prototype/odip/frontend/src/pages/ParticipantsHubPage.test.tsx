@@ -13,6 +13,11 @@ const { mockUseParticipants, mockUseParticipantInquiries } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/hooks', () => ({
+  useConfirmIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSetIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useResendIntakeInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useStaff: () => ({ data: [], isLoading: false }),
   useParticipants: mockUseParticipants,
   useDeleteParticipant: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateParticipant: () => ({ mutate: vi.fn(), isPending: false }),

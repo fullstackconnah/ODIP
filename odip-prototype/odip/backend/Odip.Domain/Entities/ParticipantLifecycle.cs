@@ -18,6 +18,31 @@ public class ParticipantInquiry : ITenantEntity
     public string? Provenance { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    // The intake visit booked for this enquiry (owner decisions 2026-10-14): one current booking, every column empty when there is none.
+    // IntakeStartsAt is a UTC instant; the visit is entered and shown in the provider's zone. IntakeInviteSentAt is when an invite last went out
+    // for this UID; IntakeInviteError is the latest send's failure ("NotConfigured", "Failed"), cleared by a send that works. IntakeUid and
+    // IntakeIcsSequence identify the calendar event across updates and a cancellation. IntakeBookedByUserId is the coordinator who booked it: the
+    // invite's ORGANIZER and Reply-To stay that person for every revision, because calendar apps treat a changed ORGANIZER as another event.
+    public DateTime? IntakeStartsAt { get; set; }
+    public int? IntakeDurationMinutes { get; set; }
+    public string? IntakeLocation { get; set; }
+    public Guid? IntakeStaffUserId { get; set; }
+    public User? IntakeStaffUser { get; set; }
+    public Guid? IntakeBookedByUserId { get; set; }
+    public User? IntakeBookedByUser { get; set; }
+    public string? IntakeNotes { get; set; }
+    public DateTime? IntakeInviteSentAt { get; set; }
+    public string? IntakeInviteError { get; set; }
+    public DateTime? IntakeConfirmedAt { get; set; }
+    public int IntakeIcsSequence { get; set; }
+    public string? IntakeUid { get; set; }
+
+    /// <summary>Cancels the booking: every intake column back to empty. The next booking gets a new UID and starts at SEQUENCE 0.</summary>
+    public void ClearIntakeBooking()
+    {
+        IntakeStartsAt = null; IntakeDurationMinutes = null; IntakeLocation = null; IntakeStaffUserId = null; IntakeBookedByUserId = null; IntakeNotes = null;
+        IntakeInviteSentAt = null; IntakeInviteError = null; IntakeConfirmedAt = null; IntakeIcsSequence = 0; IntakeUid = null;
+    }
 }
 
 /// <summary>Server-owned onboarding evidence. Readiness is derived, never supplied by a UI checkbox.</summary>

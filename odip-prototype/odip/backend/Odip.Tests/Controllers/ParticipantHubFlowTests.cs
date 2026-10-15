@@ -630,4 +630,70 @@ public class ParticipantHubFlowTests
         var created = Assert.IsType<CreatedAtActionResult>((await create).Result);
         return Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value).Data!.Id;
     }
+
+    // ── Fix round 2 (intake booking): IntakeIcsSequence and IntakeUid are concurrency tokens on the enquiry, so its other writers meet a booking ──
+    // A booking write that lands between a request's read of the enquiry and its save: the request's context still holds the old token values.
+    private static async Task<(Caller Stale, Guid EnquiryId)> EnquiryRacedByABookingAsync(Guid tenantId, Func<Caller, Task<Guid>> setup)
+    {
+        var store = Guid.NewGuid().ToString();
+        var stale = new Caller(store, tenantId);
+        var enquiryId = await setup(stale);
+        _ = await stale.Db.ParticipantInquiries.SingleAsync(x => x.Id == enquiryId); // read: now tracked with the old tokens
+        using (var other = new Caller(store, tenantId))
+        {
+            var row = await other.Db.ParticipantInquiries.SingleAsync(x => x.Id == enquiryId);
+            row.IntakeUid = "booked@odip";
+            row.IntakeIcsSequence = 1;
+            await other.Db.SaveChangesAsync();
+        }
+        return (stale, enquiryId);
+    }
+
+    [Fact]
+    public async Task Editing_an_enquiry_a_booking_just_changed_is_a_409_not_a_500()
+    {
+        var tenantId = Guid.NewGuid();
+        var (stale, id) = await EnquiryRacedByABookingAsync(tenantId, async c => (await CaptureEnquiryAsync(c)).Id);
+        using var _ = stale;
+
+        var result = await stale.Inquiries.Update(id, new UpdateParticipantInquiryDto { FirstName = "Ada", LastName = "King", Source = "Phone" }, CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Someone else just changed this enquiry. Reload and try again.", Assert.Single(Assert.IsType<ApiResponse<ParticipantInquiryDto>>(conflict.Value).Errors!));
+    }
+
+    [Fact]
+    public async Task Starting_an_intake_on_an_enquiry_a_booking_just_changed_is_a_409_not_a_500()
+    {
+        var tenantId = Guid.NewGuid();
+        var (stale, id) = await EnquiryRacedByABookingAsync(tenantId, async c => (await CaptureEnquiryAsync(c)).Id);
+        using var _ = stale;
+
+        var result = await stale.Inquiries.Convert(id, new ConvertParticipantInquiryDto(), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Someone else just changed this enquiry. Reload and try again.", Assert.Single(Assert.IsType<ApiResponse<ParticipantInquiryDto>>(conflict.Value).Errors!));
+    }
+
+    // The intake wizard's save copies the name onto the enquiry but never touches its booking, so a racing booking must not cost the whole intake.
+    [Fact]
+    public async Task Saving_an_intake_whose_enquiry_a_booking_just_changed_still_saves_and_keeps_the_booking()
+    {
+        var tenantId = Guid.NewGuid();
+        Guid participantId = Guid.Empty;
+        var (stale, id) = await EnquiryRacedByABookingAsync(tenantId, async c =>
+        {
+            var enquiry = await CaptureEnquiryAsync(c);
+            participantId = Ok(await c.Inquiries.Convert(enquiry.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
+            return enquiry.Id;
+        });
+        using var _ = stale;
+
+        Ok(await stale.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false), CancellationToken.None));
+
+        var row = await stale.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == id);
+        Assert.Equal("King", row.LastName);
+        Assert.Equal(("booked@odip", 1), (row.IntakeUid, row.IntakeIcsSequence));
+    }
+
 }
