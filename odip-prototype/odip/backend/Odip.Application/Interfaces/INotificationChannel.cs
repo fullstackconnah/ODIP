@@ -6,7 +6,11 @@ public enum ChannelSendOutcome { Sent, Skipped, TransientFailure, PermanentFailu
 
 public record ChannelSendResult(ChannelSendOutcome Outcome, string? ProviderMessageId, string? Reason);
 
-public record NotificationMessage(string RecipientAddress, string Subject, string PlainTextBody, string HtmlBody);
+/// <summary>A calendar invite (RFC 5545 text) sent as a <c>text/calendar</c> alternate view. <see cref="Method"/> is the iTIP method its METHOD line declares: REQUEST or CANCEL.</summary>
+public record IcsCalendar(string Method, string Content);
+
+/// <summary>One email. <see cref="Ics"/> and <see cref="ReplyTo"/> are optional; without them the message is sent exactly as before.</summary>
+public record NotificationMessage(string RecipientAddress, string Subject, string PlainTextBody, string HtmlBody, IcsCalendar? Ics = null, string? ReplyTo = null);
 
 /// <summary>
 /// One delivery channel (email, SMS, ...). <see cref="Odip.Infrastructure.Notifications.SmtpEmailChannel"/>

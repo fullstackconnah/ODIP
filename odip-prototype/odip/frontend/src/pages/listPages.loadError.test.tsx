@@ -49,7 +49,7 @@ const pages: [string, ComponentType, RegExp, { path?: string; role?: string }?][
   ['ReportTab', ReportTab, /No administrations found/],
   ['Incidents Flagged notes', IncidentsPage, /No flagged notes are waiting/, { path: '/incidents?view=flagged-notes' }],
   ['ActivityLibraryTab', ActivityLibraryTab, /No activities yet/],
-  ['Settings event templates', SettingsPage, /No event templates yet/],
+  ['Settings event templates', SettingsPage, /No event templates yet/, { path: '/settings?section=templates' }],
   ['Settings support catalogue', SettingsPage, /No catalogue items/, { path: '/settings?tab=catalogue', role: 'SuperAdmin' }],
   ['Settings public holidays', SettingsPage, /No holidays found/, { path: '/settings?tab=holidays' }],
 ]

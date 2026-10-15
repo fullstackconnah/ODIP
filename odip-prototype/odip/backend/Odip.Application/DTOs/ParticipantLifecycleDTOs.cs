@@ -25,6 +25,20 @@ public record ParticipantInquiryDto
     /// there is no enquiry record to edit, and <see cref="Source"/> is empty.
     /// </summary>
     public bool IsDirectIntake { get; init; }
+    // The intake visit booked for this enquiry, all null when there is none. IntakeStartsAt is an instant (UTC, Z on the wire); show it in TimeZoneId.
+    public DateTime? IntakeStartsAt { get; init; }
+    public int? IntakeDurationMinutes { get; init; }
+    public string? IntakeLocation { get; init; }
+    public Guid? IntakeStaffUserId { get; init; }
+    public string? IntakeStaffFirstName { get; init; }
+    public string? IntakeStaffName { get; init; }
+    public string? IntakeNotes { get; init; }
+    public DateTime? IntakeInviteSentAt { get; init; }
+    /// <summary>Why the latest invite did not go: "NotConfigured" (no email service) or "Failed". Null after a send that worked.</summary>
+    public string? IntakeInviteError { get; init; }
+    public DateTime? IntakeConfirmedAt { get; init; }
+    /// <summary>The provider's IANA zone, in which the visit is entered and shown.</summary>
+    public string? TimeZoneId { get; init; }
 }
 
 /// <summary>
@@ -51,6 +65,45 @@ public record CreateParticipantInquiryDto
 
 public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto;
 public record ConvertParticipantInquiryDto { public Guid? ParticipantId { get; init; } }
+
+public record SetIntakeBookingDto
+{
+    /// <summary>An instant: the provider-local date and time the coordinator chose, converted to UTC by the client (Z on the wire).</summary>
+    public DateTime StartsAt { get; init; }
+    public int DurationMinutes { get; init; }
+    public string? Location { get; init; }
+    public Guid StaffUserId { get; init; }
+    public string? Notes { get; init; }
+    /// <summary>Sent only when the enquiry has no email: validated and saved to the enquiry in the same save as the booking.</summary>
+    public string? ContactEmail { get; init; }
+}
+
+public record ConfirmIntakeBookingDto { public bool Confirmed { get; init; } }
+
+/// <summary>What a cancel did. CancellationEmail: "Sent", "NoInvite" (none had gone out, so nobody was emailed), "NotConfigured" or "Failed".</summary>
+public record CancelIntakeBookingResultDto
+{
+    public ParticipantInquiryDto Inquiry { get; init; } = new();
+    public string CancellationEmail { get; init; } = "NoInvite";
+}
+
+/// <summary>One intake visit on a schedule view (My shifts, the Schedule page). StartsAt is an instant; show it in TimeZoneId.</summary>
+public record IntakeVisitDto
+{
+    public Guid InquiryId { get; init; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public Guid? ParticipantId { get; init; }
+    public bool? ParticipantIsDraft { get; init; }
+    public DateTime? ParticipantIntakeCompletedAt { get; init; }
+    public DateTime StartsAt { get; init; }
+    public int DurationMinutes { get; init; }
+    public string Location { get; init; } = string.Empty;
+    public Guid StaffUserId { get; init; }
+    public string StaffName { get; init; } = string.Empty;
+    public DateTime? ConfirmedAt { get; init; }
+    public string TimeZoneId { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// The onboarding checklist (owner decision 2026-10-13), read-only and derived from data: clients cannot tick an item. Exactly four items,

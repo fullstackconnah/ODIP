@@ -283,7 +283,7 @@ public class TripsController : ControllerBase
             var hasProviderSettings = await _db.ProviderSettings.AnyAsync(ct);
             var taskTitle = hasProviderSettings
                 ? $"Generate NDIS claims for {t.TripName}"
-                : $"Generate NDIS claims for {t.TripName} — configure Provider Settings first";
+                : $"Generate NDIS claims for {t.TripName} — fill in Settings › Organisation profile first";
 
             var alreadyExists = await _db.BookingTasks.AnyAsync(bt =>
                 bt.TripInstanceId == id && bt.TaskType == TaskType.GenerateNdisClaims, ct);

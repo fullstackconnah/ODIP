@@ -634,6 +634,10 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        // A started, finished or cancelled shift keeps its worker here too, as /assign and a drop do (decision 8; post-merge review S2): its completion and timesheet
+        // belong to that worker. Every other edit the rules below allow still saves.
+        if (dto.StaffId != shift.UserId && IsLockedForStaffChange(shift.Status) && !(shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled))
+            return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
 
         // A shift has to end after it starts. The rule is for times somebody is setting now: an edit that leaves the shift's times alone, or cancels it, never trips it, because rows saved before this rule
         // may already be wrong and the panel must still be able to annotate, assign and cancel them (a started shift's times are locked and could not be mended at all).
@@ -668,7 +672,7 @@ public class RosteringController : ControllerBase
         // ServiceDate/StartTime/EndTime/EndsNextDay are locked — the active ShiftCompletion's
         // variance is computed against those values, so editing them out from under an
         // in-flight or already-reviewed completion would silently invalidate it. Every other
-        // field (Notes, Ratio, NightType, StaffId, etc.) remains editable on these statuses.
+        // field (Notes, Ratio, NightType, etc.) remains editable on these statuses; the worker is refused above.
         if (shift.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed
             && (dto.ServiceDate != shift.ServiceDate || dto.StartTime != shift.StartTime
                 || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay))
@@ -820,7 +824,7 @@ public class RosteringController : ControllerBase
         try
         {
             await using var held = await RosterBoardLockAsync(ct);
-            // Lock order (shared with the agreement approval): the organisation's board lock, then the shift rows by Id. A PUT takes neither, so this holds both rows until the save.
+            // Lock order (shared with the agreement approval): the organisation's board lock, then the shift rows by Id, as /assign, the PUT and the moving create take them; both rows are held until the save.
             await LockShiftRowsAsync("\"Id\" IN ({0}, {1})", new object[] { dto.FromShiftId, dto.ToShiftId }, ct);
             var from = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.FromShiftId, ct);
             var to = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == dto.ToShiftId, ct);
@@ -883,8 +887,8 @@ public class RosteringController : ControllerBase
         try
         {
             await using var held = await RosterBoardLockAsync(ct);
-            // Hold the week's Draft rows until this commits, then read them. A PUT never takes the roster-board lock: one that cancels a draft now waits for the publish, and one that
-            // committed first is read below as it is, so a publish never writes Published over it.
+            // Hold the week's Draft rows until this commits, then read them. A PUT takes the board lock too, so it waits for the publish; any other writer of a draft row (a
+            // completion endpoint, the generator) either waits here or committed first and is read below as it is, so a publish never writes Published over it.
             await LockShiftRowsAsync("\"TenantId\" = {0} AND \"Status\" = {1} AND \"ServiceDate\" >= {2} AND \"ServiceDate\" <= {3}",
                 new object[] { tenantId, (int)ShiftStatus.Draft, start, end }, ct);
             var shown = _db.Participants.Where(Participant.CanReceiveServicesRule).Select(p => p.Id);
@@ -922,6 +926,7 @@ public class RosteringController : ControllerBase
                 var shifts = worker.OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ToList();
                 string NameOf(Shift s) => participantNames.GetValueOrDefault(s.ParticipantId) ?? "a participant";
                 var first = shifts[0];
+                // shortcut: the digest dedupes on its earliest shift, so a ShiftAssigned for that one shift in the last 5 minutes swallows it; give the digest an entity of its own if that bites.
                 await _notificationRaiser.RaiseAsync(
                     Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", first.Id, new[] { worker.Key },
                     new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(email, NameOf(first), first.ServiceDate, first.StartTime, first.EndTime,
@@ -1994,6 +1999,8 @@ public class RosteringController : ControllerBase
     /// even across participants (one person dropped onto two overlapping shifts at once). It is the generator's <see cref="RosterGenerationLock"/>, keyed on the tenant under a scope of its
     /// own: a move only changes who works a shift, so it has nothing to wait for in a generation. A no-op off PostgreSQL. Read what you change AFTER taking it.
     /// </summary>
+    // shortcut: an unscoped SuperAdmin holds their own home organisation's key (every token carries tenant_id), so their writes to another organisation's roster do not exclude its
+    // coordinators; key the lock on the shift's TenantId if SuperAdmins edit rosters unscoped.
     private Task<RosterGenerationLock> RosterBoardLockAsync(CancellationToken ct) =>
         RosterGenerationLock.AcquireAsync(_db, _tenant?.TenantId ?? Guid.Empty, ct, _generator.LockWait, scope: "roster-board");
 
@@ -2012,6 +2019,13 @@ public class RosteringController : ControllerBase
     private async Task LockShiftRowsAsync(string where, object[] parameters, CancellationToken ct)
     {
         if (!_db.Database.IsNpgsql()) return;
+        // Raw SQL skips the tenant query filter, so name the caller's organisation (post-merge review N5): another organisation's row is never locked, and a guessed id answers
+        // 404 at once from the filtered read rather than waiting on, and so revealing, a row someone else is writing.
+        if (_tenant is { IsSuperAdmin: false, TenantId: { } tenantId })
+        {
+            where = string.Create(CultureInfo.InvariantCulture, $"({where}) AND \"TenantId\" = {{{parameters.Length}}}");
+            parameters = [.. parameters, tenantId];
+        }
         var sql = string.Create(CultureInfo.InvariantCulture,
             $"SET LOCAL lock_timeout = {(int)_generator.LockWait.TotalMilliseconds}; SELECT 1 FROM \"Shifts\" WHERE {where} ORDER BY \"Id\" FOR UPDATE; SET LOCAL lock_timeout TO DEFAULT");
         try

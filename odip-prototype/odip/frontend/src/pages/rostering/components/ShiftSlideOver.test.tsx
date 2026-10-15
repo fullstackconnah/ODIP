@@ -1664,3 +1664,34 @@ describe('ShiftSlideOver — opened by a drop on an empty day (roster drag and d
     expect(onSaved.mock.invocationCallOrder[0]).toBeLessThan(onClose.mock.invocationCallOrder[0])
   })
 })
+
+describe('ShiftSlideOver — the worker of a started or finished shift (post-merge review S2)', () => {
+  const LOCKED = "This shift has started, finished or been cancelled, so its worker can't be changed here."
+  const twoStaff = [{ value: 'staff-1', label: 'Alex Rivera' }, { value: 'staff-2', label: 'Jordan Smith' }]
+
+  it('shows the server refusing a new worker in its error area, stays open, and keeps the choice', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, code: 'SHIFT_STATUS_LOCKED', errors: [LOCKED] } } })
+    const onClose = vi.fn()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Cancelled', findings: [] }) }} onClose={onClose} canWrite participantOptions={participantOptions} staffOptions={twoStaff} />)
+
+    // The Staff field stays a working control on a cancelled shift (a reopen may change the worker); the server judges a change that keeps it cancelled.
+    const field = screen.getByRole('combobox', { name: 'Staff' })
+    expect(field).toBeEnabled()
+    await user.click(field)
+    await user.click(screen.getByRole('option', { name: 'Jordan Smith' }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ id: 'shift-1', data: expect.objectContaining({ staffId: 'staff-2', status: 'Cancelled' }) }))
+    expect(await screen.findByText(LOCKED)).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('combobox', { name: 'Staff' })).toHaveValue('Jordan Smith')
+  })
+
+  it.each(['InProgress', 'PendingReview', 'Completed'] as const)('shows the Staff field read-only, with the reason, on a %s shift (deep review N3)', status => {
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status, findings: [] }) }} onClose={vi.fn()} canWrite participantOptions={participantOptions} staffOptions={twoStaff} />)
+
+    expect(screen.getByRole('combobox', { name: 'Staff' })).toBeDisabled()
+    expect(screen.getByText(/its worker can.t be changed here/i)).toBeInTheDocument()
+  })
+})

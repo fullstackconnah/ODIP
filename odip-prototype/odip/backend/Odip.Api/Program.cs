@@ -235,6 +235,7 @@ builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.Holiday
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationRaiser, Odip.Infrastructure.Notifications.NotificationRaiser>();
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmtpEmailChannel>();
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmsChannel>();
+builder.Services.AddScoped<Odip.Infrastructure.Notifications.IntakeInviteSender>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
 // ── Roster top-up (plan builder phase D) ──────────────────────────

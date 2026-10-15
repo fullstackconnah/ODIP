@@ -299,3 +299,7 @@ export function toBarItem(entry: ResolvedEntry, pathname: string, counts: NavCou
     noun: entry.leaf.badge?.noun ?? '',
   }
 }
+
+/** The nav item looks, shared by the sidebar and the Settings rail: the lit "you are here" item, and every other item. */
+export const NAV_ACTIVE = 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
+export const NAV_IDLE = 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'

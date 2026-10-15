@@ -22,11 +22,11 @@ public sealed record RosterTopUpRun(int Tenants, int Participants, int Patterns,
 /// <para>
 /// It ticks hourly and does an organisation's work once for each of that organisation's provider days (the provider's calendar date, not the UTC date): the day it has done is remembered in memory,
 /// so a restart does it again, which is harmless because <see cref="RosterShiftGenerator"/> makes a shift only where there is none. For every organisation it finds the active agreement-made patterns
-/// (<c>SourceDraftId</c> set, active, not ended), asks <see cref="IRosterPlacementGate"/> whether each participant may be rostered (a participant who is not is skipped and counted: the next day brings
+/// (<c>SourceDraftId</c> set, active, not ended), asks <see cref="IRosterPlacementGate"/> whether each participant may be rostered (a participant who is not is skipped and counted: the next hourly tick brings
 /// them in once they are), and EXTENDS each pattern to the provider's today plus <c>RosterTopUp:HorizonDays</c> (56), held to its end: from the day after the last day a generation reached for it
 /// (<see cref="ShiftPattern.GeneratedThrough"/>, and today at the earliest). It never fills a hole behind that day, so a shift a coordinator deleted stays deleted (a Generate over its day makes it
 /// again). A hand-made or demo pattern (no source), an ended pattern and a switched-off pattern are never read. One participant's failure is logged and counted and does not stop the rest, and the
-/// organisation's day is only marked done when nobody failed (a failure is tried again at the next tick, which is cheap: what is generated is not asked for again). <c>RosterTopUp:Enabled</c> (default
+/// organisation's day is only marked done when nobody failed or was refused (a failure or a refusal is tried again at the next tick, which is cheap: what is generated is not asked for again). <c>RosterTopUp:Enabled</c> (default
 /// true) switches it off.
 /// </para>
 /// </summary>
@@ -114,7 +114,7 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
 
                 var patterns = await db.ShiftPatterns.AsNoTracking()
                     .Where(p => p.SourceDraftId != null && p.IsActive && (p.EffectiveTo == null || p.EffectiveTo >= today)).ToListAsync(ct);
-                var tenantFailures = 0;
+                int tenantFailures = 0, tenantNotReady = 0;
                 if (patterns.Count > 0)
                 {
                     tenants++;
@@ -131,7 +131,7 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
                             // every run used to take the lock, open a transaction and save nothing, and could meet a busy lock for no work).
                             var due = forParticipant.Select(p => (Pattern: p, From: ExtendFrom(p, today))).Where(x => x.From <= horizon && x.From <= (x.Pattern.EffectiveTo ?? DateOnly.MaxValue) && x.Pattern.EffectiveFrom <= horizon).ToList();
                             if (due.Count == 0) continue;
-                            if (!await gate.MayPlaceAsync(db, forParticipant.Key, ct)) { notReady++; continue; }
+                            if (!await gate.MayPlaceAsync(db, forParticipant.Key, ct)) { notReady++; tenantNotReady++; continue; }
                             // Patterns that share a starting day are generated together.
                             foreach (var window in due.GroupBy(x => x.From))
                             {
@@ -162,8 +162,8 @@ public sealed class RosterTopUpBackgroundService : BackgroundService
                     await LogBudgetSummaryAsync(db, tenantId, madeToday, ct);
                 }
 
-                // Done for the provider's day only when nobody failed: a failed participant is tried again at the next tick (the others have nothing due, so that costs little).
-                if (tenantFailures == 0) { lock (_gate) { _doneOn[tenantId] = today; } }
+                // Done for the provider's day only when nobody failed or was refused: the next hourly tick retries them, so one who becomes rosterable the same day gets their shifts then (the others have nothing due, so that costs little).
+                if (tenantFailures == 0 && tenantNotReady == 0) { lock (_gate) { _doneOn[tenantId] = today; } }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

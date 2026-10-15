@@ -90,6 +90,35 @@ public static class ImportUntouched
         await Add(db.IncidentWitnesses.Where(w => w.WitnessUserId != null && list.Contains(w.WitnessUserId.Value)).Select(w => w.WitnessUserId!.Value), "is a witness to an incident");
         await Add(db.TripInstances.Where(t => t.LeadCoordinatorId != null && list.Contains(t.LeadCoordinatorId.Value)).Select(t => t.LeadCoordinatorId!.Value), "leads a trip");
         await Add(db.BookingTasks.Where(t => t.OwnerId != null && list.Contains(t.OwnerId.Value)).Select(t => t.OwnerId!.Value), "owns tasks");
+        await Add(db.ParticipantInquiries.Where(q => q.IntakeStaffUserId != null && list.Contains(q.IntakeStaffUserId.Value)).Select(q => q.IntakeStaffUserId!.Value), "is booked for an intake visit");
+        await Add(db.ParticipantInquiries.Where(q => q.IntakeBookedByUserId != null && list.Contains(q.IntakeBookedByUserId.Value)).Select(q => q.IntakeBookedByUserId!.Value), "booked an intake visit");
+        return reasons;
+    }
+
+    /// <summary>
+    /// An imported funding plan changed or used since the import. Changed: every change to a plan, its pools or its periods is a replace, which raises its
+    /// revision. Used: nothing stores a reference to a plan (the ledger and the alerts compute from it on every read), so use is work recorded against its
+    /// participant in its dates since <paramref name="importedAt"/>: a shift booked or a service agreement made. Deleting the plan would leave that work
+    /// with no budget behind it.
+    /// </summary>
+    public static async Task<Dictionary<Guid, string>> FundingPlanBlockersAsync(OdipDbContext db, IReadOnlyCollection<Guid> ids, DateTime importedAt, CancellationToken ct)
+    {
+        var list = ids.ToList();
+        var plans = await db.FundingPlans.Where(f => list.Contains(f.Id)).Select(f => new { f.Id, f.ParticipantId, f.PlanStart, f.PlanEnd, f.Revision }).ToListAsync(ct);
+        var people = plans.Select(p => p.ParticipantId).Distinct().ToList();
+        var reasons = plans.Where(p => p.Revision > 1).ToDictionary(p => p.Id, _ => "was changed after the import");
+        void Used(IEnumerable<(Guid ParticipantId, DateOnly From, DateOnly To)> uses, string reason)
+        {
+            foreach (var use in uses)
+                foreach (var plan in plans.Where(p => p.ParticipantId == use.ParticipantId && p.PlanStart <= use.To && use.From <= p.PlanEnd))
+                    reasons.TryAdd(plan.Id, reason);
+        }
+
+        Used((await db.Shifts.Where(s => people.Contains(s.ParticipantId) && s.CreatedAt > importedAt).Select(s => new { s.ParticipantId, s.ServiceDate }).ToListAsync(ct))
+            .Select(s => (s.ParticipantId, s.ServiceDate, s.ServiceDate)), "has shifts booked in its dates since the import");
+        Used((await db.ServiceAgreementDrafts.Where(a => people.Contains(a.ParticipantId) && a.CreatedAt > importedAt)
+                .Select(a => new { a.ParticipantId, a.AgreementStartDate, a.AgreementEndDate }).ToListAsync(ct))
+            .Select(a => (a.ParticipantId, a.AgreementStartDate, a.AgreementEndDate)), "has a service agreement made since the import");
         return reasons;
     }
 }

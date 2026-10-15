@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff } from 'lucide-react'
-import { useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
+import { useIntakeVisits, useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { PageHeader } from '@/components/PageHeader'
@@ -12,7 +12,10 @@ import { addDays, format, subDays } from 'date-fns'
 import { RATIO_LABELS, hasEnded, pickCurrentShift, portalStatusLabel } from './lib/portal'
 import { useNow } from './shift/useNow'
 import { CurrentShiftCard } from './components/CurrentShiftCard'
-import type { PortalShiftSummaryDto } from '@/api/types'
+import type { IntakeVisitDto, PortalShiftSummaryDto } from '@/api/types'
+import { usePermissions } from '@/lib/permissions'
+import { isPastVisit, visitsByDay, withVisits } from '@/lib/intakeBooking'
+import { IntakeVisitCard } from './IntakeVisitCard'
 
 /** Groups a flat, already-date-ordered shift list into per-day buckets, preserving day order. */
 function groupByDay(shifts: PortalShiftSummaryDto[]): Map<string, PortalShiftSummaryDto[]> {
@@ -89,19 +92,27 @@ function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
   )
 }
 
-/** A titled run of day groups (Coming up, Earlier); not drawn when empty. The day headings sit under it as h3. */
-function ShiftSection({ id, title, shifts }: { id: string; title: string; shifts: PortalShiftSummaryDto[] }) {
-  if (shifts.length === 0) return null
+/** A titled run of day groups (Coming up, Earlier) holding shifts and intake visits; not drawn when empty. The day headings sit under it as h3. */
+function ShiftSection({ id, title, shifts, visits, newestFirst }: { id: string; title: string; shifts: PortalShiftSummaryDto[]; visits: IntakeVisitDto[]; newestFirst?: boolean }) {
+  if (shifts.length === 0 && visits.length === 0) return null
+  const byDay = groupByDay(shifts)
+  const visitDays = visitsByDay(visits)
+  const days = [...new Set([...byDay.keys(), ...visitDays.keys()])].sort()
+  if (newestFirst) days.reverse()
   return (
     <section aria-labelledby={id} className="space-y-3">
       <h2 id={id} className="text-base font-semibold">{title}</h2>
-      {Array.from(groupByDay(shifts).entries()).map(([day, dayShifts]) => (
+      {days.map(day => (
         <div key={day}>
           <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">
             {formatDayAccessibleName(day)}
             {isToday(day) && <span className="ml-2 text-xs font-medium text-[var(--color-primary)]">Today</span>}
           </h3>
-          <div className="space-y-2">{dayShifts.map(s => <ShiftLink key={s.id} shift={s} />)}</div>
+          <div className="space-y-2">
+            {withVisits(byDay.get(day) ?? [], visitDays.get(day) ?? []).map(entry => entry.kind === 'visit'
+              ? <IntakeVisitCard key={`visit-${entry.visit.inquiryId}`} visit={entry.visit} />
+              : <ShiftLink key={entry.shift.id} shift={entry.shift} />)}
+          </div>
         </div>
       ))}
     </section>
@@ -115,6 +126,10 @@ export default function PortalShiftsPage() {
   const { data, isLoading, isError, refetch } = useMyShifts(weekStart, weekEnd)
   const shifts = useMemo(() => data?.shifts ?? [], [data])
   const tripAssignments = data?.tripAssignments ?? []
+  // Intake visits you are going to, in the browsed week: their own query beside the shifts (a non-shift entry, not billable work).
+  const { id: myId } = usePermissions()
+  const visitsQuery = useIntakeVisits({ from: weekStart, to: weekEnd, staffUserId: myId ?? undefined }, !!myId)
+  const visits = useMemo(() => visitsQuery.data ?? [], [visitsQuery.data])
   const { data: witnessRequests } = usePendingWitnessRequests()
   const pendingWitnessCount = witnessRequests?.length ?? 0
   const [now] = useNow(60_000)
@@ -128,6 +143,8 @@ export default function PortalShiftsPage() {
   const comingUp = rest.filter(s => !hasEnded(s, now, tz))
   const earlier = rest.filter(s => hasEnded(s, now, tz))
     .sort((a, b) => b.serviceDate.localeCompare(a.serviceDate) || a.startTime.localeCompare(b.startTime))   // newest day first, each day in time order
+  const visitsEarlier = visits.filter(v => isPastVisit(v.startsAt, v.durationMinutes, now))
+  const visitsComingUp = visits.filter(v => !isPastVisit(v.startsAt, v.durationMinutes, now))
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -169,13 +186,13 @@ export default function PortalShiftsPage() {
 
       {current && <CurrentShiftCard shift={current} />}
 
-      {isLoading ? (
+      {isLoading || visitsQuery.isLoading ? (
         <ShiftsSkeleton withCurrent={isThisWeek && !current} />
       ) : isError ? (
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
           Couldn't load your shifts. Check your connection and try again.
         </Callout>
-      ) : shifts.length === 0 && tripAssignments.length === 0 && !current ? (
+      ) : shifts.length === 0 && tripAssignments.length === 0 && visits.length === 0 && !current && !visitsQuery.isError ? (
         <EmptyState
           icon={CalendarCheck2}
           title="Nothing rostered this week"
@@ -183,8 +200,13 @@ export default function PortalShiftsPage() {
         />
       ) : (
         <div className="space-y-6">
-          <ShiftSection id="coming-up" title="Coming up" shifts={comingUp} />
-          <ShiftSection id="earlier" title="Earlier" shifts={earlier} />
+          {visitsQuery.isError && (
+            <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => visitsQuery.refetch()}>Try again</Button>}>
+              Couldn't load your intake visits.
+            </Callout>
+          )}
+          <ShiftSection id="coming-up" title="Coming up" shifts={comingUp} visits={visitsComingUp} />
+          <ShiftSection id="earlier" title="Earlier" shifts={earlier} visits={visitsEarlier} newestFirst />
 
           {tripAssignments.length > 0 && (
             <section>

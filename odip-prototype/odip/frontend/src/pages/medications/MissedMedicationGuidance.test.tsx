@@ -60,7 +60,7 @@ describe('MissedMedicationGuidance manager contact', () => {
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.getByText(/no manager contact is configured for this organisation — see your team leader/i)).toBeInTheDocument()
-    expect(screen.getByText(/settings.*provider settings.*manager contact/i)).toBeInTheDocument()
+    expect(screen.getByText(/Admins: add it in Settings › Safety checks\./)).toBeInTheDocument()
   })
 
   it('falls back when only one of name/phone is configured', () => {

@@ -335,7 +335,8 @@ export function Dropdown({
               onMouseDown={e => e.preventDefault()}
               onClick={() => handleSelect(item)}
               onMouseEnter={() => !item.disabled && setFocusedIndex(idx)}
-              className={`w-full flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors ${
+              // min-h --tap-min: 44px rows under a coarse pointer (a phone's row actions live here), 0px and so unchanged on a mouse.
+              className={`w-full min-h-[var(--tap-min)] flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors ${
                 item.disabled
                   ? 'opacity-40 cursor-not-allowed'
                   : focusedIndex === idx

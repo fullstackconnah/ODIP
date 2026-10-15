@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
@@ -35,16 +37,18 @@ public sealed class OnboardingImportService
     private readonly ICurrentTenant _tenant;
     private readonly ParticipantCreateService _participants;
     private readonly StaffCreateService _staff;
+    private readonly FundingPlanService _funding;
     private readonly TimeProvider _clock;
     private readonly ILogger<OnboardingImportService>? _logger;
 
-    public OnboardingImportService(OdipDbContext db, ICurrentTenant tenant, ParticipantCreateService participants, StaffCreateService staff, TimeProvider clock,
+    public OnboardingImportService(OdipDbContext db, ICurrentTenant tenant, ParticipantCreateService participants, StaffCreateService staff, FundingPlanService funding, TimeProvider clock,
         ILogger<OnboardingImportService>? logger = null)
     {
         _db = db;
         _tenant = tenant;
         _participants = participants;
         _staff = staff;
+        _funding = funding;
         _clock = clock;
         _logger = logger;
     }
@@ -85,13 +89,15 @@ public sealed class OnboardingImportService
             plans.Count(p => p.Status == ImportRowStatus.Ready),
             plans.Count(p => p.Status == ImportRowStatus.Skipped),
             plans.Count(p => p.Status == ImportRowStatus.Invalid),
-            previouslyImportedAt);
+            previouslyImportedAt,
+            kind == ImportKind.FundingPlans ? ImportFundingRows.Plans(plans).Count : plans.Count(p => p.Status == ImportRowStatus.Ready));
     }
 
     /// <summary>Every row's status: the file's own rules, then people already in this organisation, then repeats within the file.</summary>
     private async Task<List<ImportRowPlan>> PlanAsync(ImportKind kind, ImportTable table, IReadOnlyList<string?> mapping, ClaimsPrincipal? caller, CancellationToken ct)
     {
         if (kind == ImportKind.Staff) return await PlanStaffAsync(table, mapping, caller, ct);
+        if (kind == ImportKind.FundingPlans) return await PlanFundingAsync(table, mapping, ct);
         var asOf = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var plans = ImportParticipantRows.Build(table, mapping, asOf);
 
@@ -150,6 +156,29 @@ public sealed class OnboardingImportService
     }
 
     /// <summary>
+    /// Funding rows: each is matched to a participant already here (one an undone import archived does not count, so a corrected re-import is not
+    /// ambiguous), grouped into one plan per participant and plan dates, and checked against the plans those participants already have. One query each.
+    /// </summary>
+    private async Task<List<ImportRowPlan>> PlanFundingAsync(ImportTable table, IReadOnlyList<string?> mapping, CancellationToken ct)
+    {
+        var plans = ImportFundingRows.Build(table, mapping);
+        var undone = _db.ImportBatchItems.Where(i => i.Batch!.UndoneAt != null).Select(i => i.EntityId);
+        var participants = await _db.Participants.Where(p => !undone.Contains(p.Id))
+            .Select(p => new ImportParticipantMatch(p.Id, p.NdisNumber, p.FirstName, p.LastName, p.DateOfBirth))
+            .ToListAsync(ct);
+        ImportFundingRows.Match(plans, participants);
+
+        var ids = plans.Where(p => p.Status == ImportRowStatus.Ready).Select(p => p.Funding!.ParticipantId).Distinct().ToList();
+        var existing = (await _db.FundingPlans.Where(f => ids.Contains(f.ParticipantId))
+                .Select(f => new { f.ParticipantId, f.PlanStart, f.PlanEnd })
+                .ToListAsync(ct))
+            .Select(f => (f.ParticipantId, f.PlanStart, f.PlanEnd))
+            .ToList();
+        ImportFundingRows.Check(plans, existing);
+        return plans;
+    }
+
+    /// <summary>
     /// Creates one ready staff row through the staff form's service and saves it inside the import's transaction. The Import click is the
     /// confirmation the form asks for an unusual address (the preview warned on those rows); every other rule is checked again here.
     /// </summary>
@@ -202,14 +231,27 @@ public sealed class OnboardingImportService
         var rowNumber = 0;
         try
         {
-            foreach (var plan in plans.Where(p => p.Status == ImportRowStatus.Ready))
+            if (kind == ImportKind.FundingPlans)
             {
-                rowNumber = plan.RowNumber;
-                var entityId = kind == ImportKind.Staff
-                    ? await CreateStaffAsync(plan, caller, tenantId, ct)
-                    : await CreateAsync(plan, landing, caller, ct);
-                if (entityId is { } id)
-                    items.Add(new ImportBatchItem { Id = Guid.NewGuid(), BatchId = batch.Id, EntityType = kind == ImportKind.Staff ? nameof(User) : nameof(Participant), EntityId = id });
+                var note = $"Imported from {batch.FileName} on {Say(await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct))}.";
+                foreach (var group in ImportFundingRows.Plans(plans))
+                {
+                    rowNumber = group.Rows[0].RowNumber;
+                    if (await CreateFundingPlanAsync(group, tenantId, note, caller, ct) is { } planId)
+                        items.Add(new ImportBatchItem { Id = Guid.NewGuid(), BatchId = batch.Id, EntityType = nameof(FundingPlan), EntityId = planId });
+                }
+            }
+            else
+            {
+                foreach (var plan in plans.Where(p => p.Status == ImportRowStatus.Ready))
+                {
+                    rowNumber = plan.RowNumber;
+                    var entityId = kind == ImportKind.Staff
+                        ? await CreateStaffAsync(plan, caller, tenantId, ct)
+                        : await CreateAsync(plan, landing, caller, ct);
+                    if (entityId is { } id)
+                        items.Add(new ImportBatchItem { Id = Guid.NewGuid(), BatchId = batch.Id, EntityType = kind == ImportKind.Staff ? nameof(User) : nameof(Participant), EntityId = id });
+                }
             }
             batch.CreatedCount = items.Count;
             batch.SkippedCount = plans.Count(p => p.Status == ImportRowStatus.Skipped);
@@ -275,6 +317,21 @@ public sealed class OnboardingImportService
         return participant.Id;
     }
 
+    /// <summary>
+    /// Creates one plan through the Funding tab's own service, inside the import's transaction. FundingPlanLock takes the participant's row, finds the
+    /// transaction open and leaves the commit to the import, so the overlap check runs under the lock as a manual save's does. A plan the service refuses
+    /// now (one saved meanwhile overlaps it) leaves all its rows out.
+    /// </summary>
+    private async Task<Guid?> CreateFundingPlanAsync(ImportFundingPlan group, Guid tenantId, string note, ClaimsPrincipal? caller, CancellationToken ct)
+    {
+        var saved = await _funding.CreateAsync(tenantId, group.ParticipantId, group.Plan with { Notes = note }, CompletionActor(caller), ct);
+        _db.ChangeTracker.Clear();
+        if (saved.Plan is { } plan) return plan.Id;
+        foreach (var row in group.Rows)
+            foreach (var error in saved.Errors) row.Refuse(error);
+        return null;
+    }
+
     private static Guid? ActorId(ClaimsPrincipal? caller) =>
         Guid.TryParse(caller?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
 
@@ -300,30 +357,50 @@ public sealed class OnboardingImportService
         // still lands, on the now archived participant (archiving is an update, not a delete). SupportProfiles and ElectronicSigningSnapshots have
         // no foreign key to Participants, so their writes neither wait nor are guaranteed to be seen.
         // Staff the same way: a shift, leave or pairing row's foreign key to Users conflicts with this lock too.
-        var staff = batch.Kind == ImportKind.Staff;
+        // Funding plans: every writer of a plan takes its participant's row (FundingPlanLock), so holding those rows waits out a save in flight and the
+        // revision read below is the one it left.
         if (_db.Database.IsNpgsql())
-            await _db.Database.ExecuteSqlRawAsync(staff
-                ? "SELECT 1 FROM \"Users\" WHERE \"Id\" = ANY({0}) FOR UPDATE"
-                : "SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE", new object[] { ids.ToArray() }, ct);
-        var blockers = staff
-            ? await ImportUntouched.StaffBlockersAsync(_db, ids, ct)
-            : await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct);
+            await _db.Database.ExecuteSqlRawAsync(batch.Kind switch
+            {
+                ImportKind.Staff => "SELECT 1 FROM \"Users\" WHERE \"Id\" = ANY({0}) FOR UPDATE",
+                ImportKind.FundingPlans => "SELECT 1 FROM \"Participants\" WHERE \"Id\" IN (SELECT \"ParticipantId\" FROM \"FundingPlans\" WHERE \"Id\" = ANY({0})) FOR NO KEY UPDATE",
+                _ => "SELECT 1 FROM \"Participants\" WHERE \"Id\" = ANY({0}) FOR UPDATE",
+            }, new object[] { ids.ToArray() }, ct);
+        var blockers = batch.Kind switch
+        {
+            ImportKind.Staff => await ImportUntouched.StaffBlockersAsync(_db, ids, ct),
+            ImportKind.FundingPlans => await ImportUntouched.FundingPlanBlockersAsync(_db, ids, batch.CreatedAt, ct),
+            _ => await ImportUntouched.ParticipantBlockersAsync(_db, ids, batch.CreatedAt, ct),
+        };
         if (blockers.Count > 0)
         {
             var blockedIds = blockers.Keys.ToList();
-            var names = staff
-                ? await _db.Users.Where(u => blockedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct)
-                : await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+            var names = batch.Kind switch
+            {
+                ImportKind.Staff => await _db.Users.Where(u => blockedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct),
+                ImportKind.FundingPlans => (await _db.FundingPlans.Where(f => blockedIds.Contains(f.Id))
+                        .Select(f => new { f.Id, f.PlanStart, f.PlanEnd, f.Participant!.FirstName, f.Participant.LastName })
+                        .ToListAsync(ct))
+                    .ToDictionary(f => f.Id, f => $"The plan for {f.FirstName} {f.LastName} ({Say(f.PlanStart)} to {Say(f.PlanEnd)})"),
+                _ => await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct),
+            };
             return new ImportUndoOutcome(false, blockers
                 .Select(b => new ImportUndoBlockerDto(b.Key, names.GetValueOrDefault(b.Key, ""), b.Value))
                 .OrderBy(b => b.Name).ToList(), null);
         }
 
         var now = DateTime.UtcNow;
-        if (staff)
+        if (batch.Kind == ImportKind.Staff)
         {
             // Deleted, not archived: the address must be free for a corrected re-import. The audit log keeps a Created and a Deleted row for each.
             _db.Users.RemoveRange(await _db.Users.Where(u => ids.Contains(u.Id)).ToListAsync(ct));
+        }
+        else if (batch.Kind == ImportKind.FundingPlans)
+        {
+            // Deleted, as the Funding tab's Delete does: the pools and periods are loaded so the cascade is tracked and audited. A plan deleted by hand
+            // since the import is simply not found.
+            _db.FundingPlans.RemoveRange(await _db.FundingPlans.Include(f => f.Pools).ThenInclude(p => p.Periods).AsSplitQuery()
+                .Where(f => ids.Contains(f.Id)).ToListAsync(ct));
         }
         else
         {
@@ -392,6 +469,8 @@ public sealed class OnboardingImportService
 
     private static ImportBatchDto ToDto(ImportBatch b) =>
         new(b.Id, b.Kind, b.FileName, b.CreatedByName, b.CreatedAt, b.RowCount, b.CreatedCount, b.SkippedCount, b.FailedCount, b.UndoneAt, b.UndoneByName);
+
+    private static string Say(DateOnly day) => day.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
 
     private static string Sha256(byte[] content) => Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 }

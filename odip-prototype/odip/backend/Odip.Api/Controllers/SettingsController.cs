@@ -30,7 +30,7 @@ public class SettingsController : ControllerBase
     }
 
     [HttpPut]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Update(
         [FromBody] UpdateAppSettingsDto dto, CancellationToken ct)
     {

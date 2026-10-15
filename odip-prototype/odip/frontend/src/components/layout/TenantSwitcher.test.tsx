@@ -91,3 +91,21 @@ describe('TenantSwitcher — touch target and small-screen trigger', () => {
     for (const row of rows) expect(row).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center', 'py-2')
   })
 })
+
+describe('TenantSwitcher — a switch whose reload was cancelled', () => {
+  it('puts the old tenant back on the first press after staying, so the next request still goes to it', async () => {
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, reload: vi.fn() } })
+    const user = userEvent.setup()
+    render(<TenantSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: /^SA /i }))
+    await user.click(screen.getByRole('button', { name: /Acme/ }))
+    await user.click(screen.getByRole('button', { name: 'Switch tenant' }))
+    expect(window.location.reload).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-2')   // what the reloaded page reads
+
+    window.dispatchEvent(new Event('pointerdown'))   // "Stay" on a dirty form's prompt, then a press on this page
+
+    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
+  })
+})

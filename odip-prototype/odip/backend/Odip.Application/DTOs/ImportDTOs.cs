@@ -13,10 +13,12 @@ public record ImportFieldDto(string Key, string Label, bool Required);
 /// <summary>A column of the uploaded file, the field it is matched to (null: Don't import), and a note when ODIP won't import it.</summary>
 public record ImportColumnDto(int Index, string Header, string? Field, string? Note);
 
-public record ImportRowDto(int RowNumber, string Name, ImportRowStatus Status, List<string> Reasons, List<string> Warnings, string? SkipReason);
+/// <summary>One row's outcome. <see cref="Warnings"/> want a look before importing; <see cref="Notes"/> only say what the row does; <see cref="Detail"/> is what it will create.</summary>
+public record ImportRowDto(int RowNumber, string Name, ImportRowStatus Status, List<string> Reasons, List<string> Warnings, string? SkipReason, List<string> Notes, string? Detail);
 
+/// <summary>What a preview found. <see cref="CreateCount"/> is what Import would create: the ready rows or, for funding plans, the plans they make.</summary>
 public record ImportPreviewDto(List<ImportFieldDto> Fields, List<ImportColumnDto> Columns, List<ImportRowDto> Rows,
-    int ReadyCount, int SkippedCount, int InvalidCount, DateTime? PreviouslyImportedAt);
+    int ReadyCount, int SkippedCount, int InvalidCount, DateTime? PreviouslyImportedAt, int CreateCount);
 
 /// <summary>What a commit did. <see cref="Replayed"/>: the idempotency key matched an earlier batch, which is answered instead (with no rows).</summary>
 public record ImportResultDto(Guid BatchId, int CreatedCount, int SkippedCount, int FailedCount, List<ImportRowDto> Rows, bool Replayed);

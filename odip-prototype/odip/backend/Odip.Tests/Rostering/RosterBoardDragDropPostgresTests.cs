@@ -30,11 +30,11 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
 
     private void RequirePostgres() => Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
 
-    private static ICurrentTenant TenantOf(Guid tenantId)
+    private static ICurrentTenant TenantOf(Guid tenantId, bool superAdmin = false)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(superAdmin);
         return tenant.Object;
     }
 
@@ -244,6 +244,100 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task TwoEmptyDayMovesOffOneShiftAtOnce_OneWinsTheOtherIs409_AndOnlyOneShiftIsMade()   // post-merge review N3: the moving create under contention
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid samId, sourceId, miaId;
+        await using (var db = Open(tenantId))
+        {
+            var sam = Worker(db, "Sam");
+            var mia = Person(db, "Mia");
+            (samId, miaId) = (sam.Id, mia.Id);
+            sourceId = ShiftOf(db, mia.Id, sam.Id, ShiftStatus.Draft, Monday).Id;
+            await db.SaveChangesAsync();
+        }
+
+        // Two boards carried Sam off Monday onto two different empty days, and both saved the panel at once.
+        CreateShiftDto MoveTo(DateOnly day) => new()
+        {
+            ParticipantId = miaId, StaffId = samId, ServiceDate = day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(15, 0),
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, MoveFromShiftId = sourceId,
+        };
+        await using var one = Open(tenantId);
+        await using var two = Open(tenantId);
+        var results = await Task.WhenAll(
+            Controller(one, tenantId).CreateShift(MoveTo(Monday.AddDays(2)), default),
+            Controller(two, tenantId).CreateShift(MoveTo(Monday.AddDays(3)), default));
+
+        Assert.Single(results, r => r.Result is OkObjectResult);
+        Assert.Single(results, r => r.Result is ConflictObjectResult);
+        Assert.Null(await WorkerOn(tenantId, sourceId));
+        await using var check = Open(tenantId);
+        Assert.Equal(1, await check.Shifts.CountAsync(s => s.UserId == samId));   // Sam is on exactly one new shift, never two
+        Assert.Equal(2, await check.Shifts.CountAsync());
+    }
+
+    [SkippableFact]
+    public async Task AssignShift_OnAnotherOrganisationsHeldRow_Is404_NotBusy()   // post-merge review N5: the row lock never reaches another organisation's rows
+    {
+        RequirePostgres();
+        var ours = await NewOrganisationAsync();
+        var theirsTenant = await NewOrganisationAsync();
+        Guid samId, theirShift;
+        await using (var db = Open(ours)) { samId = Worker(db, "Sam").Id; await db.SaveChangesAsync(); }
+        await using (var db = Open(theirsTenant)) { theirShift = ShiftOf(db, Person(db, "Ivy").Id, null, ShiftStatus.Draft, Monday).Id; await db.SaveChangesAsync(); }
+
+        // Their own coordinator is mid-save on that row.
+        await using var other = new NpgsqlConnection(_pg.ConnectionString);
+        await other.OpenAsync();
+        await using var editing = await other.BeginTransactionAsync();
+        await using (var touch = new NpgsqlCommand("UPDATE \"Shifts\" SET \"Notes\" = 'theirs' WHERE \"Id\" = @id", other, editing))
+        {
+            touch.Parameters.AddWithValue("id", theirShift);
+            await touch.ExecuteNonQueryAsync();
+        }
+
+        await using (var db = Open(ours))
+        {
+            // A guessed id from another organisation: 404 at once, not a lock wait that answers busy and so says the row exists and is being written.
+            var result = await Controller(db, ours, TimeSpan.FromMilliseconds(400)).AssignShift(theirShift, new AssignShiftDto { StaffId = samId }, default);
+            Assert.IsType<NotFoundObjectResult>(result.Result);
+        }
+        await editing.RollbackAsync();
+    }
+
+    [SkippableFact]
+    public async Task AssignShift_AsUnscopedSuperAdmin_OnAnotherOrganisationsHeldRow_Is409Busy()   // deep review M1: an unscoped SuperAdmin reads every organisation, so the row lock must reach it
+    {
+        RequirePostgres();
+        var home = await NewOrganisationAsync();
+        var theirsTenant = await NewOrganisationAsync();
+        Guid samId, theirShift;
+        await using (var db = Open(theirsTenant)) { samId = Worker(db, "Sam").Id; theirShift = ShiftOf(db, Person(db, "Ivy").Id, null, ShiftStatus.Draft, Monday).Id; await db.SaveChangesAsync(); }
+
+        // Their coordinator is mid-save on that row.
+        await using var other = new NpgsqlConnection(_pg.ConnectionString);
+        await other.OpenAsync();
+        await using var editing = await other.BeginTransactionAsync();
+        await using (var touch = new NpgsqlCommand("UPDATE \"Shifts\" SET \"Notes\" = 'theirs' WHERE \"Id\" = @id", other, editing))
+        {
+            touch.Parameters.AddWithValue("id", theirShift);
+            await touch.ExecuteNonQueryAsync();
+        }
+
+        // The token carries the SuperAdmin's HOME organisation; with no X-View-As-Tenant the query filter lets every organisation through.
+        var superAdmin = TenantOf(home, superAdmin: true);
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString, superAdmin);
+        var controller = new RosteringController(db2, new StaffCompatibilityLinkService(db2), new StaffUnavailabilityQuery(db2), clock: BeforeTheWeek, tenant: superAdmin, generator: new RosterShiftGenerator(TimeSpan.FromMilliseconds(400)));
+        var call = controller.AssignShift(theirShift, new AssignShiftDto { StaffId = samId }, default);
+        // Without the row lock the save itself waits on their row; release it after a while so a failure is an assertion, not a hang.
+        if (await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(5))) != call) await editing.RollbackAsync();
+        Assert.IsType<ConflictObjectResult>((await call).Result);
+        await editing.RollbackAsync();
+    }
+
+    [SkippableFact]
     public async Task TwoMovesOntoOneNeedsStaffShiftAtOnce_OneWinsTheOtherIs409()   // Review Focus 1
     {
         RequirePostgres();
@@ -312,7 +406,7 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
 
 
     [SkippableFact]
-    public async Task PublishWeek_NeverWritesPublishedOverAConcurrentCancel()   // N8: a PUT does not take the roster-board lock
+    public async Task PublishWeek_NeverWritesPublishedOverAConcurrentCancel()   // N8: a writer holding the row (here raw SQL, standing in for any write that skips the board lock) makes the publish wait
     {
         RequirePostgres();
         var tenantId = await NewOrganisationAsync();

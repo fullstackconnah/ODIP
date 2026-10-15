@@ -30,7 +30,7 @@ function parseCsv(text: string): string[][] {
 test('a full export downloads as a ZIP whose manifest counts every file, and the tab then names who exported @export', async ({ page, browser, session }, testInfo) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/settings?tab=export');
-  await expect(page.getByRole('heading', { level: 2, name: 'Export all your data' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 3, name: 'Export all your data' })).toBeVisible();
 
   const downloading = page.waitForEvent('download', { timeout: 30_000 }); // fires only once the whole export is in, past the 10 s action timeout
   await page.getByRole('button', { name: 'Download all data' }).click();

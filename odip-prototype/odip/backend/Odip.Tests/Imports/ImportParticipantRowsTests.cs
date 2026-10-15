@@ -65,7 +65,7 @@ public class ImportParticipantRowsTests
 
         Assert.Equal(ImportRowStatus.Ready, plan.Status);
         Assert.Empty(plan.Participant!.ContactRoles);
-        Assert.Equal("Contact 1 won't be imported: a plan manager needs a plan-managed participant, and the plan type isn't imported.", plan.Warnings.Single());
+        Assert.Equal("Contact 1 won't be imported: a plan manager needs Plan type to be Plan managed.", plan.Warnings.Single());
     }
 
     [Fact]
@@ -107,5 +107,47 @@ public class ImportParticipantRowsTests
 
         Assert.Equal(ImportRowStatus.Ready, plans[0].Status);
         Assert.Equal((ImportRowStatus.Invalid, "The same NDIS number is on row 2."), (plans[1].Status, plans[1].Reasons.Single()));
+    }
+
+    private static readonly string[] PlanHeaders = ["First name", "Last name", "Plan type", "Plan start", "Plan end", "Contact 1 name", "Contact 1 relationship"];
+
+    private static ImportRowPlan BuildOne(string[] headers, string[] cells) =>
+        ImportParticipantRows.Build(new ImportTable(headers, [new ImportRow(2, cells)]), ImportFields.AutoMatch(ImportKind.Participants, headers), new DateOnly(2026, 10, 13)).Single();
+
+    [Fact]
+    public void The_plan_type_and_dates_reach_the_dto_and_a_plan_managed_participant_keeps_their_plan_manager()
+    {
+        var plan = BuildOne(PlanHeaders, ["Ava", "Stone", "Plan-managed", "01/07/2026", "2027-06-30", "Pat Manager", "Plan manager"]);
+
+        Assert.Equal(ImportRowStatus.Ready, plan.Status);
+        Assert.Empty(plan.Warnings);
+        var dto = plan.Participant!;
+        Assert.Equal((PlanType.PlanManaged, new DateOnly(2026, 7, 1), new DateOnly(2027, 6, 30)), (dto.PlanType, dto.PlanStartDate!.Value, dto.PlanEndDate!.Value));
+        Assert.Equal(ContactRoleType.PlanManager, Assert.Single(dto.ContactRoles).RoleType);
+    }
+
+    [Fact]
+    public void A_plan_manager_for_a_participant_whose_plan_type_is_not_plan_managed_is_refused_by_the_manual_rule()
+    {
+        var plan = BuildOne(PlanHeaders, ["Ava", "Stone", "Self managed", "", "", "Pat Manager", "Plan manager"]);
+        Assert.Equal("Contact 1: Plan Manager contacts are only available for plan-managed participants.", plan.Reasons.Single());
+    }
+
+    [Fact]
+    public void The_plan_columns_are_optional_but_what_is_given_must_be_right()
+    {
+        var blank = BuildOne(PlanHeaders, ["Ava", "Stone", "", "", "", "", ""]);
+        Assert.Equal((ImportRowStatus.Ready, PlanType.SelfManaged), (blank.Status, blank.Participant!.PlanType));
+        var plan = BuildOne(PlanHeaders, ["Ava", "Stone", "Family managed", "30/06/2027", "01/07/2026", "", ""]);
+        Assert.Equal(new[] { "Plan end is before Plan start.", "Plan type must be Self managed, Plan managed or NDIA managed." }, plan.Reasons.OrderBy(r => r, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_month_first_plan_start_column_refuses_its_slash_dates()
+    {
+        string[] headers = ["First name", "Last name", "Plan start"];
+        var table = new ImportTable(headers, [new ImportRow(2, ["Ava", "Stone", "07/31/2026"]), new ImportRow(3, ["Ben", "Lee", "01/07/2026"])]);
+        var plans = ImportParticipantRows.Build(table, ImportFields.AutoMatch(ImportKind.Participants, headers), new DateOnly(2026, 10, 13));
+        Assert.All(plans, p => Assert.StartsWith("Plan start: this column has month-first dates", p.Reasons.Single()));
     }
 }

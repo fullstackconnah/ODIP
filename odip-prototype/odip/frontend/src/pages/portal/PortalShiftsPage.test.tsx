@@ -11,6 +11,8 @@ const { mockUseMyShifts, mockUsePendingWitnessRequests, mockUsePortalShiftDetail
 }))
 
 vi.mock('@/api/hooks', () => ({
+  useIntakeVisits: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useConvertParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
   useMyShifts: mockUseMyShifts,
   usePendingWitnessRequests: mockUsePendingWitnessRequests,
   usePortalShiftDetail: mockUsePortalShiftDetail,

@@ -27,10 +27,11 @@ beforeEach(() => {
   localStorage.clear()
   mockUseAdminTenantUsers.mockReturnValue({ data: { success: true, data: TENANT_USERS } })
   // jsdom doesn't implement navigation — stub reload so selectUser/clearUser's
-  // window.location.reload() call doesn't throw and so tests can assert it fired.
+  // window.location.reload() call doesn't throw and so tests can assert it fired. The stub goes ahead with the
+  // reload as far as the page can tell (pagehide), so a later step in the same test acts as the reloaded page.
   Object.defineProperty(window, 'location', {
     configurable: true,
-    value: { ...window.location, reload: vi.fn() },
+    value: { ...window.location, reload: vi.fn(() => window.dispatchEvent(new Event('pagehide'))) },
   })
 })
 
@@ -191,5 +192,26 @@ describe('UserSwitcher — touch target and small-screen trigger', () => {
     for (const name of [/^jamie support/i, /^casey coordinator/i]) {
       expect(screen.getByRole('button', { name })).toHaveClass('min-h-[var(--tap-min)]', 'w-full', 'flex', 'items-center', 'py-2')
     }
+  })
+})
+
+describe('UserSwitcher — a switch whose reload was cancelled', () => {
+  it('puts the SuperAdmin back on the first press after staying, so the next request is not made as the viewed user', async () => {
+    // A reload a dirty form's prompt cancelled: the page never hides.
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, reload: vi.fn() } })
+    setSuperAdminSignedIn()
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: /view as user/i }))
+    await user.click(screen.getByRole('button', { name: /jamie support/i }))
+    await user.click(screen.getByRole('button', { name: /^switch user$/i }))
+    expect(localStorage.getItem('odip_viewing_user')).toBe('user-support-1')
+
+    window.dispatchEvent(new Event('pointerdown'))
+
+    expect(localStorage.getItem('odip_viewing_user')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('odip_user') || '{}')).toEqual(SUPERADMIN_USER)
+    expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
   })
 })

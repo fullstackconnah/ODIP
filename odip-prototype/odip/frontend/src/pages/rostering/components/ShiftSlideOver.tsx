@@ -423,7 +423,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         <div data-shift-field="staff" ref={staffFieldRef}>
           <FormField
             label="Staff"
-            hint={groupBy === 'staff' ? 'Leave unassigned to add this shift to the Unfilled lane.' : 'Leave unassigned — the shift shows as unfilled on the participant’s row.'}
+            hint={statusLocked ? "This shift has started or finished, so its worker can’t be changed here." : groupBy === 'staff' ? 'Leave unassigned to add this shift to the Unfilled lane.' : 'Leave unassigned — the shift shows as unfilled on the participant’s row.'}
             // Links the Preferred/Excluded compatibility notice below (rendered outside this
             // FormField so it can carry its own role/styling) into the Staff control's
             // aria-describedby, so AT users focused on the field hear it — not just sighted
@@ -439,7 +439,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             <SearchableSelect
               value={staffId ?? ''}
               onChange={v => setStaffId(v || null)}
-              disabled={!canWrite}
+              disabled={!canWrite || statusLocked}
               placeholder="Unassigned"
               items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}
             />

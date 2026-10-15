@@ -8,7 +8,7 @@ const { mockApiGet } = vi.hoisted(() => ({ mockApiGet: vi.fn() }))
 
 vi.mock('../client', async () => {
   const actual = await vi.importActual<typeof import('../client')>('../client')
-  return { ...actual, apiGet: mockApiGet }
+  return { ...actual, apiGet: mockApiGet, apiGetWithDefault: async (url: string, fallback: unknown) => (await mockApiGet(url)) ?? fallback }
 })
 
 // PARTICIPANTS-2: the guidance reads its own every-role endpoint, never /provider-settings (Admin/Coordinator only).

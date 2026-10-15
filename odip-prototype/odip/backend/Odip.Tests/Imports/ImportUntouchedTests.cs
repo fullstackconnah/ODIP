@@ -94,6 +94,8 @@ public class ImportUntouchedTests
             ("is named in an incident", (d, id) => d.IncidentReports.Add(new IncidentReport { Id = Guid.NewGuid(), ReportedByUserId = id })),
             ("is a witness to an incident", (d, id) => d.IncidentWitnesses.Add(new IncidentWitness { Id = Guid.NewGuid(), IncidentReportId = Guid.NewGuid(), WitnessUserId = id, WitnessName = "W" })),
             ("owns tasks", (d, id) => d.BookingTasks.Add(new BookingTask { Id = Guid.NewGuid(), Title = "Call", OwnerId = id })),
+            ("is booked for an intake visit", (d, id) => d.ParticipantInquiries.Add(new ParticipantInquiry { Id = Guid.NewGuid(), FirstName = "E", LastName = "Q", Source = "Phone", IntakeStaffUserId = id })),
+            ("booked an intake visit", (d, id) => d.ParticipantInquiries.Add(new ParticipantInquiry { Id = Guid.NewGuid(), FirstName = "E", LastName = "Q", Source = "Phone", IntakeBookedByUserId = id })),
         };
         var expected = new Dictionary<Guid, string>();
         foreach (var (reason, seed) in seeds)

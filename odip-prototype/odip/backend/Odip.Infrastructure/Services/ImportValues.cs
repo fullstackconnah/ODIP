@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Odip.Domain.Enums;
 
 namespace Odip.Infrastructure.Services;
 
@@ -48,6 +49,20 @@ public static class ImportValues
         "no" or "n" or "false" or "0" => (false, null),
         _ => (null, $"{label} must be yes or no."),
     };
+
+    // Compared as ImportFields.Normalise leaves them (lower-case letters and digits): "Plan-managed", "plan managed" and "PLAN MANAGED" are one value.
+    private static readonly Dictionary<string, PlanType> PlanTypes = new()
+    {
+        ["selfmanaged"] = PlanType.SelfManaged, ["self"] = PlanType.SelfManaged,
+        ["planmanaged"] = PlanType.PlanManaged, ["plan"] = PlanType.PlanManaged, ["planmanager"] = PlanType.PlanManaged,
+        ["ndiamanaged"] = PlanType.AgencyManaged, ["ndia"] = PlanType.AgencyManaged, ["agencymanaged"] = PlanType.AgencyManaged, ["agency"] = PlanType.AgencyManaged,
+    };
+
+    /// <summary>Self managed, Plan managed or NDIA managed, in the words other platforms export; blank is null.</summary>
+    public static (PlanType? Value, string? Error) PlanManagement(string text, string label) =>
+        text.Length == 0 ? (null, null)
+        : PlanTypes.TryGetValue(ImportFields.Normalise(text), out var type) ? (type, null)
+        : (null, $"{label} must be Self managed, Plan managed or NDIA managed.");
 
     /// <summary>
     /// The [StringLength], [EmailAddress] and [Required] rules on the properties named in <paramref name="labels"/>. A manual create meets them in the

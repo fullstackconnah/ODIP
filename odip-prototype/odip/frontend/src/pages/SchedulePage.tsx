@@ -18,6 +18,7 @@ import {
   StaffAssignModal, VehicleAssignModal,
   formatDate, tripAccentText,
 } from './schedule'
+import { IntakeVisitsSection } from './schedule/IntakeVisitsSection'
 import type {
   ScheduleTripDto, ScheduleStaffDto, ScheduleVehicleDto,
   ScheduleStaffTripStatusDto, ScheduleVehicleTripStatusDto,
@@ -43,7 +44,7 @@ const ROW = 'group md:h-[var(--row-h)]'
 // ── Main Page ──
 
 export default function SchedulePage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canManageParticipantLifecycle } = usePermissions()
   const queryClient = useQueryClient()
   const { data, isLoading, refetch } = useScheduleOverview()
   const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set())
@@ -140,6 +141,8 @@ export default function SchedulePage() {
         conflicts={conflictsCount}
         utilization={utilization}
       />
+
+      {canManageParticipantLifecycle && <IntakeVisitsSection />}
 
       {/* ── Empty State ── */}
       {tripCount === 0 ? (
