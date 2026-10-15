@@ -153,6 +153,23 @@ describe('StaffPicker: keyboard and closing', () => {
   })
 })
 
+describe('StaffPicker: the md+ panel follows a reflowing board', () => {
+  it('re-places itself after a re-render, not only on scroll and resize (a refetch can move the chip)', () => {
+    let top = 100
+    const rect = () => ({ top, bottom: top + 40, left: 200, right: 500, width: 300, height: 40, x: 200, y: top, toJSON: () => ({}) }) as DOMRect
+    const chipRect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => rect())
+    const props = { target, staff: STAFF, staffLoading: false, shifts: [JACK_LIAM], leave: LEAVE, hours: new Map<string, number>(), sheet: false, onPick: vi.fn(), onClose: vi.fn() }
+    const ui = (staff: StaffListDto[]) => <><div data-shift-chip="open"><button type="button" data-shift-plus="open">plus</button></div><StaffPicker {...props} staff={staff} /></>
+    const { rerender } = render(ui(STAFF))
+    const before = screen.getByRole('dialog').style.top
+    top = 300
+    rerender(ui(STAFF.slice(0, 2)))
+    chipRect.mockRestore()
+    expect(before).not.toBe('')
+    expect(screen.getByRole('dialog').style.top).not.toBe(before)
+  })
+})
+
 // The md+ panel's place (the brief, section 4). jsdom has no layout, so the rule is a pure function; captures 3, 4 and 6 measure it in a browser.
 describe('pickerPlacement', () => {
   const view = { width: 1440, height: 900 }

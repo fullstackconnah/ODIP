@@ -51,6 +51,7 @@ function PickerPanel({ target, onClose, ...body }: OpenProps) {
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = onClose })
 
+  const placeRef = useRef<() => void>(() => {})
   useLayoutEffect(() => {
     const place = () => {
       const panel = panelRef.current
@@ -65,6 +66,7 @@ function PickerPanel({ target, onClose, ...body }: OpenProps) {
       const px = (n?: number) => (n === undefined ? '' : `${n}px`)
       Object.assign(panel.style, { left: px(p.left), width: px(p.width), maxHeight: px(p.maxHeight), top: px(p.top), bottom: px(p.bottom) })
     }
+    placeRef.current = place
     place()
     window.addEventListener('scroll', place, true)
     window.addEventListener('resize', place)
@@ -73,6 +75,8 @@ function PickerPanel({ target, onClose, ...body }: OpenProps) {
       window.removeEventListener('resize', place)
     }
   }, [target.id])
+  // And after every render: a refetch can reflow the board under an open panel (a row added above), with no scroll or resize to say so. No dependency list, on purpose.
+  useLayoutEffect(() => placeRef.current())
 
   // The house layer (lead, 2026-10-15): Escape closes this layer only, Tab stays in the panel, focus starts in the search. Not modal, so the page still scrolls;
   // focus goes back to the plus from the page (closePicker), because after a pick it belongs on the shift instead.
