@@ -46,6 +46,9 @@ public class LeaveController : ControllerBase
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
+    // D4 (2026-10-16): nobody approves or declines their own leave or unavailability. The dashboard and the Leave page only hid the buttons; this is the rule.
+    private const string OwnRequestMessage = "You can't decide your own request: someone else decides it.";
+
     // ══════════════════════════════════════════════════════════════
     // LEAVE
     // ══════════════════════════════════════════════════════════════
@@ -102,6 +105,7 @@ public class LeaveController : ControllerBase
 
         var approveCallerId = ResolveCallerId();
         if (approveCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
+        if (leave.UserId == approveCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         leave.Status = LeaveStatus.Approved;
         leave.DecidedByUserId = approveCallerId.Value;
@@ -139,6 +143,7 @@ public class LeaveController : ControllerBase
 
         var declineCallerId = ResolveCallerId();
         if (declineCallerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
+        if (leave.UserId == declineCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveRequestDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         leave.Status = LeaveStatus.Declined;
         leave.DecidedByUserId = declineCallerId.Value;
@@ -289,6 +294,7 @@ public class LeaveController : ControllerBase
 
         var approveRuleCallerId = ResolveCallerId();
         if (approveRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("Caller identity could not be resolved."));
+        if (rule.UserId == approveRuleCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         rule.Status = LeaveStatus.Approved;
         rule.DecidedByUserId = approveRuleCallerId.Value;
@@ -350,6 +356,7 @@ public class LeaveController : ControllerBase
 
         var declineRuleCallerId = ResolveCallerId();
         if (declineRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityDto>.Fail("Caller identity could not be resolved."));
+        if (rule.UserId == declineRuleCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<RecurringUnavailabilityDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         rule.Status = LeaveStatus.Declined;
         rule.DecidedByUserId = declineRuleCallerId.Value;

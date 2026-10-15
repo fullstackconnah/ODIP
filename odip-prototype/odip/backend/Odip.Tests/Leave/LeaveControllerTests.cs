@@ -302,6 +302,59 @@ public class LeaveControllerTests
         Assert.IsType<UnauthorizedObjectResult>(result.Result);
     }
 
+    /// <summary>D4 (2026-10-16): nobody decides their own request, either way. The dashboard and Leave page hid the buttons; now the server refuses too, before anything changes.</summary>
+    private static void AssertOwnRequestRefused<T>(ActionResult<ApiResponse<T>> result)
+    {
+        var refused = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.StatusCode);
+        var body = Assert.IsType<ApiResponse<T>>(refused.Value);
+        Assert.Equal(LeaveErrorCodes.LeaveOwnRequest, body.Code);
+    }
+
+    [Fact]
+    public async Task ApproveLeave_OwnRequest_Returns403_AndStaysPending()
+    {
+        using var db = CreateDb();
+        var me = SeedUser(db);
+        var leave = SeedLeave(db, me.Id);
+        var result = await MakeController(db, me.Id).ApproveLeave(leave.Id, CancellationToken.None);
+        AssertOwnRequestRefused(result);
+        Assert.Equal(LeaveStatus.Pending, (await db.LeaveRequests.SingleAsync(l => l.Id == leave.Id)).Status);
+    }
+
+    [Fact]
+    public async Task DeclineLeave_OwnRequest_Returns403_AndStaysPending()
+    {
+        using var db = CreateDb();
+        var me = SeedUser(db);
+        var leave = SeedLeave(db, me.Id);
+        var result = await MakeController(db, me.Id).DeclineLeave(leave.Id, new LeaveDecisionDto(), CancellationToken.None);
+        AssertOwnRequestRefused(result);
+        Assert.Equal(LeaveStatus.Pending, (await db.LeaveRequests.SingleAsync(l => l.Id == leave.Id)).Status);
+    }
+
+    [Fact]
+    public async Task ApproveUnavailability_OwnRequest_Returns403_AndStaysPending()
+    {
+        using var db = CreateDb();
+        var me = SeedUser(db);
+        var rule = SeedRule(db, me.Id);
+        var result = await MakeController(db, me.Id).ApproveUnavailability(rule.Id, CancellationToken.None);
+        AssertOwnRequestRefused(result);
+        Assert.Equal(LeaveStatus.Pending, (await db.RecurringUnavailabilities.SingleAsync(r => r.Id == rule.Id)).Status);
+    }
+
+    [Fact]
+    public async Task DeclineUnavailability_OwnRequest_Returns403_AndStaysPending()
+    {
+        using var db = CreateDb();
+        var me = SeedUser(db);
+        var rule = SeedRule(db, me.Id);
+        var result = await MakeController(db, me.Id).DeclineUnavailability(rule.Id, new LeaveDecisionDto(), CancellationToken.None);
+        AssertOwnRequestRefused(result);
+        Assert.Equal(LeaveStatus.Pending, (await db.RecurringUnavailabilities.SingleAsync(r => r.Id == rule.Id)).Status);
+    }
+
     [Fact]
     public async Task ApproveLeave_ReturnsOverlappingPublishedShiftsAndConfirmedTrips()
     {
