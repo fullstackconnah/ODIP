@@ -241,8 +241,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           aria-expanded={picking}
           aria-disabled={dragsOff || undefined}
           onClick={() => { if (!dragsOff) pick?.(shift) }}
-          className={`relative z-[1] col-start-1 row-start-2 flex items-center justify-center rounded-[calc(var(--radius-sm)_-_2px)] text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
-            spanPlus ? `col-span-2 ${carrying ? '' : 'pl-[calc(var(--control-h-sm)_+_4px)]'}` : 'w-[18px] shrink-0 pointer-coarse:w-11'
+          className={`relative z-[1] row-start-2 flex items-center justify-center rounded-[calc(var(--radius-sm)_-_2px)] text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+            spanPlus ? `col-[1/span_2] ${carrying ? '' : 'pl-[calc(var(--control-h-sm)_+_4px)]'}` : 'col-start-1 w-[18px] shrink-0 pointer-coarse:w-11'
           } ${dragsOff ? 'opacity-40' : 'hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)] aria-expanded:bg-[var(--color-accent)] aria-expanded:text-[var(--color-primary)]'}`}
         >
           <UserPlus className={spanPlus ? 'h-4 w-4 pointer-coarse:h-6 pointer-coarse:w-6' : 'h-3.5 w-3.5'} aria-hidden="true" />
@@ -282,10 +282,11 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         data-shift-open={shift.id}
         onClick={() => onOpen(shift)}
         onKeyDown={handleOpenKeyDown}
-        className="col-span-full row-span-2 grid grid-cols-subgrid grid-rows-subgrid rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="col-span-full row-[1/span_2] grid grid-cols-subgrid grid-rows-subgrid rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         {/* The header: one 16px line of 12px text, 4px in from the tray's inner edge. The time has the chip's whole width and never gives way; the kind is right-aligned after it. */}
-        <span className="col-span-full flex h-4 min-w-0 items-center gap-0.5 px-0.5 text-xs">
+        {/* A budget disc on the top corner would sit on the label's end, so the label gives way to it instead (pr-4: clear of the disc by 3px). */}
+        <span className={`col-span-full flex h-4 min-w-0 items-center gap-0.5 pl-0.5 text-xs ${budgetMarker && !hasFindings ? 'pr-4' : 'pr-0.5'}`}>
           <span
             className={`shrink-0 font-medium tabular-nums ${shift.status === 'Cancelled' ? 'text-muted-foreground line-through' : 'text-foreground'}`}
             title={shift.endsNextDay ? `${timeRange} — ends the next day` : undefined}
@@ -358,13 +359,13 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       </div>
 
       {/*
-        The severity marker hangs off the tray's top-right corner (the chip brief, section 2.2): a 12px box from 9px above the tray to 3px into it, clear of the header line, and 2px clear of the next
+        The severity marker hangs off the tray's top-right corner (the chip brief, section 2.2): a 12px box from 9px above the tray to 3px into it (offsets count from inside its 1px border), clear of the header line, and 2px clear of the next
         day's chip. The chip takes mt-2 for it, so the board's sticky day header never cuts it. pointer-events-none so it never intercepts the click. It's a safety signal, not decoration, so it keeps
         its own role="img" label (and hover title), and the same severity text leads the open control's aria-label (openName) so it is announced before time/person.
       */}
       {hasFindings && (
         <span
-          className="pointer-events-none absolute -top-[9px] -right-1.5 z-10"
+          className="pointer-events-none absolute -top-[10px] -right-1.5 z-10 flex h-3 w-3"
           role="img"
           aria-label={findingsSeverityLabel(shift.findings)}
           title={findingsSeverityLabel(shift.findings)}

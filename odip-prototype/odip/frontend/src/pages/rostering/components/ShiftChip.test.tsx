@@ -56,7 +56,8 @@ describe('ShiftChip severity marker', () => {
     const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     const marker = screen.getByRole('img', { name: '1 warning' })
     expect(marker.parentElement).toBe(container.querySelector('[data-shift-chip]'))
-    expect(marker).toHaveClass('absolute', 'pointer-events-none', '-top-[9px]', '-right-1.5')
+    // A 12px box 10px above the padding edge (the tray's 1px border included), so it ends 3px into the tray, where the header line starts.
+    expect(marker).toHaveClass('absolute', 'pointer-events-none', '-top-[10px]', '-right-1.5', 'h-3', 'w-3')
     expect(marker.parentElement).toHaveClass('mt-2')
   })
 
@@ -277,7 +278,7 @@ describe('ShiftChip tray and box', () => {
     expect(box).toHaveClass('border', 'rounded-[calc(var(--radius-sm)_-_2px)]')
     // The open control spans both rows, so it holds the header and the box (the brief, section 2.1).
     expect(getOpenButton(shift)).toContainElement(box)
-    expect(getOpenButton(shift)).toHaveClass('col-span-full', 'row-span-2', 'grid-cols-subgrid', 'grid-rows-subgrid')
+    expect(getOpenButton(shift)).toHaveClass('col-span-full', 'row-[1/span_2]', 'grid-cols-subgrid', 'grid-rows-subgrid')
   })
 
   it('gives the grip a 44px hit area under a coarse pointer, kept inside the chip and off the open control (post-merge review N6)', () => {
@@ -608,6 +609,14 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       })
     })
 
+    it('keeps the header label clear of a disc on the top corner: the label gives way, never sits under it', () => {
+      const top = markerOf(emergency())
+      expect(top.parentElement!.querySelector('[data-shift-source]')!.parentElement).toHaveClass('pr-4')
+      cleanup()
+      const bottom = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
+      expect(bottom.parentElement!.querySelector('[data-shift-source]')!.parentElement).toHaveClass('pr-0.5')
+    })
+
     it('adds no room to a chip with no marker', () => {
       renderChip(<ShiftChip shift={makeShift()} canWrite draggable onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
@@ -687,7 +696,7 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
     expect(screen.getByText('9am–5pm')).toHaveClass('shrink-0', 'font-medium', 'tabular-nums', 'text-foreground')
     // The header: one 16px line of 12px text, 4px in from the tray's inner edge, the label right-aligned after the time (the chip brief, section 2.2).
     const header = screen.getByText('9am–5pm').parentElement as HTMLElement
-    expect(header).toHaveClass('h-4', 'text-xs', 'px-0.5', 'col-span-full')
+    expect(header).toHaveClass('h-4', 'text-xs', 'pl-0.5', 'pr-0.5', 'col-span-full')
     expect(header).toContainElement(mark)
     expect(mark).toHaveClass('justify-end', 'flex-1', 'min-w-0')
   })
@@ -752,7 +761,7 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     const { container } = withPick(chipOf(open))
     const plus = screen.getByRole('button', { name: plusName })
     // The lead and name cells: the whole empty box is the target. Its leading pad is the menu's width, so the glyph sits at the box's centre.
-    expect(plus).toHaveClass('row-start-2', 'col-start-1', 'col-span-2', 'pl-[calc(var(--control-h-sm)_+_4px)]')
+    expect(plus).toHaveClass('row-start-2', 'col-[1/span_2]', 'pl-[calc(var(--control-h-sm)_+_4px)]')
     expect(plus).not.toHaveClass('w-[18px]')
     expect(plus.querySelector('svg')).toHaveClass('h-4', 'w-4', 'pointer-coarse:h-6', 'pointer-coarse:w-6')
     // Words inside the target would be a visible label missing from its name (WCAG 2.5.3); the open control still says it.
@@ -765,7 +774,7 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     withPick(chipOf(open, { context: 'staff' }))
     const plus = screen.getByRole('button', { name: plusName })
     expect(plus).toHaveClass('col-start-1', 'w-[18px]', 'pointer-coarse:w-11')
-    expect(plus).not.toHaveClass('col-span-2')
+    expect(plus).not.toHaveClass('col-[1/span_2]')
     expect(plus.querySelector('svg')).toHaveClass('h-3.5', 'w-3.5')
     expect(screen.getByRole('link', { name: 'Mia Chen' })).toBeInTheDocument()
   })
