@@ -95,6 +95,17 @@ internal static class ApprovalTestSupport
         return draft;
     }
 
+    /// <summary>Marks a stored revision approved by its approval row alone, as the approval writes it. The ending rule and the renewal read approvals, not patterns (agreement PR 2).</summary>
+    public static async Task MarkApprovedAsync(OdipDbContext db, ServiceAgreementDraft draft)
+    {
+        db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval
+        {
+            Id = Guid.NewGuid(), TenantId = draft.TenantId, DraftId = draft.Id, ParticipantId = draft.ParticipantId, DraftVersion = draft.Version,
+            ApprovedAt = new DateTime(2026, 9, 1, 1, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex Admin",
+        });
+        await db.SaveChangesAsync();
+    }
+
     /// <summary>The revision as saving it would have stored it (blocks, answer and lines), not yet in any context: the Postgres tests add it to theirs.</summary>
     public static ServiceAgreementDraft BuildRevision(Guid tenantId, Guid participantId, int version, IReadOnlyList<PlanBlock> blocks, DateOnly? start = null, DateOnly? end = null,
         Func<PlanQuote, PlanQuote>? shape = null, string state = "NSW", bool handTyped = false, DraftBlockRequirementsDto? requirements = null, IEnumerable<HolidayEntry>? holidays = null)

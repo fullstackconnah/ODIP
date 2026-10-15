@@ -68,6 +68,52 @@ public class IncidentOverdueRuleTests
         return Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Items.ToList();
     }
 
+    private static async Task<PagedResult<IncidentListDto>> NeedsAttention(IncidentsController controller)
+    {
+        var result = await controller.GetAll(
+            tripId: null, status: null, severity: null, qscStatus: null, isActive: null, isOverdueQsc: null,
+            shiftId: null, involvedUserId: null, ct: CancellationToken.None, needsAttention: true);
+        return Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+    }
+
+    [Fact]
+    public async Task GetAll_NeedsAttention_IsOpenOrQscOverdue_EvenResolvedOrClosed_AndNothingElse()
+    {
+        using var db = CreateDb();
+        var reporter = SeedUser(db).Id;
+        var fresh = TimeSpan.FromHours(1);
+        var late = TimeSpan.FromHours(30);
+        var submitted = SeedIncident(db, reporter, fresh, QscReportingStatus.NotRequired, status: IncidentStatus.Submitted);
+        var underReview = SeedIncident(db, reporter, fresh, QscReportingStatus.NotRequired, status: IncidentStatus.UnderReview);
+        var draftOwes = SeedIncident(db, reporter, late, status: IncidentStatus.Draft);              // open, and its QSC report is overdue
+        var resolvedOwes = SeedIncident(db, reporter, late, status: IncidentStatus.Resolved);       // resolved, but still owes the report
+        var closedOwes = SeedIncident(db, reporter, late, status: IncidentStatus.Closed);           // closed (archived), still owes it
+        SeedIncident(db, reporter, fresh, QscReportingStatus.NotRequired, status: IncidentStatus.Resolved);       // done
+        SeedIncident(db, reporter, late, reportedAt: DateTime.UtcNow, status: IncidentStatus.Closed);            // reported: owes nothing
+        SeedIncident(db, reporter, late, isActive: false, status: IncidentStatus.Submitted);                      // inactive
+        var controller = new IncidentsController(db);
+
+        var page = await NeedsAttention(controller);
+
+        Assert.Equal(
+            new[] { submitted.Id, underReview.Id, draftOwes.Id, resolvedOwes.Id, closedOwes.Id }.OrderBy(id => id),
+            page.Items.Select(i => i.Id).OrderBy(id => id));
+        Assert.Equal(5, page.TotalCount);
+        // The same rule the dashboard summary counts, as a union: open (not Resolved or Closed) or QSC overdue.
+        Assert.True(page.Items.Single(i => i.Id == closedOwes.Id).IsOverdue24h);
+    }
+
+    [Fact]
+    public async Task GetAll_WithoutNeedsAttention_StillHidesClosed_AsBefore()
+    {
+        using var db = CreateDb();
+        var reporter = SeedUser(db).Id;
+        SeedIncident(db, reporter, TimeSpan.FromHours(30), status: IncidentStatus.Closed);
+        var controller = new IncidentsController(db);
+
+        Assert.Empty(await GetAllItems(controller));
+    }
+
     [Fact]
     public async Task GetAll_InactiveIncidentPastTheWindow_IsNotFlaggedOverdue()
     {

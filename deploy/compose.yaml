@@ -42,6 +42,10 @@ services:
       # many days ahead of the provider's today shifts are kept, and how many an approval generates at once.
       - RosterTopUp__Enabled=${ROSTER_TOP_UP_ENABLED:-true}
       - RosterTopUp__HorizonDays=${ROSTER_TOP_UP_HORIZON_DAYS:-56}
+      # Employment Hero Payroll (Settings → Integrations). INTEGRATIONS_MASTER_KEY is 32 random bytes, base64, kept only in the host's .env: it encrypts
+      # every organisation's EH API key, and losing it means each Admin pastes their key again. Empty = integrations off, the rest of ODIP runs.
+      - INTEGRATIONS_MASTER_KEY=${INTEGRATIONS_MASTER_KEY:-}
+      - EmploymentHero__Enabled=${EMPLOYMENT_HERO_ENABLED:-true}
     depends_on:
       db:
         condition: service_healthy
@@ -74,6 +78,9 @@ services:
         # Must match DEV_AUTH_ENABLED on the api service. Baked in at build time,
         # so changing it requires rebuilding this image.
         VITE_DEV_AUTH: ${VITE_DEV_AUTH:-false}
+        # The deployed commit, shown in the platform footer. deploy.yml sets GIT_SHA for the build; a hand-run
+        # build gets "dev", which the footer hides.
+        VITE_BUILD_SHA: ${GIT_SHA:-dev}
     image: odip-frontend:local
     container_name: odip-frontend
     restart: unless-stopped

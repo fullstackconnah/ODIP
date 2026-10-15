@@ -27,6 +27,8 @@ export interface ProviderSettingsDto {
   participantReadinessMode: ParticipantReadinessMode
   /** Warn (default): a user without a current Medication Competency may record and the record is flagged. Enforce: refused (403). */
   medicationCompetencyMode: MedicationCompetencyMode
+  /** Staff come from Employment Hero: "New staff member" and the staff import are hidden (the server refuses them too). Absent or false otherwise. */
+  employmentHeroConnected?: boolean
 }
 
 export interface UpsertProviderSettingsDto {

@@ -52,6 +52,7 @@ function makeQueueItem(overrides: Partial<CompletionQueueItemDto> = {}): Complet
     dosesWithoutOutcome: 0,
     breakMinutes: 0,
     startWasManual: false,
+    incidentCount: 0,
     ...overrides,
   }
 }

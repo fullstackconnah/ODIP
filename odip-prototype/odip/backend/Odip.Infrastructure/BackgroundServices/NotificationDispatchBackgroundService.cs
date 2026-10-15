@@ -28,6 +28,9 @@ public class NotificationDispatchBackgroundService : BackgroundService
     private static readonly int[] BackoffMinutes = { 1, 5, 15, 60, 240 };
     private const int MaxAttempts = 5;
 
+    /// <summary>How long a bell item is kept (dashboard spec 2026-10-14, "Retention").</summary>
+    public const int InAppRetentionDays = 90;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
     private readonly ILogger<NotificationDispatchBackgroundService> _logger;
@@ -45,6 +48,7 @@ public class NotificationDispatchBackgroundService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var intervalSeconds = _config.GetValue("Notifications:DispatchIntervalSeconds", 30);
+        var nextPurgeAt = DateTime.MinValue;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -57,6 +61,21 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 _logger.LogError(ex, "Notification dispatch tick failed unexpectedly");
             }
 
+            // The bell's retention runs here, not in RunTickAsync: that returns early on an empty outbox and while
+            // Notifications:Enabled is false (live today), and the bell must not depend on either. Hourly is plenty.
+            if (DateTime.UtcNow >= nextPurgeAt)
+            {
+                try
+                {
+                    await PurgeExpiredInAppNotificationsAsync(DateTime.UtcNow, stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "In-app notification purge failed");
+                }
+                nextPurgeAt = DateTime.UtcNow.AddHours(1);
+            }
+
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken);
@@ -66,6 +85,18 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 break;
             }
         }
+    }
+
+    /// <summary>Deletes bell items older than <see cref="InAppRetentionDays"/>, in every organisation, and returns how many went.</summary>
+    public async Task<int> PurgeExpiredInAppNotificationsAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbOptions = scope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>();
+        await using var db = new OdipDbContext(dbOptions, new Notifications.ScopedTenantOverride { IsSuperAdmin = true });
+        var cutoff = nowUtc.AddDays(-InAppRetentionDays);
+        // ExecuteDeleteAsync is PostgreSQL-only here (EF InMemory has none), so its tests are PostgreSQL facts.
+        // shortcut: no CreatedAt-only index, so this is an hourly scan of the table; add one if the bell table grows large.
+        return await db.InAppNotifications.Where(n => n.CreatedAt < cutoff).ExecuteDeleteAsync(ct);
     }
 
     public async Task RunTickAsync(CancellationToken ct)
@@ -226,6 +257,8 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 LeaveRequestDecidedTemplate.Render(Deserialize<LeaveRequestDecidedPayload>(payloadJson), baseUrl),
             NotificationEventType.ShiftAssigned =>
                 ShiftAssignedTemplate.Render(Deserialize<ShiftAssignedPayload>(payloadJson), baseUrl),
+            NotificationEventType.ShiftUnassigned =>
+                ShiftUnassignedTemplate.Render(Deserialize<ShiftUnassignedPayload>(payloadJson), baseUrl),
             NotificationEventType.ShiftCompletionPendingReview =>
                 ShiftCompletionPendingReviewTemplate.Render(Deserialize<ShiftCompletionPendingReviewPayload>(payloadJson), baseUrl),
             NotificationEventType.ShiftCompletionReturned =>
@@ -236,6 +269,8 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 CaregiverSubmissionReceivedTemplate.Render(Deserialize<CaregiverSubmissionReceivedPayload>(payloadJson), baseUrl),
             NotificationEventType.IncidentReported =>
                 IncidentReportedTemplate.Render(Deserialize<IncidentReportedPayload>(payloadJson), baseUrl),
+            NotificationEventType.IntegrationDegraded =>
+                IntegrationDegradedTemplate.Render(Deserialize<IntegrationDegradedPayload>(payloadJson), baseUrl),
             _ => throw new NotSupportedException($"No template registered for event type {type}"),
         };
 

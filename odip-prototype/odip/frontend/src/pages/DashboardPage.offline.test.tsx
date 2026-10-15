@@ -25,6 +25,8 @@ const EMPTY_PAGE = { items: [], totalCount: 0, page: 1, pageSize: 1, totalPages:
 const answer = (url: string): Promise<unknown> => {
   if (url === '/dashboard/summary') return Promise.resolve(ZERO_SUMMARY)
   if (url === '/rostering/completions') return Promise.resolve(EMPTY_PAGE)
+  // The Incidents group reads a paged list (fetchPagedList fails on a bare []); /tasks falls through to [], which is right.
+  if (url === '/incidents') return Promise.resolve(EMPTY_PAGE)
   return Promise.resolve([])
 }
 
@@ -40,7 +42,7 @@ function renderDashboard(client: QueryClient) {
   )
 }
 
-const band = () => screen.getByRole('region', { name: 'Needs attention' })
+const band = () => screen.getByRole('region', { name: 'Alerts' })
 
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', fullName: 'Sarah Mitchell' }))
@@ -64,34 +66,33 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
     // The greeting needs no data, so offline the page still opens with it (and still says nothing about numbers it never had).
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Good (morning|afternoon|evening), Sarah/)
     expect(screen.queryByText(/upcoming trip/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
     expect(screen.queryByText(/All clear/)).not.toBeInTheDocument()
+    // The decision groups wait too: never absent, never clear.
+    expect(screen.getByText('Loading leave requests…')).toBeInTheDocument()
     // The requests really were paused, not answered: this is the state the mocked tests cannot reach.
     expect(apiGet).not.toHaveBeenCalled()
   })
 
-  it('shows an en dash, busy, for staff, alerts, leave and completions while they are paused, and never names them clear or claims "Nothing needs you"', () => {
+  it('shows an en dash, busy, for alerts, and a loading line for every group while they are paused, and never names them clear or claims "Nothing needs you"', () => {
     const client = newClient()
     client.setQueryData(['dashboard'], ZERO_SUMMARY) // the summary is on screen (stale, its refetch paused); everything else has never answered
     renderDashboard(client)
 
-    for (const [label, href] of [
-      ['Qualification Issues', '/qualifications'],
-      ['Critical Participant Alerts', '/participants'],
-      ['Pending Leave', '/rostering/leave'],
-      ['Shift Completions', '/rostering/completions'],
-    ]) {
-      const tile = within(band()).getByRole('link', { name: `${label} Loading` })
-      expect(tile, label).toHaveAttribute('href', href)
-      expect(tile, label).toHaveAttribute('aria-busy', 'true')
-      expect(tile, label).not.toHaveAttribute('data-attention')
-      expect(within(tile).getByText('–'), label).toBeInTheDocument()
+    const tile = within(band()).getByRole('link', { name: 'Critical Participant Alerts Loading' })
+    expect(tile).toHaveAttribute('href', '/participants')
+    expect(tile).toHaveAttribute('aria-busy', 'true')
+    expect(tile).not.toHaveAttribute('data-attention')
+    expect(within(tile).getByText('–')).toBeInTheDocument()
+    // A Coordinator decides the moved items in their groups: each one is waiting, never absent and never clear.
+    for (const line of ['Loading shift completions…', 'Loading leave requests…', 'Loading open incidents…', 'Loading tasks due…', 'Loading staff credentials to update…']) {
+      expect(screen.getByText(line)).toBeInTheDocument()
     }
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    // The row names only what the summary answered, not one of the four that are waiting.
+    // The row names only what the summary answered, and none of the groups that are waiting.
     const row = screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p') as HTMLElement
-    expect(row).toHaveTextContent('overdue tasks')
-    for (const waiting of ['qualification issues', 'critical participant alerts', 'pending leave', 'shift completions']) expect(row).not.toHaveTextContent(waiting)
+    expect(row).toHaveTextContent('trips missing accommodation')
+    for (const waiting of ['shift completions', 'leave requests', 'open incidents', 'tasks due', 'staff credentials to update']) expect(row).not.toHaveTextContent(waiting)
     expect(apiGet).not.toHaveBeenCalled()
   })
 
@@ -107,6 +108,8 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
   })
 
   it('settles when the browser comes back online: the requests run, and an all-clear is then said over real zeros', async () => {
+    // ReadOnly has no decision groups, so the band alone decides the field here.
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     const client = newClient()
     renderDashboard(client)
     expect(screen.queryByText(/All clear/)).not.toBeInTheDocument()
@@ -117,7 +120,20 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
 
     expect(await screen.findByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
     expect(apiGet).toHaveBeenCalledWith('/dashboard/summary')
-    expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', page: 1, pageSize: 1 })
+    expect(screen.queryByText('–')).not.toBeInTheDocument()
+  })
+
+  it('settles to the field for a Coordinator too, once the summary, the alerts and every group answer at zero', async () => {
+    renderDashboard(newClient())   // the beforeEach signs in a Coordinator
+    expect(screen.queryByText(/All clear/)).not.toBeInTheDocument()
+
+    await act(async () => {
+      onlineManager.setOnline(true)
+    })
+
+    expect(await screen.findByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
+    expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', page: 1, pageSize: 5 })
+    expect(apiGet).toHaveBeenCalledWith('/incidents', { needsAttention: 'true', page: '1', pageSize: '5' })
     expect(screen.queryByText('–')).not.toBeInTheDocument()
   })
 })

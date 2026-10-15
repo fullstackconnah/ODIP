@@ -476,7 +476,9 @@ public enum AuditAction
 {
     Created,
     Updated,
-    Deleted
+    Deleted,
+    /// <summary>The organisation's full data export was downloaded: EntityType "Tenant", EntityId the organisation, no Changes. Stored as its name.</summary>
+    Exported
 }
 
 /// <summary>

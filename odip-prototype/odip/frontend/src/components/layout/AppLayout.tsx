@@ -8,8 +8,10 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
+import NotificationBell from '@/components/layout/NotificationBell'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
+import PlatformFooter from '@/components/layout/PlatformFooter'
 import {
   barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, navItems, resolveNav, toBarItem,
   type BarAudience, type BarItem, type NavCounts, type NavGroup, type NavLeaf,
@@ -360,16 +362,7 @@ export default function AppLayout() {
             <div className="flex items-center gap-3">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
-              {/* Placeholder pending the notifications feature (next on the roadmap) — disabled
-                  rather than removed, so the control is honest about doing nothing right now
-                  instead of silently absorbing clicks. */}
-              <button
-                className={`${TAP_AREA} w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed`}
-                aria-label="Notifications"
-                disabled
-              >
-                <span className="material-symbols-outlined text-[var(--color-primary)]" aria-hidden="true" style={{ fontSize: '20px' }}>notifications</span>
-              </button>
+              <NotificationBell />
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-white font-bold text-sm shadow-md">
                 {initial}
               </div>
@@ -403,17 +396,13 @@ export default function AppLayout() {
 
         {/* Page content */}
         {/*
-          Bottom padding is split out from the p-4, md:p-6, lg:p-8 shorthand on purpose: that
-          shorthand sets padding-bottom too, so an unprefixed bottom padding (clearing the fixed
-          mobile bottom nav below lg) got silently overridden by md:p-6's padding-bottom
-          for the 768-1024px range, trapping the last roster row behind the nav with no way
-          to scroll it clear. Directional px and pt utilities leave the pb-[...] and lg:pb-6 as
-          the only thing ever setting padding-bottom, so it can't be clobbered by a later
-          breakpoint's shorthand again. Below lg the padding is the nav's own height
-          (--mobile-nav-h, the same var the nav is sized with and the sticky wizard footer
-          sits above) plus 1.75rem of air: 96px on touch, exactly the old pb-24.
+          Bottom padding is split out from the p-4, md:p-6, lg:p-8 shorthand on purpose: that shorthand sets padding-bottom too, and
+          md:p-6 once overrode the nav clearance between 768 and 1024px, trapping the last roster row behind the nav. Directional px
+          and pt utilities leave pb-6 as the only thing setting it. The clearance for the fixed mobile bottom nav is not here any more:
+          PlatformFooter (variant="shell"), the last thing in this column, carries it below lg (--mobile-nav-h, the safe area and
+          0.75rem). The footer always renders, because its Accessibility link is unconditional, so nothing can end up behind the nav.
         */}
-        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-[calc(var(--mobile-nav-h)+1.75rem)] lg:pb-6">
+        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-6">
           {/* Track the previous in-app pathname once at the authenticated shell so any
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}
@@ -428,6 +417,7 @@ export default function AppLayout() {
             </Suspense>
           </ErrorBoundary>
         </main>
+        <PlatformFooter variant="shell" />
       </div>
 
       {/* Mobile bottom nav. Generated from the same config as the sidebar (see BottomBar), so it can never offer a link the role

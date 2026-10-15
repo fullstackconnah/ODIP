@@ -143,3 +143,11 @@ export function formatInstantDateAu(value: string | null | undefined): string {
 export function formatNoteTimestamp(iso: string): string {
   return formatWithTimeZone(iso, undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
+
+/** "512 KB", "12.4 MB", "1.3 GB": a byte count as the export's progress shows it. KB below 1 MB, then one decimal; 1 KB is 1024 bytes. */
+export function formatBytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024)
+  if (mb < 1) return `${Math.round(bytes / 1024)} KB`
+  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  return `${(mb / 1024).toFixed(1)} GB`
+}

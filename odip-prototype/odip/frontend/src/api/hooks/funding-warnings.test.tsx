@@ -16,7 +16,7 @@ import { useCancelBooking, useCreateBooking, useDeleteBooking, usePatchBooking, 
 import { usePatchTrip, useUpdateTrip } from './trips'
 import { useApproveServiceAgreementDraft } from './service-agreement-drafts'
 import {
-  useApproveCompletion, useApproveCompletionsBatch, useAssignShift, useCreateShift, useDeleteShift, useGeneratePattern, useReturnCompletion, useUpdateShift,
+  useApproveCompletion, useApproveCompletionsBatch, useAssignShift, useCreateShift, useDeleteShift, useGeneratePattern, useMoveStaff, usePublishWeek, useReturnCompletion, useUpdateShift,
 } from './rostering'
 
 // The hooks behind the budget warnings (budget phase 2b), run for real on a real QueryClient with only the transport boundary (the axios adapter of the real client) replaced:
@@ -211,6 +211,8 @@ describe('the writes that move a participant’s money', () => {
   it.each([
     ['assigning a worker to a shift', (client: QueryClient) => run(client, useAssignShift, { id: 's-1', data: { staffId: 'st-1' } as never })],
     ['returning a shift completion', (client: QueryClient) => run(client, useReturnCompletion, { shiftId: 's-1', data: { reason: 'Add the times' } as never })],
+    ['moving a worker between shifts', (client: QueryClient) => run(client, useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Move', staffId: 'st-1', expectedToStaffId: null, overrideReason: null, acknowledgedFindingCodes: [] })],
+    ['publishing a week', (client: QueryClient) => run(client, usePublishWeek, '2026-08-17')],
   ])('does not, for a write that moves no money: %s', async (_name, write) => {
     const client = newClient()
     const invalidate = vi.spyOn(client, 'invalidateQueries')
@@ -219,6 +221,31 @@ describe('the writes that move a participant’s money', () => {
 
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['budget-list'] })
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['participant-alerts-aggregate'] })
+  })
+
+  // Deep review S5: a refused drop (409 board changed or busy, 422 findings) must leave the board showing the server's truth, not the stale puck that caused it.
+  it.each([
+    ['an assign', (client: QueryClient) => run(client, useAssignShift, { id: 's-1', data: { staffId: 'st-1' } as never })],
+    ['a move', (client: QueryClient) => run(client, useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Move', staffId: 'st-1', expectedToStaffId: null, overrideReason: null, acknowledgedFindingCodes: [] })],
+    ['a publish', (client: QueryClient) => run(client, usePublishWeek, '2026-08-17')],
+  ])('refetches the board after the server refuses %s', async (_name, write) => {
+    const client = newClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    answer = () => { throw Object.assign(new Error('Request failed with status code 409'), { response: { status: 409, data: { success: false, errors: ['This shift changed after the board was loaded.'] } } }) }
+
+    await expect(write(client)).rejects.toBeTruthy()
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+  })
+
+  it('sends move-staff and publish-week to their endpoints with the whole body', async () => {
+    await run(newClient(), useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', expectedToStaffId: 'st-9', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] })
+    await run(newClient(), usePublishWeek, '2026-08-17')
+
+    expect(calls).toEqual([
+      { method: 'post', url: '/rostering/shifts/move-staff', body: { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', expectedToStaffId: 'st-9', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] } },
+      { method: 'post', url: '/rostering/weeks/2026-08-17/publish', body: undefined },
+    ])
   })
 
   it('sends the NDIA’s code with the Rejected status, exactly as given, to the claim', async () => {

@@ -178,7 +178,7 @@ describe('leave hooks — coordinator', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
   })
 
-  it('useApproveLeave posts to /leave/{id}/approve and invalidates leave-requests + roster-board', async () => {
+  it('useApproveLeave posts to /leave/{id}/approve and invalidates leave-requests + roster-board + tasks + dashboard', async () => {
     const qc = new QueryClient()
     const spy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useApproveLeave(), { wrapper: wrapper(qc) })
@@ -186,6 +186,8 @@ describe('leave hooks — coordinator', () => {
     expect(mockApiPost).toHaveBeenCalledWith('/leave/leave-1/approve')
     expect(spy).toHaveBeenCalledWith({ queryKey: ['leave-requests'] })
     expect(spy).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['tasks'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['dashboard'] })
   })
 
   it('useDeclineLeave posts the decision note to /leave/{id}/decline and invalidates leave-requests + roster-board', async () => {

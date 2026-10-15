@@ -67,8 +67,8 @@ function budgetAlertsOf(ledger) {
 }
 
 /** One participant's alerts, Critical first and then worse first (see sortKey), with the counts that follow them, and whether a budget is in force for them (a plan running now: it is how the dashboard tells "no budget is at risk" from "no budget is recorded"). */
-function alertsDto(person, ledger) {
-  const alerts = budgetAlertsOf(ledger).sort((a, b) => SEVERITY[a.severity] - SEVERITY[b.severity] || (sortKey(a.type) < sortKey(b.type) ? -1 : sortKey(a.type) > sortKey(b.type) ? 1 : 0))
+function alertsDto(person, ledger, extra = []) {
+  const alerts = [...budgetAlertsOf(ledger), ...extra].sort((a, b) => SEVERITY[a.severity] - SEVERITY[b.severity] || (sortKey(a.type) < sortKey(b.type) ? -1 : sortKey(a.type) > sortKey(b.type) ? 1 : 0))
   return {
     participantId: person.id, participantName: nameOf(person), isActive: person.isActive, budgetInForce: Boolean(ledger.planId && ledger.planIsCurrent), alerts,
     criticalCount: alerts.filter((a) => a.severity === 'Critical').length, warningCount: alerts.filter((a) => a.severity === 'Warning').length, infoCount: alerts.filter((a) => a.severity === 'Info').length,

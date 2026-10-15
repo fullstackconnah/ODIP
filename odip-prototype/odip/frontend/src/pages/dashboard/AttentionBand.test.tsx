@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { AttentionBand, type BandItem } from './AttentionBand'
+import { AllClearField, AttentionBand, type BandItem } from './AttentionBand'
 import { BAND_GRID_CLASS, BAND_SPAN_CLASS, bandSpans } from './bandLayout'
 import { TONE } from '@/lib/tone'
 
@@ -25,7 +25,7 @@ const renderBand = (items: BandItem[]) =>
     </MemoryRouter>,
   )
 
-const band = () => screen.getByRole('region', { name: 'Needs attention' })
+const band = () => screen.getByRole('region', { name: 'Alerts' })
 const clearRow = () => screen.queryByText('All clear', { selector: 'span.font-semibold' })?.closest('p') ?? null
 
 const FOUR = [item('Alpha', 3), item('Beta', 0), item('Gamma', 2, { tone: 'warning' }), item('Delta', 0)]
@@ -126,29 +126,25 @@ describe('AttentionBand — the All clear row', () => {
 describe('AttentionBand — when everything is zero', () => {
   const ALL_ZERO = [item('Alpha', 0), item('Beta', 0, { tone: 'warning' }), item('Gamma', 0)]
 
-  it('becomes one full-width Pale Sprout field: "All clear. Nothing needs you right now."', () => {
+  it('is ONE All clear row naming every item, never the "Nothing needs you" field: the page draws that only when the whole page is clear', () => {
     renderBand(ALL_ZERO)
+
+    expect(clearRow()).toHaveTextContent('All clear on Alpha, Beta and Gamma')
+    expect(band().firstElementChild).toBe(clearRow())
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+    expect(band().querySelector('div.grid')).toBeNull()
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+  })
+})
+
+describe('AllClearField — the whole page clear (the page draws it)', () => {
+  it('is one Pale Sprout field: "All clear. Nothing needs you right now.", naming what was checked', () => {
+    render(<AllClearField labels={['Alpha', 'Beta', 'Gamma']} />)
 
     const field = screen.getByText('All clear. Nothing needs you right now.').closest('div.rounded-md') as HTMLElement
-    expect(field).not.toBeNull()
     for (const cls of TONE.success.solid.split(' ')) expect(field).toHaveClass(cls)
-    expect(band().firstElementChild).toBe(field)
-    // The field is the whole band: no tile, no link, no second row.
-    expect(screen.queryAllByRole('group')).toHaveLength(0)
-    expect(screen.queryAllByRole('link')).toHaveLength(0)
-    expect(screen.queryByText('All clear', { selector: 'span.font-semibold' })).not.toBeInTheDocument()
-  })
-
-  it('names what was checked, so the claim can be audited', () => {
-    renderBand(ALL_ZERO)
-
     expect(screen.getByText('Checked and at zero: Alpha, Beta and Gamma.')).toBeInTheDocument()
-  })
-
-  it('hides its icon from assistive tech', () => {
-    renderBand(ALL_ZERO)
-
-    expect(band().querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    expect(field.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 })
 
@@ -207,7 +203,7 @@ describe('AttentionBand — no all-clear without data', () => {
         <AttentionBand items={[item('Alpha', 0), item('Beta', 0)]} />
       </MemoryRouter>,
     )
-    expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
+    expect(clearRow()).toHaveTextContent('All clear on Alpha and Beta')
     expect(screen.queryByText('–')).not.toBeInTheDocument()
 
     rerender(
@@ -268,12 +264,6 @@ describe('AttentionBand — naming the clear items', () => {
     expect(clearRow()!.textContent).not.toMatch(/Overdue/)
   })
 
-  it('names them by noun in the all-clear field\'s audit line too', () => {
-    renderBand([item('Overdue', 0, { noun: 'overdue tasks' }), item('QSC Overdue', 0, { noun: 'overdue QSC reports' }), item('Beta', 0)])
-
-    expect(screen.getByText('Checked and at zero: overdue tasks, overdue QSC reports and Beta.')).toBeInTheDocument()
-  })
-
   it('never uses the noun on a tile: the label is what the tile is called', () => {
     renderBand([item('Overdue', 2, { noun: 'overdue tasks' }), item('Beta', 0)])
 
@@ -285,10 +275,10 @@ describe('AttentionBand — naming the clear items', () => {
 // The good-day state is the commonest login there is, so its one sentence is a payoff, not a notification: it takes the HEADLINE step the system already owns (20px,
 // display bold: the page title's, and a StatCard value's), and the audit line under it stays 13px. No size is added, and it is a sentence, not a heading.
 describe('AttentionBand — the all-clear field is a payoff', () => {
-  const ZERO = [item('Alpha', 0), item('Beta', 0)]
+  const fieldBox = () => screen.getByText('All clear. Nothing needs you right now.').closest('div.rounded-md') as HTMLElement
 
   it('sets its headline sentence at the headline step (text-xl, display bold) and its audit line at 13px', () => {
-    renderBand(ZERO)
+    render(<AllClearField labels={['Alpha', 'Beta']} />)
 
     const headline = screen.getByText('All clear. Nothing needs you right now.')
     expect(headline).toHaveClass('text-xl', 'font-display', 'font-bold')
@@ -298,17 +288,17 @@ describe('AttentionBand — the all-clear field is a payoff', () => {
   })
 
   it('adds no new type size: the field uses the headline step and the 13px step and nothing else', () => {
-    renderBand(ZERO)
+    render(<AllClearField labels={['Alpha', 'Beta']} />)
 
     // (A bracket value only counts as a size when it is a length: text-[var(--color-…)] is a colour.)
-    const sizes = new Set(band().innerHTML.match(/\btext-(?:xs|sm|base|lg|xl|[2-9]xl|display|\[\d+(?:\.\d+)?(?:px|rem)\])/g))
+    const sizes = new Set(fieldBox().innerHTML.match(/\btext-(?:xs|sm|base|lg|xl|[2-9]xl|display|\[\d+(?:\.\d+)?(?:px|rem)\])/g))
     expect(sizes).toEqual(new Set(['text-xl', 'text-[13px]']))
   })
 
   it('is a sentence, not a heading: the page keeps its one h1 and The One Heading Rule', () => {
-    renderBand(ZERO)
+    render(<AllClearField labels={['Alpha', 'Beta']} />)
 
-    expect(within(band()).queryAllByRole('heading')).toHaveLength(0)
+    expect(within(fieldBox()).queryAllByRole('heading')).toHaveLength(0)
     expect(screen.getByText('All clear. Nothing needs you right now.').tagName).toBe('P')
   })
 

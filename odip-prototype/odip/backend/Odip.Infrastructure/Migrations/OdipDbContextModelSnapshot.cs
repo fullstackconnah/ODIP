@@ -4271,6 +4271,10 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ExternalPayrollId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateOnly?>("FirstAidExpiryDate")
                         .HasColumnType("date");
 
@@ -4357,6 +4361,11 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("Username")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "ExternalPayrollId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Users_TenantId_ExternalPayrollId")
+                        .HasFilter("\"ExternalPayrollId\" IS NOT NULL");
 
                     b.ToTable("Users");
                 });
@@ -4665,6 +4674,203 @@ namespace Odip.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("FundingPools");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Integrations.EmploymentHeroAttention", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("DismissedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ExternalEmployeeId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("EmploymentHeroAttentions");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Integrations.EmploymentHeroConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("ApiKeyCiphertext")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("ApiKeyNonce")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("BusinessId")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("BusinessName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("ConnectedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("ConnectedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConnectedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("LastSyncAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("LastSyncError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("EmploymentHeroConnections");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Integrations.EmploymentHeroSyncLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Archived")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BusinessId")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Created")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorClass")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("FinishedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Linked")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NeedsAttention")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "StartedAt");
+
+                    b.ToTable("EmploymentHeroSyncLogs");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Notifications.InAppNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LinkTo")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientUserId")
+                        .HasDatabaseName("IX_InAppNotifications_Unread")
+                        .HasFilter("\"ReadAt\" IS NULL");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("RecipientUserId", "CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.ToTable("InAppNotifications");
                 });
 
             modelBuilder.Entity("Odip.Domain.Notifications.NotificationLog", b =>

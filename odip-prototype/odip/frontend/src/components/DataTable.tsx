@@ -4,7 +4,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
-import { TAP_AREA_LINKS } from './tapArea'
+import { ROW_ACTIONS_CARD, TAP_AREA_LINKS } from './tapArea'
 import { plural } from '@/lib/format'
 import { PageState } from '@/components/PageState'
 
@@ -692,10 +692,6 @@ const ROW_ACTIONS_LEGACY_ICONS = [
   '[&>div>:is(a,button)]:inline-flex [&>div>:is(a,button)]:items-center [&>div>:is(a,button)]:justify-center',
   '[&>div>:is(a,button)]:h-[var(--control-h-sm)] [&>div>:is(a,button)]:w-[var(--control-h-sm)] [&>div>:is(a,button)]:p-0',
 ].join(' ')
-
-// The phone card: every control in the cluster (a Button, an ActionButtons icon) is a real 44px target, whatever the pointer, since a
-// card below md is what a phone shows. min-* only grow a control, so a text button keeps its width and the icons stay centred.
-const ROW_ACTIONS_CARD = 'max-md:[&_:is(a,button)]:min-h-11 max-md:[&_:is(a,button)]:min-w-11'
 
 // Overlay mode: on a mouse (`pointer-fine`) at md+ the cluster leaves the table's flow and sits on
 // top of the row's last data cells, so its column costs no width — a cluster with "Change status"
