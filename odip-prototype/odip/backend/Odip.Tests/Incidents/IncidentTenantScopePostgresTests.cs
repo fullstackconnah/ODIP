@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -11,6 +13,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Odip.Tests.Postgres;
 using Xunit;
 
@@ -33,7 +36,7 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
         var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = tenantId, TripName = "Trip", StartDate = new DateOnly(2026, 10, 1), DurationDays = 3 };
         var incident = new IncidentReport
         {
-            Id = Guid.NewGuid(), ReportedByUserId = reporter.Id, TripInstanceId = trip.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.High,
+            Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = reporter.Id, TripInstanceId = trip.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.High,
             Status = IncidentStatus.Submitted, Title = "Incident", Description = "What happened.", IncidentDateTime = DateTime.UtcNow.AddHours(-31),
             CreatedAt = DateTime.UtcNow.AddHours(-30), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
         };
@@ -69,6 +72,56 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(mine.Incident.Id, Assert.Single(overdue).Id);
         Assert.Empty(Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>((await controller.GetByTrip(theirs.Trip.Id, Ct)).Result).Value).Data!);
         Assert.IsType<NotFoundObjectResult>((await controller.GetById(theirs.Incident.Id, Ct)).Result);
+    }
+
+    /// <summary>A SuperAdmin who chose <paramref name="tenantId"/>, resolved by the real <see cref="CurrentTenant"/> from the role and the view-as header.</summary>
+    private static ICurrentTenant SuperAdminViewing(Guid tenantId)
+    {
+        var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "SuperAdmin"), new Claim("tenant_id", Guid.NewGuid().ToString()) }, "Test")) };
+        http.Request.Headers["X-View-As-Tenant"] = tenantId.ToString();
+        return new CurrentTenant(new HttpContextAccessor { HttpContext = http });
+    }
+
+    [SkippableFact]
+    public async Task AnIncidentWithNoTenant_IsInNoReadPath_ForAnOrganisationsUser_OrASuperAdminWhoChoseThatOrganisation_OverNpgsql()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (own, ownTenant) = await _pg.NewTenantContextAsync();
+        await using var _own = own;
+        var mine = await PlantAsync(own, ownTenant);
+        // What the previous image files after a rollback: the organisation's own reporter, open with its QSC report overdue, but no TenantId.
+        var leftNull = new IncidentReport
+        {
+            Id = Guid.NewGuid(), ReportedByUserId = mine.Incident.ReportedByUserId, TripInstanceId = mine.Trip.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.High,
+            Status = IncidentStatus.Submitted, Title = "Unscoped", Description = "What happened.", IncidentDateTime = DateTime.UtcNow.AddHours(-31),
+            CreatedAt = DateTime.UtcNow.AddHours(-30), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
+        };
+        await using (var admin = PostgresFixture.NewContext(_pg.ConnectionString))
+        {
+            admin.IncidentReports.Add(leftNull);
+            await admin.SaveChangesAsync(Ct);
+            Assert.Null((await admin.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == leftNull.Id, Ct)).TenantId);
+        }
+
+        var viewing = SuperAdminViewing(ownTenant);
+        Assert.False(viewing.IsSuperAdmin);
+        await using var asSuperAdmin = PostgresFixture.NewContext(_pg.ConnectionString, viewing);
+        foreach (var db in new[] { own, asSuperAdmin })
+        {
+            var controller = new IncidentsController(db);
+            foreach (var (isOverdueQsc, needsAttention) in new (bool?, bool?)[] { (null, null), (true, null), (null, true) })
+            {
+                var page = Assert.IsType<ApiResponse<PagedResult<IncidentListDto>>>(Assert.IsType<OkObjectResult>(
+                    (await controller.GetAll(null, null, null, null, null, isOverdueQsc, null, null, 1, 50, Ct, needsAttention)).Result).Value).Data!;
+                Assert.Equal((mine.Incident.Id, 1), (Assert.Single(page.Items).Id, page.TotalCount));
+            }
+            Assert.Equal(mine.Incident.Id, Assert.Single(Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>((await controller.GetOverdueQsc(Ct)).Result).Value).Data!).Id);
+            Assert.Equal(mine.Incident.Id, Assert.Single(Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>((await controller.GetByTrip(mine.Trip.Id, Ct)).Result).Value).Data!).Id);
+            Assert.IsType<NotFoundObjectResult>((await controller.GetById(leftNull.Id, Ct)).Result);
+            Assert.IsType<NotFoundObjectResult>((await controller.Delete(leftNull.Id, Ct)).Result);
+            var summary = Assert.IsType<ApiResponse<DashboardSummaryDto>>(Assert.IsType<OkObjectResult>((await new DashboardController(db).GetSummary(Ct)).Result).Value).Data!;
+            Assert.Equal((1, 1), (summary.OpenIncidentCount, summary.QscOverdueCount));
+        }
     }
 
     [SkippableFact]

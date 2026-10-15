@@ -129,6 +129,33 @@ public class CrossTenantIncidentListTests
     }
 
     [Fact]
+    public async Task CreateAndUpdate_NamingAReporterOfAnotherOrganisation_AreRefused_AndTheIncidentStaysTheCallers()
+    {
+        using var db = Db();
+        var own = Plant(db, A);
+        var otherReporter = User(db, B);
+        var controller = new IncidentsController(db);
+        var before = db.IncidentReports.IgnoreQueryFilters().Count();
+
+        var create = await controller.Create(new CreateIncidentDto
+        {
+            ReportedByStaffId = otherReporter.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Low, Title = "Spoof", Description = "Spoof",
+            IncidentDateTime = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc),
+        }, Ct);
+        var update = await controller.Update(own.Incident.Id, new UpdateIncidentDto
+        {
+            ReportedByStaffId = otherReporter.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Low, Title = "Spoof", Description = "Spoof",
+            IncidentDateTime = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc), Status = IncidentStatus.Submitted,
+        }, Ct);
+
+        Assert.IsType<BadRequestObjectResult>(create.Result);
+        Assert.IsType<BadRequestObjectResult>(update.Result);
+        Assert.Equal(before, db.IncidentReports.IgnoreQueryFilters().Count());
+        var stored = db.IncidentReports.IgnoreQueryFilters().AsNoTracking().Single(i => i.Id == own.Incident.Id);
+        Assert.Equal((A, own.Incident.ReportedByUserId, "Incident"), (stored.TenantId!.Value, stored.ReportedByUserId, stored.Title));
+    }
+
+    [Fact]
     public async Task GetById_AnotherTenantsIncident_IsNotFound_AndTheOwnerStillReadsTheirs()
     {
         using var db = Db();

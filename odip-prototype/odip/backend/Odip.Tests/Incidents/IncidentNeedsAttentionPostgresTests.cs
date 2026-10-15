@@ -29,7 +29,7 @@ public class IncidentNeedsAttentionPostgresTests : IClassFixture<PostgresFixture
             var owes = n >= open;
             db.IncidentReports.Add(new IncidentReport
             {
-                Id = Guid.NewGuid(), ReportedByUserId = reporter.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Low,
+                Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = reporter.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Low,
                 Status = owes ? IncidentStatus.Resolved : IncidentStatus.Submitted, Title = $"Incident {n}", Description = "What happened.",
                 IncidentDateTime = new DateTime(2026, 10, 1, 9, n, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow.AddHours(owes ? -30 : -1),
                 QscReportingStatus = owes ? QscReportingStatus.Required : QscReportingStatus.NotRequired, IsActive = true,
