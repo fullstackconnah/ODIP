@@ -10,6 +10,11 @@ import {
   buildRpIncidentDescriptionSkeleton,
   buildMarIncidentPrefill,
   type MarIncidentPrefillState,
+  isShiftIncidentPrefillState,
+  buildShiftIncidentTitleSkeleton,
+  buildShiftIncidentDescriptionSkeleton,
+  incidentReturnPath,
+  type ShiftIncidentPrefillState,
 } from './incidentPrefill'
 import type { AdministrationDto } from '@/api/types/medications'
 
@@ -219,5 +224,28 @@ describe('editedRpAuthorisation', () => {
   it('lowers to false on the switch to "None of these", but not for an incident that already described one', () => {
     expect(editedRpAuthorisation(true, false, { unapproved: true })).toBe(false)
     expect(editedRpAuthorisation(true, true, { unapproved: true })).toBe(true)
+  })
+})
+
+describe('the shift prefill (My shifts: "Anything to report?")', () => {
+  const p: ShiftIncidentPrefillState = {
+    source: 'shift', shiftId: 'shift-9', participantId: 'participant-1', participantName: 'Sophie Brown',
+    serviceDate: '2026-08-17', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false, reportedByUserId: 'staff-1',
+    returnTo: '/portal/shifts/shift-9',
+  }
+  it('is told apart from the other prefills', () => {
+    expect(isShiftIncidentPrefillState(p)).toBe(true)
+    expect(isShiftIncidentPrefillState({ source: 'shift-note' })).toBe(false)
+    expect(isShiftIncidentPrefillState(null)).toBe(false)
+  })
+  it('seeds a title and a description with the shift, for the worker to finish', () => {
+    expect(buildShiftIncidentTitleSkeleton(p)).toBe('Incident during shift — Sophie Brown')
+    expect(buildShiftIncidentDescriptionSkeleton(p)).toContain("During Sophie Brown's shift on Monday 17 August")
+  })
+  it('returns only to a portal shift, never to anywhere a state could name', () => {
+    expect(incidentReturnPath(p)).toBe('/portal/shifts/shift-9')
+    expect(incidentReturnPath({ ...p, returnTo: 'https://evil.example' })).toBe('/incidents')
+    expect(incidentReturnPath({ source: 'mar-administration' })).toBe('/incidents')
+    expect(incidentReturnPath(null)).toBe('/incidents')
   })
 })

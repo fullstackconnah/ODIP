@@ -29,7 +29,7 @@ public class CrossTenantDashboardTests
         db.StaffAssignments.Add(new StaffAssignment { Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = reporter.Id, HasConflict = true });
         db.IncidentReports.Add(new IncidentReport
         {
-            Id = Guid.NewGuid(), ReportedByUserId = reporter.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.High, Status = IncidentStatus.Draft,
+            Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = reporter.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.High, Status = IncidentStatus.Draft,
             Title = "Open", Description = "Open", IncidentDateTime = DateTime.UtcNow.AddDays(-3), CreatedAt = DateTime.UtcNow.AddDays(-3),
             QscReportingStatus = QscReportingStatus.Required,
         });

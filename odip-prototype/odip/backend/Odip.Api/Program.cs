@@ -528,6 +528,8 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
         // Apply pending EF Core migrations
         await db.Database.MigrateAsync();
 
+        // Rollback-window incidents filed without a TenantId (see IncidentTenantHeal).
+        await db.Database.ExecuteSqlRawAsync(IncidentTenantHeal.Sql);
         await DbSeeder.SeedAsync(db);
         await DbSeeder.SeedNdisDataAsync(db);
         await DbSeeder.SeedMedicationsAsync(db);

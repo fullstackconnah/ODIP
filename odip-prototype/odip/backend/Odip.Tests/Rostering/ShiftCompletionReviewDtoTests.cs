@@ -360,4 +360,65 @@ public class ShiftCompletionReviewDtoTests
         Assert.Empty(method.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), true));
         Assert.Empty(method.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true));   // no per-action widening
     }
+
+    [Fact]
+    public async Task TheReviewAndTheQueue_ShowTheWorkersMovedTimes_TheReasonTheKilometresAndTheReportAnswer()
+    {
+        var a = Arrange();
+        a.Completion.OriginalActualEnd = ActualEnd.AddMinutes(12);
+        a.Completion.TimeAdjustmentReason = "Left at five past; tapped Finish in the car.";
+        a.Completion.Kilometres = 12.5m;
+        a.Completion.AnythingToReport = true;
+        a.Db.SaveChanges();
+
+        var c = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).Completion;
+        Assert.True(c.TimesAdjusted);
+        Assert.Null(c.OriginalActualStart);
+        Assert.Equal(ActualEnd.AddMinutes(12), c.OriginalActualEnd);
+        Assert.Equal("Left at five past; tapped Finish in the car.", c.TimeAdjustmentReason);
+        Assert.Equal(12.5m, c.Kilometres);
+        Assert.True(c.AnythingToReport);
+
+        var queue = Assert.IsType<OkObjectResult>((await a.Controller.GetCompletions(ShiftStatus.PendingReview, null, null)).Result);
+        Assert.True(Assert.Single(Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(queue.Value).Data!.Items).TimesAdjusted);
+    }
+
+    [Fact]
+    public async Task APrnDoseGivenInTheMinutesTheWorkerTrimmed_StillShowsInTheReview()
+    {
+        // Review deep S1: the worker started later and finished earlier than the stamps. Doses given in the trimmed minutes are still the
+        // worker's doses on this shift, and the coordinator approving the moved times must see them.
+        var a = Arrange();
+        a.Completion.OriginalActualStart = ActualStart.AddMinutes(-10);
+        a.Completion.OriginalActualEnd = ActualEnd.AddMinutes(12);
+        var prn = AddMed(a, "Paracetamol", null, MedicationType.Prn);
+        foreach (var at in new[] { ActualStart.AddMinutes(-5), ActualEnd.AddMinutes(8), ActualEnd.AddMinutes(30) })
+        {
+            a.Db.MedicationAdministrations.Add(new MedicationAdministration
+            {
+                Id = Guid.NewGuid(), TenantId = prn.TenantId, ParticipantMedicationId = prn.Id, ParticipantId = prn.ParticipantId, Status = MedicationAdministrationStatus.Administered,
+                RecordedByName = "Ben Turner", RecordedByUserId = a.Worker.Id, PrnReason = "Headache", AdministeredAt = at,
+            });
+        }
+        a.Db.SaveChanges();
+
+        var prnDoses = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).PrnDoses;
+
+        Assert.Equal(2, prnDoses.Count);   // the two inside the stamped span; the one after the Finish instant is not this shift's
+    }
+
+    [Fact]
+    public async Task AnUnmovedCompletion_IsNotFlagged_InTheReviewOrTheQueue()
+    {
+        var a = Arrange();
+
+        var c = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).Completion;
+        Assert.False(c.TimesAdjusted);
+        Assert.Null(c.TimeAdjustmentReason);
+        Assert.Null(c.Kilometres);
+        Assert.Null(c.AnythingToReport);
+
+        var queue = Assert.IsType<OkObjectResult>((await a.Controller.GetCompletions(ShiftStatus.PendingReview, null, null)).Result);
+        Assert.False(Assert.Single(Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(queue.Value).Data!.Items).TimesAdjusted);
+    }
 }

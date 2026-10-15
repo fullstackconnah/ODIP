@@ -123,7 +123,7 @@ internal static class DataExportTestKit
         var activity = new ScheduledActivity { Id = Guid.NewGuid(), TripDayId = day.Id, Title = "Beach walk" };
         var incident = new IncidentReport
         {
-            Id = Guid.NewGuid(), ReportedByUserId = user.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.Low, Title = "Fall", Description = "Slipped",
+            Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = user.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.Low, Title = "Fall", Description = "Slipped",
             IncidentDateTime = new DateTime(2026, 8, 30, 9, 0, 0, DateTimeKind.Utc),
         };
         var injury = new IncidentInjury { Id = Guid.NewGuid(), IncidentReportId = incident.Id, Description = "Graze" };

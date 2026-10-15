@@ -9,7 +9,10 @@ import { formatWithTimeZone, formatDateAu } from '@/lib/utils'
 import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
 import { apiErrorMessages, hasApiErrorCode, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import { Chip, Fact, Section } from './ui'
-import type { PortalEmergencyContactDto, PortalShiftDetailDto } from '@/api/types'
+import type { PortalAtAGlanceDto, PortalEmergencyContactDto, PortalShiftDetailDto } from '@/api/types'
+
+/** The HIDPA flags that are set, in their fixed order. */
+const hidpaFlags = (g: PortalAtAGlanceDto) => [g.hidpa.epilepsy && 'Epilepsy', g.hidpa.enteralFeeding && 'Enteral feeding', g.hidpa.dysphagia && 'Dysphagia'].filter(Boolean) as string[]
 
 function Handover({ shift, canAct, online }: { shift: PortalShiftDetailDto; canAct: boolean; online: boolean }) {
   const ack = useAcknowledgeHandover()
@@ -66,7 +69,7 @@ function Handover({ shift, canAct, online }: { shift: PortalShiftDetailDto; canA
 /** Fixed order: allergies, diet, communication, behaviour, HIDPA, address. Every field has an explicit "Not recorded". */
 function AtAGlance({ shift }: { shift: PortalShiftDetailDto }) {
   const g = shift.atAGlance
-  const hidpa = [g.hidpa.epilepsy && 'Epilepsy', g.hidpa.enteralFeeding && 'Enteral feeding', g.hidpa.dysphagia && 'Dysphagia'].filter(Boolean) as string[]
+  const hidpa = hidpaFlags(g)
   const a = g.address
   const address = a ? [a.street, a.suburb, [a.state, a.postcode].filter(Boolean).join(' ')].filter(Boolean).join(', ') : null
   return (
@@ -168,18 +171,11 @@ function Contacts({ contacts }: { contacts: PortalEmergencyContactDto[] }) {
   )
 }
 
-export function HandoverSection({ shift, canAct, online, compact = false }: { shift: PortalShiftDetailDto; canAct: boolean; online: boolean; compact?: boolean }) {
+/** The incoming handover. It moves between Now and Notes ("From the last shift") instead of folding (SHAPE §3). */
+export function HandoverSection({ shift, canAct, online, title = 'Handover' }: { shift: PortalShiftDetailDto; canAct: boolean; online: boolean; title?: string }) {
   const withheld = shift.sensitiveInfoWithheldReason
-  const h = shift.handover
-  // Compact (mid-shift on a phone): once the handover is read, or there is nothing to read, it folds to one line.
-  const settled = !h || !h.requiresAcknowledgement || h.isRead
   return (
-    <Section
-      id="before-handover"
-      title="Handover"
-      icon={<BookOpen className="w-4 h-4" aria-hidden="true" />}
-      collapse={compact && settled ? { summary: h ? 'Handover read' : 'No handover' } : null}
-    >
+    <Section id="before-handover" title={title} icon={<BookOpen className="w-4 h-4" aria-hidden="true" />}>
       {withheld
         ? <Callout tone="info">{withheld}</Callout>
         : <Handover shift={shift} canAct={canAct} online={online} />}
@@ -187,18 +183,9 @@ export function HandoverSection({ shift, canAct, online, compact = false }: { sh
   )
 }
 
-export function GlanceSection({ shift, className, compact = false }: { shift: PortalShiftDetailDto; className?: string; compact?: boolean }) {
-  const g = shift.atAGlance
-  const hidpa = [g.hidpa.epilepsy && 'Epilepsy', g.hidpa.enteralFeeding && 'Enteral feeding', g.hidpa.dysphagia && 'Dysphagia'].filter(Boolean) as string[]
-  // Folded, the facts that must never be missed stay on the line: the anaphylaxis risk and the HIDPA flags.
-  const summary = (
-    <>
-      {g.allergies.isAnaphylaxisRisk === true && <Chip tone="danger">Anaphylaxis risk</Chip>}
-      <span>{hidpa.length ? `HIDPA: ${hidpa.join(', ')}` : 'No HIDPA flags'}</span>
-    </>
-  )
+export function GlanceSection({ shift, className }: { shift: PortalShiftDetailDto; className?: string }) {
   return (
-    <Section id="before-glance" title="At a glance" icon={<HeartPulse className="w-4 h-4" aria-hidden="true" />} className={className} collapse={compact ? { summary } : null}>
+    <Section id="before-glance" title="At a glance" icon={<HeartPulse className="w-4 h-4" aria-hidden="true" />} className={className}>
       <AtAGlance shift={shift} />
     </Section>
   )
@@ -217,5 +204,26 @@ export function ContactsSection({ shift, compact = false }: { shift: PortalShift
         ? <Callout tone="info">{shift.sensitiveInfoWithheldReason ?? 'Emergency contacts are not shown for this shift yet.'}</Callout>
         : <Contacts contacts={shift.emergencyContacts} />}
     </Section>
+  )
+}
+
+/**
+ * The facts that must never be missed while working, as one wrapping row on Now: the anaphylaxis risk, the HIDPA flags (today's folded At a glance
+ * summary), the support flags, then a link to About. Hidden from lg, where About is on screen.
+ */
+export function MustKnowLine({ shift, onAbout }: { shift: PortalShiftDetailDto; onAbout: () => void }) {
+  const g = shift.atAGlance
+  const p = shift.participant
+  const hidpa = hidpaFlags(g)
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm lg:hidden">
+      {g.allergies.isAnaphylaxisRisk === true && <Chip tone="danger">Anaphylaxis risk</Chip>}
+      <span>{hidpa.length ? `HIDPA: ${hidpa.join(', ')}` : 'No HIDPA flags'}</span>
+      {p.isHighSupport && <Chip>High support</Chip>}
+      {p.isIntensiveSupport && <Chip>Intensive support</Chip>}
+      {p.hasRestrictivePracticeFlag && <Chip>Restrictive practice</Chip>}
+      {/* The house link look (BackButton 'link'): a ghost button reads as body text on touch, where nothing hovers. */}
+      <button type="button" className="inline-flex items-center min-h-[var(--tap-min)] rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]" onClick={onAbout}>Everything about {p.fullName.split(' ')[0]}</button>
+    </div>
   )
 }

@@ -120,7 +120,7 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
 
     // ══════════════════════ deploy safety ══════════════════════
 
-    private static async Task InsertMinimalRowAsync(NpgsqlConnection conn, string table, Dictionary<string, object?> values)
+    internal static async Task InsertMinimalRowAsync(NpgsqlConnection conn, string table, Dictionary<string, object?> values)
     {
         // Fills every NOT NULL column without a default with a type-appropriate filler, so a row can be inserted into a schema as it
         // was at an OLD migration without knowing every column (the current EF model no longer matches that schema).
@@ -1075,6 +1075,36 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task AFinishWithMovedTimesAndKilometres_StoresTheOriginalsReasonKilometresAndAnswer_OnRealPostgres()
+    {
+        // The migration's five columns, for real: numeric(6,1) keeps the rounded kilometres, and the stamps come back as they were stored.
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (_, userId, shiftId, completionId) = await SeedCompletionAsync(db);
+        await using var request = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var portal = PortalFor(request, tenantId, userId, new DateTime(2026, 7, 14, 7, 30, 0, DateTimeKind.Utc));
+
+        var result = await portal.FinishShift(shiftId, new FinishShiftDto
+        {
+            NothingToNote = true, NothingToHandOver = true,
+            ActualStart = new DateTime(2026, 7, 13, 22, 55, 0, DateTimeKind.Utc), ActualEnd = new DateTime(2026, 7, 14, 7, 20, 0, DateTimeKind.Utc),
+            TimeAdjustmentReason = "Arrived early to help with breakfast.", Kilometres = 12.46, AnythingToReport = false,
+        }, default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await using var verify = PostgresFixture.NewContext(_pg.ConnectionString, TenantMock(tenantId).Object);
+        var stored = await verify.ShiftCompletions.SingleAsync(c => c.Id == completionId);
+        Assert.Equal(new DateTime(2026, 7, 13, 22, 55, 0), stored.ActualStart);
+        Assert.Equal(new DateTime(2026, 7, 13, 23, 5, 0), stored.OriginalActualStart);
+        Assert.Equal(new DateTime(2026, 7, 14, 7, 20, 0), stored.ActualEnd);
+        Assert.Equal(new DateTime(2026, 7, 14, 7, 30, 0), stored.OriginalActualEnd);
+        Assert.Equal("Arrived early to help with breakfast.", stored.TimeAdjustmentReason);
+        Assert.Equal(12.5m, stored.Kilometres);
+        Assert.False(stored.AnythingToReport);
+    }
+
+    [SkippableFact]
     public async Task DifferentSlotsOfOneMedication_AreNotSerialisedIntoConflicts_EachGetsItsOwnRecord()
     {
         // The lock is per (medication, slot): recording the 08:00 and the 12:30 dose at the same moment must both succeed.
@@ -1526,5 +1556,13 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
         var flagged = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(
             Assert.IsType<OkObjectResult>((await rostering.GetCompletions(null, null, null, 1, 50, default)).Result).Value).Data!.Items;
         Assert.True(flagged.Single(r => r.ShiftId == shiftId).StartWasManual);
+
+        // ...and the "times adjusted by the worker" flag, projected from the new columns in SQL (My shifts redesign).
+        Assert.False(flagged.Single(r => r.ShiftId == shiftId).TimesAdjusted);
+        await db.ShiftCompletions.Where(c => c.Id == completionId)
+            .ExecuteUpdateAsync(c => c.SetProperty(x => x.OriginalActualEnd, new DateTime(2026, 7, 14, 7, 10, 0, DateTimeKind.Utc)));
+        var adjusted = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(
+            Assert.IsType<OkObjectResult>((await rostering.GetCompletions(null, null, null, 1, 50, default)).Result).Value).Data!.Items;
+        Assert.True(adjusted.Single(r => r.ShiftId == shiftId).TimesAdjusted);
     }
 }

@@ -65,7 +65,7 @@ public class AuditController : ControllerBase
             "TripInstance" => await _db.TripInstances.AnyAsync(e => e.Id == entityId, ct),
             "Participant" => await _db.Participants.AnyAsync(e => e.Id == entityId, ct),
             "ParticipantBooking" => await _db.ParticipantBookings.AnyAsync(e => e.Id == entityId && _db.TripInstances.Any(t => t.Id == e.TripInstanceId), ct),
-            "IncidentReport" => await _db.IncidentReports.AnyAsync(e => e.Id == entityId && _db.Users.Any(u => u.Id == e.ReportedByUserId), ct),
+            "IncidentReport" => await _db.IncidentReports.AnyAsync(e => e.Id == entityId, ct),
             "Staff" => await _db.Users.AnyAsync(e => e.Id == entityId, ct),
             "StaffAssignment" => await _db.StaffAssignments.AnyAsync(e => e.Id == entityId && _db.TripInstances.Any(t => t.Id == e.TripInstanceId), ct),
             "VehicleAssignment" => await _db.VehicleAssignments.AnyAsync(e => e.Id == entityId && _db.TripInstances.Any(t => t.Id == e.TripInstanceId), ct),

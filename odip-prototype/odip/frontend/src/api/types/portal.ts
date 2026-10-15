@@ -41,6 +41,8 @@ export interface PortalShiftSummaryDto {
   nightType: SleepoverType
   status: ShiftStatus
   notes: string | null
+  /** How many times a coordinator returned this shift; a Published shift above 0 reads "Returned" on the list. */
+  returnCount: number
 }
 
 export interface PortalTripAssignmentSummaryDto {
@@ -62,6 +64,8 @@ export interface PortalTripAssignmentSummaryDto {
 export interface PortalShiftsResponseDto {
   shifts: PortalShiftSummaryDto[]
   tripAssignments: PortalTripAssignmentSummaryDto[]
+  /** The provider's IANA zone: the shifts' dates and times are wall clock there. */
+  timeZoneId: string
 }
 
 // ── Shift detail ──────────────────────────────────────────
@@ -202,7 +206,16 @@ export interface FinishShiftDto {
   latitude?: number | null
   longitude?: number | null
   geolocationDeclined: boolean
+  /** While the shift is in progress, the worker's corrected start, a UTC instant with Z, within 15 minutes of the stamp with a reason; on the manual-start path the real start. Null keeps the stamp. */
   actualStart?: string | null
+  /** The worker's corrected end, a UTC instant with Z: up to 15 minutes before the Finish instant, with a reason. Null keeps the Finish instant. */
+  actualEnd?: string | null
+  /** Why a time moved: required when one did, at most 500 characters. */
+  timeAdjustmentReason?: string | null
+  /** Kilometres driven with the participant, 0 to 2,000, one decimal place. Null when not given. */
+  kilometres?: number | null
+  /** "Anything to report?": true, false, or null when skipped. Informational only. */
+  anythingToReport?: boolean | null
   /** The handover note for the next worker (max 2000 chars). Blank is allowed — it is prompted but optional. The Finish form should set
    * `maxLength={2000}` on its textarea: a longer note is rejected by the framework before the action runs, as a ValidationProblemDetails 400
    * (no `code`; `errors` keyed by field), which `apiErrorMessages` in lib/shiftPackageErrors reads. */

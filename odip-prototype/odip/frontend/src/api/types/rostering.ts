@@ -226,6 +226,19 @@ export interface ShiftCompletionDto {
   nothingToHandOver: boolean
   /** The worker confirmed "nothing to note" instead of writing a shift note. */
   nothingToNoteConfirmed: boolean
+  // ── My shifts redesign: what the worker confirmed at Finish ──
+  /** True when the worker moved either actual time at Finish; the originals below then hold the server's stamps. */
+  timesAdjusted: boolean
+  /** The server's start stamp when the worker moved `actualStart`; null otherwise. An instant. */
+  originalActualStart: string | null
+  /** The Finish instant when the worker moved `actualEnd`; null otherwise. */
+  originalActualEnd: string | null
+  /** Why the worker moved a time; null when nothing moved. */
+  timeAdjustmentReason: string | null
+  /** Kilometres driven with the participant, one decimal place; null when not given. */
+  kilometres: number | null
+  /** "Anything to report?" at Finish: true, false, or null when skipped. */
+  anythingToReport: boolean | null
 }
 
 /**
@@ -287,6 +300,8 @@ export interface CompletionQueueItemDto {
   /** True when the worker never pressed Start and supplied the start time at Finish (the manual-start path). That path skips the dose checklist,
    * so the queue can flag the row next to `dosesWithoutOutcome` without opening the shift. Same flag as `ShiftCompletionDto.startWasManual`. */
   startWasManual: boolean
+  /** True when the worker moved the start or end at Finish. */
+  timesAdjusted: boolean
   /** Active incidents linked to the shift: the ones the review lists. A row is one-tap only when this is exactly 0 (dashboard). */
   incidentCount: number
 }

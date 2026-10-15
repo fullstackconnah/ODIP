@@ -18,6 +18,7 @@ import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/uti
 import { formatVarianceMinutes } from './lib/roster'
 import { plural } from '@/lib/format'
 import { Button } from '@/components/Button'
+import { TONE } from '@/lib/tone'
 
 const PAGE_SIZE = 50
 
@@ -86,6 +87,21 @@ function IncidentsList({ incidents }: { incidents: ShiftCompletionDto['incidents
       </ul>
     </div>
   )
+}
+
+/** What the worker confirmed at Finish (My shifts redesign): moved times with the stamps they replaced, the reason, kilometres, the report answer. */
+function WorkerAnswers({ c }: { c: ShiftCompletionDto }) {
+  const t = (iso: string) => formatWithTimeZone(iso, c.timeZoneId, { hour: 'numeric', minute: '2-digit' })
+  const lines = [
+    c.originalActualStart && `Start ${t(c.originalActualStart)}, changed to ${t(c.actualStart)}.`,
+    c.originalActualEnd && c.actualEnd && `Finish ${t(c.originalActualEnd)}, changed to ${t(c.actualEnd)}.`,
+    c.timeAdjustmentReason && `Reason: ${c.timeAdjustmentReason}`,
+    c.kilometres != null && `${c.kilometres} km driven with the participant`,
+    c.anythingToReport && 'The worker said there was something to report.',
+    c.shiftReturnCount > 0 && `Returned to the worker ${plural(c.shiftReturnCount, 'time')} before.`,
+  ].filter((line): line is string => typeof line === 'string')
+  if (lines.length === 0) return null
+  return <ul className="space-y-0.5 text-xs">{lines.map(line => <li key={line}>{line}</li>)}</ul>
 }
 
 export default function CompletionReviewPage() {
@@ -189,10 +205,17 @@ export default function CompletionReviewPage() {
     { key: 'times', header: 'Rostered vs actual', render: rosteredVsActual },
     {
       key: 'variance', header: 'Variance', render: row => (
-        <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-1">   {/* the badges wrap in a narrow column instead of running under the buttons */}
           <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${varianceBadgeClass(row.isOutlierVariance)}`}>
             {formatVarianceMinutes(row.varianceMinutesStart)} / {formatVarianceMinutes(row.varianceMinutesEnd)}
           </span>
+          {row.timesAdjusted && (
+            // An adjustment is not a compliance warning, so it takes the info tone (SHAPE §7).
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.info.solid}`}>Times adjusted by the worker</span>
+          )}
+          {row.returnCount > 0 && (
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Returned {plural(row.returnCount, 'time')}</span>
+          )}
           <IncidentIndicator shiftId={row.shiftId} />
         </div>
       ),
@@ -328,6 +351,7 @@ export default function CompletionReviewPage() {
         message={
           <div className="space-y-3">
             <p>{approveTarget ? `Approve ${approveTarget.participantName}'s shift on ${formatDateAu(approveTarget.serviceDate)} for ${approveTarget.staffName}?` : ''}</p>
+            {detail && <WorkerAnswers c={detail} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
           </div>
@@ -345,6 +369,7 @@ export default function CompletionReviewPage() {
         message={
           <div className="space-y-3">
             <p>{returnTarget ? `Return ${returnTarget.participantName}'s shift on ${formatDateAu(returnTarget.serviceDate)} to ${returnTarget.staffName} for correction?` : ''}</p>
+            {detail && <WorkerAnswers c={detail} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
             <label className="block text-sm text-[var(--color-foreground)]">
               Reason (required)

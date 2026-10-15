@@ -122,6 +122,7 @@ public sealed class IncidentsPack : IDemoPack
             ServiceType = story.Service,
             InvolvedParticipantId = participant?.Id,
             ReportedByUserId = reporter.Id,
+            TenantId = reporter.TenantId,
             IncidentType = story.Type,
             OtherTypeSpecify = story.Type == IncidentType.Other ? "Equipment failure" : null,
             Severity = story.Severity,
@@ -337,7 +338,7 @@ public sealed class IncidentsPack : IDemoPack
             var created = c.Local(createdUtc);
             var incident = new IncidentReport
             {
-                Id = id, ServiceType = ServiceStreams.CommunityAccessDailyLiving, InvolvedParticipantId = participant.Id, ReportedByUserId = reporter.Id,
+                Id = id, ServiceType = ServiceStreams.CommunityAccessDailyLiving, InvolvedParticipantId = participant.Id, ReportedByUserId = reporter.Id, TenantId = reporter.TenantId,
                 IncidentType = story.Type, OtherTypeSpecify = story.OtherType, Severity = story.Severity, Status = IncidentStatus.Submitted,
                 Title = story.Title, Description = story.Description.Replace("{n}", first, StringComparison.Ordinal), Location = story.Location.Replace("{n}", first, StringComparison.Ordinal),
                 IncidentDateTime = created.AddMinutes(-(10 + DemoIds.Pick(id, "since", 0, 50))), ImmediateActionsTaken = ImmediateActions(story.Type),
