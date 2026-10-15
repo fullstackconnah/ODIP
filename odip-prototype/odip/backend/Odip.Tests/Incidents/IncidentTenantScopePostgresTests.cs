@@ -176,4 +176,25 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
         await using (var superAdmin = PostgresFixture.NewContext(cs))
             Assert.True(await superAdmin.IncidentReports.AnyAsync(i => i.Id == leftNull));
     }
+
+    [SkippableFact]
+    public async Task ACallerWithNoTenant_WhoIsNotASuperAdmin_SeesNoIncidentWithoutATenant_OverNpgsql()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (own, ownTenant) = await _pg.NewTenantContextAsync();
+        await using var _own = own;
+        var mine = await PlantAsync(own, ownTenant);
+        var leftNull = Guid.NewGuid();
+        await using (var admin = PostgresFixture.NewContext(_pg.ConnectionString))
+        {
+            admin.IncidentReports.Add(new IncidentReport { Id = leftNull, ReportedByUserId = mine.Incident.ReportedByUserId, Title = "Unscoped", Description = "What happened.", IsActive = true });
+            await admin.SaveChangesAsync(Ct);
+        }
+        // EF null semantics: TenantId == null would otherwise match the NULL row.
+        var noTenant = new Mock<ICurrentTenant>();
+        noTenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        noTenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString, noTenant.Object);
+        Assert.False(await db.IncidentReports.AnyAsync(i => i.Id == leftNull, Ct));
+    }
 }

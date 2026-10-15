@@ -2060,7 +2060,8 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<IncidentReport>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            // Fail closed: a caller with no tenant must not match NULL-tenant rows (EF null semantics).
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || (e.TenantId != null && e.TenantId == _tenant.TenantId));
         modelBuilder.Entity<IncidentReport>()
             .HasIndex(e => e.TenantId);
 

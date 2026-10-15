@@ -527,6 +527,13 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
         // Apply pending EF Core migrations
         await db.Database.MigrateAsync();
 
+        // shortcut: heals incidents filed without a TenantId by a rolled-back image; delete once the contract PR drops that window.
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "IncidentReports" i SET "TenantId" = u."TenantId"
+            FROM "Users" u WHERE u."Id" = i."ReportedByUserId" AND i."TenantId" IS NULL;
+            """);
+
         await DbSeeder.SeedAsync(db);
         await DbSeeder.SeedNdisDataAsync(db);
         await DbSeeder.SeedMedicationsAsync(db);
