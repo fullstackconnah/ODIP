@@ -1976,7 +1976,7 @@ public class RosteringController : ControllerBase
         if (!_db.Database.IsNpgsql()) return;
         // Raw SQL skips the tenant query filter, so name the caller's organisation (post-merge review N5): another organisation's row is never locked, and a guessed id answers
         // 404 at once from the filtered read rather than waiting on, and so revealing, a row someone else is writing.
-        if (_tenant?.TenantId is { } tenantId)
+        if (_tenant is { IsSuperAdmin: false, TenantId: { } tenantId })
         {
             where = string.Create(CultureInfo.InvariantCulture, $"({where}) AND \"TenantId\" = {{{parameters.Length}}}");
             parameters = [.. parameters, tenantId];
