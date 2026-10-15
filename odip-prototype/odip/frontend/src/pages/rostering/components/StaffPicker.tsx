@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Search } from 'lucide-react'
@@ -8,7 +8,7 @@ import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
 import { formatHoursMeter, formatShiftTimeRange } from '../lib/roster'
-import { WEEK_TARGET_HOURS, firstName, moveLine, pickName, pickOptionName, pickerGroups, pickerPlacement, type PickRow } from '../lib/rosterDrag'
+import { WEEK_TARGET_HOURS, firstName, moveLine, pickName, pickOptionName, pickerGroups, pickerPlacement, swapCandidates, swapLine, type PickRow } from '../lib/rosterDrag'
 
 export type StaffPickerProps = {
   /** The Needs staff shift being filled. Null: closed. */
@@ -37,15 +37,45 @@ const GROUPS = [
  * already knows (overlap, leave, hours, the expired flag) and judges nothing: the page sends the pick as a drop would, and the server's findings answer it. It is a panel anchored to
  * its chip from md up, and the house SlideOver below.
  */
-export function StaffPicker({ target, sheet, ...rest }: StaffPickerProps) {
+export function StaffPicker({ target, sheet, onClose, ...body }: StaffPickerProps) {
   if (!target) return null
-  return sheet ? <PickerSheet target={target} {...rest} /> : <PickerPanel target={target} {...rest} />
+  return (
+    <PickerShell target={target} name={pickName(target)} title="Assign someone" sheet={sheet} onClose={onClose}>
+      {inputRef => <PickerBody target={target} {...body} inputRef={inputRef} />}
+    </PickerShell>
+  )
 }
 
-type OpenProps = Omit<StaffPickerProps, 'target' | 'sheet'> & { target: ShiftDto }
+export type SwapPickerProps = {
+  /** The assigned shift whose person is swapped. Null: closed. */
+  source: ShiftDto | null
+  /** Every shift on the RAW board. */
+  shifts: ShiftDto[]
+  sheet: boolean
+  onPick: (shift: ShiftDto) => void
+  onClose: () => void
+}
+
+/** The menu's "Swap with…" (the lead's decision 1, 2026-10-15): the plus's shell, listing the shifts a drag swap could land on. The page sends the pick as a drag swap would. */
+export function SwapPicker({ source, shifts, sheet, onPick, onClose }: SwapPickerProps) {
+  if (!source) return null
+  const name = `Swap ${firstName(source.staffName)} with…`
+  return (
+    <PickerShell target={source} name={name} title={name} sheet={sheet} onClose={onClose}>
+      {inputRef => <SwapBody source={source} shifts={shifts} onPick={onPick} inputRef={inputRef} />}
+    </PickerShell>
+  )
+}
+
+/** The house picker shell: `name` is the panel's accessible name, `title` the sheet's heading. The body gets the search's ref, where focus starts. */
+type ShellProps = { target: ShiftDto; name: string; title: string; sheet: boolean; onClose: () => void; children: (inputRef: RefObject<HTMLInputElement | null>) => ReactNode }
+
+function PickerShell({ sheet, ...rest }: ShellProps) {
+  return sheet ? <PickerSheet {...rest} /> : <PickerPanel {...rest} />
+}
 
 /** md and up: a non-modal panel portalled to the body. It follows its chip and closes once the chip leaves the board frame's visible area. */
-function PickerPanel({ target, onClose, ...body }: OpenProps) {
+function PickerPanel({ target, name, onClose, children }: Omit<ShellProps, 'sheet' | 'title'>) {
   const panelRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const closeRef = useRef(onClose)
@@ -97,50 +127,43 @@ function PickerPanel({ target, onClose, ...body }: OpenProps) {
     <div
       ref={panelRef}
       role="dialog"
-      aria-label={pickName(target)}
+      aria-label={name}
       // Positioned by the layout effect above. The Floating Panel: card fill, --radius-md, the house shadow (StaffStrip's CarriedPuck), no border.
       className="fixed z-50 flex flex-col overflow-hidden rounded-[var(--radius-md)] bg-[var(--color-card)] shadow-[0_24px_40px_-12px_color-mix(in_srgb,var(--color-foreground)_14%,transparent)]"
     >
-      <PickerBody target={target} {...body} inputRef={inputRef} />
+      {children(inputRef)}
     </div>,
     document.body,
   )
 }
 
 /** Below md: the house SlideOver (SHAPE departure 6). It brings the focus trap, Escape, the scroll lock and focus return to the plus. A pick closes it, so it has no footer. */
-function PickerSheet({ target, onClose, ...body }: OpenProps) {
+function PickerSheet({ target, title, onClose, children }: Omit<ShellProps, 'sheet' | 'name'>) {
   const inputRef = useRef<HTMLInputElement>(null)
   return (
     <SlideOver
       open
       onClose={onClose}
-      title="Assign someone"
+      title={title}
       description={`${target.participantName}, ${format(parseISO(target.serviceDate), 'EEE d MMM')}, ${formatShiftTimeRange(target.startTime, target.endTime)}`}
       initialFocusRef={inputRef}
       bodyClassName="flex flex-col overflow-hidden p-0"
     >
-      <PickerBody target={target} {...body} inputRef={inputRef} />
+      {children(inputRef)}
     </SlideOver>
   )
 }
 
-type BodyProps = Omit<OpenProps, 'onClose'> & {
+type BodyProps = Omit<StaffPickerProps, 'target' | 'sheet' | 'onClose'> & {
+  target: ShiftDto
   inputRef: RefObject<HTMLInputElement | null>
 }
 
-/** The search, the Published line and the grouped listbox. Focus stays in the search; the active option is virtual (aria-activedescendant), as in SearchableSelect. */
-function PickerBody({ target, staff, staffLoading, shifts, leave, hours, onPick, inputRef }: BodyProps) {
+/** The keyboard model both bodies share: focus stays in the search; the active option is virtual (aria-activedescendant), as in SearchableSelect. */
+function useListbox<R>(options: R[], onPick: (row: R) => void) {
   const listId = useId()
-  const [query, setQuery] = useState('')
   const [active, setActive] = useState(-1)
-  const q = query.trim().toLowerCase()
-  const groups = useMemo(() => pickerGroups(target, staff, shifts, leave, hours), [target, staff, shifts, leave, hours])
-  // The search matches any part of the full name, ignoring case, in every group. An empty group draws no label.
-  const shown = GROUPS.map(g => ({ ...g, rows: groups[g.key].filter(r => !q || r.person.fullName.toLowerCase().includes(q)) })).filter(g => g.rows.length > 0)
-  const options = shown.flatMap(g => g.rows)
-  const firstIndex = shown.map((_, i) => shown.slice(0, i).reduce((n, g) => n + g.rows.length, 0))
   const optionId = (i: number) => `${listId}-opt-${i}`
-
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
@@ -157,30 +180,54 @@ function PickerBody({ target, staff, staffLoading, shifts, leave, hours, onPick,
       if (row) onPick(row)
     }
   }
+  return { listId, active, setActive, optionId, handleKeyDown, activeId: active >= 0 && active < options.length ? optionId(active) : undefined }
+}
+
+/** SearchInput's look; it takes no ref and no combobox role, so the input is written out here. */
+function PickerSearch({ inputRef, listId, activeId, value, onChange, onKeyDown }: {
+  inputRef: RefObject<HTMLInputElement | null>; listId: string; activeId?: string; value: string; onChange: (value: string) => void; onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void
+}) {
+  return (
+    <div className="relative">
+      <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
+      <input
+        ref={inputRef}
+        type="text"
+        role="combobox"
+        aria-label="Find staff"
+        placeholder="Find staff"
+        aria-expanded="true"
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={activeId}
+        autoComplete="off"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        className="h-[var(--control-h)] w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-input)] pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+      />
+    </div>
+  )
+}
+
+const OPTION = 'flex min-h-[var(--control-h)] cursor-pointer px-3 py-1.5'
+const optionFill = (active: boolean) => (active ? 'bg-[var(--color-surface-container-low)]' : 'hover:bg-[var(--color-surface-container-low)]')
+
+/** The search, the Published line and the grouped listbox. */
+function PickerBody({ target, staff, staffLoading, shifts, leave, hours, onPick, inputRef }: BodyProps) {
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const groups = useMemo(() => pickerGroups(target, staff, shifts, leave, hours), [target, staff, shifts, leave, hours])
+  // The search matches any part of the full name, ignoring case, in every group. An empty group draws no label.
+  const shown = GROUPS.map(g => ({ ...g, rows: groups[g.key].filter(r => !q || r.person.fullName.toLowerCase().includes(q)) })).filter(g => g.rows.length > 0)
+  const options = shown.flatMap(g => g.rows)
+  const firstIndex = shown.map((_, i) => shown.slice(0, i).reduce((n, g) => n + g.rows.length, 0))
+  const { listId, active, setActive, optionId, handleKeyDown, activeId } = useListbox(options, onPick)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 space-y-1.5 p-2">
-        {/* SearchInput's look; it takes no ref and no combobox role, so the input is written out here. */}
-        <div className="relative">
-          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
-          <input
-            ref={inputRef}
-            type="text"
-            role="combobox"
-            aria-label="Find staff"
-            placeholder="Find staff"
-            aria-expanded="true"
-            aria-controls={listId}
-            aria-autocomplete="list"
-            aria-activedescendant={active >= 0 && active < options.length ? optionId(active) : undefined}
-            autoComplete="off"
-            value={query}
-            onChange={e => { setQuery(e.target.value); setActive(-1) }}
-            onKeyDown={handleKeyDown}
-            className="h-[var(--control-h)] w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-input)] pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-          />
-        </div>
+        <PickerSearch inputRef={inputRef} listId={listId} activeId={activeId} value={query} onChange={v => { setQuery(v); setActive(-1) }} onKeyDown={handleKeyDown} />
         {/* A pick on a Published shift tells the person at once: said once, in the replace prompt's own words (SHAPE departure 5). */}
         {target.status === 'Published' && <p className={`text-xs ${TONE.info.ink}`}>This shift is published, so the change goes out now.</p>}
       </div>
@@ -208,6 +255,44 @@ function PickerBody({ target, staff, staffLoading, shifts, leave, hours, onPick,
   )
 }
 
+/** The swap picker's body: the search and one flat list, the person then the day and time (the lead's decision 1). The person is the visible lead, so the search matches their name. */
+function SwapBody({ source, shifts, onPick, inputRef }: { source: ShiftDto; shifts: ShiftDto[]; onPick: (shift: ShiftDto) => void; inputRef: RefObject<HTMLInputElement | null> }) {
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const candidates = useMemo(() => swapCandidates(source, shifts), [source, shifts])
+  const options = candidates.filter(s => !q || (s.staffName ?? '').toLowerCase().includes(q))
+  const { listId, active, setActive, optionId, handleKeyDown, activeId } = useListbox(options, onPick)
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 p-2">
+        <PickerSearch inputRef={inputRef} listId={listId} activeId={activeId} value={query} onChange={v => { setQuery(v); setActive(-1) }} onKeyDown={handleKeyDown} />
+      </div>
+      <div role="listbox" id={listId} aria-label="Shifts" className="min-h-0 flex-1 overflow-y-auto pb-1">
+        {options.length === 0 ? (
+          <p role="presentation" className="px-3 py-2 text-[13px] text-muted-foreground">{q ? `No staff match “${query.trim()}”.` : 'No one else is rostered this week to swap with.'}</p>
+        ) : options.map((shift, i) => (
+          <div
+            key={shift.id}
+            id={optionId(i)}
+            role="option"
+            aria-selected={i === active}
+            aria-label={swapLine(shift)}
+            // Focus stays in the search: the browser's mousedown would take it before the click picks (SearchableSelect).
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => onPick(shift)}
+            onMouseEnter={() => setActive(i)}
+            className={`${OPTION} items-center gap-1 ${optionFill(i === active)}`}
+          >
+            <span className="min-w-0 truncate text-sm font-medium text-foreground" title={shift.staffName ?? undefined}>{shift.staffName}</span>
+            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">· {format(parseISO(shift.serviceDate), 'EEE')} {formatShiftTimeRange(shift.startTime, shift.endTime)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** One person: the strip puck's language (StaffStrip). The flag, the name and "12 / 38 h". Then the leave badge and the Move line, when there is one. Then "Published: tells {name}" when that shift is out. */
 function PickOption({ id, row, active, onPick, onHover }: { id: string; row: PickRow; active: boolean; onPick: (row: PickRow) => void; onHover: () => void }) {
   const { person, source } = row
@@ -223,7 +308,7 @@ function PickOption({ id, row, active, onPick, onHover }: { id: string; row: Pic
       onMouseDown={e => e.preventDefault()}
       onClick={() => onPick(row)}
       onMouseEnter={onHover}
-      className={`flex min-h-[var(--control-h)] cursor-pointer flex-col justify-center px-3 py-1.5 ${active ? 'bg-[var(--color-surface-container-low)]' : 'hover:bg-[var(--color-surface-container-low)]'}`}
+      className={`${OPTION} flex-col justify-center ${optionFill(active)}`}
     >
       <span className="flex items-center gap-1.5">
         {person.hasExpiredQualifications && <AlertTriangle className="h-3 w-3 shrink-0 text-[var(--color-on-warning-container)]" aria-hidden="true" />}

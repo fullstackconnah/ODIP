@@ -50,3 +50,34 @@ test('a person from the strip fills a Needs staff shift, then swaps with a colle
   expect(staffOn(open.id)).toBe(sam.id);
   expect(staffOn(samsShift.id)).toBe(alex.id);
 });
+
+// The ⋮ menu's "Swap with…" (the lead's decision 1, 2026-10-15): the same move-staff Swap a drag sends, chosen from the swap picker.
+test('a shift\'s menu swaps its person with a colleague on another shift', async ({ page, session }) => {
+  const participant = await makeParticipant(session);
+  const alex = await makeStaff(session);
+  const sam = await makeStaff(session);
+  const wednesday = nextWednesday();
+  const alexsShift = await makeShift(session, participant.id, wednesday);
+  const samsShift = await makeShift(session, participant.id, addDays(wednesday, 1));
+  await assignShift(session, alexsShift.id, alex.id);
+  await assignShift(session, samsShift.id, sam.id);
+
+  await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
+  const alexsPuck = page.locator(`[data-shift-open="${alexsShift.id}"]`);
+  const samsPuck = page.locator(`[data-shift-open="${samsShift.id}"]`);
+  await expect(alexsPuck).toContainText(`Wk ${alex.token}`);
+
+  await page.locator(`[data-shift-chip="${alexsShift.id}"]`).getByRole('button', { name: /^Actions for/ }).click();
+  await page.getByRole('option', { name: 'Swap with…' }).click();
+  const picker = page.getByRole('dialog', { name: /^Swap .* with…$/ });
+  await picker.getByRole('combobox', { name: 'Find staff' }).fill(sam.token);
+  await picker.getByRole('option', { name: new RegExp(`^Wk ${sam.token} · `) }).click();
+  await expect(alexsPuck).toContainText(`Wk ${sam.token}`);
+  await expect(samsPuck).toContainText(`Wk ${alex.token}`);
+
+  const board = await call(session, 'GET', `/rostering/board?weekStart=${mondayOf(wednesday)}&groupBy=participant`);
+  const row = board.data.participantRows.find((r: { participantId: string }) => r.participantId === participant.id);
+  const staffOn = (id: string) => (row.shifts as { id: string; staffId?: string }[]).find(s => s.id === id)?.staffId;
+  expect(staffOn(alexsShift.id)).toBe(sam.id);
+  expect(staffOn(samsShift.id)).toBe(alex.id);
+});

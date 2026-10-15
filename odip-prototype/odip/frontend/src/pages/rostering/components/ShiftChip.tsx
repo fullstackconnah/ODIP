@@ -81,7 +81,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
 
   // Roster drag and drop: the grip lifts this shift's person; the chip is a drop target, locked ones included, so a drag over one can say why it is refused.
-  const { disabled: dragsOff, pending, pick, pickingId } = useContext(DropStateContext)
+  const { disabled: dragsOff, pending, pick, swap, pickingId } = useContext(DropStateContext)
   const locked = isLockedShift(shift)
   const canLift = draggable && canWrite && isFilled && !locked
   const carry: DragCarry = { staffId: shift.staffId ?? '', staffName: shift.staffName ?? '', fromShift: shift }
@@ -128,6 +128,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     { value: 'edit', label: 'Edit' },
     // The owner's words (the brief, section 5): Replace and Remove name the person, which keeps Remove apart from Delete and says who is meant in the Staff view.
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
+    // Swap (the lead's decision 1): an assigned, unlocked chip, wherever the page can open the swap picker. It waits while a write is out, as every drag and plus does.
+    ...(swap && isFilled && !locked ? [{ value: 'swap', label: 'Swap with…', disabled: dragsOff }] : []),
     ...(shift.staffId ? [{ value: 'unassign', label: `Remove ${firstName(shift.staffName)}` }] : []),
     { value: 'delete', label: 'Delete' },
   ]
@@ -136,6 +138,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     if (value === 'edit') onOpen(shift)
     // An unfilled chip assigns through the picker, as its plus does: one way to assign on one chip (SHAPE departure 13). A filled chip's "Replace {first name}…" keeps the panel.
     else if (value === 'assign') { if (!canPick) onAssignTo(shift); else if (!dragsOff) pick?.(shift) }
+    else if (value === 'swap') { if (!dragsOff) swap?.(shift) }
     else if (value === 'unassign') onUnassign(shift)
     else if (value === 'delete') onDelete(shift)
   }

@@ -4,7 +4,7 @@ import type { ShiftDto, StaffLeaveDto, StaffListDto } from '@/api/types'
 import {
   assignedSentence, carriedLine, dropOutcome, keepInWindow, movedSentence, publishedSentence, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
   staffWeekHours, swappedSentence, type DragCarry, type DropTarget,
-  hoursText, leaveFromStaffRows, moveLine, pickName, pickOptionName, pickerGroups, shiftsOverlap, type PickRow,
+  hoursText, leaveFromStaffRows, moveLine, pickName, pickOptionName, pickerGroups, shiftsOverlap, swapCandidates, swapLine, type PickRow,
 } from './rosterDrag'
 
 const sam: DragCarry = { staffId: 'staff-2', staffName: 'Sam Wilson' }
@@ -345,5 +345,38 @@ describe('the picker words', () => {
       { staffId: 's-5', from: '2026-08-17', to: '2026-08-17', status: 'Approved' },
       { staffId: 's-5', from: '2026-08-18', to: '2026-08-18', status: 'Pending' },
     ])
+  })
+})
+
+// The ⋮ menu's "Swap with…" (the lead's decision 1, 2026-10-15): the shifts a drag swap could land on, in the visible week.
+describe('swapCandidates', () => {
+  const on = (id: string, serviceDate: string, staffId: string, staffName: string, o: Partial<ShiftDto> = {}) => makeShift({ id, serviceDate, staffId, staffName, startTime: '09:00:00', endTime: '15:00:00', ...o })
+  const source = on('a', '2026-08-19', 'staff-2', 'Sam Wilson')
+
+  it('offers every other assigned, unlocked shift with someone else on it: same day first, then by date, then by start', () => {
+    const shifts = [
+      on('tue-8', '2026-08-18', 'staff-4', 'Jo Park', { startTime: '08:00:00' }),
+      source,
+      on('mon', '2026-08-17', 'staff-3', 'Alex Ng'),
+      on('wed-1pm', '2026-08-19', 'staff-6', 'Kim Lee', { startTime: '13:00:00' }),
+      on('tue-7', '2026-08-18', 'staff-5', 'Lee Tan', { startTime: '07:00:00' }),
+      on('wed-7am', '2026-08-19', 'staff-7', 'Mei Zhang', { startTime: '07:00:00' }),
+    ]
+    expect(swapCandidates(source, shifts).map(s => s.id)).toEqual(['wed-7am', 'wed-1pm', 'mon', 'tue-7', 'tue-8'])
+  })
+
+  it('leaves out the shift itself, unassigned and locked shifts, the same person, and a worker on approved leave (a hole a drag would fill, not swap)', () => {
+    const shifts = [
+      source,
+      makeUnfilledShift({ id: 'open', serviceDate: '2026-08-19' }),
+      ...(['InProgress', 'PendingReview', 'Completed', 'Cancelled'] as const).map(status => on(status, '2026-08-20', 'staff-3', 'Alex Ng', { status })),
+      on('sam-again', '2026-08-21', 'staff-2', 'Sam Wilson'),
+      on('leave', '2026-08-21', 'staff-4', 'Jo Park', { assigneeOnApprovedLeave: true }),
+    ]
+    expect(swapCandidates(source, shifts)).toEqual([])
+  })
+
+  it('reads each row as the person, then the day and time', () => {
+    expect(swapLine(on('t', '2026-08-18', 'staff-3', 'Sam Wilson'))).toBe('Sam Wilson · Tue 9am–3pm')
   })
 })

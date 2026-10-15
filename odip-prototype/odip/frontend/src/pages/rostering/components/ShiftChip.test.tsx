@@ -861,3 +861,50 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     expect(onAssignTo).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ShiftChip menu: Swap with… (the lead decision 1, 2026-10-15)', () => {
+  const chipIn = (shift: ShiftDto, state: Partial<DropState> = {}, extra: Partial<ShiftChipProps> = {}) => {
+    const swap = vi.fn()
+    renderChip(
+      <DropStateContext.Provider value={{ disabled: false, pending: null, swap, ...state }}>
+        <ShiftChip shift={shift} canWrite dashed={!shift.staffId} context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} {...extra} />
+      </DropStateContext.Provider>,
+    )
+    return swap
+  }
+  const openMenu = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /^Actions for/ }))
+
+  it('reads Edit, Replace {first}…, Swap with…, Remove {first}, Delete on an assigned chip, and Swap opens the swap picker for it', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ id: 'kim', staffName: 'Kim Lee' })
+    const swap = chipIn(shift)
+    await openMenu(user)
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Edit', 'Replace Kim…', 'Swap with…', 'Remove Kim', 'Delete'])
+    await user.click(screen.getByRole('option', { name: 'Swap with…' }))
+    expect(swap).toHaveBeenCalledWith(shift)
+  })
+
+  it('offers no Swap on an unfilled or a locked chip, or where nothing can open the picker', async () => {
+    const user = userEvent.setup()
+    chipIn(makeUnfilledShift({ id: 'open' }))
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Swap with…' })).not.toBeInTheDocument()
+    cleanup()
+    chipIn(makeShift({ id: 'done', status: 'Completed' }))
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Swap with…' })).not.toBeInTheDocument()
+    cleanup()
+    renderChip(<ShiftChip shift={makeShift()} canWrite context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Swap with…' })).not.toBeInTheDocument()
+  })
+
+  it('waits while a write is out, as every drag and plus does (#253)', async () => {
+    const user = userEvent.setup()
+    const swap = chipIn(makeShift({ id: 'kim', staffName: 'Kim Lee' }), { disabled: true })
+    await openMenu(user)
+    expect(screen.getByRole('option', { name: 'Swap with…' })).toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByRole('option', { name: 'Swap with…' }))
+    expect(swap).not.toHaveBeenCalled()
+  })
+})
