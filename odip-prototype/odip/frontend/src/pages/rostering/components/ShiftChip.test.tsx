@@ -741,6 +741,35 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     expect(screen.getByText('Assigning Kim…')).toBeInTheDocument()
   })
 
+  it('keeps the plus column as an empty spacer while a pick is out, drag or no drag, so the text does not jump', () => {
+    const pending = { disabled: true, pending: { targetId: 'open', staffName: 'Kim Lee' } }
+    for (const draggable of [true, false]) {
+      const { container, unmount } = withPick(chipOf(open, { draggable }), pending)
+      const lead = container.querySelector('[data-shift-chip="open"]')!.firstElementChild!
+      expect(lead).toHaveAttribute('aria-hidden', 'true')
+      expect(lead).toHaveClass('w-[18px]', 'pointer-coarse:w-11')
+      unmount()
+    }
+  })
+
+  it('pads the text only where no leading column does', () => {
+    const wrapper = (container: HTMLElement) => container.querySelector('[data-shift-open] > .overflow-hidden.flex-col')!
+    const withPlus = withPick(chipOf(open))
+    expect(wrapper(withPlus.container)).not.toHaveClass('px-0.5')
+    withPlus.unmount()
+    const bare = withPick(chipOf(makeShift({ id: 'f', staffName: 'Sam Wilson' }), { draggable: false }))
+    expect(wrapper(bare.container)).toHaveClass('px-0.5')
+  })
+
+  it('disables Assign to… on an unfilled chip under the same condition as its plus', async () => {
+    const user = userEvent.setup()
+    const { pick } = withPick(chipOf(open), { disabled: true })
+    await user.click(screen.getByRole('button', { name: "Actions for Mia Chen's shift" }))
+    expect(screen.getByRole('option', { name: 'Assign to…' })).toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByRole('option', { name: 'Assign to…' }))
+    expect(pick).not.toHaveBeenCalled()
+  })
+
   it("opens the picker from an unfilled chip's Assign to…, and keeps the panel for a filled chip's Reassign to… (SHAPE departure 13)", async () => {
     const user = userEvent.setup()
     const onAssignTo = vi.fn()

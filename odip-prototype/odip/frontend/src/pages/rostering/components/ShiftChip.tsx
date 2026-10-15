@@ -127,7 +127,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
-    { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : 'Reassign to…' },
+    { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : 'Reassign to…', disabled: canPick && dragsOff },
     ...(shift.staffId ? [{ value: 'unassign', label: 'Unassign' }] : []),
     { value: 'delete', label: 'Delete' },
   ]
@@ -217,7 +217,10 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           turned "open this shift" into "start a keyboard drag" for anyone tabbing to the chip.
           Splitting them keeps keyboard drag working (from the handle) without hijacking Enter on
           the primary control. */}
-      {canPick && !busy ? (
+      {canPick && busy ? (
+        // The plus is gone while its write is out, but its column stays (phones and the Staff view too), so the text does not jump.
+        <span className="w-[18px] shrink-0 pointer-coarse:w-11" aria-hidden="true" />
+      ) : canPick ? (
         // The chip's leading column is the person slot (the brief, section 3): the grip when there is a person to move, this plus when there is nobody, the Lock when nothing can change.
         // A ghost icon button the full height of the chip: 18px on a fine pointer, a real 44px square under a coarse one (no TAP_AREA pad: it would cover the open control).
         <button
@@ -306,7 +309,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           exceed the box; without a clip boundary here that excess would render over the actions menu
           beside it instead of just yielding.
         */}
-        <span className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden rounded-sm @[14rem]:flex-row @[14rem]:items-center">
+        <span className={`flex min-w-0 flex-1 flex-col justify-center overflow-hidden rounded-sm @[14rem]:flex-row @[14rem]:items-center ${canPick || (canWrite && draggable) ? '' : 'px-0.5'}`}>
           <span className="flex min-w-0 items-center gap-0.5">
             <span
               className={`shrink-0 font-medium tabular-nums ${shift.status === 'Cancelled' ? 'text-muted-foreground line-through' : 'text-foreground'}`}
