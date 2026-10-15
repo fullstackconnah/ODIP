@@ -42,7 +42,7 @@ export function visitWhen(iso: string, zone: string, now: Date = new Date()): st
 }
 
 /** A date and time that never breaks across lines in running text ("10:00" / "am"): every space becomes a no-break space. */
-export const unbroken = (text: string) => text.replaceAll(' ', ' ')
+export const unbroken = (text: string) => text.replaceAll(' ', '\u00a0')
 
 /** "Thu 15 Oct" */
 export function visitDay(iso: string, zone: string): string {
