@@ -172,7 +172,7 @@ function build(body, participantId, existing) {
 /**
  * Routes in the mock's own shape: [pattern, handler(...pathIds, body|searchParams)]. `respond` and `failEnvelope` come from server.js, so the dispatcher's status handling is reused.
  */
-function create({ respond, people = [], priceLines = () => [] }) {
+function create({ respond, people = [], priceLines = () => [], agreementAlertsOf = () => [] }) {
   const answer = (result) => (result.status ? respond(result.status, result.body) : result)
   const todayIso = () => new Date().toISOString().slice(0, 10)
   const ledgerOf = (id) => ledgerFor(plansOf, id, todayIso(), settings.approachingPercent)
@@ -182,12 +182,12 @@ function create({ respond, people = [], priceLines = () => [] }) {
     ['funding/settings', () => settings],
     // The Budgets list (phase 2b): every active participant's pools for the period running now, by risk, and the NDIS-funded participants with no budget in force. mock-budgets.js.
     ['funding/budgets', () => budgetList(people, ledgerOf, todayIso(), settings.approachingPercent)],
-    // The participant alerts the dashboard's Budgets at risk tile and the participant banners read. The mock knows only the budget kinds. `participants/alerts` is before `participants/:id` in the
+    // The participant alerts the dashboard's Budgets at risk tile and the participant banners read: the budget kinds, and the agreement ones server.js passes in (agreement PR 2). `participants/alerts` is before `participants/:id` in the
     // route table (funding.get is first), so the word is never taken for an id.
-    ['participants/alerts', () => people.filter((p) => p.isActive && !p.isDraft).map((p) => alertsDto(p, ledgerOf(p.id)))],
+    ['participants/alerts', () => people.filter((p) => p.isActive && !p.isDraft).map((p) => alertsDto(p, ledgerOf(p.id), agreementAlertsOf(p.id)))],
     ['participants/:id/alerts', (id) => {
       const person = people.find((p) => p.id === id)
-      return person ? alertsDto(person, ledgerOf(id)) : respond(404, fail(['Participant not found.']))
+      return person ? alertsDto(person, ledgerOf(id), agreementAlertsOf(id)) : respond(404, fail(['Participant not found.']))
     }],
     ['participants/:id/funding/plans', (id) => ({
       plans: [...plansOf(id)].sort((a, b) => (a.planStart < b.planStart ? 1 : -1)),

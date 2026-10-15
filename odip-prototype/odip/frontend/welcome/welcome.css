@@ -195,7 +195,8 @@ main,
   inset: 0 0 auto;
   z-index: 40;
   padding-top: env(safe-area-inset-top, 0px);
-  background: var(--forest);
+  /* A hair short of opaque: Chrome's software compositor culls the canopy canvas behind an opaque fixed layer at the wrong end, leaving a header-tall unpainted band at the foot of the screen. */
+  background: color-mix(in srgb, var(--forest) 99%, transparent);
   border-bottom: 1px solid var(--hairline);
 }
 .site-header__inner {
@@ -1044,35 +1045,96 @@ main,
 
 /* ---------- Footer ---------- */
 .site-footer {
-  padding-block: 56px calc(56px + var(--pill-h));
+  /* Clears the fixed section pill, and the home indicator (this page sets viewport-fit=cover). */
+  padding-block: 56px calc(56px + var(--pill-h) + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--hairline);
 }
 .site-footer__inner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-  gap: 40px 64px;
+  gap: 40px;
 }
-.site-footer__brand {
-  display: grid;
-  justify-items: start;
-  gap: 12px;
-  color: var(--text-2);
-}
-.site-footer__notes h2 {
-  margin-top: 28px;
+/* Footer headings: the small tracked label in Canopy Text Quiet (welcome/DESIGN.md, Label). */
+.site-footer h2 {
   font: 600 0.75rem/1.3 var(--font-sans);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-3);
 }
-.site-footer__notes h2:first-child {
-  margin-top: 0;
+.site-footer__ack p {
+  max-width: 62ch;
+  margin-top: 8px;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+/* Brand first and widest; the link columns share the rest. A wrapping row, not fixed grid tracks, so a hidden column leaves no gap. */
+.site-footer__cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px 48px;
+}
+.site-footer__brand {
+  display: grid;
+  flex: 0 1 16rem;
+  align-content: start;
+  justify-items: start;
+  gap: 12px;
+  color: var(--text-2);
+}
+.site-footer__col {
+  flex: 0 1 10rem;
+}
+.site-footer__col ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.site-footer__col li {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text-2);
+}
+/* A heading over a list of links is not running text (WCAG 1.4.1), so these go without an underline until hovered. */
+.site-footer__col a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  text-decoration: none;
+}
+.site-footer__col a:hover,
+.site-footer__notes a:hover {
+  color: var(--sprout);
+  text-decoration: underline;
+}
+.site-footer__notes {
+  display: grid;
+  gap: 28px 64px;
 }
 .site-footer__notes p {
   max-width: 62ch;
   margin-top: 8px;
   font-size: 0.875rem;
   color: var(--text-2);
+}
+.site-footer__legal {
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+@media (min-width: 900px) {
+  .site-footer__notes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 639.98px) {
+  .site-footer__brand {
+    flex-basis: 100%;
+  }
+  .site-footer__col {
+    flex: 1 1 calc(50% - 24px);
+  }
 }
 
 /* ---------- Wide screens: the section index in the left margin, the pause control bottom right ---------- */
@@ -1256,9 +1318,6 @@ main,
 }
 
 @media (max-width: 759.98px) {
-  .site-footer__inner {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .readings__list {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -271,6 +271,12 @@ export function usePermissions() {
     canImportData: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
 
     /**
+     * Settings → Integrations (Employment Hero). EmploymentHeroController admits Admin and SuperAdmin and refuses a SuperAdmin who is not viewing an
+     * organisation (an integration belongs to one), as the import does.
+     */
+    canManageIntegrations: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+
+    /**
      * A participant's plan budget (the Funding tab, and the budget card on Intake and the Profile wizard). It is money, and money is never visible to SupportWorker or ReadOnly:
      * mirrors ParticipantFundingController's class-wide [Authorize(Roles = "SuperAdmin,Admin,Coordinator")], reads included. Deliberately NOT canWrite, which ReadOnly satisfies.
      */

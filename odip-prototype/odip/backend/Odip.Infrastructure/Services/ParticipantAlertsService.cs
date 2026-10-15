@@ -46,6 +46,8 @@ namespace Odip.Infrastructure.Services;
 ///    (budget phase 2b) — the participant's budget against the plan recorded for them, for the funding period running now, all opening the Funding tab. The rules are
 ///    <see cref="BudgetAlertRules"/>'s and their figures come from <see cref="BudgetAlertSource"/>, which calls the ledger ONCE for the whole set (the aggregate route runs on every
 ///    dashboard view), so the number of queries does not grow with the number of participants. Left out when the service is built without a source.
+/// 12. <b>agreement-ending-soon</b> (Warning) / <b>agreement-ended</b> (Critical) (agreement PR 2): the newest approved service agreement ending within 60 days with no renewal
+///    waiting, or ended with no successor approved, as <see cref="AgreementEnding"/> decides. Active participants only, and linking to the agreement page.
 ///
 /// Dropped: a medication/support-profile "review overdue" rule was NOT added here — it would
 /// duplicate <c>MedicationsController.ToListDto</c>'s existing per-medication
@@ -275,6 +277,16 @@ public class ParticipantAlertsService
                         "history", $"/incidents/{incident.Id}");
                 }
             }
+        }
+
+        // ── Rule 12: the service agreement ending or ended (agreement PR 2) ──
+        // Active participants only (D6): the participant page asks with activeOnly false, and an archived participant's agreement is nobody's task.
+        var activeIds = participants.Where(p => p.IsActive).Select(p => p.Id).ToList();
+        foreach (var ending in await AgreementEnding.FindAsync(_db, activeIds, today, ct))
+        {
+            var ended = ending.DaysLeft < 0;
+            Add(ending.ParticipantId, ended ? "agreement-ended" : "agreement-ending-soon", ended ? AlertSeverity.Critical : AlertSeverity.Warning,
+                AgreementEnding.Describe(ending), "details", $"/participants/{ending.ParticipantId}/agreement-draft");
         }
 
         // ── Rules 8 to 11: the participant's budget (phase 2b) ──

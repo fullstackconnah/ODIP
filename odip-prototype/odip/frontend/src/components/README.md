@@ -843,8 +843,8 @@ with an 8px side inset (the compact card's). Given an `action` it is the band's 
   screen-reader-only text replaces the number: "Loading" (and the tile is `aria-busy`) while the request is in flight, "Couldn't load" (not busy) after it
   failed; `loading` wins if both are set. Use them for a figure whose own request has no data yet, so it is never read as a definite zero or an "All clear".
 
-Lay the tiles out with `pages/dashboard/AttentionBand.tsx`, which makes a tall tile of each item above zero, names the items at zero in one "All clear" row on Pale Sprout, and shows one Pale Sprout field when every
-item is at zero; its rows are dealt by `pages/dashboard/bandLayout.ts` (balanced, 1 to 5 tiles a row by the band's own width). The compact tile's source order is label, figure, caption, like a glance cell, so a screen reader
+Lay the tiles out with `pages/dashboard/AttentionBand.tsx`, which makes a tall tile of each item above zero, names the items at zero in one "All clear" row on Pale Sprout, and, when every item is at zero, only that
+row (the field that says nothing needs you is the page's `AllClearField`, drawn when every decision group and alert is at zero); its rows are dealt by `pages/dashboard/bandLayout.ts` (balanced, 1 to 5 tiles a row by the band's own width). The compact tile's source order is label, figure, caption, like a glance cell, so a screen reader
 hears "Overdue, 2"; the tall tile reads its figure, label, line and link in that order.
 
 ---

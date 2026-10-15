@@ -95,7 +95,7 @@ public sealed class ServiceAgreementApprovalService
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
         if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: true, ct);
-        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
 
         var (draft, participant) = found.Value;
         var plan = await PlanAsync(tenantId, draft, participant, ct, includeBudget: true);
@@ -108,7 +108,7 @@ public sealed class ServiceAgreementApprovalService
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
         if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: false, ct);
-        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
 
         try
         {
@@ -157,7 +157,7 @@ public sealed class ServiceAgreementApprovalService
     private async Task<ApprovalOutcome> NotThereAsync(Guid tenantId, Guid participantId, ApprovalCaller caller, bool preview, CancellationToken ct)
     {
         if (await NewestVersionAsync(tenantId, participantId, ct) is not { } newest) return new ApprovalOutcome(ApprovalStatus.NotFound, Errors: new[] { "Draft not found." });
-        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
         return Superseded(newest, preview);
     }
 
@@ -242,6 +242,8 @@ public sealed class ServiceAgreementApprovalService
         public List<Shift> ToRemove { get; set; } = new();
         /// <summary>The ended patterns whose new pattern is the same support, by the ended pattern's id: their shifts move to it.</summary>
         public Dictionary<Guid, ShiftPattern> CarryTo { get; set; } = new();
+        /// <summary>The new patterns a renewal's approval matched to a pattern ending the day before it starts (D12): like CarryTo's, they are not changed supports.</summary>
+        public HashSet<ShiftPattern> HandedOn { get; } = new();
         /// <summary>The shifts that move (tracked: the approval's own save moves them).</summary>
         public List<Shift> ToCarry { get; set; } = new();
         /// <summary>The (new pattern, day) pairs the moved shifts cover: generation makes nothing there.</summary>
@@ -264,8 +266,8 @@ public sealed class ServiceAgreementApprovalService
             AlreadyApproved = Existing is not null,
             Reasons = Reasons.ToList(),
             PatternsToCreate = NewPatterns.Count, PatternsToEnd = ToEnd.Count, EndsFromVersion = EndsFromVersion, EndsOn = ToEnd.Count > 0 ? EndsOn : null,
-            // A new pattern no ended one matches is a changed support: it starts with no default staff (a first approval ends nothing, so it has none to count).
-            ChangedPatterns = ToEnd.Count > 0 ? NewPatterns.Count - CarryTo.Values.Distinct().Count() : 0,
+            // A new pattern no ended one matches, or for a renewal no pattern ending the day before it (D12), is a changed support: it starts with no default staff. A first approval has none to count.
+            ChangedPatterns = ToEnd.Count > 0 || HandedOn.Count > 0 ? NewPatterns.Count - CarryTo.Values.Union(HandedOn).Count() : 0,
             HandEditedPatterns = HandEdited,
             ShiftsToCreate = ShiftsToCreate, ShiftsNote = ShiftsNote,
             OldShiftsRemaining = OldShifts,
@@ -414,6 +416,9 @@ public sealed class ServiceAgreementApprovalService
             // An approval locks the old shifts before it reads any of them: the carry-over and the removal then both decide on what is committed.
             if (approving) await LockOldShiftsAsync(old.Select(p => p.Id).ToArray(), draft.AgreementStartDate > plan.Today ? draft.AgreementStartDate : plan.Today, ct);
             await CarryOverAsync(draft, plan, ct);
+            // A renewal ends no dated pattern: only the newest revision is approved, each approval ends every earlier pattern past its start, and the roster cannot move an agreement pattern's dates.
+            // So when the carry-over ended nothing, or only open patterns (a legacy pattern with no end, fix round 2), the patterns ending the day before hand on their default workers (D12).
+            if (plan.ToEnd.All(p => p.EffectiveTo is null)) await CarryDefaultsIntoRenewalAsync(plan, old, versionOf, ct);
             if (!approving) plan.HandEdited = await HandEditedAsync(plan, ct);
             (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, plan.ToCarry.Select(s => s.Id).ToHashSet());
             plan.OldShifts = plan.OldShifts with { Carried = plan.ToCarry.Count };
@@ -455,8 +460,7 @@ public sealed class ServiceAgreementApprovalService
     private async Task CarryOverAsync(ServiceAgreementDraft draft, Plan plan, CancellationToken ct)
     {
         // A default worker is carried only while that user is active: an archived one leaves the support with no default staff.
-        var defaults = plan.ToEnd.Where(p => p.DefaultUserId is not null).Select(p => p.DefaultUserId!.Value).Distinct().ToList();
-        var active = defaults.Count == 0 ? new HashSet<Guid>() : (await _db.Users.Where(u => defaults.Contains(u.Id) && u.IsActive).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+        var active = await ActiveUsersAsync(plan.ToEnd, ct);
         // plan.ToEnd runs oldest revision first, so when two ended generations are the same support, the newest revision's default worker and switch are the ones kept. Within one generation each new
         // pattern is matched once: the block ids are not compared (the agreement builder renumbers them on every save), so the day, worker slot, times and asks are what pair them.
         var taken = new HashSet<(Guid Made, Guid Source)>();
@@ -481,6 +485,37 @@ public sealed class ServiceAgreementApprovalService
             .ToListAsync(ct))
             .Where(s => !skipped.Contains((plan.CarryTo[s.ShiftPatternId!.Value].SourceBlockKey!, s.ServiceDate))).ToList();
         plan.Carried = plan.ToCarry.Select(s => (plan.CarryTo[s.ShiftPatternId!.Value].Id, s.ServiceDate)).ToHashSet();
+    }
+
+    /// <summary>The default workers of these patterns who are active users: a default worker is handed on only while that user is (an archived one leaves the support with none).</summary>
+    private async Task<HashSet<Guid>> ActiveUsersAsync(IEnumerable<ShiftPattern> patterns, CancellationToken ct)
+    {
+        var ids = patterns.Where(p => p.DefaultUserId is not null).Select(p => p.DefaultUserId!.Value).Distinct().ToList();
+        return ids.Count == 0 ? new HashSet<Guid>() : (await _db.Users.Where(u => ids.Contains(u.Id) && u.IsActive).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+    }
+
+    /// <summary>
+    /// Agreement PR 2 (D12): a renewal starts the day after the agreement before it ends, so approving it ends none of that agreement's patterns and the carry-over above never meets them. The same
+    /// support keeps its default worker all the same, while that user is active, and stays switched off when a coordinator switched it off: the patterns that end the day before this revision starts
+    /// hand both on, oldest revision first so the newest wins, each new pattern matched once per revision as the carry-over matches them. The matched ones are recorded, so the preview counts only
+    /// the changed supports as starting with no default staff. No shift moves: theirs all end before this revision starts.
+    /// </summary>
+    private async Task CarryDefaultsIntoRenewalAsync(Plan plan, List<ShiftPattern> old, Dictionary<Guid, int> versionOf, CancellationToken ct)
+    {
+        var endingBefore = old.Where(p => p.EffectiveTo == plan.EndsOn).OrderBy(p => versionOf[p.SourceDraftId!.Value]).ToList();
+        if (endingBefore.Count == 0) return;
+        var active = await ActiveUsersAsync(endingBefore, ct);
+        var taken = new HashSet<(Guid Made, Guid Source)>();
+        foreach (var ended in endingBefore)
+        {
+            // A new pattern the carry-over already gave an open pattern's worker keeps it.
+            if (plan.NewPatterns.FirstOrDefault(made => !taken.Contains((made.Id, ended.SourceDraftId!.Value)) && !plan.CarryTo.ContainsValue(made) && SameSupport(ended, made)) is not { } same) continue;
+            taken.Add((same.Id, ended.SourceDraftId!.Value));
+            plan.HandedOn.Add(same);
+            same.DefaultUserId = ended.DefaultUserId is { } user && active.Contains(user) ? user : null;
+            // The carry-over's own guard: a pattern an approval switched off because it ended before it began is not a coordinator's choice.
+            if (ended.EffectiveTo is not { } to || to >= ended.EffectiveFrom) same.IsActive = ended.IsActive;
+        }
     }
 
     /// <summary>
@@ -606,11 +641,11 @@ public sealed class ServiceAgreementApprovalService
 
     // ── Who may approve ───────────────────────────────────────────────────────────
 
-    /// <summary>The caller's role is one of the organisation's approver roles (Admin and Coordinator until it says otherwise), or the caller is a SuperAdmin acting for the organisation.</summary>
-    private async Task<bool> MayApproveAsync(Guid tenantId, ApprovalCaller caller, CancellationToken ct)
+    /// <summary>The caller's role is one of the organisation's approver roles (Admin and Coordinator until it says otherwise), or the caller is a SuperAdmin acting for the organisation. Renewing asks the same (agreement PR 2).</summary>
+    internal static async Task<bool> MayApproveAsync(PlanPricingService pricing, Guid tenantId, ApprovalCaller caller, CancellationToken ct)
     {
         if (caller.IsSuperAdmin) return true;
-        var allowed = PlanPricingPolicy.From(await _pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;
+        var allowed = PlanPricingPolicy.From(await pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;
         return caller.Roles.Any(role => allowed.Contains(role, StringComparer.OrdinalIgnoreCase));
     }
 

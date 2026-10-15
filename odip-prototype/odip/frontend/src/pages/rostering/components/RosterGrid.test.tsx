@@ -140,7 +140,7 @@ describe('RosterGrid — density', () => {
     expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
   })
 
-  it('shows "Unfilled" on an unfilled shift inside a participant row', () => {
+  it('shows "Needs staff" on an unfilled shift inside a participant row', () => {
     const board = makeParticipantBoard({
       participantRows: [makeParticipantRow({
         participantId: 'p1',
@@ -150,7 +150,7 @@ describe('RosterGrid — density', () => {
     })
     renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
 
-    expect(screen.getByText('Unfilled')).toBeInTheDocument()
+    expect(screen.getByText('Needs staff')).toBeInTheDocument()
   })
 
   it('in a staff row the chip names the participant and the staff member is named once, by the row header link', () => {
@@ -204,5 +204,35 @@ describe('RosterGrid — density', () => {
     const { container } = render(<RosterGridSkeleton days={WEEK_DAYS} />)
 
     expect(container.firstElementChild).toHaveClass('min-[1500px]:[--roster-sticky-col:280px]', 'overflow-auto')
+  })
+})
+
+describe('RosterGrid frame with the staff strip (roster drag and drop)', () => {
+  it('grows the frame’s chrome allowance by the staff strip when draggable, and only then', () => {
+    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
+    expect(container.firstElementChild?.className).toContain('2*var(--control-h)')
+    unmount()
+    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
+    expect(plain.container.firstElementChild?.className).not.toContain('2*var(--control-h)')
+  })
+})
+
+describe('RosterGrid frame under an error notice (finish review fix 5)', () => {
+  it('takes the notice the page reports (--roster-notice-h) off its height, with and without the strip', () => {
+    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
+    expect(container.firstElementChild?.className).toContain('var(--roster-notice-h,0px)')
+    unmount()
+    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
+    expect(plain.container.firstElementChild?.className).toContain('var(--roster-notice-h,0px)')
+  })
+})
+
+describe('RosterGrid frame under a wrapped toolbar (finish review, 1280)', () => {
+  it('takes the extra toolbar row the page reports (--roster-toolbar-extra) off its height, with and without the strip', () => {
+    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
+    expect(container.firstElementChild?.className).toContain('var(--roster-toolbar-extra,0px)')
+    unmount()
+    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
+    expect(plain.container.firstElementChild?.className).toContain('var(--roster-toolbar-extra,0px)')
   })
 })

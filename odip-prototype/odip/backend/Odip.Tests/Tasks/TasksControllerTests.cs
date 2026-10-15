@@ -133,6 +133,25 @@ public class TasksControllerTests
         Assert.Contains(body.Data, t => t.Title == "Generic task" && t.TripName == null);
     }
 
+    private sealed class FixedClock(DateTimeOffset utcNow) : TimeProvider { public override DateTimeOffset GetUtcNow() => utcNow; }
+
+    /// <summary>The dashboard's Tasks due group reads "due today" on the PROVIDER's day (the Overdue and dueThisWeek rule), not the viewer's: at 14:30 UTC on 14 Oct
+    /// it is already 15 Oct in Sydney (the zone with no ProviderSettings), so only the task due 15 Oct is due today.</summary>
+    [Fact]
+    public async System.Threading.Tasks.Task GetAll_DueToday_IsTheProvidersDay_NotUtcs()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        foreach (var (day, title) in new[] { (14, "Due 14"), (15, "Due 15"), (16, "Due 16") })
+            db.BookingTasks.Add(new BookingTask { Id = Guid.NewGuid(), TaskType = TaskType.RiskReview, Title = title, Status = TaskItemStatus.NotStarted, DueDate = new DateOnly(2026, 10, day) });
+        await db.SaveChangesAsync();
+        var controller = new TasksController(db, new FixedClock(new DateTimeOffset(2026, 10, 14, 14, 30, 0, TimeSpan.Zero)));
+
+        var result = await controller.GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None, dueToday: true);
+
+        var body = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(new[] { "Due 15" }, body.Data!.Select(t => t.Title));
+    }
+
     /// <summary>Mandatory cross-tenant coverage: a generic task (no TripInstance to inherit scoping from) created under tenant A must not be listed for a tenant B caller.</summary>
     [Fact]
     public async System.Threading.Tasks.Task GetAll_GenericTaskFromAnotherTenant_IsNotListed()

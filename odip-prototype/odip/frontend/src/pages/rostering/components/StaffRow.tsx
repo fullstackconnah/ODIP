@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { useDroppable } from '@dnd-kit/core'
 import type { RosterStaffRowDto, ShiftDto } from '@/api/types'
 import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
@@ -23,8 +22,6 @@ const NOTE_BUTTON =
   'min-w-0 max-w-full truncate rounded-sm text-left text-[13px] leading-4 focus:absolute focus:left-0 focus:top-full focus:z-20 focus:mt-1 focus:w-64 focus:max-w-[16rem] focus:whitespace-normal focus:overflow-visible focus:rounded-sm focus:border focus:border-border focus:bg-card focus:px-2 focus:py-1 focus:leading-snug focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
 export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift }: StaffRowProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: `staff:${row.staffId}`, disabled: !canWrite })
-
   const overTarget = row.rosteredHours > row.targetHours
   const meterPct = row.targetHours > 0 ? Math.min(100, (row.rosteredHours / row.targetHours) * 100) : 0
 
@@ -80,8 +77,7 @@ export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, 
       </div>
 
       <div
-        ref={setNodeRef}
-        className={`grid gap-x-1 gap-y-0.5 border-b border-border px-1 transition-colors duration-150 ${isOver ? 'bg-secondary-container/40' : ''}`}
+        className="grid gap-x-1 gap-y-0.5 border-b border-border px-1"
         style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(days.length), gridAutoFlow: 'row dense' }}
       >
         {days.map((day, i) => (

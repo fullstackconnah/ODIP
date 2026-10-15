@@ -25,10 +25,10 @@ export type BandItem = {
 
 // "Needs attention" as an answer, not a row of equal counters (DESIGN.md "Attention band"). An item that needs somebody is a tall tile, tinted by its tone, with its
 // figure, a line saying what it means and a link to where it is fixed; an item at zero is not a tile at all but a name in ONE "All clear" row on Pale Sprout (the
-// system's all-clear green), and when every item is at zero the whole band is that one field. An item with no data is neither: it is a quiet en-dash tile, so an
-// all-clear is never claimed without the data behind it.
+// system's all-clear green), and when every item is at zero the band is that one row: the "Nothing needs you" field is the PAGE's, drawn only when the whole
+// page is clear. An item with no data is neither: it is a quiet en-dash tile, so an all-clear is never claimed without the data behind it.
 
-function AllClearRow({ labels }: { labels: string[] }) {
+export function AllClearRow({ labels }: { labels: string[] }) {
   return (
     <p className={`flex items-start gap-2 rounded-md px-[var(--section-gap)] py-[var(--card-pad)] text-[13px] ${TONE.success.solid}`}>
       <CircleCheck className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
@@ -39,7 +39,7 @@ function AllClearRow({ labels }: { labels: string[] }) {
   )
 }
 
-function AllClearField({ labels }: { labels: string[] }) {
+export function AllClearField({ labels }: { labels: string[] }) {
   return (
     <div className={`flex items-center gap-3 rounded-md px-[var(--section-gap)] py-[var(--section-gap)] ${TONE.success.solid}`}>
       <CircleCheck className="h-6 w-6 shrink-0" aria-hidden="true" />
@@ -69,9 +69,10 @@ export function AttentionBand({ items }: { items: BandItem[] }) {
   const styles = bandTileStyles(tiles.length)
 
   return (
-    <section aria-label="Needs attention" className="@container">
+    <section aria-label="Alerts" className="@container">
       {tiles.length === 0 ? (
-        <AllClearField labels={clear} />
+        // Every alert at zero is a name in the row. The field ("Nothing needs you") is the PAGE's, drawn only when the whole page is clear.
+        <AllClearRow labels={clear} />
       ) : (
         <div className="flex flex-col gap-2">
           <div className={BAND_GRID_CLASS}>

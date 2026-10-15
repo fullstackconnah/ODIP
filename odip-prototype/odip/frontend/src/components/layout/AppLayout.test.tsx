@@ -13,11 +13,12 @@ import { TAP_AREA } from '@/components/tapArea'
 // still imported transitively) so this suite doesn't need a QueryClientProvider or a real
 // network call, matching how the other hook-backed page tests in this codebase mock
 // '@/api/hooks' rather than provide a live client.
-const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockEndSession } = vi.hoisted(() => ({
+const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockUseInbox, mockEndSession } = vi.hoisted(() => ({
   mockEndSession: vi.fn(),
   mockUsePendingLeaveCount: vi.fn(() => 0),
   mockUsePendingWitnessRequests: vi.fn(() => ({ data: [] as unknown[], isLoading: false })),
   mockUsePendingCompletionCount: vi.fn(() => 0),
+  mockUseInbox: vi.fn(() => ({ data: undefined as { items: unknown[]; unreadCount: number; hasMore: boolean } | undefined, isError: false, refetch: vi.fn() })),
 }))
 
 vi.mock('@/api/hooks', async (importOriginal) => {
@@ -30,6 +31,10 @@ vi.mock('@/api/hooks', async (importOriginal) => {
     // entry would call the real usePendingCompletionCount, which calls useQuery and needs a
     // QueryClientProvider this suite doesn't set up.
     usePendingCompletionCount: mockUsePendingCompletionCount,
+    // The header bell (NotificationBell) polls the inbox and marks items read: stubbed for the same reason as the counts above.
+    useInbox: mockUseInbox,
+    useMarkInboxRead: () => ({ mutate: vi.fn() }),
+    useMarkAllInboxRead: () => ({ mutate: vi.fn(), reset: vi.fn(), isError: false }),
   }
 })
 
@@ -267,11 +272,11 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...pad)
   })
 
-  it('pads the header "Notifications" button (32px, disabled placeholder)', () => {
+  it('pads the header "Notifications" bell (32px), a working button now', () => {
     renderAt('/trips')
     const bell = screen.getByRole('button', { name: 'Notifications' })
     expect(bell).toHaveClass(...pad, 'w-8', 'h-8')
-    expect(bell).toBeDisabled()
+    expect(bell).toBeEnabled()
   })
 
   it('gives every mobile bottom-nav cell, "More" included, a --tap-min floor each way, its content centred, so the 42px cells are 44px', () => {
@@ -313,12 +318,36 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     }
   })
 
-  it('sizes the bottom nav with --mobile-nav-h, the var the sticky wizard footer sits above, and main clears it by the same var', () => {
+  it('sizes the bottom nav with --mobile-nav-h, the var the sticky wizard footer sits above, and the footer after main clears it by the same var', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     const { container } = renderAt('/trips')
     const nav = screen.getByRole('navigation', { name: 'Mobile' })
     expect(nav).toHaveClass('h-[var(--mobile-nav-h)]', 'fixed', 'bottom-0', 'lg:hidden')
-    expect(container.querySelector('main')).toHaveClass('pb-[calc(var(--mobile-nav-h)+1.75rem)]', 'lg:pb-6')
+    // The clearance moved from main to the platform footer, the last thing in the content column.
+    const main = container.querySelector('main')!
+    expect(main).toHaveClass('pb-6')
+    expect(main.className).not.toContain('mobile-nav-h')
+    const footer = screen.getByRole('contentinfo')
+    expect(main.nextElementSibling).toBe(footer)
+    expect(footer.parentElement!.lastElementChild).toBe(footer)
+    expect(footer).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+0.75rem)]', 'lg:pb-3')
+    // md:p-6 once overrode the clearance between 768 and 1024px; no breakpoint below lg may set padding-bottom on either element.
+    expect(footer.className).not.toMatch(/(^|\s)(sm|md):pb-/)
+    expect(main.className).not.toMatch(/(^|\s)(sm|md|lg):pb-/)
+  })
+
+  it('always renders the platform footer beside main, never inside it, with its Accessibility link, for the office and the field', () => {
+    for (const [role, path] of [['Admin', '/trips'], ['SupportWorker', '/portal']]) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { container, unmount } = renderAt(path)
+      expect(container.querySelectorAll('main'), role).toHaveLength(1)
+      expect(screen.getAllByRole('contentinfo'), role).toHaveLength(1)
+      const footer = screen.getByRole('contentinfo')
+      expect(footer.closest('main, article, aside, nav, section'), role).toBeNull()
+      expect(within(footer).getByRole('link', { name: 'Accessibility' }), role).toHaveAttribute('href', '/accessibility')
+      unmount()
+      localStorage.clear()
+    }
   })
 
   it('defines --mobile-nav-h for both pointer types as exactly what the nav content needs: 12px + the taller of the 42px link and --tap-min + 12px', () => {
@@ -1172,5 +1201,24 @@ describe('AppLayout — only the current group and the saved ones stay open', ()
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(toggle).not.toHaveClass('font-bold')
     expect(within(mainNav()).getByRole('link', { current: 'page' })).toHaveClass('font-bold')
+  })
+})
+
+describe('AppLayout — the notifications bell is in the header for every role', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockUseInbox.mockImplementation(() => ({ data: undefined, isError: false, refetch: vi.fn() }))
+  })
+
+  it.each([
+    ['Admin', '/trips'],
+    ['Coordinator', '/trips'],
+    ['ReadOnly', '/trips'],
+    ['SupportWorker', '/portal'],
+  ])('%s on %s sees it, named with the unread count', (role, path) => {
+    signIn(role)
+    mockUseInbox.mockImplementation(() => ({ data: { items: [], unreadCount: 3, hasMore: false }, isError: false, refetch: vi.fn() }))
+    renderAt(path)
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: '3 unread, Notifications' })).toBeInTheDocument()
   })
 })

@@ -31,7 +31,7 @@ public sealed record PublicHolidayRef(DateOnly Date, string Name);
 /// entirely in that path, and <see cref="RosterConflictService"/>'s CheckCompatibility/CheckCompetencyMissing/
 /// CheckRatioShortfall all no-op on a null Participant so <see cref="RosterConflictService.Check"/> stays
 /// safe if it's ever called with one too.</param>
-/// <param name="StaffShiftsInWeek">This staff member's other shifts in the candidate's week, excluding the candidate itself.</param>
+/// <param name="StaffShiftsInWeek">This staff member's other shifts in the candidate's week plus the day either side, excluding the candidate itself.</param>
 /// <param name="ParticipantShiftsOnDate">Other shifts already rostered for this participant on the candidate's <see cref="Shift.ServiceDate"/>, excluding the candidate — used to judge whether a 2:1 slot is actually covered.</param>
 /// <param name="TripAssignments">This staff member's trip assignments overlapping the candidate's <see cref="Shift.ServiceDate"/>.</param>
 /// <param name="Availability">This staff member's unavailability windows (leave, recurring rules, legacy StaffAvailability rows) relevant to the candidate's window — see <see cref="Infrastructure.Rostering.StaffUnavailabilityQuery"/>.</param>
@@ -440,7 +440,9 @@ public sealed class RosterConflictService
 
     private static void CheckOverHours(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
     {
-        var total = ctx.StaffShiftsInWeek.Sum(s => s.DurationHours) + candidate.DurationHours;
+        // StaffShiftsInWeek also carries the Sunday before and the Monday after (for the overlap check), so count only the candidate's own Monday to Sunday.
+        var monday = candidate.ServiceDate.AddDays(-(((int)candidate.ServiceDate.DayOfWeek + 6) % 7));
+        var total = ctx.StaffShiftsInWeek.Where(s => s.ServiceDate >= monday && s.ServiceDate <= monday.AddDays(6)).Sum(s => s.DurationHours) + candidate.DurationHours;
         if (total > ctx.WeeklyHoursThreshold)
         {
             findings.Add(new RosterFinding(OverHours, RosterFindingSeverity.Warning,

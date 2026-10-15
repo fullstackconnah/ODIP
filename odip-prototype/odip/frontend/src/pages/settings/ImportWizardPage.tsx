@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { WizardNavFooter, WizardShell, WizardStepHeading, WizardStepRail, type WizardStepDef } from '@/components/wizard'
-import { useCommitImport, useDownloadImportTemplate, usePreviewImport, useUndoImport } from '@/api/hooks'
+import { useCommitImport, useDownloadImportTemplate, usePreviewImport, useProviderSettings, useUndoImport } from '@/api/hooks'
 import type { ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, ImportRowDto, ImportRowStatus, ImportUndoBlockerDto } from '@/api/types'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { formatDateTimeAu, plural } from '@/lib/format'
@@ -89,6 +89,7 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
 }
 
 export default function ImportWizardPage() {
+  const staffFromPayroll = useProviderSettings().data?.employmentHeroConnected === true
   const { kind: param } = useParams()
   const kind: ImportKind | null = param === 'participants' || param === 'staff' || param === 'funding-plans' ? param : null
   const preview = usePreviewImport()
@@ -111,7 +112,7 @@ export default function ImportWizardPage() {
   // One key per file: a retry after a lost response sends the same key and gets the same batch back, never a second import.
   const idempotencyKey = useRef(newCompletionRequestId())
 
-  if (!kind) return <Navigate to={BACK_TO} replace />
+  if (!kind || (kind === 'staff' && staffFromPayroll)) return <Navigate to={BACK_TO} replace />
   const { noun, title, listNoun, listTo, undone: undoneWord, undoRule, undoNote } = KIND[kind]
 
   const go = (next: StepKey) => {

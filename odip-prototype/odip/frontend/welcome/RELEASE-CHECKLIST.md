@@ -12,7 +12,7 @@ The public landing page lives at `/welcome/` (its own Vite HTML entry, `welcome/
 
 The page ships a neutral notice: "We will only use these details to reply about early access to Odip." It appears under the form and in the footer.
 
-- [ ] Name who is collecting the details (the legal entity) and give a privacy contact. Two `TODO(release)` comments in `welcome/index.html` mark the spots: one under the form, one in the footer. Keep the two notices identical.
+- [ ] Name who is collecting the details (the legal entity) and give a privacy contact. Both notices, under the form and in the footer, fill themselves from `src/lib/platformInfo.ts`: `companyName` adds the collector sentence, and `legalPublished` (set in the PR that commits the approved Privacy Policy) adds the sentence linking to it. Nothing in `welcome/index.html` needs to change. `page.test.ts` keeps the two notices identical.
 - [ ] Decide the retention period for stored requests and say so in the notice if it is stated anywhere.
 - [ ] Say what early access is. The line above the form still only says "We will reply by email about early access to Odip." A `TODO(release)` comment under it marks the spot: who early access is for, any cost or commitment, who will write, and when. State a timeframe only if it will be honoured. The success message already repeats the address the person typed.
 

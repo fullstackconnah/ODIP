@@ -69,6 +69,8 @@ describe('useDialogBehavior', () => {
    * and why each may stay: the list is a ratchet: no new one may appear, and a file that moved onto the hook leaves it.
    *   Dropdown, SearchableSelect: an open list closing itself (they call preventDefault, which the hook respects).
    *   TenantSwitcher, UserSwitcher: header popovers, not dialogs.
+   *   NotificationBell: the bell's desktop panel, a header popover like the switchers (below lg it is a SlideOver on the hook).
+   *   QuickGroup: a dashboard row's inline form closing itself (in the page's flow, not a layer; it calls preventDefault).
    * (AppLayout, the nav drawer, left this list when the nav regroup moved it onto the hook.)
    */
   const KNOWN_ESCAPE_HANDLERS: Record<string, number> = {
@@ -76,6 +78,8 @@ describe('useDialogBehavior', () => {
     'components/SearchableSelect.tsx': 1,
     'components/layout/TenantSwitcher.tsx': 1,
     'components/layout/UserSwitcher.tsx': 1,
+    'components/layout/NotificationBell.tsx': 1,
+    'pages/dashboard/QuickGroup.tsx': 1,
     'hooks/useDialogBehavior.ts': 1,
   }
   const found: Record<string, number> = {}
