@@ -170,3 +170,23 @@ describe(`Tasks due group — "due today" is the provider's day (deep N4)`, () =
     expect(screen.getByText('Due today')).toBeInTheDocument()
   })
 })
+
+describe('Tasks due group — Mark all done (decision-bulk)', () => {
+  it('reads each task fresh and PUTs it in row order, skips one already closed as stale, and never ticks a cover task', async () => {
+    const open2 = task({ id: 't2', title: 'Book the bus', dueDate: '2026-10-11' })
+    answer([task(), open2, task({ id: 't3', title: 'Closed meanwhile', dueDate: '2026-10-12' }), task({ id: 't4', title: 'Cover the shift', taskType: 'LeaveCoverage', dueDate: '2026-10-13' })], [],
+      { t3: task({ id: 't3', title: 'Closed meanwhile', status: 'Completed' }) })
+    apiPutRaw.mockImplementation(async (_url: string, body: Record<string, unknown>) => ({ success: true, data: body }))
+    render()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark all 3 tasks done' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent("1 stays for you to open: it can't be marked done here.")
+    fireEvent.click(screen.getByRole('button', { name: 'Mark 3 done' }))
+
+    await waitFor(() => expect(screen.getByText('Marked 2 tasks done')).toBeInTheDocument())
+    expect(apiPutRaw.mock.calls.map(([url]) => url)).toEqual(['/tasks/t1', '/tasks/t2'])
+    expect(apiPutRaw).toHaveBeenCalledWith('/tasks/t2', { ...open2, status: 'Completed', completedDate: TODAY })
+    expect(screen.getByText("1 can't be marked done here and stays. 1 was already closed.")).toBeInTheDocument()
+    expect(subjects()).toEqual(['Cover the shift'])
+  })
+})

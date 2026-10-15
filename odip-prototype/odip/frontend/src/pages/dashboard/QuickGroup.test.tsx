@@ -423,3 +423,116 @@ describe('QuickGroup — fix round 1', () => {
     expect(refetch).not.toHaveBeenCalled()
   })
 })
+
+describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)', () => {
+  const ok = (id: string) => vi.fn(async (): Promise<ActionOutcome> => ({ announce: `Approved Person ${id}.` }))
+  const tapRow = (id: string, run: () => Promise<ActionOutcome> = ok(id)) => row(id, { actions: [decline(id), approve(id, run)] })
+  const confirmRun = (label: string) => fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: label }))
+  const notice = () => document.querySelector('[data-quick-group] [role="status"] [data-tone]')
+
+  it('adds a box column to a bulk tab with a one-tap row: a box on each such row only, named from its action, and Select all in the bar', () => {
+    render(<Harness model={model({ rows: [tapRow('a'), row('b', { flags: [{ label: 'Your request', tone: 'neutral' }] })] })} />)
+
+    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Select', 'Staff', 'Type', 'Dates', 'Note', ''])
+    expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
+    expect(within(rowOf('Person b')).queryByRole('checkbox')).toBeNull()
+    expect(screen.getByRole('checkbox', { name: 'Select all shown leave requests' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Approve 1 leave request' })).toHaveTextContent('Approve 1')
+    // The box track is fixed, so the subject's and the free-text fact's minimums move one track along.
+    expect(screen.getByRole('table').style.gridTemplateColumns)
+      .toBe('calc(var(--cell-px) * 2 + 1rem) minmax(var(--subject-min, 0px), max-content) max-content max-content minmax(var(--fact-min-4, 0px), max-content) minmax(0, 1fr) max-content')
+  })
+
+  it('draws no column and no bar where nothing is safe, or on a tab without a bulk action', () => {
+    const { unmount } = render(<Harness model={model()} />)
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.getAllByRole('columnheader')).toHaveLength(5)
+    unmount()
+
+    render(<Harness model={model({ key: 'incidents', rows: [tapRow('a')] })} />)
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Approve all|^Approve 1 / })).toBeNull()
+  })
+
+  it('counts every safe row in the whole tab for Complete all, not only the five shown', () => {
+    render(<Harness model={model({ count: 7, rows: ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => tapRow(id)) })} />)
+
+    expect(screen.getAllByRole('checkbox', { name: /^Select leave/ })).toHaveLength(5)
+    expect(screen.getByRole('button', { name: 'Approve all 7 leave requests' })).toHaveTextContent('Approve all 7')
+  })
+
+  it("swaps Complete all for the selection's action when a box is ticked: a count, Clear, Select all mixed; Clear puts focus back on the action", () => {
+    render(<Harness model={model({ count: 3, rows: [tapRow('a'), tapRow('b'), tapRow('c')] })} />)
+    const all = screen.getByRole('checkbox', { name: 'Select all shown leave requests' }) as HTMLInputElement
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))
+    expect(all.indeterminate).toBe(true)
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    const action = screen.getByRole('button', { name: 'Approve 1 selected leave request' })
+
+    fireEvent.click(all)
+    expect(screen.getAllByRole('checkbox', { name: /^Select leave/ }).every((box) => (box as HTMLInputElement).checked)).toBe(true)
+    expect(all.indeterminate).toBe(false)
+    expect(action).toHaveAccessibleName('Approve 3 selected leave requests')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.queryByText(/selected$/)).toBeNull()
+    expect(action).toHaveAccessibleName('Approve all 3 leave requests')
+    expect(action).toHaveFocus()
+  })
+
+  it("unticks and disables a row's box while its form is open, and Complete all leaves it out", () => {
+    render(<Harness model={model({ count: 2, rows: [tapRow('a'), tapRow('b')] })} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Decline leave: Person a' }))
+
+    expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Approve 1 leave request' })).toBeInTheDocument()
+  })
+
+  it('runs the ticked rows one at a time in row order through their own taps, then ONE notice; decided rows leave together, a refused one stays', async () => {
+    const first = deferred()
+    const runA = vi.fn(() => first.promise)
+    const runB = vi.fn(async (): Promise<ActionOutcome> => { throw axiosError('Somebody said no.') })
+    const runC = ok('c')
+    render(<Harness model={model({ count: 3, rows: [tapRow('a', runA), tapRow('b', runB), tapRow('c', runC)] })} />)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3 selected leave requests' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 3 selected leave requests?')
+    confirmRun('Approve 3')
+
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await waitFor(() => expect(runA).toHaveBeenCalled())
+    expect(runB).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /^Approve 3 selected/ })).toHaveTextContent('Approving 1 of 3…')
+    expect(screen.getByRole('button', { name: 'Approve leave: Person a' })).toHaveAttribute('aria-disabled', 'true')
+    await act(async () => first.resolve({ announce: 'Approved Person a.' }))
+
+    await waitFor(() => expect(notice()).toHaveTextContent('Approved 2 leave requests'))
+    expect(runC.mock.invocationCallOrder[0]).toBeGreaterThan(runB.mock.invocationCallOrder[0])
+    expect(notice()).toHaveTextContent("1 couldn't be approved: Person b: Somebody said no.")
+    expect(screen.queryByText('Person a')).toBeNull()
+    expect(screen.queryByText('Person c')).toBeNull()
+    expect(screen.getByRole('checkbox', { name: 'Select leave: Person b' })).not.toBeChecked()
+    expect(notice()!.contains(document.activeElement)).toBe(true)
+    // No announcement per row: the notice is the one report.
+    expect(status()).not.toHaveTextContent('Approved Person a.')
+  })
+
+  it('reports a row somebody else decided first (409) as stale, and refetches once', async () => {
+    const refetch = vi.fn()
+    const gone = vi.fn(async (): Promise<ActionOutcome> => { throw { response: { status: 409, data: { message: 'This request has already been decided.' } } } })
+    render(<Harness model={model({ count: 2, refetch, rows: [tapRow('a'), tapRow('b', gone)] })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve all 2 leave requests' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 2 leave requests?')
+    confirmRun('Approve 2')
+
+    await waitFor(() => expect(notice()).toHaveTextContent('Approved 1 leave request'))
+    expect(notice()).toHaveTextContent('1 was already decided by someone else.')
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+})

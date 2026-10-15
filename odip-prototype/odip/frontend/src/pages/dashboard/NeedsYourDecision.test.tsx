@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { useState } from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -40,8 +41,9 @@ describe('NeedsYourDecision — the tabs (SHAPE §3)', () => {
     ]} />)
 
     expect(screen.getByRole('tablist', { name: 'Needs your decision' })).toBeInTheDocument()
-    expect(tabs().map((tab) => tab.textContent)).toEqual(['Completions (2)', 'Leave (0)', 'Incidents (–)Incidents, loading', "Credentials (–)Credentials, couldn't load", 'Tasks (7)'])
-    expect(screen.getAllByText(/\(–\)$/, { selector: '[aria-hidden="true"]' }).map((el) => el.textContent)).toEqual(['Incidents (–)', 'Credentials (–)'])
+    // One sr-only text node names each tab; the visible title and count pill are hidden from the name (bolder, SHAPE §2).
+    expect(tabs().map((tab) => tab.querySelector('.sr-only')!.textContent)).toEqual(['Completions (2)', 'Leave (0)', 'Incidents, loading', "Credentials, couldn't load", 'Tasks (7)'])
+    expect(tabs().map((tab) => tab.querySelector('[aria-hidden="true"]')!.textContent)).toEqual(['Completions2', 'Leave0', 'Incidents–', 'Credentials–', 'Tasks7'])
     expect(screen.getByRole('tab', { name: 'Incidents, loading' })).toBeEnabled()
     expect(screen.getByRole('tab', { name: "Credentials, couldn't load" })).toBeEnabled()
     expect(screen.getByRole('tab', { name: 'Leave (0)' })).toBeDisabled()
@@ -57,7 +59,7 @@ describe('NeedsYourDecision — the tabs (SHAPE §3)', () => {
   it('opens the first present tab (its loading line) when no tab has rows yet', () => {
     render(<Harness groups={[group('completions'), group('leave', { phase: 'loading' }), group('tasks', { phase: 'error' })]} />)
 
-    expect(selected()).toHaveTextContent('Leave (–)')
+    expect(selected()).toHaveAccessibleName('Leave, loading')
     expect(screen.getByText('Loading leave requests…')).toBeVisible()
   })
 
@@ -121,7 +123,7 @@ describe('NeedsYourDecision — when the open tab empties (SHAPE §3, §5)', () 
 
     fireEvent.click(button)
 
-    await waitFor(() => expect(selected()).toHaveTextContent('Tasks (–)'))
+    await waitFor(() => expect(selected()).toHaveAccessibleName("Tasks, couldn't load"))
     expect(document.activeElement).toBe(selected())
   })
 
@@ -148,7 +150,7 @@ describe('NeedsYourDecision — when the open tab empties (SHAPE §3, §5)', () 
 
   it('moves an arrival tab still on its loading line to the first tab with rows once one has them', () => {
     const { rerender } = render(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { phase: 'loading' })]} />)
-    expect(selected()).toHaveTextContent('Completions (–)')
+    expect(selected()).toHaveAccessibleName('Completions, loading')
 
     rerender(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { rows: [row('a')] })]} />)
 
@@ -201,5 +203,35 @@ describe('NeedsYourDecision — when the open tab empties (SHAPE §3, §5)', () 
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Completions (1)' })).toBeInTheDocument())
     expect(document.activeElement).toBe(tasksTab)
     expect(within(screen.getByRole('tabpanel')).getByText('Person b')).toBeVisible()
+  })
+})
+
+describe('NeedsYourDecision — bolder and bulk runs (decision-bulk SHAPE §2, §6)', () => {
+  it('draws each count as the tab-counter pill: solid olive on the open tab, Mist on the others', () => {
+    render(<Harness groups={[group('completions', { rows: [row('a')] }), group('tasks', { rows: [row('b')] })]} />)
+    const pill = (name: string) => screen.getByRole('tab', { name }).querySelector('[aria-hidden="true"] > span:last-child')!
+
+    expect(pill('Completions (1)')).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]', 'rounded-full', 'text-xs', 'font-bold')
+    expect(pill('Tasks (1)')).toHaveClass('bg-[var(--color-surface-container)]', 'text-[var(--color-foreground)]')
+  })
+
+  it('keeps the tab open while a run is in flight though the refetch empties it mid-run, and lands the notice in its panel', async () => {
+    function Live() {
+      const [emptied, setEmptied] = useState(false)
+      const rows = emptied ? [] : ['a', 'b', 'c'].map((id) => row(id, [tap(id, async () => {
+        // The real server: each approval invalidates the list, and the refetch after the second comes back empty.
+        if (id === 'b') setEmptied(true)
+        return { announce: `Approved Person ${id}.` }
+      })]))
+      return <Harness groups={[group('leave', { rows, count: rows.length }), group('tasks', { rows: [row('t')] })]} />
+    }
+    render(<Live />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve all 3 leave requests' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 3' }))
+
+    await waitFor(() => expect(screen.getByText('Approved 3 leave requests')).toBeInTheDocument())
+    expect(selected()).toHaveAccessibleName('Leave (0)')
+    expect(within(screen.getByRole('tabpanel')).getByText('Approved 3 leave requests')).toBeVisible()
   })
 })
