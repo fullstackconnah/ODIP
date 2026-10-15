@@ -120,13 +120,13 @@ function FactCell({ column, value }: { column: FactColumn; value: string | null 
  * over sits in a gap before the buttons (`minmax(0, 1fr)`), which are as wide as the widest row's own buttons, busy labels included.
  */
 const gridColumns = (columns: FactColumn[]) =>
-  ['minmax(var(--subject-min, 0px), max-content)', ...columns.map((column) => (column.long ? 'minmax(0, max-content)' : 'max-content')), 'minmax(0, 1fr)', 'max-content'].join(' ')
+  ['minmax(var(--subject-min, 0px), max-content)', ...columns.map((column, i) => (column.long ? `minmax(var(--fact-min-${i + 1}, 0px), max-content)` : 'max-content')), 'minmax(0, 1fr)', 'max-content'].join(' ')
 // How narrow a free-text fact gets before a subject is cut.
 const FACT_FLOOR_REM = 6
 
 /**
  * Sets the table's --subject-min: the subject column's full width (text and flags), less whatever the table lacks once every free-text fact is at its
- * floor (or at its own width, when that is less). CSS grid shares spare width equally between growing tracks, so without this a title is cut while a
+ * floor (or at its own width, when that is less), and each free-text fact's --fact-min-<column> to that floor. CSS grid shares spare width equally between growing tracks, so without this a title is cut while a
  * trip beside it stays whole. Re-measured whenever the table or a subject changes size (a tab shown, fonts loaded, the window resized).
  */
 function useSubjectMin(tableRef: RefObject<HTMLTableElement | null>, columns: FactColumn[], rowCount: number) {
@@ -149,10 +149,16 @@ function useSubjectMin(tableRef: RefObject<HTMLTableElement | null>, columns: Fa
         const gap = px(getComputedStyle(line).columnGap)
         return text.scrollWidth + flags.reduce((sum, flag) => sum + gap + flag.getBoundingClientRect().width, 0) + padX(tr.children[0])
       }))
-      const rest = tracks[tracks.length - 1] + columns.reduce((sum, column, i) =>
-        sum + (column.long ? Math.min(floor, Math.max(0, ...rows.map((tr) => natural(tr.children[i + 1])))) : tracks[i + 1]), 0)
-      const min = `${Math.floor(Math.max(0, Math.min(subject, table.clientWidth - rest)))}px`
-      if (table.style.getPropertyValue('--subject-min') !== min) table.style.setProperty('--subject-min', min)
+      // Each free-text fact's minimum is its floor, so the grid never shares the space after the subject's minimum back to the subject.
+      const set = (name: string, value: number) => { const v = `${Math.floor(Math.max(0, value))}px`; if (table.style.getPropertyValue(name) !== v) table.style.setProperty(name, v) }
+      let rest = tracks[tracks.length - 1]
+      columns.forEach((column, i) => {
+        if (!column.long) return void (rest += tracks[i + 1])
+        const factMin = Math.min(floor, Math.max(0, ...rows.map((tr) => natural(tr.children[i + 1]))))
+        set(`--fact-min-${i + 1}`, factMin)
+        rest += factMin
+      })
+      set('--subject-min', Math.min(subject, table.clientWidth - rest))
     }
     const observer = new ResizeObserver(fit)
     observer.observe(table)
