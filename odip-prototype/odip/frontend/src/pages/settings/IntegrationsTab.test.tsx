@@ -48,6 +48,9 @@ describe('IntegrationsTab — connecting', () => {
     state.status = status({ configured: false })
     renderTab()
     expect(screen.getByText("Integrations aren't set up on this server yet.")).toBeInTheDocument()
+    // Plain words for an Admin; the server variable to set is named only in the server's log.
+    expect(screen.getByText('Contact ODIP support.')).toBeInTheDocument()
+    expect(screen.queryByText(/INTEGRATIONS_MASTER_KEY/)).toBeNull()
     expect(screen.queryByLabelText('API key')).toBeNull()
   })
 
