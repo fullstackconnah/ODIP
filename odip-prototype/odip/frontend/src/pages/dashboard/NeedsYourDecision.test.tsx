@@ -136,8 +136,9 @@ describe('NeedsYourDecision — when the open tab empties (SHAPE §3, §5)', () 
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
   })
 
-  it('never switches because an earlier tab gained rows once every group has answered', () => {
-    const { rerender } = render(<Harness groups={[group('completions'), group('leave', { rows: [row('a')] })]} />)
+  // A switch there hid a leave row's Approve under the click in e2e (2026-10-15): rows on screen are never taken away by a later arrival.
+  it('never switches because an earlier tab gained rows, even while the page is still loading', () => {
+    const { rerender } = render(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { rows: [row('a')] })]} />)
     expect(selected()).toHaveTextContent('Leave (1)')
 
     rerender(<Harness groups={[group('completions', { rows: [row('b')] }), group('leave', { rows: [row('a')] })]} />)
@@ -145,13 +146,13 @@ describe('NeedsYourDecision — when the open tab empties (SHAPE §3, §5)', () 
     expect(selected()).toHaveTextContent('Leave (1)')
   })
 
-  it('opens the first tab with rows on arrival: an earlier group whose rows land after a later one takes the open tab while the page loads', () => {
-    const { rerender } = render(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { rows: [row('a')] })]} />)
+  it('moves an arrival tab still on its loading line to the first tab with rows once one has them', () => {
+    const { rerender } = render(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { phase: 'loading' })]} />)
+    expect(selected()).toHaveTextContent('Completions (–)')
+
+    rerender(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { rows: [row('a')] })]} />)
+
     expect(selected()).toHaveTextContent('Leave (1)')
-
-    rerender(<Harness groups={[group('completions', { rows: [row('b')] }), group('leave', { rows: [row('a')] })]} />)
-
-    expect(selected()).toHaveTextContent('Completions (1)')
   })
 
   it('keeps the tab the viewer picked while other groups are still loading', () => {
