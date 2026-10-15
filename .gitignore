@@ -34,3 +34,9 @@ odip-prototype/odip/local-test/*.log.crash1
 /odip-frontend.log
 /board-*.json
 /staff-response.json
+
+# Per-machine Claude settings and generated reports (root-anchored: odip-prototype/odip/.impeccable/ stays tracked)
+.claude/settings.local.json
+.claude/recovery/
+/.impeccable/critique/
+/.impeccable/questions/

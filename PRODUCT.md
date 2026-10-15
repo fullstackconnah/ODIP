@@ -70,8 +70,6 @@ The product is currently branded in the shipped app as "Odip — NDIS Trip Manag
 A real, working local dev environment exists (not aspirational):
 - Frontend: `npm run dev` on Vite :5173, proxying `/api` to backend :5062 by default
 - A separate local-test workflow runs the backend on :5100 via `odip-prototype/odip/local-test/run-api.ps1`, with a real local Postgres and a fake Firebase service account for auth
-- `start-preview.ps1` combines a mock API + Vite for offline-ish preview
-
 No customer testimonials, case studies, press, or third-party proof exist.
 
 ## Product Principles
