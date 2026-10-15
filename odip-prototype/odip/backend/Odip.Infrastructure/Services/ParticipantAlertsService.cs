@@ -233,10 +233,8 @@ public class ParticipantAlertsService
             }
         }
 
-        // ── Rules 6 & 7 share one query over incidents naming a participant in the set. Not
-        // ── tenant-filtered at the DB level (IncidentReport has no ITenantEntity), so scoping
-        // ── comes entirely from participantIds, which the Participants query above already
-        // ── narrowed to the current tenant.
+        // ── Rules 6 & 7 share one query over incidents naming a participant in the set (IncidentReport is
+        // ── tenant-filtered, and participantIds were already narrowed to the current tenant above).
         var participantIncidents = await _db.IncidentReports
             .Where(i => i.IsActive && i.InvolvedParticipantId != null && participantIds.Contains(i.InvolvedParticipantId.Value))
             .Select(i => new

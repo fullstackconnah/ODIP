@@ -2072,6 +2072,12 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<ImportBatch>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
+        modelBuilder.Entity<IncidentReport>()
+            // Fail closed: a caller with no tenant must not match NULL-tenant rows (EF null semantics).
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || (e.TenantId != null && e.TenantId == _tenant.TenantId));
+        modelBuilder.Entity<IncidentReport>()
+            .HasIndex(e => e.TenantId);
+
         modelBuilder.Entity<EmploymentHeroConnection>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<EmploymentHeroAttention>()

@@ -12,6 +12,14 @@ public class IncidentReport
     public Guid Id { get; set; }
 
     /// <summary>
+    /// The organisation the incident belongs to: always its reporter's (Create, Update and the demo pack set it from the reporter; the migration
+    /// IncidentReportTenantId backfilled it the same way). The tenant query filter hides a null row from everyone but a SuperAdmin with no organisation chosen.
+    /// Not an <see cref="Interfaces.ITenantEntity"/>, whose TenantId is not nullable.
+    /// </summary>
+    // shortcut: nullable so the previous image, whose INSERTs leave it out, still works after a rollback (expand). Contract PR: re-run the backfill for any null, then make it NOT NULL and the entity an ITenantEntity.
+    public Guid? TenantId { get; set; }
+
+    /// <summary>
     /// Business-stream the incident occurred under (INC-01) — same value set as
     /// <see cref="Participant.ServiceStreams"/>, single-selected rather than combined. Defaults
     /// to <see cref="ServiceStreams.None"/> for incidents predating this field (no backfill).
