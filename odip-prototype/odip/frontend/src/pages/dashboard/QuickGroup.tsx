@@ -104,12 +104,12 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
 }
 
 /** A fact cell: one plain value; a dash in the table and nothing on the card when empty. Only free text is cut (in the table) or wrapped (on a card). */
-function FactCell({ column, value }: { column: FactColumn; value: string | null | undefined | false }) {
-  // A free-text column takes the table's leftover width and no minimum (width 100%, max-width 0), so on a narrow table it gives way first.
-  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', column.long ? 'xl:w-full xl:max-w-0' : 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
+function FactCell({ column, value, last }: { column: FactColumn; value: string | null | undefined | false; last: boolean }) {
+  // The last fact column takes the table's leftover width (as the Leave note does), so the facts sit together; a free-text one there has no minimum (max-width 0) and gives way first on a narrow table. A free-text column before it is capped (9rem) instead.
+  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', last ? (column.long ? 'xl:w-full xl:max-w-0' : 'whitespace-nowrap xl:w-full') : !column.long && 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
   return (
     <td className={classes.filter(Boolean).join(' ')}>
-      {!value ? '—' : column.long ? <span className="block break-words xl:truncate" title={value}>{value}</span> : value}
+      {!value ? '—' : column.long ? <span className={`block break-words xl:truncate ${last ? '' : 'xl:max-w-[9rem]'}`} title={value}>{value}</span> : value}
     </td>
   )
 }
@@ -170,14 +170,14 @@ function QuickRowView({ row, columns, onDone, onRefused }: {
       <tr className="max-xl:flex max-xl:flex-wrap max-xl:items-center max-xl:gap-x-3 max-xl:gap-y-1 xl:h-[var(--row-h)] xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)]">
         <td className={`${CELL} max-xl:basis-full`}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 xl:flex-nowrap">
-            <span className="min-w-0 text-sm font-medium text-[var(--color-foreground)] xl:max-w-[16rem] xl:truncate" title={row.subject}>{row.subject}</span>
+            <span className="min-w-0 text-sm font-medium text-[var(--color-foreground)] xl:max-w-[min(30rem,calc(100vw-1090px))] xl:truncate" title={row.subject}>{row.subject}</span>
             {row.flags.slice(0, 2).map((flag) => (
               <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
             ))}
           </div>
         </td>
-        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} />)}
-        <td className={`${CELL} whitespace-nowrap max-xl:mt-2 max-xl:basis-full xl:w-px ${row.actions.length === 0 ? 'max-xl:hidden' : ''}`}>
+        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} last={i === columns.length - 1} />)}
+        <td className={`${CELL} whitespace-nowrap max-xl:mt-2 max-xl:basis-full xl:w-px ${row.actions.length === 0 ? 'max-xl:hidden' : 'xl:min-w-[11rem]'}`}>
           {row.actions.length > 0 && (
             <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
               {row.actions.map((action) =>
