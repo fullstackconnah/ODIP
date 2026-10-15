@@ -502,7 +502,9 @@ public sealed class ServiceAgreementApprovalService
     /// </summary>
     private async Task CarryDefaultsIntoRenewalAsync(Plan plan, List<ShiftPattern> old, Dictionary<Guid, int> versionOf, CancellationToken ct)
     {
-        var endingBefore = old.Where(p => p.EffectiveTo == plan.EndsOn).OrderBy(p => versionOf[p.SourceDraftId!.Value]).ToList();
+        // Only the generation being ended, or for a renewal (nothing ended) the one ending the day before: an older generation that a same-start approval ended that day is superseded and hands on nothing.
+        var endingBefore = old.Where(p => p.EffectiveTo == plan.EndsOn && (plan.EndsFromVersion is not int from || versionOf[p.SourceDraftId!.Value] >= from))
+            .OrderBy(p => versionOf[p.SourceDraftId!.Value]).ToList();
         if (endingBefore.Count == 0) return;
         var active = await ActiveUsersAsync(endingBefore, ct);
         var taken = new HashSet<(Guid Made, Guid Source)>();

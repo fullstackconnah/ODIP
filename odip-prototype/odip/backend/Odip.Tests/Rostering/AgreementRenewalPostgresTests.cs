@@ -114,4 +114,35 @@ public class AgreementRenewalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal((3, new DateOnly(2026, 11, 23), new DateOnly(2027, 1, 3), new DateOnly(2026, 7, 1)), (v3.Version, v3.AgreementStartDate, v3.AgreementEndDate, v3.PlanStartDate));
         Assert.NotEmpty(v3.Lines);
     }
+
+    /// <summary>Follow-ups (REVIEW-006 N-3): two coordinators renew the same agreement at the same moment. Both pass the reads; the version number lets only one commit, and the other is the conflict the
+    /// controller answers 409 draft-version-conflict, naming the newest version. Never two drafts.</summary>
+    [SkippableFact]
+    public async Task TwoRenewalsAtOnce_GiveOneDraftAndOneConflict_OnPostgres()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        await using (var admin = PostgresFixture.NewContext(cs)) await CatalogueImportTestSupport.ImportAsync(admin, CatalogueFixtures.File2026_27);
+        var source = await StoreAsync(cs, tenantId, participantId, 1, new DateOnly(2026, 10, 12), new DateOnly(2026, 11, 22), approved: true);
+        await using (var setup = Open(cs, tenantId))
+        {
+            setup.FundingPlans.Add(new FundingPlan
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30),
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            await setup.SaveChangesAsync();
+        }
+        await using var first = Open(cs, tenantId);
+        await using var second = Open(cs, tenantId);
+
+        var outcomes = await Task.WhenAll(
+            new AgreementRenewalService(first).RenewAsync(tenantId, participantId, source.Id, Admin, "one", CancellationToken.None),
+            new AgreementRenewalService(second).RenewAsync(tenantId, participantId, source.Id, Admin, "two", CancellationToken.None));
+
+        Assert.Equal(2, Assert.Single(outcomes, o => o.Draft is not null).Draft!.Version);
+        Assert.Equal((int?)2, Assert.Single(outcomes, o => o.Draft is null).ConflictVersion);
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(new[] { 1, 2 }, await read.ServiceAgreementDrafts.AsNoTracking().OrderBy(d => d.Version).Select(d => d.Version).ToListAsync());
+    }
 }

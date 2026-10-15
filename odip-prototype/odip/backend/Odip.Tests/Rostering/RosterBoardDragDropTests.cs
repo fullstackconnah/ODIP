@@ -297,6 +297,58 @@ public class RosterBoardDragDropTests
         Assert.Equal(ShiftStatus.Published, after.Status);
     }
 
+    // Follow-ups (roster N4): claims select Completed shifts by Shift.ParticipantId (ShiftClaimGenerationService), so moving a started or finished shift to another participant
+    // would bill that participant's budget for a completion they never had. The participant is kept exactly as the worker is.
+    [Theory]
+    [InlineData(ShiftStatus.InProgress)]
+    [InlineData(ShiftStatus.PendingReview)]
+    [InlineData(ShiftStatus.Completed)]
+    [InlineData(ShiftStatus.Cancelled)]
+    public async Task UpdateShift_ChangingTheParticipantOfALockedShift_Is409AndChangesNothing(ShiftStatus status)
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var mia = SeedParticipant(db);
+        var leo = SeedParticipant(db, "Leo", "Park");
+        var shift = SeedShift(db, mia.Id, alex.Id, status);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, status) with { ParticipantId = leo.Id, Notes = "changed too" }, default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value);
+        Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, body.Code);
+        Assert.Equal("This shift has started, finished or been cancelled, so its participant can't be changed here.", Assert.Single(body.Errors!));
+        var after = await Reload(db, shift.Id);
+        Assert.Equal(mia.Id, after.ParticipantId);
+        Assert.Null(after.Notes);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ReopeningACancelledShiftForAnotherParticipant_Saves()   // as for the worker: a reopen is a new placement, not a change to a finished shift
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var leo = SeedParticipant(db, "Leo", "Park");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Cancelled);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Draft) with { ParticipantId = leo.Id }, default));
+
+        var after = await Reload(db, shift.Id);
+        Assert.Equal((leo.Id, ShiftStatus.Draft), (after.ParticipantId, after.Status));
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingTheParticipantOfADraft_StillChangesIt()
+    {
+        using var db = TestDb.Create();
+        var leo = SeedParticipant(db, "Leo", "Park");
+        var shift = SeedShift(db, SeedParticipant(db).Id, null, ShiftStatus.Draft);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Draft) with { ParticipantId = leo.Id }, default));
+
+        Assert.Equal(leo.Id, (await Reload(db, shift.Id)).ParticipantId);
+    }
+
     [Fact]
     public async Task UpdateShift_OtherEditsOnALockedShift_StillSave()
     {

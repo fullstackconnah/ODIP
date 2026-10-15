@@ -45,7 +45,7 @@ export default function IntegrationsTab() {
       </div>
       {!eh.configured && (
         <Callout tone="info" title="Integrations aren't set up on this server yet.">
-          Ask whoever runs your ODIP server to set INTEGRATIONS_MASTER_KEY. The rest of ODIP works as usual.
+          Contact ODIP support.
         </Callout>
       )}
       {eh.connected ? <Connected eh={eh} /> : eh.configured && <ConnectForm />}

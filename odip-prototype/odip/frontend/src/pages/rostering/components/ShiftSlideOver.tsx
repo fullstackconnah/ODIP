@@ -27,6 +27,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
 import { getRosterGate } from '../lib/rosterGate'
+import { lockedWords } from '../lib/rosterDrag'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange, shiftSource } from '../lib/roster'
 import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
 import { getRelevantRoutines } from '../lib/routines'
@@ -251,7 +252,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     (COORDINATOR_SETTABLE_SHIFT_STATUSES as readonly string[]).includes(s)
   const statusLocked = !!existing && !isCoordinatorSettable(existing.status)
   const statusItems: DropdownItem[] = statusLocked
-    ? [{ value: existing!.status, label: existing!.status, disabled: true }]
+    ? [{ value: existing!.status, label: lockedWords(existing!.status), disabled: true }]
     : COORDINATOR_SETTABLE_SHIFT_STATUSES.map(s => ({ value: s, label: s }))
 
   const warningFindings = findings.filter(f => f.severity === 'Warning')
@@ -405,7 +406,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         )}
 
         <div data-shift-field="participant" ref={participantFieldRef}>
-          <FormField label="Participant" required>
+          <FormField label="Participant" required hint={isEdit ? 'A shift stays with its participant. To roster another participant, add a new shift.' : undefined}>
             <Dropdown
               variant="form"
               value={participantId}
