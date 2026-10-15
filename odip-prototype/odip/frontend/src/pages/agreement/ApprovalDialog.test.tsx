@@ -147,6 +147,14 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect(screen.queryByText(/default staff/)).not.toBeInTheDocument()
   })
 
+  it("says a renewal's changed pattern starts with no default staff, though it ends no pattern (D12)", () => {
+    ready(preview({ patternsToEnd: 0, changedPatterns: 1 }))
+    render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+
+    expect(screen.getByText('The changed pattern starts with no default staff.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Ends /)).not.toBeInTheDocument()
+  })
+
   it('agrees its nouns with its counts', () => {
     ready(preview({ patternsToCreate: 1, shiftsToCreate: 1, patternsToEnd: 1, endsFromVersion: 3, endsOn: '2026-11-01' }))
     setUp()
