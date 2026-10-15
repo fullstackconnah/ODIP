@@ -1184,6 +1184,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.TimeZoneId).HasMaxLength(100);
             entity.Property(e => e.ReturnReason).HasMaxLength(2000);
             entity.Property(e => e.HandoverText).HasMaxLength(2000);
+            entity.Property(e => e.TimeAdjustmentReason).HasMaxLength(500);
+            entity.Property(e => e.Kilometres).HasPrecision(6, 1);
 
             // Restrict: same idiom as ShiftNote -> Shift — a shift's completion history must
             // not be silently cascade-deleted out from under it.

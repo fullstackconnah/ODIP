@@ -6,8 +6,8 @@ import { TAP_AREA } from '@/components/tapArea'
 import { TONE } from '@/lib/tone'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
-import { buildChecklist, clockLabel, type ChecklistItem } from './checklist'
-import { Chip, Section } from './ui'
+import { buildChecklist, clockLabel, dueDoseKeys, foldDueList, type ChecklistGroup, type ChecklistItem } from './checklist'
+import { Chip, Fold, Section } from './ui'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalDoseSlotDto, PortalPrnDto, PortalShiftDetailDto, PortalShiftRoutineDto } from '@/api/types'
 
@@ -23,7 +23,7 @@ function DoseRow({ slot, tz, canAct, onRecord }: { slot: PortalDoseSlotDto; tz: 
   const outcome = slot.outcome
   const overdue = slot.state === 'Overdue'
   return (
-    <li className={`rounded-lg border px-3 py-2 text-sm ${overdue ? `${TONE.warning.soft} border-[var(--color-on-warning-container)]/30` : 'border-[var(--color-border)]'}`}>
+    <li className={`py-2.5 text-sm ${overdue ? `${TONE.warning.soft} -mx-3 px-3 rounded-lg` : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium flex items-center gap-1.5 flex-wrap">
@@ -31,9 +31,8 @@ function DoseRow({ slot, tz, canAct, onRecord }: { slot: PortalDoseSlotDto; tz: 
             {slot.medicationName}{slot.strength ? ` ${slot.strength}` : ''}
             {slot.isHighRisk && <Chip>High risk</Chip>}
           </p>
-          <p className="text-[var(--color-muted-foreground)]">{slot.doseDescription}</p>
-          <p className={overdue ? `font-medium ${TONE.warning.ink}` : 'text-[var(--color-muted-foreground)]'}>
-            {overdue ? 'Overdue. ' : ''}Give by {clockLabel(slot.scheduledAt)}
+          <p className="text-[var(--color-muted-foreground)]">
+            {slot.doseDescription && `${slot.doseDescription} · `}<span className={overdue ? `font-medium ${TONE.warning.ink}` : ''}>{overdue ? 'Overdue. ' : ''}Give by {clockLabel(slot.scheduledAt)}</span>
           </p>
           {slot.directions && <p className="text-xs text-[var(--color-muted-foreground)]">{slot.directions}</p>}
           {outcome && (
@@ -65,7 +64,7 @@ function DoseRow({ slot, tz, canAct, onRecord }: { slot: PortalDoseSlotDto; tz: 
   )
 }
 
-function RoutineRow({ routine, shiftId, canAct, online }: { routine: PortalShiftRoutineDto; shiftId: string; canAct: boolean; online: boolean }) {
+export function RoutineRow({ routine, shiftId, canAct, online }: { routine: PortalShiftRoutineDto; shiftId: string; canAct: boolean; online: boolean }) {
   const check = useCheckRoutine()
   const uncheck = useUncheckRoutine()
   const [error, setError] = useState<string | null>(null)
@@ -82,7 +81,7 @@ function RoutineRow({ routine, shiftId, canAct, online }: { routine: PortalShift
   }
 
   return (
-    <li className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm">
+    <li className="py-2.5 text-sm">
       <button
         type="button"
         role="checkbox"
@@ -110,9 +109,9 @@ function RoutineRow({ routine, shiftId, canAct, online }: { routine: PortalShift
   )
 }
 
-function PrnRow({ prn, tz, canAct, onRecord }: { prn: PortalPrnDto; tz: string; canAct: boolean; onRecord: (t: DoseTarget) => void }) {
+export function PrnRow({ prn, tz, canAct, onRecord }: { prn: PortalPrnDto; tz: string; canAct: boolean; onRecord: (t: DoseTarget) => void }) {
   return (
-    <li className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm">
+    <li className="py-2.5 text-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium flex items-center gap-1.5 flex-wrap">
@@ -155,9 +154,11 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
   onRecord: (t: DoseTarget) => void
 }) {
   const { groups } = buildChecklist(shift)
+  const plan = foldDueList(groups, dueDoseKeys(shift.finishBlockers))
   const canRecord = canAct && online && shift.canRecordDoses
   const tz = shift.timeZoneId
 
+  const rowsOf = (group: ChecklistGroup) => <ul className="divide-y divide-[var(--color-border)]">{group.items.map(renderItem)}</ul>
   const renderItem = (item: ChecklistItem) => item.kind === 'dose'
     ? <DoseRow key={item.key} slot={item.slot} tz={tz} canAct={canRecord} onRecord={onRecord} />
     : <RoutineRow key={item.key} routine={item.routine} shiftId={shift.id} canAct={canAct} online={online} />
@@ -168,18 +169,35 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
         <p role="status" className="text-sm">{shift.canRecordDosesReason}</p>
       )}
       {shift.medicationsDue.length === 0 && <p className="text-sm text-[var(--color-muted-foreground)]">No doses due this shift.</p>}
-      {groups.map(group => (
-        <div key={group.id} className="space-y-2">
-          <h3 className={`text-sm font-semibold ${group.tone === 'warning' ? TONE.warning.ink : ''}`}>{group.label}</h3>
-          <ul className="space-y-2">{group.items.map(renderItem)}</ul>
-        </div>
-      ))}
-      {shift.prn.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">As needed</h3>
-          <ul className="space-y-2">
-            {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={tz} canAct={canRecord} onRecord={onRecord} />)}
-          </ul>
+      {/* Rows divided inside the one card, not a card per item. Overdue and the next time stay open; done times fold to a count, and every
+          later time folds, with the as-needed medicines, into the one-line folds at the end (finish review fix 1). */}
+      {plan.shown.map(({ group, fold }) => fold
+        ? <Fold key={group.id} summary={fold}>{rowsOf(group)}</Fold>
+        : (
+          <div key={group.id} className="space-y-1">
+            <h3 className={`text-sm font-semibold ${group.tone === 'warning' ? TONE.warning.ink : ''}`}>{group.label}</h3>
+            {rowsOf(group)}
+          </div>
+        ))}
+      {(plan.later || shift.prn.length > 0) && (
+        <div>
+          {plan.later && (
+            <Fold summary={plan.later.summary}>
+              {plan.later.groups.map(group => (
+                <div key={group.id} className="space-y-1">
+                  <h3 className="text-sm font-semibold">{group.label}</h3>
+                  {rowsOf(group)}
+                </div>
+              ))}
+            </Fold>
+          )}
+          {shift.prn.length > 0 && (
+            <Fold summary={`As needed · ${shift.prn.length} medicine${shift.prn.length === 1 ? '' : 's'}`}>
+              <ul className="divide-y divide-[var(--color-border)]">
+                {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={tz} canAct={canRecord} onRecord={onRecord} />)}
+              </ul>
+            </Fold>
+          )}
         </div>
       )}
     </Section>

@@ -32,7 +32,7 @@ export function providerLocalToUtcInstant(local: string, zone: string): string |
 }
 
 /** A UTC instant as the datetime-local value its provider-zone wall clock shows: "2026-07-01T09:00". */
-export function utcInstantToProviderLocal(iso: string, zone: string): string {
+export function utcInstantToProviderLocal(iso: string, zone: string | undefined): string {   // undefined: the device zone
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: zone, hourCycle: 'h23',
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
