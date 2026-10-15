@@ -22,7 +22,7 @@ vi.mock('@/api/hooks', () => ({
   usePlanPricingSettings: () => ({ data: pricingSettings() }),
   useRenewAgreement: () => ({ mutate: renewMutate, isPending: false }),
   useServiceAgreementDraft: () => oldDraft(),
-  useAgreementsEnding: () => endingRows(),
+  useAgreementsEnding: (enabled?: boolean) => endingRows(enabled),
   usePlanBudget: () => budget(),
   useAgreementCheck: () => check(),
 }))
@@ -73,7 +73,7 @@ beforeEach(() => {
   pricingSettings.mockReturnValue(makeSettings())
   oldDraft.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
   renewMutate.mockReset()
-  endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })
+  endingRows.mockReset(); endingRows.mockReturnValue({ data: [], isLoading: false, isError: false })
 })
 afterEach(() => { vi.useRealTimers(); localStorage.clear() })
 
@@ -526,6 +526,31 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
     expect(screen.queryByRole('button', { name: 'Renew agreement' })).not.toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  // Follow-ups (N14): the ending list needs an organisation, so for a SuperAdmin with none it answers 400 every time. The page asks for none and says what to do instead of a Try again that never helps.
+  it('asks a SuperAdmin with no organisation to choose one, instead of a check that always fails', () => {
+    asRole('SuperAdmin')
+    endingRows.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() })
+    showing(ending)
+    renderPage()
+
+    expect(endingRows).toHaveBeenCalledWith(false)
+    expect(endingRows).not.toHaveBeenCalledWith(true)
+    expect(screen.getByText('Choose an organisation to see whether this agreement is ending.')).toBeInTheDocument()
+    expect(screen.queryByText("Couldn't check whether this agreement is ending.")).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('checks as usual for a SuperAdmin viewing an organisation', () => {
+    asRole('SuperAdmin')
+    localStorage.setItem('odip_viewing_tenant', 't-1')
+    showing(ending)
+    renderPage()
+
+    expect(endingRows).toHaveBeenCalledWith(true)
+    expect(screen.getByText('Agreement ends in 20 days.')).toBeInTheDocument()
+    expect(screen.queryByText('Choose an organisation to see whether this agreement is ending.')).not.toBeInTheDocument()
   })
 
   it('is in the error tone once the agreement has ended, warning while it is ending, and info otherwise', () => {

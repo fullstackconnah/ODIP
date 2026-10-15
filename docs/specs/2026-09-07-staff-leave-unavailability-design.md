@@ -33,8 +33,7 @@ existing Warning/Blocking + override-reason parity, and migrates `StaffAvailabil
   them.
 - `AvailabilityEditor.tsx` (`frontend/src/pages/schedule/AvailabilityEditor.tsx`), mounted
   in `SchedulePage.tsx`, is coordinator-only inline CRUD on `StaffAvailability` — no
-  recurrence UI, no non-Leave creation, per its own original spec
-  (`docs/superpowers/specs/2026-03-19-unavailability-schedule-design.md`).
+  recurrence UI, no non-Leave creation, per its own original spec (the 2026-03-19 unavailability-schedule design, now only in git history).
 - `LeaveBar.tsx` (`frontend/src/pages/rostering/components/LeaveBar.tsx`) already renders a
   read-only muted bar per staff row from `RosterStaffRowDto.Leave`
   (`LeaveBarDto { startDate, endDate, availabilityType, notes }`,

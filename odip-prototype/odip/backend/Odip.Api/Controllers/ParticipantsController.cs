@@ -492,6 +492,7 @@ public class ParticipantsController : ControllerBase
 
         // ── Write ──
         var previousSupportRatio = p.SupportRatio;
+        var previousEmail = p.Email;
         ApplyIntakeScope(p, dto);
         p.UpdatedAt = DateTime.UtcNow;
 
@@ -511,7 +512,9 @@ public class ParticipantsController : ControllerBase
         // keep it in step. Where the enquiry came from (source, provenance) is its own record and is not touched.
         foreach (var inquiry in await _db.ParticipantInquiries.Where(i => i.ParticipantId == p.Id).ToListAsync(ct))
         {
-            inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone; inquiry.Email = p.Email;
+            inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone;
+            // The enquiry's email is where the intake visit's invite goes, and a booking can store it on the enquiry alone: a participant that never had one never blanks it, but one the coordinator just cleared does.
+            if (!string.IsNullOrWhiteSpace(p.Email) || !string.IsNullOrWhiteSpace(previousEmail)) inquiry.Email = p.Email;
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 
@@ -547,7 +550,15 @@ public class ParticipantsController : ControllerBase
                     property.IsModified = mine;
                 }
             }
-            await _db.SaveChangesAsync(ct);
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException again) when (again.Entries.All(e => e.Entity is ParticipantInquiry))
+            {
+                // One retry only: a booking that wins twice in a row is the house conflict. Nothing was saved, and the wizard keeps what was typed, so saving again is the way on.
+                return Conflict(ApiResponse<ParticipantDetailDto>.Fail("Someone else just changed this participant's enquiry. Save again."));
+            }
         }
         var warning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto

@@ -696,4 +696,67 @@ public class ParticipantHubFlowTests
         Assert.Equal(("booked@odip", 1), (row.IntakeUid, row.IntakeIcsSequence));
     }
 
+    // Follow-ups (intake): the enquiry's email is the contact the intake visit's invite goes to. A booking may ask for it after Start intake and writes it to the enquiry only, so the
+    // participant can have none: the wizard's save must not blank the enquiry's email with the participant's empty one. An email the wizard does give is still copied over.
+    [Fact]
+    public async Task Saving_an_intake_keeps_the_enquiry_email_the_participant_does_not_have()
+    {
+        var tenantId = Guid.NewGuid();
+        using var caller = NewCaller(tenantId);
+        var enquiry = await CaptureEnquiryAsync(caller);                                                     // by phone: no email yet
+        var participantId = Ok(await caller.Inquiries.Convert(enquiry.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
+        (await caller.Db.ParticipantInquiries.SingleAsync(x => x.Id == enquiry.Id)).Email = "family@example.test";   // as a booking's contactEmail stores it
+        await caller.Db.SaveChangesAsync();
+
+        Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false), CancellationToken.None));
+
+        var kept = await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id);
+        Assert.Equal(("King", "family@example.test"), (kept.LastName, kept.Email));
+
+        Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false) with { Email = "ada@example.test" }, CancellationToken.None));
+
+        Assert.Equal("ada@example.test", (await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email);
+
+        // Cleared by the coordinator after the participant had one: the enquiry is cleared too (only a participant that never had an email leaves it alone).
+        Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false) with { Email = "" }, CancellationToken.None));
+
+        Assert.True(string.IsNullOrWhiteSpace((await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email));
+    }
+
+    /// <summary>Before every save that writes an enquiry, a booking lands on it first through another context: the wizard's one retry meets a conflict too.</summary>
+    private sealed class BookingBeforeEverySaveInterceptor(string store, Guid tenantId) : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!Armed || !eventData.Context!.ChangeTracker.Entries<ParticipantInquiry>().Any(entry => entry.State == EntityState.Modified)) return result;
+            using var other = new Caller(store, tenantId);
+            var row = await other.Db.ParticipantInquiries.SingleAsync(cancellationToken);
+            row.IntakeIcsSequence += 1;
+            row.IntakeUid = $"booked-{row.IntakeIcsSequence}@odip";
+            await other.Db.SaveChangesAsync(cancellationToken);
+            return result;
+        }
+    }
+
+    // Follow-ups (intake RN4): the retry is bounded, so a booking that wins twice in a row is the house 409, never a 500.
+    [Fact]
+    public async Task Saving_an_intake_whose_enquiry_a_booking_changes_twice_in_a_row_is_a_409_not_a_500()
+    {
+        var tenantId = Guid.NewGuid();
+        var store = Guid.NewGuid().ToString();
+        var race = new BookingBeforeEverySaveInterceptor(store, tenantId);
+        using var caller = new Caller(store, tenantId, interceptor: race);
+        var enquiry = await CaptureEnquiryAsync(caller);
+        var participantId = Ok(await caller.Inquiries.Convert(enquiry.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
+        race.Armed = true;
+
+        var result = await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Someone else just changed this participant's enquiry. Save again.", Assert.Single(Assert.IsType<ApiResponse<ParticipantDetailDto>>(conflict.Value).Errors!));
+    }
+
 }
