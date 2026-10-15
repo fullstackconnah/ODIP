@@ -84,6 +84,14 @@ public class AuthController : ControllerBase
             return Unauthorized(ApiResponse<AuthResponseDto>.Fail(ExchangeRefusal.MessageFor(code), code));
         }
 
+        // The token must at least HAVE the shape of one before the SDK is asked to parse it. A token that is not three
+        // base64url segments cannot be a Firebase token, and the SDK's parse of one is not a defined failure: an all-dots
+        // token such as ".." makes it throw NullReferenceException (see FirebaseIdTokenShape). Refusing it here keeps that
+        // SDK defect out of the request path AND spends the failure budget like every other refusal, which is the point:
+        // without the spend this one shape would be a free retry.
+        if (!FirebaseIdTokenShape.LooksLikeAnIdToken(dto.IdToken))
+            return Rejected(ExchangeRefusal.InvalidToken, "Exchange failed — the token is not shaped like a Firebase ID token");
+
         // 1. Verify Firebase ID token
         IReadOnlyDictionary<string, object> claims;
         try
@@ -93,6 +101,19 @@ public class AuthController : ControllerBase
         catch (FirebaseAuthException ex)
         {
             return Rejected(ExchangeRefusal.InvalidToken, "Firebase token verification failed: {Message}", ex.Message);
+        }
+        catch (Exception ex) when (FirebaseTokenParseFailures.IsUndecodableToken(ex))
+        {
+            // The SDK could not DECODE the token, as distinct from refusing one it read (FirebaseAuthException, above).
+            // Malformed input reaches the decoders: "aaa.bbb.ccc" is three legal base64url segments that are not a JWT, so
+            // parsing gets as far as the payload and fails as JsonReaderException, which derives from JsonException and is
+            // therefore not an ArgumentException. Letting that escape returned HTTP 500 and, because it never returned
+            // through Rejected(), did not spend the failure budget either — which is what made the lockout bypassable by aiming
+            // at this one shape. Measured against FirebaseAdmin 3.5.0; see FirebaseTokenParseFailures.
+            // The response stays the generic InvalidToken, which is what the shape deserves: nothing about it is actionable, and a
+            // fault in the SDK must not pose as one of the more specific codes. Only these types are caught (never by message and
+            // never a catch-all), so a genuine fault elsewhere still surfaces as a 500 rather than being laundered into a 401.
+            return Rejected(ExchangeRefusal.InvalidToken, "Firebase token could not be decoded: {Type}: {Message}", ex.GetType().Name, ex.Message);
         }
 
         var rawEmail = claims.TryGetValue("email", out var emailClaim)

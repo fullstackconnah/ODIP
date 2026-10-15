@@ -43,6 +43,22 @@ public class AuthControllerExchangeTests
         public Task<IReadOnlyDictionary<string, object>> VerifyIdTokenAsync(string idToken, CancellationToken ct) => throw failure;
     }
 
+    /// <summary>
+    /// A token whose shape the guard accepts but the SDK still cannot decode, so the failure comes out of the SDK's own parsers rather
+    /// than out of a <see cref="FirebaseAuthException"/>. It throws whatever it is given, and records whether it was reached at all, which
+    /// is what separates "refused before the SDK was asked" from "the SDK was asked and said no".
+    /// </summary>
+    private sealed class ParseFailingVerifier(Exception failure) : IFirebaseTokenVerifier
+    {
+        public bool WasAsked { get; private set; }
+
+        public Task<IReadOnlyDictionary<string, object>> VerifyIdTokenAsync(string idToken, CancellationToken ct)
+        {
+            WasAsked = true;
+            throw failure;
+        }
+    }
+
     // The shape of the request that reaches the exchange in PRODUCTION: ANONYMOUS. CurrentTenant reads the tenant and the SuperAdmin flag from a JWT the
     // caller does not have yet, so the ambient tenant is none and the caller is no SuperAdmin; the Users query filter then admits no row at all, and
     // the exchange finds anyone only because its look-ups call IgnoreQueryFilters(). A context that said IsSuperAdmin = true (as these tests once did)
@@ -113,8 +129,17 @@ public class AuthControllerExchangeTests
     private static DateTime? StoredLastLoginAt(OdipDbContext db, Guid userId) =>
         db.Users.IgnoreQueryFilters().AsNoTracking().Single(u => u.Id == userId).LastLoginAt;
 
+    // A token the shape guard (FirebaseIdTokenShape) accepts and the fakes above never inspect the contents of: three legal
+    // base64url segments. The fake verifier returns canned claims regardless of the string, so only the SHAPE has to be real —
+    // an earlier placeholder ("token-the-fake-accepts") was one segment and would now be refused before the verifier was ever asked.
+    private const string AnyShapedToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1aWQtMSJ9.c2lnbmF0dXJl";
+
     private static Task<ActionResult<ApiResponse<AuthResponseDto>>> Exchange(AuthController controller) =>
-        controller.Exchange(new ExchangeTokenDto { IdToken = "token-the-fake-accepts" }, CancellationToken.None);
+        controller.Exchange(new ExchangeTokenDto { IdToken = AnyShapedToken }, CancellationToken.None);
+
+    /// <summary>The exchange with a token of THIS shape, for the cases where the token string is the thing under test.</summary>
+    private static Task<ActionResult<ApiResponse<AuthResponseDto>>> ExchangeWith(AuthController controller, string idToken) =>
+        controller.Exchange(new ExchangeTokenDto { IdToken = idToken }, CancellationToken.None);
 
     // ── Tenant path ─────────────────────────────────────────────────────
 
@@ -376,6 +401,16 @@ public class AuthControllerExchangeTests
         Assert.Equal(StatusCodes.Status429TooManyRequests, lockedOut.StatusCode);
     }
 
+    // The same, for the cases where the TOKEN is what is under test, so every attempt presents the same malformed shape.
+    private static async Task AssertRefusalsSpendTheFailureBudget(AuthController controller, string idToken)
+    {
+        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
+            Assert.IsType<UnauthorizedObjectResult>((await ExchangeWith(controller, idToken)).Result);
+
+        var lockedOut = Assert.IsType<ObjectResult>((await ExchangeWith(controller, idToken)).Result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, lockedOut.StatusCode);
+    }
+
     [Fact]
     public async Task An_address_no_active_user_has_spends_from_the_failure_budget()
     {
@@ -443,6 +478,200 @@ public class AuthControllerExchangeTests
         SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
 
         await AssertRefusalsSpendTheFailureBudget(CreateController(db, FirebaseTestClaims.FromPayload(payload)));
+    }
+
+    // ── A malformed token is a refusal like any other, not an unhandled 500 ────────────────────
+    // The exchange used to let the SDK's PARSE failures escape: JsonReaderException (from a three-segment token that is not a JWT)
+    // matches no arm of ExceptionHandlingMiddleware's switch, so it became HTTP 500 — and because it never returned through
+    // Rejected(), it did not spend the failure budget either, so the per-key lockout could be dodged by aiming at that shape.
+    // Measured against FirebaseAdmin 3.5.0, which class escapes depends on the shape, hence the theories below.
+
+    /// <summary>The card's case: three segments that are not a JWT, which is what the SDK fails to parse.</summary>
+    [Fact]
+    public async Task A_three_segment_token_that_is_not_a_JWT_is_refused_401_and_stays_the_generic_InvalidToken()
+    {
+        using var db = CreateDb();
+        var verifier = new ParseFailingVerifier(new Newtonsoft.Json.JsonReaderException("Unexpected character encountered while parsing value."));
+        var logger = new Mock<ILogger<AuthController>>();
+
+        var result = await ExchangeWith(CreateController(db, verifier, logger.Object), "aaa.bbb.ccc");
+
+        // 401, not the 500 the unhandled JsonReaderException used to produce, and the same generic answer as any other bad token.
+        AssertRefusal(result, "InvalidToken", "Invalid or expired token");
+        // The SDK really was asked, so this is the catch doing the work rather than the shape guard short-circuiting it.
+        Assert.True(verifier.WasAsked);
+        // Logged at the same level as every other refusal, so the 500's error-level noise is gone too.
+        VerifyWarningMentioning(logger, "could not be decoded");
+    }
+
+    /// <summary>The other parse class the SDK produces: short segments fail as FormatException, not JsonReaderException.</summary>
+    [Fact]
+    public async Task A_token_whose_segments_are_too_short_to_decode_is_refused_401_as_well()
+    {
+        using var db = CreateDb();
+
+        var result = await ExchangeWith(
+            CreateController(db, new ParseFailingVerifier(new FormatException("The input is not a valid Base-64 string"))), "a.b.c");
+
+        AssertRefusal(result, "InvalidToken", "Invalid or expired token");
+    }
+
+    // Every one of these spends from the failure budget, which is the half of the defect a status-code-only fix would have missed:
+    // a 500 that still skipped RecordFailure left the lockout bypassable however the status read.
+    [Theory]
+    [InlineData("aaa.bbb.ccc")]                                     // three segments, not a JWT -> JsonReaderException
+    [InlineData("aaa.###.ccc")]                                    // payload outside the base64url alphabet
+    [InlineData("aaaa.bbbb.cccc")]                                 // legal base64url, junk content
+    [InlineData("aaa.e30.ccc")]                                    // payload decodes to {} — valid JSON, not a JWT
+    public async Task A_token_the_SDK_cannot_decode_spends_from_the_failure_budget(string idToken)
+    {
+        using var db = CreateDb();
+
+        await AssertRefusalsSpendTheFailureBudget(
+            CreateController(db, new ParseFailingVerifier(new Newtonsoft.Json.JsonReaderException("parse failed"))),
+            idToken);
+    }
+
+    [Fact]
+    public async Task A_token_whose_segments_cannot_be_base64_decoded_spends_from_the_failure_budget_too()
+    {
+        using var db = CreateDb();
+
+        await AssertRefusalsSpendTheFailureBudget(
+            CreateController(db, new ParseFailingVerifier(new FormatException("not base-64"))), "a.b.c");
+    }
+
+    // ── The shape guard: refused BEFORE the SDK is asked, and still counted ───────────────────
+    // The SDK's parse of these is not a defined failure — ".." makes it throw NullReferenceException — so they are turned away
+    // at the door rather than by catching everything, which is what keeps a real fault elsewhere a real 500.
+
+    [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData("not-a-firebase-token")]
+        [InlineData("a.b")]
+        [InlineData("a.b.c.d")]
+        [InlineData("a..b")]
+        [InlineData("..")]                                             // all dots: the SDK throws NullReferenceException on this
+        [InlineData("a.b.c=")]                                         // padded, so not base64url
+        [InlineData(" a.b.c")]
+        public async Task A_token_that_is_not_shaped_like_an_ID_token_is_refused_before_the_verifier_is_asked(string idToken)
+        {
+            using var db = CreateDb();
+            var verifier = new ParseFailingVerifier(new InvalidOperationException("the SDK must never be asked about a token of this shape"));
+
+            var result = await ExchangeWith(CreateController(db, verifier), idToken);
+
+            AssertRefusal(result, "InvalidToken", "Invalid or expired token");
+            Assert.False(verifier.WasAsked, "the guard should have refused this without troubling the SDK");
+        }
+
+        /// <summary>
+        /// The new catch is filtered to parser failure types only: a genuine fault raised by the verifier must still escape rather than
+        /// be laundered into a caller's generic 401. The shape guard must therefore let the verifier see the token first.
+        /// </summary>
+        [Theory]
+        [InlineData("invalid operation")]
+        [InlineData("null reference")]
+        public async Task A_non_parse_fault_from_the_verifier_is_not_relabelled_as_an_invalid_token(string fault)
+        {
+            using var db = CreateDb();
+            Exception expected = fault switch
+            {
+                "null reference" => new NullReferenceException("BUG: the verifier dereferenced something it should not have"),
+                _ => new InvalidOperationException("BUG: the verifier is misconfigured"),
+            };
+            var verifier = new ParseFailingVerifier(expected);
+            var controller = CreateController(db, verifier);
+
+            var thrown = await Assert.ThrowsAnyAsync<Exception>(() => Exchange(controller));
+
+            Assert.Same(expected, thrown);
+            Assert.True(verifier.WasAsked, "the shaped token passes the guard; the verifier's fault is the thing being pinned here");
+        }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-a-firebase-token")]
+    [InlineData("a.b.c.d")]
+    [InlineData("..")]
+    [InlineData("a..b")]
+    public async Task A_token_that_is_not_shaped_like_an_ID_token_spends_from_the_failure_budget(string idToken)
+    {
+        using var db = CreateDb();
+
+        await AssertRefusalsSpendTheFailureBudget(
+            CreateController(db, new ParseFailingVerifier(new InvalidOperationException("unreachable"))), idToken);
+    }
+
+    // A real Firebase ID token is three legal base64url segments, so the guard must not refuse one. The fake verifier stands in
+    // for the SDK and returns claims whatever the string, so a successful sign-in here proves the token got PAST the guard and the
+    // rest of the exchange ran unchanged — a guard that were too strict would refuse this as InvalidToken.
+    [Fact]
+    public async Task A_well_formed_three_segment_token_still_gets_past_the_guard_and_signs_in()
+    {
+        using var db = CreateDb();
+        var tenant = SeedTenant(db);
+        var user = SeedUser(db, tenant.Id, "jane.smith@gmail.com");
+
+        var result = await Exchange(CreateController(db, "jane.smith@gmail.com"));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value).Data!;
+        Assert.Equal(user.Id, body.Id);
+        Assert.Equal(tenant.Id, body.TenantId);
+    }
+
+    // The exact token the deploy probe used, pinned as a literal so the regression names the reported input rather than a
+    // near-miss of it: three segments, none of them a JWT, which is what the SDK fails to parse.
+    [Fact]
+    public void The_reported_regression_token_is_the_shape_this_fix_covers()
+    {
+        // It is three legal base64url segments, so the shape guard lets it through to the SDK — which is exactly why the guard
+        // alone would NOT have fixed this, and why the parse-failure catch is load-bearing.
+        Assert.True(FirebaseIdTokenShape.LooksLikeAnIdToken("aaa.bbb.ccc"));
+    }
+
+    [Fact]
+    public async Task The_reported_token_through_the_real_Firebase_verifier_returns_401_and_spends_the_failure_budget()
+    {
+        using var db = CreateDb();
+        var controller = CreateController(db, new FirebaseTokenVerifier());
+        // The first call parses before touching credentials or the network. The DefaultInstance guard on the real verifier may
+        // therefore fail before parsing if the test process did not initialise a Firebase app; set up the minimum valid fake SA
+        // inline first. GoogleCredential parses the real PKCS#8 key; the SDK's payload parser then throws JsonReaderException.
+        EnsureFirebaseAppForLocalParse();
+
+        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
+        {
+            var refused = await ExchangeWith(controller, "aaa.bbb.ccc");
+            var unauthorized = Assert.IsType<UnauthorizedObjectResult>(refused.Result);
+            var body = Assert.IsType<ApiResponse<AuthResponseDto>>(unauthorized.Value);
+            Assert.Equal("InvalidToken", body.Code);
+        }
+
+        var locked = Assert.IsType<ObjectResult>((await ExchangeWith(controller, "aaa.bbb.ccc")).Result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, locked.StatusCode);
+    }
+
+    private static void EnsureFirebaseAppForLocalParse()
+    {
+        if (FirebaseAdmin.FirebaseApp.DefaultInstance is not null)
+            return;
+
+        using var rsa = System.Security.Cryptography.RSA.Create(2048);
+        var credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromJson(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            type = "service_account",
+            project_id = "odip-probe",
+            private_key_id = "probe",
+            private_key = new string(rsa.ExportPkcs8PrivateKeyPem()),
+            client_email = "probe@odip-probe.iam.gserviceaccount.com",
+            client_id = "1",
+            auth_uri = "https://accounts.google.com/o/oauth2/auth",
+            token_uri = "https://oauth2.googleapis.com/token",
+        }));
+        FirebaseAdmin.FirebaseApp.Create(new FirebaseAdmin.AppOptions { Credential = credential });
     }
 
     [Fact]
