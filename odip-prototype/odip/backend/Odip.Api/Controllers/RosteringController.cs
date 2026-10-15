@@ -638,6 +638,9 @@ public class RosteringController : ControllerBase
         // belong to that worker. Every other edit the rules below allow still saves.
         if (dto.StaffId != shift.UserId && IsLockedForStaffChange(shift.Status) && !(shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled))
             return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
+        // Its participant too: a claim bills a Completed shift to Shift.ParticipantId (ShiftClaimGenerationService), so moving it would charge another participant's budget.
+        if (dto.ParticipantId != shift.ParticipantId && IsLockedForStaffChange(shift.Status) && !(shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled))
+            return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForParticipantMessage, ShiftErrorCodes.ShiftStatusLocked));
 
         // A shift has to end after it starts. The rule is for times somebody is setting now: an edit that leaves the shift's times alone, or cancels it, never trips it, because rows saved before this rule
         // may already be wrong and the panel must still be able to annotate, assign and cancel them (a started shift's times are locked and could not be mended at all).
@@ -1947,6 +1950,7 @@ public class RosteringController : ControllerBase
         status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
 
     private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
+    private const string ShiftLockedForParticipantMessage = "This shift has started, finished or been cancelled, so its participant can't be changed here.";
 
     /// <summary>What a drop made on an out-of-date board is refused with (409): /assign with ExpectedStaffId, and move-staff.</summary>
     private const string BoardChangedMessage = "This shift changed after the board was loaded. Refresh the board and try again.";
