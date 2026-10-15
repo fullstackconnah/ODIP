@@ -172,4 +172,16 @@ describe('RosterDayCell — the new-shift slot while a person is carried (the br
     const { container } = cell({ canWrite: false })
     expect(container.querySelector('[data-day-slot]')).toBeNull()
   })
+
+  // The chip brief, section 6: the only carry hint. The new ad-hoc zones show before the pointer gets there; at rest the Plus stays transparent until hover or focus.
+  it('shows an empty writable day its Plus in muted ink while a person is carried, and keeps it transparent at rest', () => {
+    const { unmount } = cell({ shifts: [] })
+    expect(screen.getByRole('button', { name: ADD_LABEL })).toHaveClass('text-transparent')
+    unmount()
+    dnd.active = { id: 'staff:s-1' }
+    cell({ shifts: [] })
+    const day = screen.getByRole('button', { name: ADD_LABEL })
+    expect(day).toHaveClass('text-muted-foreground')
+    expect(day).not.toHaveClass('text-transparent')
+  })
 })

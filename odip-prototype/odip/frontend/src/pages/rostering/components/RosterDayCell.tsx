@@ -33,9 +33,9 @@ export type RosterDayCellProps = {
  * read as a grid of shouting buttons. A cell that already has shifts, or is read-only, renders
  * the plain static cell it always has.
  *
- * Height is the board row: a cell is `--row-h` less the 1px row rule, chips are `--row-h` less 6px
- * (see ShiftChip) and centred in it, so a one-shift row is exactly `--row-h` — 34px at a fine
- * pointer, 48px under `pointer: coarse`. A day with several shifts simply grows the row.
+ * Height is the board row: a cell is at least `--row-h` less the 1px row rule, so a week with no
+ * shifts is 34px at a fine pointer, 48px under `pointer: coarse`. A chip is 56px (68px coarse, see
+ * ShiftChip), so a day with a shift grows its row to 61px (73px), and one with several grows it more.
  */
 export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipContext, draggable, dayTarget, onAdd, onOpen, onAssignTo, onUnassign, onDelete }: RosterDayCellProps) {
   const style = { gridColumn: dayIndex + 1, gridRow: 1 }
@@ -56,9 +56,9 @@ export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipC
         style={style}
         onClick={onAdd}
         aria-label={addLabel}
-        // While a person is carried over it: its own hover look plus a dashed olive outline.
+        // While a person is carried over it: its own hover look plus a dashed olive outline. While a person is carried anywhere: its Plus in muted ink, so the drop zones show before the pointer gets there (the chip brief, section 6).
         className={`${base} group items-center transition-colors duration-150 hover:bg-accent/60 hover:text-muted-foreground focus:outline-none focus-visible:text-muted-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
-          isOver ? 'bg-accent/60 text-muted-foreground outline-2 -outline-offset-2 outline-dashed outline-ring' : 'text-transparent'
+          isOver ? 'bg-accent/60 text-muted-foreground outline-2 -outline-offset-2 outline-dashed outline-ring' : dayTarget && active ? 'text-muted-foreground' : 'text-transparent'
         }`}
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
