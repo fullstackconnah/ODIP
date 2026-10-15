@@ -136,13 +136,31 @@ describe('NeedsYourDecision — when the open tab empties (SHAPE §3, §5)', () 
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
   })
 
-  it('never switches because an earlier tab gained rows', () => {
-    const { rerender } = render(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { rows: [row('a')] })]} />)
+  it('never switches because an earlier tab gained rows once every group has answered', () => {
+    const { rerender } = render(<Harness groups={[group('completions'), group('leave', { rows: [row('a')] })]} />)
     expect(selected()).toHaveTextContent('Leave (1)')
 
     rerender(<Harness groups={[group('completions', { rows: [row('b')] }), group('leave', { rows: [row('a')] })]} />)
 
     expect(selected()).toHaveTextContent('Leave (1)')
+  })
+
+  it('opens the first tab with rows on arrival: an earlier group whose rows land after a later one takes the open tab while the page loads', () => {
+    const { rerender } = render(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { rows: [row('a')] })]} />)
+    expect(selected()).toHaveTextContent('Leave (1)')
+
+    rerender(<Harness groups={[group('completions', { rows: [row('b')] }), group('leave', { rows: [row('a')] })]} />)
+
+    expect(selected()).toHaveTextContent('Completions (1)')
+  })
+
+  it('keeps the tab the viewer picked while other groups are still loading', () => {
+    const { rerender } = render(<Harness groups={[group('completions', { phase: 'loading' }), group('leave', { rows: [row('a')] }), group('tasks', { rows: [row('c')] })]} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Tasks (1)' }))
+
+    rerender(<Harness groups={[group('completions', { rows: [row('b')] }), group('leave', { rows: [row('a')] }), group('tasks', { rows: [row('c')] })]} />)
+
+    expect(selected()).toHaveTextContent('Tasks (1)')
   })
 
   it('keeps a tab whose last row left while it holds a notice: "(0)", enabled, open', async () => {

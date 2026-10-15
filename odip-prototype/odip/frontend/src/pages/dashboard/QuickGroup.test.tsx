@@ -60,6 +60,8 @@ describe('QuickGroup — the table', () => {
     expect(within(rowOf('Person b')).getAllByRole('cell')[3]).toHaveTextContent('—')
     expect(screen.getByText('Family wedding')).toHaveAttribute('title', 'Family wedding')
     expect(screen.getByText('Family wedding')).toHaveClass('xl:truncate')
+    // Free text takes the leftover width with no minimum, so a narrow table cuts it first and never scrolls sideways (check 4 at 1280).
+    expect(screen.getByText('Family wedding').closest('td')).toHaveClass('xl:w-full', 'xl:max-w-0')
     // A date never breaks or is cut, at any width.
     expect(within(rowOf('Person a')).getAllByRole('cell')[2]).toHaveClass('whitespace-nowrap')
   })

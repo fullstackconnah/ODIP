@@ -105,10 +105,11 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
 
 /** A fact cell: one plain value; a dash in the table and nothing on the card when empty. Only free text is cut (in the table) or wrapped (on a card). */
 function FactCell({ column, value }: { column: FactColumn; value: string | null | undefined | false }) {
-  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', !column.long && 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
+  // A free-text column takes the table's leftover width and no minimum (width 100%, max-width 0), so on a narrow table it gives way first.
+  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', column.long ? 'xl:w-full xl:max-w-0' : 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
   return (
     <td className={classes.filter(Boolean).join(' ')}>
-      {!value ? '—' : column.long ? <span className="block break-words xl:max-w-[14rem] xl:truncate" title={value}>{value}</span> : value}
+      {!value ? '—' : column.long ? <span className="block break-words xl:truncate" title={value}>{value}</span> : value}
     </td>
   )
 }

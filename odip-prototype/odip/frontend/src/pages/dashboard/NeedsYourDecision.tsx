@@ -5,7 +5,7 @@ import { QuickGroup } from './QuickGroup'
 import { isPresent, shownCount, visibleRows, type GroupKey, type GroupModel } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 
-/** The open tab. `settled` once it was picked by the viewer, had rows, or was opened because the one before it emptied: from then on only those move it. */
+/** The open tab. `settled` once the viewer picked it, every group has answered, or the one before it emptied: from then on only a pick or an emptying moves it. */
 type Open = { key: GroupKey | null; settled: boolean }
 
 /** The tab's label carries its count in its text (the Qualifications way), so a screen reader hears it. A dash while waiting or failed, named for what it is. */
@@ -35,15 +35,11 @@ export function NeedsYourDecision({ groups, state }: { groups: GroupModel[]; sta
   const [open, setOpen] = useState<Open>({ key: null, settled: false })
   const next = ((): Open => {
     const current = present.find((group) => group.key === open.key)
-    if (current) {
-      if (open.settled) return open
-      // Opened on arrival while nothing had rows: the first tab with rows takes over once one has them.
-      const first = present.find(hasRows)
-      return first ? { key: first.key, settled: true } : open
-    }
-    if (open.key === null) {
+    if (current && open.settled) return open
+    if (current || open.key === null) {
+      // Arrival lasts until every group has answered: the first tab with rows, else the first present one.
       const first = present.find(hasRows) ?? present[0]
-      return { key: first?.key ?? null, settled: !!first && hasRows(first) }
+      return { key: first?.key ?? null, settled: !!first && !groups.some((group) => group.phase === 'loading') }
     }
     // The open tab emptied: the next one after it, in order and wrapping, with rows; else the next present one; else none.
     const from = groups.findIndex((group) => group.key === open.key)
