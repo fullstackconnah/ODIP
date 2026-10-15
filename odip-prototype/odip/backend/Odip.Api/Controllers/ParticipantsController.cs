@@ -547,7 +547,15 @@ public class ParticipantsController : ControllerBase
                     property.IsModified = mine;
                 }
             }
-            await _db.SaveChangesAsync(ct);
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException again) when (again.Entries.All(e => e.Entity is ParticipantInquiry))
+            {
+                // One retry only: a booking that wins twice in a row is the house conflict. Nothing was saved, and the wizard keeps what was typed, so saving again is the way on.
+                return Conflict(ApiResponse<ParticipantDetailDto>.Fail("Someone else just changed this participant's enquiry. Save again."));
+            }
         }
         var warning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto

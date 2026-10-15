@@ -696,4 +696,40 @@ public class ParticipantHubFlowTests
         Assert.Equal(("booked@odip", 1), (row.IntakeUid, row.IntakeIcsSequence));
     }
 
+    /// <summary>Before every save that writes an enquiry, a booking lands on it first through another context: the wizard's one retry meets a conflict too.</summary>
+    private sealed class BookingBeforeEverySaveInterceptor(string store, Guid tenantId) : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!Armed || !eventData.Context!.ChangeTracker.Entries<ParticipantInquiry>().Any(entry => entry.State == EntityState.Modified)) return result;
+            using var other = new Caller(store, tenantId);
+            var row = await other.Db.ParticipantInquiries.SingleAsync(cancellationToken);
+            row.IntakeIcsSequence += 1;
+            row.IntakeUid = $"booked-{row.IntakeIcsSequence}@odip";
+            await other.Db.SaveChangesAsync(cancellationToken);
+            return result;
+        }
+    }
+
+    // Follow-ups (intake RN4): the retry is bounded, so a booking that wins twice in a row is the house 409, never a 500.
+    [Fact]
+    public async Task Saving_an_intake_whose_enquiry_a_booking_changes_twice_in_a_row_is_a_409_not_a_500()
+    {
+        var tenantId = Guid.NewGuid();
+        var store = Guid.NewGuid().ToString();
+        var race = new BookingBeforeEverySaveInterceptor(store, tenantId);
+        using var caller = new Caller(store, tenantId, interceptor: race);
+        var enquiry = await CaptureEnquiryAsync(caller);
+        var participantId = Ok(await caller.Inquiries.Convert(enquiry.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
+        race.Armed = true;
+
+        var result = await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Someone else just changed this participant's enquiry. Save again.", Assert.Single(Assert.IsType<ApiResponse<ParticipantDetailDto>>(conflict.Value).Errors!));
+    }
+
 }
