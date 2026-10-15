@@ -1666,7 +1666,7 @@ describe('ShiftSlideOver — opened by a drop on an empty day (roster drag and d
 })
 
 describe('ShiftSlideOver — the worker of a started or finished shift (post-merge review S2)', () => {
-  const LOCKED = "This shift has started or finished, so its worker can't change here."
+  const LOCKED = "This shift has started, finished or been cancelled, so its worker can't be changed here."
   const twoStaff = [{ value: 'staff-1', label: 'Alex Rivera' }, { value: 'staff-2', label: 'Jordan Smith' }]
 
   it('shows the server refusing a new worker in its error area, stays open, and keeps the choice', async () => {

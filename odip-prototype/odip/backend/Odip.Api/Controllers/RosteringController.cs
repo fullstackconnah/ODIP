@@ -623,8 +623,8 @@ public class RosteringController : ControllerBase
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
         // A started, finished or cancelled shift keeps its worker here too, as /assign and a drop do (decision 8; post-merge review S2): its completion and timesheet
         // belong to that worker. Every other edit the rules below allow still saves.
-        if (dto.StaffId != shift.UserId && IsLockedForStaffChange(shift.Status))
-            return Conflict(ApiResponse<ShiftDto>.Fail("This shift has started or finished, so its worker can't change here.", ShiftErrorCodes.ShiftStatusLocked));
+        if (dto.StaffId != shift.UserId && IsLockedForStaffChange(shift.Status) && !(shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled))
+            return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
 
         // A shift has to end after it starts. The rule is for times somebody is setting now: an edit that leaves the shift's times alone, or cancels it, never trips it, because rows saved before this rule
         // may already be wrong and the panel must still be able to annotate, assign and cancel them (a started shift's times are locked and could not be mended at all).
@@ -1954,8 +1954,8 @@ public class RosteringController : ControllerBase
     /// even across participants (one person dropped onto two overlapping shifts at once). It is the generator's <see cref="RosterGenerationLock"/>, keyed on the tenant under a scope of its
     /// own: a move only changes who works a shift, so it has nothing to wait for in a generation. A no-op off PostgreSQL. Read what you change AFTER taking it.
     /// </summary>
-    // shortcut: a SuperAdmin with no organisation chosen locks the Guid.Empty key, so their board writes do not exclude one organisation's coordinators (they serialise only with
-    // each other); key the lock on the shifts' own tenant if SuperAdmins ever edit rosters without choosing one.
+    // shortcut: an unscoped SuperAdmin holds their own home organisation's key (every token carries tenant_id), so their writes to another organisation's roster do not exclude its
+    // coordinators; key the lock on the shift's TenantId if SuperAdmins edit rosters unscoped.
     private Task<RosterGenerationLock> RosterBoardLockAsync(CancellationToken ct) =>
         RosterGenerationLock.AcquireAsync(_db, _tenant?.TenantId ?? Guid.Empty, ct, _generator.LockWait, scope: "roster-board");
 

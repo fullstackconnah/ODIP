@@ -275,11 +275,26 @@ public class RosterBoardDragDropTests
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value);
         Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, body.Code);
-        Assert.Equal("This shift has started or finished, so its worker can't change here.", Assert.Single(body.Errors!));
+        Assert.Equal("This shift has started, finished or been cancelled, so its worker can't be changed here.", Assert.Single(body.Errors!));
         var after = await Reload(db, shift.Id);
         Assert.Equal(alex.Id, after.UserId);
         Assert.Null(after.Notes);
         Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_ReopeningACancelledShiftWithANewWorker_Saves()   // deep review S2: a reopen is not a worker change on a finished shift
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Cancelled);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Published), default));
+
+        var after = await Reload(db, shift.Id);
+        Assert.Equal(sam.Id, after.UserId);
+        Assert.Equal(ShiftStatus.Published, after.Status);
     }
 
     [Fact]
@@ -400,6 +415,7 @@ public class RosterBoardDragDropTests
 
         Assert.Equal(sam.Id, (await Reload(db, to.Id)).UserId);
         Assert.Equal(alex.Id, (await Reload(db, from.Id)).UserId);
+        Assert.Empty(await Notices(db));   // deep review N1: Draft shifts tell nobody
     }
 
     [Fact]
