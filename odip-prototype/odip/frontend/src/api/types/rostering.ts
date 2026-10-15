@@ -287,6 +287,8 @@ export interface CompletionQueueItemDto {
   /** True when the worker never pressed Start and supplied the start time at Finish (the manual-start path). That path skips the dose checklist,
    * so the queue can flag the row next to `dosesWithoutOutcome` without opening the shift. Same flag as `ShiftCompletionDto.startWasManual`. */
   startWasManual: boolean
+  /** Active incidents linked to the shift: the ones the review lists. A row is one-tap only when this is exactly 0 (dashboard). */
+  incidentCount: number
 }
 
 /** POST rostering/shifts/{id}/completion/return body — reason is required server-side (400
