@@ -105,7 +105,7 @@ export default function AdminNotificationsTab() {
     <div className="flex flex-col gap-[var(--section-gap)]">
       <div className="space-y-3">
         <div>
-          <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Notification Outbox</h2>
+          <h3 className="font-semibold text-[var(--color-foreground)] mb-1">Notification outbox</h3>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Every raised notification and its delivery status.
           </p>
@@ -148,7 +148,7 @@ export default function AdminNotificationsTab() {
 
       <div className="max-w-md space-y-3 border-t border-[var(--color-border)] pt-6">
         <div>
-          <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Send Test Email</h2>
+          <h3 className="font-semibold text-[var(--color-foreground)] mb-1">Send test email</h3>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Bypasses the outbox — proves the SMTP configuration works right now.
           </p>

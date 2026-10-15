@@ -20,7 +20,8 @@ vi.mock('@/hooks/useUnsavedChangesWarning', () => ({ useUnsavedChangesWarning: (
 const saved = (changes: Partial<BudgetSettingsDto> = {}): BudgetSettingsDto => ({ mode: 'Warn', approachingPercent: 80, isDefault: false, ...changes })
 const reply = (data: BudgetSettingsDto | undefined, extra: Record<string, unknown> = {}) => ({ data, isLoading: false, isError: false, refetch: vi.fn(), ...extra })
 
-const renderTab = () => render(<BudgetSettingsTab />)
+const FRAME = { title: 'Budgets', description: 'What the roster does.', readOnly: false, focusOnMount: false }
+const renderTab = () => render(<BudgetSettingsTab {...FRAME} />)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -63,12 +64,13 @@ describe('Budgets tab: what is shown', () => {
   })
 
   it('ties the mode choice to the list that says what each mode does, so a screen reader hears the consequence with the choice (design review L8)', () => {
-    const { container } = renderTab()
+    renderTab()
 
     const group = screen.getByRole('radiogroup', { name: 'Budget check mode' })
     expect(group).toHaveAccessibleDescription(/Warn only\. Shows a warning when a one-off roster shift/)
     expect(group).toHaveAccessibleDescription(/Hard limit for one-off shifts\. Refuses a one-off roster shift/)
-    expect(container.querySelector('.max-w-prose')).toBeNull()   // the callouts are as wide as the sections under them
+    // The words keep a readable measure now that the section spans the column (settings redesign); the callouts share that measure.
+    expect(document.getElementById(group.getAttribute('aria-describedby')!)).toHaveClass('max-w-prose')
   })
 
   it('states that the emergency or safety path is always on, as a line to read and not a control, in either mode', async () => {
@@ -116,7 +118,7 @@ describe('Budgets tab: what is shown', () => {
     renderTab()
 
     expect(screen.getByText(/Choose an organisation to view as/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save settings' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 
   it('offers to try again when the settings could not be loaded', async () => {
@@ -128,13 +130,19 @@ describe('Budgets tab: what is shown', () => {
 
     expect(refetch).toHaveBeenCalled()
   })
+
+  it('heads its two parts at h3, under the section heading', () => {
+    renderTab()
+    expect(screen.getByRole('heading', { level: 3, name: /When a one-off shift would put a participant over budget/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: /When a participant is approaching/ })).toBeInTheDocument()
+  })
 })
 
 describe('Budgets tab: saving sends only what was changed', () => {
   it('has nothing to save until something is changed', () => {
     renderTab()
 
-    expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
   it('sends the mode alone when only the mode was changed', async () => {
@@ -142,7 +150,7 @@ describe('Budgets tab: saving sends only what was changed', () => {
     renderTab()
 
     await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
-    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(mutate).toHaveBeenCalledTimes(1)
     expect(mutate.mock.calls[0][0]).toEqual({ mode: 'HardLimit' })
@@ -154,7 +162,7 @@ describe('Budgets tab: saving sends only what was changed', () => {
 
     await user.click(screen.getByRole('button', { name: /Warn when used reaches/ }))
     await user.click(screen.getByRole('option', { name: '65%' }))
-    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(mutate.mock.calls[0][0]).toEqual({ approachingPercent: 65 })
   })
@@ -166,14 +174,14 @@ describe('Budgets tab: saving sends only what was changed', () => {
     await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
     await user.click(screen.getByRole('button', { name: /Warn when used reaches/ }))
     await user.click(screen.getByRole('option', { name: '95%' }))
-    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(mutate.mock.calls[0][0]).toEqual({ mode: 'HardLimit', approachingPercent: 95 })
 
     mutate.mockClear()
     await user.click(screen.getByRole('radio', { name: 'Warn only' }))
     await user.click(screen.getByRole('button', { name: /Warn when used reaches/ }))
     await user.click(screen.getByRole('option', { name: '80%' }))
-    expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
     expect(mutate).not.toHaveBeenCalled()
   })
 
@@ -183,9 +191,10 @@ describe('Budgets tab: saving sends only what was changed', () => {
     renderTab()
 
     await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
-    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(screen.getByText('Budget settings saved.')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Saved')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
   it('shows the server’s reason when it refuses, and keeps the pick', async () => {
@@ -194,7 +203,7 @@ describe('Budgets tab: saving sends only what was changed', () => {
     renderTab()
 
     await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
-    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent('Warn when used reaches must be from 50 to 95 percent, in steps of 5.')
     expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).toBeChecked()
@@ -208,18 +217,18 @@ describe('Budgets tab: a pick made against a value that has since moved is dropp
 
     // The person picks Hard limit while the server holds Warn.
     await user.click(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' }))
-    expect(screen.getByRole('button', { name: 'Save settings' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
 
     // Another admin changes the server to Hard limit with 90%: the pick (against Warn) is stale.
     useBudgetSettings.mockReturnValue(reply(saved({ mode: 'HardLimit', approachingPercent: 90 })))
-    rerender(<BudgetSettingsTab />)
+    rerender(<BudgetSettingsTab {...FRAME} />)
     expect(screen.getByRole('radio', { name: 'Hard limit for one-off shifts' })).toBeChecked()
     expect(screen.getByRole('button', { name: /Warn when used reaches/ })).toHaveTextContent('90%')
 
     // And back to Warn: the old pick is not revived.
     useBudgetSettings.mockReturnValue(reply(saved({ mode: 'Warn', approachingPercent: 90 })))
-    rerender(<BudgetSettingsTab />)
+    rerender(<BudgetSettingsTab {...FRAME} />)
     expect(screen.getByRole('radio', { name: 'Warn only' })).toBeChecked()
-    expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 })

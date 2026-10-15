@@ -61,9 +61,9 @@ export default function TenantDetailView({
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-[var(--color-foreground)]">
+            <h3 className="text-xl font-bold text-[var(--color-foreground)]">
               {tenant.name}
-            </h2>
+            </h3>
             <span
               className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
                 tenant.isActive
@@ -114,7 +114,7 @@ export default function TenantDetailView({
       {/* ── Users Table ────────────────────────────────────────── */}
       <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-4 py-3 border-b border-[var(--color-border)]">
-          <h3 className="text-sm font-semibold text-[var(--color-foreground)]">Users</h3>
+          <h4 className="text-sm font-semibold text-[var(--color-foreground)]">Users</h4>
         </div>
 
         {usersLoading ? (
@@ -184,9 +184,9 @@ export default function TenantDetailView({
           onClick={() => setProviderOpen(prev => !prev)}
           className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-[var(--color-accent)]/50 transition-colors"
         >
-          <h3 className="text-sm font-semibold text-[var(--color-foreground)]">
+          <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
             Provider Settings
-          </h3>
+          </h4>
           {providerOpen ? (
             <ChevronDown className="w-4 h-4 text-[var(--color-muted-foreground)]" />
           ) : (

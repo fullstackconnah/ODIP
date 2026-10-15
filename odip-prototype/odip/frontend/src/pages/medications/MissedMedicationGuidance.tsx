@@ -91,7 +91,7 @@ export function MissedMedicationGuidance({ event }: MissedMedicationGuidanceProp
           ) : (
             <p>
               No manager contact is configured for this organisation — see your team leader.
-              {' '}Admins: set this under Settings → Provider Settings → Manager Contact.
+              {' '}Admins: add it in Settings › Safety checks.
             </p>
           )}
         </GuidanceStep>

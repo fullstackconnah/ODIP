@@ -20,7 +20,7 @@ import ImportInvites from './ImportInvites'
 import { undoBlockers, undoFirst } from './importUndoBlockers'
 
 const MAX_BYTES = 5 * 1024 * 1024
-const BACK_TO = '/settings?tab=import'
+const BACK_TO = '/settings?section=import'
 
 type StepKey = 'upload' | 'match' | 'preview' | 'review'
 const STEPS: WizardStepDef<Record<string, never>>[] = [

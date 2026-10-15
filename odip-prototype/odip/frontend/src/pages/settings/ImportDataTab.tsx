@@ -74,7 +74,7 @@ export default function ImportDataTab() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       <section className="flex flex-col gap-3" aria-labelledby="import-kinds">
-        <h2 id="import-kinds" className="text-base font-semibold">Bring your records into ODIP</h2>
+        <h3 id="import-kinds" className="text-base font-semibold">Bring your records into ODIP</h3>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Upload a .csv or .xlsx export from your old platform, up to 2,000 rows and 5 MB. Records already in ODIP are skipped and never changed.
         </p>
@@ -85,13 +85,13 @@ export default function ImportDataTab() {
             <section key={k.kind} aria-labelledby={`import-kind-${k.kind}`} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">
               {/* Grows beside the actions and wraps its own text, so a longer description never pushes the actions under it on a wide screen. */}
               <div className="min-w-0 flex-[1_1_20rem]">
-                <h3 id={`import-kind-${k.kind}`} className="text-sm font-semibold">{k.title}</h3>
+                <h4 id={`import-kind-${k.kind}`} className="text-sm font-semibold">{k.title}</h4>
                 <p className="text-sm text-[var(--color-muted-foreground)]">
                   {fromPayroll ? 'Staff come from Employment Hero for this organisation, so they are not imported here.' : k.text}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {fromPayroll ? <Button variant="secondary" to="/settings?tab=integrations">Open Integrations</Button> : (
+                {fromPayroll ? <Button variant="secondary" to="/settings?section=integrations">Open Integrations</Button> : (
                   <>
                     <Button variant="secondary" onClick={() => template.mutate(k.kind)}>Download template</Button>
                     <Button to={`/settings/import/${k.kind}`}>Import {k.title.toLowerCase()}</Button>
@@ -104,7 +104,7 @@ export default function ImportDataTab() {
       </section>
 
       <section className="flex flex-col gap-3" aria-labelledby="import-history">
-        <h2 id="import-history" className="text-base font-semibold">Import history</h2>
+        <h3 id="import-history" className="text-base font-semibold">Import history</h3>
         {invited && <InviteResults result={invited.result} fileName={invited.fileName} />}
         {undo.error != null && (
           <Callout tone="danger" title={extractErrorMessage(undo.error, 'The import could not be undone.')}>

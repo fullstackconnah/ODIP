@@ -7,8 +7,7 @@ namespace Odip.Tests.Controllers;
 
 /// <summary>
 /// The only setting is the qualification warning window, a number every office role's Qualifications, Staff and Dashboard figures
-/// depend on. ReadOnly may read it (it used to get 403 and silently count with a 30-day default); only the three management roles
-/// may change it, and SupportWorker reads neither.
+/// depend on. ReadOnly may read it (it used to get 403 and silently count with a 30-day default); only Admin and SuperAdmin may change it, and SupportWorker reads neither.
 /// </summary>
 public class SettingsControllerAuthorizationTests
 {
@@ -33,12 +32,14 @@ public class SettingsControllerAuthorizationTests
     public void Get_admits_the_office_roles_including_ReadOnly(string role, bool admitted)
         => Assert.Equal(admitted, Admits(nameof(SettingsController.Get), role));
 
+    // The qualification window is an organisation setting: only an Admin (or a SuperAdmin acting for the organisation) changes it.
+    // A Coordinator reads it in Settings with the section locked (settings redesign PR 1); it could write it until then.
     [Theory]
     [InlineData("SuperAdmin", true)]
     [InlineData("Admin", true)]
-    [InlineData("Coordinator", true)]
+    [InlineData("Coordinator", false)]
     [InlineData("ReadOnly", false)]
     [InlineData("SupportWorker", false)]
-    public void Update_stays_with_the_management_roles(string role, bool admitted)
+    public void Update_is_Admin_and_SuperAdmin_only(string role, bool admitted)
         => Assert.Equal(admitted, Admits(nameof(SettingsController.Update), role));
 }

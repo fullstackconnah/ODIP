@@ -192,7 +192,7 @@ describe('QualificationsPage: controls by role', () => {
     renderList()
     expandAll()
 
-    expect(screen.getByRole('link', { name: /Warning window/ })).toHaveAttribute('href', '/settings?tab=qualifications')
+    expect(screen.getByRole('link', { name: /Warning window/ })).toHaveAttribute('href', '/settings?section=alerts')
     expect(screen.getByRole('link', { name: 'Edit Dana Expired' })).toBeInTheDocument()
     // Every row has an inline Edit, so its name carries the row's credential and person.
     expect(screen.getAllByRole('button', { name: /^Edit: .+, Dana Expired$/ }).length).toBeGreaterThan(0)

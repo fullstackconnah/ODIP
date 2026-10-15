@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAdminTenantUsers } from '@/api/hooks'
 import type { TenantUserDto, ApiResponse } from '@/api/types'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { switchViewAndReload } from '@/lib/viewAsSwitch'
 import { TONE } from '@/lib/tone'
 
 export default function UserSwitcher() {
@@ -34,7 +35,7 @@ export default function UserSwitcher() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open])
 
-  const selectUser = (user: TenantUserDto) => {
+  const selectUser = (user: TenantUserDto) => switchViewAndReload(() => {
     // Preserve original SuperAdmin user object before first impersonation
     if (!localStorage.getItem('odip_superadmin_user')) {
       localStorage.setItem('odip_superadmin_user', localStorage.getItem('odip_user') || '{}')
@@ -53,18 +54,16 @@ export default function UserSwitcher() {
     localStorage.setItem('odip_viewing_user', user.id)
 
     setOpen(false)
-    window.location.reload()
-  }
+  })
 
-  const clearUser = () => {
+  const clearUser = () => switchViewAndReload(() => {
     const savedAdmin = localStorage.getItem('odip_superadmin_user')
     if (savedAdmin) {
       localStorage.setItem('odip_user', savedAdmin)
       localStorage.removeItem('odip_superadmin_user')
     }
     localStorage.removeItem('odip_viewing_user')
-    window.location.reload()
-  }
+  })
 
   return (
     <div ref={ref} className="relative">

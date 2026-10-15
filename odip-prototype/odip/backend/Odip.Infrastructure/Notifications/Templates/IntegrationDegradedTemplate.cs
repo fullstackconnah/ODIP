@@ -13,7 +13,7 @@ public static class IntegrationDegradedTemplate
     public static NotificationMessage Render(IntegrationDegradedPayload p, string baseUrl) => new(
         RecipientAddress: p.RecipientEmail,
         Subject: $"{p.Integration} needs attention",
-        PlainTextBody: $"{p.Problem}\n\nOpen it: {baseUrl}/settings?tab=integrations",
+        PlainTextBody: $"{p.Problem}\n\nOpen it: {baseUrl}/settings?section=integrations",
         HtmlBody: $"<p>{Html.E(p.Problem)}</p>" +
-                  $"<p><a href=\"{Html.Attr(baseUrl)}/settings?tab=integrations\">Open it</a></p>");
+                  $"<p><a href=\"{Html.Attr(baseUrl)}/settings?section=integrations\">Open it</a></p>");
 }

@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import NotificationPreferencesTab from './NotificationPreferencesTab'
-import type { NotificationPreferenceGridDto } from '@/api/types'
+import { NOTIFICATION_EVENT_TYPE_GROUPS, type NotificationPreferenceGridDto } from '@/api/types'
 
 const { mockUseNotificationPreferences, mockUseUpdateNotificationPreferences, mockMutate } = vi.hoisted(() => ({
   mockUseNotificationPreferences: vi.fn(),
@@ -16,16 +16,15 @@ vi.mock('@/api/hooks', () => ({
   useUpdateNotificationPreferences: mockUseUpdateNotificationPreferences,
 }))
 
-// NotificationPreferencesTab calls useUnsavedChangesWarning, which uses react-router 7's
-// useBlocker — that throws under a plain declarative <MemoryRouter>/<Routes>, so this needs a
-// data router (same pattern SettingsPage.test.tsx documents for PP-77).
+const FRAME = { title: 'Notifications', description: 'Which events ODIP emails you about.', readOnly: false, focusOnMount: false }
+
 function renderTab() {
   const router = createMemoryRouter(
     [
-      { path: '/settings', element: <NotificationPreferencesTab /> },
+      { path: '/settings', element: <NotificationPreferencesTab {...FRAME} /> },
       { path: '/elsewhere', element: <div>Elsewhere page</div> },
     ],
-    { initialEntries: ['/settings'] },
+    { initialEntries: ['/settings?section=notifications'] },
   )
   return { router, ...render(<RouterProvider router={router} />) }
 }
@@ -53,132 +52,64 @@ beforeEach(() => {
 })
 
 describe('NotificationPreferencesTab', () => {
-  it('shows a loading state while preferences are fetching', () => {
+  it('shows a loading state while preferences are fetching, and no Save over it', () => {
     mockUseNotificationPreferences.mockReturnValue({ data: undefined, isLoading: true, isError: false })
     renderTab()
-
-    expect(screen.getByRole('status')).toHaveTextContent(/loading notification preferences/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/loading notifications section/i)
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 
-  it('renders every event type as a row, with SMS always disabled', () => {
-    mockUseNotificationPreferences.mockReturnValue({ data: makeGrid(), isLoading: false, isError: false })
+  it('shows one tick per event under its area, and no SMS column', () => {
+    mockUseNotificationPreferences.mockReturnValue({ data: makeGrid({ IncidentReported: false }), isLoading: false, isError: false })
     renderTab()
 
-    expect(screen.getByText('Leave request submitted')).toBeInTheDocument()
-    expect(screen.getByText('Incident reported')).toBeInTheDocument()
-    expect(screen.getByText('Integration degraded')).toBeInTheDocument()
-
-    const smsCheckboxes = screen.getAllByLabelText(/^SMS —/)
-    expect(smsCheckboxes.length).toBeGreaterThan(0)
-    for (const checkbox of smsCheckboxes) {
-      expect(checkbox).toBeDisabled()
-    }
-    expect(screen.getAllByText(/not available yet/i).length).toBe(smsCheckboxes.length)
+    expect(screen.getByRole('heading', { level: 3, name: 'Leave' })).toBeInTheDocument()
+    // One tick per event type the app knows (roster #244 adds ShiftUnassigned, so the count comes from the list, not a number).
+    expect(screen.getAllByRole('checkbox')).toHaveLength(NOTIFICATION_EVENT_TYPE_GROUPS.flatMap(g => g.eventTypes).length)
+    expect(screen.getByRole('checkbox', { name: 'Leave request submitted' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Incident reported' })).not.toBeChecked()
+    expect(screen.queryByText(/sms/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not available yet/i)).not.toBeInTheDocument()
   })
 
-  it('toggling an Email checkbox and saving calls the update mutation with the right payload', async () => {
+  it('saves every Email tick with the one Save, then says Saved', async () => {
     mockUseNotificationPreferences.mockReturnValue({ data: makeGrid(), isLoading: false, isError: false })
     mockMutate.mockImplementation((_payload, opts) => opts?.onSuccess?.(makeGrid({ LeaveRequestSubmitted: false })))
     const user = userEvent.setup()
     renderTab()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
 
-    const saveButton = screen.getByRole('button', { name: /save preferences/i })
-    expect(saveButton).toBeDisabled()
+    await user.click(screen.getByRole('checkbox', { name: 'Leave request submitted' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    await user.click(screen.getByLabelText('Email — Leave request submitted'))
-    expect(saveButton).toBeEnabled()
-
-    await user.click(saveButton)
-
-    expect(mockMutate).toHaveBeenCalledTimes(1)
-    const [payload] = mockMutate.mock.calls[0]
-    expect(payload).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ eventType: 'LeaveRequestSubmitted', channel: 'Email', enabled: false }),
-      ]),
-    )
-    expect(payload.every((row: { channel: string }) => row.channel === 'Email')).toBe(true)
+    // The full body: one Email row per event type in the grid, in its order, with only the untick changed.
+    const expected = makeGrid({ LeaveRequestSubmitted: false }).rows.filter(r => r.channel === 'Email').map(({ eventType, enabled }) => ({ eventType, channel: 'Email', enabled }))
+    expect(mockMutate.mock.calls[0][0]).toEqual(expected)
+    expect(screen.getByRole('status')).toHaveTextContent('Saved')
   })
 
-  it('shows the 400 message inline when the update is rejected', async () => {
+  it('says in the foot why a save was refused, and keeps the ticks as they were left', async () => {
     mockUseNotificationPreferences.mockReturnValue({ data: makeGrid(), isLoading: false, isError: false })
-    mockMutate.mockImplementation((_payload, opts) => {
-      opts?.onError?.({ response: { status: 400, data: { errors: ['Unknown event type or channel.'] } } })
-    })
+    mockMutate.mockImplementation((_payload, opts) => opts?.onError?.({ response: { status: 400, data: { errors: ['Unknown event type or channel.'] } } }))
     const user = userEvent.setup()
     renderTab()
 
-    await user.click(screen.getByLabelText('Email — Leave request submitted'))
-    await user.click(screen.getByRole('button', { name: /save preferences/i }))
+    await user.click(screen.getByRole('checkbox', { name: 'Leave request submitted' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/unknown event type or channel/i)
+    expect(screen.getByRole('alert')).toHaveTextContent('Not saved. Unknown event type or channel.')
+    expect(screen.getByRole('checkbox', { name: 'Leave request submitted' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
   })
-})
 
-// The button reads "Saved!" for two seconds after a save, then a timer puts the label back. That timer used to be a bare setTimeout: a tab left
-// (or a test finished) inside the two seconds still fired setSaved into a dead tree — and after the test environment was torn down it threw
-// "window is not defined", which fails the run even though every test passed. Only setTimeout/clearTimeout are faked, and the tests click with
-// fireEvent and read the DOM straight away, so nothing here waits on a timer.
-describe('NotificationPreferencesTab — the "Saved!" reset timer', () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  it('asks before leaving with an unsaved tick', async () => {
     mockUseNotificationPreferences.mockReturnValue({ data: makeGrid(), isLoading: false, isError: false })
-    mockMutate.mockImplementation((_payload, opts) => opts?.onSuccess?.(makeGrid()))
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-  })
+    const user = userEvent.setup()
+    const { router } = renderTab()
 
-  const saveButton = () => screen.getByRole('button', { name: /^(Save Preferences|Saved!)$/ })
-  const edit = (label: string) => fireEvent.click(screen.getByLabelText(label))
-  const elapse = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
+    await user.click(screen.getByRole('checkbox', { name: 'Leave request submitted' }))
+    await act(async () => { await router.navigate('/elsewhere') })
 
-  it('leaves nothing pending when the tab unmounts before the two seconds are up', () => {
-    const { unmount } = renderTab()
-
-    edit('Email — Leave request submitted')
-    fireEvent.click(saveButton())
-    expect(saveButton()).toHaveTextContent('Saved!')
-    expect(vi.getTimerCount()).toBe(1)
-
-    elapse(1000)
-    unmount()
-
-    expect(vi.getTimerCount()).toBe(0)
-  })
-
-  it('restarts the two seconds when another save starts, so the old reset cannot cut the new "Saved!" short', () => {
-    renderTab()
-
-    edit('Email — Leave request submitted')
-    fireEvent.click(saveButton())
-    elapse(1500)                                          // the first reset is due 500 ms from now
-    edit('Email — Shift assigned')
-    fireEvent.click(saveButton())
-    expect(saveButton()).toHaveTextContent('Saved!')
-
-    elapse(1000)                                          // 2500 ms after the first save: past the old reset, inside the new window
-    expect(saveButton()).toHaveTextContent('Saved!')
-    elapse(1000)                                          // 2500 ms after the second save
-    expect(saveButton()).toHaveTextContent('Save Preferences')
-  })
-
-  it('stops saying "Saved!" as soon as a later save starts, and does not bring it back when that save is rejected', () => {
-    renderTab()
-
-    edit('Email — Leave request submitted')
-    fireEvent.click(saveButton())
-    expect(saveButton()).toHaveTextContent('Saved!')
-
-    mockMutate.mockImplementationOnce((_payload, opts) => {
-      opts?.onError?.({ response: { status: 400, data: { errors: ['Unknown event type or channel.'] } } })
-    })
-    elapse(500)
-    edit('Email — Shift assigned')
-    fireEvent.click(saveButton())
-
-    expect(screen.getByRole('alert')).toHaveTextContent(/unknown event type or channel/i)
-    expect(saveButton()).toHaveTextContent('Save Preferences')
-    expect(vi.getTimerCount()).toBe(0)
+    expect(screen.getByRole('alertdialog', { name: 'Leave without saving?' })).toBeInTheDocument()
   })
 })
