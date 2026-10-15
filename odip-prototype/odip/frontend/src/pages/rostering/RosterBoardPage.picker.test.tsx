@@ -94,7 +94,7 @@ describe('RosterBoardPage: the plus opens the staff picker', () => {
     expect(option(/^Alex Ng/)).toHaveAccessibleName('Alex Ng, 9 of 38 hours this week, move from Tuesday 8am to 5pm with Jo')
     expect(option(/^Sam Wilson/)).toHaveAccessibleName('Sam Wilson, 6 of 38 hours this week, on leave')
     expect(screen.getByRole('button', { name: TUE_PLUS })).toHaveAttribute('aria-expanded', 'true')
-    expect(document.querySelector('[data-shift-chip="open"]')).toHaveClass('ring-2')
+    expect(document.querySelector('[data-shift-chip="open"] [data-shift-box]')).toHaveClass('ring-2')
   })
 
   it('gives a 2:1 day two pluses, and no plus to a filled or a locked shift', () => {
@@ -173,7 +173,7 @@ describe('RosterBoardPage: a pick is a drop without the drag', () => {
     const dialog = await screen.findByRole('alertdialog', { name: 'Assign with warnings' })
     expect(screen.queryByRole('dialog', { name: TUE_PLUS })).not.toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(document.querySelector('[data-shift-open="open"]')).toHaveTextContent('Needs staff')
+    expect(document.querySelector('[data-shift-open="open"]')).toHaveAccessibleName(/Needs staff/)   // a writer's plus box prints no words (the chip brief, section 4)
     await waitFor(() => expect(document.querySelector('[data-shift-open="open"]')).toHaveFocus())
   })
 

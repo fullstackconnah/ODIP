@@ -506,7 +506,7 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
     expect(screen.getByRole('button', { name: 'Unfilled only' })).toHaveAttribute('aria-pressed', 'true')
     expect(shown('Amy Ng')).toBe(true)                                                // the row is still on the board
     expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()                     // the shift somebody has is out of the way
-    expect(screen.getAllByText('Needs staff').length).toBeGreaterThan(0)                   // the one nobody has is not
+    expect(screen.getAllByRole('button', { name: /Needs staff/ }).length).toBeGreaterThan(0)   // the one nobody has is not
   })
 
   it('does it with the shapes the API really sends: an unfilled shift has no staffId at all (the server leaves a null out), and the approved card\'s own link lands on a board that is not empty', () => {
@@ -523,7 +523,7 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
     renderPage('/rostering?date=2026-10-14&participant=p-1&unfilled=1')
 
     expect(screen.getByRole('button', { name: 'Unfilled only' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getAllByText('Needs staff')).toHaveLength(2)                             // both unfilled shifts are drawn: the week is not empty
+    expect(screen.getAllByRole('button', { name: /Needs staff/ })).toHaveLength(2)         // both unfilled shifts are drawn: the week is not empty
     expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()                     // and the one somebody has is out of the way
   })
 

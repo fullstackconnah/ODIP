@@ -30,7 +30,7 @@ test('a person from the strip fills a Needs staff shift, then swaps with a colle
   await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
   const openPuck = page.locator(`[data-shift-open="${open.id}"]`);
   const samsPuck = page.locator(`[data-shift-open="${samsShift.id}"]`);
-  await expect(openPuck).toContainText('Needs staff');
+  await expect(openPuck).toHaveAttribute('aria-label', /Needs staff/);
 
   // From the strip: the search finds the new person, and the drop assigns them.
   await page.getByRole('textbox', { name: 'Find staff' }).fill(alex.token);
