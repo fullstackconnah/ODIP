@@ -31,9 +31,8 @@ function DoseRow({ slot, tz, canAct, onRecord }: { slot: PortalDoseSlotDto; tz: 
             {slot.medicationName}{slot.strength ? ` ${slot.strength}` : ''}
             {slot.isHighRisk && <Chip>High risk</Chip>}
           </p>
-          <p className="text-[var(--color-muted-foreground)]">{slot.doseDescription}</p>
-          <p className={overdue ? `font-medium ${TONE.warning.ink}` : 'text-[var(--color-muted-foreground)]'}>
-            {overdue ? 'Overdue. ' : ''}Give by {clockLabel(slot.scheduledAt)}
+          <p className="text-[var(--color-muted-foreground)]">
+            {slot.doseDescription} · <span className={overdue ? `font-medium ${TONE.warning.ink}` : ''}>{overdue ? 'Overdue. ' : ''}Give by {clockLabel(slot.scheduledAt)}</span>
           </p>
           {slot.directions && <p className="text-xs text-[var(--color-muted-foreground)]">{slot.directions}</p>}
           {outcome && (

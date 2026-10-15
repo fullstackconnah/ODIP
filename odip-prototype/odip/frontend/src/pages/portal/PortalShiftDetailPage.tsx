@@ -368,7 +368,7 @@ export default function PortalShiftDetailPage() {
 
   // No bottom padding on a phone: the sticky bar, then the bottom nav's own padding, end the page.
   return (
-    <div className="space-y-4 animate-fade-in lg:pb-4">
+    <div className="space-y-3 lg:space-y-4 animate-fade-in lg:pb-4">
       <AnnouncementRegion message={submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
       <BackButton to="/portal" label="my shifts" variant="link" history={false} className="py-3" />
       <PageHeader
