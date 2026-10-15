@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, cleanup, type RenderResult } from '@testing-library/react'
+import { render, screen, cleanup, within, type RenderResult } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { ShiftChip, type ShiftChipProps } from './ShiftChip'
@@ -96,19 +96,19 @@ describe('ShiftChip open button vs drag handle', () => {
 })
 
 describe('ShiftChip menu', () => {
-  it('offers Edit, Assign to…, Unassign and Delete when the shift has an assigned staff member', async () => {
+  it('offers Edit, Replace {first name}…, Remove {first name} and Delete when the shift has an assigned staff member', async () => {
     const user = userEvent.setup()
     const shift = makeShift({ staffId: 'staff-1' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     await user.click(screen.getByRole('button', { name: /actions for/i }))
     expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Reassign to…' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Unassign' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Replace Alex…' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Remove Alex' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Delete' })).toBeInTheDocument()
   })
 
-  it('omits Unassign for an unfilled (dashed) chip with no staff, but keeps Edit/Assign/Delete', async () => {
+  it('omits Remove for an unfilled (dashed) chip with no staff, but keeps Edit/Assign/Delete', async () => {
     const user = userEvent.setup()
     const shift = makeShift({ staffId: null, staffName: null })
     renderChip(<ShiftChip shift={shift} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
@@ -116,7 +116,7 @@ describe('ShiftChip menu', () => {
     await user.click(screen.getByRole('button', { name: /actions for/i }))
     expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Assign to…' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Unassign' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^Remove/ })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Delete' })).toBeInTheDocument()
   })
 })
@@ -618,17 +618,20 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
     expect(screen.getByText('9am–5pm')).toHaveClass('line-through')
   })
 
-  it('marks every shift with where it came from: Agreed, Pattern or Ad hoc, titled and named by it', () => {
+  it('marks every shift with where it came from: Scheduled (an agreement or a pattern) or Ad hoc, titled and named by it', () => {
     const fromAgreement = makeShift({ id: 'a', shiftPatternId: 'pat-1', fromAgreement: true, sourceDraftVersion: 3, status: 'Draft' })
     const agreed = chip(fromAgreement)
     expect(agreed.container.querySelector('[data-shift-source="agreed"]')).toHaveAttribute('title', 'From agreement v3')
-    expect(screen.getByText('Agreed')).toBeInTheDocument()
-    expect(getOpenButton(fromAgreement)).toHaveAccessibleName('9am–5pm, Alex Rivera, From agreement v3, Draft')
+    expect(within(agreed.container.querySelector('[data-shift-source="agreed"]') as HTMLElement).getByText('Scheduled')).toBeInTheDocument()
+    expect(getOpenButton(fromAgreement)).toHaveAccessibleName('9am–5pm, Alex Rivera, Scheduled, From agreement v3, Draft')
     agreed.unmount()
 
-    const handMade = chip(makeShift({ id: 'b', shiftPatternId: 'pat-2', status: 'Draft' }))
+    const fromPattern = makeShift({ id: 'b', shiftPatternId: 'pat-2', status: 'Draft' })
+    const handMade = chip(fromPattern)
     expect(handMade.container.querySelector('[data-shift-source="pattern"]')).toHaveAttribute('title', 'From a pattern')
-    expect(screen.getByText('Pattern')).toBeInTheDocument()
+    expect(within(handMade.container.querySelector('[data-shift-source="pattern"]') as HTMLElement).getByText('Scheduled')).toBeInTheDocument()
+    // The visible word is in the name too (WCAG 2.5.3), just before the title that tells an agreement from a pattern. Ad hoc's title already starts with its word.
+    expect(getOpenButton(fromPattern)).toHaveAccessibleName('9am–5pm, Alex Rivera, Scheduled, From a pattern, Draft')
     handMade.unmount()
 
     const oneOff = makeShift({ id: 'c', status: 'Draft' })
@@ -779,7 +782,7 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     expect(pick).not.toHaveBeenCalled()
   })
 
-  it("opens the picker from an unfilled chip's Assign to…, and keeps the panel for a filled chip's Reassign to… (SHAPE departure 13)", async () => {
+  it("opens the picker from an unfilled chip's Assign to…, and keeps the panel for a filled chip's Replace {first name}… (SHAPE departure 13)", async () => {
     const user = userEvent.setup()
     const onAssignTo = vi.fn()
     const { pick } = withPick(<>{chipOf(open, { onAssignTo })}{chipOf(makeShift({ id: 'filled', participantName: 'Jo Park' }), { onAssignTo })}</>)
@@ -788,7 +791,7 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     expect(pick).toHaveBeenCalledWith(open)
     expect(onAssignTo).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: "Actions for Jo Park's shift" }))
-    await user.click(screen.getByRole('option', { name: 'Reassign to…' }))
+    await user.click(screen.getByRole('option', { name: 'Replace Alex…' }))
     expect(onAssignTo).toHaveBeenCalledTimes(1)
   })
 })

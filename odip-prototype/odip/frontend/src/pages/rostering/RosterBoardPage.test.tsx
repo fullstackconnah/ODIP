@@ -175,7 +175,7 @@ function makeBoardWithFilledShift(): RosterBoardDto {
 
 async function unassignMiasShift(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: "Actions for Mia Chen's shift" }))
-  await user.click(screen.getByRole('option', { name: 'Unassign' }))
+  await user.click(screen.getByRole('option', { name: 'Remove Alex' }))
 }
 
 describe('RosterBoardPage — an assign the server refuses is no longer swallowed', () => {

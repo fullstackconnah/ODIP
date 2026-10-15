@@ -128,14 +128,15 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
-    { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : 'Reassign to…', disabled: canPick && dragsOff },
-    ...(shift.staffId ? [{ value: 'unassign', label: 'Unassign' }] : []),
+    // The owner's words (the brief, section 5): Replace and Remove name the person, which keeps Remove apart from Delete and says who is meant in the Staff view.
+    { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
+    ...(shift.staffId ? [{ value: 'unassign', label: `Remove ${firstName(shift.staffName)}` }] : []),
     { value: 'delete', label: 'Delete' },
   ]
 
   function handleMenuSelect(value: string) {
     if (value === 'edit') onOpen(shift)
-    // An unfilled chip assigns through the picker, as its plus does: one way to assign on one chip (SHAPE departure 13). A filled chip's "Reassign to…" keeps the panel.
+    // An unfilled chip assigns through the picker, as its plus does: one way to assign on one chip (SHAPE departure 13). A filled chip's "Replace {first name}…" keeps the panel.
     else if (value === 'assign') { if (!canPick) onAssignTo(shift); else if (!dragsOff) pick?.(shift) }
     else if (value === 'unassign') onUnassign(shift)
     else if (value === 'delete') onDelete(shift)
@@ -162,6 +163,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     hasFindings ? findingsSeverityLabel(shift.findings) : null,
     `${timeRange}${shift.endsNextDay ? ' (ends the next day)' : ''}`,
     labelText,
+    // The label's visible word is in the name too (WCAG 2.5.3): Ad hoc's title already starts with it.
+    source.kind === 'adhoc' ? null : source.word,
     source.title,
     showRatio ? `${RATIO_LABELS[shift.ratio] ?? shift.ratio} ratio` : null,
     budgetMarkerName ?? (shift.overrideReason ? `Assigned with an override: ${shift.overrideReason}` : null),
