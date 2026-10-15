@@ -144,6 +144,30 @@ describe('rosterCollision', () => {
     expect(rosterCollision(args(null, movedOnce)).map(c => c.id)).toEqual(['target'])
   })
 
+  // Review S2: on an occupied day the new-shift slot sits at the cell's trailing edge, right beside the chip. The keyboard puck, nearer to the slot's centre, must still land on the chip.
+  it('prefers a shift in the same cell over the new-shift slot for a keyboard drag, and keeps the slot for an empty neighbour', () => {
+    const box = (left: number, top: number, width: number, height: number) => ({ left, top, width, height, right: left + width, bottom: top + height })
+    const cell = document.createElement('div')
+    const chipNode = cell.appendChild(document.createElement('div'))
+    const slotNode = cell.appendChild(document.createElement('div'))
+    const lone = document.createElement('div')
+    const puck = box(250, 0, 40, 40)   // centre (270, 20): 43px from the slot's centre, 120px from the chip's
+    const containers = [
+      { id: 'chip', data: { current: { kind: 'shift' } }, node: { current: chipNode } },
+      { id: 'slot', data: { current: { kind: 'day', beside: 1 } }, node: { current: slotNode } },
+      { id: 'empty', data: { current: { kind: 'day' } }, node: { current: lone } },
+    ]
+    const keyboard = (rects: Record<string, ReturnType<typeof box>>, collisionRect = puck) => rosterCollision({
+      active: { id: 'carry', rect: { current: { initial: box(0, 0, 40, 40), translated: null } } }, collisionRect, pointerCoordinates: null,
+      droppableRects: new Map(Object.entries(rects)), droppableContainers: containers,
+    } as unknown as Parameters<typeof rosterCollision>[0])
+    const rects = { chip: box(0, 0, 300, 40), slot: box(296, 2, 34, 36), empty: box(1000, 0, 300, 40) }
+
+    expect(keyboard(rects)[0].id).toBe('chip')
+    // An empty day has only itself, so it is still the nearest when the puck is over it.
+    expect(keyboard(rects, box(1100, 0, 40, 40))[0].id).toBe('empty')
+  })
+
   // dnd-kit does not clip rectangles to the scroll frame: a row scrolled up under the strip, or behind the sticky day header, is still "under" the pointer.
   describe('against what is actually on top at the pointer', () => {
     const target = document.createElement('div')

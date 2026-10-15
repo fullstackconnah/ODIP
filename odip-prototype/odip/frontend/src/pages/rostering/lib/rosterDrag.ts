@@ -108,14 +108,24 @@ export function staffWeekHours(shifts: ShiftDto[]): Map<string, number> {
  * A pointer drag hits only what is under the pointer, so a drop beside every target does nothing (closestCenter snapped it to the nearest puck). dnd-kit's rectangles are not clipped
  * to the board's scroll frame, so a row scrolled up under the strip, or under the sticky day header, still has its rectangle there: keep only the target whose own element is on top
  * at the pointer (the DragOverlay is pointer-events-none, so it is never that element). A keyboard drag has no pointer, so it takes the nearest target, but only once it has moved:
- * lifting and pressing Space at once lands nowhere, rather than on whichever shift is nearest (a drop can now tell a worker).
+ * lifting and pressing Space at once lands nowhere, rather than on whichever shift is nearest (a drop can now tell a worker). The new-shift slot of an occupied day never beats a shift in its own cell.
  */
 export const rosterCollision: CollisionDetection = args => {
   const { pointerCoordinates, droppableContainers, active, collisionRect } = args
   if (!pointerCoordinates) {
     const start = active.rect.current.initial
     // Not measured yet (the lift's first pass) counts as not moved: otherwise the nearest shift is "over" for a frame and the live region says so instead of "Picked up".
-    return !start || (start.top === collisionRect.top && start.left === collisionRect.left) ? [] : closestCenter(args)
+    if (!start || (start.top === collisionRect.top && start.left === collisionRect.left)) return []
+    const nearest = closestCenter(args)
+    // On an occupied day the new-shift slot hugs the chips' trailing edge and can be the nearest centre: a shift in the slot's own cell wins, so a drop assigns rather than starts a shift.
+    const slot = droppableContainers.find(container => container.id === nearest[0]?.id)
+    const slotTarget = slot?.data?.current as DropTarget | undefined
+    if (!slot || slotTarget?.kind !== 'day' || !slotTarget.beside) return nearest
+    const inCell = nearest.filter(hit => {
+      const container = droppableContainers.find(c => c.id === hit.id)
+      return (container?.data?.current as DropTarget | undefined)?.kind === 'shift' && slot.node.current?.parentElement?.contains(container?.node.current ?? null)
+    })
+    return inCell.length > 0 ? inCell : nearest
   }
   const hits = pointerWithin(args)
   if (typeof document.elementFromPoint !== 'function') return hits   // jsdom has none
