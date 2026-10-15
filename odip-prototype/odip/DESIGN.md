@@ -600,12 +600,36 @@ the chip text says the same thing. If most segments end up tinted the strip has 
 follow the same rule with a count as the signal: a danger or warning count above zero takes the error or warning container, and a zero is not a tile at all (it is named in the
 All clear row).
 
+### Decision list
+
+The dashboard's first section after the greeting, "Needs your decision" (an `h2`): what only this viewer can decide, decided on the row. ONE `Card` holds a
+group per kind (Shift completions, Leave, Incidents, Tasks due, Staff compliance; PR C adds Unfilled shifts and Agreements to approve), in that fixed order,
+told apart by space (`--card-pad`) and an `h3` with its count in a neutral pill, never by a frame. `pages/dashboard/QuickGroup.tsx` draws every group from
+a plain model; a hook per kind (`pages/dashboard/groups`) maps the real queries and the real mutation hooks to it, so a decision here is the same decision
+as on the full page.
+
+- **A group** shows its first five rows, hairlines between them, and a link to the full page: "Open Leave" when every row is shown, "See all" when rows
+  are cut. The link never carries a number; the pill does. A group at zero is absent and named in one All clear row at the card's foot. A group still
+  waiting (`awaitsData`) or failed is never absent and never named clear: an en dash pill and one line ("Loading leave requests…", or "Couldn't load leave
+  requests." with Try again), and no rows until every request it makes has answered.
+- **A row** is `--row-h` tall on one line from md (subject, flags, facts, then at most two buttons at the right edge), two lines below md with 44px
+  buttons (`ROW_ACTIONS_CARD`). Buttons are `Button size="sm"`, always visible, each named for its row. Olive means one tap decides: only Approve, Done
+  (and in PR C Start review) are primary; Return, Decline, Review, Open and Update expiry are secondary.
+- **A tap** reads its "-ing" label and holds both buttons of its row (`aria-disabled`, so focus stays). On success the row leaves at once, the pill
+  drops, the page's one `AnnouncementRegion` says what happened, and focus moves to the next row's first button. A consequence the server returns
+  (leave that overlaps shifts) is a success notice with a link button in the group's `NoticesRegion`, under its rows. A refusal stays on the row in the
+  server's words (`role="alert"`).
+- **An action that needs input** opens a small form under the row from a disclosure button: the house field, then Cancel and the submit. Checks mirror
+  the server's (a return reason is required, 500 characters at most) and a refusal keeps the text.
+- **Who:** the server's gates. ReadOnly has no decisions. A SuperAdmin decides only inside an organisation; without one, one line asks for one.
+- **Page height at 390 (touch):** about 3.8 screens for 19 decision rows (measured 3.79). Below md, flags drop under a long subject and the meta wraps rather than hide a deciding fact (a due or expiry date), since touch has no `title`. SHAPE's 3.0 assumed 60 px phone rows, which its own geometry cannot give: two `sm` buttons with their 44 px floor and the text block's 12rem floor do not fit beside each other in a 390 row. The capture script holds the limit to that row count.
+
 ### Attention band
 
-The dashboard's answer to "what needs me?", directly under the title, and the peak of the page: as big as the day's trouble. An item that needs action is a **tall tile**, an item at
-zero is only a name in ONE **All clear** row, and when nothing needs anybody the whole band is one Pale Sprout field. It replaces the row of equal KPI tiles, which gave "3 upcoming trips"
+The dashboard's Alerts section, under Needs your decision (Decision list, above): what is wrong elsewhere, as big as the day's trouble. An item that needs action is a **tall tile**, an item at
+zero is only a name in ONE **All clear** row, and when every item is at zero the band is that one row. It replaces the row of equal KPI tiles, which gave "3 upcoming trips"
 the same weight as "2 QSC overdue"; those everyday counts now live in the header's meta row. It is `StatCard variant="attention"` tiles in a
-`<section aria-label="Needs attention">`, composed by `pages/dashboard/AttentionBand.tsx`, opt-in, so every other StatCard is unchanged.
+`<section aria-label="Alerts">` under the `h2` "Alerts", composed by `pages/dashboard/AttentionBand.tsx`, opt-in, so every other StatCard is unchanged.
 
 **Items, in a fixed order**, so a position among the tiles always means the same thing. Each has a tone (what a count above zero takes), a line that says what the count is, in the server's own
 terms, and a link to where it is fixed, a route that exists today:
@@ -624,6 +648,8 @@ terms, and a link to where it is fixed, a route that exists today:
 | Pending Leave (`canApproveLeave`) | warning | Leave and unavailability requests waiting for a decision. | Review leave requests, `/rostering/leave` |
 | Shift Completions (`canReviewCompletions`) | warning | Submitted shifts waiting for review before they are billed. | Review completions, `/rostering/completions` |
 
+An item that became one of the viewer's decision groups (Qualification Issues: Staff compliance; Overdue: Tasks due; Open Incidents and QSC Overdue: Incidents; Pending Leave: Leave; Shift Completions: Shift completions) is left out for that viewer, and stays a tile for everyone else: ReadOnly keeps 7 possible tiles, a SuperAdmin with no organisation all 11, an Admin or Coordinator at most 5.
+
 Only what the role can open drops an item (the Qualifications page, `canViewAlerts`, the Budgets page, `canApproveLeave`, `canReviewCompletions`: the nav's own gates). Budgets at risk counts the participants whose pool is over or forecast to go over, from the same participant-alerts aggregate as Critical Participant Alerts, so it has no request of its own: while that request is waiting or has failed this tile is not drawn at all (the Critical Participant Alerts tile beside it is the en dash that says so, and a second dash for one request would say nothing more), and at zero it is a name in the All clear row, but only where a budget is in force (the aggregate says so for each participant, `budgetInForce`: a participant on track has no alert, so zero alerts cannot tell "none at risk" from "none recorded") and the NDIA has not said the funds ran out. With no budget recorded for anybody there is no item at all, because the band never says all clear without data; the name reads "budgets over or forecast to go over", which is what the tile counts. A participant who is over budget has a Critical alert, so that one alert (`budget-over`) is counted by this tile and left out of the Critical Participant Alerts count and list: nobody is counted twice, and the NDIA's own "funds ran out" alert, a different fact, stays with the Critical alerts. Pending Leave and Shift Completions are the two queues the Staff & roster badge adds together, so the band never says nothing needs you beside a badge that does. The summary's `conflictCount` is deliberately not an item: no page lists or fixes conflicts, and it counts every flagged record regardless of date, including the staff overrides a coordinator has already acknowledged. The lines are the server's rules in words (`DashboardController.GetSummary`: a trip counts when it starts today or within 60 days; the Qualifications
 page's own warning window; QSC overdue is a reportable incident with no report after 24 hours), and a count of one reads in the singular ("Trip starts", "1 staff member"). A vehicle or a staff
 member is assigned to a trip on the Schedule (the assignments the count reads) and accommodation on the trip's own tab, so that tile opens the Trips list to choose the trip; QSC Overdue and
@@ -638,12 +664,12 @@ Overdue open their lists already filtered to the rule the figure counts. ReadOnl
 - **A zero is a name, not a tile.** The items at zero are named in ONE row after the tiles on Pale Sprout (`TONE.success.solid`, `#bbf37c` with `#0f2000`) with a check: "All clear on trips missing vehicles,
   open incidents and overdue QSC reports" (each item names itself by a NOUN that reads without its tile, since the row has no line under it: "overdue tasks" and "overdue QSC reports" for the labels
   "Overdue" and "QSC Overdue", "trips missing staff" for "Missing Staff"; the tile keeps its label; the names joined "A, B and C", no serial comma). A zero is never tinted and never a tile, so the band's weight is the day's trouble.
-- **Nothing needs you.** When every item has data and is at zero the band is one full-width Pale Sprout field, a larger check, "All clear. Nothing needs you right now." and, under it, "Checked and at
-  zero:" and every item's noun, so the claim can be audited. It is the same green at the same strength as the row, only the whole band. The sentence is only as true as the list, which is why the list carries what the nav badges count.
+- **Nothing needs you.** When every item is at zero the band is its one All clear row. "All clear. Nothing needs you right now." is the PAGE's field (`AllClearField`): it stands under the greeting in place of both sections only when every decision group and every alert has data and is at zero, and no notice is waiting, naming every group and every item it checked ("Checked and at
+  zero:" and each noun), so the claim can be audited. It is the same green at the same strength as the row, only the whole width. The sentence is only as true as the list, which is why the list carries what the nav badges count.
 - **Loading and failure are not zero.** An item computed from its own request shows an en dash (`–`) in the muted figure style, never a definite 0, while that request is waiting (in flight, or PAUSED while the
   browser is offline, which TanStack reports as pending with `isLoading` false: `awaitsData` in `lib/queryPhase.ts`; a disabled query is not waiting) (`aria-busy="true"` and a
   screen-reader-only "Loading") and after it fails (not busy, and a screen-reader-only "Couldn't load"). It is the compact tile (card fill, a link to the page it counts), has no line and no action, is never
-  tinted, is not named in the All clear row, and while one exists the band is not the all-clear field: an all-clear is never claimed without data. The summary itself is held to the same rule: while it is waiting the page is the greeting and the date (they need no data, so the personality is the first thing on screen) over a spinner, with no counts line and no band, never a summary of zeros. Qualification Issues (the staff list), Critical Participant
+  tinted, is not named in the All clear row, and while one exists the page is not the all-clear field: an all-clear is never claimed without data. The summary itself is held to the same rule: while it is waiting its spinner, and if it fails its error with Try again, sit in the Alerts slot (no counts line, no band, never a summary of zeros), and the decision groups do not wait for it. Qualification Issues (the staff list), Critical Participant
   Alerts (the participant-alerts aggregate), Pending Leave (the approvals queue, `usePendingLeaveQueue`) and Shift Completions (the review queue, `usePendingCompletionQueue`) do this: a queue's count is 0 while loading and after a failure, so the hooks say which it is.
 - **Shape.** The band is a size container and its tiles are dealt into balanced rows by ITS width (the 232px sidebar and the pointer's gutter do not matter): up to 1, 2, 3, 4 and 5 tiles a row from band
   widths of 0, 36, 56, 72 and 96rem (a 390 phone gets 1, a 768 tablet 2, 1280 gets 3, 1440 gets 4 and 1920 gets 5). With n tiles and r to a row there are ceil(n / r) rows, the tiles dealt out evenly (7 at 4 a row
@@ -653,7 +679,7 @@ Overdue open their lists already filtered to the rule the figure counts. ReadOnl
 - **Phone.** In a band under 36rem (one tile a row) a tall tile is one compact row instead: the figure, the label and a chevron, padded `--card-pad` top and bottom; the line folds away and the link's words stay as its accessible name only (the link still covers the tile). Container queries on the band, CSS only (`StatCard`), so seven tiles no longer run about 1300px before the first trip.
 
 **The Quiet Zero Rule.** Only a count somebody can act on is loud, and only that is a tile. A zero is a name in the All clear row (Pale Sprout, never a tint), and a value that is not known yet, or failed to load,
-is an en dash tile, never a 0 and never an "All clear". The band is the all-clear field only when every item has data and is at zero. If most items are tiles the band has stopped saying anything, so review
+is an en dash tile, never a 0 and never an "All clear". The page is the all-clear field only when every item and every decision group has data and is at zero. If most items are tiles the band has stopped saying anything, so review
 the tones, not the tint.
 
 ### Status Badges & Alerts
