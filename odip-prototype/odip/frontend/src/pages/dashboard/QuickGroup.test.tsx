@@ -60,8 +60,28 @@ describe('QuickGroup — the table', () => {
     expect(within(rowOf('Person b')).getAllByRole('cell')[3]).toHaveTextContent('—')
     expect(screen.getByText('Family wedding')).toHaveAttribute('title', 'Family wedding')
     expect(screen.getByText('Family wedding')).toHaveClass('xl:truncate')
-    // Free text takes the leftover width with no minimum, so a narrow table cuts it first and never scrolls sideways (check 4 at 1280).
-    expect(screen.getByText('Family wedding').closest('td')).toHaveClass('xl:w-full', 'xl:max-w-0')
+  })
+
+  // jsdom has no layout: the sizing rule is pinned as the grid template; the captures measure it (no text cut while any column has spare width).
+  it('sizes its columns by their content from xl: text grows to its full width before the spare goes to a gap ahead of the buttons', () => {
+    render(<Harness model={model()} />)
+
+    const table = screen.getByRole('table')
+    expect(table).toHaveClass('xl:grid')
+    // Subject and free text: no minimum, up to their content. Dates and short facts: their content. Then the spare. Then the buttons, as wide as they are.
+    expect(table.style.gridTemplateColumns).toBe('minmax(0, max-content) max-content max-content minmax(0, max-content) minmax(0, 1fr) max-content')
+    for (const tr of screen.getAllByRole('row')) expect(tr).toHaveClass('xl:grid-cols-subgrid', 'xl:col-span-full')
+    // The buttons sit in the last track, past the spare.
+    expect(within(rowOf('Person a')).getAllByRole('cell').at(-1)).toHaveClass('xl:col-[-2/-1]')
+    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass('xl:col-[-2/-1]')
+  })
+
+  it('reserves the busy label on a one-tap button, so "Approving…" never moves the columns', () => {
+    render(<Harness model={model({ count: 1, rows: [row('a', { actions: [approve('a', vi.fn())] })] })} />)
+
+    const button = screen.getByRole('button', { name: 'Approve leave: Person a' })
+    expect(button).toHaveTextContent(/^Approve$/)
+    expect(button.querySelector('[data-reserve]')).toHaveAttribute('data-reserve', 'Approving…')
     // A date never breaks or is cut, at any width.
     expect(within(rowOf('Person a')).getAllByRole('cell')[2]).toHaveClass('whitespace-nowrap')
   })

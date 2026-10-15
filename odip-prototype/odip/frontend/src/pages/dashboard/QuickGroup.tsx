@@ -104,15 +104,27 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
 }
 
 /** A fact cell: one plain value; a dash in the table and nothing on the card when empty. Only free text is cut (in the table) or wrapped (on a card). */
-function FactCell({ column, value, last }: { column: FactColumn; value: string | null | undefined | false; last: boolean }) {
-  // The last fact column takes the table's leftover width (as the Leave note does), so the facts sit together; a free-text one there has no minimum (max-width 0) and gives way first on a narrow table. A free-text column before it is capped (9rem) instead.
-  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', last ? (column.long ? 'xl:w-full xl:max-w-0' : 'whitespace-nowrap xl:w-full') : !column.long && 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
+function FactCell({ column, value }: { column: FactColumn; value: string | null | undefined | false }) {
+  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', !column.long && 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
   return (
-    <td className={classes.filter(Boolean).join(' ')}>
-      {!value ? '—' : column.long ? <span className={`block break-words xl:truncate ${last ? '' : 'xl:max-w-[9rem]'}`} title={value}>{value}</span> : value}
+    <td role="cell" className={classes.filter(Boolean).join(' ')}>
+      {!value ? '—' : column.long ? <span className="block break-words xl:truncate" title={value}>{value}</span> : value}
     </td>
   )
 }
+
+/**
+ * The table's columns from xl (SHAPE §4), sized by content: the subject and free text grow up to their full width before anything else gets spare
+ * width, so text is cut only when no column has room left (`minmax(0, max-content)`: no minimum, so they also give way first on a narrow table). Dates
+ * and short facts are as wide as they are and never cut. What is left over sits in a gap before the buttons (`minmax(0, 1fr)`), which are as wide as
+ * the widest row's own buttons, busy labels included.
+ */
+const gridColumns = (columns: FactColumn[]) =>
+  ['minmax(0, max-content)', ...columns.map((column) => (column.long ? 'minmax(0, max-content)' : 'max-content')), 'minmax(0, 1fr)', 'max-content'].join(' ')
+// From xl every row group and row is a subgrid of the table's columns, so each row keeps its own box (height, hairline, hover tint).
+const SUBGRID = 'xl:col-span-full xl:grid xl:grid-cols-subgrid'
+// The buttons' track: the last one, past the gap.
+const LAST_TRACK = 'xl:col-[-2/-1]'
 
 /**
  * One decision row (SHAPE §4, §6): its own row group, so its error line and form (the detail row) stay with it. From xl a table row of --row-h with the
@@ -166,18 +178,18 @@ function QuickRowView({ row, columns, onDone, onRefused }: {
   const held = busy ? HELD : undefined
   const form = formOpen && formAction
   return (
-    <tbody ref={rowRef} className="max-xl:block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4">
-      <tr className="max-xl:flex max-xl:flex-wrap max-xl:items-center max-xl:gap-x-3 max-xl:gap-y-1 xl:h-[var(--row-h)] xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)]">
-        <td className={`${CELL} max-xl:basis-full`}>
+    <tbody ref={rowRef} role="rowgroup" className={`max-xl:block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4 ${SUBGRID}`}>
+      <tr role="row" className={`max-xl:flex max-xl:flex-wrap max-xl:items-center max-xl:gap-x-3 max-xl:gap-y-1 xl:h-[var(--row-h)] xl:items-center xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)] ${SUBGRID}`}>
+        <td role="cell" className={`${CELL} max-xl:basis-full`}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 xl:flex-nowrap">
-            <span className="min-w-0 text-sm font-medium text-[var(--color-foreground)] xl:max-w-[min(30rem,calc(100vw-1090px))] xl:truncate" title={row.subject}>{row.subject}</span>
+            <span className="min-w-0 text-sm font-medium text-[var(--color-foreground)] xl:truncate" title={row.subject}>{row.subject}</span>
             {row.flags.slice(0, 2).map((flag) => (
               <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
             ))}
           </div>
         </td>
-        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} last={i === columns.length - 1} />)}
-        <td className={`${CELL} whitespace-nowrap max-xl:mt-2 max-xl:basis-full xl:w-px ${row.actions.length === 0 ? 'max-xl:hidden' : 'xl:min-w-[11rem]'}`}>
+        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} />)}
+        <td role="cell" className={`${CELL} whitespace-nowrap max-xl:mt-2 max-xl:basis-full ${LAST_TRACK} ${row.actions.length === 0 ? 'max-xl:hidden' : ''}`}>
           {row.actions.length > 0 && (
             <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
               {row.actions.map((action) =>
@@ -199,7 +211,10 @@ function QuickRowView({ row, columns, onDone, onRefused }: {
                   </Button>
                 ) : (
                   <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined} className={held} onClick={() => tap(action)}>
-                    {tapping ? action.busyLabel : action.label}
+                    {/* An invisible, zero-height copy of the busy label holds the button at the wider of the two, so a tap never moves the columns. */}
+                    <span data-reserve={action.busyLabel} className="grid after:invisible after:h-0 after:content-[attr(data-reserve)]">
+                      {tapping ? action.busyLabel : action.label}
+                    </span>
                   </Button>
                 ),
               )}
@@ -208,8 +223,8 @@ function QuickRowView({ row, columns, onDone, onRefused }: {
         </td>
       </tr>
       {(error || form) && (
-        <tr data-detail className="max-xl:block">
-          <td colSpan={columns.length + 2} className="px-[var(--cell-px)] pb-2 max-xl:block max-xl:p-0 max-xl:pt-3">
+        <tr data-detail role="row" className="block xl:col-span-full">
+          <td role="cell" colSpan={columns.length + 2} className="block px-[var(--cell-px)] pb-2 max-xl:p-0 max-xl:pt-3">
             {error && <p role="alert" className="pb-1 text-xs text-[var(--color-destructive)]">{error}</p>}
             {form && <RowForm id={formId} form={form.form} onClose={closeForm} onBusy={setSubmitting} onDone={done} onRefused={onRefused} />}
           </td>
@@ -270,11 +285,16 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       )}
       {shown.length > 0 && (
         <div className="xl:overflow-x-auto xl:rounded-md xl:border xl:border-[var(--color-border)] xl:bg-[var(--color-card)]">
-          <table className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:divide-y xl:divide-[var(--color-border)]">
-            <thead className="max-xl:hidden">
-              <tr className="h-[var(--table-head-h)]">
+          {/* Explicit roles: a table drawn as a grid (xl) or as cards (below xl) keeps its table semantics in every browser. */}
+          <table
+            role="table"
+            style={{ gridTemplateColumns: gridColumns(model.columns) }}
+            className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:grid xl:divide-y xl:divide-[var(--color-border)]"
+          >
+            <thead role="rowgroup" className={`max-xl:hidden ${SUBGRID}`}>
+              <tr role="row" className={`h-[var(--table-head-h)] xl:items-center ${SUBGRID}`}>
                 {[model.subjectHeader, ...model.columns.map((column) => column.header), ''].map((header, i) => (
-                  <th key={i} className={`${CELL} whitespace-nowrap text-left text-xs font-medium text-[var(--color-muted-foreground)]`}>{header}</th>
+                  <th key={i} role="columnheader" className={`${CELL} ${i === model.columns.length + 1 ? LAST_TRACK : ''} whitespace-nowrap text-left text-xs font-medium text-[var(--color-muted-foreground)]`}>{header}</th>
                 ))}
               </tr>
             </thead>
