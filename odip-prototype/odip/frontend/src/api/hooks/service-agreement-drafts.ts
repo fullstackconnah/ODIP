@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
-import type { ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, ServiceAgreementDraftDto } from '../types'
+import type { AgreementEndingDto, ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, ServiceAgreementDraftDto } from '../types'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
 
@@ -57,6 +57,37 @@ export function usePatternChange() {
   })
 }
 
+export const AGREEMENTS_ENDING_KEY = ['agreements-ending'] as const
+
+/** The organisation's agreements ending within 60 days or ended (agreement PR 2): the Participants register's Agreements ending view. */
+export function useAgreementsEnding(enabled = true) {
+  return useQuery({
+    queryKey: AGREEMENTS_ENDING_KEY,
+    queryFn: () => apiGet<AgreementEndingDto[]>('/service-agreements/ending'),
+    enabled,
+  })
+}
+
+/**
+ * Renew agreement (agreement PR 2): the server saves the newest approved revision's blocks as the next revision, from the day after it ends, priced now. A Draft: the roster does not change.
+ * It is the newest revision now, and while it waits the agreement no longer counts as ending, so the revisions, the ending list and the alerts are read again.
+ */
+export function useRenewAgreement() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ participantId, draftId }: { participantId: string; draftId: string }) =>
+      apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/renew`),
+    onSuccess: (_, { participantId }) => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
+      queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
+      queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
+      queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
+      queryClient.invalidateQueries({ queryKey: ['participant-alerts', participantId] }),
+      queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] }),
+    ]),
+  })
+}
+
 const previewKey = (participantId: string | undefined, id: string | undefined) => ['service-agreement-draft-approval-preview', participantId, id] as const
 
 /**
@@ -96,6 +127,8 @@ export function useApproveServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
       queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
+      // An approved renewal ends the "ending" flag; the alerts are refreshed with the budget figures below.
+      queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
       // The unfilled shifts it makes are booked ahead in this participant's budget.
       refreshBudgetFigures(queryClient, [participantId]),
     ]),

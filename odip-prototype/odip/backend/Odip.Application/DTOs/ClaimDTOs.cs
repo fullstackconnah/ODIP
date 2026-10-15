@@ -242,6 +242,9 @@ public record ProviderSettingsDto
 
     /// <summary>"Warn" (default): a user without a current Medication Competency may record, and the record is flagged. "Enforce": refused (403).</summary>
     public MedicationCompetencyMode MedicationCompetencyMode { get; init; } = MedicationCompetencyMode.Warn;
+
+    /// <summary>The organisation's staff come from Employment Hero: the frontend hides "New staff member" and the staff import, and the server refuses them.</summary>
+    public bool EmploymentHeroConnected { get; init; }
 }
 
 public record UpsertProviderSettingsDto

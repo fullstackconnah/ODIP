@@ -82,11 +82,9 @@ describe('BookingsTab — PF-10.6 Client Overview PDF per-row action', () => {
   })
 })
 
-// Density polish (touch): the actions cell holds four 22px hand-rolled icon controls in a gap-2 row. DataTable pads every
-// link in a cell to 44px on touch, so the "View participant" link alone reached 11px past its box and overlapped its
-// still-22px neighbours by 3px each (found by the broad coarse sweep). All four now share TAP_ICON_SQUARE: 22px on a mouse
-// as before, the 36px --control-h-sm square with a 44px hit area on touch, and the row's 8px gap makes the pads touch and
-// never overlap.
+// Density polish (touch): the actions cell holds four icon controls in a gap-2 row. They are the house Button iconOnly (the 24px
+// --control-h-sm square on a mouse, 36px with a 44px TAP_AREA pad on touch), like AccommodationTab; the 8px gap lets the pads touch
+// and never overlap.
 describe('BookingsTab — touch targets in the row actions', () => {
   const controls = () => [
     screen.getByTitle('Edit booking'),
@@ -95,28 +93,27 @@ describe('BookingsTab — touch targets in the row actions', () => {
     screen.getByTitle('Remove from trip'),
   ]
 
-  it('gives all four row action controls the same 44px touch shape, so none overlaps a neighbour', () => {
+  it('makes all four row action controls the house icon button: the --control-h-sm square with a 44px touch pad', () => {
     renderTab()
 
     const [edit, pdf, view, remove] = controls()
     expect(view.tagName).toBe('A')
     for (const c of [edit, pdf, view, remove]) {
       expect(c).toHaveClass(...TAP_AREA.split(' '))
-      expect(c).toHaveClass('pointer-coarse:inline-flex', 'pointer-coarse:size-[var(--control-h-sm)]', 'pointer-coarse:items-center', 'pointer-coarse:justify-center', 'pointer-coarse:p-0')
+      expect(c).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0', 'shrink-0')
+      expect(c.querySelector('svg')).toHaveClass('w-3.5', 'h-3.5')
     }
+    expect(remove).toHaveClass('text-[var(--color-destructive)]')
   })
 
-  it('keeps the mouse look: p-1 around a 14px icon (22px), rounded, the same hover fills', () => {
+  it('names each control for its row, since every row has the same four', () => {
     renderTab()
 
     const [edit, pdf, view, remove] = controls()
-    for (const c of [edit, pdf, view, remove]) {
-      expect(c).toHaveClass('p-1', 'rounded', 'transition-colors')
-      expect(c.querySelector('svg')).toHaveClass('w-3.5', 'h-3.5')
-    }
-    expect(edit).toHaveClass('hover:bg-[var(--color-surface-container)]')
-    expect(remove).toHaveClass('hover:bg-[var(--color-error-container)]/60')
-    expect(pdf).toHaveClass('disabled:opacity-50')
+    expect(edit).toHaveAccessibleName('Edit booking: Sophie Brown')
+    expect(pdf).toHaveAccessibleName('Client Overview PDF: Sophie Brown')
+    expect(view).toHaveAccessibleName('View participant: Sophie Brown')
+    expect(remove).toHaveAccessibleName('Remove from trip: Sophie Brown')
   })
 
   it('spaces them 8px apart, the gap that lets two 36px squares with 4px pads touch without overlapping', () => {

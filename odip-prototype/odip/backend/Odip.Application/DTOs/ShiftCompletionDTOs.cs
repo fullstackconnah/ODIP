@@ -204,7 +204,10 @@ public record CompletionQueueItemDto(
     /// the same flag is on <c>ShiftCompletionDto.startWasManual</c>.</summary>
     bool StartWasManual,
     /// <summary>True when the worker moved the start or end at Finish, so the queue can say "Times adjusted by the worker" without opening the row.</summary>
-    bool TimesAdjusted);
+    bool TimesAdjusted,
+    /// <summary>How many active incidents are linked to the shift: the rows the completion review's <c>incidents</c> list shows (ShiftId and IsActive), so a row the
+    /// queue calls clean is one whose review lists no incident. No default value: an unknown count must never read as "no incident".</summary>
+    int IncidentCount);
 
 public record ReturnCompletionDto
 {

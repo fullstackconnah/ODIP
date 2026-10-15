@@ -27,6 +27,11 @@ const paged = (items) => ({
   hasNext: false,
   hasPrevious: false,
 })
+// The provider's calendar day (Australia/Sydney, the captures' zone), so "due today" and "overdue" mean what they mean to the browser.
+const providerToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+const addDaysIso = (iso, days) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10) }
+// The id the capture scripts' dev sign-in returns (scratchpad dash-shots): a leave request of "the signed-in Admin".
+const CAPTURE_VIEWER_ID = '00000000-0000-0000-0000-0000000000a1'
 
 // ── Sample data ──────────────────────────────────────────────
 
@@ -443,6 +448,18 @@ const tasks = [
     dueDate: '2026-07-13', status: 'Overdue', completedDate: null,
     notes: 'QSC reporting window closes 72h after the incident.',
     linkTo: '/incidents/inc-0002/edit', incidentReportId: 'inc-0002',
+  },
+  // The dashboard's Tasks due group: an Admin-only review of an emergency over budget, overdue (the oldest due, so it is among the group's first five
+  // rows), and a task due today (the provider's day).
+  {
+    id: 'task-0008', participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'BudgetEmergencyReview', title: 'Review the emergency booking over budget – Grace Palmer-Hughes, 8 Oct', ownerId: null, ownerName: null,
+    priority: 'Urgent', dueDate: '2026-07-01', status: 'NotStarted', completedDate: null, notes: 'Booked over the Core budget on the night.', shiftId: 'board-shift-0002',
+  },
+  {
+    id: 'task-0009', tripInstanceId: 't-0002', tripName: 'Tamborine Mountain Getaway', participantBookingId: null, accommodationReservationId: null,
+    vehicleAssignmentId: null, staffAssignmentId: null, taskType: 'InsuranceConfirmation', title: 'Confirm travel insurance – Liam O.', ownerId: 's-0001',
+    ownerName: 'Callum Radford', priority: 'High', dueDate: providerToday(), status: 'NotStarted', completedDate: null, notes: 'Policy number to follow.',
   },
 ]
 
@@ -1543,9 +1560,25 @@ const completionQueueItems = Object.values(portalShiftBase)
       startWasManual: !!completion.startWasManual,
       // True when the worker moved the start or end at Finish (the server derives it from the stored originals the same way).
       timesAdjusted: !!(completion.originalActualStart || completion.originalActualEnd),
+      // The incidents the completion's own detail lists (its fixture's `incidents`): what the server's queue counts.
+      incidentCount: (completion.incidents || []).length,
     }
   })
   .filter(Boolean)
+
+// The dashboard's Shift completions group: a clean row (one-tap Approve), one with an incident on the shift (Review), and one whose approve the
+// server refuses (409, the row error). Queue-only rows: nothing else reads them.
+const dashboardQueueRow = (shiftId, staffName, participantName, o) => ({
+  shiftId, completionId: `sc-${shiftId}`, participantName, staffName, serviceDate: '2026-10-13',
+  rosteredStart: '2026-10-12T23:00:00Z', rosteredEnd: '2026-10-13T05:00:00Z', actualStart: '2026-10-12T23:02:00Z', actualEnd: '2026-10-13T05:04:00Z',
+  varianceMinutesStart: 2, varianceMinutesEnd: 4, status: 'PendingReview', timeZoneId: 'Australia/Brisbane', isOutlierVariance: false,
+  varianceReviewMinutes: 15, returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 30, startWasManual: false, incidentCount: 0, ...o,
+})
+completionQueueItems.push(
+  dashboardQueueRow('shift-dash-clean', 'Priya Nadarajah', 'Liam Okafor', {}),
+  dashboardQueueRow('shift-dash-incident', 'Tom Beattie', 'Grace Palmer-Hughes', { incidentCount: 1 }),
+  dashboardQueueRow('shift-dash-409', 'Callum Radford', 'Ava Chen', {}),
+)
 
 // Bookings (BookingListDto)
 const bookings = [
@@ -1884,6 +1917,12 @@ const leaveRequests = [
     decidedByUserId: 's-0001', decidedAt: '2026-09-04T09:00:00Z',
     decisionNote: 'Already short-staffed that day.',
   },
+  // A request of the capture viewer's own: the dashboard shows it as "Your request", with no buttons.
+  {
+    id: 'leave-0004', userId: CAPTURE_VIEWER_ID, userFullName: 'Dev Admin', leaveType: 'Annual', startDate: '2026-11-02', endDate: '2026-11-06',
+    status: 'Pending', reason: 'School holidays.', requestedByUserId: CAPTURE_VIEWER_ID, requestedAt: '2026-10-01T09:00:00Z',
+    decidedByUserId: null, decidedAt: null, decisionNote: null,
+  },
 ]
 
 const recurringUnavailabilities = [
@@ -2058,7 +2097,7 @@ const NOTIFICATION_EVENT_TYPES = [
   'LeaveRequestSubmitted', 'LeaveRequestDecided', 'ShiftAssigned',
   'ShiftCompletionPendingReview', 'ShiftCompletionReturned', 'WitnessRequested',
   'CaregiverSubmissionReceived', 'IncidentReported', 'ServiceAgreementSent',
-  'ServiceAgreementSigned', 'IntegrationDegraded',
+  'ServiceAgreementSigned', 'IntegrationDegraded', 'ShiftUnassigned',
 ]
 
 // GET/PUT notifications/preferences fixture — every event x channel, Email defaulting ON per
@@ -2105,6 +2144,24 @@ const notificationOutbox = [
 function retriedNotification(id) {
   const row = notificationOutbox.find((n) => n.id === id) || notificationOutbox[0]
   return { ...row, status: 'Pending', attempts: 0, nextAttemptAt: new Date().toISOString(), lastError: undefined }
+}
+
+// The bell (dashboard PR B): GET notifications/inbox, POST notifications/inbox/:id/read and notifications/inbox/read-all.
+// Unlike most POSTs here these change the fixture, so the refetch after "Mark all as read" doesn't bring the dots back.
+// Four items, two unread (SHAPE section 13's fixture), for the finish reviewer's own mock run. Titles are plain text, in the server's voice.
+const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
+const inAppInbox = [
+  { id: 'inapp-0001', title: 'Sam Lee asked for annual leave, 20 to 24 Oct.', linkTo: '/rostering/leave', createdAt: minutesAgo(5) },
+  { id: 'inapp-0002', title: "Sam Lee's shift with Grace Palmer-Hughes on Tue 13 Oct is ready for review.", linkTo: '/rostering/completions', createdAt: minutesAgo(120) },
+  { id: 'inapp-0003', title: 'Sam Lee reported an incident: injury, high severity.', linkTo: '/incidents', createdAt: minutesAgo(26 * 60), readAt: minutesAgo(25 * 60) },
+  { id: 'inapp-0004', title: 'Ann Hughes sent a profile update for Grace Palmer-Hughes.', linkTo: '/caregiver-submissions', createdAt: minutesAgo(3 * 24 * 60), readAt: minutesAgo(2 * 24 * 60) },
+]
+function inAppInboxView() {
+  return { items: inAppInbox, unreadCount: inAppInbox.filter((n) => !n.readAt).length, hasMore: false }
+}
+function markInAppRead(id) {
+  for (const n of inAppInbox) if ((id === undefined || n.id === id) && !n.readAt) n.readAt = new Date().toISOString()
+  return null
 }
 
 // Connection map item 12 (staff hub) — staffId linkage for the three portalShiftBase fixture
@@ -2276,6 +2333,30 @@ function saveDraft(participantId, body) {
   return draft
 }
 
+const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
+
+// Agreement PR 2: the agreements ending, as AgreementEnding.FindAsync finds them on the server. An active participant's newest approved revision ending within 60 days of the provider's today, or
+// ended; a newer revision starting after it (a renewal) hides one still running, and an ended one says it waits. Soonest end first, in the participant alert's words. Revisions are newest first here.
+function agreementsEnding() {
+  const today = planApproval.providerToday()
+  const rows = []
+  for (const person of participants.filter((p) => p.isActive && !p.isDraft)) {
+    const revisions = serviceAgreementDrafts[person.id] || []
+    const approved = revisions.find((draft) => draft.approval)
+    if (!approved) continue
+    const daysLeft = daysBetween(today, approved.agreementEndDate)
+    if (daysLeft > 60) continue
+    const renewal = revisions.find((draft) => draft.version > approved.version && draft.agreementStartDate > approved.agreementEndDate)
+    if (renewal && daysLeft >= 0) continue
+    const words = daysLeft < 0 ? `Agreement ended ${approved.agreementEndDate}: shifts stop after it` : daysLeft === 0 ? 'Agreement ends today' : daysLeft === 1 ? 'Agreement ends in 1 day' : `Agreement ends in ${daysLeft} days`
+    rows.push({
+      participantId: person.id, participantName: person.fullName, draftId: approved.id, version: approved.version, agreementEndDate: approved.agreementEndDate, daysLeft,
+      renewalVersion: renewal ? renewal.version : null, status: renewal ? `${words}. Renewal v${renewal.version} is waiting for approval` : words,
+    })
+  }
+  return rows.sort((a, b) => a.agreementEndDate.localeCompare(b.agreementEndDate))
+}
+
 ;(function seedDrafts() {
   serviceAgreementDrafts['p-0002'] = [{
     id: 'draft-p-0002-v1', participantId: 'p-0002', version: 1, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3',
@@ -2302,6 +2383,17 @@ function saveDraft(participantId, body) {
     delete result._lines
     serviceAgreementDrafts[participantId] = [draftDto(participantId, 1, body, result, lines)]
   }
+  // Agreement PR 2 (fix round 1): p-0001 has an agreement approved for rostering that ended three days ago with no renewal, so the "ended" states can be seen. An approval refuses an agreement
+  // that has already ended, so it is seeded approved. It names the 2026-27 plan; the captures record that plan before they renew it.
+  const today = planApproval.providerToday()
+  const charged = plan.map((entry) => ({ ...entry, block: { ...entry.block, onPublicHoliday: 'Charge' } }))
+  const ended = { ...base, representative: undefined, blocks: charged, agreementStartDate: planApproval.addDays(today, -59), agreementEndDate: planApproval.addDays(today, -3) }
+  const endedQuote = planPricing.quote({ blocks: charged.map((entry) => entry.block), periodFrom: ended.agreementStartDate, periodTo: ended.agreementEndDate, includeLines: true }, planPricingSettings)
+  const endedLines = planPricing.groupLines(endedQuote._lines, charged.map((entry) => entry.block))
+  delete endedQuote._lines
+  serviceAgreementDrafts['p-0001'] = [{ ...draftDto('p-0001', 1, ended, endedQuote, endedLines), approval: {
+    approvedAt: `${planApproval.addDays(today, -60)}T01:00:00Z`, approvedByName: 'Callum Radford', patternsCreated: 7, patternsEnded: 0, shiftsCreated: 0, topUpEnabled: true,
+  } }]
 })()
 
 // Participant budgets (phase 1): the plan record, the support category list and the budget settings. See funding.js.
@@ -2309,7 +2401,13 @@ function saveDraft(participantId, body) {
 const funding = fundingModule.create({
   respond, people: participants,
   priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
+  // Agreement PR 2, rule 12 of ParticipantAlertsService: the agreement ending soon (Warning) or ended (Critical), from the ending list's rule, opening the agreement page.
+  agreementAlertsOf: (id) => agreementsEnding().filter((row) => row.participantId === id).map((row) => ({
+    type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status, deepLinkTab: 'details', linkTo: `/participants/${id}/agreement-draft`,
+  })),
 })
+// Fix round 1: the price list withdraws the group activity Sunday item three weeks from today (no seeded plan has one), so a renewal's review can show a line the new price list has not got.
+planPricing.withdraw('04_105_0136_6_1', planApproval.addDays(planApproval.providerToday(), 21))
 // Budget phase 3: the roster's budget check, the shifts that carry the over-budget markers and the Admin's review task. See rosterBudget.js for the switches.
 const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
@@ -2317,6 +2415,7 @@ const routes = [
   ...funding.get,
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
+  ['service-agreements/ending', () => agreementsEnding()],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
   ['participants/:id/service-agreement-drafts/:id', (participantId, draftId) => {
     const found = (serviceAgreementDrafts[participantId] || []).find((draft) => draft.id === draftId)
@@ -2469,7 +2568,18 @@ const routes = [
   }],
 
   // tasks
-  ['tasks', () => tasks],
+  ['tasks', (searchParams) => {
+    // The server's dashboard filters: Overdue is the TaskOverdue rule (stored Overdue, or past due and still open); dueToday is the provider's today;
+    // dueThisWeek is today to today + 7.
+    const today = providerToday()
+    const open = (t) => t.status !== 'Completed' && t.status !== 'Cancelled'
+    const status = searchParams.get('status')
+    if (status === 'Overdue') return tasks.filter((t) => t.status === 'Overdue' || (t.dueDate && t.dueDate < today && open(t)))
+    if (status) return tasks.filter((t) => t.status === status)
+    if (searchParams.get('dueToday') === 'true') return tasks.filter((t) => t.dueDate === today)
+    if (searchParams.get('dueThisWeek') === 'true') return tasks.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate <= addDaysIso(today, 7))
+    return tasks
+  }],
 
   // incidents
   ['incidents/overdue-qsc', () => incidents.filter((i) => i.isOverdue24h)],
@@ -2480,7 +2590,11 @@ const routes = [
   // every other "GET routes don't filter by query string" route noted elsewhere in this file.
   ['incidents', (searchParams) => {
     const involvedUserId = searchParams.get('involvedUserId')
-    return paged(involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents)
+    let list = involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents
+    // The dashboard's Incidents group reads these two filters (IncidentsController.GetAll): QSC overdue, and open or QSC overdue.
+    if (searchParams.get('isOverdueQsc') === 'true') list = list.filter((i) => i.isOverdue24h)
+    if (searchParams.get('needsAttention') === 'true') list = list.filter((i) => i.isOverdue24h || (i.status !== 'Resolved' && i.status !== 'Closed'))
+    return paged(list)
   }],
   ['incidents/:id', (id) => {
     const i = incidents.find((x) => x.id === id) || incidents[0]
@@ -2519,14 +2633,10 @@ const routes = [
   ['settings', () => appSettings],
   ['public-holidays', () => publicHolidays],
 
-  // leave + recurring unavailability — GET /leave and /leave/unavailability don't filter by the
-  // `status`/`userId` query string here. The GET dispatch loop DOES now pass url.searchParams as
-  // every handler's trailing argument (added for GET /incidents?involvedUserId= — see the
-  // `incidents` route above), but these two simply don't declare/read it, same net effect as
-  // before. Returns the full fixture list; the frontend pages that read it don't rely on the mock
-  // filtering (LeaveApprovalsPage/PortalLeavePage render off whatever the hook returns either way).
-  ['leave', () => leaveRequests],
-  ['leave/unavailability', () => recurringUnavailabilities],
+  // leave + recurring unavailability — GET /leave and /leave/unavailability filter by `status` (the dashboard's Leave group and the nav badge ask for
+  // Pending, so the count matches the rows); `userId` is still not read.
+  ['leave', (searchParams) => leaveRequests.filter((r) => !searchParams.get('status') || r.status === searchParams.get('status'))],
+  ['leave/unavailability', (searchParams) => recurringUnavailabilities.filter((r) => !searchParams.get('status') || r.status === searchParams.get('status'))],
 
   // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
   ['rostering/board', (searchParams) => rosterBoard(searchParams)],
@@ -2554,11 +2664,10 @@ const routes = [
   ['rostering/flagged-notes', () => flaggedShiftNotes],
 
   // Shift completion (design spec §2/§4) — portal detail (PortalShiftDetailPage's Start/Finish
-  // card) and the rostering review queue/detail (CompletionReviewPage). Same "query string isn't
-  // read here" caveat as leave/staff-availability above: GetCompletions' status/from/to/page/
-  // pageSize aren't applied — paged() below just returns every fixture row as one full page.
+  // card) and the rostering review queue/detail (CompletionReviewPage). GetCompletions' status is
+  // applied (PendingReview when absent, the server's default); from/to/page/pageSize aren't: paged() returns every matching row as one page.
   ['portal/shifts/:id', (id) => buildPortalShiftDetail(id)],
-  ['rostering/completions', () => paged(completionQueueItems)],
+  ['rostering/completions', (searchParams) => paged(completionQueueItems.filter((i) => i.status === (searchParams.get('status') || 'PendingReview')))],
   ['rostering/shifts/:id/completion', (id) => withPackageFields(id, pkgState(id).completion || shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0])],
   // The coordinator's one-call review of a submitted shift (ShiftCompletionReviewDto): completion with breaks / net
   // minutes / handover, every dose in the window with its outcome, PRN doses, notes.
@@ -2569,6 +2678,7 @@ const routes = [
   // is the self-service grid.
   ['notifications/preferences', () => notificationPreferenceGrid()],
   ['admin/notifications', () => notificationOutbox],
+  ['notifications/inbox', () => inAppInboxView()],
 ]
 
 // POST routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -2608,6 +2718,28 @@ const postRoutes = [
       oldTotal: 7358, newTotal: 7725.9, difference: 367.9, needsReview: false,
     }
     return body && body.preview ? result : { ...result, draftId: `${draftId}-change` }
+  }],
+  // Agreement PR 2: Renew agreement, as AgreementRenewalService answers it: the newest approved revision's blocks saved as the next revision from the day after it ends, for the same length, cut at
+  // the plan covering that first day and at 800 days; 409 plan-needed with no such plan, 409 draft-version-conflict while a newer revision waits.
+  // shortcut: the length is this revision's own, not its term's (D2's chained changes), which the mock's screens never make; the server holds the term.
+  ['participants/:id/service-agreement-drafts/:id/renew', (participantId, draftId) => {
+    const revisions = serviceAgreementDrafts[participantId] || []
+    const source = revisions.find((draft) => draft.id === draftId)
+    if (!source) return respond(404, failEnvelope(null, ['Agreement not found.']))
+    const approved = revisions.find((draft) => draft.approval)
+    if (!approved || approved.id !== source.id) {
+      return respond(400, failEnvelope(null, [approved ? `Renew the agreement from its newest approved revision, v${approved.version}.` : 'This agreement is not approved for rostering yet, so there is nothing to renew.']))
+    }
+    const newest = revisions[0]
+    if (newest.id !== source.id) return respond(409, failEnvelope({ currentVersion: newest.version }, [`This agreement has a newer revision, v${newest.version}. Load it first: a renewal would replace it.`], 'draft-version-conflict'))
+    const start = planApproval.addDays(source.agreementEndDate, 1)
+    const plan = funding.plansOf(participantId).find((p) => p.planStart <= start && start <= p.planEnd)
+    if (!plan) return respond(409, failEnvelope(null, [`Record the new plan first: no plan of the participant's covers ${start}, the day the renewal starts.`], 'plan-needed'))
+    const end = [planApproval.addDays(start, daysBetween(source.agreementStartDate, source.agreementEndDate)), plan.planEnd, planApproval.addDays(start, 799)].sort()[0]
+    return saveDraft(participantId, {
+      state: source.state, planStartDate: plan.planStart, planEndDate: plan.planEnd, agreementStartDate: start, agreementEndDate: end, representative: source.representative,
+      blocks: source.blocks, baseVersion: revisions.length,
+    })
   }],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
@@ -2717,6 +2849,8 @@ const postRoutes = [
     return buildPortalShiftDetail(base.id)
   }],
   ['rostering/shifts/:id/completion/approve', (id) => {
+    // The dashboard captures' row error: somebody reviewed it first.
+    if (id === 'shift-dash-409') return respond(409, failEnvelope(null, ['This shift has already been reviewed.'], 'SHIFT_NOT_PENDING_REVIEW'))
     const c = withPackageFields(id, shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0])
     return { ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(), reviewOutcome: 'Approved' }
   }],
@@ -2750,6 +2884,8 @@ const postRoutes = [
   // contract without needing an actual SMTP config to demo against.
   ['admin/notifications/:id/retry', (id) => retriedNotification(id)],
   ['admin/notifications/test-email', () => ({ sent: true, error: undefined })],
+  ['notifications/inbox/read-all', () => markInAppRead()],
+  ['notifications/inbox/:id/read', (id) => markInAppRead(id)],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback

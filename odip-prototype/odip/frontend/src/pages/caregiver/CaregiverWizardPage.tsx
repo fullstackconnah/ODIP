@@ -28,6 +28,7 @@ import {
   type WizardStepDef, type WizardValidate, type ReviewGroup,
 } from '@/components/wizard'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import PlatformFooter from '@/components/layout/PlatformFooter'
 import {
   PROFILE_STEP_SCHEMAS_BY_KEY,
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
@@ -254,14 +255,19 @@ export default function CaregiverWizardPage() {
 }
 
 function PublicShell({ children }: { children: React.ReactNode }) {
+  // The footer sits beside main, not inside it, so it is the page's contentinfo landmark. No Support link: a carer contacts the
+  // provider who sent the link, and a platform inbox would draw health information to the wrong place.
   return (
-    <main className="min-h-screen bg-[var(--color-background)] text-[var(--color-foreground)]">
-      <div className="max-w-3xl mx-auto p-4 sm:p-8">
-        <h1 className="text-xl font-bold mb-1">Participant profile</h1>
-        <p className="text-sm text-[var(--color-muted-foreground)] mb-6">Please check the information below and update anything that is missing or out of date.</p>
-        {children}
-      </div>
-    </main>
+    <div className="min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
+      <main className="flex-1">
+        <div className="max-w-3xl mx-auto p-4 sm:p-8">
+          <h1 className="text-xl font-bold mb-1">Participant profile</h1>
+          <p className="text-sm text-[var(--color-muted-foreground)] mb-6">Please check the information below and update anything that is missing or out of date.</p>
+          {children}
+        </div>
+      </main>
+      <PlatformFooter variant="public" support={false} />
+    </div>
   )
 }
 

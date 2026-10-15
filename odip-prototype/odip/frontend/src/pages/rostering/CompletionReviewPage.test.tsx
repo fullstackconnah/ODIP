@@ -53,6 +53,7 @@ function makeQueueItem(overrides: Partial<CompletionQueueItemDto> = {}): Complet
     breakMinutes: 0,
     startWasManual: false,
     timesAdjusted: false,
+    incidentCount: 0,
     ...overrides,
   }
 }
@@ -141,7 +142,7 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
 
@@ -158,7 +159,7 @@ describe('CompletionReviewPage', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
 
     expect(screen.getByText(/incidents during this shift/i)).toBeInTheDocument()
     expect(screen.getByText(/missed evening medication dose/i)).toBeInTheDocument()
@@ -169,7 +170,7 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^return$/i }))
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^return$/i }))
 
@@ -213,8 +214,8 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^return$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^approve/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^return/i })).not.toBeInTheDocument()
     expect(screen.getByText(/read-only access/i)).toBeInTheDocument()
   })
 
@@ -281,7 +282,7 @@ describe('CompletionReviewPage: what the worker confirmed at Finish', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
 
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByText(/Start 8:02\s?am, changed to 7:55\s?am\./i)).toBeInTheDocument()
@@ -296,7 +297,7 @@ describe('CompletionReviewPage: what the worker confirmed at Finish', () => {
     mockUseCompletion.mockReturnValue({ data: makeCompletionDetail() })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
 
     expect(screen.queryByText(/changed to/)).not.toBeInTheDocument()
     expect(screen.queryByText(/km driven/)).not.toBeInTheDocument()
@@ -320,7 +321,7 @@ describe('CompletionReviewPage: shifts sent back before (review CR-B Must 1)', (
     mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ shiftReturnCount: 1 }) })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
 
     expect(within(screen.getByRole('alertdialog')).getByText('Returned to the worker 1 time before.')).toBeInTheDocument()
   })

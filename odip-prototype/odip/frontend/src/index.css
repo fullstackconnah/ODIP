@@ -95,6 +95,8 @@
     --control-h: 44px;
     --control-h-sm: 36px;
     --row-h: 48px;
+    /* Roster day columns: wide enough for "Needs staff" and a name beside the 44px grip and menu (roster board, finish review fix 4). */
+    --roster-day-col-min: 168px;
     --table-head-h: 40px;
     --cell-px: 12px;
     --card-pad: 16px;

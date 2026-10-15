@@ -188,7 +188,7 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
     await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
-    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete']) {
+    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', /^delete/i]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
     expect(screen.getByText(/only a super admin can add, delete or sync public holidays/i)).toBeInTheDocument()
@@ -203,7 +203,8 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
     await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
-    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete']) {
+    // Every row has a Delete, so its name says which holiday it deletes.
+    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete: Labour Day, 05/10/2026 (NSW)']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
     expect(screen.queryByText(/only a super admin can add, delete or sync public holidays/i)).not.toBeInTheDocument()
@@ -837,5 +838,34 @@ describe('SettingsPage — Import data tab', () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isCoordinator: true, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false, canImportData: false })
     renderSettingsPage()
     expect(screen.queryByRole('tab', { name: 'Import data' })).toBeNull()
+  })
+})
+
+describe('SettingsPage — Integrations tab', () => {
+  it('shows the Integrations tab to someone who can manage integrations', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: true, canImportData: true, canManageIntegrations: true })
+    renderSettingsPage()
+    expect(screen.getByRole('tab', { name: 'Integrations' })).toBeInTheDocument()
+  })
+
+  it('hides the Integrations tab from a Coordinator', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isCoordinator: true, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false, canImportData: false, canManageIntegrations: false })
+    renderSettingsPage()
+    expect(screen.queryByRole('tab', { name: 'Integrations' })).toBeNull()
+  })
+})
+
+describe('Settings tabs — Data export', () => {
+  it('sits right after Import data for someone who can import data, and is hidden from everyone else', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canImportData: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    const { unmount } = renderSettingsPage()
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.trim())
+    expect(tabs).toContain('Import data')
+    expect(tabs.indexOf('Data export')).toBe(tabs.indexOf('Import data') + 1)
+    unmount()
+
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: false, canImportData: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
+    renderSettingsPage()
+    expect(screen.queryByRole('tab', { name: 'Data export' })).toBeNull()
   })
 })

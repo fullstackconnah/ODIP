@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
+using Odip.Domain.Integrations;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
@@ -124,10 +125,23 @@ public class OdipDbContext : DbContext
     public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
+    /// <summary>The bell's inbox — see <see cref="InAppNotification"/>.</summary>
+    public DbSet<InAppNotification> InAppNotifications => Set<InAppNotification>();
 
     /// <summary>Onboarding import batches (Settings → Import data) and the records each created: see <see cref="Entities.ImportBatch"/>.</summary>
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<ImportBatchItem> ImportBatchItems => Set<ImportBatchItem>();
+
+    /// <summary>Employment Hero Payroll (Settings → Integrations): the connection, the Needs-attention items and the sync log. See Domain/Integrations.</summary>
+    public DbSet<EmploymentHeroConnection> EmploymentHeroConnections => Set<EmploymentHeroConnection>();
+    public DbSet<EmploymentHeroAttention> EmploymentHeroAttentions => Set<EmploymentHeroAttention>();
+    public DbSet<EmploymentHeroSyncLog> EmploymentHeroSyncLogs => Set<EmploymentHeroSyncLog>();
+
+    /// <summary>
+    /// Who the audit rows this context writes name when no person did the work (the Employment Hero sync sets "Employment Hero sync"). When set it wins
+    /// over the request's user, with no user id. A background context has no HttpContext, so this is the only way it can name an actor.
+    /// </summary>
+    public string? AuditActorName { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -748,6 +762,12 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.Username).IsUnique();
             entity.HasIndex(e => e.Email).IsUnique();
             entity.HasIndex(e => e.IsActive);
+            entity.Property(e => e.ExternalPayrollId).HasMaxLength(50);
+            // One ODIP user per payroll employee per organisation. Filtered: every unlinked (NULL) row is outside it, so the migration cannot fail on existing data.
+            entity.HasIndex(e => new { e.TenantId, e.ExternalPayrollId })
+                .IsUnique()
+                .HasDatabaseName(User.ExternalPayrollIdIndexName)
+                .HasFilter("\"ExternalPayrollId\" IS NOT NULL");
         });
 
         // ── TripClaim ─────────────────────────────────────────────
@@ -1326,6 +1346,17 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.OutboxId);
         });
 
+        // The bell (dashboard spec 2026-10-14). Title and LinkTo stay unbounded text: the row commits in the caller's own
+        // SaveChanges, so a length limit on a title that carries names could fail the leave request or incident it rides on.
+        modelBuilder.Entity<InAppNotification>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EntityType).HasMaxLength(100);
+            entity.HasIndex(e => new { e.RecipientUserId, e.CreatedAt }).IsDescending(false, true);   // the bell: own rows, newest first
+            // The badge's unread count, polled every minute: only unread rows, not the recipient's whole 90-day history.
+            entity.HasIndex(e => e.RecipientUserId).HasFilter("\"ReadAt\" IS NULL").HasDatabaseName("IX_InAppNotifications_Unread");
+        });
+
         // ── StaffAssignment override fields (PR 3 wires the gate; columns land now) ──
         modelBuilder.Entity<StaffAssignment>(entity =>
         {
@@ -1765,6 +1796,34 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.EntityId);
         });
 
+        // ── Employment Hero Payroll ────────────────────────────────
+        modelBuilder.Entity<EmploymentHeroConnection>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.BusinessId).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.BusinessName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.ConnectedByName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.LastSyncError).HasMaxLength(300);
+            // One connection per organisation.
+            entity.HasIndex(e => e.TenantId).IsUnique();
+        });
+        modelBuilder.Entity<EmploymentHeroAttention>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ExternalEmployeeId).HasMaxLength(50);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(e => new { e.TenantId, e.Key }).IsUnique();
+        });
+        modelBuilder.Entity<EmploymentHeroSyncLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.BusinessId).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.ErrorClass).HasMaxLength(50);
+            entity.HasIndex(e => new { e.TenantId, e.StartedAt });
+        });
+
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────
         // Applied to all root aggregate entities. SuperAdmin bypasses all filters.
 
@@ -1927,6 +1986,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<NotificationLog>()
             .HasIndex(e => e.TenantId);
 
+        modelBuilder.Entity<InAppNotification>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<InAppNotification>()
+            .HasIndex(e => e.TenantId);
+
         // ── Medication Management tenant query filters ────────────────────────────
         modelBuilder.Entity<ParticipantMedication>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
@@ -1995,6 +2059,13 @@ public class OdipDbContext : DbContext
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ImportBatch>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+
+        modelBuilder.Entity<EmploymentHeroConnection>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<EmploymentHeroAttention>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<EmploymentHeroSyncLog>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
     }
 

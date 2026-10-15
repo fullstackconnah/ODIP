@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
 import { useCreateBooking, useUpdateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, useDownloadClientOverviewPdf, PAYMENT_STATUS_ITEMS } from '@/api/hooks'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
@@ -8,7 +7,6 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { bookingBudgetNote, bookingBudgetNotice, mergeBookingBudgetNotices, type BookingBudgetNotice } from '@/lib/bookingBudget'
-import { TAP_ICON_SQUARE } from '@/components/tapArea'
 import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
 import { BOOKING_STATUSES, INSURANCE_STATUSES, type BookingStatus, type InsuranceStatus, type PaymentStatus, type SupportRatio, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
@@ -546,35 +544,41 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             key: 'actions',
             header: '',
             align: 'center',
-            render: (b: BookingListDto) => (
-              <div className="flex items-center justify-center gap-2">
-                {b.actionRequired && <AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />}
-                {canWrite && (
-                  <button onClick={() => openEditModal(b)} className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors`} title="Edit booking">
-                    <Pencil className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleDownloadClientOverview(b)}
-                  disabled={downloadingBookingId === b.id}
-                  className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors disabled:opacity-50`}
-                  title="Client Overview PDF"
-                >
-                  {downloadingBookingId === b.id
-                    ? <Loader2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)] animate-spin" />
-                    : <Download className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />}
-                </button>
-                <Link to={`/participants/${b.participantId}`} className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors`} title="View participant">
-                  <ExternalLink className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
-                </Link>
-                {canWrite && (
-                  <button onClick={() => setDeletingBooking(b)} className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-error-container)]/60 transition-colors`} title="Remove from trip">
-                    <Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)]" />
-                  </button>
-                )}
-              </div>
-            ),
+            render: (b: BookingListDto) => {
+              // Every row has the same four, so each name says whose booking it acts on.
+              const who = b.participantName || 'this participant'
+              return (
+                <div className="flex items-center justify-center gap-2">
+                  {b.actionRequired && <AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />}
+                  {canWrite && (
+                    <Button variant="ghost" size="sm" iconOnly onClick={() => openEditModal(b)} title="Edit booking" aria-label={`Edit booking: ${who}`}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    iconOnly
+                    onClick={() => handleDownloadClientOverview(b)}
+                    disabled={downloadingBookingId === b.id}
+                    title="Client Overview PDF"
+                    aria-label={`Client Overview PDF: ${who}`}
+                  >
+                    {downloadingBookingId === b.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Download className="w-3.5 h-3.5" />}
+                  </Button>
+                  <Button variant="ghost" size="sm" iconOnly to={`/participants/${b.participantId}`} title="View participant" aria-label={`View participant: ${who}`}>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </Button>
+                  {canWrite && (
+                    <Button variant="ghost-danger" size="sm" iconOnly onClick={() => setDeletingBooking(b)} title="Remove from trip" aria-label={`Remove from trip: ${who}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )
+            },
           },
         ]}
       />

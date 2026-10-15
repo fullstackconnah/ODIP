@@ -23,6 +23,7 @@ public enum NotificationEventType
     ServiceAgreementSent = 8,           // reserved — docs/specs/2026-09-08-service-agreements-and-budgets-design.md
     ServiceAgreementSigned = 9,         // reserved — docs/specs/2026-09-08-service-agreements-and-budgets-design.md
     IntegrationDegraded = 10,           // reserved — docs/specs/2026-09-08-integration-framework-design.md
+    ShiftUnassigned = 11,               // roster drag and drop (2026-10-14): someone taken off a Published shift
 }
 
 public enum NotificationChannelKind { Email = 0, Sms = 1 }
@@ -81,4 +82,24 @@ public class NotificationLog : ITenantEntity
     public string? ProviderMessageId { get; set; }
     public DateTime SentAt { get; set; } = DateTime.UtcNow;
     public string RecipientAddress { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// One bell item: "this happened, and it concerns you" (dashboard spec 2026-10-14, "The bell"). Written by
+/// <c>NotificationRaiser</c> beside the outbox row, in the caller's same SaveChanges, for every recipient whatever their
+/// email preference (preferences stay email-only). <see cref="Title"/> is plain text built on the server, never HTML.
+/// Read state is the recipient's own. Purged after 90 days by <c>NotificationDispatchBackgroundService</c>.
+/// </summary>
+public class InAppNotification : ITenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid RecipientUserId { get; set; }
+    public NotificationEventType EventType { get; set; }
+    public string EntityType { get; set; } = string.Empty;   // e.g. "LeaveRequest", "Shift"
+    public Guid EntityId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? LinkTo { get; set; }                       // an app route, or null when there is nowhere to go
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ReadAt { get; set; }
 }

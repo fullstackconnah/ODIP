@@ -47,6 +47,7 @@ public class DedupeTests
         await db.SaveChangesAsync();
 
         Assert.Equal(1, await db.NotificationOutbox.CountAsync());
+        Assert.Equal(1, await db.InAppNotifications.CountAsync()); // the bell shares the outbox dedupe: one event, one bell item
     }
 
     [Fact]
@@ -67,6 +68,44 @@ public class DedupeTests
 
         await raiser.RaiseAsync(NotificationEventType.ShiftAssigned, "Shift", entityId, new[] { recipient.Id }, new { }, CancellationToken.None);
         await db.SaveChangesAsync();
+
+        Assert.Equal(2, await db.NotificationOutbox.CountAsync());
+        Assert.Equal(2, await db.InAppNotifications.CountAsync());
+    }
+
+    [Fact]
+    public async Task RaiseAsync_AfterTheOppositeNoticeForTheSameShift_IsNotDeduped()
+    {
+        var db = CreateDb();
+        var recipient = SeedUser(db);
+        var raiser = new NotificationRaiser(db);
+        var shiftId = Guid.NewGuid();
+
+        // On, off and on again within five minutes (a coordinator fixing a slip): the worker's last notice must say "on".
+        foreach (var type in new[] { NotificationEventType.ShiftAssigned, NotificationEventType.ShiftUnassigned, NotificationEventType.ShiftAssigned })
+        {
+            await raiser.RaiseAsync(type, "Shift", shiftId, new[] { recipient.Id }, new { }, CancellationToken.None);
+            await db.SaveChangesAsync();
+        }
+
+        var kinds = await db.NotificationOutbox.OrderBy(o => o.CreatedAt).Select(o => o.EventType).ToListAsync();
+        Assert.Equal(new[] { NotificationEventType.ShiftAssigned, NotificationEventType.ShiftUnassigned, NotificationEventType.ShiftAssigned }, kinds);
+    }
+
+    [Fact]
+    public async Task RaiseAsync_TheSameNoticeTwiceAfterAnother_IsStillDeduped()
+    {
+        var db = CreateDb();
+        var recipient = SeedUser(db);
+        var raiser = new NotificationRaiser(db);
+        var shiftId = Guid.NewGuid();
+
+        // On, then off twice (a double-click on Unassign): the repeat of the newest kind is still dropped.
+        foreach (var type in new[] { NotificationEventType.ShiftAssigned, NotificationEventType.ShiftUnassigned, NotificationEventType.ShiftUnassigned })
+        {
+            await raiser.RaiseAsync(type, "Shift", shiftId, new[] { recipient.Id }, new { }, CancellationToken.None);
+            await db.SaveChangesAsync();
+        }
 
         Assert.Equal(2, await db.NotificationOutbox.CountAsync());
     }

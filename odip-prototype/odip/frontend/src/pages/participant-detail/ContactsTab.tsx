@@ -5,7 +5,7 @@ import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
@@ -17,6 +17,9 @@ import type { ParticipantContactRoleDto } from '@/api/types/contacts'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+
+// A row's actions repeat on every row, and one person can hold several roles, so their names carry both.
+const subject = (role: ParticipantContactRoleDto) => `${role.personFullName}, ${CONTACT_ROLE_TYPE_LABELS[role.roleType]}`
 
 /** The most relevant secondary line for a role row — different role types surface a different
  * "what matters most" field (research §3.1-3.14) rather than one fixed column always showing the
@@ -121,22 +124,14 @@ export default function ContactsTab({ participantId }: { participantId: string |
       header: <span className="sr-only">Actions</span>,
       align: 'right' as const,
       render: (role: ParticipantContactRoleDto) => (
-        <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            onClick={() => openEdit(role)}
-            className="text-xs font-medium text-[var(--color-primary)] hover:underline min-h-[44px] px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-          >
+        <RowActions>
+          <Button variant="ghost" size="sm" onClick={() => openEdit(role)} aria-label={`Edit: ${subject(role)}`}>
             Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeletingRole(role)}
-            className="text-xs font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] min-h-[44px] px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-          >
+          </Button>
+          <Button variant="ghost-danger" size="sm" onClick={() => setDeletingRole(role)} aria-label={`Remove: ${subject(role)}`}>
             Remove
-          </button>
-        </div>
+          </Button>
+        </RowActions>
       ),
     }] : []),
   ]

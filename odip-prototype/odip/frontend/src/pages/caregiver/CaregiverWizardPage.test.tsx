@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import type { CaregiverFormDto } from '@/api/types/caregiver'
+import { ACKNOWLEDGEMENT_OF_COUNTRY } from '@/lib/platformFacts'
 
 const { mockUsePublicCaregiverForm, mockSaveDraftMutateAsync, mockSubmitMutateAsync } = vi.hoisted(() => ({
   mockUsePublicCaregiverForm: vi.fn(),
@@ -59,6 +60,30 @@ describe('CaregiverWizardPage — invalid link', () => {
     expect(await screen.findByText(/this link is no longer valid/i)).toBeInTheDocument()
     expect(screen.queryByText(/expired/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/revoked/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('CaregiverWizardPage — landmarks and the platform footer', () => {
+  it('puts the form in one main and the footer beside it, with the acknowledgement and no Support link', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
+    const footer = screen.getByRole('contentinfo')
+    expect(footer.closest('main')).toBeNull()
+    expect(screen.getByRole('main').nextElementSibling).toBe(footer)
+    expect(within(footer).getByText(ACKNOWLEDGEMENT_OF_COUNTRY)).toBeInTheDocument()
+    expect(within(footer).getByRole('link', { name: 'Accessibility' })).toHaveAttribute('href', '/accessibility')
+    expect(within(footer).queryByRole('link', { name: /support/i })).toBeNull()
+    expect(screen.getAllByRole('navigation')).toHaveLength(1)
+  })
+
+  it('keeps the same frame on the invalid-link page', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: true, data: undefined })
+    renderCaregiverPage()
+    await screen.findByText(/this link is no longer valid/i)
+    expect(screen.getByRole('main').nextElementSibling).toBe(screen.getByRole('contentinfo'))
   })
 })
 

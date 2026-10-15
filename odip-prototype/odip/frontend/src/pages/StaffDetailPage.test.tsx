@@ -329,6 +329,7 @@ describe('StaffDetailPage — Completions tab', () => {
             varianceMinutesStart: 2, varianceMinutesEnd: 5, status: 'Completed', timeZoneId: 'Australia/Brisbane',
             isOutlierVariance: false, varianceReviewMinutes: 15, returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 0, startWasManual: false,
             timesAdjusted: false,
+            incidentCount: 0,
           },
         ],
       }),

@@ -24,7 +24,7 @@ shots.push({
     // mock-preview session is seeded (main.tsx), then load "/" as a signed-in user.
     await goto('/trips')
     await goto('/')
-    const band = page.getByRole('region', { name: 'Needs attention' })
+    const band = page.getByRole('region', { name: 'Alerts' })
     await band.waitFor()
     await page.getByText('Missing Accommodation').first().waitFor()
     return { locator: band, pad: 8 }

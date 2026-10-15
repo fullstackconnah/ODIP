@@ -10,7 +10,6 @@ import {
 } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { TAP_ICON_SQUARE } from '@/components/tapArea'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
@@ -327,14 +326,14 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
                   </span>
                 )}
                 {canWrite && (
-                  <button onClick={() => openEditStaffModal(s)} className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors`} title="Edit assignment">
-                    <Pencil className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
-                  </button>
+                  <Button variant="ghost" size="sm" iconOnly onClick={() => openEditStaffModal(s)} title="Edit assignment" aria-label={`Edit assignment: ${s.staffName || 'this staff member'}`}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
                 )}
                 {canWrite && (
-                  <button onClick={() => setDeletingStaff(s)} className={`${TAP_ICON_SQUARE} p-1 rounded hover:bg-[var(--color-error-container)]/60 transition-colors`} title="Remove from trip">
-                    <Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)]" />
-                  </button>
+                  <Button variant="ghost-danger" size="sm" iconOnly onClick={() => setDeletingStaff(s)} title="Remove from trip" aria-label={`Remove from trip: ${s.staffName || 'this staff member'}`}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
                 )}
               </div>
             ),

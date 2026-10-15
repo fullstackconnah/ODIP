@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useStaff, useSettings, useUpdateStaff } from '@/api/hooks'
+import { useStaff, useSettings, useUpdateStaff, useProviderSettings } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
 import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -76,6 +76,7 @@ function buildGroups(staff: StaffListDto[], warningDays: number): StaffGroup[] {
 
 export default function QualificationsPage() {
   const { canWrite, canAccessPage } = usePermissions()
+  const staffFromPayroll = useProviderSettings(canWrite).data?.employmentHeroConnected === true
   const { data: settings } = useSettings()
   const { data: allStaff = [], isLoading, isError, refetch } = useStaff({ isActive: 'true' })
   const updateStaff = useUpdateStaff()
@@ -159,7 +160,7 @@ export default function QualificationsPage() {
           icon={UserCog}
           title="No staff members yet"
           description="This page tracks expiry dates for staff certifications like First Aid, driver licences, and manual handling. Add a staff member to start tracking theirs."
-          action={canWrite ? { label: 'New staff member', to: '/staff/new' } : undefined}
+          action={canWrite && !staffFromPayroll ? { label: 'New staff member', to: '/staff/new' } : undefined}
         />}
       </div>
     )
@@ -266,28 +267,19 @@ export default function QualificationsPage() {
                         render: (q) => {
                           const isEditing = editingKey === q.key
                           return isEditing ? (
-                            <div className="flex items-center gap-3 justify-end">
-                              <button
-                                onClick={() => handleSave(q)}
-                                disabled={updateStaff.isPending}
-                                className="text-xs font-semibold text-[var(--color-primary)] hover:underline disabled:opacity-50"
-                              >
+                            <div className="flex items-center gap-1.5 pointer-coarse:gap-2 justify-end">
+                              <Button size="sm" onClick={() => handleSave(q)} disabled={updateStaff.isPending}>
                                 {updateStaff.isPending ? 'Saving...' : 'Save'}
-                              </button>
-                              <button
-                                onClick={() => { setEditingKey(null); setSaveError(null) }}
-                                className="text-xs text-[var(--color-muted-foreground)] hover:underline"
-                              >
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setEditingKey(null); setSaveError(null) }}>
                                 Cancel
-                              </button>
+                              </Button>
                             </div>
                           ) : canWrite ? (
-                            <button
-                              onClick={() => handleEdit(q)}
-                              className="text-xs font-medium text-[var(--color-primary)] hover:underline"
-                            >
+                            // Every row has one, so its name says whose credential it edits.
+                            <Button variant="ghost" size="sm" onClick={() => handleEdit(q)} aria-label={`Edit: ${q.qualification}, ${q.staffName}`}>
                               Edit
-                            </button>
+                            </Button>
                           ) : null
                         },
                       },

@@ -69,16 +69,21 @@ export function NoticesRegion({ notices, onDismiss, focusAfterDismiss, className
             title={notice.title}
             announce={false}
             actions={
-              <Button
-                variant="ghost"
-                size="sm"
-                iconOnly
-                data-dismiss-notice={notice.id}
-                onClick={() => dismiss(notice)}
-                aria-label={`Dismiss notice about ${notice.title}`}
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </Button>
+              <>
+                {notice.link && (
+                  <Button variant="secondary" size="sm" to={notice.link.to}>{notice.link.label}</Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  data-dismiss-notice={notice.id}
+                  onClick={() => dismiss(notice)}
+                  aria-label={`Dismiss notice about ${notice.title}`}
+                >
+                  <X className="w-4 h-4" aria-hidden="true" />
+                </Button>
+              </>
             }
           >
             <span className="break-words">{notice.message}</span>

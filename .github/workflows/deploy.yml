@@ -81,6 +81,20 @@ jobs:
           test -d "$STACK_DIR" || { echo "::error::$STACK_DIR not found — run the one-time server setup first"; exit 1; }
           test -f "$STACK_DIR/.env" || { echo "::error::$STACK_DIR/.env missing — secrets live on the server and are never committed"; exit 1; }
 
+      - name: Wait for free memory
+        # The deploy host also runs the test runner's jobs, and the image's test run needs headroom (frontend/Dockerfile).
+        run: |
+          set -uo pipefail
+          need_kb=$((4 * 1024 * 1024))
+          for i in $(seq 1 30); do
+            avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+            if [ $((i % 2)) -eq 1 ]; then echo "MemAvailable ${avail} kB (need ${need_kb} kB)"; fi
+            if [ "$avail" -ge "$need_kb" ]; then echo "Enough free memory."; exit 0; fi
+            sleep 30
+          done
+          echo "::error::Deploy host still has under 4 GiB available after 15 minutes; not building. Re-run the deploy when the test runner is quiet."
+          exit 1
+
       - name: Tag rollback images
         run: |
           set -euo pipefail
@@ -111,6 +125,8 @@ jobs:
       - name: Build images
         # This is the gate. If either image fails to compile the job stops here
         # and the currently running containers are left untouched.
+        env:
+          GIT_SHA: ${{ github.sha }} # the platform footer's build number (deploy/compose.yaml, frontend/Dockerfile)
         run: |
           set -euo pipefail
           cd "$STACK_DIR"
