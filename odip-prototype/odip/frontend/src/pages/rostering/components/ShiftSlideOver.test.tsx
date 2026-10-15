@@ -4,6 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
+import { lockedWords } from '../lib/rosterDrag'
 import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftDto, ShiftNoteDto } from '@/api/types'
 
 const {
@@ -256,6 +257,17 @@ describe('ShiftSlideOver status (PP-8)', () => {
     expect(call.data.status).toBe('Published')
   })
 
+  it('says a shift stays with its participant on an existing shift, and not on a new one', () => {
+    const hint = 'A shift stays with its participant. To roster another participant, add a new shift.'
+    const props = { onClose: noop, canWrite: true, participantOptions, staffOptions }
+    const { unmount } = render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ findings: [] }) }} {...props} />)
+    expect(screen.getByText(hint)).toBeInTheDocument()
+    unmount()
+
+    render(<ShiftSlideOver target={{ mode: 'create', participantId: 'participant-1' }} {...props} />)
+    expect(screen.queryByText(hint)).not.toBeInTheDocument()
+  })
+
   it('does not render a Status control in create mode', () => {
     render(
       <ShiftSlideOver
@@ -314,7 +326,7 @@ describe('ShiftSlideOver status — coordinator-settable statuses only', () => {
       )
 
       const statusControl = screen.getByLabelText('Status')
-      expect(statusControl).toHaveTextContent(workerStatus)
+      expect(statusControl).toHaveTextContent(lockedWords(workerStatus))
       expect(statusControl).toBeDisabled()
     },
   )
