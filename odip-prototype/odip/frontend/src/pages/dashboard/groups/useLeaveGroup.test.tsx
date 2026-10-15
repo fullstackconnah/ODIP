@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { renderGroup, announcement } from './groupHarness'
+import { renderGroup, announcement, facts, headers, subjects } from './groupHarness'
 import { overlapNotice, useLeaveGroup } from './useLeaveGroup'
 import type { RosterFindingDto } from '@/api/hooks'
 
@@ -38,11 +38,21 @@ describe('Leave group — what it reads', () => {
     expect(apiGetWithDefault).toHaveBeenCalledWith('/leave', [], { status: 'Pending' })
     expect(apiGetWithDefault).toHaveBeenCalledWith('/leave/unavailability', [], { status: 'Pending' })
     expect(client.getQueryCache().find({ queryKey: ['leave-requests', { status: 'Pending' }], exact: true })).toBeDefined()
-    expect(screen.getAllByRole('listitem').map((li) => li.querySelector('span')!.textContent)).toEqual(['Ana Ruiz', 'Sam Lee', 'Mei Zhang'])
-    expect(screen.getByText('Annual leave · 20–24 Oct 2026 · 5 days · “Family wedding”')).toBeInTheDocument()
-    expect(screen.getByText('Annual leave · 15 Oct 2026 · 1 day')).toBeInTheDocument()
-    expect(screen.getByText('Unavailable Tuesdays · 9am – 12pm · from 21 Oct')).toBeInTheDocument()
-    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(subjects()).toEqual(['Ana Ruiz', 'Sam Lee', 'Mei Zhang'])
+    expect(headers()).toEqual(['Staff', 'Type', 'Dates', 'Note', ''])
+    expect(facts('Sam Lee')).toEqual(['Annual leave', '20–24 Oct 2026, 5 days', '“Family wedding”'])
+    expect(facts('Ana Ruiz')).toEqual(['Annual leave', '15 Oct 2026, 1 day', '—'])
+    // The Leave page's word for a rule, and its notes (fetched, not drawn before).
+    expect(facts('Mei Zhang')).toEqual(['Regular unavailability', 'Tuesdays, 9am – 12pm, from 21 Oct', '—'])
+    expect(screen.getByRole('tab', { name: 'Leave (3)' })).toBeInTheDocument()
+  })
+
+  it('draws an unavailability rule’s notes in the Note column', async () => {
+    answer([], [rule({ notes: 'School pick-up' })])
+    renderGroup(() => useLeaveGroup(true, 'u-viewer'))
+
+    await screen.findByText('Mei Zhang')
+    expect(facts('Mei Zhang')[2]).toBe('“School pick-up”')
   })
 
   it('never shows clear while a list failed: it says so, with Try again', async () => {
@@ -58,7 +68,7 @@ describe('Leave group — your own request', () => {
     answer([leave(), leave({ id: 'l2', userId: 'u-ana', userFullName: 'Ana Ruiz', requestedByUserId: 'u-sam' })])
     renderGroup(() => useLeaveGroup(true, 'u-sam'))
 
-    const own = (await screen.findByText('Sam Lee')).closest('li')!
+    const own = (await screen.findByText('Sam Lee')).closest('tbody')!
     expect(within(own).getByText('Your request')).toBeInTheDocument()
     expect(within(own).queryAllByRole('button')).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Approve leave: Ana Ruiz, 20–24 Oct 2026' })).toBeInTheDocument()

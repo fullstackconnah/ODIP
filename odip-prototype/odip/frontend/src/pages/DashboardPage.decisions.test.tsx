@@ -10,11 +10,11 @@ vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (awai
 installDashboardDefaults()
 
 const NOUNS: Record<GroupKey, string> = {
-  completions: 'shift completions', leave: 'leave requests', incidents: 'open incidents', tasks: 'tasks due', compliance: 'staff credentials to update',
+  completions: 'shift completions', leave: 'leave requests', incidents: 'open incidents', compliance: 'staff credentials to update', tasks: 'tasks due',
 }
-const row = (id: string): QuickRow => ({ id, subject: `Person ${id}`, meta: [], flags: [], actions: [] })
+const row = (id: string): QuickRow => ({ id, subject: `Person ${id}`, facts: [], flags: [], actions: [] })
 const group = (key: GroupKey, o: Partial<GroupModel> = {}): GroupModel => ({
-  key, title: key, noun: NOUNS[key], phase: 'ready', refetch: vi.fn(), count: 0, rows: [], link: { to: `/${key}`, openLabel: `Open ${key}` }, ...o,
+  key, title: key, noun: NOUNS[key], subjectHeader: 'Staff', columns: [], phase: 'ready', refetch: vi.fn(), count: 0, rows: [], link: { to: `/${key}`, openLabel: `Open ${key}` }, ...o,
 })
 const h2s = () => screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
 const ALL_GATES = { completions: true, leave: true, incidents: true, tasks: true, compliance: true, needsOrganisation: false }
@@ -71,16 +71,16 @@ describe('DashboardPage — who decides what (SHAPE §3)', () => {
   })
 })
 
-describe('DashboardPage — the order of the page (SHAPE §3)', () => {
-  it('orders the page: the greeting, Needs your decision, Alerts, Upcoming trips', () => {
+describe('DashboardPage — the order of the page (SHAPE §2)', () => {
+  it('orders the page: the greeting, Alerts, Needs your decision (the worklist under them), Upcoming trips', () => {
     asRole('Admin')
     mockUseDecisionGroups.mockReturnValue([group('leave', { count: 1, rows: [row('a')] })])
     mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 1 }))
     renderPage()
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(h2s()).toEqual(['Needs your decision', 'Alerts', 'Upcoming trips'])
-    expect(screen.getByRole('heading', { level: 2, name: 'Alerts' })).toHaveAttribute('tabindex', '-1')
+    expect(h2s()).toEqual(['Alerts', 'Needs your decision', 'Upcoming trips'])
+    expect(screen.getByRole('heading', { level: 2, name: 'Needs your decision' })).toHaveAttribute('tabindex', '-1')
   })
 
   it('runs Upcoming trips the full width, as an h2 section after Alerts, and has no Overdue Tasks panel', () => {
@@ -118,7 +118,7 @@ describe('DashboardPage — the summary no longer holds the page hostage (SHAPE 
     expect(screen.queryByRole('heading', { name: 'Upcoming trips' })).not.toBeInTheDocument()
   })
 
-  it('shows the spinner in the Alerts slot, under its heading, while the groups render above it', () => {
+  it('shows the spinner in the Alerts slot, under its heading, while the groups render under it', () => {
     asRole('Admin')
     mockUseDashboard.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })
     mockUseDecisionGroups.mockReturnValue([group('leave', { count: 1, rows: [row('a')] })])
@@ -126,12 +126,12 @@ describe('DashboardPage — the summary no longer holds the page hostage (SHAPE 
 
     const spinner = container.querySelector('.animate-spin')!
     expect(screen.getByRole('heading', { level: 2, name: 'Alerts' }).compareDocumentPosition(spinner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByText('Person a')).toBeInTheDocument()
+    expect(spinner.compareDocumentPosition(screen.getByText('Person a')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
 describe('DashboardPage — groups at zero (SHAPE §6)', () => {
-  it('names the groups at zero in one All clear row at the foot of the card, and never a waiting or failed one', () => {
+  it('names the groups at zero in one All clear row at the foot of the section, and never a waiting or failed one', () => {
     asRole('Admin')
     mockUseDecisionGroups.mockReturnValue([
       group('completions', { count: 1, rows: [row('a')] }), group('leave'), group('incidents', { phase: 'loading' }), group('tasks', { phase: 'error' }), group('compliance'),
@@ -155,8 +155,9 @@ describe('DashboardPage — groups at zero (SHAPE §6)', () => {
 
     const decisions = screen.getByRole('heading', { level: 2, name: 'Needs your decision' }).parentElement!
     expect(within(decisions).getByText(/^All clear/).closest('p')).toHaveTextContent(
-      'All clear on shift completions, leave requests, open incidents, tasks due and staff credentials to update')
-    expect(within(decisions).queryAllByRole('listitem')).toHaveLength(0)
+      'All clear on shift completions, leave requests, open incidents, staff credentials to update and tasks due')
+    expect(within(decisions).queryAllByRole('row')).toHaveLength(0)
+    expect(within(decisions).queryByRole('tablist')).not.toBeInTheDocument()
     expect(tileLabels()).toEqual(['Missing Staff'])
   })
 })
@@ -170,7 +171,7 @@ describe('DashboardPage — the whole page clear (SHAPE §6)', () => {
     renderPage()
 
     expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
-    expect(screen.getByText('Checked and at zero: shift completions, leave requests, open incidents, tasks due, staff credentials to update, critical participant alerts, trips missing accommodation, trips missing vehicles and trips missing staff.')).toBeInTheDocument()
+    expect(screen.getByText('Checked and at zero: shift completions, leave requests, open incidents, staff credentials to update, tasks due, critical participant alerts, trips missing accommodation, trips missing vehicles and trips missing staff.')).toBeInTheDocument()
     expect(h2s()).toEqual(['Upcoming trips'])
   })
 
@@ -203,7 +204,7 @@ describe('DashboardPage — the whole page clear (SHAPE §6)', () => {
 describe('DashboardPage — focus when a group leaves the page (SHAPE §10)', () => {
   const tap = (id: string) => ({ kind: 'tap' as const, label: 'Approve', busyLabel: 'Approving…', name: `Approve: Person ${id}`, failText: "Couldn't approve. Try again.", run: async () => ({ announce: `Approved Person ${id}.` }) })
 
-  it("moves focus to the next group's link when a group's last row leaves", async () => {
+  it("moves focus to the newly opened tab when a tab's last row leaves", async () => {
     asRole('Admin')
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingStaff: 1 }))
     mockUseDecisionGroups.mockReturnValue([
@@ -216,10 +217,10 @@ describe('DashboardPage — focus when a group leaves the page (SHAPE §10)', ()
 
     fireEvent.click(button)
 
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Open leave' })))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'leave (1)' })))
   })
 
-  it('moves focus to the Alerts heading when the last group leaves the page', async () => {
+  it('moves focus to the Needs your decision heading when the last tab with anything empties', async () => {
     asRole('Admin')
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingStaff: 1 }))
     mockUseDecisionGroups.mockReturnValue([group('completions', { count: 1, rows: [{ ...row('a'), actions: [tap('a')] }] })])
@@ -229,7 +230,7 @@ describe('DashboardPage — focus when a group leaves the page (SHAPE §10)', ()
 
     fireEvent.click(button)
 
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Alerts' })))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Needs your decision' })))
     expect(document.querySelector('.sr-only[role="status"]')).toHaveTextContent('Approved Person a.')
   })
 

@@ -3,6 +3,7 @@ import { formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 import type { Tone } from '@/lib/tone'
 import { formatWithTimeZone } from '@/lib/utils'
+import { formatVarianceMinutes } from '@/pages/rostering/lib/roster'
 import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
 
 /** A queue row's review flags, in SHAPE's order (the first two are drawn). */
@@ -33,7 +34,11 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
     return {
       id: item.shiftId,
       subject: item.staffName,
-      meta: [item.participantName, day, `${time(item.actualStart)} – ${item.actualEnd ? time(item.actualEnd) : '…'}`],
+      facts: [
+        item.participantName,
+        `${day}, ${time(item.actualStart)} – ${item.actualEnd ? time(item.actualEnd) : '…'}`,
+        `${formatVarianceMinutes(item.varianceMinutesStart)} / ${formatVarianceMinutes(item.varianceMinutesEnd)}`,
+      ],
       flags: completionFlags(item),
       actions: [
         { kind: 'form', label: 'Return', name: `Return shift: ${shift}`, form: {
@@ -59,8 +64,10 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
 
   return {
     key: 'completions',
-    title: 'Shift completions',
+    title: 'Completions',
     noun: 'shift completions',
+    subjectHeader: 'Staff',
+    columns: [{ header: 'Participant', long: true }, { header: 'Shift' }, { header: 'Variance' }],
     phase: groupPhase(queue),
     refetch: () => { void queue.refetch() },
     count: queue.data?.totalCount ?? 0,

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { renderGroup, announcement } from './groupHarness'
+import { renderGroup, announcement, facts, headers, rowOf, subjects } from './groupHarness'
 import { useTasksGroup } from './useTasksGroup'
 
 vi.mock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: true }))
@@ -23,7 +23,6 @@ const answer = (overdue: Array<{ id: unknown }>, week: Array<{ id: unknown }> = 
     return Promise.resolve(params?.status === 'Overdue' ? overdue : week)
   })
 const render = (mayCloseBudgetReview = true) => renderGroup(() => useTasksGroup(true, { today: TODAY, mayCloseBudgetReview }))
-const subjects = () => screen.getAllByRole('listitem').map((li) => li.querySelector('span')!.textContent)
 
 beforeEach(() => {
   apiGet.mockReset()
@@ -47,14 +46,14 @@ describe('Tasks due group — what it lists', () => {
     expect(apiGet).toHaveBeenCalledWith('/tasks', { status: 'Overdue' })
     expect(apiGet).toHaveBeenCalledWith('/tasks', { dueToday: 'true' })
     expect(subjects()).toEqual(['Overdue older', 'Overdue newer', 'Due today urgent', 'Due today medium'])
-    expect(screen.getByText('4')).toBeInTheDocument()
-    const overdueRow = screen.getByText('Overdue older').closest('li')!
-    expect(within(overdueRow).getByText('Overdue')).toBeInTheDocument()
-    // The date first, so a narrow row cuts the context, never the date (finish re-score 1); the trip only from lg.
-    expect(within(overdueRow).getByText('due 8 Oct · Insurance confirmation · Urgent')).toBeInTheDocument()
-    expect(within(overdueRow).getByText('· Beach Trip')).toHaveClass('hidden', 'lg:inline')
-    expect(within(screen.getByText('Due today medium').closest('li')!).getByText('Due today')).toBeInTheDocument()
-    expect(within(screen.getByText('Due today medium').closest('li')!).getByText('Insurance confirmation')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Tasks (4)' })).toBeInTheDocument()
+    expect(within(rowOf('Overdue older')).getByText('Overdue')).toBeInTheDocument()
+    expect(headers()).toEqual(['Task', 'Type', 'Due', 'Priority', 'Trip', ''])
+    expect(facts('Overdue older')).toEqual(['Insurance confirmation', '8 Oct', 'Urgent', 'Beach Trip'])
+    // Every task names its priority (a column with gaps reads as missing data); the trip is on a card only from lg.
+    expect(facts('Due today medium')).toEqual(['Insurance confirmation', '14 Oct', 'Medium', 'Beach Trip'])
+    expect(within(rowOf('Due today medium')).getByText('Due today')).toBeInTheDocument()
+    expect(within(rowOf('Due today medium')).getByText('Beach Trip').closest('td')).toHaveClass('max-lg:hidden')
   })
 })
 
@@ -114,9 +113,9 @@ describe('Tasks due group — the review of an emergency over budget', () => {
 
     expect(await screen.findByRole('link', { name: 'Open task: Review the emergency booking for Grace' })).toHaveAttribute('href', '/tasks/t9/edit')
     expect(screen.queryByRole('button', { name: /^Done/ })).not.toBeInTheDocument()
-    // A neutral flag, never the end of a meta a narrow row cuts.
-    expect(screen.getByText('An admin signs this off').closest('p')).toBeNull()
-    expect(screen.getByText('due 10 Oct · Budget emergency review · Urgent')).toBeInTheDocument()
+    // A neutral flag, never a fact a narrow table cuts.
+    expect(screen.getByText('An admin signs this off').closest('td')).toBe(screen.getByText('Review the emergency booking for Grace').closest('td'))
+    expect(facts('Review the emergency booking for Grace')).toEqual(['Budget emergency review', '10 Oct', 'Urgent', '—'])
   })
 })
 

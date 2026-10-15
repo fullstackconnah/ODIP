@@ -9,9 +9,8 @@ import { useTasksGroup } from './groups/useTasksGroup'
 import { useComplianceGroup } from './groups/useComplianceGroup'
 
 /**
- * The viewer's decision groups, in SHAPE §5's fixed order, so a position always means the same group. Every group hook runs on every render (the rules
- * of hooks); its gate decides whether its requests are made and whether it is listed. PR C slots Unfilled shifts after Incidents, and Agreements to
- * approve after Tasks due.
+ * The viewer's decision groups, in the tab order (the owner's: Completions, Leave, Incidents, Credentials, Tasks), so a position always means the same group. Every group hook runs on every render (the rules
+ * of hooks); its gate decides whether its requests are made and whether it is listed. PR C adds Unfilled shifts and Agreements to approve as tabs.
  */
 export function useDecisionGroups(gates: DecisionGates, ctx: {
   viewerId: string | null
@@ -27,7 +26,7 @@ export function useDecisionGroups(gates: DecisionGates, ctx: {
   // The same right as closing a budget review: Admin or SuperAdmin.
   const compliance = useComplianceGroup(gates.compliance, { staff: ctx.staff, today: ctx.today, warningDays: ctx.warningDays, mayEditAdmins: ctx.mayCloseBudgetReview })
   const ordered: Array<[boolean, GroupModel]> = [
-    [gates.completions, completions], [gates.leave, leave], [gates.incidents, incidents], [gates.tasks, tasks], [gates.compliance, compliance],
+    [gates.completions, completions], [gates.leave, leave], [gates.incidents, incidents], [gates.compliance, compliance], [gates.tasks, tasks],
   ]
   return ordered.filter(([shown]) => shown).map(([, group]) => group)
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { screen, within } from '@testing-library/react'
-import { renderGroup } from './groupHarness'
+import { facts, headers, renderGroup, rowOf, subjects } from './groupHarness'
 import { useIncidentsGroup } from './useIncidentsGroup'
 
 vi.mock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: true }))
@@ -28,14 +28,15 @@ describe('Incidents group (links only)', () => {
     await screen.findByText('Incident q1')
     expect(apiGet).toHaveBeenCalledWith('/incidents', { isOverdueQsc: 'true', page: '1', pageSize: '5' })
     expect(apiGet).toHaveBeenCalledWith('/incidents', { needsAttention: 'true', page: '1', pageSize: '5' })
-    expect(screen.getAllByRole('listitem').map((li) => li.querySelector('span')!.textContent)).toEqual(['Incident q1', 'Incident a1', 'Incident a2'])
-    expect(screen.getByText('9')).toBeInTheDocument()
+    expect(subjects()).toEqual(['Incident q1', 'Incident a1', 'Incident a2'])
+    expect(screen.getByRole('tab', { name: 'Incidents (9)' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See all open incidents' })).toHaveAttribute('href', '/incidents')
-    const overdue = screen.getByText('Incident q1').closest('li')!
+    const overdue = rowOf('Incident q1')
     expect(within(overdue).getByText('QSC overdue')).toBeInTheDocument()
     expect(within(overdue).getByRole('link', { name: 'Open incident: Incident q1' })).toHaveAttribute('href', '/incidents/q1')
     expect(within(overdue).queryByRole('button')).not.toBeInTheDocument()
-    expect(within(overdue).getByText(/^Grace Palmer-Hughes · Injury · /)).toBeInTheDocument()
+    expect(headers()).toEqual(['Incident', 'Participant', 'Type', 'When', ''])
+    expect(facts('Incident q1')).toEqual(['Grace Palmer-Hughes', 'Injury', expect.stringMatching(/^14 Oct/)])
   })
 
   it('never shows clear while a list failed', async () => {
