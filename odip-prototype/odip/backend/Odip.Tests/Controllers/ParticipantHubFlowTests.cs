@@ -716,6 +716,11 @@ public class ParticipantHubFlowTests
         Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false) with { Email = "ada@example.test" }, CancellationToken.None));
 
         Assert.Equal("ada@example.test", (await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email);
+
+        // Cleared by the coordinator after the participant had one: the enquiry is cleared too (only a participant that never had an email leaves it alone).
+        Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false) with { Email = "" }, CancellationToken.None));
+
+        Assert.True(string.IsNullOrWhiteSpace((await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email));
     }
 
     /// <summary>Before every save that writes an enquiry, a booking lands on it first through another context: the wizard's one retry meets a conflict too.</summary>

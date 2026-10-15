@@ -492,6 +492,7 @@ public class ParticipantsController : ControllerBase
 
         // ── Write ──
         var previousSupportRatio = p.SupportRatio;
+        var previousEmail = p.Email;
         ApplyIntakeScope(p, dto);
         p.UpdatedAt = DateTime.UtcNow;
 
@@ -512,8 +513,8 @@ public class ParticipantsController : ControllerBase
         foreach (var inquiry in await _db.ParticipantInquiries.Where(i => i.ParticipantId == p.Id).ToListAsync(ct))
         {
             inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone;
-            // The enquiry's email is where the intake visit's invite goes, and a booking can store it on the enquiry alone: a participant with no email never blanks it.
-            if (!string.IsNullOrWhiteSpace(p.Email)) inquiry.Email = p.Email;
+            // The enquiry's email is where the intake visit's invite goes, and a booking can store it on the enquiry alone: a participant that never had one never blanks it, but one the coordinator just cleared does.
+            if (!string.IsNullOrWhiteSpace(p.Email) || !string.IsNullOrWhiteSpace(previousEmail)) inquiry.Email = p.Email;
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 
