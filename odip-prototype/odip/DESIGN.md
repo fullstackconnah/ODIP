@@ -622,6 +622,7 @@ as on the full page.
 - **An action that needs input** opens a small form under the row from a disclosure button: the house field, then Cancel and the submit. Checks mirror
   the server's (a return reason is required, 500 characters at most) and a refusal keeps the text.
 - **Who:** the server's gates. ReadOnly has no decisions. A SuperAdmin decides only inside an organisation; without one, one line asks for one.
+- **Page height at 390 (touch):** about 3.8 screens for 19 decision rows (measured 3.79). Below md, flags drop under a long subject and the meta wraps rather than hide a deciding fact (a due or expiry date), since touch has no `title`. SHAPE's 3.0 assumed 60 px phone rows, which its own geometry cannot give: two `sm` buttons with their 44 px floor and the text block's 12rem floor do not fit beside each other in a 390 row. The capture script holds the limit to that row count.
 
 ### Attention band
 
