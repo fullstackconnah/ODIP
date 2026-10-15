@@ -8,6 +8,8 @@ import type {
   CreateShiftDto,
   UpdateShiftDto,
   AssignShiftDto,
+  MoveStaffDto,
+  PublishWeekResultDto,
   CheckShiftDto,
   ShiftCheckResult,
   RosterFindingDto,
@@ -62,8 +64,9 @@ export function useCreateShift() {
     onSuccess: (_, data) => {
       refreshBudgetFigures(qc, [data.participantId])   // a new shift is booked ahead in its participant's budget
       qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write: the Tasks list must not be served stale
-      return qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
+    // onSettled, as assign, move and publish: a refused save (an empty-day move whose source changed, 409; findings, 422) refetches the board too.
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
 
@@ -75,8 +78,9 @@ export function useUpdateShift() {
     onSuccess: () => {
       refreshBudgetFigures(qc)   // its times, status or day changed what it costs, and where; the update names no participant, so every ledger held is refreshed
       qc.invalidateQueries({ queryKey: ['tasks'] })   // an emergency save raises the Admin's review task in the same write
-      return qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
+    // onSettled: a refused PUT (busy, locked or findings) refetches the board too, so the panel and the board show the server's truth.
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
 
@@ -97,7 +101,26 @@ export function useAssignShift() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: AssignShiftDto }) =>
       apiPost<ShiftDto>(`/rostering/shifts/${id}/assign`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    // onSettled: a refused drop (409, 422) refetches too, so the board shows the server's truth rather than the stale puck that caused it.
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/** Roster drag and drop: carries the person on one shift to another in one all-or-nothing request (move, swap, or replace the worker there). Who works a shift moves no money (the ledger counts Draft and Published alike), so only the board refreshes. */
+export function useMoveStaff() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: MoveStaffDto) => apiPost<ShiftDto>('/rostering/shifts/move-staff', data),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/** Publish week: every Draft shift of the week (all participants, unfilled ones too) becomes Published, and the server tells their workers. `weekStart` is the board's Monday, yyyy-MM-dd. */
+export function usePublishWeek() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (weekStart: string) => apiPost<PublishWeekResultDto>(`/rostering/weeks/${weekStart}/publish`),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
 
@@ -267,14 +290,6 @@ export function usePatterns(params?: Record<string, string>) {
   })
 }
 
-export function usePattern(id: string | undefined) {
-  return useQuery({
-    queryKey: ['roster-pattern', id],
-    queryFn: () => apiGet<ShiftPatternDto>(`/rostering/patterns/${id}`),
-    enabled: !!id,
-  })
-}
-
 export function useCreatePattern() {
   const qc = useQueryClient()
   return useMutation({
@@ -288,10 +303,7 @@ export function useUpdatePattern() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateShiftPatternDto }) =>
       apiPut<ShiftPatternDto>(`/rostering/patterns/${id}`, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['roster-patterns'] })
-      qc.invalidateQueries({ queryKey: ['roster-pattern', vars.id] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
   })
 }
 

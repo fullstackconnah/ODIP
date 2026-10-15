@@ -129,9 +129,9 @@ function sourceFiles(dir: string): string[] {
 const KNOWN_WARNING_COLOURED_TEXT: Record<string, number> = {
   'components/ItineraryTab.tsx': 1,
   'pages/ClaimDetailPage.tsx': 1,
-  'pages/SettingsPage.tsx': 1,
   'pages/participant-detail/SupportProfileTab.tsx': 1,
   'pages/rostering/components/ExceptionsDrawer.tsx': 1,
+  'pages/settings/SupportCatalogueSection.tsx': 1,
   'pages/trip-detail/BookingsTab.tsx': 2,
   'pages/trip-detail/StaffTab.tsx': 2,
 }
@@ -162,7 +162,7 @@ describe('statuses are tones, not raw hex', () => {
   })
 
   it('leaves no status class map with the warning pair as raw hex (#fef3c7 / #92400e are --color-warning-container / --color-on-warning-container)', () => {
-    for (const file of ['api/types/leave.ts', 'api/types/notifications.ts', 'lib/utils.ts', 'pages/billing/constants.ts']) {
+    for (const file of ['api/types/leave.ts', 'api/types/notifications.ts', 'lib/utils.ts']) {
       const source = readFileSync(join(SRC_DIR, file), 'utf-8')
       expect(source, file).not.toMatch(/#fef3c7|#92400e/i)
     }

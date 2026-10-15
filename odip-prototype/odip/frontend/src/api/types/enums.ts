@@ -61,6 +61,14 @@ export type VehicleAssignmentStatus = typeof VEHICLE_ASSIGNMENT_STATUSES[number]
 export const POSITIONS = ['SupportWorker', 'SeniorSupportWorker', 'Coordinator', 'TeamLeader', 'Other'] as const
 export type Position = typeof POSITIONS[number]
 
+export const POSITION_LABELS: Record<Position, string> = {
+  SupportWorker: 'Support worker',
+  SeniorSupportWorker: 'Senior support worker',
+  Coordinator: 'Coordinator',
+  TeamLeader: 'Team leader',
+  Other: 'Other',
+}
+
 // ── Availability Type ───────────────────────────────────
 export const AVAILABILITY_TYPES = ['Available', 'Unavailable', 'Leave', 'Training', 'Preferred', 'Tentative'] as const
 export type AvailabilityType = typeof AVAILABILITY_TYPES[number]
@@ -82,7 +90,7 @@ export const ACTIVITY_CATEGORIES = ['Leisure', 'Dining', 'Transport', 'Sightseei
 export type ActivityCategory = typeof ACTIVITY_CATEGORIES[number]
 
 // ── Task Type ───────────────────────────────────────────
-export const TASK_TYPES = ['AccommodationRequest', 'AccommodationConfirmation', 'VehicleRequest', 'VehicleConfirmation', 'ParticipantConfirmation', 'FamilyContact', 'InvoiceOop', 'StaffingAllocation', 'RiskReview', 'MedicationCheck', 'PreDeparture', 'PostTrip', 'InsuranceConfirmation', 'GenerateNdisClaims', 'LeaveCoverage', 'IncidentQscReport', 'MedicationWitness', 'FlaggedNoteFollowUp', 'BudgetEmergencyReview', 'Other'] as const
+export const TASK_TYPES = ['AccommodationRequest', 'AccommodationConfirmation', 'VehicleRequest', 'VehicleConfirmation', 'ParticipantConfirmation', 'FamilyContact', 'InvoiceOop', 'StaffingAllocation', 'RiskReview', 'MedicationCheck', 'PreDeparture', 'PostTrip', 'InsuranceConfirmation', 'GenerateNdisClaims', 'LeaveCoverage', 'IncidentQscReport', 'MedicationWitness', 'FlaggedNoteFollowUp', 'BudgetEmergencyReview', 'RestrictivePracticeRegisterAddition', 'Other'] as const
 export type TaskType = typeof TASK_TYPES[number]
 
 // ── Task Priority ───────────────────────────────────────

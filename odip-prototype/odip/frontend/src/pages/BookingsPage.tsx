@@ -3,16 +3,24 @@ import type { TruncatableList } from '@/api/hooks/pagedList'
 import { Link } from 'react-router-dom'
 import { DataTable } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
+import { SearchInput } from '@/components/SearchInput'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Dropdown } from '@/components/Dropdown'
+import { StatusBadge } from '@/components/StatusBadge'
+import { CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { getStatusColor } from '@/lib/utils'
+import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { getStatusColor, extractErrorMessage } from '@/lib/utils'
 import { CalendarCheck } from 'lucide-react'
 import { useState } from 'react'
-import type { BookingStatus } from '@/api/types/enums'
+import { BOOKING_STATUSES, type BookingStatus } from '@/api/types/enums'
+import { BOOKING_STATUS_LABELS, statusItems } from '@/lib/tone'
 import type { BookingListDto } from '@/api/types/bookings'
 import { plural } from '@/lib/format'
+import { usePermissions } from '@/lib/permissions'
 import { bookingBudgetNote, bookingBudgetNotice, type BookingBudgetNotice } from '@/lib/bookingBudget'
 
 // Statuses that end a participant's involvement in a trip — confirmed before applying, same
@@ -24,9 +32,32 @@ const CONFIRM_STATUSES: BookingStatus[] = ['Cancelled', 'NoLongerAttending']
 // boundary as plain query strings, not a shared type.
 const BOOKINGS_PAGE_SIZE = 50
 
+const BOOKING_STATUS_ITEMS = statusItems(BOOKING_STATUSES, BOOKING_STATUS_LABELS)
+
+const NEEDS: Array<[keyof BookingListDto, string]> = [
+  ['wheelchairRequired', 'Wheelchair'],
+  ['highSupportRequired', 'High support'],
+  ['nightSupportRequired', 'Night support'],
+]
+
+function Needs({ booking }: { booking: BookingListDto }) {
+  const needed = NEEDS.filter(([flag]) => booking[flag]).map(([, label]) => label)
+  if (needed.length === 0) return null
+  return (
+    <ul aria-label="Needs" className="inline-flex flex-wrap items-center gap-1">
+      {needed.map(label => <li key={label} className={CHIP_CLASS}>{label}</li>)}
+    </ul>
+  )
+}
+
 export default function BookingsPage() {
+  const { canWrite } = usePermissions()
   const [page, setPage] = useState(1)
-  const { data: bookings = [], isLoading, isError } = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE) })
+  const [search, setSearch] = useState('')
+  // Asked once typing pauses, not on every keystroke (each one sent a request and flashed the table to loading).
+  const term = useDebouncedValue(search.trim(), 300)
+  // The list is paged on the server, so the search is a server parameter (participant or trip name): a client filter would search one page.
+  const { data: bookings = [], isLoading, isError, refetch } = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE), ...(term ? { search: term } : {}) })
   // `bookings` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as IncidentsPage/RegisterTab.
@@ -35,17 +66,27 @@ export default function BookingsPage() {
   const [confirmTarget, setConfirmTarget] = useState<{ booking: BookingListDto; status: BookingStatus } | null>(null)
   // Budget phase 3: what confirming a booking does to the participant's budget, as the server says it. A warning only; the status change has already gone through.
   const [budgetNotice, setBudgetNotice] = useState<BookingBudgetNotice | null>(null)
+  // Only a later success on the same booking clears it, so another row's success never hides this refusal.
+  const [statusError, setStatusError] = useState<{ bookingId: string; participantName: string; message: string } | null>(null)
+  // A failed refetch over rows already on screen keeps them; only a list that never loaded is replaced.
+  const loadFailed = isError && bookings.length === 0
 
-  if (isError) return (
-    <div className="p-[var(--card-pad)] text-center text-[var(--color-destructive)]">Failed to load bookings. Please refresh the page.</div>
-  )
+  function patchStatus(booking: BookingListDto, status: BookingStatus, onSuccess?: (response: Parameters<typeof bookingBudgetNotice>[0]) => void) {
+    // Its own promise, not mutate() callbacks: TanStack keeps only the latest call's, so a second change would drop this answer.
+    patchBooking.mutateAsync({ id: booking.id, data: { bookingStatus: status } })
+      .then(
+        response => { setStatusError(e => (e?.bookingId === booking.id ? null : e)); onSuccess?.(response) },
+        err => setStatusError({ bookingId: booking.id, participantName: booking.participantName || 'this participant', message: extractErrorMessage(err, 'Please try again.') }),
+      )
+      .finally(() => setConfirmTarget(null))
+  }
 
   function handleStatusChange(booking: BookingListDto, status: BookingStatus) {
     setBudgetNotice(null)
     if (CONFIRM_STATUSES.includes(status)) {
       setConfirmTarget({ booking, status })
     } else {
-      patchBooking.mutate({ id: booking.id, data: { bookingStatus: status } }, { onSuccess: response => setBudgetNotice(bookingBudgetNotice(response)) })
+      patchStatus(booking, status, response => setBudgetNotice(bookingBudgetNotice(response)))
     }
   }
 
@@ -53,12 +94,27 @@ export default function BookingsPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Bookings"
-        subtitle={plural(totalCount, 'booking')}
-      />
+        subtitle={loadFailed ? undefined : plural(totalCount, 'booking')}
+      >
+        <SearchInput value={search} onChange={value => { setSearch(value); setPage(1) }} placeholder="Search participants or trips..." />
+      </PageHeader>
 
       {budgetNotice && <BudgetWarnings warnings={budgetNotice.warnings} note={bookingBudgetNote(budgetNotice)} onDismiss={() => setBudgetNotice(null)} />}
 
-      {isLoading ? <div className="text-center py-12 text-[var(--color-muted-foreground)]">Loading...</div> : bookings.length === 0 ? (
+      {statusError && (
+        <Callout tone="error">
+          <strong>Couldn't update {statusError.participantName}'s booking.</strong> {statusError.message}
+        </Callout>
+      )}
+
+      {loadFailed ? <PageState kind="error" noun="booking list" onRetry={() => refetch()} /> : isLoading ? <PageState kind="loading" noun="bookings" /> : bookings.length === 0 && term ? (
+        <EmptyState
+          icon={CalendarCheck}
+          title="No results for your search"
+          description="Try a different search term, or clear your search to see all bookings."
+          action={{ label: 'Clear search', onClick: () => setSearch('') }}
+        />
+      ) : bookings.length === 0 ? (
         <EmptyState
           icon={CalendarCheck}
           title="No bookings yet"
@@ -69,12 +125,11 @@ export default function BookingsPage() {
         <DataTable
           data={bookings}
           keyField="id"
-          sortable
           columns={[
             {
               key: 'participantName',
               header: 'Participant',
-              sortable: true,
+              mobile: 'primary',
               render: (b: any) => (
                 <Link to={`/participants/${b.participantId}`} className="font-medium hover:text-[var(--color-primary)]">
                   {b.participantName || '\u2014'}
@@ -84,7 +139,7 @@ export default function BookingsPage() {
             {
               key: 'tripName',
               header: 'Trip',
-              sortable: true,
+              mobile: 'meta',
               render: (b: any) => (
                 <Link to={`/trips/${b.tripInstanceId}`} className="hover:text-[var(--color-primary)]">
                   {b.tripName || '\u2014'}
@@ -94,34 +149,23 @@ export default function BookingsPage() {
             {
               key: 'bookingStatus',
               header: 'Status',
-              sortable: true,
-              render: (b) => (
+              mobile: 'status',
+              // ReadOnly is refused PATCH /bookings/:id, so it reads the status instead of a pill it cannot change.
+              render: (b) => canWrite ? (
                 <Dropdown
                   variant="pill"
                   value={b.bookingStatus}
                   onChange={val => handleStatusChange(b, val as BookingStatus)}
                   colorClass={getStatusColor(b.bookingStatus)}
-                  items={[
-                    { value: 'Enquiry', label: 'Enquiry' },
-                    { value: 'Held', label: 'Held' },
-                    { value: 'Confirmed', label: 'Confirmed' },
-                    { value: 'Waitlist', label: 'Waitlist' },
-                    { value: 'Cancelled', label: 'Cancelled' },
-                    { value: 'Completed', label: 'Completed' },
-                    { value: 'NoLongerAttending', label: 'No Longer Attending' },
-                  ]}
+                  items={BOOKING_STATUS_ITEMS}
                 />
+              ) : (
+                <StatusBadge status={b.bookingStatus} label={BOOKING_STATUS_ITEMS.find(i => i.value === b.bookingStatus)?.label} />
               ),
             },
-            { key: 'bookingDate', header: 'Booking Date', type: 'date', sortable: true },
-            {
-              key: 'wheelchairRequired',
-              header: 'WC',
-              type: 'boolean',
-              align: 'center' as const,
-            },
-            { key: 'highSupportRequired', header: 'High', type: 'boolean', align: 'center' as const },
-            { key: 'nightSupportRequired', header: 'Night', type: 'boolean', align: 'center' as const },
+            { key: 'bookingDate', header: 'Booking Date', type: 'date', mobile: 'meta' },
+            // Only what the booking needs, as chips: three tick columns read the same for a booking with none as with all three on a phone.
+            { key: 'needs', header: 'Needs', mobile: 'meta', className: 'max-md:basis-full', render: (b: BookingListDto) => <Needs booking={b} /> },
           ]}
           pagination={{
             page,
@@ -136,11 +180,7 @@ export default function BookingsPage() {
         open={confirmTarget !== null}
         onCancel={() => setConfirmTarget(null)}
         onConfirm={() => {
-          if (!confirmTarget) return
-          patchBooking.mutate(
-            { id: confirmTarget.booking.id, data: { bookingStatus: confirmTarget.status } },
-            { onSuccess: () => setConfirmTarget(null) }
-          )
+          if (confirmTarget) patchStatus(confirmTarget.booking, confirmTarget.status)
         }}
         variant="danger"
         loading={patchBooking.isPending}

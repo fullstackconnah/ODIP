@@ -54,16 +54,28 @@ public class BookingsController : ControllerBase
         }
     }
 
+    // ParticipantBookings has no tenant filter of its own: a booking belongs to the organisation of its trip. Reads start here so a count cannot include another organisation's rows.
+    private IQueryable<ParticipantBooking> TenantBookings() => _db.ParticipantBookings.Where(b => _db.TripInstances.Any(t => t.Id == b.TripInstanceId));
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<BookingListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] BookingStatus? status,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default,
+        [FromQuery] string? search = null)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
-        var query = _db.ParticipantBookings.Include(b => b.Participant).Include(b => b.TripInstance).AsQueryable();
+        var query = TenantBookings().Include(b => b.Participant).Include(b => b.TripInstance).AsQueryable();
         if (tripId.HasValue) query = query.Where(b => b.TripInstanceId == tripId.Value);
         if (status.HasValue) query = query.Where(b => b.BookingStatus == status.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // Lower-cased both sides: Contains alone is a case-sensitive LIKE on Npgsql (as ParticipantQueries.SearchByName).
+            var term = search.Trim().ToLower();
+            query = query.Where(b => (b.Participant.FirstName + " " + b.Participant.LastName).ToLower().Contains(term)
+                || (b.Participant.PreferredName != null && b.Participant.PreferredName.ToLower().Contains(term))
+                || b.TripInstance.TripName.ToLower().Contains(term));
+        }
 
         // Correctness fix: BookingDate is a plain date (not a timestamp) and many bookings are
         // created on the same day, so ties on the sole OrderByDescending key are common. With no
@@ -91,7 +103,7 @@ public class BookingsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> GetById(Guid id, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.Include(x => x.Participant).Include(x => x.TripInstance)
+        var b = await TenantBookings().Include(x => x.Participant).Include(x => x.TripInstance)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
 
@@ -116,35 +128,6 @@ public class BookingsController : ControllerBase
         }));
     }
 
-    private static readonly Dictionary<SupportRatio, decimal> RatioToStaff = new()
-    {
-        { SupportRatio.OneToOne, 1m }, { SupportRatio.OneToTwo, 0.5m }, { SupportRatio.OneToThree, 1m / 3m },
-        { SupportRatio.OneToFour, 0.25m }, { SupportRatio.OneToFive, 0.2m }, { SupportRatio.TwoToOne, 2m },
-        { SupportRatio.SharedSupport, 0.25m }, { SupportRatio.Other, 1m }
-    };
-
-    private async Task RecalculateStaffRequired(Guid tripId, CancellationToken ct)
-    {
-        var trip = await _db.TripInstances
-            .Include(t => t.Bookings)
-            .ThenInclude(b => b.Participant)
-            .FirstOrDefaultAsync(t => t.Id == tripId, ct);
-        if (trip == null) return;
-
-        var activeBookings = trip.Bookings.Where(b =>
-            b.BookingStatus != BookingStatus.Cancelled && b.BookingStatus != BookingStatus.NoLongerAttending);
-
-        var rawTotal = activeBookings.Sum(b =>
-        {
-            var ratio = b.SupportRatioOverride ?? b.Participant?.SupportRatio ?? SupportRatio.OneToOne;
-            return RatioToStaff.TryGetValue(ratio, out var v) ? v : 1m;
-        });
-
-        trip.CalculatedStaffRequired = rawTotal;
-        trip.MinStaffRequired = (int)Math.Ceiling(rawTotal);
-        trip.UpdatedAt = DateTime.UtcNow;
-    }
-
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Create([FromBody] CreateBookingDto dto, CancellationToken ct)
@@ -156,6 +139,8 @@ public class BookingsController : ControllerBase
         var readiness = await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct);
         if (!readiness.Allowed)
             return BadRequest(ApiResponse<BookingDetailDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct))
+            return NotFound(ApiResponse<BookingDetailDto>.Fail("Trip not found"));
 
         // The provider's calendar date, not the UTC date (which is yesterday for the first 10-11 hours of a Sydney day).
         var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
@@ -198,7 +183,7 @@ public class BookingsController : ControllerBase
 
         try
         {
-            await RecalculateStaffRequired(dto.TripInstanceId, ct);
+            await TripStaffing.RecalculateAsync(_db, dto.TripInstanceId, ct);
             await _db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
@@ -233,7 +218,7 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Update(Guid id, [FromBody] UpdateBookingDto dto, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.Include(x => x.Participant).Include(x => x.TripInstance)
+        var b = await TenantBookings().Include(x => x.Participant).Include(x => x.TripInstance)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
 
@@ -266,7 +251,7 @@ public class BookingsController : ControllerBase
             }
         }
 
-        await RecalculateStaffRequired(b.TripInstanceId, ct);
+        await TripStaffing.RecalculateAsync(_db, b.TripInstanceId, ct);
         await _db.SaveChangesAsync(ct);
         // Only the write that CONFIRMS a booking says what it does to the budget: one edited while it stays confirmed has said it already.
         var updatedWarnings = wasConfirmed ? null : await BudgetWarningsAsync(b, ct);
@@ -294,7 +279,7 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Patch(Guid id, [FromBody] PatchBookingDto dto, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.Include(x => x.Participant).Include(x => x.TripInstance).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var b = await TenantBookings().Include(x => x.Participant).Include(x => x.TripInstance).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
 
         var wasConfirmed = b.BookingStatus == BookingStatus.Confirmed;
@@ -303,7 +288,7 @@ public class BookingsController : ControllerBase
         if (dto.PaymentStatus.HasValue) b.PaymentStatus = dto.PaymentStatus.Value;
 
         b.UpdatedAt = DateTime.UtcNow;
-        await RecalculateStaffRequired(b.TripInstanceId, ct);
+        await TripStaffing.RecalculateAsync(_db, b.TripInstanceId, ct);
         await _db.SaveChangesAsync(ct);
 
         // The booking as it now stands (the response used to be a bare true, which the page typed as a booking anyway), so the write that confirms it can carry its budget warning.
@@ -328,12 +313,13 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.FirstOrDefaultAsync(x => x.Id == id, ct);
+        // ParticipantBooking has no organisation column or query filter: a booking is the caller's only if its trip is.
+        var b = await _db.ParticipantBookings.FirstOrDefaultAsync(x => x.Id == id && _db.TripInstances.Any(t => t.Id == x.TripInstanceId), ct);
         if (b == null) return NotFound(ApiResponse<bool>.Fail("Booking not found"));
         var tripId = b.TripInstanceId;
         _db.ParticipantBookings.Remove(b);
         await _db.SaveChangesAsync(ct);           // save deletion first
-        await RecalculateStaffRequired(tripId, ct); // now recalculate from clean DB
+        await TripStaffing.RecalculateAsync(_db, tripId, ct); // now recalculate from clean DB
         await _db.SaveChangesAsync(ct);           // save updated staff count
         return Ok(ApiResponse<bool>.Ok(true, "Booking deleted"));
     }
@@ -467,6 +453,18 @@ public class AccommodationController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Accommodation archived"));
     }
 
+    /// <summary>Restore an archived property. Only IsActive changes: the list row the Archived view holds lacks most columns, so a PUT of it wiped them (TRIPS-2).</summary>
+    [HttpPost("{id:guid}/restore")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<bool>>> Restore(Guid id, CancellationToken ct)
+    {
+        var a = await _db.AccommodationProperties.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (a == null) return NotFound(ApiResponse<bool>.Fail("Accommodation not found"));
+        a.IsActive = true; a.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Accommodation restored"));
+    }
+
     [HttpGet("{id:guid}/reservations")]
     public async Task<ActionResult<ApiResponse<List<ReservationDto>>>> GetReservations(Guid id, CancellationToken ct)
     {
@@ -492,6 +490,10 @@ public class ReservationsController : ControllerBase
     private readonly OdipDbContext _db;
     public ReservationsController(OdipDbContext db) => _db = db;
 
+    /// <summary>AccommodationReservation has no organisation column or query filter: a reservation is the caller's only if its trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<AccommodationReservation> TenantReservations() =>
+        _db.AccommodationReservations.Where(r => _db.TripInstances.Any(t => t.Id == r.TripInstanceId));
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ReservationDto>>>> GetAll(CancellationToken ct)
     {
@@ -514,6 +516,9 @@ public class ReservationsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ReservationDto>>> Create([FromBody] CreateReservationDto dto, CancellationToken ct)
     {
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct)) return NotFound(ApiResponse<ReservationDto>.Fail("Trip not found"));
+        if (!await _db.AccommodationProperties.AnyAsync(p => p.Id == dto.AccommodationPropertyId, ct)) return BadRequest(ApiResponse<ReservationDto>.Fail("Accommodation not found."));
+
         var reservation = new AccommodationReservation
         {
             Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId,
@@ -551,8 +556,9 @@ public class ReservationsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ReservationDto>>> Update(Guid id, [FromBody] UpdateReservationDto dto, CancellationToken ct)
     {
-        var r = await _db.AccommodationReservations.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var r = await TenantReservations().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (r == null) return NotFound(ApiResponse<ReservationDto>.Fail("Reservation not found"));
+        if (!await _db.AccommodationProperties.AnyAsync(p => p.Id == dto.AccommodationPropertyId, ct)) return BadRequest(ApiResponse<ReservationDto>.Fail("Accommodation not found."));
 
         r.AccommodationPropertyId = dto.AccommodationPropertyId; r.RequestSentDate = dto.RequestSentDate;
         r.CheckInDate = dto.CheckInDate; r.CheckOutDate = dto.CheckOutDate;
@@ -588,7 +594,7 @@ public class ReservationsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var r = await _db.AccommodationReservations.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var r = await TenantReservations().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (r == null) return NotFound(ApiResponse<bool>.Fail("Reservation not found"));
         _db.AccommodationReservations.Remove(r);
         await _db.SaveChangesAsync(ct);
