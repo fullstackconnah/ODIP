@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   breaksSignature, buildChecklist, clockLabel,
-  FINISH_STEPS, breaksLabel, foldDueList, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
+  FINISH_STEPS, breaksLabel, dueDoseKeys, foldDueList, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
 } from './checklist'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
 
@@ -188,9 +188,25 @@ describe("Now's due list: what stays open (finish review fix 1)", () => {
     const { groups } = buildChecklist({ medicationsDue: [done, overdue, half, one], shiftRoutines: [noon, one2, any] })
 
     expect(groups.map(g => g.label)).toEqual(['Overdue', '8:00 am', '12:00 pm', '12:30 pm', '1:00 pm', 'Anytime'])
-    const plan = foldDueList(groups)
+    const plan = foldDueList(groups, new Set())
     expect(plan.shown.map(x => [x.group.label, x.fold])).toEqual([['Overdue', null], ['8:00 am', '8:00 am · 1 done'], ['12:00 pm', null]])
     expect(plan.later?.summary).toBe('Later · 2 doses, 2 routines')
     expect(plan.later?.groups.map(g => g.label)).toEqual(['12:30 pm', '1:00 pm', 'Anytime'])
+  })
+
+  it('never folds a dose the strip counts as due (finish rescore R1: Ferrous at 12:30 hid in Later while the strip said 2)', () => {
+    const overdue = dose({ medicationId: 'lev', scheduledAt: '2026-10-05T09:00:00', scheduledTime: '09:00', state: 'Overdue', isOverdue: true })
+    const noon = routine({ id: 'r1', occursAt: '2026-10-05T12:00:00' })
+    const ferrous = dose({ medicationId: 'fe', scheduledAt: '2026-10-05T12:30:00', scheduledTime: '12:30' })
+    const evening = dose({ medicationId: 'ev', scheduledAt: '2026-10-05T18:00:00', scheduledTime: '18:00' })
+    const blockers = [overdue, ferrous].map(d => ({ code: 'DOSE_OUTCOME_MISSING', message: '', medicationId: d.medicationId, medicationName: null, scheduledAt: d.scheduledAt }))
+    const counted = dueDoseKeys(blockers as never)
+    const { groups } = buildChecklist({ medicationsDue: [overdue, ferrous, evening], shiftRoutines: [noon] })
+
+    const plan = foldDueList(groups, counted)
+    expect(plan.shown.map(x => [x.group.label, x.fold])).toEqual([['Overdue', null], ['12:00 pm', null], ['12:30 pm', null]])
+    expect(plan.later?.groups.map(g => g.label)).toEqual(['6:00 pm'])
+    const open = plan.shown.flatMap(x => x.group.items).filter(i => counted.has(i.key))
+    expect(open).toHaveLength(counted.size)
   })
 })

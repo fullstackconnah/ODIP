@@ -28,6 +28,7 @@ import { HandoverSection, GlanceSection, ContactsSection, MustKnowLine } from '.
 import { DuringSection } from './shift/DuringSection'
 import { FinishFlow } from './shift/FinishFlow'
 import { DoseSheet, type DoseTarget } from './shift/DoseSheet'
+import { dueDoseKeys } from './shift/checklist'
 import { loadEndDraft } from './shift/endDraft'
 import { requestGeolocation } from './shift/geolocation'
 import { useOnline } from './shift/useOnline'
@@ -52,7 +53,7 @@ function GlanceStrip({ shift }: { shift: PortalShiftDetailDto }) {
       { label: 'Due this shift', value: shift.medicationsDue.length + shift.shiftRoutines.length },
     ]
   } else if (shift.status === 'InProgress' && c) {
-    const due = shift.finishBlockers.filter(b => b.code === 'DOSE_OUTCOME_MISSING').length
+    const due = dueDoseKeys(shift.finishBlockers).size
     // The Attention Tint Rule: the tint and its chip only when something is overdue, time-bound compliance.
     const overdue = shift.medicationsDue.some(d => d.state === 'Overdue' && !d.outcome)
     segments = [

@@ -6,7 +6,7 @@ import { TAP_AREA } from '@/components/tapArea'
 import { TONE } from '@/lib/tone'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
-import { buildChecklist, clockLabel, foldDueList, type ChecklistGroup, type ChecklistItem } from './checklist'
+import { buildChecklist, clockLabel, dueDoseKeys, foldDueList, type ChecklistGroup, type ChecklistItem } from './checklist'
 import { Chip, Fold, Section } from './ui'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalDoseSlotDto, PortalPrnDto, PortalShiftDetailDto, PortalShiftRoutineDto } from '@/api/types'
@@ -155,7 +155,7 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
   onRecord: (t: DoseTarget) => void
 }) {
   const { groups } = buildChecklist(shift)
-  const plan = foldDueList(groups)
+  const plan = foldDueList(groups, dueDoseKeys(shift.finishBlockers))
   const canRecord = canAct && online && shift.canRecordDoses
   const tz = shift.timeZoneId
 

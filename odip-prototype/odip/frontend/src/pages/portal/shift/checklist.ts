@@ -62,6 +62,10 @@ export function buildChecklist(shift: { medicationsDue: PortalDoseSlotDto[]; shi
   return { groups }
 }
 
+/** The doses the Due now strip counts: the server's DOSE_OUTCOME_MISSING blockers, as checklist item keys. The strip and the fold both read this. */
+export const dueDoseKeys = (blockers: { code: string; medicationId: string | null; scheduledAt: string | null }[]): Set<string> =>
+  new Set(blockers.filter(b => b.code === 'DOSE_OUTCOME_MISSING').map(b => `dose-${b.medicationId}-${b.scheduledAt}`))
+
 const settled = (i: ChecklistItem) => (i.kind === 'dose' ? !!i.slot.outcome : i.routine.isChecked)
 
 const countWords = (items: ChecklistItem[]) => {
@@ -71,10 +75,10 @@ const countWords = (items: ChecklistItem[]) => {
 }
 
 /**
- * Now's due list (finish review fix 1). Overdue and the next open time stay open; a time whose every item is settled folds to
+ * Now's due list (finish review fix 1). Overdue, the next open time and any time holding a dose the Due now strip counts stay open; a time whose every item is settled folds to
  * "8:00 am · 3 done"; every time after the next one folds, together, into one line: "Later · 2 doses, 2 routines".
  */
-export function foldDueList(groups: ChecklistGroup[]): {
+export function foldDueList(groups: ChecklistGroup[], counted: ReadonlySet<string>): {
   shown: { group: ChecklistGroup; fold: string | null }[]
   later: { summary: string; groups: ChecklistGroup[] } | null
 } {
@@ -84,7 +88,7 @@ export function foldDueList(groups: ChecklistGroup[]): {
   for (const g of groups) {
     if (g.tone === 'warning') shown.push({ group: g, fold: null })
     else if (g.items.every(settled)) shown.push({ group: g, fold: `${g.label} · ${g.items.length} done` })
-    else if (!nextShown) { nextShown = true; shown.push({ group: g, fold: null }) }
+    else if (!nextShown || g.items.some(i => counted.has(i.key))) { nextShown = true; shown.push({ group: g, fold: null }) }
     else later.push(g)
   }
   return { shown, later: later.length ? { summary: `Later · ${countWords(later.flatMap(g => g.items))}`, groups: later } : null }
