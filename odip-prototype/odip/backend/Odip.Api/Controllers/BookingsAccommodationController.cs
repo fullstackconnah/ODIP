@@ -54,6 +54,9 @@ public class BookingsController : ControllerBase
         }
     }
 
+    // ParticipantBookings has no tenant filter of its own: a booking belongs to the organisation of its trip. Reads start here so a count cannot include another organisation's rows.
+    private IQueryable<ParticipantBooking> TenantBookings() => _db.ParticipantBookings.Where(b => _db.TripInstances.Any(t => t.Id == b.TripInstanceId));
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<BookingListDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] BookingStatus? status,
@@ -62,7 +65,7 @@ public class BookingsController : ControllerBase
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
-        var query = _db.ParticipantBookings.Include(b => b.Participant).Include(b => b.TripInstance).AsQueryable();
+        var query = TenantBookings().Include(b => b.Participant).Include(b => b.TripInstance).AsQueryable();
         if (tripId.HasValue) query = query.Where(b => b.TripInstanceId == tripId.Value);
         if (status.HasValue) query = query.Where(b => b.BookingStatus == status.Value);
         if (!string.IsNullOrWhiteSpace(search))
@@ -100,7 +103,7 @@ public class BookingsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> GetById(Guid id, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.Include(x => x.Participant).Include(x => x.TripInstance)
+        var b = await TenantBookings().Include(x => x.Participant).Include(x => x.TripInstance)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
 
@@ -215,7 +218,7 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Update(Guid id, [FromBody] UpdateBookingDto dto, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.Include(x => x.Participant).Include(x => x.TripInstance)
+        var b = await TenantBookings().Include(x => x.Participant).Include(x => x.TripInstance)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
 
@@ -276,7 +279,7 @@ public class BookingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<BookingDetailDto>>> Patch(Guid id, [FromBody] PatchBookingDto dto, CancellationToken ct)
     {
-        var b = await _db.ParticipantBookings.Include(x => x.Participant).Include(x => x.TripInstance).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var b = await TenantBookings().Include(x => x.Participant).Include(x => x.TripInstance).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (b == null) return NotFound(ApiResponse<BookingDetailDto>.Fail("Booking not found"));
 
         var wasConfirmed = b.BookingStatus == BookingStatus.Confirmed;
