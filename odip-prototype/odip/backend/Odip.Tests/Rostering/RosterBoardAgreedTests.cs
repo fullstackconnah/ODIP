@@ -122,6 +122,22 @@ public class RosterBoardAgreedTests
     }
 
     [Theory]
+    [InlineData("null")]       // the JSON literal null
+    [InlineData("  ")]         // whitespace
+    [InlineData("{not json")]  // unreadable: the approval service reads all of these as no stored answer
+    public async Task PendingAgreements_LeaveOutAStoredAnswerApprovalCannotRead(string pricingJson)
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using (var db = TestDb.Create(dbName))
+        {
+            Revision(db, TenantA, Person(db, TenantA).Id, 1).PricingJson = pricingJson;
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Empty((await BoardAsync(dbName, TenantA)).PendingAgreements!);
+    }
+
+    [Theory]
     [InlineData(2026, 8, 19, false)]   // ended yesterday on the provider's calendar
     [InlineData(2026, 8, 20, true)]    // ends today: still waits
     public async Task PendingAgreements_EndOnTheProvidersCalendar(int year, int month, int day, bool waits)

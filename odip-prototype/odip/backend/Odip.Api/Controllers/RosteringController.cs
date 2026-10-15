@@ -1674,10 +1674,11 @@ public class RosteringController : ControllerBase
             .Where(d => d.AgreementEndDate >= today && d.Blocks.Any() && d.PricingJson != null
                 && !_db.ServiceAgreementDrafts.Any(newer => newer.ParticipantId == d.ParticipantId && newer.TenantId == d.TenantId && newer.Version > d.Version)
                 && !_db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id && a.TenantId == d.TenantId))
-            .Join(_db.Participants.AsNoTracking().Where(p => p.IsActive || p.IsDraft), d => d.ParticipantId, p => p.Id, (d, p) => new { d.Id, d.Version, d.TenantId, Participant = p })
+            .Join(_db.Participants.AsNoTracking().Where(p => p.IsActive || p.IsDraft), d => d.ParticipantId, p => p.Id, (d, p) => new { d.Id, d.Version, d.TenantId, d.PricingJson, Participant = p })
             .Where(x => x.Participant.TenantId == x.TenantId)
             .ToListAsync(ct);
         return waiting
+            .Where(x => DraftJson.ReadQuote(x.PricingJson) is not null)   // the approval service's own HandTyped test: a stored answer it can read
             .OrderBy(x => x.Participant.LastName).ThenBy(x => x.Participant.FirstName)
             .Select(x => new PendingAgreementDto
             {
