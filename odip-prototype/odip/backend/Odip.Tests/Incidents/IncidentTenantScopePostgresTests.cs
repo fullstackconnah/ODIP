@@ -197,4 +197,50 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
         await using var db = PostgresFixture.NewContext(_pg.ConnectionString, noTenant.Object);
         Assert.False(await db.IncidentReports.AnyAsync(i => i.Id == leftNull, Ct));
     }
+
+    [SkippableFact]
+    public async Task TheStartupHeal_GivesANullTenantIncidentItsReportersOrganisation_Once_AndTouchesNothingElse_OverNpgsql()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (a, tenantA) = await _pg.NewTenantContextAsync();
+        await using var _a = a;
+        var (b, tenantB) = await _pg.NewTenantContextAsync();
+        await using var _b = b;
+        var inA = await PlantAsync(a, tenantA);
+        var inB = await PlantAsync(b, tenantB);
+        var (nullA, nullB, taggedOther) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await using var admin = PostgresFixture.NewContext(_pg.ConnectionString);
+        IncidentReport Row(Guid id, Guid reporter, Guid? tenant) => new() { Id = id, TenantId = tenant, ReportedByUserId = reporter, Title = "Row", Description = "What happened.", IsActive = true };
+        // Two rows a rolled-back image filed with no tenant, and one already tagged with a tenant other than its reporter's.
+        admin.IncidentReports.AddRange(Row(nullA, inA.Incident.ReportedByUserId, null), Row(nullB, inB.Incident.ReportedByUserId, null), Row(taggedOther, inA.Incident.ReportedByUserId, tenantB));
+        await admin.SaveChangesAsync(Ct);
+
+        Task<Dictionary<Guid, Guid>> UsersAsync() => admin.Users.IgnoreQueryFilters().AsNoTracking().ToDictionaryAsync(u => u.Id, u => u.TenantId, Ct);
+        Task<Dictionary<Guid, Guid?>> IncidentsAsync() => admin.IncidentReports.IgnoreQueryFilters().AsNoTracking().ToDictionaryAsync(i => i.Id, i => i.TenantId, Ct);
+        var usersBefore = await UsersAsync();
+
+        // At least the two planted rows: earlier tests in this shared database leave NULL-tenant rows of their own, which it heals too.
+        Assert.True(await admin.Database.ExecuteSqlRawAsync(IncidentTenantHeal.Sql) >= 2);
+        var healed = await IncidentsAsync();
+        Assert.Equal(tenantA, healed[nullA]);
+        Assert.Equal(tenantB, healed[nullB]);
+        Assert.Equal(tenantB, healed[taggedOther]);
+        Assert.Equal(tenantA, healed[inA.Incident.Id]);
+        Assert.Equal(tenantB, healed[inB.Incident.Id]);
+
+        // A second run changes nothing.
+        Assert.Equal(0, await admin.Database.ExecuteSqlRawAsync(IncidentTenantHeal.Sql));
+        Assert.Equal(healed, await IncidentsAsync());
+        Assert.Equal(usersBefore, await UsersAsync());
+    }
+
+    [SkippableFact]
+    public async Task AnIncidentCannotHaveAReporterWhoDoesNotExist_SoTheHealAlwaysFindsATenant_OverNpgsql()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        await using var admin = PostgresFixture.NewContext(_pg.ConnectionString);
+        // The reporter FK is required and Users.TenantId is not nullable, so a NULL row can never be left without a tenant to heal to.
+        admin.IncidentReports.Add(new IncidentReport { Id = Guid.NewGuid(), ReportedByUserId = Guid.NewGuid(), Title = "Orphan", Description = "What happened.", IsActive = true });
+        await Assert.ThrowsAsync<DbUpdateException>(() => admin.SaveChangesAsync(Ct));
+    }
 }
