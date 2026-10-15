@@ -9,7 +9,7 @@ import { TextField } from '@/components/TextField'
 import { ROW_ACTIONS_CARD, TAP_FLOOR } from '@/components/tapArea'
 import { formatRatio } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
-import { SHOWN_ROWS, isPresent, rowKey, shownCount, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
+import { SHOWN_ROWS, isPresent, rowKey, shownCount, trackMinimums, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 
 // A busy control is aria-disabled, not disabled: a disabled button drops focus in some browsers, and a refused tap must leave focus where it was (SHAPE §4).
@@ -126,10 +126,12 @@ const FACT_FLOOR_REM = 6
 
 /**
  * Sets the table's --subject-min: the subject column's full width (text and flags), less whatever the table lacks once every free-text fact is at its
- * floor (or at its own width, when that is less), and each free-text fact's --fact-min-<column> to that floor. CSS grid shares spare width equally between growing tracks, so without this a title is cut while a
- * trip beside it stays whole. Re-measured whenever the table or a subject changes size (a tab shown, fonts loaded, the window resized).
+ * floor (or at its own width, when that is less), and each free-text fact's --fact-min-<track> to that floor (the arithmetic: trackMinimums). CSS grid
+ * shares spare width equally between growing tracks, so without this a title is cut while a trip beside it stays whole. Re-measured when the table or a
+ * subject changes size (a tab shown, fonts loaded, the window resized), and when the columns or the shown rows change. Its keys are strings, so a
+ * render that changes neither does not re-subscribe: `freeText` has one character per fact column ('1' free text, '0' not); `rowIds` names the rows.
  */
-function useSubjectMin(tableRef: RefObject<HTMLTableElement | null>, columns: FactColumn[], rowCount: number) {
+function useSubjectMin(tableRef: RefObject<HTMLTableElement | null>, freeText: string, rowIds: string) {
   useLayoutEffect(() => {
     const table = tableRef.current
     if (!table || typeof ResizeObserver === 'undefined') return
@@ -149,22 +151,20 @@ function useSubjectMin(tableRef: RefObject<HTMLTableElement | null>, columns: Fa
         const gap = px(getComputedStyle(line).columnGap)
         return text.scrollWidth + flags.reduce((sum, flag) => sum + gap + flag.getBoundingClientRect().width, 0) + padX(tr.children[0])
       }))
-      // Each free-text fact's minimum is its floor, so the grid never shares the space after the subject's minimum back to the subject.
-      const set = (name: string, value: number) => { const v = `${Math.floor(Math.max(0, value))}px`; if (table.style.getPropertyValue(name) !== v) table.style.setProperty(name, v) }
-      let rest = tracks[tracks.length - 1]
-      columns.forEach((column, i) => {
-        if (!column.long) return void (rest += tracks[i + 1])
-        const factMin = Math.min(floor, Math.max(0, ...rows.map((tr) => natural(tr.children[i + 1]))))
-        set(`--fact-min-${i + 1}`, factMin)
-        rest += factMin
-      })
-      set('--subject-min', Math.min(subject, table.clientWidth - rest))
+      // Tracks 1..n are the facts (0 the subject; then the gap and the buttons). Free text gives way; everything else is fixed at its width.
+      const free = [...freeText].flatMap((flag, i) => (flag === '1' ? [i + 1] : []))
+      const fixed = tracks[tracks.length - 1] + [...freeText].reduce((sum, flag, i) => sum + (flag === '1' ? 0 : tracks[i + 1]), 0)
+      const facts = free.map((track) => Math.max(0, ...rows.map((tr) => natural(tr.children[track]))))
+      const mins = trackMinimums({ table: table.clientWidth, fixed, floor, subject, facts })
+      const set = (name: string, value: number) => { const v = `${Math.floor(value)}px`; if (table.style.getPropertyValue(name) !== v) table.style.setProperty(name, v) }
+      free.forEach((track, k) => set(`--fact-min-${track}`, mins.facts[k]))
+      set('--subject-min', mins.subject)
     }
     const observer = new ResizeObserver(fit)
     observer.observe(table)
     table.querySelectorAll(':scope > tbody > tr > td:first-child span[title]').forEach((span) => observer.observe(span))
     return () => observer.disconnect()
-  }, [tableRef, columns, rowCount])
+  }, [tableRef, freeText, rowIds])
 }
 
 // From xl every row group and row is a subgrid of the table's columns, so each row keeps its own box (height, hairline, hover tint).
@@ -292,7 +292,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   // Rows only once every request has answered: a group whose other list is still waiting or failed shows its one line, not half its rows (SHAPE §6).
   const ready = model.phase === 'ready'
   const shown = ready ? rows.slice(0, SHOWN_ROWS) : []
-  useSubjectMin(tableRef, model.columns, shown.length)
+  useSubjectMin(tableRef, model.columns.map((column) => (column.long ? '1' : '0')).join(''), shown.map((row) => row.id).join('\n'))
   const cut = ready && shownCount(model, state.gone) > shown.length
   const notices = state.notices.filter((notice) => notice.subject === model.key)
 

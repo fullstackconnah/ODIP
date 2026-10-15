@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { groupPhase, isPresent, rowKey, shownCount, visibleRows, type GroupModel, type QuickRow } from './quickGroupModel'
+import { groupPhase, isPresent, rowKey, shownCount, trackMinimums, visibleRows, type GroupModel, type QuickRow } from './quickGroupModel'
 
 const row = (id: string): QuickRow => ({ id, subject: `Person ${id}`, facts: [], flags: [], actions: [] })
 const model = (o: Partial<GroupModel> = {}): GroupModel => ({
@@ -61,5 +61,27 @@ describe('isPresent', () => {
 
     expect(shownCount(eight, gone)).toBe(3)
     expect(isPresent(eight, gone, 0)).toBe(true)
+  })
+})
+
+describe('trackMinimums (the xl table: a title wins over free-text facts)', () => {
+  // A 1006px table; 493px of buttons, dates and short facts; free-text facts at a 96px floor.
+  const base = { table: 1006, fixed: 493, floor: 96 }
+
+  it('keeps a title whole when it fits with the facts at their floor', () => {
+    expect(trackMinimums({ ...base, subject: 400, facts: [185] })).toEqual({ subject: 400, facts: [96] })
+  })
+
+  it('cuts a title only to what is left once every free-text fact is at its floor', () => {
+    expect(trackMinimums({ ...base, subject: 574, facts: [185] })).toEqual({ subject: 417, facts: [96] })
+  })
+
+  it('holds a fact shorter than its floor at its own width, and gives the difference to the title', () => {
+    expect(trackMinimums({ ...base, subject: 574, facts: [40] })).toEqual({ subject: 473, facts: [40] })
+  })
+
+  it('asks nothing of an empty table, and never a negative width', () => {
+    expect(trackMinimums({ ...base, subject: 0, facts: [] })).toEqual({ subject: 0, facts: [] })
+    expect(trackMinimums({ table: 300, fixed: 493, floor: 96, subject: 574, facts: [185] })).toEqual({ subject: 0, facts: [96] })
   })
 })

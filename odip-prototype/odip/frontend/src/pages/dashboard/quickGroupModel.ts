@@ -110,3 +110,14 @@ export function shownCount(model: GroupModel, gone: ReadonlySet<string>): number
 export function isPresent(model: GroupModel, gone: ReadonlySet<string>, notices: number): boolean {
   return model.phase !== 'ready' || visibleRows(model, gone).length > 0 || shownCount(model, gone) > 0 || notices > 0
 }
+
+/**
+ * The xl table's measured track minimums (QuickGroup's useSubjectMin), so a title wins over free-text facts: each free-text fact's minimum is its floor,
+ * or its own width when shorter; the title's is its full width, unless the table cannot fit that with every free-text fact at its floor. Widths in px;
+ * `fixed` is everything that never gives way (dates, short facts, the buttons).
+ */
+export function trackMinimums({ table, fixed, floor, subject, facts }: { table: number; fixed: number; floor: number; subject: number; facts: number[] }) {
+  const factMins = facts.map((width) => Math.min(floor, width))
+  const left = table - fixed - factMins.reduce((sum, width) => sum + width, 0)
+  return { subject: Math.max(0, Math.min(subject, left)), facts: factMins }
+}
