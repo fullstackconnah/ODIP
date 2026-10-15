@@ -6,13 +6,14 @@ import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 
 import { ParticipantsTable } from './ParticipantsPage'
 import { participantActivatedState } from './profile/participantActivated'
 
-const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockStatusMutate, mockRestoreMutate, mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
+const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockStatusMutate, mockRestoreMutate, mockUseParticipantAlertsAggregate, mockUseAgreementsEnding } = vi.hoisted(() => ({
   mockUseParticipants: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
   mockStatusMutate: vi.fn(),
   mockRestoreMutate: vi.fn(),
   mockUseParticipantAlertsAggregate: vi.fn(),
+  mockUseAgreementsEnding: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -22,6 +23,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateParticipantStatus: () => ({ mutate: mockStatusMutate, isPending: false }),
   useRestoreParticipant: () => ({ mutate: mockRestoreMutate, isPending: false }),
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
+  useAgreementsEnding: mockUseAgreementsEnding,
 }))
 
 /** An axios-shaped failure: the API's envelope sits on `response.data`, where `extractErrorMessage` reads it. */
@@ -61,6 +63,7 @@ beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
   mockUseParticipants.mockReturnValue({ data: [], isLoading: false })
   mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+  mockUseAgreementsEnding.mockReturnValue({ data: [{ participantId: 'p-9', participantName: 'Ben Ng', draftId: 'd-9', version: 1, agreementEndDate: '2026-10-30', daysLeft: 20, renewalVersion: null, status: 'Agreement ends in 20 days' }], isLoading: false, isError: false, refetch: vi.fn() })
 })
 
 afterEach(() => {
@@ -213,7 +216,7 @@ describe('ParticipantsPage — alerts badge column', () => {
 })
 
 describe('ParticipantsPage — operational register stage boundary', () => {
-  it('offers only the Active and Archived views: a draft is an Enquiries or an Onboarding row, never a register row', async () => {
+  it('offers the Active, Archived and Agreements ending views, never Drafts: a draft is an Enquiries or an Onboarding row, never a register row', async () => {
     // L2-04 added a Drafts view here because a draft saved from the Intake wizard had no onboarding row and so belonged to no tab. Drafts now
     // live on the Enquiries tab (intake open) and the Onboarding tab (intake complete), so the register has two views and never asks for drafts.
     const user = userEvent.setup()
@@ -221,7 +224,7 @@ describe('ParticipantsPage — operational register stage boundary', () => {
     renderPage()
 
     const views = screen.getByRole('radiogroup', { name: /participant list view/i })
-    expect(within(views).getAllByRole('radio').map(radio => radio.getAttribute('aria-label') ?? radio.textContent)).toEqual(['Active', 'Archived'])
+    expect(within(views).getAllByRole('radio').map(radio => radio.getAttribute('aria-label') ?? radio.textContent)).toEqual(['Active', 'Archived', 'Agreements ending'])
     expect(screen.queryByRole('radio', { name: 'Drafts' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('radio', { name: 'Archived' }))
@@ -246,6 +249,23 @@ describe('ParticipantsPage — operational register stage boundary', () => {
 
     expect(screen.getByText('Legacy visible participant')).toBeInTheDocument()
     expect(screen.queryByText('Incomplete onboarding participant')).not.toBeInTheDocument()
+  })
+
+  it('shows the agreements ending to the roles that manage participants, and only the two views to the rest', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    const { unmount } = renderPage()
+
+    await user.click(screen.getByRole('radio', { name: 'Agreements ending' }))
+
+    expect(screen.getByText('Ben Ng')).toBeInTheDocument()
+    expect(screen.getByText('Agreement ends in 20 days')).toBeInTheDocument()
+    expect(screen.queryByText('Jamie Smith')).not.toBeInTheDocument()
+    unmount()
+
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    renderPage()
+    expect(screen.queryByRole('radio', { name: 'Agreements ending' })).not.toBeInTheDocument()
   })
 })
 

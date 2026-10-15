@@ -58,7 +58,7 @@ public class ExportTablesTests
         Assert.Empty(exported.Intersect(leftOut));
         Assert.Empty(exported.Concat(leftOut).Except(model));
         Assert.Equal(exported.Count, exported.Distinct().Count());
-        Assert.Equal((69, 8), (exported.Count, leftOut.Count)); // adding the Employment Hero secret store to LeftOut makes this (69, 9)
+        Assert.Equal((71, 9), (exported.Count, leftOut.Count));
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public class ExportTablesTests
     [Fact]
     public void A_table_of_secrets_or_credentials_is_never_exported()
     {
-        // Employment Hero PR 1 adds an encrypted per-tenant integration secret store: it belongs in ExportTables.LeftOut, never in All.
+        // Employment Hero's connection holds an encrypted API key: it is in ExportTables.LeftOut, never in All (and this catches any later one by name).
         var looksSecret = new Regex("secret|credential|token|password|apikey", RegexOptions.IgnoreCase);
         Assert.Empty(ExportTables.All.Where(t => looksSecret.IsMatch(t.EntityType.Name)).Select(t => t.EntityType.Name));
     }

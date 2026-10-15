@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Odip.Application.Serialization;
 using Odip.Domain.Entities;
 using Odip.Domain.Funding;
+using Odip.Domain.Integrations;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
@@ -38,10 +39,9 @@ public static class ExportTables
 {
     public const string DocumentsFolder = "documents/";
 
-    // When Employment Hero's encrypted integration secret store lands, it goes here with: "Connection details for other systems, such as
-    // payroll. They are kept encrypted and never exported." (ExportTablesTests' (69, 8) pin moves with it.)
     public static readonly IReadOnlyDictionary<Type, string> LeftOut = new Dictionary<Type, string>
     {
+        [typeof(EmploymentHeroConnection)] = "Integration credentials (encrypted API key) and connection settings: never exported.",
         [typeof(AuditLog)] = "The change history (audit log). It has no organisation column, so it can't yet be separated safely from other organisations' history.",
         [typeof(NotificationOutbox)] = "Queued notification messages and their contents.",
         [typeof(InAppNotification)] = "Bell notices for each person. They are short-lived and purged after 90 days, like the queued notification messages.",
@@ -246,5 +246,12 @@ public static class ExportTables
         Own<ImportBatch>("import-batches.csv", "Imports of participants and staff, and their undos."),
         Via("import-batch-items.csv", "The records each import created.",
             (db, t) => { var batches = db.ImportBatches.Where(b => b.TenantId == t); return db.ImportBatchItems.Where(i => batches.Any(b => b.Id == i.BatchId)); }),
+
+        // Employment Hero (the connection itself, with its encrypted key, is in LeftOut)
+        Own<EmploymentHeroAttention>("employment-hero-attention.csv", "Staff the Employment Hero sync needs an Admin to look at, and why.") with
+        {
+            Omit = new Dictionary<string, string> { [nameof(EmploymentHeroAttention.Key)] = "ODIP's own label for the item (its kind and the person's id, both already in the file)" },
+        },
+        Own<EmploymentHeroSyncLog>("employment-hero-sync-log.csv", "Each Employment Hero sync of the last 90 days: when, which business, what changed, and any error."),
     ];
 }

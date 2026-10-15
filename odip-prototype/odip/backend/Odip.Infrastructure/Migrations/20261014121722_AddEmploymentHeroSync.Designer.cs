@@ -13,8 +13,8 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261014145955_AddIntakeBooking")]
-    partial class AddIntakeBooking
+    [Migration("20261014121722_AddEmploymentHeroSync")]
+    partial class AddEmploymentHeroSync
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2343,45 +2343,6 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<Guid?>("IntakeBookedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("IntakeConfirmedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int?>("IntakeDurationMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("IntakeIcsSequence")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer");
-
-                    b.Property<string>("IntakeInviteError")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime?>("IntakeInviteSentAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("IntakeLocation")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("IntakeNotes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid?>("IntakeStaffUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("IntakeStartsAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("IntakeUid")
-                        .IsConcurrencyToken()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -2411,15 +2372,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IntakeBookedByUserId");
-
-                    b.HasIndex("IntakeStaffUserId");
-
                     b.HasIndex("ParticipantId");
 
                     b.HasIndex("TenantId", "CreatedAt");
-
-                    b.HasIndex("TenantId", "IntakeStartsAt");
 
                     b.HasIndex("TenantId", "ParticipantId");
 
@@ -4319,6 +4274,10 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ExternalPayrollId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateOnly?>("FirstAidExpiryDate")
                         .HasColumnType("date");
 
@@ -4405,6 +4364,11 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("Username")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "ExternalPayrollId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Users_TenantId_ExternalPayrollId")
+                        .HasFilter("\"ExternalPayrollId\" IS NOT NULL");
 
                     b.ToTable("Users");
                 });
@@ -4713,6 +4677,153 @@ namespace Odip.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("FundingPools");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Integrations.EmploymentHeroAttention", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("DismissedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ExternalEmployeeId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("EmploymentHeroAttentions");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Integrations.EmploymentHeroConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("ApiKeyCiphertext")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("ApiKeyNonce")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("BusinessId")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("BusinessName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("ConnectedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("ConnectedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConnectedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("LastSyncAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("LastSyncError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("EmploymentHeroConnections");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Integrations.EmploymentHeroSyncLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Archived")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BusinessId")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Created")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorClass")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("FinishedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Linked")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NeedsAttention")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "StartedAt");
+
+                    b.ToTable("EmploymentHeroSyncLogs");
                 });
 
             modelBuilder.Entity("Odip.Domain.Notifications.InAppNotification", b =>
@@ -6075,16 +6186,6 @@ namespace Odip.Infrastructure.Migrations
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantInquiry", b =>
                 {
-                    b.HasOne("Odip.Domain.Entities.User", "IntakeBookedByUser")
-                        .WithMany()
-                        .HasForeignKey("IntakeBookedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Odip.Domain.Entities.User", "IntakeStaffUser")
-                        .WithMany()
-                        .HasForeignKey("IntakeStaffUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
                         .WithMany()
                         .HasForeignKey("ParticipantId")
@@ -6095,10 +6196,6 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("IntakeBookedByUser");
-
-                    b.Navigation("IntakeStaffUser");
 
                     b.Navigation("Participant");
 

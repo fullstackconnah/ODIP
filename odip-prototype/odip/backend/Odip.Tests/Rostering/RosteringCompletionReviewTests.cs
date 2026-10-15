@@ -501,6 +501,44 @@ public class RosteringCompletionReviewTests
         Assert.Equal(incidentDateTime, incident.IncidentDateTime);
     }
 
+    private static void SeedIncident(OdipDbContext db, Guid reporterId, Guid? shiftId, bool isActive)
+    {
+        db.IncidentReports.Add(new IncidentReport
+        {
+            Id = Guid.NewGuid(), ShiftId = shiftId, ReportedByUserId = reporterId,
+            Title = "Fall during transfer", Description = "Details.", IncidentDateTime = new DateTime(2026, 9, 8, 10, 0, 0, DateTimeKind.Utc),
+            Severity = IncidentSeverity.High, Status = IncidentStatus.Submitted, IsActive = isActive,
+        });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task GetCompletions_CountsTheShiftsActiveIncidents_TheSameOnesTheReviewLists()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var flagged = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, flagged.Id, staff.Id);
+        var clean = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, clean.Id, staff.Id);
+        SeedIncident(db, staff.Id, flagged.Id, isActive: true);
+        SeedIncident(db, staff.Id, flagged.Id, isActive: true);
+        SeedIncident(db, staff.Id, flagged.Id, isActive: false);   // archived: the review does not list it
+        SeedIncident(db, staff.Id, shiftId: null, isActive: true);  // on no shift
+        var controller = MakeController(db);
+
+        var queue = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(Assert.IsType<OkObjectResult>(
+            (await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None)).Result).Value);
+        Assert.Equal(2, queue.Data!.Items.Single(i => i.ShiftId == flagged.Id).IncidentCount);
+        Assert.Equal(0, queue.Data!.Items.Single(i => i.ShiftId == clean.Id).IncidentCount);
+
+        // The review detail lists exactly the incidents the queue counted.
+        var detail = Assert.IsType<ApiResponse<ShiftCompletionDto>>(Assert.IsType<OkObjectResult>(
+            (await controller.GetShiftCompletion(flagged.Id, CancellationToken.None)).Result).Value);
+        Assert.Equal(2, detail.Data!.Incidents.Count);
+    }
+
     [Fact]
     public async Task GetShiftCompletions_List_LeavesIncidentsEmptyEvenWithAnActiveIncidentOnTheShift()
     {

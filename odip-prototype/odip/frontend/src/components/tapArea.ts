@@ -72,4 +72,5 @@ export const TAP_ICON_SQUARE = `${TAP_AREA} pointer-coarse:inline-flex pointer-c
 
 // The phone card: every control in the cluster (a Button, an ActionButtons icon) is a real 44px target, whatever the pointer, since a
 // card below md is what a phone shows. min-* only grow a control, so a text button keeps its width and the icons stay centred.
+// DataTable's RowActions, the dashboard's decision rows and the enquiry cards' intake actions use it.
 export const ROW_ACTIONS_CARD = 'max-md:[&_:is(a,button)]:min-h-11 max-md:[&_:is(a,button)]:min-w-11'

@@ -137,4 +137,12 @@ describe('useNotices', () => {
     expect(result.current.notify).toBe(notify)
     expect(result.current.dismiss).toBe(dismiss)
   })
+
+  it('keeps a next step, when notify is given one, after the subject', () => {
+    const { result } = renderHook(() => useNotices())
+
+    act(() => result.current.notify('success', 'Sam Lee', 'Leave approved.', 'leave', { label: 'Open roster', to: '/rostering' }))
+
+    expect(result.current.notices[0]).toMatchObject({ title: 'Sam Lee', subject: 'leave', link: { label: 'Open roster', to: '/rostering' } })
+  })
 })

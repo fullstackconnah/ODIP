@@ -172,7 +172,10 @@ public record CompletionQueueItemDto(
     /// <summary>True when the worker never pressed Start and supplied the start time when finishing (the manual-start path). That path skips the
     /// dose checklist (a Published shift has no route to record a dose), so the queue can flag such a row for a closer look without opening it;
     /// the same flag is on <c>ShiftCompletionDto.startWasManual</c>.</summary>
-    bool StartWasManual);
+    bool StartWasManual,
+    /// <summary>How many active incidents are linked to the shift: the rows the completion review's <c>incidents</c> list shows (ShiftId and IsActive), so a row the
+    /// queue calls clean is one whose review lists no incident. No default value: an unknown count must never read as "no incident".</summary>
+    int IncidentCount);
 
 public record ReturnCompletionDto
 {

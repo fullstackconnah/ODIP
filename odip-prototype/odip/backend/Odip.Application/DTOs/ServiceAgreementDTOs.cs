@@ -42,6 +42,23 @@ public record AgreementPatternConflictDto
     public Guid DraftId { get; init; }
 }
 
+/// <summary>Agreement PR 2: one row of the Agreements ending list (GET api/v1/service-agreements/ending). Who and when only: no money, unlike the drafts.</summary>
+public record AgreementEndingDto
+{
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    /// <summary>The newest approved revision, the one ending.</summary>
+    public Guid DraftId { get; init; }
+    public int Version { get; init; }
+    public DateOnly AgreementEndDate { get; init; }
+    /// <summary>Days from the provider's today to the end; below 0 once it has ended.</summary>
+    public int DaysLeft { get; init; }
+    /// <summary>The renewal waiting for approval after an ended agreement, if any.</summary>
+    public int? RenewalVersion { get; init; }
+    /// <summary>The participant alert's words (AgreementEnding.Describe), so the list and the banner never disagree.</summary>
+    public string Status { get; init; } = string.Empty;
+}
+
 /// <summary>
 /// The body of POST .../{id}/pattern-change: the day, times, ratio and night type one roster pattern of the approved revision <c>{id}</c> should have, and from when. The change is made to the
 /// pattern's block (every worker of it): to every day of it with <see cref="AllDays"/>, otherwise to the pattern's day only, which splits a block of several days. It is saved as the next revision,

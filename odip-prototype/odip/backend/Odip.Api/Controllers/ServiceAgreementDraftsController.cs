@@ -29,12 +29,14 @@ public class ServiceAgreementDraftsController : ControllerBase
     private readonly PlanQuoteConcurrencyLimiter? _saveLimiter;
     private readonly ServiceAgreementApprovalService _approval;
     private readonly AgreementPatternChangeService _patternChange;
+    private readonly AgreementRenewalService _renewal;
     public const string SaveBusyMessage = "Another plan is already being saved for your organisation. Try again in a moment.";
-    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null, ServiceAgreementApprovalService? approval = null, AgreementPatternChangeService? patternChange = null)
+    public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null, ServiceAgreementApprovalService? approval = null, AgreementPatternChangeService? patternChange = null, AgreementRenewalService? renewal = null)
     {
         _saveLimiter = saveLimiter;
         _approval = approval ?? new ServiceAgreementApprovalService(db, new Odip.Api.Services.RosterPlacementGate(), configuration: configuration);
         _patternChange = patternChange ?? new AgreementPatternChangeService(db, service);
+        _renewal = renewal ?? new AgreementRenewalService(db, service);
         _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
         _simulation = simulation ?? new DemoJourneySimulationService(db);
         _configuration = configuration ?? new ConfigurationBuilder().Build();
@@ -193,6 +195,38 @@ public class ServiceAgreementDraftsController : ControllerBase
         return outcome.NotFound
             ? NotFound(ApiResponse<PatternChangeResultDto>.Fail(outcome.Errors.First()))
             : BadRequest(ApiResponse<PatternChangeResultDto>.Fail(outcome.Errors.ToList()));
+    }
+
+    /// <summary>
+    /// Renew agreement (agreement PR 2): revision <c>{id}</c>, the newest approved, copied as the agreement's next revision from the day after it ends, for its term's length within the participant's
+    /// plan covering that day, and priced now. A Draft, approved as any other. 200 with the revision; 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 404 for a revision
+    /// that is not the caller's; 409 <c>draft-version-conflict</c> when a newer revision waits, or <c>plan-needed</c> when no plan of the participant's covers that first day.
+    /// </summary>
+    [HttpPost("{id:guid}/renew")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(4_096)]
+    [EnableRateLimiting("api")]
+    public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> Renew(Guid participantId, Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail("A tenant context is required."));
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
+
+        // A renewal prices a whole term, as a save does: it holds one of the organisation's save permits.
+        using var lease = _saveLimiter is not null ? _saveLimiter.TryEnter("save:tenant:" + tenantId.ToString("N")) : null;
+        if (lease is { IsAcquired: false })
+        {
+            Response.Headers.RetryAfter = "1";
+            return StatusCode(StatusCodes.Status429TooManyRequests, ApiResponse<ServiceAgreementDraftDto>.Fail(SaveBusyMessage));
+        }
+
+        var outcome = await _renewal.RenewAsync(tenantId, participantId, id, Caller(), actor, ct);
+        if (outcome.Draft is { } draft) return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(draft)));
+        if (outcome.NotAnApprover) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<ServiceAgreementDraftDto>.Fail(outcome.Errors.First()));
+        if (outcome.NotFound) return NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail(outcome.Errors.First()));
+        if (outcome.ConflictVersion is int newest)
+            return Conflict(new ApiResponse<DraftVersionConflictDto> { Success = false, Data = new DraftVersionConflictDto { CurrentVersion = newest }, Errors = outcome.Errors.ToList(), Code = "draft-version-conflict" });
+        if (outcome.PlanNeeded) return Conflict(new ApiResponse<ServiceAgreementDraftDto> { Success = false, Errors = outcome.Errors.ToList(), Code = "plan-needed" });
+        return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(outcome.Errors.ToList()));
     }
 
     [HttpGet("{id:guid}/pdf")]

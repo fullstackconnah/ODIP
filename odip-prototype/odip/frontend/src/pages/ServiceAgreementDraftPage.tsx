@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
 import {
-  useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useFundingPlans, useParticipant, useServiceAgreementDrafts,
+  useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useAgreementsEnding, useFundingPlans, useParticipant, useRenewAgreement, useServiceAgreementDraft, useServiceAgreementDrafts,
 } from '@/api/hooks'
 import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
@@ -15,6 +15,7 @@ import { PageState } from '@/components/PageState'
 import { WizardNavFooter, WizardShell, WizardStepHeading, WizardStepRail, type WizardStepDef } from '@/components/wizard'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { agreementIssues, type AgreementIssue } from '@/lib/agreementIssues'
+import { endingWords } from '@/lib/agreementEnding'
 import { approvalHistory } from '@/lib/agreementHistory'
 import { blocksToShifts, chargeHolidaysByDefault, engineLimits, shiftIdsOfBlock, type Shift } from '@/lib/agreementShifts'
 import { localIsoDate } from '@/lib/dateOnly'
@@ -22,11 +23,12 @@ import { currentPlanOf, planStatus } from '@/lib/fundingPlan'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, normaliseBlock, stampLocation } from '@/lib/planBlocks'
-import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, conflictVersionOf, describeSaveError, friendlyMessage, isPricingDate, type SaveFailure } from '@/lib/planQuote'
+import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, conflictVersionOf, describeRenewError, describeSaveError, friendlyMessage, isPricingDate, planNeededMessageOf, type SaveFailure } from '@/lib/planQuote'
 import { ApprovalDialog } from './agreement/ApprovalDialog'
 import { STATES, planDatesOf, type Details } from '@/lib/agreementDetails'
 import { AgreementStep } from './agreement/AgreementStep'
 import { CheckStep } from './agreement/CheckStep'
+import { RenewalReview } from './agreement/RenewalReview'
 import { RunningTotal } from './agreement/RunningTotal'
 import { SaveStep } from './agreement/SaveStep'
 import { useAgreementPricing } from './agreement/useAgreementPricing'
@@ -61,6 +63,9 @@ function dateProblems(details: Details, plan: { start: string; end: string }): {
  * The working copy belongs to one participant and is seeded once from that participant's newest save, so the page is keyed by participant: a change of the route's id without a
  * remount would show, and then save, one participant's shifts under another.
  */
+/** What the last press of Renew agreement met, shown beside it: no plan for its first day, a newer revision waiting, or another refusal. */
+type RenewNotice = { kind: 'plan'; words: string } | { kind: 'newer'; version: number } | { kind: 'failed'; failure: SaveFailure }
+
 export default function ServiceAgreementDraftPage() {
   const { id } = useParams<{ id: string }>()
   return <DraftPage key={id} />
@@ -101,6 +106,17 @@ function DraftPage() {
   const [approving, setApproving] = useState(false)
   // The save whose "Start a new revision" was pressed: an approved agreement is what the roster was made from, so it is read only until somebody says they mean to change it.
   const [revisingFrom, setRevisingFrom] = useState<string | null>(null)
+  const renew = useRenewAgreement()
+  const [renewNotice, setRenewNotice] = useState<RenewNotice | null>(null)
+  // "Record a new plan" from a renewal that had no plan: the plan editor opened after the plan that ends (D7). A save sends focus back to the ending words, beside Renew.
+  const [recordingNextPlan, setRecordingNextPlan] = useState(false)
+  const savedNextPlan = useRef(false)
+  const endingRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (recordingNextPlan || !savedNextPlan.current) return
+    savedNextPlan.current = false
+    endingRef.current?.focus()
+  }, [recordingNextPlan])
 
   const currentPlan = useMemo(() => (plans.data ? currentPlanOf(plans.data.plans ?? [], today) : undefined), [plans.data, today])
   const endedPlan = currentPlan && planStatus(currentPlan, today) === 'Ended' ? currentPlan : undefined
@@ -123,6 +139,11 @@ function DraftPage() {
   const newest = drafts.data?.[0]
   // What is on screen is the save this working copy was loaded from or last saved as, not whatever has been read since: the PDF and the approval are of that one.
   const onScreen = drafts.data?.find(entry => entry.version === baseVersion)
+  // A renewal is the revision that starts the day after an approved one ends (D4): its Check step sets it beside that one, whose lines the list leaves out, so they are read.
+  const renewedFrom = onScreen && !onScreen.isSummary
+    ? drafts.data?.find(entry => !!entry.approval && entry.version < onScreen.version && addDays(entry.agreementEndDate, 1) === onScreen.agreementStartDate)
+    : undefined
+  const renewedLines = useServiceAgreementDraft(participantId, renewedFrom?.id, !!renewedFrom)
   if (loaded && baseline === null && participant.data) {
     setBaseVersion(newest?.version ?? 0)
     // A save with a block that can no longer be read is not loaded: an empty shift would look like a schedule nobody made, and saving over it would lose it for good.
@@ -150,6 +171,11 @@ function DraftPage() {
 
   const unreadableVersion = newest && newest.blocks.some(entry => entry.unreadable) ? newest.version : null
   const locked = canEdit && !!newest?.approval && revisingFrom !== newest.id
+  // An approved agreement within 60 days of its end, or past it, says so on its callout, and an approver may renew it there (D1). The days are the server's, counted from the provider's today
+  // as the alert counts them, never from the browser's date (fix round 1, CR-B S1).
+  const endingList = useAgreementsEnding(locked)
+  const daysLeft = locked && newest ? endingList.data?.find(row => row.draftId === newest.id)?.daysLeft ?? null : null
+  const ending = newest && daysLeft !== null && daysLeft <= 60 ? `${endingWords(daysLeft, newest.agreementEndDate)}.` : null
   const readOnly = !canEdit || locked
   const plan = planDatesOf(details, recorded)
   const dates = dateProblems(details, plan)
@@ -235,7 +261,29 @@ function DraftPage() {
         void drafts.refetch()
       },
     })
+  }  // Renew agreement (agreement PR 2). The renewal is the newest revision now, so the working copy is seeded from it (a locked page has nothing unsaved) and it opens where it is reviewed.
+  const renewNow = () => {
+    if (!newest || renew.isPending) return
+    setRenewNotice(null)
+    renew.mutate({ participantId, draftId: newest.id }, {
+      onSuccess: () => { void drafts.refetch().then(() => { setBaseline(null); setSaved(false); go('check') }) },
+      onError: error => {
+        const newer = conflictVersionOf(error)
+        if (newer !== null) { setRenewNotice({ kind: 'newer', version: newer }); return }
+        const words = planNeededMessageOf(error)
+        setRenewNotice(words ? { kind: 'plan', words } : { kind: 'failed', failure: describeRenewError(error) })
+      },
+    })
   }
+  // The newer revision a renewal would have replaced (D3): read in, and the working copy seeded from it.
+  const loadNewer = () => {
+    void drafts.refetch().then(read => {
+      if (read.isError) { setRenewNotice({ kind: 'failed', failure: { title: 'The newer revision could not be loaded', messages: ['It could not be read just now. Try again.'] } }); return }
+      setRenewNotice(null)
+      setBaseline(null)
+    })
+  }
+
 
   // The approval or its preview was refused because a newer save has replaced this agreement: read the agreement again, and if there is a newer one, offer it.
   const superseded = () => {
@@ -335,8 +383,41 @@ function DraftPage() {
     </div>
 
     {locked && newest && (
-      <Callout tone="info" className="max-w-prose" title="Approved for rostering" actions={<Button onClick={() => { setRevisingFrom(newest.id); go('week') }}>Start a new revision</Button>}>
+      <Callout
+        // One fact, one tone (Tone Rule): ended is the banner's Critical, ending its Warning. It is there from the first render, so it is not announced.
+        tone={daysLeft !== null && daysLeft < 0 ? 'error' : ending ? 'warning' : 'info'} announce={!ending} className="max-w-prose" title="Approved for rostering"
+        actions={<>
+          {ending && mayApprove && <Button disabled={renew.isPending} onClick={renewNow}>{renew.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{renew.isPending ? 'Renewing…' : 'Renew agreement'}</Button>}
+          <Button variant={ending && mayApprove ? 'secondary' : undefined} onClick={() => { setRevisingFrom(newest.id); go('week') }}>Start a new revision</Button>
+        </>}
+      >
+        {ending && <strong ref={endingRef} tabIndex={-1} className="block focus:outline-none">{ending}</strong>}
         This agreement is read only: the roster was made from it. A new revision changes nothing until you save it.
+        {/* Fix round 1 (deep S3): a known limit. Once a renewal exists, this term changes only through a revision with its dates, and approving that ends the renewal's patterns. Not said of an ended agreement (fix round 2). */}
+        {ending && mayApprove && daysLeft !== null && daysLeft >= 0 && <span className="mt-2 block">Make any change this agreement needs before you renew it: once it is renewed, a change to it replaces the renewal.</span>}
+      </Callout>
+    )}
+    {/* Fix round 2: without the ending list the page cannot say when the agreement ends or offer Renew, so it says it could not check rather than going quiet. */}
+    {locked && endingList.isError && (
+      <Callout tone="warning" className="max-w-prose" actions={<Button size="sm" variant="secondary" onClick={() => { void endingList.refetch() }}>Try again</Button>}>
+        Couldn&apos;t check whether this agreement is ending.
+      </Callout>
+    )}
+    {renewNotice?.kind === 'plan' && (
+      <Callout tone="warning" className="max-w-prose" title="The renewal needs the participant's new plan" actions={closeButton(() => setRenewNotice(null))}>
+        <span className="block">{renewNotice.words}</span>
+        {canManageFunding && <span className="mt-2 flex flex-wrap gap-2"><Button size="sm" onClick={() => setRecordingNextPlan(true)}>Record a new plan</Button></span>}
+      </Callout>
+    )}
+    {renewNotice?.kind === 'newer' && (
+      <Callout tone="warning" className="max-w-prose" title="A newer revision is waiting" actions={closeButton(() => setRenewNotice(null))}>
+        <span className="block">This agreement has a newer revision, v{renewNotice.version}. Load it first: a renewal would replace it.</span>
+        <span className="mt-2 flex flex-wrap gap-2"><Button size="sm" onClick={loadNewer}>Load v{renewNotice.version}</Button></span>
+      </Callout>
+    )}
+    {renewNotice?.kind === 'failed' && (
+      <Callout tone="error" className="max-w-prose" title={renewNotice.failure.title} actions={closeButton(() => setRenewNotice(null))}>
+        <ul className="list-disc pl-5">{renewNotice.failure.messages.map(message => <li key={message}>{message}</li>)}</ul>
       </Callout>
     )}
     {!canEdit && <Callout tone="info" className="max-w-prose">You can read this agreement; Admins and Coordinators change it.</Callout>}
@@ -375,10 +456,15 @@ function DraftPage() {
             </div>
           )}
           {step === 'check' && (
-            <CheckStep
-              pricing={pricing} issues={issues} readOnly={readOnly} onFix={fix} onChangeHolidays={selectShiftsOf} budgetHeadingRef={budgetHeadingRef}
-              anySkipped={shifts.some(shift => shift.block.onPublicHoliday === 'Skip')}
-            />
+            <div className="flex flex-col gap-[var(--section-gap)]">
+              {renewedFrom && onScreen && (
+                <RenewalReview renewal={onScreen} renewedFrom={renewedFrom} oldLines={renewedLines.data?.lines} oldBlocks={renewedLines.data?.blocks} oldFailed={renewedLines.isError} onRetry={() => { void renewedLines.refetch() }} />
+              )}
+              <CheckStep
+                pricing={pricing} issues={issues} readOnly={readOnly} onFix={fix} onChangeHolidays={selectShiftsOf} budgetHeadingRef={budgetHeadingRef}
+                anySkipped={shifts.some(shift => shift.block.onPublicHoliday === 'Skip')}
+              />
+            </div>
           )}
           {step === 'save' && (
             <SaveStep
@@ -406,7 +492,12 @@ function DraftPage() {
     </form>
     {/* In a portal: inside the wizard's form, Enter in one of the editor's fields would submit the agreement. */}
     {canManageFunding && createPortal(
-      <FundingPlanEditor open={recordingBudget} onClose={() => setRecordingBudget(false)} onSaved={() => { savedBudget.current = true }} participantId={participantId} previousPlan={endedPlan} defaultManagement={participant.data.planType} />,
+      <FundingPlanEditor
+        open={recordingBudget || recordingNextPlan}
+        onClose={() => { setRecordingBudget(false); setRecordingNextPlan(false) }}
+        onSaved={() => { if (recordingNextPlan) { setRenewNotice(null); savedNextPlan.current = true } else savedBudget.current = true }}
+        participantId={participantId} previousPlan={recordingNextPlan ? currentPlan : endedPlan} defaultManagement={participant.data.planType}
+      />,
       document.body,
     )}
   </div>

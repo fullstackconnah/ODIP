@@ -54,6 +54,12 @@ public class User : ITenantEntity
     public bool HasExpiredQualifications => HasExpiredQualificationsOn(DateOnly.FromDateTime(DateTime.UtcNow));
 
     public bool IsActive { get; set; } = true;
+    /// <summary>
+    /// The organisation's payroll system's id for this person (Employment Hero's employee id), set by the payroll sync or an Admin's Link.
+    /// Null when not linked. Unique per organisation over non-null values (<see cref="ExternalPayrollIdIndexName"/>).
+    /// </summary>
+    public string? ExternalPayrollId { get; set; }
+    public const string ExternalPayrollIdIndexName = "IX_Users_TenantId_ExternalPayrollId";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAt { get; set; }

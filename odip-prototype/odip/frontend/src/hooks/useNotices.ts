@@ -14,6 +14,8 @@ export interface Notice {
    * for example to give it focus once their notice is dismissed. The title is for people to read and is no key (two people can share a name).
    */
   subject?: string
+  /** A next step drawn after the message as a link button ("Open roster"), when the notice has one. */
+  link?: { label: string; to: string }
 }
 
 /** The most SUCCESSES held at once. Errors are not counted: an error is never removed to make room. */
@@ -54,10 +56,10 @@ export function useNotices(max = MAX_SUCCESSES) {
   const nextId = useRef(0)
 
   const notify = useCallback(
-    (tone: NoticeTone, title: string, message: string, subject?: string) => {
+    (tone: NoticeTone, title: string, message: string, subject?: string, link?: Notice['link']) => {
       // The id is taken here, not inside the updater: an updater must be pure, and React may run it twice.
       const id = nextId.current++
-      setNotices(list => withNotice(list, { id, tone, title, message, subject }, max))
+      setNotices(list => withNotice(list, { id, tone, title, message, subject, link }, max))
     },
     [max],
   )
