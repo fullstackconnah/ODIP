@@ -180,3 +180,17 @@ describe('ReadinessNote — a narrow row', () => {
     for (const cls of TONE.warning.solid.split(' ')) expect(chip).toHaveClass(cls)
   })
 })
+
+describe('ReadinessNote — refused in Enforce (blocked)', () => {
+  it('says "Not ready for rostering" with the reasons, and its title says what is refused', () => {
+    render(<ReadinessNote blocked issues={ISSUES} variant="chip" />)
+    const text = 'Not ready for rostering: Intake not complete · No signed service agreement'
+    expect(screen.getByText(text)).toBeInTheDocument()
+    expect(screen.getByText(text).parentElement).toHaveAttribute('title', `${text}. New shifts and assignments are refused until this is done.`)
+  })
+
+  it('still says so with no reasons listed (Review Focus 5: the UnapprovedDraft template closes everyone)', () => {
+    render(<ReadinessNote blocked issues={undefined} variant="chip" />)
+    expect(screen.getByText('Not ready for rostering')).toBeInTheDocument()
+  })
+})

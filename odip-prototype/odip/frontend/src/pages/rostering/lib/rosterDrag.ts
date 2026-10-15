@@ -1,7 +1,7 @@
 import { createContext } from 'react'
 import { closestCenter, pointerWithin, type Announcements, type CollisionDetection, type Modifier, type ScreenReaderInstructions } from '@dnd-kit/core'
-import { format, parseISO } from 'date-fns'
-import type { PublishWeekResultDto, ShiftDto, ShiftStatus } from '@/api/types'
+import { addDays, format, parseISO } from 'date-fns'
+import type { PublishWeekResultDto, RosterStaffRowDto, ShiftDto, ShiftStatus, StaffLeaveDto, StaffListDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatShiftTime } from '@/lib/utils'
 import { formatDayAccessibleName, formatShiftTimeRange, isUnfilledShift } from './roster'
@@ -12,8 +12,8 @@ import { formatDayAccessibleName, formatShiftTimeRange, isUnfilledShift } from '
  */
 export type DragCarry = { staffId: string; staffName: string; fromShift?: ShiftDto }
 
-/** An empty day of a participant's row: a drop there opens the create form, prefilled. */
-export type DayTarget = { kind: 'day'; participantId: string; participantName: string; day: string }
+/** A day of a participant's row: a drop there opens the create form, prefilled. `beside` counts the shifts the day already holds (a drop on its new-shift slot); absent for an empty day. */
+export type DayTarget = { kind: 'day'; participantId: string; participantName: string; day: string; beside?: number }
 
 /** What a carried person can land on: a shift's puck, or an empty day. */
 export type DropTarget = { kind: 'shift'; shift: ShiftDto } | DayTarget
@@ -28,9 +28,12 @@ export type DropOutcome =
 
 /** While a drop's request is out: the target reads "Assigning {first name}…", a move's source fades, and every drag waits. */
 export type PendingDrop = { targetId: string; sourceId?: string; staffName: string }
-export type DropState = { disabled: boolean; pending: PendingDrop | null }
+/**
+ * `pick` opens the staff picker for a Needs staff shift: the chip's plus, and its menu's "Assign to…" (spec 2026-10-15). `pickingId` is the shift whose picker is open; the chip rings it.
+ */
+export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; pickingId?: string | null }
 
-/** Shared by the page with the strip and every puck, so neither is threaded through the grid's rows. Outside a provider (the Staff view, phones) nothing is disabled or pending. */
+/** Shared by the page with the strip and every puck, so neither is threaded through the grid's rows. Outside a provider nothing is disabled or pending, and no chip has a plus. */
 export const DropStateContext = createContext<DropState>({ disabled: false, pending: null })
 
 /** Decision 8: these keep their worker; only the completion endpoints move them on. */
@@ -53,6 +56,9 @@ export const WEEK_TARGET_HOURS = 38
 export function firstName(fullName: string | null | undefined): string {
   return (fullName ?? '').trim().split(' ')[0]
 }
+
+/** "12" or "7.5": hours as the strip puck and the picker print them. */
+export const hoursText = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
 /** What letting go here would do. The server still judges it: nothing here checks a rule. */
 export function dropOutcome(carry: DragCarry, target: DropTarget | undefined): DropOutcome {
@@ -102,14 +108,24 @@ export function staffWeekHours(shifts: ShiftDto[]): Map<string, number> {
  * A pointer drag hits only what is under the pointer, so a drop beside every target does nothing (closestCenter snapped it to the nearest puck). dnd-kit's rectangles are not clipped
  * to the board's scroll frame, so a row scrolled up under the strip, or under the sticky day header, still has its rectangle there: keep only the target whose own element is on top
  * at the pointer (the DragOverlay is pointer-events-none, so it is never that element). A keyboard drag has no pointer, so it takes the nearest target, but only once it has moved:
- * lifting and pressing Space at once lands nowhere, rather than on whichever shift is nearest (a drop can now tell a worker).
+ * lifting and pressing Space at once lands nowhere, rather than on whichever shift is nearest (a drop can now tell a worker). The new-shift slot of an occupied day never beats a shift in its own cell.
  */
 export const rosterCollision: CollisionDetection = args => {
   const { pointerCoordinates, droppableContainers, active, collisionRect } = args
   if (!pointerCoordinates) {
     const start = active.rect.current.initial
     // Not measured yet (the lift's first pass) counts as not moved: otherwise the nearest shift is "over" for a frame and the live region says so instead of "Picked up".
-    return !start || (start.top === collisionRect.top && start.left === collisionRect.left) ? [] : closestCenter(args)
+    if (!start || (start.top === collisionRect.top && start.left === collisionRect.left)) return []
+    const nearest = closestCenter(args)
+    // On an occupied day the new-shift slot hugs the chips' trailing edge and can be the nearest centre: a shift in the slot's own cell wins, so a drop assigns rather than starts a shift.
+    const slot = droppableContainers.find(container => container.id === nearest[0]?.id)
+    const slotTarget = slot?.data?.current as DropTarget | undefined
+    if (!slot || slotTarget?.kind !== 'day' || !slotTarget.beside) return nearest
+    const inCell = nearest.filter(hit => {
+      const container = droppableContainers.find(c => c.id === hit.id)
+      return (container?.data?.current as DropTarget | undefined)?.kind === 'shift' && slot.node.current?.parentElement?.contains(container?.node.current ?? null)
+    })
+    return inCell.length > 0 ? inCell : nearest
   }
   const hits = pointerWithin(args)
   if (typeof document.elementFromPoint !== 'function') return hits   // jsdom has none
@@ -150,7 +166,7 @@ const targetOf = (over: { data: { current?: unknown } } | null) => over?.data.cu
 
 function overSentence(carry: DragCarry, target: DropTarget | undefined): string {
   if (!target) return 'Not over a shift.'
-  if (target.kind === 'day') return `Over ${target.participantName}, ${formatDayAccessibleName(target.day)}, empty. Dropping starts a new shift.`
+  if (target.kind === 'day') return `Over ${target.participantName}, ${formatDayAccessibleName(target.day)}, ${target.beside ? `beside ${plural(target.beside, 'shift')}` : 'empty'}. Dropping starts a new shift.`
   const { shift } = target
   if (isLockedShift(shift)) return `Over a ${lockedWords(shift.status).toLowerCase()} shift. It can't be changed.`
   const where = `Over ${shift.participantName}, ${formatDayAccessibleName(shift.serviceDate)}, ${spokenRange(shift)}`
@@ -225,4 +241,107 @@ export function publishWeekMessage(drafts: ShiftDto[]): string {
     people > 0 ? `The ${plural(people, 'person', 'people')} on them ${people === 1 ? 'is' : 'are'} notified.` : null,
     unfilled > 0 ? `${unfilled} still ${unfilled === 1 ? 'needs' : 'need'} staff and ${unfilled === 1 ? 'is' : 'are'} published as needing staff.` : null,
   ].filter(Boolean).join(' ')
+}
+
+// ── The staff picker (spec 2026-10-15, decision C; the brief, section 4). Nothing here checks a rule: the server judges the pick. ──
+
+/** One row of the picker: a person, and on a Move row the shift they would come off. `key` is unique in the list: the person's id, or `{person id}:{source shift id}`. */
+export type PickRow = { key: string; person: StaffListDto; hours: number; leave: 'Approved' | 'Pending' | null; source?: ShiftDto }
+export type PickGroups = { free: PickRow[]; move: PickRow[]; leave: PickRow[] }
+
+/** A shift's start and end in minutes on the wall clock with no zone. A day is always 1440 minutes, so a clock change never moves an overlap (Review Focus 1). */
+function shiftMinutes(s: Pick<ShiftDto, 'serviceDate' | 'startTime' | 'endTime' | 'endsNextDay'>): [number, number] {
+  const day = Date.UTC(+s.serviceDate.slice(0, 4), +s.serviceDate.slice(5, 7) - 1, +s.serviceDate.slice(8, 10)) / 60_000
+  const at = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3, 5)
+  return [day + at(s.startTime), day + at(s.endTime) + (s.endsNextDay ? 1440 : 0)]
+}
+
+export function shiftsOverlap(a: ShiftDto, b: ShiftDto): boolean {
+  const [aStart, aEnd] = shiftMinutes(a)
+  const [bStart, bEnd] = shiftMinutes(b)
+  return aStart < bEnd && bStart < aEnd
+}
+
+/** Leave covering any day the shift runs (an overnight one also covers the morning after): approved wins over pending. */
+function leaveOn(leave: StaffLeaveDto[], staffId: string, shift: Pick<ShiftDto, 'serviceDate' | 'endsNextDay'>): PickRow['leave'] {
+  const day = shift.serviceDate
+  const last = shift.endsNextDay ? format(addDays(parseISO(day), 1), 'yyyy-MM-dd') : day
+  const covering = leave.filter(l => l.staffId === staffId && l.from <= last && day <= l.to)
+  return covering.some(l => l.status === 'Approved') ? 'Approved' : covering.length > 0 ? 'Pending' : null
+}
+
+/**
+ * Who goes in which group for a Needs staff shift (the brief, section 4). Each active person lands in the FIRST group that matches:
+ * 1. Move: they hold a non-cancelled, unlocked shift whose time overlaps this one. Each such shift is its own row.
+ *    Left out entirely: a person whose only overlapping shifts are locked, or who is on the other chip of this 2:1 pair (same participant and day, any overlapping time).
+ * 2. Leave: approved or pending leave covers the day.
+ * 3. Free: everyone else, a non-overlapping shift that day included.
+ * Each group keeps the staff list's order (by last name), and a person's Move rows go by start time. Shown Free, then Move, then Leave.
+ */
+// shortcut: only sees the shifts on the board's week, so a night shift crossing the week edge reads as Free here; the server's double-booking check (assign, move) covers it.
+export function pickerGroups(target: ShiftDto, staff: StaffListDto[], shifts: ShiftDto[], leave: StaffLeaveDto[], hours: Map<string, number>): PickGroups {
+  const groups: PickGroups = { free: [], move: [], leave: [] }
+  const isPair = (s: ShiftDto) => s.participantId === target.participantId && s.serviceDate === target.serviceDate && shiftsOverlap(s, target)
+  for (const person of staff) {
+    if (!person.isActive) continue
+    const row = { person, hours: hours.get(person.id) ?? 0, leave: leaveOn(leave, person.id, target) }
+    const overlapping = shifts
+      .filter(s => s.staffId === person.id && s.id !== target.id && s.status !== 'Cancelled' && shiftsOverlap(s, target))
+      .sort((a, b) => shiftMinutes(a)[0] - shiftMinutes(b)[0])
+    const sources = overlapping.filter(s => !isLockedShift(s) && !isPair(s))
+    if (sources.length > 0) groups.move.push(...sources.map(source => ({ ...row, key: `${person.id}:${source.id}`, source })))
+    else if (overlapping.length === 0) (row.leave ? groups.leave : groups.free).push({ ...row, key: person.id })
+  }
+  return groups
+}
+
+/** The plus's accessible name and title: "Assign someone to Tuesday 9am to 3pm for Mia". */
+export function pickName(shift: ShiftDto): string {
+  return `Assign someone to ${format(parseISO(shift.serviceDate), 'EEEE')} ${spokenRange(shift)} for ${firstName(shift.participantName)}`
+}
+
+/** A Move row's second line: "Move from Mon 8am–5pm · Liam". */
+export function moveLine(source: ShiftDto): string {
+  return `Move from ${format(parseISO(source.serviceDate), 'EEE')} ${formatShiftTimeRange(source.startTime, source.endTime)} · ${firstName(source.participantName)}`
+}
+
+/** An option's accessible name, in the strip puck's style (StaffStrip): "Jack O'Sullivan, 15 of 38 hours this week, move from Monday 8am to 5pm with Liam, published: tells Jack". */
+export function pickOptionName(row: PickRow): string {
+  const { person, source } = row
+  return [
+    `${person.fullName}, ${hoursText(row.hours)} of ${WEEK_TARGET_HOURS} hours this week`,
+    person.hasExpiredQualifications ? 'qualifications expired' : null,
+    row.leave === 'Approved' ? 'on leave' : row.leave === 'Pending' ? 'leave pending' : null,
+    source ? `move from ${format(parseISO(source.serviceDate), 'EEEE')} ${spokenRange(source)} with ${firstName(source.participantName)}` : null,
+    source?.status === 'Published' ? `published: tells ${firstName(person.fullName)}` : null,
+  ].filter(Boolean).join(', ')
+}
+
+/** The Staff view's leave for the picker: its rows' leave bars that are leave requests (the participant board sends `staffLeave` instead). */
+export function leaveFromStaffRows(rows: RosterStaffRowDto[]): StaffLeaveDto[] {
+  return rows.flatMap(row => row.leave
+    .filter(bar => bar.kind === 'ApprovedLeave' || bar.kind === 'PendingLeave')
+    .map(bar => ({ staffId: row.staffId, from: bar.startDate, to: bar.endDate, status: bar.kind === 'ApprovedLeave' ? 'Approved' as const : 'Pending' as const })))
+}
+
+// The md+ picker panel's place: a pure rule here, not in StaffPicker.tsx, because a component file may export components only (react-refresh/only-export-components).
+const PANEL_WIDTH = 320
+const PANEL_MAX_HEIGHT = 416   // 26rem
+const FLIP_BELOW = 288         // 18rem
+const EDGE = 8
+const GAP = 4
+
+/**
+ * Where the md+ panel goes (the brief, section 4). It sits 4px under its chip, with their left edges together. It goes above the chip when the room below is under 18rem and the room
+ * above is larger. When 320px would pass the window's right edge, its right edge lines up with the chip's. It always stays 8px inside the window, and never covers its own chip.
+ */
+export type PickerPlace = { left: number; width: number; maxHeight: number; top?: number; bottom?: number }
+
+export function pickerPlacement(chip: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right'>, view: { width: number; height: number }): PickerPlace {
+  const below = view.height - chip.bottom - GAP - EDGE
+  const above = chip.top - GAP - EDGE
+  const left = Math.max(EDGE, Math.min(chip.left + PANEL_WIDTH > view.width - EDGE ? chip.right - PANEL_WIDTH : chip.left, view.width - EDGE - PANEL_WIDTH))
+  return below < FLIP_BELOW && above > below
+    ? { left, width: PANEL_WIDTH, bottom: view.height - chip.top + GAP, maxHeight: Math.min(PANEL_MAX_HEIGHT, above) }
+    : { left, width: PANEL_WIDTH, top: chip.bottom + GAP, maxHeight: Math.min(PANEL_MAX_HEIGHT, below) }
 }

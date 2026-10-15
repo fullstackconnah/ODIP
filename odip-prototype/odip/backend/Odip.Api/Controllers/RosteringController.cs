@@ -342,14 +342,27 @@ public class RosteringController : ControllerBase
                     InOnboarding = participant.IsDraft,
                     Shifts = shiftDtos, TripBars = myTripBars,
                     ScheduledHours = scheduledHours, DaysWithoutCover = daysWithoutCover,
-                    ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssuesById, participant.Id)
+                    ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssuesById, participant.Id),
+                    // The rule of the PARTICIPANT_NOT_READY finding above: an organisation that enforces readiness, and a participant who fails it.
+                    NotReadyForRostering = enforcingTenants.Contains(participant.TenantId) && !readyParticipantIdSet.Contains(participant.Id),
                 });
             }
 
             board = new RosterBoardDto
             {
                 WeekStart = start, Days = days, GroupBy = RosterBoardGroupBy.Participant,
-                ParticipantRows = participantRows, Exceptions = exceptions
+                ParticipantRows = participantRows, Exceptions = exceptions,
+                PendingAgreements = await PendingAgreementsAsync(ct),
+                // The leave the findings already loaded (weekWindows): leave requests only; recurring and legacy unavailability stay findings of the assign.
+                StaffLeave = weekWindows
+                    .Where(w => w.Kind is UnavailabilityKind.ApprovedLeave or UnavailabilityKind.PendingLeave)
+                    .Select(w => new StaffLeaveDto
+                    {
+                        // w.End is exclusive (StaffUnavailabilityQuery), as for the staff rows' leave bars below.
+                        StaffId = w.UserId, From = DateOnly.FromDateTime(w.Start), To = DateOnly.FromDateTime(w.End.AddTicks(-1)),
+                        Status = w.Kind == UnavailabilityKind.ApprovedLeave ? LeaveStatus.Approved : LeaveStatus.Pending,
+                    })
+                    .ToList(),
             };
         }
         else
@@ -1646,6 +1659,35 @@ public class RosteringController : ControllerBase
         return made.ToDictionary(p => p.Id, p => versions.TryGetValue(p.DraftId, out var version) ? (int?)version : null);
     }
 
+    /// <summary>
+    /// For the board's notice (spec 2026-10-15; lead decision L10): every participant whose newest agreement revision waits for an approval for rostering, with a board row or not.
+    /// A participant still in onboarding has no row, and theirs is the agreement nobody can otherwise see.
+    /// - Newest: no newer revision of theirs in the same organisation (the shape ParticipantReadinessGate already runs on Npgsql).
+    /// - Waits: not approved; made from blocks (blocks and a stored answer: the approval service's HandTyped rule); not ended on the provider's calendar.
+    /// - Archived participants (neither active nor a draft) are left out (L11).
+    /// One query, read only. The query filters keep it to the caller's organisation, and each revision is matched to its own participant's organisation, because a SuperAdmin's context sees all of them.
+    /// </summary>
+    private async Task<List<PendingAgreementDto>> PendingAgreementsAsync(CancellationToken ct)
+    {
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var waiting = await _db.ServiceAgreementDrafts.AsNoTracking()
+            .Where(d => d.AgreementEndDate >= today && d.Blocks.Any() && d.PricingJson != null
+                && !_db.ServiceAgreementDrafts.Any(newer => newer.ParticipantId == d.ParticipantId && newer.TenantId == d.TenantId && newer.Version > d.Version)
+                && !_db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id && a.TenantId == d.TenantId))
+            .Join(_db.Participants.AsNoTracking().Where(p => p.IsActive || p.IsDraft), d => d.ParticipantId, p => p.Id, (d, p) => new { d.Id, d.Version, d.TenantId, d.PricingJson, Participant = p })
+            .Where(x => x.Participant.TenantId == x.TenantId)
+            .ToListAsync(ct);
+        return waiting
+            .Where(x => DraftJson.ReadQuote(x.PricingJson) is not null)   // the approval service's own HandTyped test: a stored answer it can read
+            .OrderBy(x => x.Participant.LastName).ThenBy(x => x.Participant.FirstName)
+            .Select(x => new PendingAgreementDto
+            {
+                ParticipantId = x.Participant.Id, DisplayName = x.Participant.FullName, DraftId = x.Id, Version = x.Version,
+                CanReceiveServices = Participant.CanReceiveServices(x.Participant),
+            })
+            .ToList();
+    }
+
     private static CompatibilityRowDto ToCompatibilityDto(StaffParticipantCompatibility c) => new()
     {
         Id = c.Id, StaffId = c.UserId, StaffName = c.User?.FullName ?? string.Empty,
@@ -1821,8 +1863,9 @@ public class RosteringController : ControllerBase
 
         // A person being moved or swapped off leavingShiftId is judged without it: no DOUBLE_BOOKED_SHIFT or OVER_HOURS against the shift they are leaving (roster drag and drop, 2026-10-14).
         // shortcut: participantShiftsOnDate still counts them on the shift they leave, so a swap inside one 2:1 pair can warn RATIO_SHORTFALL falsely; filter it there too if pairs get swapped often.
+        // The day either side of the week too, so an overnight shift crossing the week edge is double-booking checked; OVER_HOURS still counts only the candidate's own Monday to Sunday.
         var staffShiftsInWeek = await _db.Shifts
-            .Where(s => s.UserId == candidate.UserId.Value && s.ServiceDate >= weekStart && s.ServiceDate <= weekEnd
+            .Where(s => s.UserId == candidate.UserId.Value && s.ServiceDate >= weekStart.AddDays(-1) && s.ServiceDate <= weekEnd.AddDays(1)
                         && s.Id != excludeShiftId && s.Id != leavingShiftId)
             .ToListAsync(ct);
 
