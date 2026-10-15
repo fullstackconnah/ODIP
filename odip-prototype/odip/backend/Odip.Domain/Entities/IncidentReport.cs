@@ -1,5 +1,4 @@
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 
 namespace Odip.Domain.Entities;
@@ -8,12 +7,17 @@ namespace Odip.Domain.Entities;
 /// NDIS reportable incident — tracks incidents during trips,
 /// including mandatory QSC escalation within 24 hours for critical incidents.
 /// </summary>
-public class IncidentReport : ITenantEntity
+public class IncidentReport
 {
     public Guid Id { get; set; }
 
-    /// <summary>The organisation the incident belongs to: always its reporter's (Create and Update set it from the reporter; the migration backfilled it the same way).</summary>
-    public Guid TenantId { get; set; }
+    /// <summary>
+    /// The organisation the incident belongs to: always its reporter's (Create, Update and the demo pack set it from the reporter; the migration
+    /// IncidentReportTenantId backfilled it the same way). The tenant query filter hides a null row from everyone but a SuperAdmin with no organisation chosen.
+    /// Not an <see cref="Interfaces.ITenantEntity"/>, whose TenantId is not nullable.
+    /// </summary>
+    // shortcut: nullable so the previous image, whose INSERTs leave it out, still works after a rollback (expand). Contract PR: re-run the backfill for any null, then make it NOT NULL and the entity an ITenantEntity.
+    public Guid? TenantId { get; set; }
 
     /// <summary>
     /// Business-stream the incident occurred under (INC-01) — same value set as

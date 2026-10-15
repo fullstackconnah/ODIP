@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261015010752_IncidentReportTenantId")]
+    [Migration("20261015011733_IncidentReportTenantId")]
     partial class IncidentReportTenantId
     {
         /// <inheritdoc />
@@ -1119,7 +1119,7 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("SupportCoordinatorNotifiedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<Guid>("TenantId")
+                    b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Title")

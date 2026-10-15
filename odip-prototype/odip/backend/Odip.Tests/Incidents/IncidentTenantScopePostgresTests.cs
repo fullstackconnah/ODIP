@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Moq;
 using Npgsql;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Tests.Postgres;
 using Xunit;
@@ -69,7 +72,7 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task TheTenantMigration_GivesEveryExistingIncidentItsReportersOrganisation_AndMakesTheColumnRequired()
+    public async Task TheTenantMigration_GivesEveryExistingIncidentItsReportersOrganisation_AndARowLeftNullIsSeenOnlyByASuperAdminWithNoOrganisation()
     {
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
         var cs = await _pg.CreateDatabaseAsync();
@@ -108,7 +111,16 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
             }
             Assert.Equal(3, seen);
         }
-        await using var nullable = new NpgsqlCommand("SELECT is_nullable FROM information_schema.columns WHERE table_name = 'IncidentReports' AND column_name = 'TenantId'", after);
-        Assert.Equal("NO", await nullable.ExecuteScalarAsync());
+
+        // An incident the previous image files after a rollback leaves TenantId out: hidden from the organisation, seen by a SuperAdmin with none chosen.
+        var leftNull = Guid.NewGuid();
+        await ShiftPackagePostgresTests.InsertMinimalRowAsync(after, "IncidentReports", new() { ["Id"] = leftNull, ["ReportedByUserId"] = userA, ["Title"] = "Incident" });
+        var scoped = new Mock<ICurrentTenant>();
+        scoped.Setup(t => t.TenantId).Returns(a);
+        scoped.Setup(t => t.IsSuperAdmin).Returns(false);
+        await using (var organisation = PostgresFixture.NewContext(cs, scoped.Object))
+            Assert.Equal(2, await organisation.IncidentReports.CountAsync(i => reporterOf.Keys.Contains(i.Id) || i.Id == leftNull));
+        await using (var superAdmin = PostgresFixture.NewContext(cs))
+            Assert.True(await superAdmin.IncidentReports.AnyAsync(i => i.Id == leftNull));
     }
 }

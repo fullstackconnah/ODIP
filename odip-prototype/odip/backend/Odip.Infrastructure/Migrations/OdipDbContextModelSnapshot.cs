@@ -1116,7 +1116,7 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("SupportCoordinatorNotifiedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<Guid>("TenantId")
+                    b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Title")

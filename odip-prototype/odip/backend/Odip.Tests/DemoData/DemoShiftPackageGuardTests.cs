@@ -113,7 +113,7 @@ public class DemoShiftPackageGuardTests
         Assert.Contains(nameof(MedicationAdministration.ParticipantId), ex.Message);
     }
 
-    // ── incidents: an incident is its reporter's organisation's, so one of a reporter the Demo tenant does not own carries another tenant ──
+    // ── incidents: the reporter is what makes one the Demo tenant's (the guard does not read the incident's TenantId) ──
 
     private static IncidentReport Incident(Guid reporter, Guid? participant = null) => new()
     {
