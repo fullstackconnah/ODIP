@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
@@ -115,12 +115,52 @@ function FactCell({ column, value }: { column: FactColumn; value: string | null 
 
 /**
  * The table's columns from xl (SHAPE §4), sized by content: the subject and free text grow up to their full width before anything else gets spare
- * width, so text is cut only when no column has room left (`minmax(0, max-content)`: no minimum, so they also give way first on a narrow table). Dates
- * and short facts are as wide as they are and never cut. What is left over sits in a gap before the buttons (`minmax(0, 1fr)`), which are as wide as
- * the widest row's own buttons, busy labels included.
+ * width, so text is cut only when no column has room left. The subject wins over free text: its minimum (--subject-min, set by useSubjectMin) is its
+ * full width while the free-text facts can still give way to their floor. Dates and short facts are as wide as they are and never cut. What is left
+ * over sits in a gap before the buttons (`minmax(0, 1fr)`), which are as wide as the widest row's own buttons, busy labels included.
  */
 const gridColumns = (columns: FactColumn[]) =>
-  ['minmax(0, max-content)', ...columns.map((column) => (column.long ? 'minmax(0, max-content)' : 'max-content')), 'minmax(0, 1fr)', 'max-content'].join(' ')
+  ['minmax(var(--subject-min, 0px), max-content)', ...columns.map((column) => (column.long ? 'minmax(0, max-content)' : 'max-content')), 'minmax(0, 1fr)', 'max-content'].join(' ')
+// How narrow a free-text fact gets before a subject is cut.
+const FACT_FLOOR_REM = 6
+
+/**
+ * Sets the table's --subject-min: the subject column's full width (text and flags), less whatever the table lacks once every free-text fact is at its
+ * floor (or at its own width, when that is less). CSS grid shares spare width equally between growing tracks, so without this a title is cut while a
+ * trip beside it stays whole. Re-measured whenever the table or a subject changes size (a tab shown, fonts loaded, the window resized).
+ */
+function useSubjectMin(tableRef: RefObject<HTMLTableElement | null>, columns: FactColumn[], rowCount: number) {
+  useLayoutEffect(() => {
+    const table = tableRef.current
+    if (!table || typeof ResizeObserver === 'undefined') return
+    const px = (v: string) => parseFloat(v) || 0
+    const padX = (el: Element) => { const cs = getComputedStyle(el); return px(cs.paddingLeft) + px(cs.paddingRight) }
+    const textWidth = (el: Element) => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect().width }
+    // A cell's full width: a cut span counts at its whole text (scrollWidth).
+    const natural = (td: Element) => { const span = td.querySelector('span[title]'); return (span ? span.scrollWidth : textWidth(td)) + padX(td) }
+    const fit = () => {
+      if (getComputedStyle(table).display !== 'grid') return
+      const rows = [...table.querySelectorAll(':scope > tbody > tr:not([data-detail])')]
+      const tracks = getComputedStyle(table).gridTemplateColumns.split(' ').map(px)
+      const floor = FACT_FLOOR_REM * px(getComputedStyle(document.documentElement).fontSize)
+      const subject = Math.max(0, ...rows.map((tr) => {
+        const line = tr.children[0].firstElementChild!
+        const [text, ...flags] = [...line.children]
+        const gap = px(getComputedStyle(line).columnGap)
+        return text.scrollWidth + flags.reduce((sum, flag) => sum + gap + flag.getBoundingClientRect().width, 0) + padX(tr.children[0])
+      }))
+      const rest = tracks[tracks.length - 1] + columns.reduce((sum, column, i) =>
+        sum + (column.long ? Math.min(floor, Math.max(0, ...rows.map((tr) => natural(tr.children[i + 1])))) : tracks[i + 1]), 0)
+      const min = `${Math.floor(Math.max(0, Math.min(subject, table.clientWidth - rest)))}px`
+      if (table.style.getPropertyValue('--subject-min') !== min) table.style.setProperty('--subject-min', min)
+    }
+    const observer = new ResizeObserver(fit)
+    observer.observe(table)
+    table.querySelectorAll(':scope > tbody > tr > td:first-child span[title]').forEach((span) => observer.observe(span))
+    return () => observer.disconnect()
+  }, [tableRef, columns, rowCount])
+}
+
 // From xl every row group and row is a subgrid of the table's columns, so each row keeps its own box (height, hairline, hover tint).
 const SUBGRID = 'xl:col-span-full xl:grid xl:grid-cols-subgrid'
 // The buttons' track: the last one, past the gap.
@@ -241,10 +281,12 @@ function QuickRowView({ row, columns, onDone, onRefused }: {
  */
 export function QuickGroup({ model, state }: { model: GroupModel; state: DecisionState }) {
   const linkRef = useRef<HTMLAnchorElement>(null)
+  const tableRef = useRef<HTMLTableElement>(null)
   const rows = visibleRows(model, state.gone)
   // Rows only once every request has answered: a group whose other list is still waiting or failed shows its one line, not half its rows (SHAPE §6).
   const ready = model.phase === 'ready'
   const shown = ready ? rows.slice(0, SHOWN_ROWS) : []
+  useSubjectMin(tableRef, model.columns, shown.length)
   const cut = ready && shownCount(model, state.gone) > shown.length
   const notices = state.notices.filter((notice) => notice.subject === model.key)
 
@@ -287,6 +329,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         <div className="xl:overflow-x-auto xl:rounded-md xl:border xl:border-[var(--color-border)] xl:bg-[var(--color-card)]">
           {/* Explicit roles: a table drawn as a grid (xl) or as cards (below xl) keeps its table semantics in every browser. */}
           <table
+            ref={tableRef}
             role="table"
             style={{ gridTemplateColumns: gridColumns(model.columns) }}
             className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:grid xl:divide-y xl:divide-[var(--color-border)]"

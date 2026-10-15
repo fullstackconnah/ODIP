@@ -69,7 +69,8 @@ describe('QuickGroup — the table', () => {
     const table = screen.getByRole('table')
     expect(table).toHaveClass('xl:grid')
     // Subject and free text: no minimum, up to their content. Dates and short facts: their content. Then the spare. Then the buttons, as wide as they are.
-    expect(table.style.gridTemplateColumns).toBe('minmax(0, max-content) max-content max-content minmax(0, max-content) minmax(0, 1fr) max-content')
+    // The subject's minimum is measured (--subject-min): it keeps its full width until every free-text fact is down to its floor.
+    expect(table.style.gridTemplateColumns).toBe('minmax(var(--subject-min, 0px), max-content) max-content max-content minmax(0, max-content) minmax(0, 1fr) max-content')
     for (const tr of screen.getAllByRole('row')) expect(tr).toHaveClass('xl:grid-cols-subgrid', 'xl:col-span-full')
     // The buttons sit in the last track, past the spare.
     expect(within(rowOf('Person a')).getAllByRole('cell').at(-1)).toHaveClass('xl:col-[-2/-1]')
