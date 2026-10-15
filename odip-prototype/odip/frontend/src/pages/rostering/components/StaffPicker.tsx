@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Search } from 'lucide-react'
 import type { ShiftDto, StaffLeaveDto, StaffListDto } from '@/api/types'
 import { SlideOver } from '@/components/SlideOver'
+import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
 import { formatHoursMeter, formatShiftTimeRange } from '../lib/roster'
@@ -21,7 +22,7 @@ export type StaffPickerProps = {
   /** Below md: the house SlideOver instead of the panel anchored to the chip. */
   sheet: boolean
   onPick: (row: PickRow) => void
-  /** Closed without a pick: Escape, Tab (the panel), a mousedown outside, or the chip gone or scrolled out of the board. */
+  /** Closed without a pick: Escape, a mousedown outside, or the chip gone or scrolled out of the board. */
   onClose: () => void
 }
 
@@ -73,7 +74,9 @@ function PickerPanel({ target, onClose, ...body }: OpenProps) {
     }
   }, [target.id])
 
-  useEffect(() => { inputRef.current?.focus() }, [])
+  // The house layer (lead, 2026-10-15): Escape closes this layer only, Tab stays in the panel, focus starts in the search. Not modal, so the page still scrolls;
+  // focus goes back to the plus from the page (closePicker), because after a pick it belongs on the shift instead.
+  useDialogBehavior({ open: true, onClose, containerRef: panelRef, initialFocusRef: inputRef, lockScroll: false, returnFocus: false })
 
   // A mousedown anywhere else closes it. Its own plus is not "anywhere else": a click there toggles the picker (the page).
   useEffect(() => {
@@ -94,13 +97,7 @@ function PickerPanel({ target, onClose, ...body }: OpenProps) {
       // Positioned by the layout effect above. The Floating Panel: card fill, --radius-md, the house shadow (StaffStrip's CarriedPuck), no border.
       className="fixed z-50 flex flex-col overflow-hidden rounded-[var(--radius-md)] bg-[var(--color-card)] shadow-[0_24px_40px_-12px_color-mix(in_srgb,var(--color-foreground)_14%,transparent)]"
     >
-      <PickerBody
-        target={target}
-        {...body}
-        inputRef={inputRef}
-        // Tab closes too, and focus goes back to the plus (the page): portalled to the end of the body, the panel would otherwise hand focus to nothing near its chip.
-        onDismissKey={e => { if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); onClose() } }}
-      />
+      <PickerBody target={target} {...body} inputRef={inputRef} />
     </div>,
     document.body,
   )
@@ -125,12 +122,10 @@ function PickerSheet({ target, onClose, ...body }: OpenProps) {
 
 type BodyProps = Omit<OpenProps, 'onClose'> & {
   inputRef: RefObject<HTMLInputElement | null>
-  /** Keys that close without a pick. The panel passes Escape and Tab; the SlideOver handles its own Escape and keeps Tab trapped. */
-  onDismissKey?: (e: KeyboardEvent<HTMLInputElement>) => void
 }
 
 /** The search, the Published line and the grouped listbox. Focus stays in the search; the active option is virtual (aria-activedescendant), as in SearchableSelect. */
-function PickerBody({ target, staff, staffLoading, shifts, leave, hours, onPick, inputRef, onDismissKey }: BodyProps) {
+function PickerBody({ target, staff, staffLoading, shifts, leave, hours, onPick, inputRef }: BodyProps) {
   const listId = useId()
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(-1)
@@ -156,7 +151,7 @@ function PickerBody({ target, staff, staffLoading, shifts, leave, hours, onPick,
       // With nothing active, Enter picks only when one option is left, so a stray Enter never assigns somebody (SearchableSelect's rule).
       const row = options[active] ?? (options.length === 1 ? options[0] : undefined)
       if (row) onPick(row)
-    } else onDismissKey?.(e)
+    }
   }
 
   return (

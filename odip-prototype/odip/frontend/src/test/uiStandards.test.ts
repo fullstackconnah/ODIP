@@ -69,7 +69,10 @@ const BASELINE: Record<Rule, Record<string, number>> = {
     'pages/TripsPage.tsx': 1,
   },
   button: {},
-  overlay: {},
+  overlay: {
+    // Anchored non-modal staff picker on useDialogBehavior (lead, 2026-10-15): below md it is the house SlideOver.
+    'pages/rostering/components/StaffPicker.tsx': 1,
+  },
   format: {},
 }
 

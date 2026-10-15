@@ -123,18 +123,19 @@ describe('StaffPicker: keyboard and closing', () => {
     expect(search()).toHaveFocus()
   })
 
-  it('closes without a pick on Escape, on Tab, and on a mousedown outside, but not on its own plus', async () => {
+  it('closes without a pick on Escape and on a mousedown outside, but not on its own plus; Tab stays in the search', async () => {
     const user = userEvent.setup()
-    const { onPick, onClose } = renderPicker()
+    const { onPick, onClose, search } = renderPicker()
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledTimes(1)
-    screen.getByRole('combobox', { name: 'Find staff' }).focus()
+    // The panel runs on useDialogBehavior (lead, 2026-10-15): its Tab trap keeps focus in the search, the panel's only focusable control.
     await user.keyboard('{Tab}')
-    expect(onClose).toHaveBeenCalledTimes(2)
+    expect(search()).toHaveFocus()
+    expect(onClose).toHaveBeenCalledTimes(1)
     await user.click(screen.getByRole('button', { name: 'plus' }))
-    expect(onClose).toHaveBeenCalledTimes(2)
+    expect(onClose).toHaveBeenCalledTimes(1)
     await user.click(document.body)
-    expect(onClose).toHaveBeenCalledTimes(3)
+    expect(onClose).toHaveBeenCalledTimes(2)
     expect(onPick).not.toHaveBeenCalled()
   })
 
