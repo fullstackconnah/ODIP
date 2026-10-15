@@ -535,7 +535,7 @@ row; the old one stays for history) and resubmits.
 
 **Un-cancel ruling (post-launch hardening).** The matrix above originally left every
 `Cancelled` cell blank, matching a PUT gate that blocked all transitions out of `Cancelled`.
-The hardening pass (`docs/plans/2026-09-09-shift-completion-hardening.md`, Task 5) allows
+The hardening pass (its plan, removed from the tree and now only in git history, Task 5) allows
 `Cancelled → Draft` and `Cancelled → Published` via `UpdateShift`, restoring the pre-PR-#124
 un-cancel path — every other transition into/out of `InProgress`/`PendingReview`/`Completed`
 remains locked to the completion endpoints (`SHIFT_STATUS_LOCKED`, renamed from

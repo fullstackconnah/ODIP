@@ -72,8 +72,8 @@ supporting tooling all live nested two levels down, inside `odip-prototype/odip/
     ├── frontend/                  # React 19 + TypeScript 5.9 + Vite 7 + Tailwind 4
     ├── mock-api/server.js         # Node mock API for offline frontend preview
     ├── local-test/                # fake Firebase SA + JWT minting; run-api.ps1 starts the API on :5100
-    ├── docs/superpowers/          # legacy TripCore plan/spec archive — historical only, ignore
-    ├── nginx/, start-preview.ps1, .env.example
+    ├── docs/superpowers/specs/2026-08-21-rostering-design.md  # the one legacy spec kept (cited by code)
+    ├── nginx/, .env.example
 ```
 
 The repository root is `F:\Projects\personal\ODIP` (the level above `odip-prototype/`),
@@ -97,8 +97,8 @@ npm run build      # tsc -b && vite build
 npm run lint
 ```
 
-- Combined preview: `odip-prototype/odip/start-preview.ps1` (mock API + Vite; expects Node at
-  `~\tools\node`).
+- No local preview script: the mock API and Vite run only through the server test runner
+  (`F:/Projects/.claude/tools/odip-server-test/odip-test.sh`), never on this PC.
 - Docker: the deployed stack is `deploy/compose.yaml` (repo root), built from source on the
   homelab by `.github/workflows/deploy.yml` — a self-hosted runner that rsyncs the tree,
   runs `docker compose build` as the test gate, then `up -d` with a health check and
@@ -199,8 +199,7 @@ npm run lint
   startup silently with no obvious error pointing back to the cause, so migrations must be
   touched with extreme care.
 
-- `start-preview.ps1`'s opening comment says the mock API runs on port 5050, but the comment is
-  stale — `mock-api/server.js` actually listens on 5062 (overridable via `MOCK_PORT`).
+- `mock-api/server.js` listens on 5062 (overridable via `MOCK_PORT`); any note that says 5050 is stale.
 
 - The XLParser, OpenXml, and Irony DLLs that show up in the build output are transitive
   dependencies of ClosedXML, not direct references — there is no Roslyn usage anywhere in the
