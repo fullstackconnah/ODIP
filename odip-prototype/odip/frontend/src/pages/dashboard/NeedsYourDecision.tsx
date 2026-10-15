@@ -17,14 +17,15 @@ function tabLabel(group: GroupModel, count: number, open: boolean) {
   const ready = group.phase === 'ready'
   const name = ready ? `${group.title} (${count})` : `${group.title}${group.phase === 'loading' ? ', loading' : ", couldn't load"}`
   const pill = open ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-surface-container)] text-[var(--color-foreground)]'
+  // `relative`: the sr-only name is absolute, and must sit inside the strip's scroller, not stretch the page sideways from the last tab.
   return (
-    <>
+    <span className="relative inline-flex items-center">
       <span aria-hidden="true" className="inline-flex items-center gap-2">
         <span className="font-semibold">{group.title}</span>
         <span className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-xs font-bold tabular-nums ${pill}`}>{ready ? count : '–'}</span>
       </span>
       <span className="sr-only">{name}</span>
-    </>
+    </span>
   )
 }
 
