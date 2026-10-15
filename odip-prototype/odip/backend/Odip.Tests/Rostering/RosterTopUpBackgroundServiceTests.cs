@@ -132,6 +132,28 @@ public class RosterTopUpBackgroundServiceTests
     }
 
     [Fact]
+    public async Task A_participant_made_rosterable_later_the_same_day_gets_their_shifts_at_the_next_tick_and_a_ready_organisation_is_done_after_one_tick()
+    {
+        var (db, service, _) = Build(Clock());
+        await using var _ = db;
+        var onboarding = await AddParticipantAsync(db, TenantA, active: false, name: "Jordan");
+        db.ShiftPatterns.Add(AgreementPattern(onboarding, DayOfWeek.Monday));
+        var ready = await AddParticipantAsync(db, TenantB);
+        db.ShiftPatterns.Add(AgreementPattern(ready, DayOfWeek.Monday));
+        await db.SaveChangesAsync();
+
+        var first = await service.RunOnceAsync(CancellationToken.None);         // Jordan is not ready: TenantA is not done for the day; TenantB is done
+        var tracked = await db.Participants.SingleAsync(p => p.Id == onboarding.Id);
+        tracked.IsActive = true; tracked.ServicesStartedAt = Clock().GetUtcNow().UtcDateTime;   // the Warn rule now allows them (IsActive, services begun)
+        await db.SaveChangesAsync();
+        var second = await service.RunOnceAsync(CancellationToken.None);        // the same provider day, an hour later: TenantA is tried again, TenantB is not scanned
+
+        Assert.Equal((2, 2, 8, 1, 0), (first.Tenants, first.Participants, first.ShiftsCreated, first.ParticipantsNotReady, first.Failures));
+        Assert.Equal((1, 1, 8, 0, 0), (second.Tenants, second.Participants, second.ShiftsCreated, second.ParticipantsNotReady, second.Failures));
+        Assert.Equal((8, 8), (await db.Shifts.CountAsync(s => s.TenantId == TenantA), await db.Shifts.CountAsync(s => s.TenantId == TenantB)));
+    }
+
+    [Fact]
     public async Task Hand_made_demo_ended_and_switched_off_patterns_are_never_touched()
     {
         var (db, service, _) = Build(Clock());
