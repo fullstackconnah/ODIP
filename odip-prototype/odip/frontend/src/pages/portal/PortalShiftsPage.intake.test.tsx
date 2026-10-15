@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import PortalShiftsPage from './PortalShiftsPage'
@@ -86,6 +86,25 @@ describe('My shifts: intake visits', () => {
   it('says nothing is rostered only when shifts, trips and visits are all empty', () => {
     mocks.shifts.mockReturnValue({ data: { shifts: [], tripAssignments: [] }, isLoading: false, isError: false, refetch: vi.fn() })
     page()
+    expect(screen.queryByText('Nothing rostered this week')).not.toBeInTheDocument()
+  })
+
+  it('puts a visit that has ended under Earlier and one still to come under Coming up', () => {
+    const past = { ...visit, inquiryId: 'inq-0', firstName: 'Ada', lastName: 'Past', startsAt: '2026-10-12T23:00:00Z' } // Tue 13 Oct, 10:00 am Sydney
+    mocks.visits.mockReturnValue({ data: [past, visit], isLoading: false, isError: false, refetch: mocks.refetchVisits })
+    page()
+
+    expect(within(screen.getByRole('region', { name: 'Earlier' })).getByText('Ada Past')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Earlier' })).queryByText('Noah Fitzgerald')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Coming up' })).getByText('Noah Fitzgerald')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Coming up' })).queryByText('Ada Past')).not.toBeInTheDocument()
+  })
+
+  it('shows a week with only a visit as that visit, not the empty state', () => {
+    mocks.shifts.mockReturnValue({ data: { shifts: [], tripAssignments: [] }, isLoading: false, isError: false, refetch: vi.fn() })
+    page()
+
+    expect(within(screen.getByRole('region', { name: 'Coming up' })).getByText('Noah Fitzgerald')).toBeInTheDocument()
     expect(screen.queryByText('Nothing rostered this week')).not.toBeInTheDocument()
   })
 
