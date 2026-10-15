@@ -14,8 +14,8 @@ for (const touch of [false, true]) {
       const date = `${sydneyToday().slice(0, 4)}-01-01`;
       const created = (await expectStatus('create synthetic holiday', 200, await call(session, 'POST', '/public-holidays', { date, name, state: 'VIC' }))).data;
       try {
-        await page.goto('/settings');
-        await page.getByRole('tab', { name: 'Public holidays', exact: true }).click();
+        // Settings has sections, not tabs, since #258.
+        await page.goto('/settings?section=holidays');
         const button = page.getByRole('button', { name: new RegExp(`^Delete: ${name},.*\\(VIC\\)$`) });
         await expect(button).toBeVisible();
         await button.scrollIntoViewIfNeeded();
