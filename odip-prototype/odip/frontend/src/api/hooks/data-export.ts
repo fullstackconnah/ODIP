@@ -9,6 +9,7 @@ import { localIsoDate } from '@/lib/dateOnly'
 export const DATA_EXPORT_KEY = ['data-export'] as const
 const LAST_KEY = ['data-export', 'last'] as const
 const NO_ORGANISATION = 'Choose an organisation to view as before exporting data.'
+const ALREADY_RUNNING = 'An export for this organisation is already running. Try again when it finishes.'
 const DIDNT_FINISH: DataExportFailure = {
   title: "The export didn't finish",
   body: 'The download stopped before the file was complete, so nothing was saved. Try again.',
@@ -68,20 +69,24 @@ export function exportFileName(contentDisposition: unknown): string {
 export async function exportFailure(err: unknown): Promise<DataExportFailure> {
   const response = isAxiosError(err) ? err.response : undefined
   if (isAxiosError(err) && !response) return DIDNT_FINISH
-  if (response?.status === 400) {
-    // A blob request's error body is itself a Blob, so read the ApiResponse out of it first.
-    let data: unknown = response.data
-    try {
-      data = data instanceof Blob ? JSON.parse(await readText(data)) : data
-    } catch {
-      data = undefined
-    }
-    return { title: 'Choose an organisation first', body: extractErrorMessage({ response: { data } }, NO_ORGANISATION), retry: false }
-  }
+  if (response?.status === 400) return { title: 'Choose an organisation first', body: await serverSentence(response.data, NO_ORGANISATION), retry: false }
+  // Another export of this organisation is running (DataExportConcurrencyFilter): once it finishes, trying again works.
+  if (response?.status === 429) return { title: 'An export is already running', body: await serverSentence(response.data, ALREADY_RUNNING), retry: true }
   if (response?.status === 403) return { title: "You can't export this organisation's data", body: 'Only an Admin can download a full export.', retry: false }
   // A SuperAdmin viewing an organisation that has gone (DataExportController's 404): trying again never helps.
   if (response?.status === 404) return { title: 'That organisation no longer exists', body: 'Choose another organisation to view as.', retry: false }
   return { title: "The export couldn't be built", body: 'Try again in a few minutes. Nothing was saved.', retry: true }
+}
+
+/** The ApiResponse's sentence. A blob request's error body is itself a Blob, so it is read out of that first; anything unreadable gives the fallback. */
+async function serverSentence(body: unknown, fallback: string): Promise<string> {
+  let data: unknown = body
+  try {
+    data = data instanceof Blob ? JSON.parse(await readText(data)) : data
+  } catch {
+    data = undefined
+  }
+  return extractErrorMessage({ response: { data } }, fallback)
 }
 
 /**

@@ -7,6 +7,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 
 namespace Odip.Infrastructure.Services;
 
@@ -54,10 +55,17 @@ public sealed class OnboardingImportService
     /// </summary>
     private Guid TenantId() => !_tenant.IsSuperAdmin && _tenant.TenantId is { } id ? id : throw new ImportException(ChooseOrganisation);
 
+    /// <summary>A connected organisation's staff come from Employment Hero, the master list, so its staff import is refused. The card is hidden too.</summary>
+    private async Task RefuseStaffFromPayrollAsync(ImportKind kind, Guid tenantId, CancellationToken ct)
+    {
+        if (kind == ImportKind.Staff && await EmploymentHeroStaffSync.IsConnectedAsync(_db, tenantId, ct))
+            throw new ImportException(EmploymentHeroStaffSync.StaffFromEmploymentHeroMessage, 409);
+    }
+
     public async Task<ImportPreviewDto> PreviewAsync(ImportKind kind, byte[] content, string fileName, IReadOnlyList<string?>? mapping, CancellationToken ct,
         ClaimsPrincipal? caller = null)
     {
-        TenantId();
+        await RefuseStaffFromPayrollAsync(kind, TenantId(), ct);
         var table = ImportFileReader.Read(content, fileName);
         var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers);
         if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: false) is { } mappingError) throw new ImportException(mappingError);
@@ -166,6 +174,7 @@ public sealed class OnboardingImportService
         ImportLanding? landing, string idempotencyKey, ClaimsPrincipal? caller, CancellationToken ct)
     {
         var tenantId = TenantId();
+        await RefuseStaffFromPayrollAsync(kind, tenantId, ct);
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 100)
             throw new ImportException("The import request has no key. Reload the page and try again.");
         if (kind == ImportKind.Participants && landing is null) throw new ImportException(ChooseLanding);

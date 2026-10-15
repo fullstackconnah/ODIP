@@ -177,6 +177,10 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetEffect>();
 // The plan quote is the one heavy request: about two in flight per organisation (a resource filter, because the rate limiter runs before authentication).
 builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>();
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
+// The data export: one at a time per organisation. The same limiter with one permit, keyed so the quote keeps its two.
+// shortcut: process-local, correct for the single api container in deploy/compose.yaml; move to a DB advisory lock if the API is ever scaled out.
+builder.Services.AddKeyedSingleton(Odip.Api.RateLimiting.DataExportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.DataExportConcurrencyFilter.PermitsPerOrganisation));
+builder.Services.AddScoped<Odip.Api.RateLimiting.DataExportConcurrencyFilter>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftService>();
 // Agreement PR 1: a change to a pattern an approved agreement made is saved as the agreement's next revision (through ServiceAgreementDraftService.SaveAsync).
 builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementPatternChangeService>();
@@ -237,6 +241,16 @@ builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.Notific
 // Keeps RosterTopUp:HorizonDays (56) days of open shifts generated for the patterns an approved agreement made, once for each organisation's provider day. RosterTopUp:Enabled (default true)
 // switches it off; hand-made and demo patterns are never touched. Reads the clock the rest of the API reads (TimeProvider.System, registered above).
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RosterTopUpBackgroundService>();
+
+// ── Employment Hero Payroll (Settings → Integrations) ────────────────
+// The key store reads Integrations:MasterKey, else INTEGRATIONS_MASTER_KEY (32 bytes, base64). With neither, connecting is refused and the rest of ODIP runs.
+builder.Services.AddSingleton<Odip.Infrastructure.Integrations.IntegrationKeyProtector>();
+// The API key travels only in the Authorization header, which is kept out of HttpClient's own request logging.
+builder.Services.AddHttpClient<Odip.Infrastructure.Integrations.EmploymentHeroClient>(c => c.Timeout = TimeSpan.FromSeconds(30))
+    .RedactLoggedHeaders(new[] { "Authorization" });
+builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroStaffSync>();
+// Every 30 minutes, each connected organisation. EmploymentHero:Enabled (default true) switches the loop off; Sync now still works.
+builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroSyncBackgroundService>();
 
 // ── Public early-access form (landing page) ──────────────────────
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH

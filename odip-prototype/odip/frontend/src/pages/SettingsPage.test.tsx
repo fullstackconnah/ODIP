@@ -841,6 +841,20 @@ describe('SettingsPage — Import data tab', () => {
   })
 })
 
+describe('SettingsPage — Integrations tab', () => {
+  it('shows the Integrations tab to someone who can manage integrations', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: true, canImportData: true, canManageIntegrations: true })
+    renderSettingsPage()
+    expect(screen.getByRole('tab', { name: 'Integrations' })).toBeInTheDocument()
+  })
+
+  it('hides the Integrations tab from a Coordinator', () => {
+    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isCoordinator: true, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false, canImportData: false, canManageIntegrations: false })
+    renderSettingsPage()
+    expect(screen.queryByRole('tab', { name: 'Integrations' })).toBeNull()
+  })
+})
+
 describe('Settings tabs — Data export', () => {
   it('sits right after Import data for someone who can import data, and is hidden from everyone else', () => {
     mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canImportData: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })

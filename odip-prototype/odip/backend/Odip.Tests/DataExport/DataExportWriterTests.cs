@@ -87,6 +87,36 @@ public class DataExportWriterTests
         Assert.StartsWith("\uFEFF", Encoding.UTF8.GetString(ReadAll(zip, "participants.csv")));
     }
 
+    [Fact]
+    public async Task A_client_that_leaves_as_the_last_bytes_are_written_does_not_fail_the_finished_export()
+    {
+        // Once the end-of-central-directory record is out, the ZIP is whole; the final flush must not turn the client leaving into a failure
+        // (which would cost the export its audit row).
+        var (db, tenantId) = await NewOrganisationAsync();
+        using var leaving = new CancellationTokenSource();
+        var output = new CancelOnEndOfZip(leaving);
+
+        await DataExportWriter.WriteAsync(output, db, tenantId, ExportTables.All, DataExportTestKit.GeneratedAt, "test-build", leaving.Token);
+
+        Assert.True(leaving.IsCancellationRequested);
+        output.Position = 0;
+        using var zip = new System.IO.Compression.ZipArchive(output, System.IO.Compression.ZipArchiveMode.Read);
+        Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
+    }
+
+    /// <summary>A response body whose client goes away the moment the ZIP's end-of-central-directory record (PK 05 06) is written.</summary>
+    private sealed class CancelOnEndOfZip(CancellationTokenSource leaving) : MemoryStream
+    {
+        // A subclass's span Write goes through this array one, so the check lives here only.
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            base.Write(buffer, offset, count);
+            if (buffer.AsSpan(offset, count).IndexOf(new byte[] { 0x50, 0x4B, 0x05, 0x06 }) >= 0) leaving.Cancel();
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer) => Write(buffer.ToArray(), 0, buffer.Length);
+    }
+
     private static byte[] ReadAll(System.IO.Compression.ZipArchive zip, string name)
     {
         using var bytes = new MemoryStream();
