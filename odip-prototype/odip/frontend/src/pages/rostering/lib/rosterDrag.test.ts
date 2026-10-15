@@ -269,6 +269,18 @@ describe('pickerGroups', () => {
     const groups = pickerGroups(target, [person('jack', "Jack O'Sullivan")], [on('late', 'jack', { startTime: '12:00:00', endTime: '14:00:00' }), on('early', 'jack', { startTime: '08:00:00', endTime: '10:00:00' })], [], none)
     expect(keys(groups.move)).toEqual(['jack:early', 'jack:late'])
   })
+
+  it('puts a person on leave that starts the day an overnight shift ends under Leave', () => {
+    const overnight = makeUnfilledShift({ id: 'night', serviceDate: '2026-08-16', startTime: '22:00:00', endTime: '07:00:00', endsNextDay: true })
+    const groups = pickerGroups(overnight, [person('kim', 'Kim Lee')], [], [{ staffId: 'kim', from: '2026-08-17', to: '2026-08-17', status: 'Approved' }], none)
+    expect(groups.leave.map(r => [r.key, r.leave])).toEqual([['kim', 'Approved']])
+  })
+
+  it('leaves out the other worker of a staggered 2:1 (same participant and day, overlapping times)', () => {
+    const staggered = on('stag', 'sam', { participantId: 'p-1', participantName: 'Mia Chen', startTime: '10:00:00', endTime: '14:00:00' })
+    const groups = pickerGroups(target, [person('sam', 'Sam Wilson')], [staggered], [], none)
+    expect([...groups.free, ...groups.move, ...groups.leave]).toEqual([])
+  })
 })
 
 // Review Focus 1: overnight shifts, across the night Sydney's clocks go forward (2am Sunday 4 October 2026). Also run under vitest-sydney.

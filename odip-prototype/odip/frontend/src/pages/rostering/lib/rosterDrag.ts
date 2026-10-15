@@ -1,6 +1,6 @@
 import { createContext } from 'react'
 import { closestCenter, pointerWithin, type Announcements, type CollisionDetection, type Modifier, type ScreenReaderInstructions } from '@dnd-kit/core'
-import { format, parseISO } from 'date-fns'
+import { addDays, format, parseISO } from 'date-fns'
 import type { PublishWeekResultDto, RosterStaffRowDto, ShiftDto, ShiftStatus, StaffLeaveDto, StaffListDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatShiftTime } from '@/lib/utils'
@@ -252,26 +252,29 @@ export function shiftsOverlap(a: ShiftDto, b: ShiftDto): boolean {
   return aStart < bEnd && bStart < aEnd
 }
 
-/** Leave covering the day: approved wins over pending. */
-function leaveOn(leave: StaffLeaveDto[], staffId: string, day: string): PickRow['leave'] {
-  const covering = leave.filter(l => l.staffId === staffId && l.from <= day && day <= l.to)
+/** Leave covering any day the shift runs (an overnight one also covers the morning after): approved wins over pending. */
+function leaveOn(leave: StaffLeaveDto[], staffId: string, shift: Pick<ShiftDto, 'serviceDate' | 'endsNextDay'>): PickRow['leave'] {
+  const day = shift.serviceDate
+  const last = shift.endsNextDay ? format(addDays(parseISO(day), 1), 'yyyy-MM-dd') : day
+  const covering = leave.filter(l => l.staffId === staffId && l.from <= last && day <= l.to)
   return covering.some(l => l.status === 'Approved') ? 'Approved' : covering.length > 0 ? 'Pending' : null
 }
 
 /**
  * Who goes in which group for a Needs staff shift (the brief, section 4). Each active person lands in the FIRST group that matches:
  * 1. Move: they hold a non-cancelled, unlocked shift whose time overlaps this one. Each such shift is its own row.
- *    Left out entirely: a person whose only overlapping shifts are locked, or who is on the other chip of this 2:1 pair (same participant, day and times).
+ *    Left out entirely: a person whose only overlapping shifts are locked, or who is on the other chip of this 2:1 pair (same participant and day, any overlapping time).
  * 2. Leave: approved or pending leave covers the day.
  * 3. Free: everyone else, a non-overlapping shift that day included.
  * Each group keeps the staff list's order (by last name), and a person's Move rows go by start time. Shown Free, then Move, then Leave.
  */
+// shortcut: only sees the shifts on the board's week, so a night shift crossing the week edge reads as Free here; the server's double-booking check (assign, move) covers it.
 export function pickerGroups(target: ShiftDto, staff: StaffListDto[], shifts: ShiftDto[], leave: StaffLeaveDto[], hours: Map<string, number>): PickGroups {
   const groups: PickGroups = { free: [], move: [], leave: [] }
-  const isPair = (s: ShiftDto) => s.participantId === target.participantId && s.serviceDate === target.serviceDate && s.startTime === target.startTime && s.endTime === target.endTime
+  const isPair = (s: ShiftDto) => s.participantId === target.participantId && s.serviceDate === target.serviceDate && shiftsOverlap(s, target)
   for (const person of staff) {
     if (!person.isActive) continue
-    const row = { person, hours: hours.get(person.id) ?? 0, leave: leaveOn(leave, person.id, target.serviceDate) }
+    const row = { person, hours: hours.get(person.id) ?? 0, leave: leaveOn(leave, person.id, target) }
     const overlapping = shifts
       .filter(s => s.staffId === person.id && s.id !== target.id && s.status !== 'Cancelled' && shiftsOverlap(s, target))
       .sort((a, b) => shiftMinutes(a)[0] - shiftMinutes(b)[0])
