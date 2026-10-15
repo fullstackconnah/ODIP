@@ -71,7 +71,7 @@ test('a shift\'s menu swaps its person with a colleague on another shift', async
   await page.getByRole('option', { name: 'Swap with…' }).click();
   const picker = page.getByRole('dialog', { name: /^Swap .* with…$/ });
   await picker.getByRole('combobox', { name: 'Find staff' }).fill(sam.token);
-  await picker.getByRole('option', { name: new RegExp(`^Wk ${sam.token} · `) }).click();
+  await picker.getByRole('option', { name: new RegExp(`^Wk ${sam.token}, `) }).click();
   await expect(alexsPuck).toContainText(`Wk ${sam.token}`);
   await expect(samsPuck).toContainText(`Wk ${alex.token}`);
 

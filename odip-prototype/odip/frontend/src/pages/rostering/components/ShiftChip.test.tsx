@@ -544,9 +544,11 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       expect(screen.getByRole('img', { name: /Assigned with an override/ }).querySelector('svg')!.getAttribute('class')).toContain('shield')
     })
 
-    it('takes the top corner, and the bottom one when the chip already carries a severity marker at the top', () => {
+    // The chip brief's tray (2026-10-15): the header line runs the tray's whole width and its time never clips, so the disc takes the bottom corner on every chip, beside the box's menu.
+    it('takes the bottom corner, with or without a severity marker, so it never sits on the header line', () => {
       const plain = markerOf(emergency())
-      expect(plain.className).toContain('-top-')
+      expect(plain.className).toContain('-bottom-')
+      expect(plain.className).not.toContain('-top-')
       cleanup()
 
       const withFindings = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
@@ -555,9 +557,9 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
     })
 
     it('makes room for the part of the disc that hangs off the chip, so the board’s sticky day header never cuts it (the first row sits right under it)', () => {
-      const top = markerOf(emergency())
-      expect(top.parentElement).toHaveClass('mt-2')
-      expect(top.parentElement).not.toHaveClass('mb-2')
+      const plain = markerOf(emergency())
+      expect(plain.parentElement).toHaveClass('mb-2')
+      expect(plain.parentElement).not.toHaveClass('mt-2')
       cleanup()
 
       const bottom = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
@@ -609,12 +611,9 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       })
     })
 
-    it('keeps the header label clear of a disc on the top corner: the label gives way, never sits under it', () => {
-      const top = markerOf(emergency())
-      expect(top.parentElement!.querySelector('[data-shift-source]')!.parentElement).toHaveClass('pr-4')
-      cleanup()
-      const bottom = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
-      expect(bottom.parentElement!.querySelector('[data-shift-source]')!.parentElement).toHaveClass('pr-0.5')
+    it('leaves the header its whole width: no pad for the disc', () => {
+      const disc = markerOf(emergency())
+      expect(disc.parentElement!.querySelector('[data-shift-source]')!.parentElement).toHaveClass('px-0.5')
     })
 
     it('adds no room to a chip with no marker', () => {
@@ -696,7 +695,7 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
     expect(screen.getByText('9am–5pm')).toHaveClass('shrink-0', 'font-medium', 'tabular-nums', 'text-foreground')
     // The header: one 16px line of 12px text, 4px in from the tray's inner edge, the label right-aligned after the time (the chip brief, section 2.2).
     const header = screen.getByText('9am–5pm').parentElement as HTMLElement
-    expect(header).toHaveClass('h-4', 'text-xs', 'pl-0.5', 'pr-0.5', 'col-span-full')
+    expect(header).toHaveClass('h-4', 'text-xs', 'px-0.5', 'col-span-full')
     expect(header).toContainElement(mark)
     expect(mark).toHaveClass('justify-end', 'flex-1', 'min-w-0')
   })

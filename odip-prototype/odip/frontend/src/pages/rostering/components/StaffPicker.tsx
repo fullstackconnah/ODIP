@@ -8,7 +8,7 @@ import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
 import { formatHoursMeter, formatShiftTimeRange } from '../lib/roster'
-import { WEEK_TARGET_HOURS, firstName, moveLine, pickName, pickOptionName, pickerGroups, pickerPlacement, swapCandidates, swapLine, type PickRow } from '../lib/rosterDrag'
+import { WEEK_TARGET_HOURS, firstName, moveLine, pickName, pickOptionName, pickerGroups, pickerPlacement, swapCandidates, swapOptionName, type PickRow } from '../lib/rosterDrag'
 
 export type StaffPickerProps = {
   /** The Needs staff shift being filled. Null: closed. */
@@ -277,7 +277,7 @@ function SwapBody({ source, shifts, onPick, inputRef }: { source: ShiftDto; shif
             id={optionId(i)}
             role="option"
             aria-selected={i === active}
-            aria-label={swapLine(shift)}
+            aria-label={swapOptionName(shift)}
             // Focus stays in the search: the browser's mousedown would take it before the click picks (SearchableSelect).
             onMouseDown={e => e.preventDefault()}
             onClick={() => onPick(shift)}

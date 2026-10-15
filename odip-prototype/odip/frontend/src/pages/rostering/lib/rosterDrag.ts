@@ -357,7 +357,7 @@ export function swapCandidates(source: ShiftDto, shifts: ShiftDto[]): ShiftDto[]
     .sort((a, b) => Number(b.serviceDate === source.serviceDate) - Number(a.serviceDate === source.serviceDate) || shiftMinutes(a)[0] - shiftMinutes(b)[0])
 }
 
-/** A swap row: "Sam Wilson · Tue 9am–3pm". */
-export function swapLine(shift: ShiftDto): string {
-  return `${shift.staffName} · ${format(parseISO(shift.serviceDate), 'EEE')} ${formatShiftTimeRange(shift.startTime, shift.endTime)}`
+/** A swap row's accessible name, spoken as the plus's and the picker's are: "Sam Wilson, Tuesday 9am to 3pm". It shows as "Sam Wilson · Tue 9am–3pm". */
+export function swapOptionName(shift: ShiftDto): string {
+  return `${shift.staffName}, ${format(parseISO(shift.serviceDate), 'EEEE')} ${spokenRange(shift)}`
 }

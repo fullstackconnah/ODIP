@@ -4,7 +4,7 @@ import type { ShiftDto, StaffLeaveDto, StaffListDto } from '@/api/types'
 import {
   assignedSentence, carriedLine, dropOutcome, keepInWindow, movedSentence, publishedSentence, publishWeekMessage, replacePromptLines, rosterAnnouncements, rosterCollision,
   staffWeekHours, swappedSentence, type DragCarry, type DropTarget,
-  hoursText, leaveFromStaffRows, moveLine, pickName, pickOptionName, pickerGroups, shiftsOverlap, swapCandidates, swapLine, type PickRow,
+  hoursText, leaveFromStaffRows, moveLine, pickName, pickOptionName, pickerGroups, shiftsOverlap, swapCandidates, swapOptionName, type PickRow,
 } from './rosterDrag'
 
 const sam: DragCarry = { staffId: 'staff-2', staffName: 'Sam Wilson' }
@@ -376,7 +376,7 @@ describe('swapCandidates', () => {
     expect(swapCandidates(source, shifts)).toEqual([])
   })
 
-  it('reads each row as the person, then the day and time', () => {
-    expect(swapLine(on('t', '2026-08-18', 'staff-3', 'Sam Wilson'))).toBe('Sam Wilson · Tue 9am–3pm')
+  it('names each row as the person, then the day and time, in spoken words', () => {
+    expect(swapOptionName(on('t', '2026-08-18', 'staff-3', 'Sam Wilson'))).toBe('Sam Wilson, Tuesday 9am to 3pm')
   })
 })

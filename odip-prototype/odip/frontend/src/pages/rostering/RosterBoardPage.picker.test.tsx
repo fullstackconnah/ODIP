@@ -238,7 +238,8 @@ describe('RosterBoardPage: Swap with… from the menu', () => {
     renderPage()
     const dialog = await openSwap(user)
     expect(within(dialog).getByRole('combobox', { name: 'Find staff' })).toHaveFocus()
-    expect(within(dialog).getAllByRole('option').map(o => o.getAttribute('aria-label'))).toEqual(['Alex Ng · Tue 8am–5pm'])
+    expect(within(dialog).getAllByRole('option').map(o => o.getAttribute('aria-label'))).toEqual(['Alex Ng, Tuesday 8am to 5pm'])
+    expect(within(dialog).getByRole('option').textContent).toBe('Alex Ng· Tue 8am–5pm')   // two spans, drawn apart by a gap
     expect(document.querySelector('[data-shift-chip="sam-wed"] [data-shift-box]')).toHaveClass('ring-2')
   })
 

@@ -220,7 +220,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       // the menu, siblings of the open control, sit in the box's own cells. A 2px pad and a 2px row gap make 56px with a mouse and 68px under a coarse pointer.
       className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_var(--control-h)] gap-y-0.5 rounded-sm border border-border bg-surface-container-low p-0.5 text-[13px] transition-opacity duration-150 ${
         isDragging || fading ? 'opacity-50' : ''
-      } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings || budgetMarker ? 'mt-2' : ''} ${budgetMarker && hasFindings ? 'mb-2' : ''}`}
+      } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings ? 'mt-2' : ''} ${budgetMarker ? 'mb-2' : ''}`}
     >
       {/* Drag activation lives on its own handle, separate from the open button below. Both used
           to share one element with dnd-kit's listeners spread onto the same button that opens the
@@ -288,8 +288,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         className="col-span-full row-[1/span_2] grid grid-cols-subgrid grid-rows-subgrid rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         {/* The header: one 16px line of 12px text, 4px in from the tray's inner edge. The time has the chip's whole width and never gives way; the kind is right-aligned after it. */}
-        {/* A budget disc on the top corner would sit on the label's end, so the label gives way to it instead (pr-4: clear of the disc by 3px). */}
-        <span className={`col-span-full flex h-4 min-w-0 items-center gap-0.5 pl-0.5 text-xs ${budgetMarker && !hasFindings ? 'pr-4' : 'pr-0.5'}`}>
+        <span className="col-span-full flex h-4 min-w-0 items-center gap-0.5 px-0.5 text-xs">
           <span
             className={`shrink-0 font-medium tabular-nums ${shift.status === 'Cancelled' ? 'text-muted-foreground line-through' : 'text-foreground'}`}
             title={shift.endsNextDay ? `${timeRange} — ends the next day` : undefined}
@@ -386,12 +385,11 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       )}
 
       {/* The over-budget marker (design review H1): a 20 px disc on the chip's corner, not a 12 px shield in the name row. It is out of the flow, so the label never gives way to it, and it is
-          pointer-events-none like the severity marker, so it never takes a click from the chip or the menu. It takes the top corner; a chip that already carries a severity marker at the top
-          takes the bottom one, so the two never sit on each other. The part of the disc that hangs off the chip needs room to hang in: the chip leaves 8 px of margin on that side, because the first row sits
-          right under the board's sticky day header (z-20), which cut the top of the disc when it hung over nothing. It keeps its role="img", its words in the accessible name and the hover title, and its data attribute. */}
+          pointer-events-none like the severity marker, so it never takes a click from the chip or the menu. It takes the bottom corner on every chip (the chip brief's tray, 2026-10-15): on the top
+          one it sat on the header line, where the time must never clip. The part that hangs off the chip needs room to hang in, so the chip leaves 8 px of margin below. It keeps its role="img", its words in the accessible name and the hover title, and its data attribute. */}
       {budgetMarker && budgetMarkerTitle && (
         <span
-          className={`pointer-events-none absolute z-10 flex h-5 w-5 items-center justify-center ring-2 ring-[var(--color-card)] ${hasFindings ? '-bottom-2' : '-top-2'} -right-1 ${budgetDisc.shape} ${budgetDisc.fill}`}
+          className={`pointer-events-none absolute z-10 flex h-5 w-5 items-center justify-center ring-2 ring-[var(--color-card)] -bottom-2 -right-1 ${budgetDisc.shape} ${budgetDisc.fill}`}
           role="img"
           aria-label={budgetMarkerName ?? undefined}
           title={budgetMarkerTitle}
