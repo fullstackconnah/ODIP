@@ -696,6 +696,28 @@ public class ParticipantHubFlowTests
         Assert.Equal(("booked@odip", 1), (row.IntakeUid, row.IntakeIcsSequence));
     }
 
+    // Follow-ups (intake): the enquiry's email is the contact the intake visit's invite goes to. A booking may ask for it after Start intake and writes it to the enquiry only, so the
+    // participant can have none: the wizard's save must not blank the enquiry's email with the participant's empty one. An email the wizard does give is still copied over.
+    [Fact]
+    public async Task Saving_an_intake_keeps_the_enquiry_email_the_participant_does_not_have()
+    {
+        var tenantId = Guid.NewGuid();
+        using var caller = NewCaller(tenantId);
+        var enquiry = await CaptureEnquiryAsync(caller);                                                     // by phone: no email yet
+        var participantId = Ok(await caller.Inquiries.Convert(enquiry.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
+        (await caller.Db.ParticipantInquiries.SingleAsync(x => x.Id == enquiry.Id)).Email = "family@example.test";   // as a booking's contactEmail stores it
+        await caller.Db.SaveChangesAsync();
+
+        Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false), CancellationToken.None));
+
+        var kept = await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id);
+        Assert.Equal(("King", "family@example.test"), (kept.LastName, kept.Email));
+
+        Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false) with { Email = "ada@example.test" }, CancellationToken.None));
+
+        Assert.Equal("ada@example.test", (await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email);
+    }
+
     /// <summary>Before every save that writes an enquiry, a booking lands on it first through another context: the wizard's one retry meets a conflict too.</summary>
     private sealed class BookingBeforeEverySaveInterceptor(string store, Guid tenantId) : SaveChangesInterceptor
     {

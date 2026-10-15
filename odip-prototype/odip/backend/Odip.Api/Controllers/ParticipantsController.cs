@@ -511,7 +511,9 @@ public class ParticipantsController : ControllerBase
         // keep it in step. Where the enquiry came from (source, provenance) is its own record and is not touched.
         foreach (var inquiry in await _db.ParticipantInquiries.Where(i => i.ParticipantId == p.Id).ToListAsync(ct))
         {
-            inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone; inquiry.Email = p.Email;
+            inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone;
+            // The enquiry's email is where the intake visit's invite goes, and a booking can store it on the enquiry alone: a participant with no email never blanks it.
+            if (!string.IsNullOrWhiteSpace(p.Email)) inquiry.Email = p.Email;
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 
