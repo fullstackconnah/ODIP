@@ -37,7 +37,7 @@ test.describe('dashboard quick actions', () => {
 
     await page.goto('/');
     // One tab per kind; which opens first depends on what lands first, so pick this one (its name carries its count, or "loading").
-    await page.getByRole('tab', { name: /^Leave/ }).click();
+    await page.getByRole('tab', { name: /^Leave/ }).click();
     const approve = page.getByRole('button', { name: new RegExp(`^Approve leave: Wk ${staff.token}, `) });
     await expect(approve).toBeVisible();
     await approve.click();
@@ -77,7 +77,7 @@ test.describe('dashboard quick actions', () => {
 
     await page.goto('/');
     // One tab per kind; which opens first depends on what lands first, so pick this one (its name carries its count, or "loading").
-    await page.getByRole('tab', { name: /^Completions/ }).click();
+    await page.getByRole('tab', { name: /^Completions/ }).click();
     const approve = page.getByRole('button', { name: new RegExp(`^Approve shift: Wk ${staff.token} with `) });
     await expect(approve).toBeVisible();
     await approve.click();
