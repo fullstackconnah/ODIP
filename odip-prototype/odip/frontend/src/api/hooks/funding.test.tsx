@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import type { SaveFundingPlanDto } from '../types'
 import { plan } from '@/test/fixtures/funding'
 import {
-  useApplyPlanDatesToProfile, useBillingSourcesHint, useBudgetSettings, useCreateFundingPlan, useFundingPlans, usePaceCategories, useUpdateBudgetSettings, useUpdateFundingPlan,
+  useApplyPlanDatesToProfile, useBudgetSettings, useCreateFundingPlan, useFundingPlans, usePaceCategories, useUpdateBudgetSettings, useUpdateFundingPlan,
 } from './funding'
 
 // The budget hooks send exact bodies to the funding endpoints (never the participant's patch groups), and a plan write refreshes ['participant-funding', participantId]; applying a plan's
@@ -49,16 +49,15 @@ describe('reading', () => {
     expect(apiGet).not.toHaveBeenCalled()
   })
 
-  it('reads the support categories, the Billing hint and the settings from their own endpoints', async () => {
+  it('reads the support categories and the settings from their own endpoints', async () => {
     apiGet.mockResolvedValue([])
     const client = new QueryClient()
     renderHook(() => usePaceCategories(), { wrapper: wrapper(client) })
-    renderHook(() => useBillingSourcesHint('participant-1'), { wrapper: wrapper(client) })
     renderHook(() => useBudgetSettings(), { wrapper: wrapper(client) })
 
-    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2))
     expect(apiGet.mock.calls.map(call => call[0]).sort()).toEqual([
-      '/funding/pace-categories', '/funding/settings', '/participants/participant-1/funding/billing-sources-hint',
+      '/funding/pace-categories', '/funding/settings',
     ])
   })
 })

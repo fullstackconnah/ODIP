@@ -1,0 +1,521 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ProviderSettingsDto } from '@/api/types'
+import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
+import SettingsPage from '@/pages/SettingsPage'
+
+// Organisation profile, Billing details and Safety checks share one provider settings row and one PUT that overwrites every text and flag
+// field it is sent. The fake server below follows that contract (it applies what it is sent, and leaves the rest alone), so each test
+// proves the outcome on the server: what a section sends, and what it must never send (the other sections' fields, the two modes).
+const { mockApiGet, mockApiPut, mockUsePermissions, screenSize } = vi.hoisted(() => ({ mockApiGet: vi.fn(), mockApiPut: vi.fn(), mockUsePermissions: vi.fn(), screenSize: { belowMd: false } }))
+
+vi.mock('@/api/client', async () => {
+  const actual = await vi.importActual<typeof import('@/api/client')>('@/api/client')
+  // The tenant and user panels the page always mounts read through apiClient directly; an empty answer keeps them quiet.
+  const apiClient = { get: vi.fn(async () => ({ data: { data: [] } })), post: vi.fn(), put: vi.fn(), delete: vi.fn() }
+  return {
+    ...actual,
+    apiClient,
+    apiGet: mockApiGet,
+    apiGetWithDefault: async (url: string, fallback: unknown) => (await mockApiGet(url)) ?? fallback,
+    apiPut: mockApiPut,
+  }
+})
+vi.mock('@/lib/permissions', () => ({ usePermissions: mockUsePermissions }))
+// Desktop (the rail beside the section) unless a test says otherwise; jsdom would read as a phone.
+vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => screenSize.belowMd }))
+
+function makeSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSettingsDto {
+  return {
+    id: 'ps-1', registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sunrise Support Services', address: '12 Wattle St, Brisbane QLD 4000',
+    state: 'QLD', gstRegistered: true, isPaceProvider: false, bankAccountName: 'Sunrise Support', bsb: '064-000', accountNumber: '12345678',
+    invoiceFooterNotes: 'Thank you for choosing Sunrise.', managerName: 'Priya Sharma', managerPhone: '0412 345 007',
+    participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', ...overrides,
+  }
+}
+
+/** The fake server's row: what the next GET returns, and what a PUT merges the sent fields into. Null: the organisation has no row. */
+let server: ProviderSettingsDto | null
+
+beforeEach(() => {
+  server = makeSettings()
+  mockApiGet.mockReset().mockImplementation(async (url: string) => (url === '/provider-settings' ? server : []))
+  mockApiPut.mockReset().mockImplementation(async (_url: string, body: Partial<ProviderSettingsDto>) => {
+    server = { ...(server ?? ({} as ProviderSettingsDto)), ...body }
+    return true
+  })
+  mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
+  screenSize.belowMd = false
+})
+
+afterEach(() => vi.restoreAllMocks())
+
+function renderSection(section: 'organisation' | 'billing' | 'safety', queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: [`/settings?section=${section}`] })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  )
+  return { queryClient, router }
+}
+
+/** The body of the Nth PUT /provider-settings (the first by default). */
+function putBody(nth = 0): Record<string, unknown> {
+  const call = mockApiPut.mock.calls[nth]
+  expect(call[0]).toBe('/provider-settings')
+  return call[1] as Record<string, unknown>
+}
+
+/** The row as the server held it, as a section PUTs it back: every field except the two modes, which go only when changed. */
+function rowWithoutModes(row: ProviderSettingsDto, overrides: Partial<ProviderSettingsDto> = {}) {
+  const body: Partial<ProviderSettingsDto> = { ...row, ...overrides }
+  delete body.participantReadinessMode
+  delete body.medicationCompetencyMode
+  delete body.employmentHeroConnected
+  return body
+}
+
+const saveButton = () => screen.getByRole('button', { name: 'Save changes' })
+
+describe('Organisation profile', () => {
+  it('shows the identity fields from the row, in two groups', async () => {
+    renderSection('organisation')
+    expect(await screen.findByLabelText('Organisation name')).toHaveValue('Sunrise Support Services')
+    expect(screen.getByLabelText('ABN')).toHaveValue('51824753556')
+    expect(screen.getByLabelText('NDIS registration number')).toHaveValue('4050012345')
+    expect(screen.getByRole('textbox', { name: 'Address' })).toHaveValue('12 Wattle St, Brisbane QLD 4000')
+    expect(screen.getByRole('button', { name: /State/ })).toHaveTextContent('QLD')
+    expect(screen.getByRole('heading', { level: 3, name: 'Name and registration' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Address' })).toBeInTheDocument()
+  })
+
+  it('on a phone opens as a screen of its own with a Back link, and saves the same way', async () => {
+    const user = userEvent.setup()
+    screenSize.belowMd = true
+    renderSection('organisation')
+    const name = await screen.findByLabelText('Organisation name')
+    expect(screen.getByRole('link', { name: 'Back to settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Settings' })).not.toBeInTheDocument()
+
+    await user.type(name, '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Support Services!' }))
+  })
+
+  it('sends the row as the server holds it with only the changed field replaced, and never a mode', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    renderSection('organisation')
+    const name = await screen.findByLabelText('Organisation name')
+
+    await user.clear(name)
+    await user.type(name, 'Sunrise Care')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care' }))
+    expect(server).toMatchObject({ organisationName: 'Sunrise Care', participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
+  })
+
+  it('a second save before the refetch lands keeps the first save: the cache holds what was saved', async () => {
+    const user = userEvent.setup()
+    renderSection('organisation')
+    const name = await screen.findByLabelText('Organisation name')
+    await user.clear(name)
+    await user.type(name, 'Sunrise Care')
+    // From here every GET of the row hangs: the refetch after the first save never lands.
+    mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
+    await user.click(saveButton())
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+
+    const abn = screen.getByLabelText('ABN')
+    await user.clear(abn)
+    await user.type(abn, '12345678901')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toEqual(rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }))
+  })
+
+  it('never writes back the Employment Hero flag the GET computes', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ employmentHeroConnected: true })
+    renderSection('organisation')
+    await user.type(await screen.findByLabelText('Organisation name'), '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).not.toHaveProperty('employmentHeroConnected')
+  })
+
+  it('starts from the row as it is when the section opens, not from an older copy in the cache', async () => {
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+    queryClient.setQueryData(['provider-settings'], makeSettings({ bsb: '000-000' }))   // what this browser saw earlier
+    renderSection('organisation', queryClient)                                          // the server meanwhile holds 064-000
+    const name = await screen.findByLabelText('Organisation name')
+
+    await user.type(name, '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toMatchObject({ bsb: '064-000', organisationName: 'Sunrise Support Services!' })
+  })
+
+  it('opens as an empty form for an organisation with no row (the API sends no data), and its first save sends only what was typed', async () => {
+    const user = userEvent.setup()
+    server = null
+    mockApiGet.mockImplementation(async (url: string) => (url === '/provider-settings' ? undefined : []))
+    renderSection('organisation')
+
+    const name = await screen.findByLabelText('Organisation name')
+    expect(name).toHaveValue('')
+    expect(screen.queryByText(/could not load|couldn.t load/i)).not.toBeInTheDocument()
+    await user.type(name, 'Sunrise Care')
+    await user.type(screen.getByLabelText('ABN'), '51824753556')
+    await user.type(screen.getByLabelText('NDIS registration number'), '4050012345')
+    await user.type(screen.getByRole('textbox', { name: 'Address' }), '1 Test St')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual({ organisationName: 'Sunrise Care', abn: '51824753556', registrationNumber: '4050012345', address: '1 Test St' })
+  })
+
+  it('says which fields the server needs when it refuses a blank one without a message', async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: { errors: { ABN: ['The ABN field is required.'] } } } })
+    renderSection('organisation')
+    await user.clear(await screen.findByLabelText('ABN'))
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Fill in the registration number, ABN, organisation name and address.')
+    expect(screen.getByLabelText('ABN')).toHaveValue('')
+    expect(saveButton()).toBeEnabled()
+  })
+
+  it('is locked for a Coordinator: values readable in read-only fields, State disabled, a note, and no Save', async () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    renderSection('organisation')
+    const abn = await screen.findByLabelText('ABN')
+    expect(abn).toHaveAttribute('readonly')
+    expect(abn).toHaveValue('51824753556')
+    expect(screen.getByRole('button', { name: /State/ })).toBeDisabled()
+    expect(screen.getByText(/only an admin can change these/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Billing details', () => {
+  it('keeps untouched nulls null and every other section field as the server sent it', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ bankAccountName: null, invoiceFooterNotes: null })
+    renderSection('billing')
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Registered for GST' }))
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings({ bankAccountName: null, invoiceFooterNotes: null }), { gstRegistered: false }))
+  })
+
+  it('names its groups and fields in the words of the brief, and gives the invoice note three rows', async () => {
+    renderSection('billing')
+    expect(await screen.findByLabelText('Account name')).toHaveValue('Sunrise Support')
+    expect(screen.getByLabelText('BSB')).toHaveValue('064-000')
+    expect(screen.getByLabelText('Account number')).toHaveValue('12345678')
+    expect(screen.getByRole('checkbox', { name: /PACE provider/ })).not.toBeChecked()
+    const note = screen.getByLabelText('Note at the foot of every invoice')
+    expect(note).toHaveAttribute('rows', '3')
+    expect(note).toHaveClass('h-auto')
+    for (const group of ['Bank account', 'Tax and claiming', 'Invoice note']) expect(screen.getByRole('heading', { level: 3, name: group })).toBeInTheDocument()
+  })
+
+  it('waits for the organisation profile when its required fields are blank: a note with a link, locked fields, no Save', async () => {
+    server = makeSettings({ abn: '' })
+    renderSection('billing')
+    expect(await screen.findByText('Fill in the organisation profile first. These settings are saved with it.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Organisation profile' })).toHaveAttribute('href', '/settings?section=organisation')
+    expect(screen.getByRole('checkbox', { name: 'Registered for GST' })).toBeDisabled()
+    expect(screen.getByLabelText('Account name')).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the edited bank details and says why when a save fails, having sent the row with only that change', async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 500, data: {} } })
+    renderSection('billing')
+    const bsb = await screen.findByLabelText('BSB')
+
+    await user.clear(bsb)
+    await user.type(bsb, '063-000')
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Check your connection and try again.')
+    expect(screen.getByLabelText('BSB')).toHaveValue('063-000')
+    expect(saveButton()).toBeEnabled()
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { bsb: '063-000' }))
+    expect(server?.bsb).toBe('064-000')
+  })
+
+  it('hides the bank account from a Coordinator, and has no Save', async () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    renderSection('billing')
+    expect(await screen.findByRole('checkbox', { name: 'Registered for GST' })).toBeDisabled()
+    expect(screen.queryByLabelText('Account name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Safety checks', () => {
+  const readiness = () => screen.getByRole('radiogroup', { name: 'Participant readiness check' })
+  const medication = () => screen.getByRole('radiogroup', { name: 'Medication competency check' })
+  const radio = (group: HTMLElement, name: 'Warn only' | 'Enforce') => within(group).getByRole('radio', { name })
+  const managerName = () => screen.getByLabelText('Manager name') as HTMLInputElement
+  async function open() {
+    renderSection('safety')
+    await screen.findByLabelText('Manager name')
+  }
+
+  it('gives each check its own block: when it applies, both modes in words, and the current mode chosen', async () => {
+    server = makeSettings({ participantReadinessMode: 'Enforce' })
+    await open()
+    expect(screen.getByRole('heading', { level: 3, name: 'Participant readiness check' })).toBeInTheDocument()
+    expect(screen.getByText('Before a participant is rostered, booked or activated.')).toBeInTheDocument()
+    expect(screen.getByText(/Participants must be fully ready first, including a signed service agreement\./)).toBeInTheDocument()
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(radio(medication(), 'Warn only')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText(/The dose is refused\./)).toBeInTheDocument()
+    expect(managerName()).toHaveValue('Priya Sharma')
+    expect(screen.getByLabelText('Manager phone')).toHaveValue('0412 345 007')
+  })
+
+  it('keeps the warning that Enforce would block everyone while signed agreements cannot be recorded', async () => {
+    await open()
+    expect(screen.getByText(/Signed agreements can.t be recorded yet, so Enforce would block every participant/)).toBeInTheDocument()
+  })
+
+  it('says a picked mode is not saved yet, and what it will do from the save', async () => {
+    const user = userEvent.setup()
+    await open()
+    await user.click(radio(readiness(), 'Enforce'))
+    expect(screen.getByText('Not saved yet. From when you save: Participants must be fully ready first, including a signed service agreement.')).toBeInTheDocument()
+  })
+
+  it('editing only the manager name sends neither mode: the body is the row with the new name', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    await open()
+
+    await user.clear(managerName())
+    await user.type(managerName(), 'Alex Morgan')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { managerName: 'Alex Morgan' }))
+    expect(server).toMatchObject({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce', managerName: 'Alex Morgan' })
+  })
+
+  it('a section that went stale does not revert a mode another Admin set, and shows the truth after its save', async () => {
+    const user = userEvent.setup()
+    await open()
+    expect(radio(readiness(), 'Warn only')).toHaveAttribute('aria-checked', 'true')
+    server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })   // another Admin, meanwhile
+
+    await user.clear(managerName())
+    await user.type(managerName(), 'Alex Morgan')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).not.toHaveProperty('participantReadinessMode')
+    expect(putBody()).not.toHaveProperty('medicationCompetencyMode')
+    expect(server).toMatchObject({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+    await waitFor(() => expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true'))
+  })
+
+  it('asks once before tightening the readiness check, then sends it with the row', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(saveButton())
+    const dialog = screen.getByRole('alertdialog', { name: 'Turn on Enforce for the readiness check?' })
+    expect(dialog).toHaveTextContent("From now on, a participant who isn't fully ready can't be rostered, booked or activated.")
+    expect(mockApiPut).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Turn on Enforce' }))
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual({ ...rowWithoutModes(makeSettings()), participantReadinessMode: 'Enforce' })
+  })
+
+  it('keeps the edit unsaved when the confirm is cancelled', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(saveButton())
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Turn on Enforce for medication competency?' })).getByRole('button', { name: 'Cancel' }))
+
+    expect(mockApiPut).not.toHaveBeenCalled()
+    expect(radio(medication(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes')
+  })
+
+  it('asks once for both when both are tightened, and sends both', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(saveButton())
+    const dialog = screen.getByRole('alertdialog', { name: 'Turn on Enforce for both checks?' })
+    expect(dialog).toHaveTextContent("can't be rostered, booked or activated")
+    expect(dialog).toHaveTextContent("Check your team's competencies first.")
+    await user.click(within(dialog).getByRole('button', { name: 'Turn on Enforce for both' }))
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual({ ...rowWithoutModes(makeSettings()), participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+  })
+
+  it('says the tightened check is saved as soon as the save lands, without waiting for the refetch', async () => {
+    const user = userEvent.setup()
+    await open()
+    await user.click(radio(readiness(), 'Enforce'))
+    mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
+    await user.click(saveButton())
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Turn on Enforce' }))
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
+    expect(screen.queryByText(/^Not saved yet./)).not.toBeInTheDocument()
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('shows the medication mode another Admin has since set, once the row refetches', async () => {
+    const { queryClient } = renderSection('safety')
+    await screen.findByLabelText('Manager name')
+    expect(radio(medication(), 'Warn only')).toHaveAttribute('aria-checked', 'true')
+
+    server = makeSettings({ medicationCompetencyMode: 'Enforce' })   // another Admin, meanwhile
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: ['provider-settings'] }) })
+
+    await waitFor(() => expect(radio(medication(), 'Enforce')).toHaveAttribute('aria-checked', 'true'))
+    expect(screen.queryByText(/^Not saved yet./)).not.toBeInTheDocument()
+  })
+
+  it('loosens without asking: Enforce back to Warn only is a deliberate change, and is sent', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ participantReadinessMode: 'Enforce' })
+    await open()
+
+    await user.click(radio(readiness(), 'Warn only'))
+    await user.click(saveButton())
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toMatchObject({ participantReadinessMode: 'Warn' })
+  })
+
+  it('sends a mode once: after its own change saved, a later unrelated save sends no mode', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(saveButton())
+    await user.click(screen.getByRole('button', { name: 'Turn on Enforce' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    await user.type(managerName(), '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(0)).toHaveProperty('medicationCompetencyMode', 'Enforce')
+    expect(putBody(1)).not.toHaveProperty('medicationCompetencyMode')
+    expect(putBody(1)).not.toHaveProperty('participantReadinessMode')
+  })
+
+  it('sends no mode when one was changed and changed back before saving', async () => {
+    const user = userEvent.setup()
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(radio(readiness(), 'Warn only'))
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(radio(medication(), 'Warn only'))
+    await user.type(managerName(), '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { managerName: 'Priya Sharma!' }))
+  })
+
+  it('keeps both choices after a failed save, and the retry sends both', async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 500, data: {} } })
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(radio(medication(), 'Enforce'))
+    await user.click(saveButton())
+    await user.click(screen.getByRole('button', { name: 'Turn on Enforce for both' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Check your connection and try again.')
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(radio(medication(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+
+    await user.click(saveButton())
+    await user.click(screen.getByRole('button', { name: 'Turn on Enforce for both' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toEqual({ ...rowWithoutModes(makeSettings()), participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
+  })
+
+  it("shows the server's own words for a refused save, and keeps the choice", async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['Choose a tenant to view as before changing the participant readiness check.'] } } })
+    await open()
+
+    await user.click(radio(readiness(), 'Enforce'))
+    await user.click(saveButton())
+    await user.click(screen.getByRole('button', { name: 'Turn on Enforce' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Choose a tenant to view as before changing the participant readiness check.')
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(server?.participantReadinessMode).toBe('Warn')
+  })
+
+  it('with no row yet: reads Warn only for both, locked, under the profile note, with no Save', async () => {
+    server = null
+    mockApiGet.mockImplementation(async (url: string) => (url === '/provider-settings' ? undefined : []))
+    await open()
+
+    expect(screen.getByText('Fill in the organisation profile first. These settings are saved with it.')).toBeInTheDocument()
+    expect(radio(readiness(), 'Warn only')).toHaveAttribute('aria-checked', 'true')
+    expect(radio(readiness(), 'Enforce')).toBeDisabled()
+    expect(radio(medication(), 'Enforce')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  it('is locked for a Coordinator: the value reads, a click changes nothing, and there is no Save', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    server = makeSettings({ participantReadinessMode: 'Enforce' })
+    await open()
+
+    expect(readiness()).toHaveAttribute('aria-disabled', 'true')
+    await user.click(radio(readiness(), 'Warn only'))
+    expect(radio(readiness(), 'Enforce')).toHaveAttribute('aria-checked', 'true')
+    expect(managerName()).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(mockApiPut).not.toHaveBeenCalled()
+  })
+
+  it('offers no control until the row has loaded, so it never shows a value it has not read', () => {
+    mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
+    renderSection('safety')
+    expect(screen.getByText('Loading safety checks section…')).toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+  })
+})

@@ -7,6 +7,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Alerts;
 
@@ -20,31 +21,9 @@ namespace Odip.Tests.Alerts;
 /// </summary>
 public class ParticipantAlertsServiceTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
-
-    private static OdipDbContext CreateTenantScopedDb(string dbName, Guid tenantId)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateTenantScopedDb(string dbName, Guid tenantId) => TestDb.ForTenant(dbName, tenantId);
 
     private static Participant SeedParticipant(
         OdipDbContext db, string firstName = "Sophie", string lastName = "Brown",
@@ -825,12 +804,16 @@ public class ParticipantAlertsServiceTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
+        // An incident belongs to an organisation through its reporting user, which is what the dashboard's count now joins.
+        var reporter = Odip.Tests.Security.CrossTenant.User(db, participant.TenantId);
         var overdue = NewIncident(participant.Id, IncidentSeverity.Critical, title: "Overdue one");
+        overdue.ReportedByUserId = reporter.Id;
         overdue.QscReportingStatus = QscReportingStatus.Required;
         overdue.QscReportedAt = null;
         overdue.CreatedAt = DateTime.UtcNow.AddHours(-25);
 
         var notOverdue = NewIncident(participant.Id, IncidentSeverity.Critical, title: "Reported already");
+        notOverdue.ReportedByUserId = reporter.Id;
         notOverdue.QscReportingStatus = QscReportingStatus.Required;
         notOverdue.QscReportedAt = DateTime.UtcNow.AddHours(-1);
         notOverdue.CreatedAt = DateTime.UtcNow.AddHours(-25);

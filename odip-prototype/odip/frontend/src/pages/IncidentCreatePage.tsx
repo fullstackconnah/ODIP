@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import type { AxiosError } from 'axios'
 import { useForm, useWatch } from 'react-hook-form'
@@ -8,7 +8,7 @@ import { Info } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
-import { TAP_FLOOR } from '@/components/tapArea'
+import { BackButton } from '@/components/BackButton'
 import type { CreateIncidentDto, UpdateIncidentDto, IncidentDetailDto } from '@/api/types/incidents'
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
 import { SERVICE_STREAMS, INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
@@ -31,10 +31,17 @@ import {
   buildShiftNoteIncidentDescriptionSkeleton,
   buildShiftNoteIncidentDateTime,
   suggestedIncidentTypeForShiftNote,
+  previewRpAuthorisation,
+  editedRpAuthorisation,
+  isShiftIncidentPrefillState,
+  buildShiftIncidentTitleSkeleton,
+  buildShiftIncidentDescriptionSkeleton,
+  incidentReturnPath,
 } from '@/lib/incidentPrefill'
+import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
-import { formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import {
   incidentResolver, type IncidentFormData,
   basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema, complianceSchema,
@@ -46,6 +53,9 @@ import { IncidentDetailsStep } from './incidents/steps/IncidentDetailsStep'
 import { WitnessesStep } from './incidents/steps/WitnessesStep'
 import { ComplianceStep } from './incidents/steps/ComplianceStep'
 import type { z } from 'zod'
+import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 
 // INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
 // selecting "Trip" is what reveals the trip-select dropdown below.
@@ -69,12 +79,12 @@ function computeSteps(incidentType: string | undefined, isEdit: boolean): Wizard
     { key: 'basics', label: 'Basics', fields: STEP_BASICS_FIELDS },
   ]
   if (incidentType === 'RestrictivePracticeUse') {
-    steps.push({ key: 'restrictivePractice', label: 'Restrictive Practice', fields: STEP_RESTRICTIVE_PRACTICE_FIELDS })
+    steps.push({ key: 'restrictivePractice', label: 'Restrictive practice', fields: STEP_RESTRICTIVE_PRACTICE_FIELDS })
   }
-  steps.push({ key: 'details', label: 'Incident Details', fields: STEP_DETAILS_FIELDS })
+  steps.push({ key: 'details', label: 'Incident details', fields: STEP_DETAILS_FIELDS })
   steps.push({ key: 'witnesses', label: 'Witnesses', fields: STEP_WITNESSES_FIELDS })
   if (isEdit) {
-    steps.push({ key: 'compliance', label: 'Review & Compliance', fields: STEP_COMPLIANCE_FIELDS })
+    steps.push({ key: 'compliance', label: 'Review & compliance', fields: STEP_COMPLIANCE_FIELDS })
   }
   return steps
 }
@@ -102,6 +112,8 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
       restrictivePracticeType: i.restrictivePracticeType ?? '',
       restrictivePracticeId: i.restrictivePracticeId ?? '',
       unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? '',
+      // Stored unauthorised with a practice linked: that is what "This use was not authorised" records.
+      usedWithoutAuthorisation: !!i.restrictivePracticeId && i.isRestrictivePracticeAuthorised === false,
       severity: i.severity ?? 'Medium',
       title: i.title ?? '',
       description: i.description ?? '',
@@ -160,11 +172,7 @@ function extractIncidentErrorMessage(err: unknown, isEdit: boolean): string {
   if (axiosErr?.response?.status === 403) {
     return "You don't have permission to file incident reports."
   }
-  return (
-    axiosErr?.response?.data?.errors?.[0] ||
-    axiosErr?.response?.data?.message ||
-    `Failed to ${isEdit ? 'update' : 'create'} incident report. Please check your input and try again.`
-  )
+  return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} incident report. Please check your input and try again.`)
 }
 
 /**
@@ -177,10 +185,13 @@ function extractIncidentErrorMessage(err: unknown, isEdit: boolean): string {
 export default function IncidentCreatePage() {
   const { id } = useParams()
   const isEdit = !!id
-  const { data: existingIncident } = useIncident(id)
+  const { data: existingIncident, isError, error, refetch } = useIncident(id)
 
   if (isEdit && !existingIncident) {
-    return <div className="p-6 text-sm text-[var(--color-muted-foreground)]">Loading incident…</div>
+    if (!isError) return <PageState kind="loading" noun="incident" />
+    return isNotFoundError(error)
+      ? <PageState kind="not-found" noun="incident" backTo="/incidents" backLabel="incidents" />
+      : <PageState kind="error" noun="incident" onRetry={() => refetch()} />
   }
 
   return <IncidentWizardForm key={id ?? 'new'} id={id} existingIncident={existingIncident} />
@@ -213,6 +224,9 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   // — only one producer ever sets location.state per navigation.
   const shiftNotePrefill = !isEdit && isShiftNoteIncidentPrefillState(location.state) ? location.state : null
   const appliedShiftNotePrefillRef = useRef(false)
+  // My shifts: "Anything to report?" on the finish flow. A shift with no note behind it; the worker picks the type.
+  const shiftPrefill = !isEdit && isShiftIncidentPrefillState(location.state) ? location.state : null
+  const appliedShiftPrefillRef = useRef(false)
 
   // Evaluated once, synchronously, from the (already-loaded, in edit mode) existingIncident —
   // see buildDefaultValues' own doc comment for why this must be correct on the very first
@@ -237,6 +251,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const restrictivePracticeType = useWatch({ control, name: 'restrictivePracticeType' })
   const restrictivePracticeId = useWatch({ control, name: 'restrictivePracticeId' })
   const unapprovedRestrictivePracticeDetails = useWatch({ control, name: 'unapprovedRestrictivePracticeDetails' })
+  const usedWithoutAuthorisation = useWatch({ control, name: 'usedWithoutAuthorisation' })
+  const description = useWatch({ control, name: 'description' })
   const witnesses = useWatch({ control, name: 'witnesses' })
   // UX-01: reportedByStaffId/involvedStaffId/reviewedByStaffId are SearchableSelect, which isn't
   // a native input register() can bind to, so it's tracked the same way: watched here, written
@@ -256,6 +272,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       setValue('restrictivePracticeType', '')
       setValue('restrictivePracticeId', '')
       setValue('unapprovedRestrictivePracticeDetails', '')
+      setValue('usedWithoutAuthorisation', false)
     }
   }, [incidentType, setValue])
 
@@ -264,46 +281,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       setValue('injuries', [])
     }
   }, [incidentType, setValue])
-
-  useEffect(() => {
-    if (isEdit && existingIncident) {
-      const i = existingIncident
-      reset({
-        serviceType: i.serviceType ?? 'None',
-        tripInstanceId: i.tripInstanceId ?? '',
-        incidentType: i.incidentType ?? 'Other',
-        otherTypeSpecify: i.otherTypeSpecify ?? '',
-        restrictivePracticeType: i.restrictivePracticeType ?? '',
-        restrictivePracticeId: i.restrictivePracticeId ?? '',
-        unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? '',
-        severity: i.severity ?? 'Medium',
-        title: i.title ?? '',
-        description: i.description ?? '',
-        reportedByStaffId: i.reportedByStaffId ?? '',
-        incidentDateTime: i.incidentDateTime ? i.incidentDateTime.slice(0, 16) : '',
-        location: i.location ?? '',
-        participantBookingId: i.participantBookingId ?? '',
-        involvedParticipantId: i.involvedParticipantId ?? '',
-        involvedStaffId: i.involvedStaffId ?? '',
-        immediateActionsTaken: i.immediateActionsTaken ?? '',
-        wereEmergencyServicesCalled: i.wereEmergencyServicesCalled ?? false,
-        emergencyServicesDetails: i.emergencyServicesDetails ?? '',
-        injuries: (i.injuries ?? []).map((inj) => ({ region: inj.region, injuryType: inj.injuryType, description: inj.description })),
-        witnesses: (i.witnesses ?? []).map((w) => ({ existingId: w.id, witnessUserId: w.witnessUserId, witnessName: w.witnessName })),
-        status: i.status ?? 'Draft',
-        qscReportingStatus: i.qscReportingStatus ?? 'NotRequired',
-        qscReferenceNumber: i.qscReferenceNumber ?? '',
-        qscReportedAt: i.qscReportedAt ? i.qscReportedAt.slice(0, 16) : '',
-        reviewedByStaffId: i.reviewedByStaffId ?? '',
-        reviewNotes: i.reviewNotes ?? '',
-        correctiveActions: i.correctiveActions ?? '',
-        familyNotified: i.familyNotified ?? false,
-        familyNotifiedAt: i.familyNotifiedAt ? i.familyNotifiedAt.slice(0, 16) : '',
-        supportCoordinatorNotified: i.supportCoordinatorNotified ?? false,
-        supportCoordinatorNotifiedAt: i.supportCoordinatorNotifiedAt ? i.supportCoordinatorNotifiedAt.slice(0, 16) : '',
-      })
-    }
-  }, [id, isEdit, existingIncident, reset])
 
   // INC-03: apply the MAR drop-into-draft prefill once, on mount — a useRef "applied once" guard
   // means a coordinator who's already started editing the pre-filled form never has their
@@ -358,6 +335,19 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     })
   }, [shiftNotePrefill, reset])
 
+  useEffect(() => {
+    if (!shiftPrefill || appliedShiftPrefillRef.current) return
+    appliedShiftPrefillRef.current = true
+    reset({
+      ...buildDefaultValues(false, undefined, currentUserId),
+      title: buildShiftIncidentTitleSkeleton(shiftPrefill),
+      description: buildShiftIncidentDescriptionSkeleton(shiftPrefill),
+      involvedParticipantId: shiftPrefill.participantId,
+      reportedByStaffId: shiftPrefill.reportedByUserId ?? currentUserId ?? '',
+      incidentDateTime: shiftPrefill.incidentAt ?? `${shiftPrefill.serviceDate}T${shiftPrefill.startTime.slice(0, 5)}`,
+    })
+  }, [shiftPrefill, reset, currentUserId])
+
   // IN-1: the computed, not fixed, step list — wrapped in useMemo so its identity is stable
   // across renders that don't actually change incidentType/isEdit (useWizard's reshuffle
   // detection compares the `steps` array by identity, not deep-equality).
@@ -404,6 +394,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       // unapproved-practice field only when nothing was linked. Never both at once.
       restrictivePracticeId: isRp && !data.unapprovedRestrictivePracticeDetails?.trim() ? data.restrictivePracticeId || undefined : undefined,
       unapprovedRestrictivePracticeDetails: isRp ? data.unapprovedRestrictivePracticeDetails?.trim() || undefined : undefined,
+      // "This use was not authorised": only with a linked practice. The server also stores a Not authorised entry's use as unauthorised.
+      usedWithoutAuthorisation: isRp && !data.unapprovedRestrictivePracticeDetails?.trim() && !!data.restrictivePracticeId && !!data.usedWithoutAuthorisation,
       severity: data.severity as IncidentSeverity,
       title: data.title,
       description: data.description,
@@ -424,11 +416,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         witnessUserId: w.witnessUserId,
         witnessName: w.witnessName,
       })),
-      // Connection map: only ever set on a create-mode submission that started from one of these
-      // two router-state hand-offs — marPrefill/shiftNotePrefill are both hard-gated on !isEdit.
-      medicationAdministrationId: marPrefill ? marPrefill.medicationAdministrationId : undefined,
-      shiftId: shiftNotePrefill ? shiftNotePrefill.shiftId : undefined,
-      shiftNoteId: shiftNotePrefill ? shiftNotePrefill.shiftNoteId : undefined,
+      // Connection map: a create-mode submission takes these from the router-state hand-off it started from
+      // (marPrefill/shiftNotePrefill are both hard-gated on !isEdit). UpdateIncident sets all three from the body,
+      // so an edit sends the stored links back, or saving any change would clear them.
+      medicationAdministrationId: isEdit ? existingIncident?.medicationAdministrationId ?? undefined : marPrefill?.medicationAdministrationId,
+      shiftId: isEdit ? existingIncident?.shiftId ?? undefined : shiftNotePrefill?.shiftId ?? shiftPrefill?.shiftId,
+      shiftNoteId: isEdit ? existingIncident?.shiftNoteId ?? undefined : shiftNotePrefill?.shiftNoteId,
     }
 
     try {
@@ -463,7 +456,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             })
           }
           flushSync(() => reset(data))
-          navigate('/incidents')
+          navigate(incidentReturnPath(location.state))
         }
       }
     } catch {
@@ -489,6 +482,17 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       ? existingIncident.restrictivePracticeDescription
       : allRestrictivePractices.find((p) => p.id === practiceId)?.description) ?? '—'
 
+  // The same state the Restrictive practice step shows: the live preview when reporting, the stored determination when editing (which
+  // "This use was not authorised" can only lower).
+  const editedAuthorisation = editedRpAuthorisation(existingIncident?.isRestrictivePracticeAuthorised, !!existingIncident?.unapprovedRestrictivePracticeDetails?.trim(), {
+    restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation,
+  })
+  const rpAuthorisation = isEdit
+    ? editedAuthorisation === null ? '—' : editedAuthorisation ? 'Authorised' : 'Not authorised'
+    : { authorised: 'Authorised', unauthorised: 'Not authorised', unknown: '—' }[previewRpAuthorisation(involvedParticipantId, restrictivePracticeType, allRestrictivePractices, {
+      restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation: !!restrictivePracticeId && !!usedWithoutAuthorisation,
+    })]
+
   const reviewGroups: ReviewGroup[] = [
     {
       stepKey: 'basics',
@@ -509,6 +513,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         { label: 'Restrictive Practice Type', value: restrictivePracticeType ? (RESTRICTIVE_PRACTICE_TYPE_LABELS[restrictivePracticeType as keyof typeof RESTRICTIVE_PRACTICE_TYPE_LABELS] ?? restrictivePracticeType) : '—' },
         { label: 'Linked Practice', value: restrictivePracticeId ? practiceLabel(restrictivePracticeId) : 'Not linked' },
         { label: 'Unapproved Practice Details', value: unapprovedRestrictivePracticeDetails || '—' },
+        { label: 'Authorisation', value: rpAuthorisation },
       ],
     }] : []),
     {
@@ -551,10 +556,10 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/incidents" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Incidents</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/incidents" label="incidents" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit incident report' : 'Report incident'} /></div>
       </div>
-      <PageHeader title={isEdit ? 'Edit Incident Report' : 'Report New Incident'} />
 
       {marPrefill && (
         <Card className="bg-[var(--color-secondary-container)]/40 border-[var(--color-secondary-container)]">
@@ -578,6 +583,17 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         </Card>
       )}
 
+      {shiftPrefill && (
+        <Card className="bg-[var(--color-secondary-container)]/40 border-[var(--color-secondary-container)]">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-[var(--color-secondary)] shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm text-[var(--color-foreground)]">
+              <strong className="font-medium">Pre-filled from your shift:</strong> {shiftPrefill.participantName}, {formatDateAu(shiftPrefill.serviceDate)}. Review and complete the details below — nothing is filed until you submit this report.
+            </p>
+          </div>
+        </Card>
+      )}
+
       {/* Connection map: a compact, always-visible reminder of what this incident is linked to —
           the banners above explain the hand-off once; this line stays visible as the reporter
           works through the wizard's later steps. No new inputs — this is purely informational. */}
@@ -591,11 +607,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           Linked to: Shift note from {formatDateAu(shiftNotePrefill.serviceDate)}
         </p>
       )}
+      {shiftPrefill && (
+        <p className="text-sm text-[var(--color-muted-foreground)]">Linked to: Shift on {formatDateAu(shiftPrefill.serviceDate)}</p>
+      )}
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {extractIncidentErrorMessage(mutation.error, isEdit)}
-        </div>
+        <Callout tone="error">{extractIncidentErrorMessage(mutation.error, isEdit)}</Callout>
       )}
 
       <WizardStepRail
@@ -603,6 +620,10 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         visitedSteps={wizard.visitedSteps}
         currentKey={isReviewStep ? REVIEW_STEP_KEY : currentStep.key}
         onSelect={wizard.goToStep}
+        // One row at every width: the rail sits in the page flow above the form, where the vertical list cost about 200px (V2-E).
+        orientation="horizontal"
+        // A pill row now, so the current step takes the solid fill (unfilled, its marker was white at 20% on the cream ground).
+        filled
         ariaLabel="Incident report steps"
       />
 
@@ -634,6 +655,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             restrictivePracticeType={restrictivePracticeType}
             restrictivePracticeId={restrictivePracticeId}
             unapprovedRestrictivePracticeDetails={unapprovedRestrictivePracticeDetails}
+            usedWithoutAuthorisation={usedWithoutAuthorisation}
+            description={description}
             isEdit={isEdit}
             existingIncident={existingIncident}
           />
@@ -678,6 +701,14 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             groups={reviewGroups}
             steps={steps}
             onEdit={wizard.goToStep}
+            renderRow={(row) => (
+              <div key={row.label} className="flex justify-between gap-4">
+                <dt className="text-[var(--color-muted-foreground)]">{row.label}</dt>
+                <dd className="font-medium text-right min-w-0 break-words">
+                  {row.label === 'Authorisation' && row.value !== '—' ? <RpAuthorisationBadge authorised={row.value === 'Authorised'} /> : row.value}
+                </dd>
+              </div>
+            )}
           />
         )}
 
@@ -688,7 +719,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           isReviewStep={isReviewStep}
           secondaryActions={[]}
           cancelTo="/incidents"
-          submitLabel={mutation.isPending ? (isEdit ? 'Saving...' : 'Submitting...') : (isEdit ? 'Save Changes' : 'Submit Incident Report')}
+          history={false}
+          submitLabel={mutation.isPending ? (isEdit ? 'Saving…' : 'Submitting…') : (isEdit ? 'Save' : 'Submit incident report')}
           isSubmitting={mutation.isPending}
         />
       </form>

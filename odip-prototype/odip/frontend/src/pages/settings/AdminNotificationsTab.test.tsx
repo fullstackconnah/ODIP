@@ -57,14 +57,14 @@ describe('AdminNotificationsTab', () => {
 
     expect(screen.getByText('Priya Sharma')).toBeInTheDocument()
     expect(screen.getByText('SMTP timeout')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^retry$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^retry: .+ to priya sharma$/i })).toBeInTheDocument()
   })
 
   it('does not show a Retry button for a non-Failed row', () => {
     mockUseAdminNotifications.mockReturnValue({ data: [makeRow({ status: 'Sent', lastError: undefined })], isLoading: false, isError: false })
     render(<AdminNotificationsTab />)
 
-    expect(screen.queryByRole('button', { name: /^retry$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^retry/i })).not.toBeInTheDocument()
   })
 
   it('Retry calls the mutation and disables the button while pending', async () => {
@@ -74,7 +74,7 @@ describe('AdminNotificationsTab', () => {
     const user = userEvent.setup()
     render(<AdminNotificationsTab />)
 
-    const retryButton = screen.getByRole('button', { name: /^retry$/i })
+    const retryButton = screen.getByRole('button', { name: /^retry: .+ to priya sharma$/i })
     await user.click(retryButton)
 
     expect(mockRetryMutateAsync).toHaveBeenCalledWith('notif-1')
@@ -89,9 +89,20 @@ describe('AdminNotificationsTab', () => {
     const user = userEvent.setup()
     render(<AdminNotificationsTab />)
 
-    await user.click(screen.getByRole('button', { name: /^retry$/i }))
+    await user.click(screen.getByRole('button', { name: /^retry: .+ to priya sharma$/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/only failed notifications can be retried/i)
+  })
+
+  it('shows a failed load as the house error banner whose Try again refetches', async () => {
+    const refetch = vi.fn()
+    mockUseAdminNotifications.mockReturnValue({ data: [], isLoading: false, isError: true, refetch })
+    render(<AdminNotificationsTab />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load/i)
+    expect(screen.queryByText(/no notifications match/i)).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
   })
 
   it('sends a test email and shows the result', async () => {

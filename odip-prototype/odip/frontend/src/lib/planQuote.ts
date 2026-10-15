@@ -1,10 +1,9 @@
-// What the plan builder does with the pricing engine's answer, pure and JSX-free: which week stands for "a week", how the per-occurrence lines read as the
-// lines of an agreement, what each flag, rule and refusal means in plain words, how a plan compares with its budget, and what a failed request says.
+// What the agreement wizard does with the pricing engine's answer, pure and JSX-free: which week stands for "a week", what each refusal means in plain words, how a plan compares with its budget, and what a failed request says.
 // The engine is the authority on every number: nothing here prices anything, and a line's total is always the server's total.
 import type { AxiosError } from 'axios'
-import type { FundingSourceDto, PlanFailureReason, PlannedLine, PlannedLineKind, PlanIssue, PlanBlock, PlanQuote } from '@/api/types'
+import type { PlanFailureReason, PlanIssue, PlanBlock, PlanQuote } from '@/api/types'
 import { isDateOnly, parseDateOnly, formatDayNumber } from './dateOnly'
-import { formatHours, type PlanStepKey } from './planBlocks'
+import type { PlanStepKey } from './planBlocks'
 import { plural } from './format'
 import { apiErrorMessages } from './shiftPackageErrors'
 
@@ -54,11 +53,6 @@ export function periodProblem(from: string, to: string): PeriodProblem | null {
   return (parseDateOnly(from) as number) > (parseDateOnly(to) as number) ? 'reversed' : null
 }
 
-/** What to tell a person whose plan cannot be priced for want of its dates. `subject`: "the plan" in the budget bar, "this block" in Review. */
-export function periodPrompt(problem: PeriodProblem, subject: 'the plan' | 'this block'): string {
-  return problem === 'reversed' ? `The agreement ends before it starts, so ${subject} cannot be priced` : `Enter the agreement dates to price ${subject}`
-}
-
 // ── "A week" ──────────────────────────────────────────────────────────────────
 
 export interface ReferenceWeek { from: string; to: string }
@@ -78,166 +72,8 @@ export function referenceWeek(from: string, to: string, holidayDates: readonly s
   return { from: formatDayNumber(first), to: formatDayNumber(first + 6) }
 }
 
-// ── Flags ─────────────────────────────────────────────────────────────────────
-
-export interface LineFlags { review: boolean; holidayExposure: boolean; provisional: boolean }
-
-/** The engine writes flags as "None" or the names joined by ", ". */
-export function parseFlags(flags: string | null | undefined): LineFlags {
-  const names = (flags ?? '').split(',').map(name => name.trim())
-  return { review: names.includes('Review'), holidayExposure: names.includes('HolidayExposure'), provisional: names.includes('Provisional') }
-}
-
-// ── Lines of an agreement ─────────────────────────────────────────────────────
-
-export interface LineGroup {
-  key: string
-  kind: PlannedLineKind
-  /** Absent on a line the engine could not price. */
-  itemCode?: string
-  unpriced?: PlanFailureReason
-  band: string
-  unit: string
-  unitPrice: number
-  flags: LineFlags
-  occurrences: number
-  periodQty: number
-  periodTotal: number
-  /** In the reference week (null when there is no such week). Zero where the group does not occur in it. */
-  weeklyQty: number | null
-  weeklyTotal: number | null
-  /** The first occurrence: its trace is the "why" this group shows. */
-  sample: PlannedLine
-  openQuestions: number[]
-}
-
-/**
- * The per-occurrence lines of one block as the lines of an agreement: one row for each kind, item, band, price and set of flags, summed over the period, with what the group
- * is in the reference week beside it. A total is the sum of the occurrences' own totals (the server's), never quantity times price.
- */
-export function groupLines(lines: readonly PlannedLine[], week: ReferenceWeek | null): LineGroup[] {
-  const groups = new Map<string, LineGroup>()
-  const inWeek = (line: PlannedLine) => week !== null && line.serviceDate >= week.from && line.serviceDate <= week.to
-  for (const line of [...lines].sort((a, b) => a.serviceDate.localeCompare(b.serviceDate) || a.kind.localeCompare(b.kind))) {
-    const key = [line.kind, line.itemCode ?? `unpriced:${line.unpriced ?? ''}`, line.band, line.unitPrice, line.flags, line.trace.catalogueVersion ?? '', line.trace.priceBasisFrom ?? ''].join('|')
-    let group = groups.get(key)
-    if (!group) {
-      group = {
-        key, kind: line.kind, itemCode: line.itemCode, unpriced: line.unpriced, band: line.band, unit: line.unit, unitPrice: line.unitPrice, flags: parseFlags(line.flags),
-        occurrences: 0, periodQty: 0, periodTotal: 0, weeklyQty: week ? 0 : null, weeklyTotal: week ? 0 : null, sample: line, openQuestions: [],
-      }
-      groups.set(key, group)
-    }
-    group.occurrences += 1
-    group.periodQty += line.qty
-    group.periodTotal = roundCents(group.periodTotal + line.total)
-    if (week && inWeek(line)) {
-      group.weeklyQty = (group.weeklyQty ?? 0) + line.qty
-      group.weeklyTotal = roundCents((group.weeklyTotal ?? 0) + line.total)
-    }
-    for (const question of line.trace.openQuestions) if (!group.openQuestions.includes(question)) group.openQuestions.push(question)
-  }
-  return [...groups.values()].sort((a, b) => a.sample.serviceDate.localeCompare(b.sample.serviceDate) || kindOrder(a.kind) - kindOrder(b.kind) || a.band.localeCompare(b.band))
-}
-
-const KIND_ORDER: PlannedLineKind[] = ['Support', 'Sleepover', 'SleepoverActiveHours', 'CentreCapital', 'ProviderTravelTime', 'ProviderTravelCosts', 'ActivityTransport', 'ParticipantAccommodation', 'WorkerAccommodation']
-function kindOrder(kind: PlannedLineKind): number { return KIND_ORDER.indexOf(kind) }
-
-function roundCents(value: number): number { return Math.round(value * 100) / 100 }
-
 /** A figure that is not known, or that nothing can say: an en dash, as the dashboard's tiles do (DESIGN.md, The Quiet Zero Rule), never a 0 that reads as a price. */
 export const NO_FIGURE = '–'
-
-/** The quantity of a line in words: hours, nights, each; a dollar line (kilometres, tolls, parking) is its own money, so it has no quantity to show. */
-export function quantityLabel(kind: PlannedLineKind, unit: string, qty: number): string {
-  if (kind === 'ProviderTravelCosts' || kind === 'ActivityTransport') return NO_FIGURE
-  if (unit === 'H') return `${formatHours(qty)} h`
-  if (unit === 'D') return plural(Math.round(qty * 100) / 100, 'night')
-  return kind === 'Sleepover' ? plural(Math.round(qty * 100) / 100, 'sleepover') : `${Math.round(qty * 100) / 100} each`
-}
-
-export const KIND_LABEL: Record<PlannedLineKind, string> = {
-  Support: 'Support', Sleepover: 'Sleepover', SleepoverActiveHours: 'Sleepover active hours', ProviderTravelTime: 'Provider travel time', ProviderTravelCosts: 'Provider travel kilometres',
-  ActivityTransport: 'Activity-based transport', CentreCapital: 'Centre capital cost', ParticipantAccommodation: 'Accommodation (participant)', WorkerAccommodation: 'Accommodation (support worker)',
-}
-
-/** The engine's bands, in the words a coordinator uses: "Weekday Daytime" is "Weekday daytime (06:00–20:00)". */
-export function bandLabel(band: string): string {
-  switch (band) {
-    case 'Weekday Daytime': return 'Weekday daytime'
-    case 'Weekday Evening': return 'Weekday evening'
-    case 'Weekday Night': return 'Weekday night'
-    case 'Public Holiday': return 'Public holiday'
-    default: return band
-  }
-}
-
-// ── Why: rule ids in plain words ──────────────────────────────────────────────
-
-const BAND_RULE: Record<string, string> = {
-  'weekday-daytime': 'Weekday daytime price (Mon–Fri 06:00–20:00)',
-  'weekday-evening': 'Weekday evening price (Mon–Fri 20:00–24:00)',
-  'weekday-night': 'Weekday night price (Mon–Fri 00:00–06:00)',
-  saturday: 'Saturday price, the whole day',
-  sunday: 'Sunday price, the whole day',
-  'public-holiday': 'Public holiday price, the whole day',
-}
-
-const RULE_WORDS: Record<string, string> = {
-  'price:catalogue-by-service-date': 'Priced from the catalogue row valid on the date of the service',
-  'group:floor(price*workers/participants)': 'Group price: the maximum times workers over participants present, rounded down to the cent',
-  'group:workers-over-participants-unconfirmed': 'More than one worker for several participants: how NDIA divides the price is not confirmed (question 5)',
-  'crossing:A': 'Split at each time or day boundary, each part at its own item (crossing policy A)',
-  'crossing:B': 'The higher of the parts applies to the whole support (crossing policy B)',
-  'crossing:B-not-applicable': 'Policy B was chosen but cannot apply here, so each part is priced on its own',
-  'holiday:state-calendar': 'A public holiday in the state calendar',
-  'holiday:named-date': '26 December or 25 April, which the pricing schedule names as public holidays',
-  'holiday:named-date-no-calendar-row': 'A named public holiday the state calendar has no row for: priced as an ordinary day and left for a person to decide',
-  'holiday:part-day': 'A part-day public holiday: the holiday price applies only inside its hours (Provisional)',
-  'headcount:segment': 'Priced in parts where the number of participants changes (Provisional)',
-  'clock-change:elapsed-hours': 'Counted in elapsed hours: the night the clocks change is 7 or 9 hours long',
-  'clock-change:sleepover-reading': 'The clocks change inside the sleepover, so whether it counts depends on how the 8 hours are read (question 13)',
-  'sleepover:each-item': 'A sleepover is one "each" item, whatever the day',
-  'sleepover:active-hours-beyond-2': 'Active hours beyond the first two are priced hourly',
-  'sleepover:active-hours-rate-straddle': 'Active hours of a sleepover that starts on a Saturday or Sunday are priced at the rate of the day it starts (question 14)',
-  'centre-capital:per-participant-hour': 'Centre capital cost: per participant per hour of support, not divided by the group',
-  'travel:no-cap': 'Provider travel time: no cap in this price zone',
-  'travel:same-item-as-support': 'Provider travel time is claimed on the support item',
-  'travel:km': 'Provider travel kilometres are claimed in dollars on the non-labour item',
-  'abt:vehicle-costs': 'Activity-based transport: kilometres by vehicle plus tolls and parking at cost, shared between the participants in the vehicle',
-  'sta:accommodation-night': 'A short-term accommodation night item',
-}
-
-function words(slug: string): string {
-  const spaced = slug.replace(/-/g, ' ')
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
-}
-
-/** A rule id the engine put in a line's trace, in words. An id this does not know is shown as it is, never hidden. */
-export function ruleWords(rule: string): string {
-  if (RULE_WORDS[rule]) return RULE_WORDS[rule]
-  const band = /^bands:(.+)$/.exec(rule)
-  if (band) return BAND_RULE[band[1]] ?? `${words(band[1])} price`
-  const cap = /^travel:time-cap-(\d+)$/.exec(rule)
-  if (cap) return `Provider travel time capped at ${cap[1]} minutes each way for this zone`
-  const unpriced = /^unpriced:(.+)$/.exec(rule)
-  if (unpriced) return `Not priced: ${words(unpriced[1]).toLowerCase()}`
-  return rule
-}
-
-/** The owner questions (NDIS-CODES 11.3) a line can depend on, said briefly where a line shows them. */
-export const QUESTION_SHORT: Record<number, string> = {
-  1: 'registration groups not confirmed',
-  5: 'how NDIA divides a group price here is not confirmed',
-  6: 'travel time caps and per-kilometre rates are 2025-26 values',
-  8: 'a part-day holiday, or Boxing Day or Anzac Day missing from the calendar',
-  13: 'the night the clocks change',
-  14: 'active hours of a sleepover on a Saturday or Sunday night',
-}
-
-export function questionShort(number: number): string {
-  return QUESTION_SHORT[number] ?? `open question ${number}`
-}
 
 // ── What each refusal means, and what to do ───────────────────────────────────
 
@@ -255,7 +91,7 @@ export const REASON_COPY: Record<PlanFailureReason, ReasonCopy> = {
   RegistrationGroupNotHeld: { title: 'Your organisation does not hold this registration group', advice: 'Choose another support type, or an Admin can record the groups you hold in Settings, Plan pricing.', step: 'requirements', refusal: true },
   StaLegacyNotSupported: { title: 'Short-term accommodation is set to the legacy per-day items', advice: 'Those items end on 30 June 2027. An Admin can switch to the hourly items plus accommodation nights in Settings, Plan pricing.', refusal: true },
   NoItem: { title: 'Part of this block has no price item', advice: 'That part is left out of every total. Community access and group activities have no item between 00:00 and 06:00 on a weekday: keep the block clear of those hours, or use personal care.', step: 'times', refusal: false },
-  CatalogueNotFound: { title: 'No catalogue prices for part of the agreement', advice: 'The support catalogue has not been imported for some of these dates, so those lines have no price. A SuperAdmin can import it in Settings, or shorten the agreement.', refusal: false },
+  CatalogueNotFound: { title: 'No catalogue prices for part of the agreement', advice: 'No price list row covers this support on some of these dates. If the item was withdrawn from the price list, choose a current support on the Week step; if the price list for those dates is not imported yet, a SuperAdmin can import it in Settings.', refusal: false },
   CatalogueAmbiguous: { title: 'Two catalogue prices clash', advice: 'Two rows of one catalogue version are valid on the same date. A SuperAdmin needs to fix the catalogue before this can be priced.', refusal: false },
   ZoneNotEligible: { title: 'This item has no price for the delivery zone', advice: 'The catalogue lists no price for this item in the price zone. Check the zone in the agreement details.', refusal: false },
   CatalogueNotPriced: { title: 'This item has no price limit', advice: 'The catalogue marks this item as quotable, so there is no maximum to price from.', refusal: false },
@@ -303,11 +139,6 @@ function mergeIssues(issues: readonly PlanIssue[], keyOf: (issue: PlanIssue) => 
  */
 export function groupIssues(issues: readonly PlanIssue[]): PlanIssue[] {
   return mergeIssues(issues, issue => `${issue.blockId}|${issue.reason}|${ONE_PER_MESSAGE.has(issue.reason) ? issue.message : ''}`)
-}
-
-/** One entry for each block and reason whatever the message says, for a line that shows only the reason's title. */
-export function groupByReason(issues: readonly PlanIssue[]): PlanIssue[] {
-  return mergeIssues(issues, issue => `${issue.blockId}|${issue.reason}`)
 }
 
 /** Where an issue was met, in words: "24 shifts, the first on Tue 13 Oct 2026", or just the day when it was met once. */
@@ -392,58 +223,9 @@ export function pricedNothing(answer: Pick<PlanQuote, 'totals'>): boolean {
   return answer.totals.lineCount - answer.totals.unpricedLines <= 0
 }
 
-/** Which block an issue is about, in the coordinator's words: its position and readable line, never its id. */
-export function blockName(blocks: readonly PlanBlock[], blockId: string, describe: (block: PlanBlock) => string): string {
-  const index = blocks.findIndex(block => block.id === blockId)
-  return index < 0 ? 'A block' : `Block ${index + 1} (${describe(blocks[index])})`
-}
-
-/** "Block 1", "Blocks 1 and 3", "Blocks 1, 3 and 4". */
-function blocksNamed(places: readonly number[]): string {
-  if (places.length === 1) return `Block ${places[0]}`
-  return `Blocks ${places.slice(0, -1).join(', ')} and ${places[places.length - 1]}`
-}
-
-/**
- * Why the plan cannot be saved, in one sentence, when the engine refused something: "Block 1 cannot be priced yet, so the plan cannot be saved.", naming the blocks by their places in `blocks` (the plan
- * as it is being priced, a block being added or changed in its place), or, when the refusal names no block (the dates, say), "This plan cannot be priced yet, so it cannot be saved." What to do is on the
- * block's own row, with the step that does it, so it is not said again here. Shown beside the Save it holds back (review D5, L1).
- */
-export function refusalSentence(refused: readonly PlanIssue[], blocks: readonly PlanBlock[]): string {
-  const places = [...new Set(refused.map(issue => blocks.findIndex(block => block.id === issue.blockId)).filter(at => at >= 0))].sort((a, b) => a - b).map(at => at + 1)
-  return places.length > 0 ? `${blocksNamed(places)} cannot be priced yet, so the plan cannot be saved.` : 'This plan cannot be priced yet, so it cannot be saved.'
-}
-
-// ── The plan budget ───────────────────────────────────────────────────────────
-
-export interface BudgetComparison {
-  /** `unknown`: no plan budget is recorded, so the totals stand alone. */
-  status: 'unknown' | 'within' | 'over'
-  budget: number | null
-  used: number
-  remaining: number | null
-  /** The share of the budget the plan uses, a whole number (null when unknown). */
-  percent: number | null
-}
-
-export function compareBudget(used: number, budget: number | null | undefined): BudgetComparison {
-  if (budget === null || budget === undefined || !(budget > 0)) return { status: 'unknown', budget: null, used, remaining: null, percent: null }
-  const remaining = roundCents(budget - used)
-  return { status: used > budget ? 'over' : 'within', budget, used, remaining, percent: Math.round((used / budget) * 100) }
-}
-
-const NDIS_ROUTES = new Set(['AgencyManaged', 'PlanManaged', 'SelfManaged'])
-
-/**
- * The participant's plan budget as the funding sources record it: the active NDIS ones with a budget whose plan dates meet the agreement. The sources keep their budget category as
- * free text, so only the total is compared, never a category. null when none records a budget.
- */
-export function planBudgetFor(sources: readonly FundingSourceDto[] | undefined, from: string, to: string): { total: number; count: number } | null {
-  const picked = (sources ?? []).filter(source => source.isActive && NDIS_ROUTES.has(source.routeType) && typeof source.budget === 'number' && source.budget > 0
-    && (!source.planStartDate || source.planStartDate <= to) && (!source.planEndDate || source.planEndDate >= from))
-  if (picked.length === 0) return null
-  return { total: roundCents(picked.reduce((sum, source) => sum + (source.budget ?? 0), 0)), count: picked.length }
-}
+// ── The budget categories ─────────────────────────────────────────────────────
+// (The agreement is compared with the participant's real pools by the server - POST participants/{id}/funding/agreement-check - and not here: the sum of the Billing funding sources this file used
+// to compare it with is gone, with no fallback.)
 
 /** The PACE categories the engine totals by, in words short enough for a bar. */
 export const CATEGORY_SHORT: Record<number, string> = { 1: 'Daily life', 2: 'Transport', 4: 'Community participation', 16: 'Home and living' }
@@ -521,4 +303,21 @@ export function describeSaveError(error: unknown): SaveFailure {
   if (status === 413) return { title: 'The plan is too large to save', messages: ['Save fewer blocks, or split the agreement.'] }
   if (status === 400 || status === 404) return { title: 'The draft was not saved', messages: messages.length > 0 ? [...new Set(messages.map(plain))] : ['The server refused the draft.'] }
   return { title: 'The draft was not saved', messages: ['The server could not price and save this draft. Check your connection and try again; nothing you entered is lost.'] }
+}
+
+/** The words of a renewal refused because no plan of the participant's covers its first day (409, code "plan-needed"), or null for any other failure (agreement PR 2). */
+export function planNeededMessageOf(error: unknown): string | null {
+  const response = (error as AxiosError<{ code?: string; errors?: unknown }> | undefined)?.response
+  if (response?.status !== 409 || response.data?.code !== 'plan-needed') return null
+  // The server names the day in ISO; the screen says it as it says every date (fix round 2).
+  return messagesOf(error)[0]?.replace(/\d{4}-\d{2}-\d{2}/, iso => formatServiceDate(iso)) ?? null
+}
+
+/** What a refused renewal says. The two 409s (a newer revision, no plan for the first day) are read apart, by conflictVersionOf and planNeededMessageOf. */
+export function describeRenewError(error: unknown): SaveFailure {
+  const status = statusOf(error)
+  const messages = messagesOf(error)
+  if (status === 429) return { title: 'The server is busy', messages: ['Too many requests just now. Wait a moment and renew again.'] }
+  if ((status === 400 || status === 403 || status === 404) && messages.length > 0) return { title: 'The agreement was not renewed', messages: [...new Set(messages.map(plain))] }
+  return { title: 'The agreement was not renewed', messages: ['It could not be renewed just now. Check your connection and try again.'] }
 }

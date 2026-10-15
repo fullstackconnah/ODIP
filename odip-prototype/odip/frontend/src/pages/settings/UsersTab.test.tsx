@@ -20,7 +20,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('UsersTab: Last Login', () => {
+describe('UsersTab: Last sign-in', () => {
   // formatRelative (compact) for the first month, then the date itself.
   it('reads never, just now, minutes, hours and days, and the date once the login is a month old', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -35,7 +35,7 @@ describe('UsersTab: Last Login', () => {
     })
     render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
 
-    for (const text of ['Never', 'Just now', '5m ago', '1h ago', '3d ago', '14d ago', new Date(monthOld).toLocaleDateString()]) {
+    for (const text of ['Never', 'Just now', '5m ago', '1h ago', '3d ago', '14d ago', new Date(monthOld).toLocaleDateString('en-AU')]) {
       expect(screen.getByText(text)).toBeInTheDocument()
     }
   })

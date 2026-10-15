@@ -841,7 +841,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
       staffId: null,
       serviceDate: '2026-08-17',
       startTime: '09:00',
-      endTime: '09:00',
+      endTime: '10:00',
       endsNextDay: true,
       ratio: 'OneToOne',
       nightType: 'None',
@@ -1003,7 +1003,7 @@ describe('ShiftSlideOver — readiness note (WARN mode)', () => {
       staffId: null,
       serviceDate: '2026-08-17',
       startTime: '09:00',
-      endTime: '09:00',
+      endTime: '10:00',
       endsNextDay: false,
       ratio: 'OneToOne',
       nightType: 'None',
@@ -1188,7 +1188,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
     expect(message.closest('[role="alert"]')).not.toBeNull()
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
     expect(mockCheckMutate).toHaveBeenCalledWith(
-      { id: undefined, participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '09:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None' },
+      { id: undefined, participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None' },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     )
     expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
@@ -1255,7 +1255,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
       staffId: null,
       serviceDate: '2026-08-17',
       startTime: '09:00',
-      endTime: '09:00',
+      endTime: '10:00',
       endsNextDay: false,
       ratio: 'OneToOne',
       nightType: 'None',
@@ -1426,16 +1426,272 @@ describe('ShiftSlideOver — which agreement a shift came from', () => {
     expect(screen.getByText('From agreement v2')).toBeInTheDocument()
   })
 
-  it('says "From an agreement" when the version is not known, and nothing for a shift that does not say it came from one', () => {
+  it('says "From an agreement" when the version is not known, and names the other two kinds too, so a touch screen can read every kind (the brief, section 5)', () => {
     const first = open({ fromAgreement: true })
     expect(screen.getByText('From an agreement')).toBeInTheDocument()
     first.unmount()
 
     const second = open({})                                                                  // a hand-made pattern's shift: no fromAgreement on the wire
-    expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
+    expect(screen.getByText('From a pattern')).toBeInTheDocument()
     second.unmount()
 
     open({ shiftPatternId: null })                                                           // a one-off shift with no pattern at all
-    expect(screen.queryByText(/From agreement|From an agreement/)).not.toBeInTheDocument()
+    expect(screen.getByText('Ad hoc: not from an agreement or a pattern')).toBeInTheDocument()
+  })
+})
+
+// ── The length of a shift (phase 3 review N5, design review N2 and D6) ───────────────────────────────────────────────
+// A new shift opens with an end an hour after the start, so it opens valid and quiet. A pair of times with no length is a rule of the End time field, said under it, and the live check is not asked about it.
+describe('ShiftSlideOver — the length of a shift', () => {
+  const NO_LENGTH = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift."
+  const endTimeField = () => screen.getByLabelText(/^End time/)
+
+  afterEach(() => {
+    mockCheckMutate.mockReset()
+  })
+
+  function openNew() {
+    return render(
+      <ShiftSlideOver target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />,
+    )
+  }
+
+  it('opens a new shift with an end an hour after the start, and no alert of any kind', async () => {
+    openNew()
+
+    expect(screen.getByLabelText(/^Start time/)).toHaveValue('09:00')
+    expect(endTimeField()).toHaveValue('10:00')
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(1))
+    expect(mockCheckMutate.mock.calls[0][0]).toMatchObject({ startTime: '09:00', endTime: '10:00', endsNextDay: false })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(endTimeField()).not.toBeInvalid()
+  })
+
+  it('says it under End time, as the field’s own error, when the end is set at or before the start', async () => {
+    const user = userEvent.setup()
+    openNew()
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(1))
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '09:00')
+
+    expect(await screen.findByText(NO_LENGTH)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(NO_LENGTH)
+    expect(screen.getAllByRole('alert')).toHaveLength(1)   // the field's own, not a second box at the foot
+  })
+
+  it('does not ask the live check about a pair of times with no length', async () => {
+    const user = userEvent.setup()
+    openNew()
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenCalledTimes(1))
+    mockCheckMutate.mockClear()
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '08:30')
+    await screen.findByText(NO_LENGTH)
+    await new Promise(resolve => setTimeout(resolve, 650))   // past the 400 ms debounce
+
+    expect(mockCheckMutate).not.toHaveBeenCalled()
+  })
+
+  it('hides what the last check said while the pair has no length, and shows the check’s answer for the new times once it has one', async () => {
+    const user = userEvent.setup()
+    type PreviewCallbacks = { onSuccess?: (result: { findings: unknown[] }) => void }
+    mockCheckMutate.mockImplementation((candidate: { endTime: string }, opts?: PreviewCallbacks) =>
+      opts?.onSuccess?.({ findings: [makeFinding({ severity: 'Warning', message: `Takes Core to the end of ${candidate.endTime}` })] }))
+    openNew()
+    expect(await screen.findByText('Takes Core to the end of 10:00')).toBeInTheDocument()
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '09:00')
+    await screen.findByText(NO_LENGTH)
+    expect(screen.queryByText('Takes Core to the end of 10:00')).not.toBeInTheDocument()   // about a different shift
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+    expect(await screen.findByText('Takes Core to the end of 11:00')).toBeInTheDocument()
+  })
+
+  it('takes the message away, and asks the check, once "Ends the next day" is ticked', async () => {
+    const user = userEvent.setup()
+    openNew()
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '09:00')
+    await screen.findByText(NO_LENGTH)
+
+    await user.click(screen.getByLabelText('Ends the next day'))
+
+    expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
+    await waitFor(() => expect(mockCheckMutate).toHaveBeenLastCalledWith(expect.objectContaining({ startTime: '09:00', endTime: '09:00', endsNextDay: true }), expect.anything()))
+  })
+
+  it('shows the server’s 400 for no length under End time too, not in the alert at the foot, and clears it when the time is fixed', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest(NO_LENGTH))
+    openNew()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(NO_LENGTH)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(NO_LENGTH)
+    expect(screen.getAllByText(NO_LENGTH)).toHaveLength(1)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)   // the field's, never the foot box (a div)
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+
+    expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
+  })
+
+  it('shows the live check’s 400 for no length under End time as well', async () => {
+    type PreviewCallbacks = { onError?: (err: unknown) => void }
+    mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(badRequest(NO_LENGTH)))
+    openNew()
+
+    expect(await screen.findByText(NO_LENGTH)).toBeInTheDocument()
+    expect(endTimeField()).toHaveAccessibleDescription(NO_LENGTH)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
+  })
+
+  // The server's 400 carries a code; the panel recognises the refusal by it, so a sentence it has never seen is still said under End time and never in the alert at the foot.
+  const REWORDED = 'Pick an end time that is after the start time.'
+  const noLengthByCode = () => ({ response: { status: 400, data: { success: false, errors: [REWORDED], code: 'shift-no-length' } } })
+
+  it('recognises a save’s 400 for no length by its code, whatever the words, and says the server’s words under End time', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(noLengthByCode())
+    openNew()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByText(REWORDED)).toBeInTheDocument()
+    expect(endTimeField()).toBeInvalid()
+    expect(endTimeField()).toHaveAccessibleDescription(REWORDED)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)   // the field's, never the foot box (a div)
+
+    await user.clear(endTimeField())
+    await user.type(endTimeField(), '11:00')
+
+    expect(screen.queryByText(REWORDED)).not.toBeInTheDocument()
+  })
+
+  it('recognises the live check’s 400 for no length by its code too', async () => {
+    type PreviewCallbacks = { onError?: (err: unknown) => void }
+    mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(noLengthByCode()))
+    openNew()
+
+    expect(await screen.findByText(REWORDED)).toBeInTheDocument()
+    expect(endTimeField()).toHaveAccessibleDescription(REWORDED)
+    expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
+  })
+
+  it('still shows any other 400 at the foot, with its words', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockRejectedValueOnce(badRequest('Participant is not ready for booking or rostering.'))
+    openNew()
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    const foot = await screen.findByRole('alert')
+    expect(foot).toHaveTextContent('Participant is not ready for booking or rostering.')
+    expect(foot.tagName).toBe('DIV')
+    expect(endTimeField()).not.toBeInvalid()
+  })
+
+  it('tells an existing shift that has no length the same way, but not one that is being cancelled', () => {
+    const legacy = { startTime: '09:00:00', endTime: '09:00:00' }
+    const { unmount } = render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ ...legacy, status: 'Published' }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    expect(screen.getByText(NO_LENGTH)).toBeInTheDocument()
+    unmount()
+
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ ...legacy, status: 'Cancelled' }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    expect(screen.queryByText(NO_LENGTH)).not.toBeInTheDocument()
+  })
+})
+
+describe('ShiftSlideOver — a person carried off a puck onto an empty day (deep review S6)', () => {
+  const twoStaff = [{ value: 'staff-1', label: 'Alex Rivera' }, { value: 'staff-2', label: 'Jordan Smith' }]
+  const moveTarget = { mode: 'create' as const, participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18', focusField: 'start' as const, moveFromShiftId: 'from-1' }
+
+  it('saves the new shift and the move off the old one as one request', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValueOnce(makeShift({ id: 'new-shift' }))
+    render(<ShiftSlideOver target={moveTarget} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={twoStaff} />)
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18', moveFromShiftId: 'from-1' }))
+  })
+
+  it('sends no move once the Staff field names somebody else: the carried person stays where they were', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValueOnce(makeShift({ id: 'new-shift', staffId: 'staff-2' }))
+    render(<ShiftSlideOver target={moveTarget} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={twoStaff} />)
+
+    const field = screen.getByRole('combobox', { name: 'Staff' })
+    await user.click(field)
+    await user.click(screen.getByRole('option', { name: 'Jordan Smith' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ staffId: 'staff-2' }))
+    expect(mockCreateMutateAsync.mock.calls[0][0]).not.toHaveProperty('moveFromShiftId')
+  })
+})
+
+describe('ShiftSlideOver — opened by a drop on an empty day (roster drag and drop)', () => {
+  const dropTarget = { mode: 'create' as const, participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18', focusField: 'start' as const }
+
+  it('puts focus on Start time when the board prefilled participant, day and person', () => {
+    render(<ShiftSlideOver target={dropTarget} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    expect(screen.getByLabelText(/^Start time/)).toHaveFocus()
+  })
+
+  it('hands the saved shift to onSaved before it closes', async () => {
+    const user = userEvent.setup()
+    const saved = makeShift({ id: 'new-shift' })
+    mockCreateMutateAsync.mockResolvedValueOnce(saved)
+    const onSaved = vi.fn()
+    const onClose = vi.fn()
+    render(<ShiftSlideOver target={dropTarget} onClose={onClose} onSaved={onSaved} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ participantId: 'participant-1', staffId: 'staff-1', serviceDate: '2026-08-18' }))
+    expect(onSaved).toHaveBeenCalledWith(saved)
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onSaved.mock.invocationCallOrder[0]).toBeLessThan(onClose.mock.invocationCallOrder[0])
+  })
+})
+
+describe('ShiftSlideOver — the worker of a started or finished shift (post-merge review S2)', () => {
+  const LOCKED = "This shift has started, finished or been cancelled, so its worker can't be changed here."
+  const twoStaff = [{ value: 'staff-1', label: 'Alex Rivera' }, { value: 'staff-2', label: 'Jordan Smith' }]
+
+  it('shows the server refusing a new worker in its error area, stays open, and keeps the choice', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, code: 'SHIFT_STATUS_LOCKED', errors: [LOCKED] } } })
+    const onClose = vi.fn()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Cancelled', findings: [] }) }} onClose={onClose} canWrite participantOptions={participantOptions} staffOptions={twoStaff} />)
+
+    // The Staff field stays a working control on a cancelled shift (a reopen may change the worker); the server judges a change that keeps it cancelled.
+    const field = screen.getByRole('combobox', { name: 'Staff' })
+    expect(field).toBeEnabled()
+    await user.click(field)
+    await user.click(screen.getByRole('option', { name: 'Jordan Smith' }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ id: 'shift-1', data: expect.objectContaining({ staffId: 'staff-2', status: 'Cancelled' }) }))
+    expect(await screen.findByText(LOCKED)).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('combobox', { name: 'Staff' })).toHaveValue('Jordan Smith')
+  })
+
+  it.each(['InProgress', 'PendingReview', 'Completed'] as const)('shows the Staff field read-only, with the reason, on a %s shift (deep review N3)', status => {
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status, findings: [] }) }} onClose={vi.fn()} canWrite participantOptions={participantOptions} staffOptions={twoStaff} />)
+
+    expect(screen.getByRole('combobox', { name: 'Staff' })).toBeDisabled()
+    expect(screen.getByText(/its worker can.t be changed here/i)).toBeInTheDocument()
   })
 })

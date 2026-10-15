@@ -8,6 +8,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 
 namespace Odip.Api.Controllers;
 
@@ -42,7 +43,8 @@ public class ProviderSettingsController : ControllerBase
             AccountNumber = s.AccountNumber, InvoiceFooterNotes = s.InvoiceFooterNotes,
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
             ParticipantReadinessMode = s.ParticipantReadinessMode,
-            MedicationCompetencyMode = s.MedicationCompetencyMode
+            MedicationCompetencyMode = s.MedicationCompetencyMode,
+            EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, s.TenantId, ct)
         }));
     }
 

@@ -5,15 +5,18 @@ import QualificationsPage from './QualificationsPage'
 import DashboardPage from './DashboardPage'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseStaff, mockUseSettings } = vi.hoisted(() => ({
+const { mockUseStaff, mockUseSettings, providerSettings } = vi.hoisted(() => ({
   mockUseStaff: vi.fn(),
   mockUseSettings: vi.fn(),
+  providerSettings: { current: undefined as { employmentHeroConnected?: boolean } | undefined },
 }))
 
+vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
   useStaff: mockUseStaff,
   useSettings: mockUseSettings,
   useUpdateStaff: () => ({ mutate: vi.fn(), isPending: false }),
+  useProviderSettings: () => ({ data: providerSettings.current }),
   // The dashboard's own request, answered with a real summary of zeros (the page no longer makes one up).
   useDashboard: () => ({
     data: {
@@ -110,22 +113,22 @@ describe('QualificationsPage: the list', () => {
     expect(screen.getAllByText('No date set')).toHaveLength(3)
   })
 
-  it('counts a credential due today under Expiring Soon, and the last day of the window as soon', () => {
+  it('counts a credential due today under Expiring within 30 days, and the last day of the window as soon', () => {
     renderList()
 
     const tabs = screen.getAllByRole('tab').map(t => t.textContent)
-    expect(tabs).toEqual(['All Issues (4)', 'Expired (1)', 'Expiring Soon (2)', 'No Date Set (2)'])
+    expect(tabs).toEqual(['All issues (4)', 'Expired (1)', 'Expiring within 30 days (2)', 'No date set (2)'])
   })
 
   it('filters to the staff with a credential in that state', () => {
     renderList()
 
-    fireEvent.click(screen.getByRole('tab', { name: /No Date Set/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /No date set/ }))
     expect(screen.getByText('Gus NoDate')).toBeInTheDocument()
     expect(screen.getByText('Ivy OneIssue')).toBeInTheDocument()
     expect(screen.queryByText('Dana Expired')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('tab', { name: /Expiring Soon/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /Expiring within/ }))
     expect(screen.getByText('Dana Expired')).toBeInTheDocument() // due today and in 1 day
     expect(screen.getByText('Eli Soon')).toBeInTheDocument()
     expect(screen.queryByText('Gus NoDate')).not.toBeInTheDocument()
@@ -160,11 +163,52 @@ describe('QualificationsPage and the Dashboard agree', () => {
     const listTotal = screen.getAllByText(/^\d+ issues?$/).reduce((sum, el) => sum + Number.parseInt(el.textContent!, 10), 0)
     unmount()
 
+    // A Coordinator now updates these in the Staff compliance group (the same sum); the tile is a SuperAdmin's with no organisation (SHAPE call 6).
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     render(<MemoryRouter><DashboardPage /></MemoryRouter>)
     // With issues, Qualification Issues is a tall tile: a named group ("Qualification Issues 12") whose figure is the count.
-    const tile = within(screen.getByRole('region', { name: 'Needs attention' })).getByRole('group', { name: /^Qualification Issues \d+$/ })
+    const tile = within(screen.getByRole('region', { name: 'Alerts' })).getByRole('group', { name: /^Qualification Issues \d+$/ })
 
     expect(listTotal).toBe(12)
     expect(tile.querySelector('.text-display')!.textContent).toBe(String(listTotal))
+  })
+})
+
+// STAFF-3 / STAFF-9 / CORE-6: ReadOnly is refused Settings and every staff write, so it is offered neither the Warning window link nor an edit.
+describe('QualificationsPage: controls by role', () => {
+  it('offers ReadOnly the list, with no Warning window link, pencil or inline Edit', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    renderList()
+    expandAll()
+
+    expect(screen.getByText('12 issues across 4 active staff')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Warning window/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Edit / })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^edit/i })).not.toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s the Warning window link, the pencil and inline Edit', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    renderList()
+    expandAll()
+
+    expect(screen.getByRole('link', { name: /Warning window/ })).toHaveAttribute('href', '/settings?section=alerts')
+    expect(screen.getByRole('link', { name: 'Edit Dana Expired' })).toBeInTheDocument()
+    // Every row has an inline Edit, so its name carries the row's credential and person.
+    expect(screen.getAllByRole('button', { name: /^Edit: .+, Dana Expired$/ }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('QualificationsPage — staff from Employment Hero', () => {
+  afterEach(() => { providerSettings.current = undefined; localStorage.clear() })
+
+  it('has no New staff member action on the empty page when staff come from Employment Hero', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    providerSettings.current = { employmentHeroConnected: true }
+    mockUseStaff.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 30 } })
+    render(<MemoryRouter><QualificationsPage /></MemoryRouter>)
+    expect(screen.getByText('No staff members yet')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'New staff member' })).toBeNull()
   })
 })

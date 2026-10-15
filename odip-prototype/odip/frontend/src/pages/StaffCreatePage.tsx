@@ -1,10 +1,10 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateStaff, useUpdateStaff, useStaffDetail, useEnsureStaffSignInAccount } from '@/api/hooks'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { FormField } from '@/components/FormField'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
@@ -12,8 +12,8 @@ import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { BackButton } from '@/components/BackButton'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
-import { TAP_FLOOR } from '@/components/tapArea'
 import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { addressConfirmationRequest } from '@/lib/addressConfirmation'
@@ -22,6 +22,10 @@ import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail, type EmailOutcome } from '@/lib/signInEmail'
 import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
+import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 
 const POSITION_ITEMS: DropdownItem[] = [
   { value: 'SupportWorker', label: 'Support Worker' },
@@ -77,7 +81,7 @@ export default function StaffCreatePage() {
   const createStaff = useCreateStaff()
   const updateStaff = useUpdateStaff()
   const ensureStaffAccount = useEnsureStaffSignInAccount()
-  const { data: existing, isLoading: isLoadingExisting } = useStaffDetail(isEdit ? id : undefined)
+  const { data: existing, isError: isExistingError, error: existingError, refetch: refetchExisting } = useStaffDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateStaff : createStaff
   const { isCoordinator } = usePermissions()
   // Staff added here get a user row and, until something makes one, no Firebase sign-in account. After a create the page makes sure there is
@@ -144,31 +148,29 @@ export default function StaffCreatePage() {
 
   const typedEmail = useWatch({ control, name: 'email' })
 
-  useEffect(() => {
-    if (existing) {
-      reset({
-        firstName: existing.firstName ?? '',
-        lastName: existing.lastName ?? '',
-        position: existing.position ?? 'SupportWorker',
-        role: existing.role ?? 'SupportWorker',
-        email: existing.email ?? '',
-        mobile: existing.mobile ?? '',
-        region: existing.region ?? '',
-        isDriverEligible: existing.isDriverEligible ?? false,
-        isFirstAidQualified: existing.isFirstAidQualified ?? false,
-        isMedicationCompetent: existing.isMedicationCompetent ?? false,
-        isManualHandlingCompetent: existing.isManualHandlingCompetent ?? false,
-        isOvernightEligible: existing.isOvernightEligible ?? false,
-        firstAidExpiryDate: existing.firstAidExpiryDate ?? '',
-        driverLicenceExpiryDate: existing.driverLicenceExpiryDate ?? '',
-        manualHandlingExpiryDate: existing.manualHandlingExpiryDate ?? '',
-        medicationCompetencyExpiryDate: existing.medicationCompetencyExpiryDate ?? '',
-        workerScreeningNumber: existing.workerScreeningNumber ?? '',
-        workerScreeningExpiryDate: existing.workerScreeningExpiryDate ?? '',
-        notes: existing.notes ?? '',
-      })
-    }
-  }, [existing, reset])
+  useFillOnce(existing, record => {
+    reset({
+      firstName: record.firstName ?? '',
+      lastName: record.lastName ?? '',
+      position: record.position ?? 'SupportWorker',
+      role: record.role ?? 'SupportWorker',
+      email: record.email ?? '',
+      mobile: record.mobile ?? '',
+      region: record.region ?? '',
+      isDriverEligible: record.isDriverEligible ?? false,
+      isFirstAidQualified: record.isFirstAidQualified ?? false,
+      isMedicationCompetent: record.isMedicationCompetent ?? false,
+      isManualHandlingCompetent: record.isManualHandlingCompetent ?? false,
+      isOvernightEligible: record.isOvernightEligible ?? false,
+      firstAidExpiryDate: record.firstAidExpiryDate ?? '',
+      driverLicenceExpiryDate: record.driverLicenceExpiryDate ?? '',
+      manualHandlingExpiryDate: record.manualHandlingExpiryDate ?? '',
+      medicationCompetencyExpiryDate: record.medicationCompetencyExpiryDate ?? '',
+      workerScreeningNumber: record.workerScreeningNumber ?? '',
+      workerScreeningExpiryDate: record.workerScreeningExpiryDate ?? '',
+      notes: record.notes ?? '',
+    })
+  }, !isDirty)
 
   const onSubmit = async (data: StaffFormData, addressConfirmed: boolean) => {
     const payload: any = { ...data }
@@ -226,7 +228,13 @@ export default function StaffCreatePage() {
     setRetrying(false)
   }
 
-  if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+  // An unknown id is a not-found, never a blank form that would PUT to it.
+  if (isEdit && !existing) {
+    if (!isExistingError) return <PageState kind="loading" noun="staff member" />
+    return isNotFoundError(existingError)
+      ? <PageState kind="not-found" noun="staff member" backTo="/staff" backLabel="staff" />
+      : <PageState kind="error" noun="staff member" onRetry={() => refetchExisting()} />
+  }
 
   // What the done view says, once: the visible Callout shows the sentence and the status region announces it.
   const announcement = created ? `${created.name} was created. ${describeEmailOutcome(created.outcome, 'use Send again').message}` : ''
@@ -251,10 +259,10 @@ export default function StaffCreatePage() {
   if (isTargetSuperAdmin) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
-        <div className="text-sm text-[var(--color-muted-foreground)]">
-          <Link to="/staff" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Staff</Link>
+        <div className="flex items-start gap-2">
+          <BackButton to="/staff" label="staff" variant="icon" history={false} />
+          <div className="flex-1 min-w-0"><PageHeader title="Edit staff member" /></div>
         </div>
-        <PageHeader title="Edit Staff Member" />
         <Card className="space-y-2">
           <p role="alert" className="text-sm font-medium text-[var(--color-destructive)]">
             SuperAdmin accounts can't be edited here.
@@ -262,9 +270,6 @@ export default function StaffCreatePage() {
           <p className="text-sm text-[var(--color-muted-foreground)]">
             SuperAdmin accounts are managed in Settings › Users. Contact a SuperAdmin if this account's role or profile needs to change.
           </p>
-          <Link to="/staff" className="inline-block mt-2 px-4 py-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors">
-            Back to Staff
-          </Link>
         </Card>
       </div>
     )
@@ -274,20 +279,20 @@ export default function StaffCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       <AnnouncementRegion message={announcement} />
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/staff" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Staff</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/staff" label="staff" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit staff member' : 'New staff member'} /></div>
       </div>
-      <PageHeader title={isEdit ? 'Edit Staff Member' : 'New Staff Member'} />
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} staff member. Please check your input and try again.`)}
-        </div>
+        </Callout>
       )}
 
       <form onSubmit={submitWith(false)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Personal Information */}
-        <Card title="Personal Information">
+        <Card title="Personal information">
           <div className={formGrid}>
             <FormField label="First Name" required error={errors.firstName?.message} className={span.medium}>
               <input {...register('firstName')} placeholder="e.g. Sarah" autoFocus />
@@ -381,7 +386,7 @@ export default function StaffCreatePage() {
         </Card>
 
         {/* Qualifications */}
-        <Card title="Qualifications & Eligibility">
+        <Card title="Qualifications & eligibility">
           <div className={formGrid}>
             <div className={`${span.medium} space-y-1`}>
               <FormField label="First Aid Qualified" layout="checkbox">
@@ -447,10 +452,10 @@ export default function StaffCreatePage() {
           <Button variant="secondary" to="/staff">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending || submitting}>
             {mutation.isPending
-              ? (isEdit ? 'Saving...' : 'Creating...')
+              ? (isEdit ? 'Saving…' : 'Creating…')
               : submitting && !isEdit && emailLinkAvailable
                 ? 'Sending link...'
-                : (isEdit ? 'Save Changes' : 'Create Staff Member')}
+                : (isEdit ? 'Save' : 'Create staff member')}
           </Button>
         </div>
       </form>

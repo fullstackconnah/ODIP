@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { golden } from '@/test/fixtures/planPricing'
-import { groupByReason, groupIssues, groupLines, referenceWeek, shiftsNotPriced, totalsCaption } from './planQuote'
+import { groupIssues, shiftsNotPriced, totalsCaption } from './planQuote'
 
 // What the screen's helpers do with a quote the engine wrote (see test/fixtures/planPricing.ts: the C# tests keep these files equal to what the engine says today). They were written against
 // hand-made quotes that had one issue for every date; the engine has one for each block, reason and message, counting the shifts, and its messages never hold a date (review F11).
@@ -29,7 +29,6 @@ describe("grouping and counting issues from the engine's own quotes", () => {
     const { issues } = golden.twoIssuesSameShifts
 
     expect(groupIssues(issues).map(issue => [issue.reason, issue.count])).toEqual([['TransportNotAvailable', 10], ['AccommodationNotAvailable', 10]])
-    expect(groupByReason(issues)).toHaveLength(2)
     expect(shiftsNotPriced(issues)).toBe(10)
     // Ten, and "at least": the quote does not say that the two issues touch the same shifts, only how many each touches, so the figure is a lower bound and not the count (review N10).
     expect(totalsCaption(golden.twoIssuesSameShifts)).toEqual({ text: 'at least 10 shifts with a part not priced', notFullyPriced: true })
@@ -43,42 +42,5 @@ describe("grouping and counting issues from the engine's own quotes", () => {
   it('says a priced plan with a public holiday to decide is not short of a price: the decision is a thing to do, not work left out', () => {
     expect(shiftsNotPriced(golden.briefFortnight.issues)).toBe(0)
     expect(totalsCaption(golden.briefFortnight)).toEqual({ text: '1 public holiday shift to decide', notFullyPriced: false })
-  })
-})
-
-describe('the lines of an engine quote as the Review step groups them', () => {
-  const weekOf = (quote: typeof golden.briefFortnight) => referenceWeek(quote.periodFrom, quote.periodTo, quote.holidayOccurrences.map(occurrence => occurrence.date))
-
-  it("finds the ordinary week that has no holiday in it, and gives the brief's eight hours and $588.64 for it", () => {
-    const quote = golden.briefFortnight
-    expect(weekOf(quote)).toEqual({ from: '2026-10-08', to: '2026-10-14' })     // the week of Labour Day (Monday 5 October) is not an ordinary one
-
-    const groups = groupLines(quote.lines, weekOf(quote))
-
-    const daytime = groups.find(group => group.itemCode === '04_104_0125_6_1')!
-    expect(daytime).toMatchObject({ occurrences: 3, periodTotal: 882.96, weeklyQty: 8, weeklyTotal: 588.64, band: 'Weekday Daytime' })
-    const holiday = groups.find(group => group.itemCode === '04_102_0125_6_1')!
-    expect(holiday).toMatchObject({ occurrences: 1, periodTotal: 653.84, weeklyQty: 0, weeklyTotal: 0, flags: { review: true, holidayExposure: true } })
-    expect(groups.reduce((sum, group) => sum + group.periodTotal, 0)).toBeCloseTo(quote.totals.amount, 2)       // the groups add up to the engine's total
-  })
-
-  it("groups the dawn block's ten lines with no price as one row with no item and a price of nothing, beside its priced support and transport", () => {
-    const quote = golden.noItemDawn
-    const groups = groupLines(quote.lines, weekOf(quote))
-
-    expect(groups).toHaveLength(3)
-    const unpriced = groups.find(group => group.unpriced === 'NoItem')!
-    expect(unpriced).toMatchObject({ itemCode: undefined, kind: 'Support', band: 'Weekday Night', occurrences: 10, periodTotal: 0, weeklyQty: 5, weeklyTotal: 0 })
-    expect(unpriced.sample.trace.why).toContain('The catalogue has no item for community access standard Weekday Night')
-    expect(groups.find(group => group.kind === 'Support' && group.unpriced === undefined)).toMatchObject({ occurrences: 10, weeklyQty: 10, band: 'Weekday Daytime' })
-    expect(groups.find(group => group.kind === 'ActivityTransport')).toMatchObject({ occurrences: 10, flags: { provisional: true } })
-  })
-
-  it('sums the hours the way the engine does: the hours of the priced lines only', () => {
-    const quote = golden.noItemDawn
-    const groups = groupLines(quote.lines, weekOf(quote))
-    const pricedHours = groups.filter(group => group.kind === 'Support' && group.unpriced === undefined).reduce((sum, group) => sum + group.periodQty, 0)
-
-    expect(pricedHours).toBe(quote.totals.supportHours)         // 20 h: the 10 unpriced hours are not in the engine's hours
   })
 })

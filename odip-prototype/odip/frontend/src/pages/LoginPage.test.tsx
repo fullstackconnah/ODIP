@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import LoginPage from './LoginPage'
 import { SignInRefused, type SignInRefusal } from '@/lib/signInRefusal'
+import { ACKNOWLEDGEMENT_OF_COUNTRY } from '@/lib/platformFacts'
 
 // A refused sign-in used to be "Login failed. Please try again." whatever the reason: an account Firebase had re-created arrives unverified and the exchange
 // refuses it, and nobody could tell that from a wrong password. The exchange now says why (a code), and the page turns each code into one plain sentence and a
@@ -62,7 +63,7 @@ function renderPage() {
 async function signIn(u: ReturnType<typeof userEvent.setup>, password = 'a-password') {
   await u.type(screen.getByLabelText('Email'), EMAIL)
   await u.type(screen.getByLabelText('Password'), password)
-  await u.click(screen.getByRole('button', { name: 'Sign In' }))
+  await u.click(screen.getByRole('button', { name: 'Sign in' }))
 }
 
 /** The one alert on the page: errors are announced, once. */
@@ -241,7 +242,7 @@ describe('LoginPage: a sign-in the exchange refused', () => {
     await signIn(u)
     await alert()
 
-    await u.click(screen.getByRole('button', { name: 'Sign In' }))
+    await u.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
@@ -344,7 +345,7 @@ describe('LoginPage: the verification link is sent at most once per hold', () =>
     return userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime })
   }
 
-  const signInAgain = (u: ReturnType<typeof userEvent.setup>) => u.click(screen.getByRole('button', { name: 'Sign In' }))
+  const signInAgain = (u: ReturnType<typeof userEvent.setup>) => u.click(screen.getByRole('button', { name: 'Sign in' }))
 
   it('asks the sign-in to send the first time, and not to send on a second attempt inside the hold, saying a link went a moment ago', async () => {
     mockLogin.mockRejectedValueOnce(unverified('sent')).mockRejectedValueOnce(unverified('recent'))
@@ -469,7 +470,7 @@ describe('LoginPage: sending the verification link again', () => {
   }
 
   const sendAgain = () => screen.getByRole('button', { name: 'Send it again' })
-  const signInButton = () => screen.getByRole('button', { name: 'Sign In' })
+  const signInButton = () => screen.getByRole('button', { name: 'Sign in' })
 
   it('keeps the text of the alert, Send it again included, as it was while the link is being sent, and marks the button busy', async () => {
     const resend = pendingResend()
@@ -541,5 +542,20 @@ describe('LoginPage: sending the verification link again', () => {
     fireEvent.submit(screen.getByLabelText('Password').closest('form')!)
 
     expect(mockLogin).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('LoginPage: landmarks and the platform footer', () => {
+  it('has one main holding the sign-in, and one contentinfo beside it with the acknowledgement and the Accessibility link', () => {
+    renderPage()
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
+    const main = screen.getByRole('main')
+    const footer = screen.getByRole('contentinfo')
+    expect(main).toContainElement(screen.getByRole('heading', { level: 1, name: 'Odip' }))
+    expect(footer.closest('main')).toBeNull()
+    expect(main.nextElementSibling).toBe(footer)
+    expect(within(footer).getByText(ACKNOWLEDGEMENT_OF_COUNTRY)).toBeInTheDocument()
+    expect(within(footer).getByRole('link', { name: 'Accessibility' })).toHaveAttribute('href', '/accessibility')
   })
 })

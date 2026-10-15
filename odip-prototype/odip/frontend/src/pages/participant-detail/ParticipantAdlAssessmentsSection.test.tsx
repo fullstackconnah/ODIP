@@ -192,3 +192,14 @@ describe('ParticipantAdlAssessmentsSection', () => {
     expect(screen.queryByText('Lay out clothes in order.')).not.toBeInTheDocument()
   })
 })
+
+// VISUAL-1 V2: a table of "Not assessed" rows on a new participant folds into one line that opens to it.
+describe('ParticipantAdlAssessmentsSection — nothing assessed yet', () => {
+  it('folds each unassessed table into one closed line under its heading', () => {
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+    for (const summary of [/^Not recorded: \d+ personal ADLs$/, /^Not recorded: \d+ community or domestic ADLs$/]) {
+      expect(screen.getByText(summary).closest('details')).not.toHaveAttribute('open')
+    }
+    expect(screen.getByText('Dressing').closest('details')).not.toBeNull()
+  })
+})

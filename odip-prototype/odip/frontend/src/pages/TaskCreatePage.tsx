@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
@@ -9,11 +9,15 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
+import { BackButton } from '@/components/BackButton'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
-import { TAP_FLOOR } from '@/components/tapArea'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { formGrid, span } from '@/lib/formGrid'
+import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { extractErrorMessage } from '@/lib/utils'
+import { usePermissions } from '@/lib/permissions'
 
 const TASK_TYPE_ITEMS: DropdownItem[] = [
   { value: 'AccommodationRequest', label: 'Accommodation Request' },
@@ -65,6 +69,9 @@ export default function TaskCreatePage() {
   const [searchParams] = useSearchParams()
   const tripInstanceIdParam = searchParams.get('tripInstanceId') ?? ''
   const isEdit = !!id
+  // A role that cannot write (ReadOnly; the route admits no one else without write) reads the task here: the only place its details are shown.
+  const { canWrite } = usePermissions()
+  const viewOnly = isEdit && !canWrite
   const createTask = useCreateTask()
   const updateTask = useUpdateTask()
   const mutation = isEdit ? updateTask : createTask
@@ -129,7 +136,7 @@ export default function TaskCreatePage() {
   // PP-59: don't render the form with create-mode defaults while an edit-mode fetch is still in
   // flight — wait for it to resolve (success or the not-found case handled just below).
   if (isEdit && !isTaskError && !existingTask) {
-    return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+    return <PageState kind="loading" noun="task" />
   }
 
   // PP-10/PP-11: a failed/not-found single-task fetch must surface visibly, not silently fall
@@ -137,13 +144,13 @@ export default function TaskCreatePage() {
   if (isEdit && isTaskError) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
-        <div className="text-sm text-[var(--color-muted-foreground)]">
-          <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
+        <div className="flex items-start gap-2">
+          <BackButton to="/tasks" label="tasks" variant="icon" history={false} />
+          <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View task' : 'Edit task'} /></div>
         </div>
-        <PageHeader title="Edit Task" />
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           Couldn't find this task. It may have been deleted, or something went wrong loading it.
-        </div>
+        </Callout>
       </div>
     )
   }
@@ -151,20 +158,21 @@ export default function TaskCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/tasks" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Tasks</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/tasks" label="tasks" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View task' : isEdit ? 'Edit task' : 'New task'} /></div>
       </div>
-      <PageHeader title={isEdit ? 'Edit Task' : 'New Task'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          Failed to {isEdit ? 'update' : 'create'} task. Please check your input and try again.
-        </div>
+        <Callout tone="error">
+          {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} task. Please check your input and try again.`)}
+        </Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+        <fieldset disabled={viewOnly} className="min-w-0">
         {/* Task Details */}
-        <Card title="Task Details">
+        <Card title="Task details">
           <div className={formGrid}>
             <FormField label="Title" required error={errors.title?.message} className={span.medium}>
               <input {...register('title')} placeholder="e.g. Confirm accommodation booking" autoFocus />
@@ -272,13 +280,15 @@ export default function TaskCreatePage() {
           </div>
         </Card>
 
+        </fieldset>
+
         {/* Submit */}
-        <div className="flex justify-end gap-3">
+        {!viewOnly && <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/tasks">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Task')}
+            {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create task')}
           </Button>
-        </div>
+        </div>}
       </form>
     </div>
   )

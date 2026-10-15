@@ -3,6 +3,7 @@ import { Pencil } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Callout } from '@/components/Callout'
 
 /**
  * PD-6/PD-7 shared chrome for section-level "edit this card in place" panels (see SPEC-03's PD-7
@@ -96,9 +97,7 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
       }
     >
       {error && (
-        <div role="alert" className="mb-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {error}
-        </div>
+        <Callout tone="error" className="mb-3">{error}</Callout>
       )}
 
       {saved && (

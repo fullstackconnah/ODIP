@@ -11,6 +11,7 @@ const http = require('http')
 const planPricing = require('./planPricing')
 const planApproval = require('./planApproval')
 const fundingModule = require('./funding')
+const intakeBookingModule = require('./intakeBooking')
 const rosterBudgetModule = require('./rosterBudget')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
@@ -27,6 +28,11 @@ const paged = (items) => ({
   hasNext: false,
   hasPrevious: false,
 })
+// The provider's calendar day (Australia/Sydney, the captures' zone), so "due today" and "overdue" mean what they mean to the browser.
+const providerToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+const addDaysIso = (iso, days) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10) }
+// The id the capture scripts' dev sign-in returns (scratchpad dash-shots): a leave request of "the signed-in Admin".
+const CAPTURE_VIEWER_ID = '00000000-0000-0000-0000-0000000000a1'
 
 // ── Sample data ──────────────────────────────────────────────
 
@@ -99,17 +105,15 @@ const enquiryFeed = [
     createdAt: '2026-02-01T00:00:00Z', participantIsDraft: false, participantIsActive: true, participantIntakeCompletedAt: '2026-02-10T00:00:00Z' },
 ]
 
-// An NDIS-funded participant has a sixth gate, "Funding recorded" (budget phase 1): the real API counts it in totalSteps and adds this reason while no plan budget is recorded. The mock treats
-// everyone on the worklist as NDIS-funded, and Mei has no plan budget (funding.js holds plans for p-0002 and p-0004 only).
-const FUNDING_NOT_RECORDED_REASON = "Funding is not recorded: add the plan budget on the participant's Funding tab."
-const FUNDING_ENDED_REASON = "The plan budget has ended: record the new plan on the participant's Funding tab."
-const SCHEDULE_REASON = 'The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.'
-// Daniel has done everything but the plan budget, so his onboarding page recommends "Record plan budget" (the one step Warn mode lets wait).
-const ALL_BUT_FUNDING = new Set(['p-0104'])
+// The onboarding checklist (owner decision 2026-10-13): four items derived by the server, three for anyone not NDIS-funded. The mock treats everyone on the
+// worklist as NDIS-funded. Mei has every item open: no date of birth, no draft, no agreement record, no plan budget (funding.js holds plans
+// for p-0002 and p-0004 only). Daniel's services have started and only his plan budget is missing.
+const FUNDING_NOT_RECORDED = 'No plan budget recorded.'
+const FUNDING_ENDED = 'The plan budget has ended: record the new plan.'
+const SERVICES_STARTED = { 'p-0104': '2026-10-08T00:00:00Z' }
 const onboardingWorklist = [
-  { participantId: 'p-0103', fullName: 'Mei Tanaka', stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 6,
-    reasons: ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.', FUNDING_NOT_RECORDED_REASON] },
-  { participantId: 'p-0104', fullName: 'Daniel Osei', stage: 'Onboarding incomplete', nextAction: 'Record plan budget', completedSteps: 4, totalSteps: 6, reasons: [FUNDING_NOT_RECORDED_REASON] },
+  { participantId: 'p-0103', fullName: 'Mei Tanaka', servicesStartedAt: null, completedSteps: 0, totalSteps: 4, firstMissing: 'Profile details' },
+  { participantId: 'p-0104', fullName: 'Daniel Osei', servicesStartedAt: SERVICES_STARTED['p-0104'], completedSteps: 3, totalSteps: 4, firstMissing: 'Funding' },
 ]
 
 // Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
@@ -122,7 +126,7 @@ const draftParticipants = [
   { id: 'p-0103', firstName: 'Mei', lastName: 'Tanaka', preferredName: null, fullName: 'Mei Tanaka', maskedNdisNumber: null, planType: 'SelfManaged', region: null,
     isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-29T05:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
   { id: 'p-0104', firstName: 'Daniel', lastName: 'Osei', preferredName: null, fullName: 'Daniel Osei', maskedNdisNumber: null, planType: 'PlanManaged', region: null,
-    isRepeatClient: false, isActive: false, isDraft: true, intakeCompletedAt: '2026-09-30T03:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
+    isRepeatClient: false, isActive: true, isDraft: true, intakeCompletedAt: '2026-09-30T03:00:00Z', servicesStartedAt: '2026-10-08T00:00:00Z', wheelchairRequired: false, isHighSupport: false, supportRatio: 'SharedSupport' },
 ]
 
 const participantDetailExtras = {
@@ -268,6 +272,12 @@ const tripDetailExtras = {
   },
 }
 
+// Same rule as TripInstance.StaffRequired: the bookings' figure rounded up, or the trip's own minimum if that is higher; null if there is neither.
+function staffRequiredOf(extras) {
+  const { calculatedStaffRequired: calc = 0, minStaffRequired: min = null } = extras || {}
+  return calc > 0 ? Math.max(Math.ceil(calc), min ?? 0) : min
+}
+
 function tripDetail(t) {
   return {
     ...t,
@@ -276,6 +286,7 @@ function tripDetail(t) {
     createdAt: '2026-05-02T10:00:00Z',
     updatedAt: '2026-07-30T11:20:00Z',
     ...(tripDetailExtras[t.id] || {}),
+    staffRequired: staffRequiredOf(tripDetailExtras[t.id]),
   }
 }
 
@@ -438,6 +449,18 @@ const tasks = [
     dueDate: '2026-07-13', status: 'Overdue', completedDate: null,
     notes: 'QSC reporting window closes 72h after the incident.',
     linkTo: '/incidents/inc-0002/edit', incidentReportId: 'inc-0002',
+  },
+  // The dashboard's Tasks due group: an Admin-only review of an emergency over budget, overdue (the oldest due, so it is among the group's first five
+  // rows), and a task due today (the provider's day).
+  {
+    id: 'task-0008', participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'BudgetEmergencyReview', title: 'Review the emergency booking over budget – Grace Palmer-Hughes, 8 Oct', ownerId: null, ownerName: null,
+    priority: 'Urgent', dueDate: '2026-07-01', status: 'NotStarted', completedDate: null, notes: 'Booked over the Core budget on the night.', shiftId: 'board-shift-0002',
+  },
+  {
+    id: 'task-0009', tripInstanceId: 't-0002', tripName: 'Tamborine Mountain Getaway', participantBookingId: null, accommodationReservationId: null,
+    vehicleAssignmentId: null, staffAssignmentId: null, taskType: 'InsuranceConfirmation', title: 'Confirm travel insurance – Liam O.', ownerId: 's-0001',
+    ownerName: 'Callum Radford', priority: 'High', dueDate: providerToday(), status: 'NotStarted', completedDate: null, notes: 'Policy number to follow.',
   },
 ]
 
@@ -695,12 +718,14 @@ const shiftCompletions = [
     // A manual start (the worker never pressed Start and supplied the time at Finish): that path skips the dose checklist, which is why this
     // fixture also has a dose with no outcome - the queue shows both.
     timeZoneId: 'Australia/Brisbane', geolocationDeclined: false, startWasManual: true,
+    originalActualEnd: '2026-09-11T00:02:00Z', timeAdjustmentReason: 'Left at ten to midnight; tapped Finish at home.',
+    kilometres: 12.5, anythingToReport: true,
     submittedByUserId: 's-0004', submittedByName: 'Mei Zhang',
     startedAt: '2026-09-10T19:32:00Z', submittedAt: '2026-09-10T23:50:00Z',
     reviewedByUserId: null, reviewedByName: null, reviewedAt: null,
     reviewOutcome: null, returnReason: null,
     varianceMinutesStart: 32, varianceMinutesEnd: -10, isOutlierVariance: true, varianceReviewMinutes: 15,
-    shiftReturnCount: 0,
+    shiftReturnCount: 1,   // returned once and sent again: the queue says "Returned 1 time"
     incidents: [
       { id: 'inc-0002', title: 'Missed evening medication dose', severity: 'Medium', status: 'UnderReview', incidentDateTime: '2026-07-11T20:15:00' },
     ],
@@ -1037,7 +1062,10 @@ function withPackageFields(shiftId, completion) {
   }, 0)
   const breakMins = wholeMinutes(breakMinutes)
   return {
-    handoverText: null, nothingToHandOver: false, nothingToNoteConfirmed: false, ...completion,
+    handoverText: null, nothingToHandOver: false, nothingToNoteConfirmed: false,
+    originalActualStart: null, originalActualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null,
+    ...completion,
+    timesAdjusted: !!(completion.originalActualStart || completion.originalActualEnd),
     breaks: breaks.map((b) => breakDto(b, nowMs)), breakMinutes: breakMins, netWorkedMinutes: Math.max(0, gross - breakMins),
   }
 }
@@ -1531,9 +1559,27 @@ const completionQueueItems = Object.values(portalShiftBase)
       breakMinutes: (packageHistoryBreaks[base.id] || []).reduce((sum, b) => sum + Math.round((Date.parse(b.endedAt) - Date.parse(b.startedAt)) / 60000), 0),
       // True on the manual-start path (the worker never pressed Start and supplied the start time at Finish), which skips the dose checklist.
       startWasManual: !!completion.startWasManual,
+      // True when the worker moved the start or end at Finish (the server derives it from the stored originals the same way).
+      timesAdjusted: !!(completion.originalActualStart || completion.originalActualEnd),
+      // The incidents the completion's own detail lists (its fixture's `incidents`): what the server's queue counts.
+      incidentCount: (completion.incidents || []).length,
     }
   })
   .filter(Boolean)
+
+// The dashboard's Shift completions group: a clean row (one-tap Approve), one with an incident on the shift (Review), and one whose approve the
+// server refuses (409, the row error). Queue-only rows: nothing else reads them.
+const dashboardQueueRow = (shiftId, staffName, participantName, o) => ({
+  shiftId, completionId: `sc-${shiftId}`, participantName, staffName, serviceDate: '2026-10-13',
+  rosteredStart: '2026-10-12T23:00:00Z', rosteredEnd: '2026-10-13T05:00:00Z', actualStart: '2026-10-12T23:02:00Z', actualEnd: '2026-10-13T05:04:00Z',
+  varianceMinutesStart: 2, varianceMinutesEnd: 4, status: 'PendingReview', timeZoneId: 'Australia/Brisbane', isOutlierVariance: false,
+  varianceReviewMinutes: 15, returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 30, startWasManual: false, incidentCount: 0, ...o,
+})
+completionQueueItems.push(
+  dashboardQueueRow('shift-dash-clean', 'Priya Nadarajah', 'Liam Okafor', {}),
+  dashboardQueueRow('shift-dash-incident', 'Tom Beattie', 'Grace Palmer-Hughes', { incidentCount: 1 }),
+  dashboardQueueRow('shift-dash-409', 'Callum Radford', 'Ava Chen', {}),
+)
 
 // Bookings (BookingListDto)
 const bookings = [
@@ -1639,7 +1685,7 @@ const scheduleOverview = {
     durationDays: t.durationDays, status: t.status, maxParticipants: t.maxParticipants,
     currentParticipantCount: t.currentParticipantCount,
     minStaffRequired: (tripDetailExtras[t.id] || {}).minStaffRequired ?? null,
-    staffRequired: (tripDetailExtras[t.id] || {}).calculatedStaffRequired ?? null,
+    staffRequired: staffRequiredOf(tripDetailExtras[t.id]),
     staffAssignedCount: (tripDetailExtras[t.id] || {}).staffAssignedCount ?? 0,
     vehicleAssignedCount: t.id === 't-0001' || t.id === 't-0004' ? 1 : 0,
     leadCoordinatorName: t.leadCoordinatorName,
@@ -1705,32 +1751,6 @@ const dashboardSummary = {
   overdueTasks: tasks.filter((t) => t.status === 'Overdue'),
 }
 
-// Staff "my dashboard" (StaffDashboardDto) — for support-worker view
-const myDashboard = {
-  staffId: 's-0003',
-  fullName: "Jack O'Sullivan",
-  upcomingTripCount: 1,
-  activeAssignmentCount: 1,
-  nextTripCountdownDays: 12,
-  activeTrip: null,
-  assignments: [
-    {
-      assignmentId: 'sa-0002', tripInstanceId: 't-0001',
-      tripName: 'Sunshine Coast Beach Escape', destination: 'Caloundra QLD',
-      region: 'Sunshine Coast', startDate: '2026-08-14', endDate: '2026-08-17',
-      durationDays: 4, tripStatus: 'Confirmed', assignmentStatus: 'Confirmed',
-      assignmentRole: 'Support Worker / Driver', isDriver: true,
-      sleepoverType: 'Sleepover', shiftNotes: 'Driving Big Red. Hoist induction complete.',
-      group: 'Upcoming', daysUntilStart: 12,
-    },
-  ],
-  qualifications: [
-    { name: 'First Aid', status: 'ExpiringSoon', expiryDate: '2026-08-20', daysUntilExpiry: 18 },
-    { name: 'Driver Licence', status: 'Current', expiryDate: '2027-10-09', daysUntilExpiry: 433 },
-    { name: 'Manual Handling', status: 'Current', expiryDate: '2026-10-30', daysUntilExpiry: 89 },
-  ],
-}
-
 // Staff assignments per trip (StaffAssignmentDto)
 const tripStaffAssignments = {
   't-0001': [
@@ -1778,7 +1798,7 @@ const appSettings = { qualificationWarningDays: 30 }
 
 // Leave requests (LeaveRequestDto) + recurring unavailability (RecurringUnavailabilityDto) —
 // offline preview fixtures for the coordinator LeaveApprovalsPage and self-service
-// PortalLeavePage. CURRENT_STAFF_ID mirrors myDashboard.staffId — the "current user" the
+// PortalLeavePage. CURRENT_STAFF_ID is the "current user" the
 // portal/* routes below answer for.
 const CURRENT_STAFF_ID = 's-0003'
 
@@ -1816,6 +1836,8 @@ function rosterBoard(searchParams) {
   const days = Array.from({ length: 7 }, (_, i) => planApproval.addDays(monday, i))
   const board = rosterBoardFixture()
   if (monday !== BOARD_FIXTURE_WEEK) { board.participantRows = []; board.exceptions = [] }
+  // Daniel's services have begun while he is still onboarding: he has a row every week, tagged as onboarding (the real board lists everyone who can receive services).
+  board.participantRows.push({ participantId: 'p-0104', fullName: 'Daniel Osei', supportRatio: 'SharedSupport', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: true, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 })
   board.weekStart = monday
   board.days = days
   for (const shift of rosterShifts.filter((s) => s.serviceDate >= days[0] && s.serviceDate <= days[6])) {
@@ -1896,6 +1918,12 @@ const leaveRequests = [
     decidedByUserId: 's-0001', decidedAt: '2026-09-04T09:00:00Z',
     decisionNote: 'Already short-staffed that day.',
   },
+  // A request of the capture viewer's own: the dashboard shows it as "Your request", with no buttons.
+  {
+    id: 'leave-0004', userId: CAPTURE_VIEWER_ID, userFullName: 'Dev Admin', leaveType: 'Annual', startDate: '2026-11-02', endDate: '2026-11-06',
+    status: 'Pending', reason: 'School holidays.', requestedByUserId: CAPTURE_VIEWER_ID, requestedAt: '2026-10-01T09:00:00Z',
+    decidedByUserId: null, decidedAt: null, decisionNote: null,
+  },
 ]
 
 const recurringUnavailabilities = [
@@ -1961,6 +1989,13 @@ const claims = [
     tripName: '', status: 'Draft', claimReference: 'TC-43015828-20260810', totalAmount: 640,
     createdAt: '2026-08-10T08:00:00Z',
   },
+  // The claim the NDIA refused for want of funds (budget phase 2b): V27, not enough in the funding period. Grace's Core (flexible) is on track by ODIP's own figures, and the NDIA's portal shows a
+  // provider no budget, so this is the only direct sign her pool is empty: the Funding tab and the alerts say so (mock-ledger.js holds the same claim).
+  {
+    id: 'claim-0003', kind: 'Shift', participantId: 'p-0004', periodFrom: '2026-10-01', periodTo: '2026-10-07',
+    tripName: '', status: 'Rejected', claimReference: 'TC-43000412-20261008', totalAmount: 552,
+    createdAt: '2026-10-07T08:00:00Z', submittedDate: '2026-10-07T09:00:00Z', rejectedDate: '2026-10-08T01:30:00Z', rejectionCode: 'V27',
+  },
 ]
 
 const claimLineItemsByClaimId = {
@@ -1993,6 +2028,17 @@ const claimLineItemsByClaimId = {
       hours: 8, unitPrice: 40, totalAmount: 320, gstCode: 'GST', claimType: 'Standard',
       cancellationReason: null, participantApproved: false, status: 'Draft',
       rejectionReason: null, paidAmount: null,
+    },
+  ],
+  'claim-0003': [
+    {
+      id: 'cli-0004', tripClaimId: 'claim-0003', shiftId: 'sh-0003', participantId: 'p-0004',
+      participantName: 'Grace Palmer-Hughes', ndisNumber: '43•••••34', planType: 'PlanManaged',
+      supportItemCode: '04_104_0125_6_1', dayType: 'Weekday',
+      supportsDeliveredFrom: '2026-10-02', supportsDeliveredTo: '2026-10-02',
+      hours: 8, unitPrice: 69, totalAmount: 552, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: false, status: 'Rejected',
+      rejectionReason: 'Not enough funds in the funding period', paidAmount: null,
     },
   ],
 }
@@ -2052,7 +2098,7 @@ const NOTIFICATION_EVENT_TYPES = [
   'LeaveRequestSubmitted', 'LeaveRequestDecided', 'ShiftAssigned',
   'ShiftCompletionPendingReview', 'ShiftCompletionReturned', 'WitnessRequested',
   'CaregiverSubmissionReceived', 'IncidentReported', 'ServiceAgreementSent',
-  'ServiceAgreementSigned', 'IntegrationDegraded',
+  'ServiceAgreementSigned', 'IntegrationDegraded', 'ShiftUnassigned', 'IntakeBooked',
 ]
 
 // GET/PUT notifications/preferences fixture — every event x channel, Email defaulting ON per
@@ -2099,6 +2145,24 @@ const notificationOutbox = [
 function retriedNotification(id) {
   const row = notificationOutbox.find((n) => n.id === id) || notificationOutbox[0]
   return { ...row, status: 'Pending', attempts: 0, nextAttemptAt: new Date().toISOString(), lastError: undefined }
+}
+
+// The bell (dashboard PR B): GET notifications/inbox, POST notifications/inbox/:id/read and notifications/inbox/read-all.
+// Unlike most POSTs here these change the fixture, so the refetch after "Mark all as read" doesn't bring the dots back.
+// Four items, two unread (SHAPE section 13's fixture), for the finish reviewer's own mock run. Titles are plain text, in the server's voice.
+const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
+const inAppInbox = [
+  { id: 'inapp-0001', title: 'Sam Lee asked for annual leave, 20 to 24 Oct.', linkTo: '/rostering/leave', createdAt: minutesAgo(5) },
+  { id: 'inapp-0002', title: "Sam Lee's shift with Grace Palmer-Hughes on Tue 13 Oct is ready for review.", linkTo: '/rostering/completions', createdAt: minutesAgo(120) },
+  { id: 'inapp-0003', title: 'Sam Lee reported an incident: injury, high severity.', linkTo: '/incidents', createdAt: minutesAgo(26 * 60), readAt: minutesAgo(25 * 60) },
+  { id: 'inapp-0004', title: 'Ann Hughes sent a profile update for Grace Palmer-Hughes.', linkTo: '/caregiver-submissions', createdAt: minutesAgo(3 * 24 * 60), readAt: minutesAgo(2 * 24 * 60) },
+]
+function inAppInboxView() {
+  return { items: inAppInbox, unreadCount: inAppInbox.filter((n) => !n.readAt).length, hasMore: false }
+}
+function markInAppRead(id) {
+  for (const n of inAppInbox) if ((id === undefined || n.id === id) && !n.readAt) n.readAt = new Date().toISOString()
+  return null
 }
 
 // Connection map item 12 (staff hub) — staffId linkage for the three portalShiftBase fixture
@@ -2194,10 +2258,6 @@ function scheduleAvailabilityForStaff(id) {
 // Seeded so each state of the builder can be seen: p-0001 has no draft (the empty state), p-0002 a hand-typed one (read-only, rebuild from blocks), p-0003 a
 // plan built from blocks that costs more than its small plan budget, p-0004 the same plan with no budget recorded (the totals stand alone).
 let planPricingSettings = planPricing.defaultSettings()
-const fundingSources = [
-  { id: 'fs-0001', participantId: 'p-0001', participantName: 'Liam Okafor', routeType: 'PlanManaged', budgetCategory: 'Core - Social & Community Participation', ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30', budget: 60000, payerName: null, payerEmail: null, isActive: true },
-  { id: 'fs-0003', participantId: 'p-0003', participantName: 'Marcus Tran', routeType: 'SelfManaged', budgetCategory: 'Core - Social & Community Participation', ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30', budget: 25000, payerName: null, payerEmail: null, isActive: true },
-]
 const serviceAgreementDrafts = {}
 
 // Plan builder phase D: the roster patterns and shifts an approval makes (planApproval.js), kept so the Patterns page and the roster board show them. Two hand-made patterns are seeded: p-0004 has a
@@ -2274,6 +2334,30 @@ function saveDraft(participantId, body) {
   return draft
 }
 
+const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
+
+// Agreement PR 2: the agreements ending, as AgreementEnding.FindAsync finds them on the server. An active participant's newest approved revision ending within 60 days of the provider's today, or
+// ended; a newer revision starting after it (a renewal) hides one still running, and an ended one says it waits. Soonest end first, in the participant alert's words. Revisions are newest first here.
+function agreementsEnding() {
+  const today = planApproval.providerToday()
+  const rows = []
+  for (const person of participants.filter((p) => p.isActive && !p.isDraft)) {
+    const revisions = serviceAgreementDrafts[person.id] || []
+    const approved = revisions.find((draft) => draft.approval)
+    if (!approved) continue
+    const daysLeft = daysBetween(today, approved.agreementEndDate)
+    if (daysLeft > 60) continue
+    const renewal = revisions.find((draft) => draft.version > approved.version && draft.agreementStartDate > approved.agreementEndDate)
+    if (renewal && daysLeft >= 0) continue
+    const words = daysLeft < 0 ? `Agreement ended ${approved.agreementEndDate}: shifts stop after it` : daysLeft === 0 ? 'Agreement ends today' : daysLeft === 1 ? 'Agreement ends in 1 day' : `Agreement ends in ${daysLeft} days`
+    rows.push({
+      participantId: person.id, participantName: person.fullName, draftId: approved.id, version: approved.version, agreementEndDate: approved.agreementEndDate, daysLeft,
+      renewalVersion: renewal ? renewal.version : null, status: renewal ? `${words}. Renewal v${renewal.version} is waiting for approval` : words,
+    })
+  }
+  return rows.sort((a, b) => a.agreementEndDate.localeCompare(b.agreementEndDate))
+}
+
 ;(function seedDrafts() {
   serviceAgreementDrafts['p-0002'] = [{
     id: 'draft-p-0002-v1', participantId: 'p-0002', version: 1, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3',
@@ -2289,7 +2373,9 @@ function saveDraft(participantId, body) {
     { block: block('b2', { supportType: 'GroupActivity', days: ['Saturday'], start: '09:00:00', end: '15:00:00', participantsPresent: 3 }), requirements: none },
     { block: block('b3', { supportType: 'PersonalCare', days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], start: '07:00:00', end: '09:00:00', setting: 'AtHome' }), requirements: { ...none, skills: ['ManualHandling'] } },
   ]
-  for (const participantId of ['p-0003', 'p-0004']) {
+  // p-0005 has a draft too (budget phase 2b), so the agreement budget bar can be seen OVER: her Core (flexible) pool is already over for the quarter (mock-ledger.js), so any agreement is. p-0003's
+  // plan has ended and p-0004's is far from its limit, so the bar shows "No budget recorded" for the first and "Within" for the second.
+  for (const participantId of ['p-0003', 'p-0004', 'p-0005']) {
     // p-0004's plan has decided its public holidays (Charge), so it can be approved for rostering; p-0003's has not (Review, the default), so approving it is refused with the holidays named.
     const blocksFor = participantId === 'p-0004' ? plan.map((entry) => ({ ...entry, block: { ...entry.block, onPublicHoliday: 'Charge' } })) : plan
     const body = { ...base, blocks: blocksFor }
@@ -2298,17 +2384,42 @@ function saveDraft(participantId, body) {
     delete result._lines
     serviceAgreementDrafts[participantId] = [draftDto(participantId, 1, body, result, lines)]
   }
+  // Agreement PR 2 (fix round 1): p-0001 has an agreement approved for rostering that ended three days ago with no renewal, so the "ended" states can be seen. An approval refuses an agreement
+  // that has already ended, so it is seeded approved. It names the 2026-27 plan; the captures record that plan before they renew it.
+  const today = planApproval.providerToday()
+  const charged = plan.map((entry) => ({ ...entry, block: { ...entry.block, onPublicHoliday: 'Charge' } }))
+  const ended = { ...base, representative: undefined, blocks: charged, agreementStartDate: planApproval.addDays(today, -59), agreementEndDate: planApproval.addDays(today, -3) }
+  const endedQuote = planPricing.quote({ blocks: charged.map((entry) => entry.block), periodFrom: ended.agreementStartDate, periodTo: ended.agreementEndDate, includeLines: true }, planPricingSettings)
+  const endedLines = planPricing.groupLines(endedQuote._lines, charged.map((entry) => entry.block))
+  delete endedQuote._lines
+  serviceAgreementDrafts['p-0001'] = [{ ...draftDto('p-0001', 1, ended, endedQuote, endedLines), approval: {
+    approvedAt: `${planApproval.addDays(today, -60)}T01:00:00Z`, approvedByName: 'Callum Radford', patternsCreated: 7, patternsEnded: 0, shiftsCreated: 0, topUpEnabled: true,
+  } }]
 })()
 
-// Participant budgets (phase 1): the plan record, its hint from the Billing funding sources, the support category list and the budget settings. See funding.js.
-const funding = fundingModule.create({ respond, fundingSources })
+// Participant budgets (phase 1): the plan record, the support category list and the budget settings. See funding.js.
+// Phase 2b adds the places a warning shows: it reads the participants (names, how their money is managed) and prices an agreement with the same engine as the plan builder's quote.
+const funding = fundingModule.create({
+  respond, people: participants,
+  priceLines: (blocks, periodFrom, periodTo) => planPricing.quote({ blocks, periodFrom, periodTo, includeLines: false }, planPricingSettings)._lines,
+  // Agreement PR 2, rule 12 of ParticipantAlertsService: the agreement ending soon (Warning) or ended (Critical), from the ending list's rule, opening the agreement page.
+  agreementAlertsOf: (id) => agreementsEnding().filter((row) => row.participantId === id).map((row) => ({
+    type: row.daysLeft < 0 ? 'agreement-ended' : 'agreement-ending-soon', severity: row.daysLeft < 0 ? 'Critical' : 'Warning', message: row.status, deepLinkTab: 'details', linkTo: `/participants/${id}/agreement-draft`,
+  })),
+})
+// Intake booking: the booking fields on the enquiry feed, its writes and GET intake-visits. See intakeBooking.js.
+const intake = intakeBookingModule.create({ respond, failEnvelope, enquiryFeed })
+// Fix round 1: the price list withdraws the group activity Sunday item three weeks from today (no seeded plan has one), so a renewal's review can show a line the new price list has not got.
+planPricing.withdraw('04_105_0136_6_1', planApproval.addDays(planApproval.providerToday(), 21))
 // Budget phase 3: the roster's budget check, the shifts that carry the over-budget markers and the Admin's review task. See rosterBudget.js for the switches.
 const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
 const routes = [
   ...funding.get,
+  ...intake.get,
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
+  ['service-agreements/ending', () => agreementsEnding()],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
   ['participants/:id/service-agreement-drafts/:id', (participantId, draftId) => {
     const found = (serviceAgreementDrafts[participantId] || []).find((draft) => draft.id === draftId)
@@ -2322,31 +2433,27 @@ const routes = [
     const budgetWarnings = result.preview.canApprove ? rosterBudget.sampleWarnings('shift', result.preview.shiftsToCreate || 0) : null
     return budgetWarnings ? { ...result.preview, budgetWarnings } : result.preview
   }],
-  ['billing/funding-sources', (searchParams) => paged(fundingSources.filter((f) => !searchParams.get('participantId') || f.participantId === searchParams.get('participantId')))],
 
   // participants (paged list)
   // Honours the filters the Active participants tab sends (Active = isActive=true, Archived = isActive=false, both isDraft=false); the fixtures here have no drafts.
   ['participants', (searchParams) => paged(participants.filter((p) =>
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
-  ['inquiries', () => enquiryFeed],
+  ['inquiries', () => intake.feed()],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
   ['inquiries/:id/onboarding', (id) => {
     const budget = funding.budgetStatus(id)
-    const fundingRecorded = budget.recorded
-    // p-0004 has every step, its plan budget included (funding.js gives it a plan), but for the schedule: its checklist shows the last step, before and after its agreement draft is approved for rostering
-    // (phase D). Like the server, the list says where the schedule is made until a revision is approved and nothing about it after (the checklist's row names the revision), and it is never ready while the schedule waits.
-    const scheduleOnly = id === 'p-0004'
-    const approved = (serviceAgreementDrafts[id] || []).filter((d) => d.approval).sort((a, b) => b.version - a.version)[0]
-    const schedule = approved ? { scheduleApprovedVersion: approved.version, scheduleApprovedAt: approved.approval.approvedAt } : {}
-    const done = ALL_BUT_FUNDING.has(id) || scheduleOnly
+    // Mei is the fresh case; everyone else on a checklist (Daniel, and p-0004 opened by URL) has everything but, perhaps, the plan budget.
+    const fresh = id === 'p-0103'
+    const item = (key, label, done, missing) => ({ key, label, done, missing: done ? null : missing })
+    const items = [
+      item('profile', 'Profile details', !fresh, 'Missing: date of birth.'),
+      item('serviceNeeds', 'Service needs', !fresh, 'No current agreement draft with dated, priced support lines.'),
+      item('agreement', 'Signed agreement', !fresh, 'Record the date it was signed, or why there is no written agreement.'),
+      item('funding', 'Funding', budget.recorded, budget.ended ? FUNDING_ENDED : FUNDING_NOT_RECORDED),
+    ]
     return {
-      participantId: id, intakeComplete: true, profileComplete: done, serviceTypeConfirmed: done, serviceAgreementSigned: done, fundingRecorded, isReady: done && fundingRecorded && !scheduleOnly,
-      reasons: [
-        ...(done ? [] : ['Profile requires date of birth.', 'A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.']),
-        ...(fundingRecorded ? [] : [budget.ended ? FUNDING_ENDED_REASON : FUNDING_NOT_RECORDED_REASON]),
-        ...(scheduleOnly && !approved ? [SCHEDULE_REASON] : []),
-      ],
-      ...schedule,
+      participantId: id, items, isReady: items.every((i) => i.done), servicesStartedAt: SERVICES_STARTED[id] ?? null,
+      agreementSignedOn: fresh ? null : '2026-10-01', noAgreementReason: null,
     }
   }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],
@@ -2411,7 +2518,6 @@ const routes = [
   ['trips/:id/staff', (id) => tripStaffAssignments[id] || []],
   ['trips/:id/vehicles', (id) => tripVehicleAssignments[id] || []],
   ['trips/:id/accommodation', () => []],
-  ['trips/:id/documents', () => []],
   ['trips/:id/schedule', () => []],
   ['trips/:id/claims', () => []],
   ['claims/:id', (id) => claimDetail(claims.find((c) => c.id === id) || claims[0])],
@@ -2422,7 +2528,6 @@ const routes = [
   }],
 
   // staff (plain array)
-  ['staff/me/dashboard', () => myDashboard],
   ['staff/available', () => staff.filter((s) => s.isActive && s.id !== 's-0005')],
   ['staff', () => staff],
   ['staff/:id/availability', (id) =>
@@ -2467,7 +2572,18 @@ const routes = [
   }],
 
   // tasks
-  ['tasks', () => tasks],
+  ['tasks', (searchParams) => {
+    // The server's dashboard filters: Overdue is the TaskOverdue rule (stored Overdue, or past due and still open); dueToday is the provider's today;
+    // dueThisWeek is today to today + 7.
+    const today = providerToday()
+    const open = (t) => t.status !== 'Completed' && t.status !== 'Cancelled'
+    const status = searchParams.get('status')
+    if (status === 'Overdue') return tasks.filter((t) => t.status === 'Overdue' || (t.dueDate && t.dueDate < today && open(t)))
+    if (status) return tasks.filter((t) => t.status === status)
+    if (searchParams.get('dueToday') === 'true') return tasks.filter((t) => t.dueDate === today)
+    if (searchParams.get('dueThisWeek') === 'true') return tasks.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate <= addDaysIso(today, 7))
+    return tasks
+  }],
 
   // incidents
   ['incidents/overdue-qsc', () => incidents.filter((i) => i.isOverdue24h)],
@@ -2478,7 +2594,11 @@ const routes = [
   // every other "GET routes don't filter by query string" route noted elsewhere in this file.
   ['incidents', (searchParams) => {
     const involvedUserId = searchParams.get('involvedUserId')
-    return paged(involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents)
+    let list = involvedUserId ? incidentsInvolvingStaff(involvedUserId) : incidents
+    // The dashboard's Incidents group reads these two filters (IncidentsController.GetAll): QSC overdue, and open or QSC overdue.
+    if (searchParams.get('isOverdueQsc') === 'true') list = list.filter((i) => i.isOverdue24h)
+    if (searchParams.get('needsAttention') === 'true') list = list.filter((i) => i.isOverdue24h || (i.status !== 'Resolved' && i.status !== 'Closed'))
+    return paged(list)
   }],
   ['incidents/:id', (id) => {
     const i = incidents.find((x) => x.id === id) || incidents[0]
@@ -2517,14 +2637,10 @@ const routes = [
   ['settings', () => appSettings],
   ['public-holidays', () => publicHolidays],
 
-  // leave + recurring unavailability — GET /leave and /leave/unavailability don't filter by the
-  // `status`/`userId` query string here. The GET dispatch loop DOES now pass url.searchParams as
-  // every handler's trailing argument (added for GET /incidents?involvedUserId= — see the
-  // `incidents` route above), but these two simply don't declare/read it, same net effect as
-  // before. Returns the full fixture list; the frontend pages that read it don't rely on the mock
-  // filtering (LeaveApprovalsPage/PortalLeavePage render off whatever the hook returns either way).
-  ['leave', () => leaveRequests],
-  ['leave/unavailability', () => recurringUnavailabilities],
+  // leave + recurring unavailability — GET /leave and /leave/unavailability filter by `status` (the dashboard's Leave group and the nav badge ask for
+  // Pending, so the count matches the rows); `userId` is still not read.
+  ['leave', (searchParams) => leaveRequests.filter((r) => !searchParams.get('status') || r.status === searchParams.get('status'))],
+  ['leave/unavailability', (searchParams) => recurringUnavailabilities.filter((r) => !searchParams.get('status') || r.status === searchParams.get('status'))],
 
   // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
   ['rostering/board', (searchParams) => rosterBoard(searchParams)],
@@ -2552,11 +2668,10 @@ const routes = [
   ['rostering/flagged-notes', () => flaggedShiftNotes],
 
   // Shift completion (design spec §2/§4) — portal detail (PortalShiftDetailPage's Start/Finish
-  // card) and the rostering review queue/detail (CompletionReviewPage). Same "query string isn't
-  // read here" caveat as leave/staff-availability above: GetCompletions' status/from/to/page/
-  // pageSize aren't applied — paged() below just returns every fixture row as one full page.
+  // card) and the rostering review queue/detail (CompletionReviewPage). GetCompletions' status is
+  // applied (PendingReview when absent, the server's default); from/to/page/pageSize aren't: paged() returns every matching row as one page.
   ['portal/shifts/:id', (id) => buildPortalShiftDetail(id)],
-  ['rostering/completions', () => paged(completionQueueItems)],
+  ['rostering/completions', (searchParams) => paged(completionQueueItems.filter((i) => i.status === (searchParams.get('status') || 'PendingReview')))],
   ['rostering/shifts/:id/completion', (id) => withPackageFields(id, pkgState(id).completion || shiftCompletions.find((c) => c.shiftId === id) || shiftCompletions[0])],
   // The coordinator's one-call review of a submitted shift (ShiftCompletionReviewDto): completion with breaks / net
   // minutes / handover, every dose in the window with its outcome, PRN doses, notes.
@@ -2567,6 +2682,7 @@ const routes = [
   // is the self-service grid.
   ['notifications/preferences', () => notificationPreferenceGrid()],
   ['admin/notifications', () => notificationOutbox],
+  ['notifications/inbox', () => inAppInboxView()],
 ]
 
 // POST routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -2575,6 +2691,7 @@ const routes = [
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
   ...funding.post,
+  ...intake.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
     if (!body.periodFrom || !body.periodTo || body.periodFrom > body.periodTo) return respond(400, failEnvelope(null, ['The agreement period ends before it starts.']))
@@ -2593,6 +2710,42 @@ const postRoutes = [
     const budgetWarnings = rosterBudget.sampleWarnings('shift', 8)
     return budgetWarnings ? { created: 8, skipped: 0, budgetWarnings } : { created: 0, skipped: 3 }
   }],
+  // Agreement PR 1: a change to a pattern an approved agreement made, as the next revision. The real server builds, prices and saves it; this answers in its shape so the panel can be seen.
+  // shortcut: canned figures, and nothing is saved even without preview; enough for screenshots of the panel, never a check of the money.
+  ['participants/:id/service-agreement-drafts/:id/pattern-change', (participantId, draftId, body) => {
+    const revisions = serviceAgreementDrafts[participantId] || []
+    const source = revisions.find((draft) => draft.id === draftId)
+    if (!source) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    const newest = Math.max(...revisions.map((draft) => draft.version))
+    if (newest !== source.version) return respond(409, failEnvelope({ currentVersion: newest }, [`This agreement has a newer revision, v${newest}. Open the agreement and make the change there.`], 'draft-version-conflict'))
+    const result = {
+      version: source.version + 1, agreementStartDate: (body && body.fromDate) || source.agreementStartDate, agreementEndDate: source.agreementEndDate,
+      oldTotal: 7358, newTotal: 7725.9, difference: 367.9, needsReview: false,
+    }
+    return body && body.preview ? result : { ...result, draftId: `${draftId}-change` }
+  }],
+  // Agreement PR 2: Renew agreement, as AgreementRenewalService answers it: the newest approved revision's blocks saved as the next revision from the day after it ends, for the same length, cut at
+  // the plan covering that first day and at 800 days; 409 plan-needed with no such plan, 409 draft-version-conflict while a newer revision waits.
+  // shortcut: the length is this revision's own, not its term's (D2's chained changes), which the mock's screens never make; the server holds the term.
+  ['participants/:id/service-agreement-drafts/:id/renew', (participantId, draftId) => {
+    const revisions = serviceAgreementDrafts[participantId] || []
+    const source = revisions.find((draft) => draft.id === draftId)
+    if (!source) return respond(404, failEnvelope(null, ['Agreement not found.']))
+    const approved = revisions.find((draft) => draft.approval)
+    if (!approved || approved.id !== source.id) {
+      return respond(400, failEnvelope(null, [approved ? `Renew the agreement from its newest approved revision, v${approved.version}.` : 'This agreement is not approved for rostering yet, so there is nothing to renew.']))
+    }
+    const newest = revisions[0]
+    if (newest.id !== source.id) return respond(409, failEnvelope({ currentVersion: newest.version }, [`This agreement has a newer revision, v${newest.version}. Load it first: a renewal would replace it.`], 'draft-version-conflict'))
+    const start = planApproval.addDays(source.agreementEndDate, 1)
+    const plan = funding.plansOf(participantId).find((p) => p.planStart <= start && start <= p.planEnd)
+    if (!plan) return respond(409, failEnvelope(null, [`Record the new plan first: no plan of the participant's covers ${start}, the day the renewal starts.`], 'plan-needed'))
+    const end = [planApproval.addDays(start, daysBetween(source.agreementStartDate, source.agreementEndDate)), plan.planEnd, planApproval.addDays(start, 799)].sort()[0]
+    return saveDraft(participantId, {
+      state: source.state, planStartDate: plan.planStart, planEndDate: plan.planEnd, agreementStartDate: start, agreementEndDate: end, representative: source.representative,
+      blocks: source.blocks, baseVersion: revisions.length,
+    })
+  }],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
@@ -2603,6 +2756,8 @@ const postRoutes = [
   ['staff-assignments/check', () => []],
   // The shift panel's live dry-run (a pure preview), and shift create (rosterBudget.js): the budget findings, the emergency path, the markers. Without a check route the panel, open for a moment, set its findings to whatever the generic answer was and crashed.
   ...rosterBudget.post,
+  // A pattern made on the Patterns page: refused with no length, as the server refuses it (the code and sentence of the shift's own 400); otherwise the same echo with an id the generic fallback gives any write.
+  ['rostering/patterns', (body) => rosterBudget.refusePatternNoLength(null, body || {}) || { id: (body && body.id) || `mock-${Date.now()}`, ...body }],
 
   ['leave/:id/approve', (id) => ({
     leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
@@ -2680,14 +2835,27 @@ const postRoutes = [
       reviewedByUserId: null, reviewedByName: null, reviewedAt: null, reviewOutcome: null, returnReason: null,
       varianceMinutesStart: 3, varianceMinutesEnd: 0, isOutlierVariance: false, varianceReviewMinutes: 15, shiftReturnCount: 0, incidents: [],
     }
+    // The finish flow's inputs, stored as the server stores them. A start move only exists on an in-progress completion, and the mock doesn't
+    // re-check the 15-minute rule: the server is the floor.
+    const startMoved = !!(body?.actualStart && st.completion)
     st.completion = {
-      ...started, actualEnd: now, submittedAt: now, varianceMinutesEnd: -2,
+      ...started,
+      actualStart: startMoved ? body.actualStart : started.actualStart,
+      originalActualStart: startMoved ? started.actualStart : null,
+      actualEnd: body?.actualEnd ?? now,
+      originalActualEnd: body?.actualEnd ? now : null,
+      timeAdjustmentReason: body?.actualEnd || startMoved ? body?.timeAdjustmentReason ?? null : null,
+      kilometres: body?.kilometres ?? null,
+      anythingToReport: body?.anythingToReport ?? null,
+      submittedAt: now, varianceMinutesEnd: -2,
       handoverText, nothingToHandOver: !!body?.nothingToHandOver, nothingToNoteConfirmed: !!body?.nothingToNote,
     }
     st.status = 'PendingReview'
     return buildPortalShiftDetail(base.id)
   }],
   ['rostering/shifts/:id/completion/approve', (id) => {
+    // The dashboard captures' row error: somebody reviewed it first.
+    if (id === 'shift-dash-409') return respond(409, failEnvelope(null, ['This shift has already been reviewed.'], 'SHIFT_NOT_PENDING_REVIEW'))
     const c = withPackageFields(id, shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0])
     return { ...c, reviewedByUserId: 's-0001', reviewedByName: 'Callum Radford', reviewedAt: new Date().toISOString(), reviewOutcome: 'Approved' }
   }],
@@ -2721,6 +2889,8 @@ const postRoutes = [
   // contract without needing an actual SMTP config to demo against.
   ['admin/notifications/:id/retry', (id) => retriedNotification(id)],
   ['admin/notifications/test-email', () => ({ sent: true, error: undefined })],
+  ['notifications/inbox/read-all', () => markInAppRead()],
+  ['notifications/inbox/:id/read', (id) => markInAppRead(id)],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -2732,15 +2902,40 @@ const postRoutes = [
 const putRoutes = [
   ...packageRoutesPut,
   ...funding.put,
+  ...intake.put,
+  // A claim's status and notes, and, with a rejection, the NDIA's code (budget phase 2b: at most 10 characters, and only with a claim that is being marked Rejected). Kept in the fixture, so the next
+  // GET shows it. A claim that stops being rejected forgets the moment and the code, as the server's does.
+  ['claims/:id', (id, body) => {
+    const claim = claims.find((c) => c.id === id)
+    if (!claim) return respond(404, failEnvelope(null, ['Claim not found']))
+    const code = typeof body.rejectionCode === 'string' ? body.rejectionCode.trim() : null
+    if (code && code.length > 10) return respond(400, failEnvelope(null, ['The NDIA code is at most 10 characters.']))
+    if (code && (body.status || claim.status) !== 'Rejected') return respond(400, failEnvelope(null, ['An NDIA rejection code goes with a rejected claim: mark the claim as Rejected to record it.']))
+    if (typeof body.notes === 'string') claim.notes = body.notes
+    if (body.status) {
+      const before = claim.status
+      claim.status = body.status
+      if (body.status === 'Submitted') claim.submittedDate = new Date().toISOString()
+      if (body.status === 'Paid') claim.paidDate = new Date().toISOString()
+      if (body.status === 'Rejected' && before !== 'Rejected') claim.rejectedDate = new Date().toISOString()
+      if (body.status !== 'Rejected') { delete claim.rejectedDate; delete claim.rejectionCode }
+    }
+    if (code && claim.status === 'Rejected') claim.rejectionCode = code
+    return true
+  }],
   // A pattern edited or switched off on the Patterns page (phase D keeps the patterns an approval made in memory). The fields the real PUT takes; where it came from is never the form's to change.
   ['rostering/patterns/:id', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
     if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
-    // An agreement pattern is one weekday of one block for one worker of one revision (a unique key): moving it to a weekday its block already has is a 409 in words, as the real server answers it.
-    if (pattern.sourceDraftId && body && body.dayOfWeek && body.dayOfWeek !== pattern.dayOfWeek
-      && rosterPatterns.some((p) => p.id !== pattern.id && p.sourceDraftId === pattern.sourceDraftId && p.sourceBlockKey === pattern.sourceBlockKey && p.workerSlot === pattern.workerSlot && p.dayOfWeek === body.dayOfWeek)) {
-      return respond(409, failEnvelope(null, ['This agreement already has a pattern for that block, day and worker. Edit that one instead, or pick another day.']))
+    // An agreement pattern's participant, day, times, ratio, night type and dates are the agreement's: a change to any of them is the real server's 409 agreement-pattern (agreement PR 1).
+    const hhmm = (time) => String(time || '').slice(0, 5)
+    const definition = (p) => [p.participantId, p.dayOfWeek, hhmm(p.startTime), hhmm(p.endTime), !!p.endsNextDay, p.ratio, p.nightType, p.effectiveFrom, p.effectiveTo || null].join('|')
+    if (pattern.sourceDraftId && body && definition({ ...pattern, ...body }) !== definition(pattern)) {
+      return respond(409, failEnvelope({ draftId: pattern.sourceDraftId }, ["This pattern comes from a service agreement. Its day, times, ratio, night type, dates and participant are the agreement's: change it through the agreement, which saves a new revision for approval. Default staff, notes and active can be changed here."], 'agreement-pattern'))
     }
+    // No length is refused only when the edit changes the times, as on the server, so a pattern saved before the rule can still be switched off.
+    const noLength = rosterBudget.refusePatternNoLength(pattern, body || {})
+    if (noLength) return noLength
     for (const key of ['dayOfWeek', 'startTime', 'endTime', 'endsNextDay', 'ratio', 'nightType', 'effectiveFrom', 'effectiveTo', 'isActive', 'notes', 'defaultStaffId']) if (body && key in body) pattern[key] = body[key]
     return pattern
   }],
@@ -3018,7 +3213,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete]) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           sendResult(res, handler(...params, body))

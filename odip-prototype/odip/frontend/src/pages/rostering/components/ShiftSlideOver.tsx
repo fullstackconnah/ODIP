@@ -14,7 +14,6 @@ import { requirementLabels } from '@/lib/workerRequirements'
 import {
   useCheckShift, useCreateShift, useUpdateShift, useDeleteShift, useParticipantRoutines, useCompatibility, useRosterShiftNotes, getRosterFindings,
 } from '@/api/hooks'
-import { extractErrorMessage } from '@/lib/utils'
 import { formatNoteTimestamp } from '@/lib/format'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { RosterGateFields } from './RosterGateFields'
@@ -28,7 +27,8 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
 import { getRosterGate } from '../lib/rosterGate'
-import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
+import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange, shiftSource } from '../lib/roster'
+import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
 import { getRelevantRoutines } from '../lib/routines'
 
 export type ShiftSlideOverTarget =
@@ -37,8 +37,10 @@ export type ShiftSlideOverTarget =
       participantId?: string
       staffId?: string | null
       serviceDate?: string
-      /** Which field to send focus to once the panel opens, overriding the default first-focusable — set when the field it names is already prefilled and the other one is what needs picking (e.g. clicking an empty cell). */
-      focusField?: 'participant' | 'staff'
+      /** Which field to send focus to once the panel opens, overriding the default first-focusable — set when the field it names is already prefilled and the other one is what needs picking (e.g. clicking an empty cell). `start` when a drop on an empty day prefilled participant, day and person, and the times are what is left. */
+      focusField?: 'participant' | 'staff' | 'start'
+      /** Roster drag and drop: the shift the prefilled person was carried off. Saved with the new shift as one move, while the Staff field still names that person. */
+      moveFromShiftId?: string
     }
   | { mode: 'edit'; shift: ShiftDto }
 
@@ -56,6 +58,8 @@ export type ShiftSlideOverProps = {
    * `readinessIssues` in edit mode; an entry holding an empty list means "ready", and wins over that fallback.
    */
   participantReadiness?: Record<string, string[]>
+  /** Called with the saved shift after a successful save, before onClose; never on Cancel. The board uses it to clear the shift a person was carried off (roster drag and drop, decision 6). */
+  onSaved?: (shift: ShiftDto) => void
 }
 
 /** Normalises a Shift/TimeOnly string ("HH:mm:ss" or "HH:mm") to the "HH:mm" a <input type="time"> needs. */
@@ -66,17 +70,20 @@ function toTimeInputValue(time: string | undefined): string {
 /** What the panel says when the budget refuses the shift (the hard limit, for a Coordinator): one line, in the budget's words and not the roster conflict gate's. */
 const BUDGET_REFUSAL_SENTENCE = "The hard limit is on, so this shift can't be saved as it is."
 
+/** No findings, one stable array (a new `[]` each render would look like a change). */
+const NO_FINDINGS: RosterFindingDto[] = []
+
 /** What the reason field says when the budget is the only thing asking for a reason (an Admin under the hard limit). */
 const BUDGET_REASON_COPY = {
   hint: 'The hard limit is on. This reason is recorded in the audit log.',
-  placeholder: 'Why this shift should go ahead past the budget',
-  error: 'Add a reason to save this shift past the budget.',
+  placeholder: 'Why this shift should go ahead over budget',
+  error: 'Add a reason to save this shift over budget.',
 } as const
 
 /** Sort-boost order for the Staff dropdown: Preferred first, then Allowed/no row, Excluded last. */
 const COMPATIBILITY_RANK = { Preferred: 0, Allowed: 1, Excluded: 2 } as const
 
-export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness }: ShiftSlideOverProps) {
+export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness, onSaved }: ShiftSlideOverProps) {
   const staffCompatibilityNoticeId = useId()
   const refusalId = useId()
   const open = target !== null
@@ -87,11 +94,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // moves in, which is after every layout effect has run, so this one has set it by then.
   const participantFieldRef = useRef<HTMLDivElement>(null)
   const staffFieldRef = useRef<HTMLDivElement>(null)
+  const startFieldRef = useRef<HTMLDivElement>(null)
   const initialFocusRef = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
-    const field = open && target?.mode === 'create' && target.focusField
-      ? (target.focusField === 'staff' ? staffFieldRef : participantFieldRef).current
-      : null
+    const fieldRefs = { participant: participantFieldRef, staff: staffFieldRef, start: startFieldRef }
+    const field = open && target?.mode === 'create' && target.focusField ? fieldRefs[target.focusField].current : null
     initialFocusRef.current = field?.querySelector<HTMLElement>('button, input') ?? null
   }, [open, target])
 
@@ -102,7 +109,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [staffId, setStaffId] = useState<string | null>(existing?.staffId ?? (target?.mode === 'create' ? target.staffId ?? null : null))
   const [serviceDate, setServiceDate] = useState(existing?.serviceDate ?? (target?.mode === 'create' ? target.serviceDate ?? '' : ''))
   const [startTime, setStartTime] = useState(toTimeInputValue(existing?.startTime))
-  const [endTime, setEndTime] = useState(toTimeInputValue(existing?.endTime))
+  // A new shift opens with an end an hour after the start, so it opens with a length (09:00 gives 10:00) and the live check has something to say about it; an existing shift keeps its own.
+  const [endTime, setEndTime] = useState(existing?.endTime ? toTimeInputValue(existing.endTime) : oneHourAfter(toTimeInputValue(existing?.startTime)))
   const [endsNextDay, setEndsNextDay] = useState(existing?.endsNextDay ?? false)
   const [ratio, setRatio] = useState<SupportRatio>(existing?.ratio ?? 'OneToOne')
   const [nightType, setNightType] = useState<SleepoverType>(existing?.nightType ?? 'None')
@@ -115,19 +123,24 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // the ordinary reason field below, where a later save would send the server's own sentence back as if somebody had just written it.
   const budgetMarker = markerForAcknowledgedCodes(existing?.acknowledgedFindingCodes)
   const [overrideReason, setOverrideReason] = useState(budgetMarker ? '' : existing?.overrideReason ?? '')
-  const [findings, setFindings] = useState<RosterFindingDto[]>(existing?.findings ?? [])
+  const [checkedFindings, setFindings] = useState<RosterFindingDto[]>(existing?.findings ?? [])
   // Budget phase 3: "Emergency or safety", the one way through a one-off shift a hard limit refused for a Coordinator, and the one line a shift the budget could not check gets.
   const [budgetChoice, setBudgetChoice] = useState<BudgetOverrideChoice>('none')
   const [emergencyDescription, setEmergencyDescription] = useState('')
   const [emergencySubmitted, setEmergencySubmitted] = useState(false)
-  const [budgetNote, setBudgetNote] = useState<string | null>(null)
+  const [checkedBudgetNote, setBudgetNote] = useState<string | null>(null)
+  // A pair of times with no length (the end at or before the start, and not ending the next day): a rule of the End time field, and no question for the live check. What the last check said was about a different
+  // shift, so while the pair has no length none of it is shown. Derived here, not set from an effect: the check's answer is kept and comes back the moment the pair has a length again.
+  const noLength = hasNoLength(startTime, endTime, endsNextDay)
+  const findings = noLength ? NO_FINDINGS : checkedFindings
+  const budgetNote = noLength ? null : checkedBudgetNote
   const [reasonRequired, setReasonRequired] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<PanelRefusal | null>(null)
   // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
   // mode) the server refuses it with the same 400 message. That is shown as soon as the preview says so, not only at Save. It is tied
   // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an
   // older candidate can never show. It never gates Save; a preview that fails without a server message (a network blip) says nothing.
-  const [previewRefusal, setPreviewRefusal] = useState<{ key: string; message: string } | null>(null)
+  const [previewRefusal, setPreviewRefusal] = useState<(PanelRefusal & { key: string }) | null>(null)
   const candidateKey = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -188,6 +201,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // don't fire a request per keystroke. Never writes — POST /shifts/check is a pure preview.
   useEffect(() => {
     if (!canWrite || !participantId || !serviceDate || !startTime || !endTime) return
+    // Nothing to ask while the pair has no length: the answer is known, and the End time field says it (what the last check said is hidden meanwhile, below).
+    if (noLength) return
     const handle = setTimeout(() => {
       checkShift.mutate(
         // The status the shift would be saved with, for an existing shift: a cancel costs nothing and gets no budget finding.
@@ -204,8 +219,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             if (!emergencyOffered(f)) setBudgetChoice('none')
           },
           onError: err => {
-            const message = extractErrorMessage(err, '')
-            setPreviewRefusal(message ? { key: candidateKey, message } : null)
+            const refused = refusalOf(err, '')
+            setPreviewRefusal(refused.message ? { key: candidateKey, ...refused } : null)
           },
         },
       )
@@ -272,7 +287,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // Informational only: never read by the save gate above or by the Save button, so it can never block a save.
   const readinessIssues = participantReadiness?.[participantId] ?? existing?.readinessIssues
   // A save's own failure wins; otherwise the dry-run's refusal of exactly what is on screen now (one box, so the same text never shows twice).
-  const shownError = error ?? (previewRefusal?.key === candidateKey ? previewRefusal.message : null)
+  const shownError = error ?? (previewRefusal?.key === candidateKey ? previewRefusal : null)
+  // The length is said under End time, where the person is looking: by the form's own rule, and by the server's 400 for it (the backstop) from the live check or from a save, recognised by its code (with the
+  // sentence as the fallback) and said in the server's own words. Never as the alert at the foot, and a cancel needs no length.
+  const lengthError = noLength && status !== 'Cancelled' ? NO_LENGTH_MESSAGE : shownError?.noLength ? shownError.message : undefined
+  const footError = shownError && !shownError.noLength ? shownError.message : null
+  // A save's refusal for the length is about the times it was for: changing one ends it.
+  const clearLengthRefusal = () => setError(previous => (previous?.noLength ? null : previous))
 
   // Typing a real answer under "a reason is required" ends the complaint at once, not only on the next save.
   function handleOverrideReasonChange(value: string) {
@@ -309,14 +330,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       // A code once: two pools both past their funding are two findings with the same code.
       acknowledgedFindingCodes: [...new Set(warningFindings.map(f => f.code))],
       ...(emergencyActive ? { emergency: true } : {}),
+      // A person carried off a puck moves in the same save; once the Staff field names somebody else, nobody is moving.
+      ...(target?.mode === 'create' && target.moveFromShiftId && staffId === target.staffId ? { moveFromShiftId: target.moveFromShiftId } : {}),
     }
 
     try {
-      if (isEdit && existing) {
-        await updateShift.mutateAsync({ id: existing.id, data: payload })
-      } else {
-        await createShift.mutateAsync(payload)
-      }
+      const saved = isEdit && existing
+        ? await updateShift.mutateAsync({ id: existing.id, data: payload })
+        : await createShift.mutateAsync(payload)
+      onSaved?.(saved)
       onClose()
     } catch (err: unknown) {
       const serverFindings = getRosterFindings(err)
@@ -326,7 +348,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       } else {
         // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
         // the generic line only when it did not. The form stays as the user left it.
-        setError(extractErrorMessage(err, 'Something went wrong saving this shift. Please try again.'))
+        setError(refusalOf(err, 'Something went wrong saving this shift. Please try again.'))
       }
     }
   }
@@ -401,7 +423,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         <div data-shift-field="staff" ref={staffFieldRef}>
           <FormField
             label="Staff"
-            hint={groupBy === 'staff' ? 'Leave unassigned to add this shift to the Unfilled lane.' : 'Leave unassigned — the shift shows as unfilled on the participant’s row.'}
+            hint={statusLocked ? "This shift has started or finished, so its worker can’t be changed here." : groupBy === 'staff' ? 'Leave unassigned to add this shift to the Unfilled lane.' : 'Leave unassigned — the shift shows as unfilled on the participant’s row.'}
             // Links the Preferred/Excluded compatibility notice below (rendered outside this
             // FormField so it can carry its own role/styling) into the Staff control's
             // aria-describedby, so AT users focused on the field hear it — not just sighted
@@ -417,7 +439,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             <SearchableSelect
               value={staffId ?? ''}
               onChange={v => setStaffId(v || null)}
-              disabled={!canWrite}
+              disabled={!canWrite || statusLocked}
               placeholder="Unassigned"
               items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}
             />
@@ -444,16 +466,18 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         </FormField>
 
         <div className={modalGrid}>
-          <FormField label="Start time" required>
-            <input type="time" value={startTime} disabled={!canWrite} onChange={e => setStartTime(e.target.value)} />
-          </FormField>
-          <FormField label="End time" required>
-            <input type="time" value={endTime} disabled={!canWrite} onChange={e => setEndTime(e.target.value)} />
+          <div ref={startFieldRef}>
+            <FormField label="Start time" required>
+              <input type="time" value={startTime} disabled={!canWrite} onChange={e => { setStartTime(e.target.value); clearLengthRefusal() }} />
+            </FormField>
+          </div>
+          <FormField label="End time" required error={lengthError}>
+            <input type="time" value={endTime} disabled={!canWrite} onChange={e => { setEndTime(e.target.value); clearLengthRefusal() }} />
           </FormField>
         </div>
 
         <FormField label="Ends the next day" layout="checkbox">
-          <input type="checkbox" checked={endsNextDay} disabled={!canWrite} onChange={e => setEndsNextDay(e.target.checked)} />
+          <input type="checkbox" checked={endsNextDay} disabled={!canWrite} onChange={e => { setEndsNextDay(e.target.checked); clearLengthRefusal() }} />
         </FormField>
 
         <div className={modalGrid}>
@@ -492,10 +516,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           </FormField>
         )}
 
-        {/* Plan builder phase D: a shift made from an agreement's pattern says which agreement, read only (the shifts of one revision and the next sit on the board on the same days). The shift itself says so (the server puts the pattern's source on it): no read of the pattern. */}
-        {existing?.fromAgreement && (
-          <p className="text-sm text-[var(--color-muted-foreground)]">{existing.sourceDraftVersion !== undefined ? `From agreement v${existing.sourceDraftVersion}` : 'From an agreement'}</p>
-        )}
+        {/* Where the shift came from, read only: all three kinds, because a chip's mark has no hover title on a touch screen (the brief, section 5). The shift says so itself: no read of the pattern. */}
+        {existing && <p className="text-sm text-[var(--color-muted-foreground)]">{shiftSource(existing).title}</p>}
 
         {/* Plan builder phase D: what the agreement asked of a worker for this shift (copied from its pattern). Information: nothing checks it against the worker yet. */}
         {existing?.requirements && requirementLabels(existing.requirements).length > 0 && (
@@ -612,9 +634,9 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {/* Not a finding and never a block: a shift the estimator cannot price has nothing to check, and a quiet line says so rather than letting no warning read as an all clear. */}
         {budgetNote && <p className="text-[13px] text-[var(--color-muted-foreground)]">{budgetNote}</p>}
 
-        {shownError && (
+        {footError && (
           <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
-            {shownError}
+            {footError}
           </div>
         )}
       </SlideOver>

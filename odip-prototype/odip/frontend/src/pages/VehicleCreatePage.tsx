@@ -1,19 +1,21 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateVehicle, useUpdateVehicle, useVehicleDetail } from '@/api/hooks'
-import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { TAP_FLOOR } from '@/components/tapArea'
+import { BackButton } from '@/components/BackButton'
+import { usePermissions } from '@/lib/permissions'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
+import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
 
 const VEHICLE_TYPE_ITEMS: DropdownItem[] = [
   { value: 'Car', label: 'Car' },
@@ -44,12 +46,15 @@ export default function VehicleCreatePage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = !!id
+  // ReadOnly reads a vehicle's full record (notes, ramp, driver requirements) only here: the route admits it to /:id/edit, not /new.
+  const { canWrite } = usePermissions()
+  const viewOnly = isEdit && !canWrite
   const createVehicle = useCreateVehicle()
   const updateVehicle = useUpdateVehicle()
   const { data: existing, isLoading: isLoadingExisting } = useVehicleDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateVehicle : createVehicle
 
-  const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<VehicleFormData>({
+  const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm({
     resolver: zodResolver(vehicleSchema),
     defaultValues: {
       vehicleType: 'Van',
@@ -59,23 +64,21 @@ export default function VehicleCreatePage() {
     },
   })
 
-  useEffect(() => {
-    if (existing) {
-      reset({
-        vehicleName: existing.vehicleName ?? '',
-        registration: existing.registration ?? '',
-        vehicleType: existing.vehicleType ?? 'Van',
-        totalSeats: existing.totalSeats ?? 0,
-        wheelchairPositions: existing.wheelchairPositions ?? 0,
-        rampHoistDetails: existing.rampHoistDetails ?? '',
-        driverRequirements: existing.driverRequirements ?? '',
-        isInternal: existing.isInternal ?? true,
-        serviceDueDate: existing.serviceDueDate ?? '',
-        registrationDueDate: existing.registrationDueDate ?? '',
-        notes: existing.notes ?? '',
-      })
-    }
-  }, [existing, reset])
+  useFillOnce(existing, record => {
+    reset({
+      vehicleName: record.vehicleName ?? '',
+      registration: record.registration ?? '',
+      vehicleType: record.vehicleType ?? 'Van',
+      totalSeats: record.totalSeats ?? 0,
+      wheelchairPositions: record.wheelchairPositions ?? 0,
+      rampHoistDetails: record.rampHoistDetails ?? '',
+      driverRequirements: record.driverRequirements ?? '',
+      isInternal: record.isInternal ?? true,
+      serviceDueDate: record.serviceDueDate ?? '',
+      registrationDueDate: record.registrationDueDate ?? '',
+      notes: record.notes ?? '',
+    })
+  }, !isDirty)
 
   const onSubmit = async (data: VehicleFormData) => {
     const payload: any = { ...data }
@@ -108,20 +111,21 @@ export default function VehicleCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/vehicles" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Vehicles</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/vehicles" label="vehicles" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View vehicle' : isEdit ? 'Edit vehicle' : 'New vehicle'} /></div>
       </div>
-      <PageHeader title={isEdit ? 'Edit Vehicle' : 'New Vehicle'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} vehicle. Please check your input and try again.`)}
-        </div>
+        </Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+        <fieldset disabled={viewOnly} className="flex flex-col gap-[var(--section-gap)] min-w-0">
         {/* Vehicle Information */}
-        <Card title="Vehicle Information">
+        <Card title="Vehicle information">
           <div className={formGrid}>
             <FormField label="Vehicle Name" required error={errors.vehicleName?.message} className={span.medium}>
               <input {...register('vehicleName')} placeholder="e.g. Blue Van 1" autoFocus />
@@ -154,7 +158,7 @@ export default function VehicleCreatePage() {
         </Card>
 
         {/* Capacity & Accessibility */}
-        <Card title="Capacity & Accessibility">
+        <Card title="Capacity & accessibility">
           <div className={formGrid}>
             <FormField label="Total Seats" required error={errors.totalSeats?.message} className={span.short}>
               <input type="number" min="0" {...register('totalSeats')} />
@@ -174,7 +178,7 @@ export default function VehicleCreatePage() {
         </Card>
 
         {/* Dates & Notes */}
-        <Card title="Service & Notes">
+        <Card title="Service & notes">
           <div className={formGrid}>
             <FormField label="Service Due Date" className={span.date}>
               <input type="date" {...register('serviceDueDate')} />
@@ -189,13 +193,15 @@ export default function VehicleCreatePage() {
           </div>
         </Card>
 
+        </fieldset>
+
         {/* Submit */}
-        <div className="flex justify-end gap-3">
+        {!viewOnly && <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/vehicles">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Vehicle')}
+            {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create vehicle')}
           </Button>
-        </div>
+        </div>}
       </form>
     </div>
   )

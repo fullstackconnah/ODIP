@@ -1,22 +1,20 @@
-import { useState } from 'react'
+import { useMemo } from 'react'
 import { ClipboardList, BookOpen, FileClock } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Tabs } from '@/components/Tabs'
 import { usePermissions } from '@/lib/permissions'
+import { useTabParam } from '@/hooks/useTabParam'
 import { MarTab, RegisterTab, ReportTab } from './medications'
-
-type Tab = 'administration' | 'register' | 'report'
 
 export default function MedicationsPage() {
   const { canViewAdministrationReport } = usePermissions()
-  const [tab, setTab] = useState<Tab>('administration')
+  // The tab is in the URL (?tab=), so the medication form, opened from a Register row, returns to the Register.
+  const tabKeys = useMemo(() => (canViewAdministrationReport ? ['administration', 'register', 'report'] : ['administration', 'register']), [canViewAdministrationReport])
+  const [tab, setTab] = useTabParam(tabKeys, 'administration')
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Medications"
-        subtitle="Medication administration record and the participant medication register"
-      />
+      <PageHeader title="Medications" />
 
       <Tabs
         tabs={[
@@ -28,7 +26,7 @@ export default function MedicationsPage() {
           ...(canViewAdministrationReport ? [{ id: 'report' as const, label: 'Report', icon: FileClock }] : []),
         ]}
         active={tab}
-        onChange={key => setTab(key as Tab)}
+        onChange={setTab}
         ariaLabel="Medications sections"
       />
 

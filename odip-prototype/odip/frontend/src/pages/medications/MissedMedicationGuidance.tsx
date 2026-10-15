@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Phone, PhoneCall, Pill, Siren, TriangleAlert } from 'lucide-react'
-import { useProviderSettings } from '@/api/hooks'
+import { useMissedGuidanceContact } from '@/api/hooks'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import type { MedicationAdministrationStatus, PackagingType } from '@/api/types/enums'
 import { EMERGENCY_PHONE, PACKAGING_CHECK_LABEL, POISONS_INFO_PHONE, healthAdviceLine, telHref } from '@/lib/missedMedicationGuidance'
@@ -59,16 +59,16 @@ function PhoneLink({ phone, children }: { phone: string; children: ReactNode }) 
  * clinical judgement or a suggestion to search the web.
  */
 export function MissedMedicationGuidance({ event }: MissedMedicationGuidanceProps) {
-  const { data: providerSettings } = useProviderSettings()
+  const { data: contact } = useMissedGuidanceContact()
 
   // Defensive — Administered is never a trigger outcome, but guard here too so this component is
   // safe to render standalone (and testable) without relying on a caller to gate it first.
   if (event && event.outcome === 'Administered') return null
 
-  const managerName = providerSettings?.managerName?.trim() || null
-  const managerPhone = providerSettings?.managerPhone?.trim() || null
+  const managerName = contact?.managerName?.trim() || null
+  const managerPhone = contact?.managerPhone?.trim() || null
   const hasManagerContact = !!managerName && !!managerPhone
-  const advice = healthAdviceLine(providerSettings?.state)
+  const advice = healthAdviceLine(contact?.state)
   const packagingLabel = PACKAGING_CHECK_LABEL[event?.packaging ?? 'OriginalPackaging']
   const pharmacyName = event?.pharmacyName?.trim() || null
   const pharmacyPhone = event?.pharmacyPhone?.trim() || null
@@ -91,7 +91,7 @@ export function MissedMedicationGuidance({ event }: MissedMedicationGuidanceProp
           ) : (
             <p>
               No manager contact is configured for this organisation — see your team leader.
-              {' '}Admins: set this under Settings → Provider Settings → Manager Contact.
+              {' '}Admins: add it in Settings › Safety checks.
             </p>
           )}
         </GuidanceStep>

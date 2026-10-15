@@ -311,11 +311,27 @@ public class DraftBlocksTests
 
     // ── A revision is immutable ───────────────────────────────────────────────────
 
+    /// <summary>
+    /// Records that a person approved the revision. That is what keeps a revision when a later save replaces the participant's older ones that did nothing (DraftPruningTests): the tests
+    /// below that read an older revision approve it first.
+    /// </summary>
+    private static async Task ApproveAsync(Fixture f, int version)
+    {
+        var draft = await f.Db.ServiceAgreementDrafts.SingleAsync(d => d.ParticipantId == f.Participant.Id && d.Version == version);
+        f.Db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval
+        {
+            Id = Guid.NewGuid(), TenantId = f.TenantId, DraftId = draft.Id, ParticipantId = f.Participant.Id, DraftVersion = version,
+            ApprovedAt = new DateTime(2026, 10, 5, 1, 0, 0, DateTimeKind.Utc), ApprovedByName = "Alex Admin",
+        });
+        await f.Db.SaveChangesAsync();
+    }
+
     [Fact]
-    public async Task Every_save_is_a_new_revision_and_the_earlier_one_keeps_its_blocks_lines_and_answer()
+    public async Task Every_save_is_a_new_revision_and_an_approved_earlier_one_keeps_its_blocks_lines_and_answer()
     {
         await using var f = await SetUpAsync();
         await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed()) }), "actor", CancellationToken.None);
+        await ApproveAsync(f, 1);
         var before = await Snapshot(f.Db, 1);
 
         // The coordinator adds a Saturday outing and saves again; and the catalogue's weekday price moves in between (a later import).
@@ -360,7 +376,7 @@ public class DraftBlocksTests
         Assert.Null(stale.Draft);
         Assert.Equal(2, stale.ConflictVersion);
         Assert.Contains("Version 2", Assert.Single(stale.Errors));
-        Assert.Equal(new[] { 1, 2 }, f.Db.ServiceAgreementDrafts.OrderBy(d => d.Version).Select(d => d.Version).ToList());   // B's plan was not stored as version 3
+        Assert.Equal(new[] { 2 }, f.Db.ServiceAgreementDrafts.OrderBy(d => d.Version).Select(d => d.Version).ToList());   // A's save replaced version 1 (nobody approved it); B's plan was not stored as version 3
     }
 
     [Fact]
@@ -586,7 +602,9 @@ public class DraftBlocksTests
         await using var f = await SetUpAsync();
         var saturday = Block("sat", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b => b with { ParticipantsPresent = 3 });
         await SaveFrom(f, 0, Entry(MonWed()));
+        await ApproveAsync(f, 1);
         await SaveFrom(f, 1, Entry(MonWed()), Entry(saturday));
+        await ApproveAsync(f, 2);
         await SaveFrom(f, 2, Entry(MonWed()), Entry(saturday));
 
         var listed = await ListedAsync(Controller(f), f.Participant.Id);
@@ -623,6 +641,7 @@ public class DraftBlocksTests
             Lines = { new ServiceAgreementDraftLine { Id = Guid.NewGuid(), ServiceType = "x", ItemCode = "TEST", Hours = 2.5m, UnitPrice = 20.55m, CatalogueVersion = "t", CatalogueEffectiveFrom = new DateOnly(2026, 7, 1) } },
         });
         await f.Db.SaveChangesAsync();
+        await ApproveAsync(f, 1);
         await SaveFrom(f, 1, Entry(MonWed()));
 
         var listed = await ListedAsync(Controller(f), f.Participant.Id);
@@ -639,6 +658,7 @@ public class DraftBlocksTests
     {
         await using var f = await SetUpAsync();
         await SaveFrom(f, 0, Entry(MonWed()));
+        await ApproveAsync(f, 1);
         await SaveFrom(f, 1, Entry(MonWed()));
         var older = (await ListedAsync(Controller(f), f.Participant.Id)).Single(d => d.Version == 1);
 

@@ -8,6 +8,7 @@ using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Leave;
 
@@ -15,15 +16,7 @@ public class StaffUnavailabilityQueryTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static User SeedUser(OdipDbContext db)
     {

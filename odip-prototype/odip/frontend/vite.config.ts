@@ -3,6 +3,10 @@ import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { readFileSync } from 'node:fs'
+
+// package.json's version, for the platform footer (src/lib/platformInfo.ts). Read here because tsconfig.node.json has no resolveJsonModule.
+const { version } = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')) as { version: string }
 
 // The public landing page lives at /welcome/ as its own HTML entry (welcome/index.html).
 // A signed-out visitor to exactly "/" must reach it without the login page flashing, so the app's
@@ -31,6 +35,7 @@ function routeGate(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), routeGate()],
+  define: { __APP_VERSION__: JSON.stringify(version) },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

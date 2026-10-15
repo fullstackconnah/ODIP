@@ -1,18 +1,19 @@
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateAccommodation, useUpdateAccommodation, useAccommodationDetail } from '@/api/hooks'
-import { useEffect } from 'react'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { TAP_FLOOR } from '@/components/tapArea'
+import { BackButton } from '@/components/BackButton'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
+import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
 
 const accommodationSchema = z.object({
   propertyName: z.string().min(1, 'Property name is required'),
@@ -51,7 +52,7 @@ export default function AccommodationCreatePage() {
   const { data: existing, isLoading: isLoadingExisting } = useAccommodationDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateAccommodation : createAccommodation
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<AccommodationFormData>({
+  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm({
     resolver: zodResolver(accommodationSchema),
     defaultValues: {
       isFullyModified: false,
@@ -60,35 +61,33 @@ export default function AccommodationCreatePage() {
     },
   })
 
-  useEffect(() => {
-    if (existing) {
-      reset({
-        propertyName: existing.propertyName ?? '',
-        providerOwner: existing.providerOwner ?? '',
-        location: existing.location ?? '',
-        region: existing.region ?? '',
-        address: existing.address ?? '',
-        suburb: existing.suburb ?? '',
-        state: existing.state ?? '',
-        postcode: existing.postcode ?? '',
-        contactPerson: existing.contactPerson ?? '',
-        email: existing.email ?? '',
-        phone: existing.phone ?? '',
-        mobile: existing.mobile ?? '',
-        website: existing.website ?? '',
-        isFullyModified: existing.isFullyModified ?? false,
-        isSemiModified: existing.isSemiModified ?? false,
-        isWheelchairAccessible: existing.isWheelchairAccessible ?? false,
-        accessibilityNotes: existing.accessibilityNotes ?? '',
-        bedroomCount: existing.bedroomCount ?? undefined,
-        bedCount: existing.bedCount ?? undefined,
-        maxCapacity: existing.maxCapacity ?? undefined,
-        beddingConfiguration: existing.beddingConfiguration ?? '',
-        hoistBathroomNotes: existing.hoistBathroomNotes ?? '',
-        generalNotes: existing.generalNotes ?? '',
-      })
-    }
-  }, [existing, reset])
+  useFillOnce(existing, record => {
+    reset({
+      propertyName: record.propertyName ?? '',
+      providerOwner: record.providerOwner ?? '',
+      location: record.location ?? '',
+      region: record.region ?? '',
+      address: record.address ?? '',
+      suburb: record.suburb ?? '',
+      state: record.state ?? '',
+      postcode: record.postcode ?? '',
+      contactPerson: record.contactPerson ?? '',
+      email: record.email ?? '',
+      phone: record.phone ?? '',
+      mobile: record.mobile ?? '',
+      website: record.website ?? '',
+      isFullyModified: record.isFullyModified ?? false,
+      isSemiModified: record.isSemiModified ?? false,
+      isWheelchairAccessible: record.isWheelchairAccessible ?? false,
+      accessibilityNotes: record.accessibilityNotes ?? '',
+      bedroomCount: record.bedroomCount ?? undefined,
+      bedCount: record.bedCount ?? undefined,
+      maxCapacity: record.maxCapacity ?? undefined,
+      beddingConfiguration: record.beddingConfiguration ?? '',
+      hoistBathroomNotes: record.hoistBathroomNotes ?? '',
+      generalNotes: record.generalNotes ?? '',
+    })
+  }, !isDirty)
 
   const onSubmit = async (data: AccommodationFormData) => {
     const payload: any = { ...data }
@@ -130,20 +129,20 @@ export default function AccommodationCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to={isEdit ? `/accommodation/${id}` : '/accommodation'} className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Accommodation</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to={isEdit ? `/accommodation/${id}` : '/accommodation'} label="accommodation" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit accommodation' : 'New accommodation'} /></div>
       </div>
-      <PageHeader title={isEdit ? 'Edit Accommodation' : 'New Accommodation'} />
 
       {mutation.isError && (
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} accommodation. Please check your input and try again.`)}
-        </div>
+        </Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
         {/* Property Information */}
-        <Card title="Property Information">
+        <Card title="Property information">
           <div className={formGrid}>
             <FormField label="Property Name" required error={errors.propertyName?.message} className={span.medium}>
               <input {...register('propertyName')} placeholder="e.g. Sunrise Beach House" autoFocus />
@@ -164,7 +163,7 @@ export default function AccommodationCreatePage() {
         </Card>
 
         {/* Address & Contact */}
-        <Card title="Address & Contact">
+        <Card title="Address & contact">
           <div className={formGrid}>
             <FormField label="Address" className={span.long}>
               <input {...register('address')} placeholder="e.g. 123 Ocean Drive" />
@@ -201,7 +200,7 @@ export default function AccommodationCreatePage() {
         </Card>
 
         {/* Capacity & Accessibility */}
-        <Card title="Capacity & Accessibility">
+        <Card title="Capacity & accessibility">
           <div className={formGrid}>
             <FormField label="Bedrooms" className={span.short}>
               <input type="number" min="0" {...register('bedroomCount')} placeholder="0" />
@@ -252,7 +251,7 @@ export default function AccommodationCreatePage() {
         <div className="flex justify-end gap-3">
           <Button variant="secondary" to={isEdit ? `/accommodation/${id}` : '/accommodation'}>Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Accommodation')}
+            {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create accommodation')}
           </Button>
         </div>
       </form>

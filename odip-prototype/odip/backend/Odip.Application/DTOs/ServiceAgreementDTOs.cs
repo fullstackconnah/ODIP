@@ -36,6 +36,71 @@ public record DraftVersionConflictDto
     public int CurrentVersion { get; init; }
 }
 
+/// <summary>The body of the 409 <c>agreement-pattern</c>: the revision whose approval made the pattern. A change to what the agreement set is made through that agreement (POST .../pattern-change).</summary>
+public record AgreementPatternConflictDto
+{
+    public Guid DraftId { get; init; }
+}
+
+/// <summary>Agreement PR 2: one row of the Agreements ending list (GET api/v1/service-agreements/ending). Who and when only: no money, unlike the drafts.</summary>
+public record AgreementEndingDto
+{
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    /// <summary>The newest approved revision, the one ending.</summary>
+    public Guid DraftId { get; init; }
+    public int Version { get; init; }
+    public DateOnly AgreementEndDate { get; init; }
+    /// <summary>Days from the provider's today to the end; below 0 once it has ended.</summary>
+    public int DaysLeft { get; init; }
+    /// <summary>The renewal waiting for approval after an ended agreement, if any.</summary>
+    public int? RenewalVersion { get; init; }
+    /// <summary>The participant alert's words (AgreementEnding.Describe), so the list and the banner never disagree.</summary>
+    public string Status { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// The body of POST .../{id}/pattern-change: the day, times, ratio and night type one roster pattern of the approved revision <c>{id}</c> should have, and from when. The change is made to the
+/// pattern's block (every worker of it): to every day of it with <see cref="AllDays"/>, otherwise to the pattern's day only, which splits a block of several days. It is saved as the next revision,
+/// re-priced, for approval; the pattern and the roster change only when that is approved.
+/// </summary>
+public record AgreementPatternChangeDto
+{
+    public Guid PatternId { get; init; }
+    public DayOfWeek DayOfWeek { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    /// <summary>Must be what the times say: the end is on the next day exactly when it is not after the start.</summary>
+    public bool EndsNextDay { get; init; }
+    public Odip.Domain.Enums.SupportRatio Ratio { get; init; }
+    public Odip.Domain.Enums.SleepoverType NightType { get; init; }
+    /// <summary>Change every day of the block (no split). The day cannot change with it.</summary>
+    public bool AllDays { get; init; }
+    /// <summary>The first day of the change, and of the new revision. Absent: the provider's tomorrow, or the agreement's start when that is later.</summary>
+    public DateOnly? FromDate { get; init; }
+    /// <summary>Work out the revision and its price difference, and save nothing.</summary>
+    public bool Preview { get; init; }
+}
+
+/// <summary>
+/// What a pattern change saved (or, on a preview, would save): the revision and its dates, and what its period costs before and after. <see cref="OldTotal"/> is the revision it was made from, priced
+/// over the same dates with the catalogue as it is now; <see cref="NewTotal"/> is the new revision's lines (on a preview, the same quote of its blocks). Same dates and prices, so the difference is the
+/// change alone.
+/// </summary>
+public record PatternChangeResultDto
+{
+    /// <summary>The revision saved; absent on a preview, which saves nothing.</summary>
+    public Guid? DraftId { get; init; }
+    public int Version { get; init; }
+    public DateOnly AgreementStartDate { get; init; }
+    public DateOnly AgreementEndDate { get; init; }
+    public decimal OldTotal { get; init; }
+    public decimal NewTotal { get; init; }
+    public decimal Difference { get; init; }
+    /// <summary>The new revision's pricing needs a person before it can be approved (an issue, a public holiday to decide, a line to review).</summary>
+    public bool NeedsReview { get; init; }
+}
+
 /// <summary>One block of a revision: the block exactly as the pricing engine takes it, and what its shifts will ask of a worker.</summary>
 public record DraftBlockDto
 {
@@ -108,10 +173,7 @@ public record ServiceAgreementDraftDto
     /// revision) and it is not a signature: approval makes the weekly roster patterns, nothing more.
     /// </summary>
     public DraftApprovalDto? Approval { get; init; }
-    /// <summary>
-    /// Only in the answer to an approval: the shifts of the revision before this one that are dated on or after this one starts and still stand, which approval leaves exactly as they are for a
-    /// coordinator to tidy by hand.
-    /// </summary>
+    /// <summary>Only in the answer to an approval: the shifts of the revision before this one dated on or after this one starts (or today), which approval removed when nobody was on them and otherwise left for a coordinator to move or cancel.</summary>
     public OldShiftsRemainingDto? OldShiftsRemaining { get; init; }
 }
 
@@ -141,15 +203,41 @@ public record DraftApprovalDto
     public bool TopUpEnabled { get; init; } = true;
 }
 
-/// <summary>Shifts of the previous approved revision on or after the new one starts: left alone by approval, counted so they can be tidied. Open means nobody is assigned.</summary>
+/// <summary>
+/// The shifts of the earlier approved revisions dated from the day the new one starts (or today, when that is later) that a coordinator can still tidy: Draft or Published. Approval removes the
+/// unfilled Draft ones (<see cref="Removed"/>), except one something is recorded against; the rest stay, counted here (open when nobody is assigned) and listed in <see cref="Shifts"/> for a
+/// coordinator to move or cancel.
+/// </summary>
 public record OldShiftsRemainingDto
 {
+    /// <summary>The most kept shifts <see cref="Shifts"/> lists; <see cref="Open"/> and <see cref="Assigned"/> count them all.</summary>
+    public const int MaxListed = 50;
+
     public int Open { get; init; }
     public int Assigned { get; init; }
-    /// <summary>The first day of them; absent when there are none.</summary>
+    /// <summary>The unfilled Draft shifts approval removes (in a preview) or removed (in the answer to an approval): nobody on them, no notes written on them, nothing recorded against them.</summary>
+    public int Removed { get; init; }
+    /// <summary>The shifts handed on to the new patterns because their support did not change: kept as they are, with their workers and states, and not made again.</summary>
+    public int Carried { get; init; }
+    /// <summary>The first day of them, removed or kept; absent when there are none.</summary>
     public DateOnly? FirstDate { get; init; }
     /// <summary>The version of the revision they came from (the one whose patterns this approval ends); absent when there is none.</summary>
     public int? FromVersion { get; init; }
+    /// <summary>The kept ones, by day and time.</summary>
+    public List<OldShiftDto> Shifts { get; init; } = [];
+}
+
+/// <summary>A shift of a replaced revision that approval leaves for a coordinator: when, its state, and who is on it.</summary>
+public record OldShiftDto
+{
+    public Guid Id { get; init; }
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    public Odip.Domain.Rostering.ShiftStatus Status { get; init; }
+    /// <summary>Who is on it; absent when nobody is.</summary>
+    public string? WorkerName { get; init; }
 }
 
 /// <summary>One reason an approval is refused, in plain words. <see cref="Code"/> is the pricing engine's reason name (NoItem, BlocksOverlap, ...) or one of this feature's own (HolidayUndecided, ReviewFlag, HandTyped, TimeZoneMismatch, ...).</summary>
@@ -185,6 +273,10 @@ public record DraftApprovalPreviewDto
     public List<ApprovalReasonDto> Reasons { get; init; } = [];
     public int PatternsToCreate { get; init; }
     public int PatternsToEnd { get; init; }
+    /// <summary>The new patterns no ended pattern matches (a changed support): they start with no default staff. 0 when the approval ends no pattern, as on a first approval.</summary>
+    public int ChangedPatterns { get; init; }
+    /// <summary>The ended patterns a coordinator edited by hand before (their times, ratio or night type are not their block's) that approving puts back to the agreement's times.</summary>
+    public int HandEditedPatterns { get; init; }
     /// <summary>The version whose patterns would end.</summary>
     public int? EndsFromVersion { get; init; }
     /// <summary>The day they would end: the day before this revision starts.</summary>

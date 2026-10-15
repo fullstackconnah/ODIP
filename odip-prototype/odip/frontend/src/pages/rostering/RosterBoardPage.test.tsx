@@ -101,7 +101,7 @@ describe('RosterBoardPage — ASSIGNEE_ON_LEAVE exception comes from the server'
     expect(screen.getAllByText('Mei Zhang is on approved leave on 2026-08-18')).toHaveLength(1)
   })
 
-  it('shows zero exceptions when the server sends none, even though a shift is flagged assigneeOnApprovedLeave', () => {
+  it('shows no exceptions button when the server sends none, even though a shift is flagged assigneeOnApprovedLeave', () => {
     const board = makeBoardWithLeaveException()
     mockUseRosterBoard.mockReturnValue({
       data: { ...board, exceptions: [] },
@@ -111,7 +111,8 @@ describe('RosterBoardPage — ASSIGNEE_ON_LEAVE exception comes from the server'
     })
     renderPage()
 
-    expect(screen.getByRole('button', { name: '0 exceptions' })).toBeInTheDocument()
+    // An empty count is not a button: there is nothing to open (V2-G).
+    expect(screen.queryByRole('button', { name: /exception/ })).not.toBeInTheDocument()
   })
 })
 
@@ -505,7 +506,7 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
     expect(screen.getByRole('button', { name: 'Unfilled only' })).toHaveAttribute('aria-pressed', 'true')
     expect(shown('Amy Ng')).toBe(true)                                                // the row is still on the board
     expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()                     // the shift somebody has is out of the way
-    expect(screen.getAllByText('Unfilled').length).toBeGreaterThan(0)                   // the one nobody has is not
+    expect(screen.getAllByText('Needs staff').length).toBeGreaterThan(0)                   // the one nobody has is not
   })
 
   it('does it with the shapes the API really sends: an unfilled shift has no staffId at all (the server leaves a null out), and the approved card\'s own link lands on a board that is not empty', () => {
@@ -522,7 +523,7 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
     renderPage('/rostering?date=2026-10-14&participant=p-1&unfilled=1')
 
     expect(screen.getByRole('button', { name: 'Unfilled only' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getAllByText('Unfilled')).toHaveLength(2)                             // both unfilled shifts are drawn: the week is not empty
+    expect(screen.getAllByText('Needs staff')).toHaveLength(2)                             // both unfilled shifts are drawn: the week is not empty
     expect(screen.queryByText('Casey Roe')).not.toBeInTheDocument()                     // and the one somebody has is out of the way
   })
 

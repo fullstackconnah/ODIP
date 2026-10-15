@@ -115,3 +115,11 @@ describe('ReportTab', () => {
     expect(lastCallArgs.from).toBe('2026-08-01')
   })
 })
+
+describe('ReportTab participant picker', () => {
+  it('asks for everyone past the start of services: a services-started draft and an archived participant both stay selectable', () => {
+    mockUseAdministrationsReport.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
+    render(<ReportTab />)
+    expect(mockUseParticipants).toHaveBeenCalledWith({ servicesBegun: 'true' })
+  })
+})

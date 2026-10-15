@@ -1,18 +1,20 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useStaff, useSettings, useUpdateStaff } from '@/api/hooks'
+import { useStaff, useSettings, useUpdateStaff, useProviderSettings } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
 import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { PageHeader } from '@/components/PageHeader'
-import { UserCog } from 'lucide-react'
+import { Settings, UserCog } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { usePermissions } from '@/lib/permissions'
 import { staffCredentials, credentialIssueCount } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, type DeadlineState, type DeadlineStatus } from '@/lib/deadline'
 import { plural } from '@/lib/format'
-import type { StaffListDto } from '@/api/types/staff'
+import { toUpdateStaffDto, type StaffListDto } from '@/api/types/staff'
 
 type FilterTab = 'all' | 'expired' | 'expiring' | 'no-date'
 
@@ -73,9 +75,10 @@ function buildGroups(staff: StaffListDto[], warningDays: number): StaffGroup[] {
 }
 
 export default function QualificationsPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canAccessPage } = usePermissions()
+  const staffFromPayroll = useProviderSettings(canWrite).data?.employmentHeroConnected === true
   const { data: settings } = useSettings()
-  const { data: allStaff = [], isLoading } = useStaff({ isActive: 'true' })
+  const { data: allStaff = [], isLoading, isError, refetch } = useStaff({ isActive: 'true' })
   const updateStaff = useUpdateStaff()
 
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
@@ -119,92 +122,53 @@ export default function QualificationsPage() {
     const s = allStaff.find((m: any) => m.id === row.staffId)
     if (!s) return
 
-    const payload = {
-      firstName: s.firstName,
-      lastName: s.lastName,
-      role: s.role,
-      position: s.position,
-      email: s.email ?? '',
-      mobile: s.mobile ?? undefined,
-      region: s.region ?? undefined,
-      isDriverEligible: s.isDriverEligible,
-      isFirstAidQualified: s.isFirstAidQualified,
-      isMedicationCompetent: s.isMedicationCompetent,
-      isManualHandlingCompetent: s.isManualHandlingCompetent,
-      isOvernightEligible: s.isOvernightEligible,
-      isActive: s.isActive,
-      notes: s.notes ?? undefined,
-      firstAidExpiryDate: s.firstAidExpiryDate ?? undefined,
-      driverLicenceExpiryDate: s.driverLicenceExpiryDate ?? undefined,
-      manualHandlingExpiryDate: s.manualHandlingExpiryDate ?? undefined,
-      medicationCompetencyExpiryDate: s.medicationCompetencyExpiryDate ?? undefined,
-      workerScreeningNumber: s.workerScreeningNumber ?? undefined,
-      workerScreeningExpiryDate: s.workerScreeningExpiryDate ?? undefined,
-      [row.fieldKey]: editValue || undefined,
-    }
-
-    updateStaff.mutate({ id: row.staffId, data: payload }, {
+    updateStaff.mutate({ id: row.staffId, data: toUpdateStaffDto(s, { [row.fieldKey]: editValue || undefined }) }, {
       onSuccess: () => { setEditingKey(null); setSaveError(null) },
       onError: () => setSaveError('Failed to save. Please try again.'),
     })
   }
 
   const tabs: { key: FilterTab; label: string }[] = [
-    { key: 'all', label: `All Issues (${counts.all})` },
+    { key: 'all', label: `All issues (${counts.all})` },
     { key: 'expired', label: `Expired (${counts.expired})` },
-    { key: 'expiring', label: `Expiring Soon (${counts.expiring})` },
-    { key: 'no-date', label: `No Date Set (${counts['no-date']})` },
+    { key: 'expiring', label: `Expiring within ${warningDays} days (${counts.expiring})` },
+    { key: 'no-date', label: `No date set (${counts['no-date']})` },
   ]
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
-      </div>
-    )
-  }
+  if (isLoading) return <PageState kind="loading" noun="staff qualifications" />
+
+  // The Dashboard's "Qualification Issues" figure counts issues; the tabs below count staff. The subtitle says both, so 12 reads against 4.
+  const issueCount = groups.reduce((sum, g) => sum + g.issueCount, 0)
+  // ReadOnly is refused Settings: it reads the window in the Expiring tab, with no link to a page that sends it back.
+  const header = (
+    <PageHeader
+      title="Qualifications"
+      subtitle={allStaff.length > 0 ? `${plural(issueCount, 'issue')} across ${groups.length} active staff` : undefined}
+      action={canAccessPage('settings') && (
+        <Button to="/settings?section=alerts" variant="secondary" size="md">
+          <Settings className="w-4 h-4" /> Warning window
+        </Button>
+      )}
+    />
+  )
 
   if (allStaff.length === 0) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-        <PageHeader
-          title="Staff Qualification Expiry"
-          subtitle={(
-            <>
-              Warning window: {warningDays} days —{' '}
-              <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
-                change in Settings
-              </Link>
-              {' '}· showing active staff only
-            </>
-          )}
-        />
-        <EmptyState
+        {header}
+        {isError ? <PageState kind="error" noun="staff list" onRetry={() => refetch()} /> : <EmptyState
           icon={UserCog}
           title="No staff members yet"
           description="This page tracks expiry dates for staff certifications like First Aid, driver licences, and manual handling. Add a staff member to start tracking theirs."
-          action={canWrite ? { label: 'Add staff member', to: '/staff/new' } : undefined}
-        />
+          action={canWrite && !staffFromPayroll ? { label: 'New staff member', to: '/staff/new' } : undefined}
+        />}
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Staff Qualification Expiry"
-        subtitle={(
-          <>
-            Warning window: {warningDays} days —{' '}
-            <Link to="/settings" className="text-[var(--color-primary)] hover:underline">
-              change in Settings
-            </Link>
-            {' '}· showing active staff only
-            {/* The Dashboard's "Qualification Issues" figure counts issues; the tabs below count staff. Both are said here, so 12 reads against 4. */}
-            {' '}· {plural(groups.reduce((sum, g) => sum + g.issueCount, 0), 'issue')} across {plural(groups.length, 'staff member')}
-          </>
-        )}
-      />
+      {header}
 
       {/* Filter tabs */}
       <Tabs
@@ -242,13 +206,13 @@ export default function QualificationsPage() {
                   <span className="font-medium truncate">{group.staffName}</span>
                 </button>
                 <StatusBadge tone="danger" label={plural(group.issueCount, 'issue')} />
-                <Link
+                {canWrite && <Link
                   to={`/staff/${group.staffId}/edit`}
                   aria-label={`Edit ${group.staffName}`}
                   className="shrink-0 p-2 -m-2 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                 >
                   <span className="material-symbols-outlined text-lg" aria-hidden="true">edit</span>
-                </Link>
+                </Link>}
               </div>
 
               {/* Accordion body */}
@@ -303,28 +267,19 @@ export default function QualificationsPage() {
                         render: (q) => {
                           const isEditing = editingKey === q.key
                           return isEditing ? (
-                            <div className="flex items-center gap-3 justify-end">
-                              <button
-                                onClick={() => handleSave(q)}
-                                disabled={updateStaff.isPending}
-                                className="text-xs font-semibold text-[var(--color-primary)] hover:underline disabled:opacity-50"
-                              >
+                            <div className="flex items-center gap-1.5 pointer-coarse:gap-2 justify-end">
+                              <Button size="sm" onClick={() => handleSave(q)} disabled={updateStaff.isPending}>
                                 {updateStaff.isPending ? 'Saving...' : 'Save'}
-                              </button>
-                              <button
-                                onClick={() => { setEditingKey(null); setSaveError(null) }}
-                                className="text-xs text-[var(--color-muted-foreground)] hover:underline"
-                              >
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setEditingKey(null); setSaveError(null) }}>
                                 Cancel
-                              </button>
+                              </Button>
                             </div>
                           ) : canWrite ? (
-                            <button
-                              onClick={() => handleEdit(q)}
-                              className="text-xs font-medium text-[var(--color-primary)] hover:underline"
-                            >
+                            // Every row has one, so its name says whose credential it edits.
+                            <Button variant="ghost" size="sm" onClick={() => handleEdit(q)} aria-label={`Edit: ${q.qualification}, ${q.staffName}`}>
                               Edit
-                            </button>
+                            </Button>
                           ) : null
                         },
                       },

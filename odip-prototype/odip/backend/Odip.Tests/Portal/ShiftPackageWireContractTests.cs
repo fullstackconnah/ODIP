@@ -123,6 +123,9 @@ public class ShiftPackageWireContractTests
         AssertExplicitNulls(breakBlocker, "finishBlockers[BREAK_RUNNING]", "medicationId", "medicationName", "scheduledAt");
 
         AssertExplicitNull(data.GetProperty("completion"), "handoverText", "completion");
+        AssertExplicitNulls(data.GetProperty("completion"), "completion",
+            "originalActualStart", "originalActualEnd", "timeAdjustmentReason", "kilometres", "anythingToReport");
+        Assert.False(data.GetProperty("completion").GetProperty("timesAdjusted").GetBoolean());
     }
 
     [Fact]
@@ -227,7 +230,7 @@ public class ShiftPackageWireContractTests
     private static readonly Dictionary<Type, string[]> NewMembersOfOlderRecords = new()
     {
         [typeof(PortalShiftDetailDto)] = ["Handover", "CanRecordDosesReason", "CanRecordDosesReasonCode", "EmergencyContacts", "SensitiveInfoWithheldReason"],
-        [typeof(ShiftCompletionDto)] = ["HandoverText"],
+        [typeof(ShiftCompletionDto)] = ["HandoverText", "OriginalActualStart", "OriginalActualEnd", "TimeAdjustmentReason", "Kilometres", "AnythingToReport"],
     };
 
     private static bool IsNullable(PropertyInfo property) => new NullabilityInfoContext().Create(property).ReadState == NullabilityState.Nullable;

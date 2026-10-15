@@ -8,15 +8,18 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
+import NotificationBell from '@/components/layout/NotificationBell'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
+import PlatformFooter from '@/components/layout/PlatformFooter'
 import {
-  barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, navItems, resolveNav, toBarItem,
+  barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, NAV_ACTIVE, NAV_IDLE, navItems, resolveNav, toBarItem,
   type BarAudience, type BarItem, type NavCounts, type NavGroup, type NavLeaf,
 } from '@/components/layout/navConfig'
 import { readStoredOpenGroups, storeGroupOpen } from '@/components/layout/navOpenGroups'
 import { usePermissions } from '@/lib/permissions'
 import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount } from '@/api/hooks'
+import { endSession } from '@/api/client'
 
 /**
  * Mobile bottom-nav cell: icon over label, 42px tall. The cells share the row in equal widths (`flex-1`), so however many pages the
@@ -27,10 +30,6 @@ import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCo
  * link, and a floor cannot. Nothing changes on a mouse.
  */
 const MOBILE_NAV_LINK = 'flex flex-1 min-h-[var(--tap-min)] min-w-[var(--tap-min)] flex-col items-center justify-center gap-1'
-
-/** The lit item of the sidebar, the drawer and the bar's links: Pale Sprout with near-black bold text. */
-const NAV_ACTIVE = 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
-const NAV_IDLE = 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
 
 /**
  * The groups to show open: the ones already open, plus any group that holds the current page. The page you are on is never hidden
@@ -100,13 +99,8 @@ function SidebarGroup({ group, leaves, open, onToggle, pathname, counts, onNavig
         aria-current={filled ? 'true' : undefined}
         aria-label={open ? undefined : navBadgeLabel(count, group.badgeNoun ?? 'item', group.label)}
         onClick={() => onToggle(group.id)}
-        className={`flex items-center w-full gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${
-          filled
-            ? NAV_ACTIVE
-            : active
-              ? 'text-[var(--color-on-primary-fixed)] font-bold hover:bg-[var(--color-surface-container-high)]'
-              : NAV_IDLE
-        }`}
+        // One active signal: the open group's lit child. The header is lit only when closed over the current page (U3).
+        className={`flex items-center w-full gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-all duration-150 ${filled ? NAV_ACTIVE : NAV_IDLE}`}
       >
         <span className="material-symbols-outlined shrink-0" aria-hidden="true" style={{ fontSize: '18px' }}>{group.msIcon}</span>
         <span className="flex-1 text-left truncate">{group.label}</span>
@@ -212,11 +206,14 @@ export default function AppLayout() {
 
   // Which groups are open: what the user chose to keep open last time, plus the group that holds the current page.
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => withActiveGroups(readStoredOpenGroups(), location.pathname))
-  // Navigating (a link, a Dashboard tile, the browser's Back) opens the group that now holds the page, and closes the drawer.
+  // Navigating (a link, a Dashboard tile, the browser's Back) opens the group that now holds the page, and closes the drawer. It starts again
+  // from the saved choices, so a group that only opened itself for the page you left closes again (V2-G: passing through Trips, Participants
+  // and Staff used to leave all three open, filling the sidebar).
+  // shortcut: with localStorage blocked, a toggle made this session is forgotten on the next navigation; keep a session set if that matters.
   const [seenPathname, setSeenPathname] = useState(location.pathname)
   if (seenPathname !== location.pathname) {
     setSeenPathname(location.pathname)
-    setOpenGroups(open => withActiveGroups(open, location.pathname))
+    setOpenGroups(withActiveGroups(readStoredOpenGroups(), location.pathname))
     setSidebarOpen(false)
   }
 
@@ -242,15 +239,6 @@ export default function AppLayout() {
   const viewingTenantId = localStorage.getItem('odip_viewing_tenant')
   const savedAdminUser = JSON.parse(localStorage.getItem('odip_superadmin_user') || '{}')
 
-  const handleLogout = () => {
-    localStorage.removeItem('odip_token')
-    localStorage.removeItem('odip_user')
-    localStorage.removeItem('odip_viewing_tenant')
-    localStorage.removeItem('odip_viewing_user')
-    localStorage.removeItem('odip_superadmin_user')
-    window.location.href = '/login'
-  }
-
   const initial = (user.fullName || 'A').charAt(0).toUpperCase()
 
   return (
@@ -264,7 +252,7 @@ export default function AppLayout() {
       {/*
         Mobile overlay. Below lg the open drawer (z-[60]) and its scrim (z-[55]) sit ABOVE the fixed bottom nav
         (z-50). They used to be z-50 and z-40: the nav comes later in the DOM, so it painted over the drawer's own
-        "Sign Out" (which could not be tapped) and stayed live above the scrim. From lg up the sidebar is permanent,
+        "Sign out" (which could not be tapped) and stayed live above the scrim. From lg up the sidebar is permanent,
         there is no bottom nav, and it keeps z-50 (`lg:z-50`) so a Modal (z-50, later in the DOM) still covers it.
       */}
       {drawerOpen && (
@@ -326,10 +314,10 @@ export default function AppLayout() {
 
         {/* Bottom */}
         <div className="pt-2 shrink-0">
-          <button onClick={handleLogout}
+          <button onClick={endSession}
             className="flex items-center gap-3 px-3 py-1.5 h-8 min-h-[var(--tap-min)] rounded-md text-sm text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)] w-full transition-colors">
             <LogOut className="w-4 h-4" />
-            Sign Out
+            Sign out
           </button>
         </div>
       </aside>
@@ -370,16 +358,7 @@ export default function AppLayout() {
             <div className="flex items-center gap-3">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
-              {/* Placeholder pending the notifications feature (next on the roadmap) — disabled
-                  rather than removed, so the control is honest about doing nothing right now
-                  instead of silently absorbing clicks. */}
-              <button
-                className={`${TAP_AREA} w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed`}
-                aria-label="Notifications"
-                disabled
-              >
-                <span className="material-symbols-outlined text-[var(--color-primary)]" aria-hidden="true" style={{ fontSize: '20px' }}>notifications</span>
-              </button>
+              <NotificationBell />
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-white font-bold text-sm shadow-md">
                 {initial}
               </div>
@@ -413,17 +392,13 @@ export default function AppLayout() {
 
         {/* Page content */}
         {/*
-          Bottom padding is split out from the p-4, md:p-6, lg:p-8 shorthand on purpose: that
-          shorthand sets padding-bottom too, so an unprefixed bottom padding (clearing the fixed
-          mobile bottom nav below lg) got silently overridden by md:p-6's padding-bottom
-          for the 768-1024px range, trapping the last roster row behind the nav with no way
-          to scroll it clear. Directional px and pt utilities leave the pb-[...] and lg:pb-6 as
-          the only thing ever setting padding-bottom, so it can't be clobbered by a later
-          breakpoint's shorthand again. Below lg the padding is the nav's own height
-          (--mobile-nav-h, the same var the nav is sized with and the sticky wizard footer
-          sits above) plus 1.75rem of air: 96px on touch, exactly the old pb-24.
+          Bottom padding is split out from the p-4, md:p-6, lg:p-8 shorthand on purpose: that shorthand sets padding-bottom too, and
+          md:p-6 once overrode the nav clearance between 768 and 1024px, trapping the last roster row behind the nav. Directional px
+          and pt utilities leave pb-6 as the only thing setting it. The clearance for the fixed mobile bottom nav is not here any more:
+          PlatformFooter (variant="shell"), the last thing in this column, carries it below lg (--mobile-nav-h, the safe area and
+          0.75rem). The footer always renders, because its Accessibility link is unconditional, so nothing can end up behind the nav.
         */}
-        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-[calc(var(--mobile-nav-h)+1.75rem)] lg:pb-6">
+        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-6">
           {/* Track the previous in-app pathname once at the authenticated shell so any
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}
@@ -438,6 +413,7 @@ export default function AppLayout() {
             </Suspense>
           </ErrorBoundary>
         </main>
+        <PlatformFooter variant="shell" />
       </div>
 
       {/* Mobile bottom nav. Generated from the same config as the sidebar (see BottomBar), so it can never offer a link the role

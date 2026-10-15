@@ -132,7 +132,7 @@ describe('LeaveApprovalsPage', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve: /i }))
     const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
@@ -155,7 +155,7 @@ describe('LeaveApprovalsPage', () => {
     mockAssignShiftMutateAsync.mockResolvedValue({})
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve: /i }))
     const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
@@ -185,7 +185,7 @@ describe('LeaveApprovalsPage', () => {
     mockAssignShiftMutateAsync.mockRejectedValue({ response: { data: { message: 'This shift has already started.' } } })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve: /i }))
     const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
@@ -206,7 +206,7 @@ describe('LeaveApprovalsPage', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve: /i }))
     const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
@@ -220,7 +220,7 @@ describe('LeaveApprovalsPage', () => {
     mockApproveLeaveMutateAsync.mockResolvedValue({ leave: makeLeaveRequest({ id: 'leave-1', status: 'Approved' }), overlaps: [] })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve: /i }))
     const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
@@ -233,7 +233,7 @@ describe('LeaveApprovalsPage', () => {
     mockApproveLeaveMutateAsync.mockRejectedValue({ response: { data: { message: 'This request has already been decided.' } } })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve: /i }))
     const confirmDialog = screen.getByRole('alertdialog')
     await user.click(within(confirmDialog).getByRole('button', { name: /^approve$/i }))
 
@@ -242,7 +242,7 @@ describe('LeaveApprovalsPage', () => {
     // Pending, with its Approve/Decline actions intact — since the mutation never resolved.
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^decline$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^decline: /i })).toBeInTheDocument()
   })
 
   // Product ruling (2026-09-09): a decline reason is optional, not required — levelled down to
@@ -254,7 +254,7 @@ describe('LeaveApprovalsPage', () => {
     mockDeclineLeaveMutateAsync.mockResolvedValue(makeLeaveRequest({ id: 'leave-1', status: 'Declined' }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^decline$/i }))
+    await user.click(screen.getByRole('button', { name: /^decline: /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
 
@@ -267,7 +267,7 @@ describe('LeaveApprovalsPage', () => {
     mockDeclineLeaveMutateAsync.mockResolvedValue(makeLeaveRequest({ id: 'leave-1', status: 'Declined' }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^decline$/i }))
+    await user.click(screen.getByRole('button', { name: /^decline: /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.type(within(dialog).getByRole('textbox'), 'Short-staffed that week')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
@@ -281,9 +281,9 @@ describe('LeaveApprovalsPage', () => {
     mockCancelLeaveMutateAsync.mockResolvedValue(makeLeaveRequest({ id: 'leave-1', status: 'Cancelled' }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^cancel leave$/i }))
+    await user.click(screen.getByRole('button', { name: /^cancel leave: /i }))
     const dialog = screen.getByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
 
     expect(mockCancelLeaveMutateAsync).toHaveBeenCalledWith('leave-1')
   })
@@ -294,9 +294,9 @@ describe('LeaveApprovalsPage', () => {
     mockCancelLeaveMutateAsync.mockRejectedValue({ response: { data: { message: 'Only pending requests can be withdrawn.' } } })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^cancel leave$/i }))
+    await user.click(screen.getByRole('button', { name: /^cancel leave: /i }))
     const dialog = screen.getByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
 
     expect(await within(dialog).findByText(/only pending requests can be withdrawn\./i)).toBeInTheDocument()
     // The cancel dialog stays open and the row is unchanged — still Approved, with its own
@@ -350,7 +350,7 @@ describe('LeaveApprovalsPage', () => {
     mockApproveUnavailabilityMutateAsync.mockResolvedValue({ unavailability: makeRecurringRule({ id: 'rule-1', status: 'Approved' }), overlaps: [] })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve: /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
 
@@ -364,7 +364,7 @@ describe('LeaveApprovalsPage', () => {
     mockDeclineUnavailabilityMutateAsync.mockResolvedValue(makeRecurringRule({ id: 'rule-1', status: 'Declined' }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^decline$/i }))
+    await user.click(screen.getByRole('button', { name: /^decline: /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.type(within(dialog).getByRole('textbox'), 'Roster gap')
     await user.click(within(dialog).getByRole('button', { name: /^decline$/i }))
@@ -378,9 +378,9 @@ describe('LeaveApprovalsPage', () => {
     mockCancelUnavailabilityMutateAsync.mockResolvedValue(makeRecurringRule({ id: 'rule-1', status: 'Cancelled' }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^cancel rule$/i }))
+    await user.click(screen.getByRole('button', { name: /^cancel rule: /i }))
     const dialog = screen.getByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: /^yes, cancel it$/i }))
+    await user.click(within(dialog).getByRole('button', { name: /^cancel request$/i }))
 
     expect(mockCancelUnavailabilityMutateAsync).toHaveBeenCalledWith('rule-1')
   })
@@ -416,8 +416,8 @@ describe('LeaveApprovalsPage', () => {
     renderPage()
 
     expect(screen.queryByRole('button', { name: /enter on behalf/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^decline$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^approve/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^decline/i })).not.toBeInTheDocument()
     expect(screen.getByText(/read-only access/i)).toBeInTheDocument()
   })
 
@@ -425,17 +425,18 @@ describe('LeaveApprovalsPage', () => {
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', status: 'Pending' })], isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^approve$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^decline$/i })).toBeInTheDocument()
+    // Every row has these, so each name carries the row's subject: who, and when.
+    expect(screen.getByRole('button', { name: 'Edit: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Decline: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
   })
 
   it('gives an Approved leave row an Edit button alongside Cancel', () => {
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-1', status: 'Approved' })], isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^cancel leave$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel leave: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
   })
 
   it('edits a Pending leave request: opens the modal pre-filled and submits PUT with the edited body', async () => {
@@ -447,7 +448,7 @@ describe('LeaveApprovalsPage', () => {
     mockUpdateLeaveMutateAsync.mockResolvedValue({ leave: makeLeaveRequest({ id: 'leave-1' }), overlaps: [] })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /^edit: /i }))
 
     expect(screen.getByText('Edit leave request')).toBeInTheDocument()
     expect(screen.getByLabelText(/start date/i)).toHaveValue('2026-09-14')
@@ -470,7 +471,7 @@ describe('LeaveApprovalsPage', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /^edit: /i }))
     await user.click(screen.getByRole('button', { name: /^save changes$/i }))
 
     expect(await screen.findByText(/saved.*overlaps 1 rostered shift\/trip/i)).toBeInTheDocument()
@@ -491,7 +492,7 @@ describe('LeaveApprovalsPage', () => {
     mockAssignShiftMutateAsync.mockResolvedValue({})
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /^edit: /i }))
     await user.click(screen.getByRole('button', { name: /^save changes$/i }))
 
     expect(await screen.findByText(/noah blake/i)).toBeInTheDocument()
@@ -513,7 +514,7 @@ describe('LeaveApprovalsPage', () => {
     mockUpdateUnavailabilityMutateAsync.mockResolvedValue({ unavailability: makeRecurringRule({ id: 'rule-1' }), overlaps: [] })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /^edit: /i }))
     expect(screen.getByText('Edit regular unavailability')).toBeInTheDocument()
     expect(screen.getByLabelText(/start time/i)).toHaveValue('10:00')
 
@@ -539,7 +540,7 @@ describe('LeaveApprovalsPage', () => {
     mockUpdateLeaveMutateAsync.mockRejectedValue({ response: { data: { message: 'This overlaps another approved request.' } } })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /^edit: /i }))
     const endDateInput = screen.getByLabelText(/end date/i)
     await user.clear(endDateInput)
     await user.type(endDateInput, '2026-09-20')
@@ -563,7 +564,7 @@ describe('LeaveApprovalsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Pending' }))
     await user.click(screen.getByRole('option', { name: 'All statuses' }))
 
-    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /^edit: /i }))
     const endDateInput = screen.getByLabelText(/end date/i)
     await user.clear(endDateInput)
     await user.type(endDateInput, '2026-09-20')
@@ -589,8 +590,8 @@ describe('LeaveApprovalsPage', () => {
 
       expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
       expect(screen.getByText('Training')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Delete: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
     })
 
     it('are hidden under the default Pending filter', () => {
@@ -615,10 +616,10 @@ describe('LeaveApprovalsPage', () => {
       await user.click(screen.getByRole('button', { name: 'Pending' }))
       await user.click(screen.getByRole('option', { name: 'All statuses' }))
 
-      await user.click(screen.getByRole('button', { name: /^delete$/i }))
+      await user.click(screen.getByRole('button', { name: /^delete: /i }))
       const dialog = screen.getByRole('alertdialog')
       expect(within(dialog).getByText('Delete record')).toBeInTheDocument()
-      await user.click(within(dialog).getByRole('button', { name: /^yes, delete it$/i }))
+      await user.click(within(dialog).getByRole('button', { name: /^delete$/i }))
 
       expect(mockDeleteStaffAvailabilityMutateAsync).toHaveBeenCalledWith('av-1')
     })
@@ -635,7 +636,7 @@ describe('LeaveApprovalsPage', () => {
       await user.click(screen.getByRole('button', { name: 'Pending' }))
       await user.click(screen.getByRole('option', { name: 'All statuses' }))
 
-      await user.click(screen.getByRole('button', { name: /^edit$/i }))
+      await user.click(screen.getByRole('button', { name: /^edit: /i }))
       expect(screen.getByText('Edit availability record')).toBeInTheDocument()
       expect(screen.getByLabelText(/start date/i)).toHaveValue('2026-09-14')
 
@@ -686,5 +687,18 @@ describe('LeaveApprovalsPage', () => {
 
     expect(mockUseLeaveRequests).toHaveBeenCalledWith(expect.objectContaining({ userId: 'staff-1', status: undefined }))
     expect(mockUseRecurringUnavailabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'staff-1', status: undefined }))
+  })
+})
+
+// A failed load is the house error banner (a danger Callout, announced at once, with its retry), not an EmptyState that reads as "nothing here".
+describe('LeaveApprovalsPage — a failed load', () => {
+  it('shows the error banner with Try again, not an empty state', async () => {
+    const refetch = vi.fn()
+    mockUseLeaveRequests.mockReturnValue({ data: [], isLoading: false, isError: true, refetch })
+    renderPage()
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/couldn't load leave requests/i)
+    await userEvent.setup().click(within(alert).getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
   })
 })

@@ -34,7 +34,7 @@ vi.mock('@/api/hooks', () => ({
   PAYMENT_STATUS_COLORS: { NotInvoiced: 'bg-neutral-100 text-neutral-600', Invoiced: 'bg-blue-100 text-blue-700' },
 }))
 
-const trip = { id: 'trip-1', maxParticipants: 10, staffAssignedCount: 0 } as unknown as TripDetailDto
+const trip = { id: 'trip-1', maxParticipants: 10, staffAssignedCount: 0, staffRequired: null, calculatedStaffRequired: 0 } as unknown as TripDetailDto
 
 function makeBooking(overrides: Partial<BookingListDto> = {}): BookingListDto {
   return {
@@ -82,11 +82,9 @@ describe('BookingsTab — PF-10.6 Client Overview PDF per-row action', () => {
   })
 })
 
-// Density polish (touch): the actions cell holds four 22px hand-rolled icon controls in a gap-2 row. DataTable pads every
-// link in a cell to 44px on touch, so the "View participant" link alone reached 11px past its box and overlapped its
-// still-22px neighbours by 3px each (found by the broad coarse sweep). All four now share TAP_ICON_SQUARE: 22px on a mouse
-// as before, the 36px --control-h-sm square with a 44px hit area on touch, and the row's 8px gap makes the pads touch and
-// never overlap.
+// Density polish (touch): the actions cell holds four icon controls in a gap-2 row. They are the house Button iconOnly (the 24px
+// --control-h-sm square on a mouse, 36px with a 44px TAP_AREA pad on touch), like AccommodationTab; the 8px gap lets the pads touch
+// and never overlap.
 describe('BookingsTab — touch targets in the row actions', () => {
   const controls = () => [
     screen.getByTitle('Edit booking'),
@@ -95,28 +93,27 @@ describe('BookingsTab — touch targets in the row actions', () => {
     screen.getByTitle('Remove from trip'),
   ]
 
-  it('gives all four row action controls the same 44px touch shape, so none overlaps a neighbour', () => {
+  it('makes all four row action controls the house icon button: the --control-h-sm square with a 44px touch pad', () => {
     renderTab()
 
     const [edit, pdf, view, remove] = controls()
     expect(view.tagName).toBe('A')
     for (const c of [edit, pdf, view, remove]) {
       expect(c).toHaveClass(...TAP_AREA.split(' '))
-      expect(c).toHaveClass('pointer-coarse:inline-flex', 'pointer-coarse:size-[var(--control-h-sm)]', 'pointer-coarse:items-center', 'pointer-coarse:justify-center', 'pointer-coarse:p-0')
+      expect(c).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0', 'shrink-0')
+      expect(c.querySelector('svg')).toHaveClass('w-3.5', 'h-3.5')
     }
+    expect(remove).toHaveClass('text-[var(--color-destructive)]')
   })
 
-  it('keeps the mouse look: p-1 around a 14px icon (22px), rounded, the same hover fills', () => {
+  it('names each control for its row, since every row has the same four', () => {
     renderTab()
 
     const [edit, pdf, view, remove] = controls()
-    for (const c of [edit, pdf, view, remove]) {
-      expect(c).toHaveClass('p-1', 'rounded', 'transition-colors')
-      expect(c.querySelector('svg')).toHaveClass('w-3.5', 'h-3.5')
-    }
-    expect(edit).toHaveClass('hover:bg-[var(--color-surface-container)]')
-    expect(remove).toHaveClass('hover:bg-[var(--color-error-container)]/60')
-    expect(pdf).toHaveClass('disabled:opacity-50')
+    expect(edit).toHaveAccessibleName('Edit booking: Sophie Brown')
+    expect(pdf).toHaveAccessibleName('Client Overview PDF: Sophie Brown')
+    expect(view).toHaveAccessibleName('View participant: Sophie Brown')
+    expect(remove).toHaveAccessibleName('Remove from trip: Sophie Brown')
   })
 
   it('spaces them 8px apart, the gap that lets two 36px squares with 4px pads touch without overlapping', () => {
@@ -298,5 +295,79 @@ describe('BookingsTab — Add Booking: the server\'s refusal reaches the user', 
 
     expect(await screen.findByText(GENERIC_BOOKING_ERROR)).toBeInTheDocument()
     expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
+  })
+})
+
+// The Staff Required card shows the server's figure for the trip, not a second sum of the bookings' override ratios (a booking with no override, or at `Other`,
+// counted 0 here but 1 on the server).
+describe('BookingsTab — the staffing summary shows what the server says the trip needs', () => {
+  it('shows the figure the server sends and the exact figure beside it, and how many more staff are needed', () => {
+    const needing = { ...trip, calculatedStaffRequired: 2.5, staffRequired: 4, staffAssignedCount: 1 } as unknown as TripDetailDto
+    const bookings = [makeBooking({ id: 'b1' }), makeBooking({ id: 'b2', supportRatioOverride: 'Other' }), makeBooking({ id: 'b3', supportRatioOverride: 'OneToTwo' })]
+    render(
+      <MemoryRouter>
+        <BookingsTab tripId="trip-1" trip={needing} bookings={bookings} participants={[]} canWrite isReadOnly={false} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Staff Required').parentElement).toHaveTextContent('4 (2.50)')
+    expect(screen.getByText('Staff Assigned').parentElement).toHaveTextContent('1 / 4')
+    expect(screen.getByText('Need 3 more')).toBeInTheDocument()
+  })
+
+  it('shows ? for the figure the server has not set (all bookings cancelled and no minimum), not a 0', () => {
+    const unknown = { ...trip, calculatedStaffRequired: 0, staffRequired: null, staffAssignedCount: 0 } as unknown as TripDetailDto
+    render(
+      <MemoryRouter>
+        <BookingsTab tripId="trip-1" trip={unknown} bookings={[makeBooking({ id: 'b1' })]} participants={[]} canWrite isReadOnly={false} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Staff Required').parentElement).toHaveTextContent('? (0.00)')
+    expect(screen.getByText('Staff Assigned').parentElement).toHaveTextContent('0 / ?')
+  })
+})
+
+describe('BookingsTab — dialogs', () => {
+  // Each dialog is named, Escape closes it, and focus goes back to the control that opened it.
+  it.each([
+    ['Add Participant to Trip', () => screen.getByRole('button', { name: /add participant/i }), 'Add Participant to Trip'],
+    ['Edit Booking', () => screen.getByTitle('Edit booking'), /^Edit Booking — /],
+  ])('%s: Escape closes it and focus returns to the opener', async (_label, opener, name) => {
+    const user = userEvent.setup()
+    renderTab()
+    const control = opener()
+    await user.click(control)
+    expect(screen.getByRole('dialog', { name })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(control).toHaveFocus()
+  })
+
+  it('Add Participant: Escape clears the picked participant, so the next dialog opens empty', async () => {
+    const user = userEvent.setup()
+    renderTab([], [readyParticipant, notReadyParticipant])
+    await openModalAndPick(user, 'Mia Chen')
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeEnabled()
+
+    await user.keyboard('{Escape}')
+    await openModalAndPick(user)
+
+    expect(screen.getByRole('button', { name: 'Add Booking' })).toBeDisabled()
+  })
+})
+
+// V-A follow-up: the tab kept its own support-ratio map, so the override said "Shared" where the rest of the app says "Shared Support".
+describe('BookingsTab — support ratio override labels', () => {
+  it('uses the shared SUPPORT_RATIO_LABELS', async () => {
+    const user = userEvent.setup()
+    renderTab()
+    await user.click(screen.getByRole('button', { name: /Add Participant/ }))
+    await user.click(screen.getByRole('button', { name: 'Support Ratio Override' }))
+
+    expect(screen.getByRole('option', { name: 'Shared Support' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Shared' })).not.toBeInTheDocument()
   })
 })

@@ -28,6 +28,7 @@ import {
 import type { StaffOverviewUpcomingShiftDto, StaffOverviewTripAssignmentDto } from '@/api/types/staff'
 import type { IncidentListDto } from '@/api/types/incidents'
 import type { CompletionQueueItemDto } from '@/api/types/rostering'
+import { POSITION_LABELS } from '@/api/types/enums'
 
 type Tab = 'availability' | 'credentials' | 'upcoming' | 'incidents' | 'completions'
 
@@ -47,7 +48,7 @@ export default function StaffDetailPage() {
   const { id } = useParams()
   const { canWrite, canAccessPage, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
-  // POST /staff/{id}/sign-in-account is Admin, Coordinator and SuperAdmin only (canWrite also admits ReadOnly, whom the server refuses), and
+  // POST /staff/{id}/sign-in-account is Admin, Coordinator and SuperAdmin only (the same three roles canWrite admits), and
   // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
   const canManageSignIn = (isSuperAdmin || isAdmin || isCoordinator) && canSendSetPasswordEmail()
   const ensureAccount = useEnsureStaffSignInAccount()
@@ -95,47 +96,51 @@ export default function StaffDetailPage() {
   const { staff } = overview
   // Join only the parts that exist: an empty position used to leave the row starting with a
   // stray " · " separator.
-  const positionAndRegion = [staff.position, staff.region || 'No region'].filter(Boolean).join(' · ')
+  const positionAndRegion = [POSITION_LABELS[staff.position] ?? staff.position, staff.region || 'No region'].filter(Boolean).join(' · ')
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title={staff.fullName}
-        subtitle={
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={staff.isActive ? 'Active' : 'Inactive'} />
-            <span>{positionAndRegion}</span>
-          </div>
-        }
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <BackButton to="/staff" label="staff" history={false} />
-            {canAccessLeaveApprovals && (
-              <Button to={`/rostering/leave?userId=${id}`} variant="secondary" size="md">
-                <CalendarOff className="w-4 h-4" /> Leave & availability
-              </Button>
-            )}
-            {canManageSignIn && staff.isActive && !!staff.email && (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={handleSendSetPasswordEmail}
-                data-send-set-password
-                aria-disabled={sending || undefined}
-                aria-busy={sending || undefined}
-                className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
-              >
-                <Mail className="w-4 h-4" /> Send set-password email
-              </Button>
-            )}
-            {canWrite && (
-              <Button to={`/staff/${id}/edit`} variant="primary" size="md">
-                <Pencil className="w-4 h-4" /> Edit
-              </Button>
-            )}
-          </div>
-        }
-      />
+      <div className="flex items-start gap-2">
+        <BackButton to="/staff" label="staff" variant="icon" history={false} className="mt-1" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={staff.fullName}
+            subtitle={
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge status={staff.isActive ? 'Active' : 'Inactive'} />
+                <span>{positionAndRegion}</span>
+              </div>
+            }
+            action={
+              <div className="flex flex-wrap items-center gap-2">
+                {canAccessLeaveApprovals && (
+                  <Button to={`/rostering/leave?userId=${id}`} variant="secondary" size="md">
+                    <CalendarOff className="w-4 h-4" /> Leave & availability
+                  </Button>
+                )}
+                {canManageSignIn && staff.isActive && !!staff.email && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={handleSendSetPasswordEmail}
+                    data-send-set-password
+                    aria-disabled={sending || undefined}
+                    aria-busy={sending || undefined}
+                    className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                  >
+                    <Mail className="w-4 h-4" /> Send set-password email
+                  </Button>
+                )}
+                {canWrite && (
+                  <Button to={`/staff/${id}/edit`} variant="primary" size="md">
+                    <Pencil className="w-4 h-4" /> Edit
+                  </Button>
+                )}
+              </div>
+            }
+          />
+        </div>
+      </div>
 
       {/* Notices for the actions above. Always mounted (a live region must exist before its content), and collapsed while empty. */}
       <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusSendButton} className="empty:-mt-[var(--section-gap)]" />

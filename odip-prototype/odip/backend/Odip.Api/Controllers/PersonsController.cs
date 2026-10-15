@@ -37,9 +37,13 @@ public class PersonsController : ControllerBase
     {
         var query = _db.People.AsQueryable();
         if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(p => (p.FirstName + " " + p.LastName).Contains(search)
-                || (p.Organisation != null && p.Organisation.Contains(search))
-                || (p.Email != null && p.Email.Contains(search)));
+        {
+            // Lower-cased both sides: Contains alone is a case-sensitive LIKE on Npgsql (as ParticipantQueries.SearchByName).
+            var term = search.Trim().ToLower();
+            query = query.Where(p => (p.FirstName + " " + p.LastName).ToLower().Contains(term)
+                || (p.Organisation != null && p.Organisation.ToLower().Contains(term))
+                || (p.Email != null && p.Email.ToLower().Contains(term)));
+        }
 
         var people = await query
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)

@@ -91,6 +91,12 @@ describe('ContactsTab', () => {
     expect(screen.getByText('No contacts recorded')).toBeInTheDocument()
   })
 
+  // VISUAL-1 V2: the empty state carried a second Add contact under the header's own.
+  it('offers one Add contact on an empty list', () => {
+    render(<ContactsTab participantId="participant-1" />)
+    expect(screen.getAllByRole('button', { name: /Add contact/ })).toHaveLength(1)
+  })
+
   it('renders a contact role row with person, role, and status', () => {
     mockUseParticipantContactRoles.mockReturnValue({ data: [makeRole()], isLoading: false })
 
@@ -110,8 +116,8 @@ describe('ContactsTab', () => {
     render(<ContactsTab participantId="participant-1" />)
 
     expect(screen.queryByRole('button', { name: /add contact/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^edit/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^remove/i })).not.toBeInTheDocument()
   })
 
   it('adds a new-person contact and submits the mapped payload', async () => {
@@ -176,7 +182,9 @@ describe('ContactsTab', () => {
     })
 
     render(<ContactsTab participantId="participant-1" />)
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    // One person can hold several roles, so the name carries the role as well as the person.
+    expect(screen.getByRole('button', { name: 'Remove: Karen Johnson, Emergency Contact' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Edit: Karen Johnson, Emergency Contact' }))
 
     expect(screen.getByDisplayValue('Father')).toBeInTheDocument()
     expect(screen.getByDisplayValue('1')).toBeInTheDocument()
@@ -187,7 +195,7 @@ describe('ContactsTab', () => {
     mockUseParticipantContactRoles.mockReturnValue({ data: [makeRole()], isLoading: false })
 
     render(<ContactsTab participantId="participant-1" />)
-    await user.click(screen.getByRole('button', { name: 'Remove' }))
+    await user.click(screen.getByRole('button', { name: /^remove: karen johnson, /i }))
     const dialog = screen.getByRole('alertdialog', { name: /remove this contact role/i })
     await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
 

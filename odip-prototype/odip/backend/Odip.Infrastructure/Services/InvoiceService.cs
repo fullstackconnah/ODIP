@@ -75,7 +75,7 @@ public class InvoiceService
         }
 
         var subtotal = lineItems.Sum(l => l.TotalAmount);
-        var gstAmount = settings.GSTRegistered ? subtotal * 0.1m : 0m;
+        var gstAmount = GstFor(lineItems, settings.GSTRegistered);
         var total = subtotal + gstAmount;
 
         var pdfBytes = Document.Create(container =>
@@ -137,6 +137,7 @@ public class InvoiceService
                             cols.RelativeColumn(1);
                             cols.RelativeColumn(1);
                             cols.RelativeColumn(1);
+                            if (settings.GSTRegistered) cols.RelativeColumn(1);
                         });
 
                         table.Header(header =>
@@ -146,6 +147,8 @@ public class InvoiceService
                             header.Cell().Background("#e2e8f0").Padding(4).AlignRight().Text("Hours").Bold();
                             header.Cell().Background("#e2e8f0").Padding(4).AlignRight().Text("Rate").Bold();
                             header.Cell().Background("#e2e8f0").Padding(4).AlignRight().Text("Amount").Bold();
+                            if (settings.GSTRegistered)
+                                header.Cell().Background("#e2e8f0").Padding(4).AlignRight().Text("GST").Bold();
                         });
 
                         foreach (var item in lineItems)
@@ -159,6 +162,8 @@ public class InvoiceService
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(item.Hours.ToString("F2"));
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text($"${item.UnitPrice:F2}");
                             table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text($"${item.TotalAmount:F2}");
+                            if (settings.GSTRegistered)
+                                table.Cell().BorderBottom(1).BorderColor("#e2e8f0").Padding(4).AlignRight().Text(GstLabel(item.GSTCode));
                         }
                     });
 
@@ -166,7 +171,7 @@ public class InvoiceService
                     {
                         c.Item().Text($"Subtotal: ${subtotal:F2}");
                         if (settings.GSTRegistered)
-                            c.Item().Text($"GST (10%): ${gstAmount:F2}");
+                            c.Item().Text($"GST: ${gstAmount:F2}");
                         c.Item().Text($"Total: ${total:F2}").Bold().FontSize(12);
                     });
 
@@ -190,6 +195,20 @@ public class InvoiceService
         var fileName = $"{invoiceNumber}.pdf";
         return (pdfBytes, fileName);
     }
+
+    /// <summary>
+    /// GST on the invoice: 10% of the lines coded P1 (tax claimable), rounded to the cent. P2 (GST-free), P5 (out of scope) and the
+    /// legacy codes, which the BPR CSV also sends as P2, add nothing; a provider that is not GST-registered charges none.
+    /// </summary>
+    public static decimal GstFor(IEnumerable<Odip.Domain.Entities.ClaimLineItem> lines, bool gstRegistered) =>
+        gstRegistered ? Math.Round(lines.Where(l => l.GSTCode == GSTCode.P1).Sum(l => l.TotalAmount) * 0.1m, 2, MidpointRounding.AwayFromZero) : 0m;
+
+    private static string GstLabel(GSTCode code) => code switch
+    {
+        GSTCode.P1 => "10%",
+        GSTCode.P5 => "Out of scope",
+        _ => "GST-free"
+    };
 
     private static string BuildContactAddress(Odip.Domain.Entities.Contact c)
     {

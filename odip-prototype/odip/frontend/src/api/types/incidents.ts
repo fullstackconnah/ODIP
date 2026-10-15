@@ -104,7 +104,8 @@ export interface IncidentDetailDto extends IncidentListDto {
    * territory), null = not determinable (not an RP incident, or no participant was selected).
    * Frozen at creation — editing the incident afterwards never recomputes this.
    */
-  isRestrictivePracticeAuthorised: boolean | null
+  /** Left out of the JSON when null (not determined): the API writes no null fields. */
+  isRestrictivePracticeAuthorised?: boolean | null
   description: string
   immediateActionsTaken: string | null
   wereEmergencyServicesCalled: boolean
@@ -182,6 +183,8 @@ export interface CreateIncidentDto {
    * 400). Never results in a RestrictivePractice register row being created.
    */
   unapprovedRestrictivePracticeDetails?: string
+  /** "This use was not authorised": the linked practice was used without, or outside, its authorisation, so the incident is stored unauthorised (link kept). On an edit it can only lower the stored determination. */
+  usedWithoutAuthorisation?: boolean
   severity: IncidentSeverity
   title: string
   description: string
@@ -220,4 +223,54 @@ export interface UpdateIncidentDto extends CreateIncidentDto {
   supportCoordinatorNotified: boolean
   /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   supportCoordinatorNotifiedAt?: string
+}
+
+/**
+ * The body for PUT /incidents/{id}, which replaces the whole record: the description is required, the injuries are deleted and re-inserted from the body, the
+ * witnesses are matched by id (so an Approved or Declined witness is not reset to Pending) and the source links are set to what the body says. Build every
+ * update that does not come from the edit form from the incident itself and say only what changes. A list row has none of this.
+ */
+export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateIncidentDto> = {}): UpdateIncidentDto {
+  return {
+    serviceType: i.serviceType,
+    tripInstanceId: i.tripInstanceId ?? undefined,
+    participantBookingId: i.participantBookingId ?? undefined,
+    involvedParticipantId: i.involvedParticipantId ?? undefined,
+    involvedStaffId: i.involvedStaffId ?? undefined,
+    reportedByStaffId: i.reportedByStaffId,
+    incidentType: i.incidentType,
+    otherTypeSpecify: i.otherTypeSpecify ?? undefined,
+    restrictivePracticeType: i.restrictivePracticeType ?? undefined,
+    restrictivePracticeId: i.restrictivePracticeId ?? undefined,
+    unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? undefined,
+    // Only ever lowers the stored determination, so an update made from the record itself leaves it as it is.
+    usedWithoutAuthorisation: false,
+    severity: i.severity,
+    title: i.title,
+    description: i.description,
+    incidentDateTime: i.incidentDateTime,
+    location: i.location ?? undefined,
+    immediateActionsTaken: i.immediateActionsTaken ?? undefined,
+    wereEmergencyServicesCalled: i.wereEmergencyServicesCalled,
+    emergencyServicesDetails: i.emergencyServicesDetails ?? undefined,
+    witnessNames: i.witnessNames ?? undefined,
+    witnessStatements: i.witnessStatements ?? undefined,
+    injuries: i.injuries.map(({ region, injuryType, description }) => ({ region, injuryType, description })),
+    witnesses: i.witnesses.map(({ id, witnessUserId, witnessName }) => ({ id, witnessUserId, witnessName })),
+    medicationAdministrationId: i.medicationAdministrationId ?? undefined,
+    shiftId: i.shiftId ?? undefined,
+    shiftNoteId: i.shiftNoteId ?? undefined,
+    status: i.status,
+    qscReportingStatus: i.qscReportingStatus,
+    qscReportedAt: i.qscReportedAt ?? undefined,
+    qscReferenceNumber: i.qscReferenceNumber ?? undefined,
+    reviewedByStaffId: i.reviewedByStaffId ?? undefined,
+    reviewNotes: i.reviewNotes ?? undefined,
+    correctiveActions: i.correctiveActions ?? undefined,
+    familyNotified: i.familyNotified,
+    familyNotifiedAt: i.familyNotifiedAt ?? undefined,
+    supportCoordinatorNotified: i.supportCoordinatorNotified,
+    supportCoordinatorNotifiedAt: i.supportCoordinatorNotifiedAt ?? undefined,
+    ...patch,
+  } satisfies Record<keyof UpdateIncidentDto, unknown> // a field added to the type and missed here is a type error
 }

@@ -70,7 +70,6 @@ audit history, compatibility matrices, restrictive-practice registers.
 | `rowError` | `(row: T) => string \| undefined` | Per-row validation error rendered as its own `role="alert"` row directly beneath a row currently in edit mode (`editingRow` or `editingRows`). Return `undefined` for a row with nothing to show. |
 | `selectable` / `selectedRows` / `onSelectionChange` | | Adds a checkbox column with select-all in the header. |
 | `compact` | `boolean` | Tighter cell padding. |
-| `verticalDividers` | `boolean` | **DS-02.** Adds a vertical rule between every column (header + body). Off by default — most tables read fine with only the horizontal row dividers already in place; turn it on for dense, many-column tables where tracking a column by eye benefits from a rule (e.g. a wide compatibility matrix). |
 | `footer` | `ReactNode` | Rendered in a `<tfoot>` below the body. |
 | `className` | `string` | Overrides the default card/border wrapper entirely. |
 
@@ -163,7 +162,6 @@ summary — reach for `Card`/`StatCard` instead.
   onRowClick={p => navigate(`/participants/${p.id}`)}
   emptyMessage="No participants match these filters."
   loading={isLoading}
-  verticalDividers
 />
 ```
 
@@ -254,7 +252,8 @@ keyboard/positioning engine.
 
 **Props**: `variant: 'pill' | 'form' | 'menu' | 'icon'`, `items: DropdownItem[]`
 (`{ value, label, icon?, description?, disabled? }`), `value`/`onChange` (pill/form),
-`onSelect` (menu, no tracked value), `onBlur`, `label`, `icon`, `colorClass`, `disabled`,
+`onSelect` (menu, no tracked value), `triggerVariant` (menu: `primary`, the default, for a header
+action; `secondary` for an in-page menu, so a page keeps one filled primary), `onBlur`, `label`, `icon`, `colorClass`, `disabled`,
 `loading`, `align`, `searchable` (adds a filter `<input>` *inside* the open panel — see
 [Picking a picker](#picking-a-picker) for how this differs from SearchableSelect), plus
 the `id`/`aria-labelledby`/`aria-required`/`aria-invalid`/`aria-describedby` labelling
@@ -523,7 +522,7 @@ confirm footer.
 
 `hooks/useDialogBehavior.ts` is the behaviour every modal layer owes its user, in one hook: **Escape** closes it, **Tab**
 stays inside it (and wraps both ways), focus **moves in** on open and **returns** to whatever had it when the layer
-opened, and the **page behind does not scroll**. `Modal`, `SlideOver`, `EditTripModal` and the unsaved-changes dialog
+opened, and the **page behind does not scroll**. `Modal`, `SlideOver` and the unsaved-changes dialog
 (`useUnsavedChangesWarning`) all run on it. It renders nothing and sets no ARIA: the caller marks up the dialog.
 
 ```tsx
@@ -592,8 +591,8 @@ useDialogBehavior({ open: drawerOpen, onClose: () => setSidebarOpen(false), cont
 ## SlideOver
 
 `components/SlideOver.tsx` is the panel docked to the right edge, for creating or editing a record without leaving the list.
-It replaced nine hand-rolled copies (`TemplateFormPanel`, `BillableEventFormPanel`, `FundingSourceFormPanel`,
-`ServiceBookingFormPanel`, `ExceptionsDrawer`, `PatternSlideOver`, `ShiftSlideOver`, `TenantFormPanel`, `UserFormPanel`), six
+It replaced nine hand-rolled copies (`TemplateFormPanel`, `ExceptionsDrawer`, `PatternSlideOver`, `ShiftSlideOver`,
+`TenantFormPanel`, `UserFormPanel`, and three Billing panels since retired), six
 of which had no Escape, no focus handling and no dialog role.
 
 ```tsx
@@ -633,11 +632,10 @@ scrim, close button), which go through `beforeClose` and then `dirty`. A success
 a footer Cancel is an explicit discard that calls `onClose` directly: neither asks. To make a footer Cancel ask too, it has to
 call the panel's own request, which is not exposed; keep Cancel as the explicit way out.
 
-**Dirty.** The panels compute `dirty` from what they already have: react-hook-form's `formState.isDirty` (Template, Billable
-event, Funding source, Service booking), or the current values against the values the panel opened with (Shift and Pattern
+**Dirty.** The panels compute `dirty` from what they already have: react-hook-form's `formState.isDirty` (Template), or the current values against the values the panel opened with (Shift and Pattern
 compare to their first render, because their page keys them on the target; Tenant and User compare to what the open effect
 set). A panel that shows a success notice before it auto-closes (Template, Tenant) is not dirty once it has saved. A read-only
-panel (`canWrite` false, a claimed billable event) cannot be dirty.
+panel (`canWrite` false) cannot be dirty.
 
 **A dialog over the panel** (the Delete flow) is a `ConfirmDialog` rendered after the `SlideOver`: it is the topmost layer, so
 Escape closes only it, focus returns to the Delete button, and the page stays scroll-locked until the panel closes too. See
@@ -845,8 +843,8 @@ with an 8px side inset (the compact card's). Given an `action` it is the band's 
   screen-reader-only text replaces the number: "Loading" (and the tile is `aria-busy`) while the request is in flight, "Couldn't load" (not busy) after it
   failed; `loading` wins if both are set. Use them for a figure whose own request has no data yet, so it is never read as a definite zero or an "All clear".
 
-Lay the tiles out with `pages/dashboard/AttentionBand.tsx`, which makes a tall tile of each item above zero, names the items at zero in one "All clear" row on Pale Sprout, and shows one Pale Sprout field when every
-item is at zero; its rows are dealt by `pages/dashboard/bandLayout.ts` (balanced, 1 to 5 tiles a row by the band's own width). The compact tile's source order is label, figure, caption, like a glance cell, so a screen reader
+Lay the tiles out with `pages/dashboard/AttentionBand.tsx`, which makes a tall tile of each item above zero, names the items at zero in one "All clear" row on Pale Sprout, and, when every item is at zero, only that
+row (the field that says nothing needs you is the page's `AllClearField`, drawn when every decision group and alert is at zero); its rows are dealt by `pages/dashboard/bandLayout.ts` (balanced, 1 to 5 tiles a row by the band's own width). The compact tile's source order is label, figure, caption, like a glance cell, so a screen reader
 hears "Overdue, 2"; the tall tile reads its figure, label, line and link in that order.
 
 ---
@@ -900,7 +898,7 @@ The trip detail page opts in with a status-led meta row, and the dashboard opts 
 |---|---|---|
 | `button` | secondary `Button`, an arrow and "Back", `--control-h` tall | a detail page's action cluster (trip, staff, accommodation, incident, onboarding) |
 | `icon` | ghost icon-only `Button`, 24px on a mouse and a 44px square under a coarse pointer; its tooltip carries the name | a form or wizard header with the title beside it (participant, the intake and profile wizards, enquiry, medication, agreement draft, caregiver review) |
-| `link` | primary-coloured text link with an arrow, a `--tap-min` floor, a keyboard-only focus ring | a page with no action cluster (the portal, claim batch detail) |
+| `link` | primary-coloured text link with an arrow, a `--tap-min` floor, a keyboard-only focus ring | a page with no action cluster (the portal) |
 
 **Accessibility**: always a real `<a href>` (open in a new tab and copy-link work); it is never a `<button>` that navigates. The visible text is "Back" and the accessible name is "Back to {label}" (it contains
 the visible text). 44px under a coarse pointer in every variant, visible focus ring, first in the tab order of its header.
@@ -964,7 +962,7 @@ detail page opts in today; the other detail pages adopt it next.
 ## Tabs
 
 `Tabs.tsx` — the single tab primitive. It absorbed the former `TabNav.tsx` (deleted) so
-every tab surface in the app shares one look and one behaviour set; the billing screen's
+every tab surface in the app shares one look and one behaviour set; the (since retired) billing screen's
 underlined, icon-optional, text-only strip is the reference styling.
 
 Two usage modes:
@@ -990,7 +988,7 @@ the strip whenever `active` changes; from `md` up it wraps onto extra rows as be
 
 `overflow` (optional, `'wrap'` by default): `overflow="scroll"` keeps the strip to ONE row that scrolls sideways at EVERY width, md and up included (a thin scrollbar from md, the
 native hidden one below it), instead of wrapping from md up. Use it for a strip too long to fit one row at the widest layout, where wrapping leaves the last tab alone on a second row:
-Settings, with its ten tabs. The active tab (including one named by `?tab=`) is scrolled into view either way, arrow-key navigation is unchanged, and `'wrap'` renders exactly what it did before.
+Settings, with its ten tabs. The active tab (including one named by `?tab=`) is scrolled into view either way, arrow-key navigation is unchanged, and `'wrap'` renders exactly what it did before. The one-row strip fades out over its last 2rem and pads its end by the same, so a tab cut by the edge reads as "more this way" and the last tab is clear of the fade at the end.
 
 > When a test previously did `getByRole('button', { name: <tab> })`, it is now
 > `getByRole('tab', { name: <tab> })` — the role change is the accessibility fix, not a

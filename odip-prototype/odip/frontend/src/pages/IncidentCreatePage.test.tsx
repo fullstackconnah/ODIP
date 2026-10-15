@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IncidentCreatePage from './IncidentCreatePage'
-import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
+import { refetchable } from '@/test/refetchable'
+import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState, ShiftIncidentPrefillState } from '@/lib/incidentPrefill'
 import {
   buildIncidentTitleSkeleton, buildIncidentDescriptionSkeleton, buildIncidentDateTime, suggestedIncidentSeverity,
   buildShiftNoteIncidentTitleSkeleton, buildShiftNoteIncidentDescriptionSkeleton, buildShiftNoteIncidentDateTime,
@@ -13,7 +14,7 @@ import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enum
 
 const {
   mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseRestrictivePractices, mockApiPost,
-  mockUseCreateIncident,
+  mockUseCreateIncident, mockBulkCreateMutateAsync,
 } = vi.hoisted(() => ({
   mockUseIncident: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
@@ -21,6 +22,7 @@ const {
   mockUseRestrictivePractices: vi.fn(),
   mockApiPost: vi.fn(),
   mockUseCreateIncident: vi.fn(),
+  mockBulkCreateMutateAsync: vi.fn(),
 }))
 
 // Only the API layer is mocked — FormField, Card are the real components, so this exercises the
@@ -40,6 +42,9 @@ vi.mock('@/api/hooks', () => ({
   useParticipants: () => ({ data: [{ id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', fullName: 'Sophie Brown' }] }),
   // INC-04/INC-05/IN-4
   useRestrictivePractices: mockUseRestrictivePractices,
+  // "Add to restrictive practice register" from the RP step (AddRestrictivePracticeDialog)
+  useBulkCreateRestrictivePractices: () => ({ mutateAsync: mockBulkCreateMutateAsync, isPending: false }),
+  useParticipantMedications: () => ({ data: [] }),
 }))
 
 // NOTES-02: apiPost is only used here for the fire-and-forget acknowledge-flags call after a
@@ -60,6 +65,7 @@ function renderCreatePage(initialEntry: string | { pathname: string; state?: unk
       { path: '/incidents/new', element: <IncidentCreatePage /> },
       { path: '/incidents/:id/edit', element: <IncidentCreatePage /> },
       { path: '/incidents', element: <div>Incidents list</div> },
+      { path: '/portal/shifts/:id', element: <div>Shift page</div> },
     ],
     { initialEntries: [initialEntry] },
   )
@@ -150,6 +156,9 @@ function reviewValueFor(label: string) {
   return screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
 }
 
+/** Who authorised a register entry and when: with both, an active entry reads Authorised (isRpAuthorised). */
+const AUTHORISED = { authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01' }
+
 beforeEach(() => {
   mockUseIncident.mockReturnValue({ data: undefined })
   mockCreateMutateAsync.mockReset()
@@ -158,6 +167,7 @@ beforeEach(() => {
   mockUseCreateIncident.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false, error: null })
   mockUseRestrictivePractices.mockReturnValue({ data: [] })
   mockApiPost.mockReset().mockResolvedValue({ success: true, data: null })
+  mockBulkCreateMutateAsync.mockReset()
   localStorage.clear()
 })
 
@@ -661,10 +671,26 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
   })
 })
 
+// V-D2 follow-up: the wizard's step labels and step-card headings are sentence case, like every other heading (DESIGN.md).
+describe('IncidentCreatePage — sentence-case steps', () => {
+  it('names the steps in sentence case on the rail', () => {
+    renderCreatePage()
+    expect(screen.getAllByText('Incident details').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Incident Details')).not.toBeInTheDocument()
+  })
+
+  it('heads the Incident details step card in sentence case', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillBasicsMinimallyAndNext(user)
+    expect(screen.getByRole('heading', { name: 'Incident details' })).toBeInTheDocument()
+  })
+})
+
 describe('IncidentCreatePage — INC-04 RP incident authorisation determination', () => {
   it('does not show the Restrictive Practice Details card for non-RP incident types', () => {
     renderCreatePage()
-    expect(screen.queryByText('Restrictive Practice Details')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Restrictive Practice Details/i)).not.toBeInTheDocument()
   })
 
   it('shows the RP type picker once Incident Type is Restrictive Practice Use (a new step reached via Next)', async () => {
@@ -673,7 +699,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
 
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i })
 
-    expect(screen.getByText('Restrictive Practice Details')).toBeInTheDocument()
+    expect(screen.getByText('Restrictive practice details')).toBeInTheDocument()
     expect(screen.getByLabelText(/Restrictive Practice Type/i)).toBeInTheDocument()
   })
 
@@ -699,7 +725,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
 
   it('shows an authorised banner when the involved participant has a matching active practice', async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
     ] })
     const user = userEvent.setup()
     renderCreatePage()
@@ -707,7 +733,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
     await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
 
-    expect(await screen.findByText(/matches an active practice/i)).toBeInTheDocument()
+    expect(await screen.findByText(/matches an authorised practice/i)).toBeInTheDocument()
   })
 
   it('shows the "may be reportable" banner when the involved participant has no matching active practice', async () => {
@@ -718,7 +744,7 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
     await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
 
-    expect(await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(await screen.findByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
   })
 
   // IN-4: with no participant selected there is nothing to link, so reaching Review requires
@@ -749,8 +775,8 @@ describe('IncidentCreatePage — INC-04 RP incident authorisation determination'
 describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
   it("lists the involved participant's active practices of the selected type, not other types, as selectable rows", async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true },
-      { id: 'rp-2', type: 'PhysicalRestraint', description: 'Two-person hold.', reviewDate: null, isActive: true },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
+      { id: 'rp-2', type: 'PhysicalRestraint', description: 'Two-person hold.', reviewDate: null, isActive: true, ...AUTHORISED },
     ] })
     const user = userEvent.setup()
     renderCreatePage()
@@ -764,7 +790,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
 
   it('linking a practice prepopulates an empty description (visible once Incident Details is reached)', async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
     ] })
     const user = userEvent.setup()
     renderCreatePage()
@@ -784,7 +810,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
   // never-overwrite behaviour as before, just exercised via a different path.
   it('never overwrites an already-typed description when linking a practice', async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true, ...AUTHORISED },
     ] })
     const user = userEvent.setup()
     renderCreatePage()
@@ -802,7 +828,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
 
   it('submits restrictivePracticeId when a practice is linked', async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true, ...AUTHORISED },
     ] })
     const user = userEvent.setup()
     renderCreatePage()
@@ -828,7 +854,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
 
   it('resolves the linked practice to its description on Review, not the placeholder "(linked)"', async () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room during acute crisis.', reviewDate: null, isActive: true, ...AUTHORISED },
     ] })
     const user = userEvent.setup()
     renderCreatePage()
@@ -869,30 +895,77 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     mockUseIncident.mockReturnValue({ data: existingRpIncident })
     // If the banner were recomputed live, this active matching entry would flip it to authorised.
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
     ] })
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
 
-    expect(await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(await screen.findByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
     expect(screen.getByText(/determined when this incident was created/i)).toBeInTheDocument()
+  })
+
+  it('ticks "This use was not authorised" for a linked incident stored unauthorised, without locking it while the link is unchanged', async () => {
+    mockUseIncident.mockReturnValue({ data: existingRpIncident })
+    // The entry now reads Not authorised; the incident keeps what it was stored with, so nothing is forced.
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, authorisedBy: null, authorisationDate: null },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
+
+    const box = await screen.findByRole('checkbox', { name: 'This use was not authorised' })
+    expect(box).toBeChecked()
+    expect(box).toBeEnabled()
+  })
+
+  // Review N1: the banner agrees with the Review row and with what the server stores on save.
+  it('shows the lowered state in the edit banner once "This use was not authorised" is ticked', async () => {
+    mockUseIncident.mockReturnValue({ data: { ...existingRpIncident, isRestrictivePracticeAuthorised: true } })
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
+    expect(await screen.findByText('Authorised at the time this was reported.')).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'This use was not authorised' }))
+
+    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(screen.getByText('Saving records this use as not authorised.')).toBeInTheDocument()
+    expect(screen.queryByText('Authorised at the time this was reported.')).not.toBeInTheDocument()
+  })
+
+  // Review S1: the API leaves a null flag out of the JSON, so "not determined" arrives as a missing key.
+  it('shows "no determination on record" when the flag is missing from the payload', async () => {
+    const { isRestrictivePracticeAuthorised: _omitted, ...withoutFlag } = existingRpIncident
+    void _omitted
+    mockUseIncident.mockReturnValue({ data: withoutFlag })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
+
+    expect(await screen.findByText('No authorisation determination on record for this incident.')).toBeInTheDocument()
   })
 
   it('keeps showing the frozen determination even after changing the RP type in the edit form', async () => {
     mockUseIncident.mockReturnValue({ data: existingRpIncident })
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
     ] })
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
-    await screen.findByText(/no matching authorised practice — this may be a reportable incident/i)
+    await screen.findByText(/not authorised — this may be a reportable incident/i)
     await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
 
-    expect(screen.getByText(/no matching authorised practice — this may be a reportable incident/i)).toBeInTheDocument()
+    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
   })
 })
 
@@ -984,7 +1057,7 @@ describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () =>
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     // Edit mode's 'all' initialVisited means every step's rail button is clickable immediately.
-    await user.click(await screen.findByRole('button', { name: /Review & Compliance/i }))
+    await user.click(await screen.findByRole('button', { name: /Review & compliance/ }))
 
     const reviewedBy = await screen.findByLabelText('Reviewed By')
     await user.click(reviewedBy)
@@ -1193,13 +1266,46 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
       renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
       await user.click(await screen.findByRole('button', { name: /Review$/i }))
-      await user.click(screen.getByRole('button', { name: /save changes/i }))
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
 
       expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
       const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
       expect(payload.witnesses).toEqual([
         { id: 'witness-1', witnessUserId: 'staff-3', witnessName: 'Alex Rivera' },
       ])
+    })
+
+    // UpdateIncident sets the three source links from the body ("assigning null clears the link"), and the router-state hand-offs that carry them exist only on
+    // create. An edit used to send them absent, so saving any change to an incident filed from a MAR or a shift note cut it loose from its source.
+    it('sends the stored source links back on an edit, so saving does not clear them', async () => {
+      mockUseIncident.mockReturnValue({
+        data: { ...existingIncidentWithWitnesses, medicationAdministrationId: 'mar-1', shiftId: 'shift-1', shiftNoteId: 'note-1' },
+      })
+      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      await user.click(await screen.findByRole('button', { name: /Review$/i }))
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+      expect(payload).toMatchObject({ medicationAdministrationId: 'mar-1', shiftId: 'shift-1', shiftNoteId: 'note-1' })
+    })
+
+    it('sends no source links for an edit of an incident that has none', async () => {
+      mockUseIncident.mockReturnValue({ data: { ...existingIncidentWithWitnesses, medicationAdministrationId: null, shiftId: null, shiftNoteId: null } })
+      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      await user.click(await screen.findByRole('button', { name: /Review$/i }))
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+      expect(payload.medicationAdministrationId).toBeUndefined()
+      expect(payload.shiftId).toBeUndefined()
+      expect(payload.shiftNoteId).toBeUndefined()
     })
   })
 })
@@ -1233,16 +1339,338 @@ describe('IncidentCreatePage — save-failure banner', () => {
   })
 })
 
-// Density polish (touch): the "← Back to Incidents" text link was a 19px tap target. It takes the shared TAP_FLOOR
-// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
-// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
-describe('IncidentCreatePage — Back link touch target', () => {
-  it('floors the "Back to Incidents" link at --tap-min and keeps its destination and hover colour', () => {
+// The one Back standard (UI survey s.1): the icon BackButton left of the title, named for where it goes.
+describe('IncidentCreatePage — Back', () => {
+  it('is the icon Back before the title, a real link to /incidents', () => {
     renderCreatePage()
 
     const back = screen.getByRole('link', { name: /back to incidents/i })
     expect(back).toHaveAttribute('href', '/incidents')
-    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
-    expect(back.className).not.toMatch(/44px/)
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+// The page builds the form's starting values from the incident once, when it mounts (it waits for the incident to load). A second effect used to reset the form from
+// every later copy of the incident, so a background refetch (window refocus, the 30 s stale time) replaced what the person had typed with the server's values.
+describe('IncidentCreatePage — editing', () => {
+  const incident = {
+    id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'Other', otherTypeSpecify: 'Spilled drink', severity: 'Low', status: 'Draft',
+    title: 'Existing incident', incidentDateTime: '2026-08-01T09:00', location: null, reportedByStaffId: 'staff-1', description: 'Existing description',
+    participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, immediateActionsTaken: null, wereEmergencyServicesCalled: false,
+    emergencyServicesDetails: null, injuries: [], witnesses: [], qscReportingStatus: 'NotRequired', qscReportedAt: null, qscReferenceNumber: null,
+    reviewedByStaffId: null, reviewNotes: null, correctiveActions: null, familyNotified: false, familyNotifiedAt: null,
+    supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
+  }
+
+  it('keeps what was typed when the incident is fetched again', async () => {
+    const user = userEvent.setup()
+    const query = refetchable(incident)
+    mockUseIncident.mockImplementation(() => ({ data: query.useValue() }))
+    renderCreatePage('/incidents/incident-1/edit')
+
+    const title = screen.getByPlaceholderText('Brief incident summary')
+    expect(title).toHaveValue('Existing incident')
+    await user.clear(title)
+    await user.type(title, 'My own title')
+
+    act(() => query.refetchWith({ ...incident, title: 'Changed on the server' }))
+
+    expect(title).toHaveValue('My own title')
+  })
+})
+
+// STAFF-7: editing an id the server does not know says so, instead of "Loading incident…" for ever.
+describe('IncidentCreatePage — editing an unknown incident', () => {
+  it('says it is loading while the incident loads', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isError: false })
+    renderCreatePage('/incidents/missing/edit')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading incident…')
+  })
+
+  it('says the incident was not found on a 404', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isError: true, error: { response: { status: 404 } } })
+    renderCreatePage('/incidents/missing/edit')
+    expect(screen.getByText('Incident not found')).toBeInTheDocument()
+  })
+
+  it('offers a retry when the load failed for another reason', () => {
+    mockUseIncident.mockReturnValue({ data: undefined, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
+    renderCreatePage('/incidents/missing/edit')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+})
+
+// V2-E: the rail is the horizontal step row at every width. From lg it used to turn into a vertical four-line list about 200px tall in the page flow, above the form.
+describe('IncidentCreatePage — the step rail is one row', () => {
+  it('never stacks into the vertical list, and still says which step this is', () => {
+    renderCreatePage()
+    const rail = screen.getByRole('navigation', { name: 'Incident report steps' })
+    expect(rail).toHaveTextContent(/Step 1 of \d/)
+    expect(rail.querySelector('ol')!.className).not.toMatch(/lg:flex-col/)
+  })
+
+  it('offers Cancel on the first step', () => {
+    renderCreatePage()
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/incidents')
+  })
+})
+
+describe('IncidentCreatePage — the current step is marked', () => {
+  it('fills the current step on the one-row rail', () => {
+    renderCreatePage()
+    const current = screen.getByRole('navigation', { name: 'Incident report steps' }).querySelector('[aria-current="step"]')!
+    expect(current).toHaveClass('bg-[var(--color-primary)]', 'text-white')
+  })
+})
+
+// Owner decision 2026-10-14: each practice shows Authorised or Not authorised by the shared rule; "This use was not authorised" sends the
+// incident down the same path as "None of these"; and "None of these" can be added to the register by a coordinator from here.
+describe('IncidentCreatePage — restrictive practice authorisation', () => {
+  const authorisedEntry = { id: 'rp-a', participantId: 'participant-1', type: 'PhysicalRestraint', description: 'Two-person hold during transfers.', reviewDate: null, isActive: true, ...AUTHORISED }
+  const notAuthorisedEntry = { id: 'rp-n', participantId: 'participant-1', type: 'PhysicalRestraint', description: 'Hand-over-hand guidance.', reviewDate: null, isActive: true, authorisedBy: null, authorisationDate: null }
+
+  async function toPhysicalRestraintStep(user: ReturnType<typeof userEvent.setup>) {
+    await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
+    await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
+  }
+
+  function rowFor(name: RegExp) {
+    return screen.getByRole('radio', { name }).closest('label') as HTMLElement
+  }
+
+  it('badges each practice Authorised or Not authorised by the shared rule', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry, notAuthorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+
+    expect(within(rowFor(/Two-person hold/)).getByText('Authorised')).toBeInTheDocument()
+    expect(within(rowFor(/Hand-over-hand/)).getByText('Not authorised')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /None of these — the practice used is not on this participant's register/ })).toBeInTheDocument()
+  })
+
+  it('shows "This use was not authorised" only once a registered practice is chosen: ticked and locked for a Not authorised one, optional for an Authorised one', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry, notAuthorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    expect(screen.queryByRole('checkbox', { name: 'This use was not authorised' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /Hand-over-hand/ }))
+    const locked = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(locked).toBeChecked()
+    expect(locked).toBeDisabled()
+    expect(screen.getByText(/register entry is missing who authorised it or when/i)).toBeInTheDocument()
+    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+    const optional = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(optional).not.toBeChecked()
+    expect(optional).toBeEnabled()
+    expect(screen.getByText(/matches an authorised practice/i)).toBeInTheDocument()
+
+    await user.click(optional)
+    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
+  })
+
+  it('requires a description of what was done when the use was not authorised, and submits it with the link kept', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [notAuthorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Hand-over-hand/ }))
+
+    await clickNext(user)
+    expect(await screen.findByText('Describe what was actually done.')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/Describe what was actually done/), 'Guided his hand away from the stove.')
+    await clickNext(user) // Restrictive Practice -> Incident Details
+    expect(screen.getByPlaceholderText('Detailed description of the incident...')).toHaveValue('Guided his hand away from the stove.')
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await clickNext(user)
+    await clickNext(user)
+    expect(reviewValueFor('Authorisation')).toBe('Not authorised')
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload).toMatchObject({
+      restrictivePracticeType: 'PhysicalRestraint',
+      restrictivePracticeId: 'rp-n',
+      usedWithoutAuthorisation: true,
+      description: 'Guided his hand away from the stove.',
+    })
+    expect(payload.unapprovedRestrictivePracticeDetails).toBeUndefined()
+  })
+
+  it('sends usedWithoutAuthorisation false for an Authorised practice left unticked', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+    await clickNext(user)
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await clickNext(user)
+    await clickNext(user)
+    expect(reviewValueFor('Authorisation')).toBe('Authorised')
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ restrictivePracticeId: 'rp-a', usedWithoutAuthorisation: false })
+  })
+
+  it('clears the prefilled skeleton when "This use was not authorised" is ticked, and blocks Next until the reporter writes what was done', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ })) // prefills the skeleton into the empty description
+    await user.click(screen.getByRole('checkbox', { name: 'This use was not authorised' }))
+
+    expect(screen.getByLabelText(/Describe what was actually done/)).toHaveValue('')
+    await clickNext(user)
+    expect(await screen.findByText('Describe what was actually done.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Describe what was actually done/)).toBeInTheDocument() // still on this step
+
+    await user.type(screen.getByLabelText(/Describe what was actually done/), 'Held him past the agreed two minutes.')
+    await clickNext(user)
+    expect(screen.getByPlaceholderText('Detailed description of the incident...')).toHaveValue('Held him past the agreed two minutes.')
+  })
+
+  // Review N3: a link to another participant's register entry would only fail on submit.
+  it('clears the linked practice and "This use was not authorised" when the involved participant changes', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [notAuthorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Hand-over-hand/ }))
+    expect(screen.getByRole('checkbox', { name: 'This use was not authorised' })).toBeChecked()
+
+    await clickBack(user)
+    await user.click(screen.getByLabelText('Involved Participant'))
+    await user.click(screen.getByRole('option', { name: 'None' }))
+    await clickNext(user)
+
+    expect(screen.queryByRole('checkbox', { name: 'This use was not authorised' })).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('radio').filter((r) => (r as HTMLInputElement).checked)).toEqual([])
+  })
+
+  it('offers "Add to restrictive practice register" for "None of these" to a coordinator', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', role: 'Coordinator' }))
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /none of these/i }))
+
+    expect(screen.getByRole('button', { name: 'Add to restrictive practice register' })).toBeInTheDocument()
+    expect(screen.queryByText('A coordinator will be asked to add this to the register.')).not.toBeInTheDocument()
+  })
+
+  it('tells a support worker a coordinator will be asked instead, with no add button', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', role: 'SupportWorker' }))
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /none of these/i }))
+
+    expect(screen.queryByRole('button', { name: 'Add to restrictive practice register' })).not.toBeInTheDocument()
+    expect(screen.getByText('A coordinator will be asked to add this to the register.')).toBeInTheDocument()
+  })
+
+  it('opens the add dialog outside the wizard form, prefilled, and Enter in it never submits the incident', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', role: 'Coordinator' }))
+    const user = userEvent.setup()
+    const { container } = renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /none of these/i }))
+    await user.type(screen.getByLabelText(/Describe the restrictive practice that was used/i), 'Held both arms at the kerb.')
+    await user.click(screen.getByRole('button', { name: 'Add to restrictive practice register' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Add to restrictive practice register — Physical restraint' })
+    expect(container.querySelector('form')!.contains(dialog)).toBe(false)
+    const description = within(dialog).getByLabelText('Description, row 1')
+    expect(description).toHaveValue('Held both arms at the kerb.')
+    await user.type(description, '{Enter}')
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+    expect(mockBulkCreateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('after saving, links the new entry, moves the text into the description, and locks "This use was not authorised"', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', role: 'Coordinator' }))
+    const created = { ...notAuthorisedEntry, id: 'rp-new', description: 'Held both arms at the kerb.', relatedMedicationId: null, relatedMedicationName: null, createdAt: '2026-10-14T00:00:00Z', updatedAt: '2026-10-14T00:00:00Z' }
+    mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [created] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /none of these/i }))
+    await user.type(screen.getByLabelText(/Describe the restrictive practice that was used/i), 'Held both arms at the kerb.')
+    await user.click(screen.getByRole('button', { name: 'Add to restrictive practice register' }))
+    await user.click(screen.getByRole('button', { name: 'Save 1 entry' }))
+
+    expect(mockBulkCreateMutateAsync.mock.calls[0][0].data.items[0]).toMatchObject({ type: 'PhysicalRestraint', authorisedBy: null, authorisationDate: null, isActive: true })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Held both arms at the kerb/ })).toBeChecked()
+    expect(within(rowFor(/Held both arms at the kerb/)).getByText('Not authorised')).toBeInTheDocument()
+    const box = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(box).toBeChecked()
+    expect(box).toBeDisabled()
+    expect(screen.queryByLabelText(/Describe the restrictive practice that was used/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Describe what was actually done/)).toHaveValue('Held both arms at the kerb.')
+
+    await clickNext(user)
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await clickNext(user)
+    await clickNext(user)
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+    const payload = mockCreateMutateAsync.mock.calls[0][0]
+    expect(payload).toMatchObject({ restrictivePracticeId: 'rp-new', usedWithoutAuthorisation: true, description: 'Held both arms at the kerb.' })
+    expect(payload.unapprovedRestrictivePracticeDetails).toBeUndefined()
+  })
+})
+
+describe('IncidentCreatePage: the shift prefill from "Anything to report?"', () => {
+  const shiftPrefill: ShiftIncidentPrefillState = {
+    source: 'shift', shiftId: 'shift-9', participantId: 'participant-1', participantName: 'Sophie Brown',
+    serviceDate: '2026-08-17', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false, reportedByUserId: 'staff-1',
+    returnTo: '/portal/shifts/shift-9',
+  }
+
+  it('says where the form came from and fills the shift in', () => {
+    renderCreatePage({ pathname: '/incidents/new', state: shiftPrefill })
+
+    expect(screen.getByText(/pre-filled from your shift/i)).toBeInTheDocument()
+    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toContain('Sophie Brown')
+    expect(screen.getByText(/linked to: shift on 17\/08\/2026/i)).toBeInTheDocument()
+  })
+
+  it('files the incident against the shift, then goes back to the shift', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: shiftPrefill })
+
+    await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Fall in the garden')
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user)   // Basics -> Incident Details (description and date are prefilled)
+    await clickNext(user)   // -> Witnesses
+    await clickNext(user)   // -> Review
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(await screen.findByText('Shift page')).toBeInTheDocument()
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ shiftId: 'shift-9', involvedParticipantId: 'participant-1' })
+    expect(mockApiPost).not.toHaveBeenCalled()
+  })
+
+  it("dates the incident at the shift's actual start when the shift gives one (review deep N3)", async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: { ...shiftPrefill, incidentAt: '2026-08-17T09:05' } })
+
+    await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Fall in the garden')
+    await selectReportedByFirstAlexRivera(user)
+    await clickNext(user)
+    await clickNext(user)
+    await clickNext(user)
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    await screen.findByText('Shift page')
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ incidentDateTime: '2026-08-17T09:05' })
   })
 })

@@ -6,11 +6,18 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { AT_RISK_PARTIES } from '@/api/types/enums'
 import { AT_RISK_PARTY_LABELS } from '@/api/types/risk-entries'
 import type { ParticipantRiskEntryDto } from '@/api/types/risk-entries'
 import type { AtRiskParty } from '@/api/types/enums'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
+
+// One empty array for every render while there is no data, so the memos below do not see a new dependency each time.
+const NO_ENTRIES: ParticipantRiskEntryDto[] = []
 
 type RiskEntryFormState = {
   atRiskParty: AtRiskParty
@@ -21,15 +28,6 @@ type RiskEntryFormState = {
 
 const EMPTY_FORM: RiskEntryFormState = {
   atRiskParty: 'Participant', description: '', mitigationNotes: '', isActive: true,
-}
-
-function RiskEntrySkeleton() {
-  return (
-    <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] animate-pulse space-y-2">
-      <div className="h-4 w-1/4 bg-[var(--color-muted)] rounded" />
-      <div className="h-3 w-full bg-[var(--color-muted)] rounded" />
-    </div>
-  )
 }
 
 function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
@@ -88,7 +86,10 @@ function RiskEntryRow({ entry, canWrite, onEdit, onDelete }: {
  */
 export default function RiskEntriesSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteRisks } = usePermissions()
-  const { data: entries = [], isLoading } = useParticipantRiskEntries(participantId, true)
+  const entriesQuery = useParticipantRiskEntries(participantId, true)
+  const entries = entriesQuery.data ?? NO_ENTRIES
+  // A failed or paused request is not an empty list: "No risks recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(entriesQuery)
   const createEntry = useCreateRiskEntry()
   const updateEntry = useUpdateRiskEntry()
   const deleteEntry = useDeleteRiskEntry()
@@ -177,33 +178,23 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
           <AlertTriangle className="w-4 h-4" /> Risks
         </h3>
         {canWriteRisks && participantId && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-1.5 min-h-[44px] px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-          >
+          <Button variant="secondary" onClick={openCreate}>
             <Plus className="w-4 h-4" /> Add risk
-          </button>
+          </Button>
         )}
       </div>
 
       {listError && (
-        <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          <span>{listError}</span>
-          <button
-            type="button"
-            onClick={() => setListError(null)}
-            className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Callout tone="error"
+          actions={<Button variant="ghost" size="sm" onClick={() => setListError(null)}>Dismiss</Button>}>
+          {listError}
+        </Callout>
       )}
 
-      {isLoading ? (
-        <div className="space-y-3">
-          <RiskEntrySkeleton />
-        </div>
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="risk list" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="risk list" onRetry={() => entriesQuery.refetch()} />
       ) : activeEntries.length === 0 ? (
         // The same compact strip Health Conditions and the ADL grids use for "nothing recorded" (a bordered,
         // centred, muted line about 60px tall), not an EmptyState: its 40px icon, 18px title, three lines of
@@ -252,29 +243,18 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save risk entry'}
-            </button>
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="At Risk">
             <Dropdown

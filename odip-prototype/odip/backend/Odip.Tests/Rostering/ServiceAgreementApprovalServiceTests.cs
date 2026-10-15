@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Services;
 using Odip.Application.DTOs;
-using Odip.Domain.Billing;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -256,20 +255,6 @@ public class ServiceAgreementApprovalServiceTests
     }
 
     [Fact]
-    public async Task Being_over_the_participants_budget_does_not_stop_approval_the_budget_feature_warns_about_that_separately()
-    {
-        await using var f = await SetUpAsync();
-        f.Db.FundingSources.Add(new FundingSource { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, RouteType = FundingRouteType.PlanManaged, BudgetCategory = "Core", Budget = 100m, PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30) });
-        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await f.Db.SaveChangesAsync();
-        Assert.True(draft.Lines.Sum(l => l.Total ?? 0m) > 100m);
-
-        var outcome = await ApproveAsync(f, draft);
-
-        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
-    }
-
-    [Fact]
     public async Task A_block_that_can_no_longer_be_read_stops_approval_it_is_never_made_into_a_pattern_as_an_empty_block()
     {
         await using var f = await SetUpAsync();
@@ -429,48 +414,53 @@ public class ServiceAgreementApprovalServiceTests
         var theirs = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, tenantId: TenantB, participantId: otherParticipant);
         var mine = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
 
-        Assert.Equal(ApprovalStatus.NotFound, (await ApproveAsync(f, theirs)).Status);                                                                 // another tenant's draft, a participant that is not mine
+        Assert.Equal(ApprovalStatus.Superseded, (await ApproveAsync(f, theirs)).Status);                                                              // another tenant's draft id under my participant, who has revisions: it cannot be told from one a save replaced (ServiceAgreementApprovalReplacedTests)
         Assert.Equal(ApprovalStatus.NotFound, (await f.Service.ApproveAsync(TenantA, otherParticipant, theirs.Id, false, Admin, CancellationToken.None)).Status);   // another tenant's participant
         Assert.Equal(ApprovalStatus.NotFound, (await f.Service.ApproveAsync(TenantB, f.ParticipantId, mine.Id, false, Admin, CancellationToken.None)).Status);       // my participant, asked as another tenant
-        Assert.Equal(ApprovalStatus.NotFound, (await f.Service.PreviewAsync(TenantA, f.ParticipantId, Guid.NewGuid(), Admin, CancellationToken.None)).Status);
+        Assert.Equal(ApprovalStatus.Superseded, (await f.Service.PreviewAsync(TenantA, f.ParticipantId, Guid.NewGuid(), Admin, CancellationToken.None)).Status);   // my participant has revisions: a revision that is not there may have been replaced by a save (ServiceAgreementApprovalReplacedTests)
         Assert.Empty(await f.Db.ServiceAgreementDraftApprovals.ToListAsync());
     }
 
     // ── Ending the revision before ────────────────────────────────────────────────
 
     [Fact]
-    public async Task Approving_the_next_revision_ends_the_old_patterns_the_day_before_it_starts_and_touches_no_shift_assigned_or_open()
+    public async Task Approving_the_next_revision_ends_the_old_patterns_removes_their_unfilled_drafts_from_its_start_and_keeps_and_lists_the_assigned_ones()
     {
         await using var f = await SetUpAsync(audited: true);
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);
+        await ApproveAsync(f, v1);                                                                          // 40 shifts, 12 October to 4 December
         var staff = Guid.NewGuid();
         f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
         var assigned = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).OrderBy(s => s.ServiceDate).Take(2).ToListAsync();      // Monday 2 and Tuesday 3 November
         foreach (var shift in assigned) shift.UserId = staff;
         await f.Db.SaveChangesAsync();
-        var shiftsBefore = (await f.Db.Shifts.AsNoTracking().ToListAsync()).ToDictionary(s => s.Id, s => (s.ShiftPatternId, s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime));
-        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));       // starts on Monday 2 November
+        var before = (await f.Db.Shifts.AsNoTracking().Where(s => s.ServiceDate < new DateOnly(2026, 11, 2)).ToListAsync())
+            .ToDictionary(s => s.Id, s => (s.ShiftPatternId, s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime));
+        // v2 changes the support (an hour longer), so no shift of v1 is a shift of v2
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
 
         var outcome = await ApproveAsync(f, v2);
 
-        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
-        Assert.Equal(5, outcome.Approval!.PatternsEnded);
-        var old = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync();
-        Assert.All(old, p => Assert.Equal((new DateOnly(2026, 11, 1), true), (p.EffectiveTo!.Value, p.IsActive)));              // the day before v2 starts; still active, ending
-        Assert.All(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).ToListAsync(), p => Assert.Equal((new DateOnly(2026, 11, 2), true), (p.EffectiveFrom, p.IsActive)));
-        // every shift of v1 is as it was: not changed, cancelled or deleted, assigned or not
-        var shiftsAfter = (await f.Db.Shifts.AsNoTracking().Where(s => shiftsBefore.Keys.Contains(s.Id)).ToListAsync()).ToDictionary(s => s.Id, s => (s.ShiftPatternId, s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime));
-        Assert.Equal(shiftsBefore, shiftsAfter);
-        Assert.Equal(2, shiftsAfter.Values.Count(s => s.UserId == staff));
-        // each old pattern is one Updated audit row (the first approval only created patterns), by the person who approved
-        var updates = (await f.Db.AuditLogs.ToListAsync()).Where(l => l.EntityType == "ShiftPattern" && l.Action == AuditAction.Updated).ToList();
-        Assert.Equal(5, updates.Count);
-        Assert.All(updates, l => Assert.Equal("Alex Admin", l.ChangedByName));
+
+        Assert.Equal((ApprovalStatus.Approved, 5, 25), (outcome.Status, outcome.Approval!.PatternsEnded, outcome.Approval.ShiftsCreated));
+        Assert.All(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync(), p => Assert.Equal((new DateOnly(2026, 11, 1), true), (p.EffectiveTo!.Value, p.IsActive)));
+        var v1Ids = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).Select(p => p.Id).ToListAsync();
+        var v1Shifts = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && v1Ids.Contains(s.ShiftPatternId.Value)).ToListAsync();
+        // before 2 November nothing is touched; from it, only the two with a worker are left
+        Assert.Equal(before, v1Shifts.Where(s => s.ServiceDate < new DateOnly(2026, 11, 2)).ToDictionary(s => s.Id, s => (s.ShiftPatternId, s.ServiceDate, s.UserId, s.Status, s.StartTime, s.EndTime)));
+        Assert.Equal(assigned.Select(s => s.Id).OrderBy(id => id), v1Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).Select(s => s.Id).OrderBy(id => id));
+        var old = outcome.OldShifts!;
+        Assert.Equal((0, 2, 23, (DateOnly?)new DateOnly(2026, 11, 2), (int?)1), (old.Open, old.Assigned, old.Removed, old.FirstDate, old.FromVersion));
+        Assert.Equal(new[] { (new DateOnly(2026, 11, 2), "Ben Turner", ShiftStatus.Draft), (new DateOnly(2026, 11, 3), "Ben Turner", ShiftStatus.Draft) },
+            old.Shifts.Select(s => (s.ServiceDate, s.WorkerName!, s.Status)));
+        // each removal is one Deleted audit row by the person who approved, as each ended pattern is one Updated row
+        var logs = await f.Db.AuditLogs.ToListAsync();
+        Assert.Equal(23, logs.Count(l => l.EntityType == "Shift" && l.Action == AuditAction.Deleted && l.ChangedByName == "Alex Admin"));
+        Assert.Equal(5, logs.Count(l => l.EntityType == "ShiftPattern" && l.Action == AuditAction.Updated));
     }
 
     [Fact]
-    public async Task The_result_counts_the_old_versions_shifts_on_or_after_the_new_start_open_and_assigned_separately_and_says_which_day_they_begin()
+    public async Task The_preview_and_the_result_count_what_approval_removes_and_keeps_and_say_which_day_they_begin()
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
@@ -481,16 +471,209 @@ public class ServiceAgreementApprovalServiceTests
         for (var i = 0; i < 3; i++) onOrAfter[i].UserId = staff;                         // three assigned
         onOrAfter[3].Status = ShiftStatus.Cancelled;                                     // a cancelled one is not a shift that stands
         await f.Db.SaveChangesAsync();
-        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
-        var expectedOpen = onOrAfter.Count - 3 - 1;
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+        var expectedRemoved = onOrAfter.Count - 3 - 1;                                   // all but the three assigned and the cancelled one
 
         var preview = (await PreviewAsync(f, v2)).Preview!;
         var outcome = await ApproveAsync(f, v2);
 
         foreach (var counted in new[] { preview.OldShiftsRemaining, outcome.OldShifts! })
-            Assert.Equal((expectedOpen, 3, (DateOnly?)new DateOnly(2026, 11, 2), (int?)1), (counted.Open, counted.Assigned, counted.FirstDate, counted.FromVersion));
+            Assert.Equal((0, 3, expectedRemoved, (DateOnly?)new DateOnly(2026, 11, 2), (int?)1), (counted.Open, counted.Assigned, counted.Removed, counted.FirstDate, counted.FromVersion));
+        Assert.Equal(3, preview.OldShiftsRemaining.Shifts.Count);
         Assert.Equal((5, 1, new DateOnly(2026, 11, 1)), (preview.PatternsToEnd, preview.EndsFromVersion, preview.EndsOn));
     }
+
+    [Fact]
+    public async Task An_unfilled_draft_a_coordinator_wrote_notes_on_is_kept_and_listed_not_removed()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        var noted = await f.Db.Shifts.SingleAsync(s => s.ServiceDate == new DateOnly(2026, 11, 4));       // Wednesday 4 November, unfilled
+        noted.Notes = "Bring the hoist";
+        await f.Db.SaveChangesAsync();
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+
+        var outcome = await ApproveAsync(f, v2);
+
+        Assert.Equal((24, 1, 0), (outcome.OldShifts!.Removed, outcome.OldShifts.Open, outcome.OldShifts.Assigned));
+        Assert.Equal(noted.Id, Assert.Single(outcome.OldShifts.Shifts).Id);
+        Assert.True(await f.Db.Shifts.AnyAsync(s => s.Id == noted.Id));
+    }
+
+    [Fact]
+    public async Task A_support_that_does_not_change_hands_its_shifts_to_the_new_pattern_with_their_workers_and_states_and_none_is_made_twice()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        var staff = Guid.NewGuid();
+        f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
+        var later = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).OrderBy(s => s.ServiceDate).ToListAsync();      // 25, one a day
+        later[0].UserId = staff; later[0].Status = ShiftStatus.Published;
+        later[1].Status = ShiftStatus.Cancelled;
+        await f.Db.SaveChangesAsync();
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+
+        var preview = (await PreviewAsync(f, v2)).Preview!;
+        var outcome = await ApproveAsync(f, v2);
+
+        var counted = preview.OldShiftsRemaining;
+        Assert.Equal((25, 0, 0, 0, 0), (counted.Carried, counted.Removed, counted.Open, counted.Assigned, preview.ShiftsToCreate));
+        Assert.Equal((0, 25, 0), (outcome.Approval!.ShiftsCreated, outcome.OldShifts!.Carried, preview.ChangedPatterns));     // the same support on every day: nothing is a changed pattern
+        Assert.Equal(40, await f.Db.Shifts.CountAsync());                                                  // nothing removed, nothing made twice
+        var v2Ids = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).Select(p => p.Id).ToListAsync();
+        var moved = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && v2Ids.Contains(s.ShiftPatternId.Value)).OrderBy(s => s.ServiceDate).ToListAsync();
+        Assert.Equal(later.Select(s => s.Id), moved.Select(s => s.Id));
+        Assert.Equal((staff, ShiftStatus.Published), (moved[0].UserId!.Value, moved[0].Status));
+        Assert.Equal(ShiftStatus.Cancelled, moved[1].Status);                                               // a cancelled day stays cancelled: it is not made again
+        Assert.All(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).ToListAsync(), p => Assert.Equal(new DateOnly(2026, 12, 5), p.GeneratedThrough));   // the top-up carries on after the horizon
+    }
+
+
+    [Fact]
+    public async Task After_a_pattern_change_only_the_changed_days_shifts_are_tidied_and_the_rest_carry_over_with_their_default_worker()
+    {
+        await using var f = await SetUpAsync();
+        var saturday = Block("sat", PlanSupportType.CommunityAccess, DayOfWeek.Saturday, T(10), T(12));
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock(), saturday });
+        await ApproveAsync(f, v1);                                                                         // 40 weekday and 8 Saturday shifts, 12 October to 5 December
+        var staff = Guid.NewGuid();
+        f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
+        (await f.Db.Shifts.SingleAsync(s => s.ServiceDate == new DateOnly(2026, 11, 9))).UserId = staff;  // Monday 9 November has a worker
+        // Monday's and Tuesday's patterns have a default worker: Tuesday's support does not change and keeps it; Monday's does, and starts with none.
+        foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id && (p.DayOfWeek == DayOfWeek.Monday || p.DayOfWeek == DayOfWeek.Tuesday)).ToListAsync()) pattern.DefaultUserId = staff;
+        // Wednesday's default worker has left (archived): the unchanged Wednesday support carries its shifts, but not that default.
+        var gone = Guid.NewGuid();
+        f.Db.Users.Add(new User { Id = gone, TenantId = TenantA, FirstName = "Gus", LastName = "Gone", Username = "gus", Email = "gus@example.com", Role = UserRole.SupportWorker, IsActive = false });
+        (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Wednesday)).DefaultUserId = gone;
+        await f.Db.SaveChangesAsync();
+        // What a longer Monday from 2 November saves (Task 3): the weekday block split, Saturday as it was.
+        var v2 = await AddRevisionAsync(f, 2, new[]
+        {
+            WeekdayBlock(change: b => b with { Days = ApprovalTestSupport.Weekdays.Skip(1).ToArray() }), WeekdayBlock("weekdays-mon", b => b with { Days = new[] { DayOfWeek.Monday }, End = T(14) }), saturday,
+        }, start: new DateOnly(2026, 11, 2));
+
+        var preview = (await PreviewAsync(f, v2)).Preview!;
+        var outcome = await ApproveAsync(f, v2);
+
+        var old = outcome.OldShifts!;
+        Assert.Equal((25, 4, 1, 0), (old.Carried, old.Removed, old.Assigned, old.Open));                  // Tuesday to Saturday carried; four unfilled Mondays removed; the one with a worker kept
+        Assert.Equal(new DateOnly(2026, 11, 9), Assert.Single(old.Shifts).ServiceDate);
+        Assert.Equal(5, outcome.Approval!.ShiftsCreated);                                                  // the five new Mondays, 09:00 to 14:00
+        Assert.Equal(48 - 4 + 5, await f.Db.Shifts.CountAsync());
+        Assert.All(await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2) && s.ServiceDate.DayOfWeek == DayOfWeek.Monday && s.UserId == null).ToListAsync(),
+            s => Assert.Equal(T(14), s.EndTime));
+        Assert.Equal(1, preview.ChangedPatterns);                                                          // only the new Monday is a changed support
+        var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == v2.Id).ToListAsync();
+        Assert.Equal((Guid?)staff, made.Single(p => p.DayOfWeek == DayOfWeek.Tuesday).DefaultUserId);       // the unchanged support keeps its default worker
+        Assert.Null(made.Single(p => p.DayOfWeek == DayOfWeek.Wednesday).DefaultUserId);                    // archived: not carried
+        Assert.All(made.Where(p => p.DayOfWeek != DayOfWeek.Tuesday), p => Assert.Null(p.DefaultUserId));
+    }
+
+    [Fact]
+    public async Task A_day_the_new_plan_skips_for_a_public_holiday_is_not_carried_and_its_unfilled_shift_is_removed()
+    {
+        await using var f = await SetUpAsync();
+        var holiday = new HolidayEntry(new DateOnly(2026, 11, 9), "NSW", "Test holiday", null, null, "test");         // Monday 9 November
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock(change: b => b with { OnPublicHoliday = HolidayDecision.Charge }) }, holidays: new[] { holiday });
+        await ApproveAsync(f, v1);                                                                         // charged: the 9th has its shift like any Monday
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { OnPublicHoliday = HolidayDecision.Skip }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28), holidays: new[] { holiday });
+
+        var outcome = await ApproveAsync(f, v2);
+
+        Assert.Equal((24, 1, 0), (outcome.OldShifts!.Carried, outcome.OldShifts.Removed, outcome.Approval!.ShiftsCreated));     // the same support otherwise; the 9th is neither carried nor made
+        Assert.False(await f.Db.Shifts.AnyAsync(s => s.ServiceDate == new DateOnly(2026, 11, 9)));
+    }
+
+    [Fact]
+    public async Task When_two_ended_generations_are_the_same_support_the_newest_revisions_default_worker_is_the_one_kept()
+    {
+        await using var f = await SetUpAsync();
+        var (older, newer) = (Guid.NewGuid(), Guid.NewGuid());
+        f.Db.Users.Add(new User { Id = older, TenantId = TenantA, FirstName = "Olga", LastName = "Older", Username = "olga", Email = "olga@example.com", Role = UserRole.SupportWorker, IsActive = true });
+        f.Db.Users.Add(new User { Id = newer, TenantId = TenantA, FirstName = "Nina", LastName = "Newer", Username = "nina", Email = "nina@example.com", Role = UserRole.SupportWorker, IsActive = true });
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, v1);
+        (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Tuesday)).DefaultUserId = older;
+        await f.Db.SaveChangesAsync();
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2));
+        await ApproveAsync(f, v2);                                                                         // v1's patterns now end on 1 November
+        (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v2.Id && p.DayOfWeek == DayOfWeek.Tuesday)).DefaultUserId = newer;
+        await f.Db.SaveChangesAsync();
+        // v3 starts before v2 does: both v1's and v2's patterns end the day before it, and both are the same support as v3's.
+        var v3 = await AddRevisionAsync(f, 3, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 19));
+
+        await ApproveAsync(f, v3);
+
+        // In-memory reads come back in the order rows were written, so this pins the rule (oldest first, the newest wins) rather than reproducing an unordered PostgreSQL read.
+        Assert.Equal((Guid?)newer, (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v3.Id && p.DayOfWeek == DayOfWeek.Tuesday)).DefaultUserId);
+    }
+    [Fact]
+    public async Task A_support_switched_off_stays_off_when_the_next_revision_carries_it_and_makes_no_shifts()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        var staff = Guid.NewGuid();
+        f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
+        // The coordinator switched Wednesday off (the server refuses its delete and says to) and cleared its shifts from 2 November.
+        var wednesday = await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Wednesday);
+        wednesday.IsActive = false;
+        wednesday.DefaultUserId = staff;
+        f.Db.Shifts.RemoveRange(await f.Db.Shifts.Where(s => s.ShiftPatternId == wednesday.Id && s.ServiceDate >= new DateOnly(2026, 11, 2)).ToListAsync());
+        await f.Db.SaveChangesAsync();
+        // v2 changes Monday only: Wednesday's support is unchanged, so it is carried.
+        var v2 = await AddRevisionAsync(f, 2, new[]
+        {
+            WeekdayBlock(change: b => b with { Days = ApprovalTestSupport.Weekdays.Skip(1).ToArray() }), WeekdayBlock("weekdays-mon", b => b with { Days = new[] { DayOfWeek.Monday }, End = T(14) }),
+        }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+
+        var preview = (await PreviewAsync(f, v2)).Preview!;
+        var outcome = await ApproveAsync(f, v2);
+
+        Assert.False((await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v2.Id && p.DayOfWeek == DayOfWeek.Wednesday)).IsActive);
+        Assert.False(await f.Db.Shifts.AnyAsync(s => s.ServiceDate >= new DateOnly(2026, 11, 2) && s.ServiceDate.DayOfWeek == DayOfWeek.Wednesday));
+        Assert.Equal((5, 5), (preview.ShiftsToCreate, outcome.Approval!.ShiftsCreated));                  // the five new Mondays only
+    }
+
+    [Fact]
+    public async Task A_support_whose_block_was_renumbered_by_the_builder_is_still_the_same_support_and_carries_over()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        // The agreement builder names its blocks b1, b2, ... on every save: the same support under another id.
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock("b1") }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+
+        var preview = (await PreviewAsync(f, v2)).Preview!;
+        var outcome = await ApproveAsync(f, v2);
+
+        Assert.Equal((25, 0, 0), (outcome.OldShifts!.Carried, outcome.OldShifts.Removed, outcome.Approval!.ShiftsCreated));
+        Assert.Equal(0, preview.ChangedPatterns);
+        Assert.Equal(40, await f.Db.Shifts.CountAsync());                                                  // nothing made twice
+    }
+    [Fact]
+    public async Task The_preview_counts_the_patterns_edited_by_hand_that_go_back_to_the_agreements_times()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        var first = (await PreviewAsync(f, v1)).Preview!;
+        await ApproveAsync(f, v1);
+        // Before agreement PR 1 a coordinator could move an agreement pattern by hand: Thursday now runs 10:00 to 14:00, while its block still says 09:00 to 13:00.
+        var thursday = await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Thursday);
+        (thursday.StartTime, thursday.EndTime) = (T(10), T(14));
+        await f.Db.SaveChangesAsync();
+        // v2 has the same weekday support as the agreement says it: Thursday goes back to 09:00 to 13:00.
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+
+        var preview = (await PreviewAsync(f, v2)).Preview!;
+
+        Assert.Equal(0, first.HandEditedPatterns);
+        Assert.Equal((1, 1), (preview.HandEditedPatterns, preview.ChangedPatterns));
+    }
+
+
 
     [Fact]
     public async Task A_new_revision_that_starts_before_the_old_pattern_did_leaves_it_ending_before_it_starts_and_switched_off()
@@ -780,12 +963,12 @@ public class ServiceAgreementApprovalServiceTests
         var published = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2) && s.Status == ShiftStatus.Draft).OrderBy(s => s.ServiceDate).ThenBy(s => s.Id).Take(2).ToListAsync();
         published[0].Status = ShiftStatus.Published; published[1].UserId = Guid.NewGuid();                         // one published, one assigned
         await f.Db.SaveChangesAsync();
-        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 1), end: new DateOnly(2026, 12, 20));      // starts in the past
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 10, 1), end: new DateOnly(2026, 12, 20));      // starts in the past
 
         var counted = (await PreviewAsync(f, v2)).Preview!.OldShiftsRemaining;
 
-        // 12 October to 4 December is 40 shifts and the one on the 8th; none of those on or after 12 October is cancelled; three are not tidy-able, and the 8th is past
-        Assert.Equal((40 - 3 - 1, 1), (counted.Open, counted.Assigned));
+        // 37 can be tidied (40 less the three under way, handed in or finished; the 8th is past): the published one nobody is on is kept and open, the assigned one kept, the other 35 removed
+        Assert.Equal((1, 1, 40 - 3 - 2), (counted.Open, counted.Assigned, counted.Removed));
         Assert.Equal(new DateOnly(2026, 10, 12), counted.FirstDate);                                              // from today on, not from the day v2 starts
     }
 
@@ -847,6 +1030,38 @@ public class ServiceAgreementApprovalServiceTests
         Assert.Equal(1, await f.Db.ServiceAgreementDraftApprovals.CountAsync());
         Assert.Equal(5, await f.Db.ShiftPatterns.CountAsync());
         Assert.Equal(40, await f.Db.Shifts.CountAsync());
+    }
+
+    /// <summary>Deletes, from another context, the first shift this save moves to a new pattern: the carry's UPDATE then finds no row.</summary>
+    private sealed class CarriedShiftDeletedInterceptor(string dbName) : SaveChangesInterceptor
+    {
+        private bool _fired;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var moved = eventData.Context!.ChangeTracker.Entries<Shift>().FirstOrDefault(entry => entry.State == EntityState.Modified && entry.Property(s => s.ShiftPatternId).IsModified);
+            if (_fired || moved is null) return result;
+            _fired = true;
+            await using var other = NewDb(dbName);
+            other.Shifts.Remove(await other.Shifts.SingleAsync(s => s.Id == moved.Entity.Id, cancellationToken));
+            await other.SaveChangesAsync(cancellationToken);
+            return result;
+        }
+    }
+
+    [Fact]
+    public async Task A_carried_shift_deleted_by_someone_else_mid_approval_is_the_busy_answer_not_a_server_error()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, v1);
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
+        await using var racing = NewDb(f.DbName, false, new CarriedShiftDeletedInterceptor(f.DbName));
+
+        var outcome = await new ServiceAgreementApprovalService(racing, new RosterPlacementGate(), new RosterShiftGenerator(), clock: f.Clock).ApproveAsync(TenantA, f.ParticipantId, v2.Id, false, Admin, CancellationToken.None);
+
+        Assert.Equal(ApprovalStatus.Busy, outcome.Status);
+        Assert.Equal(RosterBusyException.Words, Assert.Single(outcome.Errors!));
     }
 
     private static async Task AssertNothingWrittenAsync(Fixture f, int expectedPatterns = 0)

@@ -9,7 +9,7 @@ import { GENDERS } from '@/api/types/enums'
 import { GENDER_LABELS } from '@/api/types/participants'
 import type { Gender } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 
 /**
  * PD-7: Identity card — CORE-02's `personalDetails` group (firstName, lastName, preferredName,
@@ -136,7 +136,7 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
             { label: 'Last Name', value: p.lastName },
             { label: 'Preferred Name', value: p.preferredName },
             { label: 'Middle Name', value: p.middleName },
-            { label: 'Date of Birth', value: p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString('en-AU') : undefined },
+            { label: 'Date of Birth', value: p.dateOfBirth ? formatDateAu(p.dateOfBirth) : undefined },
             {
               label: 'Gender',
               value: p.gender

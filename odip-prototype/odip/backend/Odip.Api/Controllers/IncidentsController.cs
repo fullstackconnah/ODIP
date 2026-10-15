@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -29,6 +30,10 @@ public class IncidentsController : ControllerBase
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
+
+    /// <summary>The saved incident as the list shows it — Create and Update return this, so it can never differ from <see cref="GetAll"/>'s item.</summary>
+    private Task<IncidentListDto> ListItemAsync(Guid id, CancellationToken ct) =>
+        _db.IncidentReports.Where(x => x.Id == id).Select(IncidentProjections.ToListDto(DateTime.UtcNow)).SingleAsync(ct);
 
     /// <summary>Item 9 of the connection map: raises (Required + not yet reported) or completes (reported, or status left Required) the IncidentQscReport obligation task for this incident. Called from both Create and Update, right before the caller's own SaveChangesAsync.</summary>
     private async Task RaiseOrCompleteQscTaskAsync(IncidentReport incident, CancellationToken ct)
@@ -64,6 +69,22 @@ public class IncidentsController : ControllerBase
     private Task<bool> IsValidUserRefAsync(Guid? userId, CancellationToken ct) =>
         userId.HasValue
             ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
+            : Task.FromResult(true);
+
+    /// <summary>An incident belongs to its reporter's organisation. The reporter is already validated against the tenant-filtered Users, so this is the caller's organisation, or for a SuperAdmin with none chosen, the reporter's own.</summary>
+    private Task<Guid> ReporterTenantAsync(Guid reporterId, CancellationToken ct) =>
+        _db.Users.Where(u => u.Id == reporterId).Select(u => u.TenantId).SingleAsync(ct);
+
+    /// <summary>Null is always fine, otherwise the id must resolve to a Participant of the caller's organisation (Participants is tenant-filtered).</summary>
+    private Task<bool> IsValidParticipantRefAsync(Guid? participantId, CancellationToken ct) =>
+        participantId.HasValue
+            ? _db.Participants.AnyAsync(p => p.Id == participantId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>Null is always fine, otherwise the id must resolve to a booking on one of the caller's trips (ParticipantBooking has no query filter of its own).</summary>
+    private Task<bool> IsValidBookingRefAsync(Guid? bookingId, CancellationToken ct) =>
+        bookingId.HasValue
+            ? _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId.Value && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)
             : Task.FromResult(true);
 
     /// <summary>
@@ -186,22 +207,29 @@ public class IncidentsController : ControllerBase
 
     /// <summary>
     /// INC-04: the authorised-vs-unauthorised determination, computed once at Create time only
-    /// (see <see cref="IncidentReport.IsRestrictivePracticeAuthorised"/> for why Update
-    /// never calls this). Authorised means the involved participant had at least one ACTIVE
-    /// register entry of the reported type at this moment — the same tenant-scoped
-    /// _db.RestrictivePractices set INC-05's picker and RestrictivePracticesController both read,
-    /// so "no matching active entry" (including a participant with only inactive/retired rows of
-    /// that type) is Unauthorised, not "unknown". Returns null — not determinable — when this
-    /// isn't a RestrictivePracticeUse incident or no participant was selected.
+    /// (see <see cref="IncidentReport.IsRestrictivePracticeAuthorised"/> for why Update never
+    /// recomputes it). Every register entry is judged by the one shared rule,
+    /// <see cref="RestrictivePracticeAuthorisation.IsAuthorised"/> (active, with who authorised it and
+    /// when). In order: null (not determinable) when this isn't a RestrictivePracticeUse incident or
+    /// no participant or type was given; Unauthorised when the reporter described a practice that is
+    /// not on the register, or said this use was not authorised (<see cref="CreateIncidentDto.UsedWithoutAuthorisation"/>);
+    /// the linked entry's own state when one was linked; otherwise whether the
+    /// participant has any Authorised entry of the reported type. Reads the same tenant-scoped
+    /// _db.RestrictivePractices set as INC-05's picker. The wizard's banner preview
+    /// (previewRpAuthorisation, lib/incidentPrefill.ts) follows the same order.
     /// </summary>
-    private async Task<bool?> DetermineRestrictivePracticeAuthorisationAsync(
-        IncidentType incidentType, RestrictivePracticeType? rpType, Guid? involvedParticipantId, CancellationToken ct)
+    private async Task<bool?> DetermineRestrictivePracticeAuthorisationAsync(CreateIncidentDto dto, CancellationToken ct)
     {
-        if (incidentType != IncidentType.RestrictivePracticeUse) return null;
-        if (rpType == null || involvedParticipantId == null) return null;
+        if (dto.IncidentType != IncidentType.RestrictivePracticeUse) return null;
+        if (dto.RestrictivePracticeType == null || dto.InvolvedParticipantId == null) return null;
+        if (dto.UsedWithoutAuthorisation || !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails)) return false;
 
-        return await _db.RestrictivePractices.AnyAsync(
-            rp => rp.ParticipantId == involvedParticipantId.Value && rp.Type == rpType.Value && rp.IsActive, ct);
+        // The link was validated to belong to this participant and type, so this is that one entry, or every entry of the type when none is linked.
+        var entries = await _db.RestrictivePractices
+            .Where(rp => rp.ParticipantId == dto.InvolvedParticipantId.Value && rp.Type == dto.RestrictivePracticeType.Value
+                && (dto.RestrictivePracticeId == null || rp.Id == dto.RestrictivePracticeId))
+            .ToListAsync(ct);
+        return entries.Any(RestrictivePracticeAuthorisation.IsAuthorised);
     }
 
     [HttpGet]
@@ -210,15 +238,13 @@ public class IncidentsController : ControllerBase
         [FromQuery] IncidentSeverity? severity, [FromQuery] QscReportingStatus? qscStatus,
         [FromQuery] bool? isActive, [FromQuery] bool? isOverdueQsc,
         [FromQuery] Guid? shiftId, [FromQuery] Guid? involvedUserId,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default,
+        // Last, so every existing caller keeps compiling; bound by name like the others.
+        [FromQuery] bool? needsAttention = null)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
-        var query = _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
-            .AsQueryable();
+        var query = _db.IncidentReports.AsQueryable();
 
         // Default: only active records unless explicitly filtered
         if (isActive != false)
@@ -229,8 +255,10 @@ public class IncidentsController : ControllerBase
         // PP-2 follow-up: archiving sets Status = Closed without touching IsActive (see Delete
         // below), so the IsActive filter above no longer keeps archived incidents out of the
         // default list. Exclude Closed by default unless the caller explicitly filters by
-        // status — e.g. the Archived tab's explicit ?status=Closed keeps working unchanged.
-        if (!status.HasValue)
+        // status — e.g. the Archived tab's explicit ?status=Closed keeps working unchanged. Not in
+        // overdue mode: a closed incident still owes its Commission report, and the banner and the
+        // dashboard count it, so the overdue list must show it.
+        if (!status.HasValue && isOverdueQsc != true && needsAttention != true)
             query = query.Where(i => i.Status != IncidentStatus.Closed);
 
         if (tripId.HasValue) query = query.Where(i => i.TripInstanceId == tripId.Value);
@@ -244,13 +272,18 @@ public class IncidentsController : ControllerBase
         // which used to run over the full (unpaged) result set. Once GetAll only sends one page,
         // filtering client-side would silently apply to that page's ~50 rows instead of every
         // matching incident — for compliance data, under-reporting overdue incidents is the worst
-        // possible failure. This is the EXACT same predicate as the IsOverdue24h projection below
-        // (and the identical expression used by Create/Update/GetByTrip's IsOverdue24h), applied
-        // as a Where instead of a Select so it participates in TotalCount/paging correctly.
+        // possible failure. This is the same rule IncidentProjections puts in IsOverdue24h,
+        // applied as a Where instead of a Select so it participates in TotalCount/paging correctly.
         if (isOverdueQsc == true)
-            query = query.Where(i => i.QscReportingStatus == QscReportingStatus.Required
-                && i.QscReportedAt == null
-                && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24);
+            query = query.Where(QscReporting.IsOverdueExpr(DateTime.UtcNow));
+
+        // The dashboard's Incidents group: what still needs somebody. Open (the summary's rule: not Resolved or Closed), or a QSC report overdue, which a
+        // resolved or closed incident can still owe (QscReporting, the one definition). The same set as the summary's count.
+        if (needsAttention == true)
+        {
+            var qscOverdue = _db.IncidentReports.Where(QscReporting.IsOverdueExpr(DateTime.UtcNow)).Select(o => o.Id);
+            query = query.Where(i => (i.Status != IncidentStatus.Resolved && i.Status != IncidentStatus.Closed) || qscOverdue.Contains(i.Id));
+        }
 
         // Correctness fix: IncidentDateTime is user-entered (picked in the report form) and
         // trivially collision-prone — two incidents can share the exact same value. With no
@@ -260,32 +293,7 @@ public class IncidentsController : ControllerBase
         // .Id is a unique Guid primary key, so ThenBy(i => i.Id) makes the total order
         // deterministic and safe to paginate.
         var projectedQuery = query.OrderByDescending(i => i.IncidentDateTime).ThenBy(i => i.Id)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            });
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow));
 
         var result = await PagedResult<IncidentListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
         return Ok(ApiResponse<PagedResult<IncidentListDto>>.Ok(result));
@@ -326,9 +334,7 @@ public class IncidentsController : ControllerBase
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
                 QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
+                IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.CreatedAt, DateTime.UtcNow),
                 CreatedAt = i.CreatedAt,
                 MedicationAdministrationId = i.MedicationAdministrationId,
                 ShiftId = i.ShiftId,
@@ -426,6 +432,10 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));
         if (!await IsValidTripRefAsync(dto.TripInstanceId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Trip not found."));
+        if (!await IsValidParticipantRefAsync(dto.InvolvedParticipantId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved participant not found."));
+        if (!await IsValidBookingRefAsync(dto.ParticipantBookingId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Booking not found."));
         if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
@@ -446,7 +456,7 @@ public class IncidentsController : ControllerBase
         // INC-04: determined once here, from the register as it stood right now — see
         // DetermineRestrictivePracticeAuthorisationAsync and the entity field's XML doc for why
         // this never runs again on Update.
-        var isRpAuthorised = await DetermineRestrictivePracticeAuthorisationAsync(dto.IncidentType, dto.RestrictivePracticeType, dto.InvolvedParticipantId, ct);
+        var isRpAuthorised = await DetermineRestrictivePracticeAuthorisationAsync(dto, ct);
 
         var incident = new IncidentReport
         {
@@ -457,6 +467,7 @@ public class IncidentsController : ControllerBase
             InvolvedParticipantId = dto.InvolvedParticipantId,
             InvolvedUserId = dto.InvolvedStaffId,
             ReportedByUserId = dto.ReportedByStaffId,
+            TenantId = await ReporterTenantAsync(dto.ReportedByStaffId, ct),
             IncidentType = dto.IncidentType,
             OtherTypeSpecify = dto.OtherTypeSpecify,
             RestrictivePracticeType = dto.RestrictivePracticeType,
@@ -499,6 +510,22 @@ public class IncidentsController : ControllerBase
         // Item 9 of the connection map: raise the IncidentQscReport obligation task when this
         // new incident is already Required-and-unreported.
         await RaiseOrCompleteQscTaskAsync(incident, ct);
+
+        // "None of these" from someone who may not write the register (a support worker): a coordinator is asked to add the practice. Nothing is
+        // written to the register here; adding it stays the separate, role-checked RestrictivePracticesController action. A coordinator has
+        // the "Add to restrictive practice register" button in the wizard instead, so gets no task.
+        if (incident.UnapprovedRestrictivePracticeDetails != null && incident.RestrictivePracticeType.HasValue && incident.InvolvedParticipantId.HasValue
+            && !(User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true))
+        {
+            var participant = await _db.Participants.SingleAsync(p => p.Id == incident.InvolvedParticipantId.Value, ct);
+            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+                SourceKey: $"incident-rp-register:{incident.Id}",
+                Type: TaskType.RestrictivePracticeRegisterAddition,
+                Title: $"Add {RestrictivePracticeAuthorisation.TypePhrase(incident.RestrictivePracticeType.Value)} to {participant.FullName}'s restrictive practice register",
+                DueDate: DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)),
+                LinkTo: $"/incidents/{incident.Id}",
+                IncidentReportId: incident.Id), ct);
+        }
 
         // Item 9: filing an incident against a flagged shift note satisfies the
         // FlaggedNoteFollowUp task raised when that note was created/edited — "decide whether an
@@ -560,36 +587,7 @@ public class IncidentsController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
 
-        await _db.Entry(incident).Reference(i => i.TripInstance).LoadAsync(ct);
-        await _db.Entry(incident).Reference(i => i.ReportedByUser).LoadAsync(ct);
-        if (incident.InvolvedParticipantId.HasValue) await _db.Entry(incident).Reference(i => i.InvolvedParticipant).LoadAsync(ct);
-
-        return Ok(ApiResponse<IncidentListDto>.Ok(new IncidentListDto
-        {
-            Id = incident.Id,
-            ServiceType = incident.ServiceType,
-            TripInstanceId = incident.TripInstanceId,
-            TripName = incident.TripInstance?.TripName,
-            IncidentType = incident.IncidentType,
-            OtherTypeSpecify = incident.OtherTypeSpecify,
-            Severity = incident.Severity,
-            Status = incident.Status,
-            Title = incident.Title,
-            IncidentDateTime = incident.IncidentDateTime,
-            Location = incident.Location,
-            ReportedByName = incident.ReportedByUser != null ? incident.ReportedByUser.FirstName + " " + incident.ReportedByUser.LastName : null,
-            InvolvedParticipantId = incident.InvolvedParticipantId,
-            InvolvedParticipantName = incident.InvolvedParticipant != null
-                ? incident.InvolvedParticipant.FirstName + " " + incident.InvolvedParticipant.LastName : null,
-            QscReportingStatus = incident.QscReportingStatus,
-            IsOverdue24h = incident.QscReportingStatus == QscReportingStatus.Required
-                && incident.QscReportedAt == null
-                && (DateTime.UtcNow - incident.CreatedAt).TotalHours > 24,
-            CreatedAt = incident.CreatedAt,
-            MedicationAdministrationId = incident.MedicationAdministrationId,
-            ShiftId = incident.ShiftId,
-            ShiftNoteId = incident.ShiftNoteId
-        }));
+        return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(incident.Id, ct)));
     }
 
     [HttpPut("{id:guid}")]
@@ -604,6 +602,10 @@ public class IncidentsController : ControllerBase
             return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));
         if (!await IsValidTripRefAsync(dto.TripInstanceId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Trip not found."));
+        if (!await IsValidParticipantRefAsync(dto.InvolvedParticipantId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved participant not found."));
+        if (!await IsValidBookingRefAsync(dto.ParticipantBookingId, ct))
+            return BadRequest(ApiResponse<IncidentListDto>.Fail("Booking not found."));
         if (!await IsValidUserRefAsync(dto.InvolvedStaffId, ct))
             return BadRequest(ApiResponse<IncidentListDto>.Fail("Involved staff member not found."));
         if (!await IsValidUserRefAsync(dto.ReportedByStaffId, ct))
@@ -629,12 +631,25 @@ public class IncidentsController : ControllerBase
         i.InvolvedParticipantId = dto.InvolvedParticipantId;
         i.InvolvedUserId = dto.InvolvedStaffId;
         i.ReportedByUserId = dto.ReportedByStaffId;
+        i.TenantId = await ReporterTenantAsync(dto.ReportedByStaffId, ct);
         i.IncidentType = dto.IncidentType;
         i.OtherTypeSpecify = dto.OtherTypeSpecify;
         // INC-04: RestrictivePracticeType/Id may still be corrected here like any other field, but
         // IsRestrictivePracticeAuthorised is deliberately left untouched — it's frozen at whatever
         // Create computed (see the entity field's XML doc). Editing the participant or type here
         // does NOT silently re-run the authorised/unauthorised finding against today's register.
+        // The one exception only ever LOWERS it to false: the editor said this use was not authorised,
+        // relinked the incident to an entry that is Not authorised (e.g. one just added from it), or
+        // switched it to "None of these" (only on that switch, so an old incident saved with its own
+        // text unchanged keeps what it was stored with).
+        if (dto.IncidentType == IncidentType.RestrictivePracticeUse && (dto.UsedWithoutAuthorisation
+            || (string.IsNullOrWhiteSpace(i.UnapprovedRestrictivePracticeDetails) && !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails))
+            || (dto.RestrictivePracticeId.HasValue && dto.RestrictivePracticeId != i.RestrictivePracticeId
+                && !RestrictivePracticeAuthorisation.IsAuthorised(await _db.RestrictivePractices.SingleAsync(rp => rp.Id == dto.RestrictivePracticeId.Value, ct)))))
+            i.IsRestrictivePracticeAuthorised = false;
+        // Linked to a register entry now, so the coordinator's "add it to the register" task is done (a no-op when there is none).
+        if (dto.RestrictivePracticeId.HasValue)
+            await _obligationTasks.CompleteAsync($"incident-rp-register:{i.Id}", ct);
         i.RestrictivePracticeType = dto.RestrictivePracticeType;
         i.RestrictivePracticeId = dto.RestrictivePracticeId;
         // IN-4: same trim/empty->null rule as Create — still frozen against ever creating a
@@ -739,36 +754,7 @@ public class IncidentsController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
 
-        await _db.Entry(i).Reference(x => x.TripInstance).LoadAsync(ct);
-        await _db.Entry(i).Reference(x => x.ReportedByUser).LoadAsync(ct);
-        if (i.InvolvedParticipantId.HasValue) await _db.Entry(i).Reference(x => x.InvolvedParticipant).LoadAsync(ct);
-
-        return Ok(ApiResponse<IncidentListDto>.Ok(new IncidentListDto
-        {
-            Id = i.Id,
-            ServiceType = i.ServiceType,
-            TripInstanceId = i.TripInstanceId,
-            TripName = i.TripInstance?.TripName,
-            IncidentType = i.IncidentType,
-            OtherTypeSpecify = i.OtherTypeSpecify,
-            Severity = i.Severity,
-            Status = i.Status,
-            Title = i.Title,
-            IncidentDateTime = i.IncidentDateTime,
-            Location = i.Location,
-            ReportedByName = i.ReportedByUser != null ? i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName : null,
-            InvolvedParticipantId = i.InvolvedParticipantId,
-            InvolvedParticipantName = i.InvolvedParticipant != null
-                ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-            QscReportingStatus = i.QscReportingStatus,
-            IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                && i.QscReportedAt == null
-                && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-            CreatedAt = i.CreatedAt,
-            MedicationAdministrationId = i.MedicationAdministrationId,
-            ShiftId = i.ShiftId,
-            ShiftNoteId = i.ShiftNoteId
-        }));
+        return Ok(ApiResponse<IncidentListDto>.Ok(await ListItemAsync(i.Id, ct)));
     }
 
     [HttpDelete("{id:guid}")]
@@ -791,37 +777,9 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetByTrip(Guid tripId, CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(i => i.TripInstanceId == tripId && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            }).ToListAsync(ct);
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
     }
@@ -830,37 +788,9 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetByShift(Guid shiftId, CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(i => i.ShiftId == shiftId && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            }).ToListAsync(ct);
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
     }
@@ -869,35 +799,9 @@ public class IncidentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<IncidentListDto>>>> GetOverdueQsc(CancellationToken ct)
     {
         var items = await _db.IncidentReports
-            .Include(i => i.TripInstance)
-            .Include(i => i.ReportedByUser)
-            .Include(i => i.InvolvedParticipant)
             .Where(QscReporting.IsOverdueExpr(DateTime.UtcNow))
             .OrderByDescending(i => i.CreatedAt)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = true,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            }).ToListAsync(ct);
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow)).ToListAsync(ct);
 
         return Ok(ApiResponse<List<IncidentListDto>>.Ok(items));
     }

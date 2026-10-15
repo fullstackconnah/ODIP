@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
-using Odip.Domain.Billing;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Xunit;
@@ -15,7 +14,7 @@ namespace Odip.Tests.Funding;
 
 /// <summary>
 /// The plan budget endpoints against the real service, the real tenant filter and the real audit interceptor (InMemory): what a save stores, what it refuses and
-/// how, the revision and overlap 409s, delete, apply-dates, the Billing hint, and that no other organisation's participant or plan can be reached.
+/// how, the revision and overlap 409s, delete, apply-dates, and that no other organisation's participant or plan can be reached.
 /// </summary>
 public class ParticipantFundingControllerTests
 {
@@ -220,7 +219,6 @@ public class ParticipantFundingControllerTests
             (await kit.Controller.UpdatePlan(id, Guid.NewGuid(), Plan() with { Revision = 1 }, default)).Result,
             (await kit.Controller.DeletePlan(id, Guid.NewGuid(), default)).Result,
             (await kit.Controller.ApplyDatesToProfile(id, Guid.NewGuid(), default)).Result,
-            (await kit.Controller.BillingSourcesHint(id, default)).Result,
         };
 
         foreach (var result in results)
@@ -476,62 +474,5 @@ public class ParticipantFundingControllerTests
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
         Assert.Equal(D(2026, 1, 1), (await theirs.Db.Participants.SingleAsync()).PlanStartDate);
-    }
-
-    // ── The Billing hint ────────────────────────────────────────────────────
-
-    private static FundingSource Source(Guid tenantId, Guid participantId, FundingRouteType route, decimal? budget, DateOnly? start = null, DateOnly? end = null, bool active = true, string? category = null) => new()
-    {
-        Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, RouteType = route, Budget = budget, PlanStartDate = start, PlanEndDate = end, IsActive = active, BudgetCategory = category,
-    };
-
-    [Fact]
-    public async Task Hint_SumsTheActiveNdisSourcesWithABudget_AndReportsTheirDatesRowsAndTheBiggestManagementType_ChangingNothing()
-    {
-        using var kit = Create();
-        var participant = kit.SeedParticipant();
-        kit.Db.FundingSources.AddRange(
-            Source(TenantA, participant.Id, FundingRouteType.PlanManaged, 20_000m, D(2026, 7, 1), D(2027, 6, 30), category: "Core - Social & Community Participation"),
-            Source(TenantA, participant.Id, FundingRouteType.AgencyManaged, 5_000.5m, D(2026, 8, 1), D(2027, 8, 1)),
-            Source(TenantA, participant.Id, FundingRouteType.SelfManaged, 100m),                     // no dates of its own
-            Source(TenantA, participant.Id, FundingRouteType.PlanManaged, 9_999m, active: false),   // inactive
-            Source(TenantA, participant.Id, FundingRouteType.Private, 7_000m),                     // not NDIS money
-            Source(TenantA, participant.Id, FundingRouteType.BusinessToBusiness, 7_000m),
-            Source(TenantA, participant.Id, FundingRouteType.PlanManaged, null),                   // no budget
-            Source(TenantA, participant.Id, FundingRouteType.PlanManaged, 0m));
-        kit.Db.SaveChanges();
-        var before = JsonSerializer.Serialize(await kit.Db.FundingSources.OrderBy(f => f.Id).Select(f => new { f.Id, f.Budget, f.IsActive, f.RouteType }).ToListAsync());
-        kit.ClearAudit();
-
-        var hint = Body(await kit.Controller.BillingSourcesHint(participant.Id, CancellationToken.None));
-
-        Assert.Equal(25_100.5m, hint.Total);
-        Assert.Equal((D(2026, 7, 1), D(2027, 8, 1)), (hint.PlanStart, hint.PlanEnd));
-        Assert.Equal(PlanType.PlanManaged, hint.ManagementType);
-        Assert.Equal(3, hint.Rows.Count);
-        Assert.Contains(hint.Rows, r => r.BudgetCategory == "Core - Social & Community Participation" && r.Budget == 20_000m && r.RouteType == FundingRouteType.PlanManaged);
-        // Read-only: nothing was written, audit included, and the Billing rows are as they were.
-        Assert.Empty(await kit.Db.AuditLogs.ToListAsync());
-        Assert.Equal(before, JsonSerializer.Serialize(await kit.Db.FundingSources.OrderBy(f => f.Id).Select(f => new { f.Id, f.Budget, f.IsActive, f.RouteType }).ToListAsync()));
-    }
-
-    [Fact]
-    public async Task Hint_WithNothingToStartFrom_HasNoRows_AndAnotherOrganisationsSourcesAreNeverSeen()
-    {
-        var database = Guid.NewGuid().ToString();
-        using var theirs = Create(TenantB, database: database);
-        var theirParticipant = theirs.SeedParticipant(TenantB);
-        theirs.Db.FundingSources.Add(Source(TenantB, theirParticipant.Id, FundingRouteType.PlanManaged, 50_000m));
-        theirs.Db.SaveChanges();
-        using var mine = Create(TenantA, database: database);
-        var participant = mine.SeedParticipant();
-        mine.Db.FundingSources.Add(Source(TenantA, participant.Id, FundingRouteType.Private, 3_000m));
-        mine.Db.SaveChanges();
-
-        var empty = Body(await mine.Controller.BillingSourcesHint(participant.Id, CancellationToken.None));
-
-        Assert.Empty(empty.Rows);
-        Assert.Equal(0m, empty.Total);
-        Assert.IsType<NotFoundObjectResult>((await mine.Controller.BillingSourcesHint(theirParticipant.Id, CancellationToken.None)).Result);
     }
 }

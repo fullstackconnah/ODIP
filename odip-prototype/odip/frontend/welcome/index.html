@@ -218,7 +218,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <div class="wrap act__head">
           <div class="act__text" data-quiet data-canopy>
             <h2 id="after-title">When everyone's home</h2>
-            <p class="act__lede">Once the trip is complete, Odip builds each traveller's claim lines from the confirmed bookings and checks claim batches before you upload.</p>
+            <p class="act__lede">Once the trip is complete, Odip builds each traveller's claim lines from the confirmed bookings.</p>
           </div>
         </div>
         <div class="wrap">
@@ -248,11 +248,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
               <span class="screen__hint">Swipe sideways to read the whole screen.</span>
               <div class="screen__view"><div class="screen__frame"><img src="./assets/screens/fund-claim-preview.webp" width="670" height="494" srcset="./assets/screens/fund-claim-preview.webp 1x, ./assets/screens/fund-claim-preview@2x.webp 2x" alt="Claim Preview dialog: an estimated total, the trip's departure and return times and hours per day, then six line items by traveller with day type, dates, hours and amount, and Back, Cancel and Confirm and Generate buttons." loading="lazy" decoding="async" /></div></div>
               <figcaption><span class="tag">Sample data</span> Preview before you generate: each traveller's lines by day type and state price limit</figcaption>
-            </figure>
-            <figure class="screen screen--wide" style="--w:1104px;--wm:616px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/fund-claim-batch-m.webp 1x, ./assets/screens/fund-claim-batch-m@2x.webp 2x" width="616" height="974" /><img src="./assets/screens/fund-claim-batch.webp" width="1104" height="386" srcset="./assets/screens/fund-claim-batch.webp 1x, ./assets/screens/fund-claim-batch@2x.webp 2x" alt="Claim batch validation: error and warning chips such as already claimed, exceeds service booking balance and claim window closed, shown beside the events they apply to." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> Each claim in a batch is checked against its service booking's balance and claim window before you upload</figcaption>
             </figure>
             <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
               <span class="screen__hint">Swipe sideways to read the whole screen.</span>
@@ -315,8 +310,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 <span data-submit-label>Request early access</span>
                 <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-forward" /></svg>
               </button>
-              <p class="form__notice" id="form-notice">We will only use these details to reply about early access to Odip.
-                <!-- TODO(release): collection notice. Add who is collecting these details (collector identity) and a contact for privacy questions before this goes public. -->
+              <p class="form__notice" id="form-notice">We will only use these details to reply about early access to Odip.<span data-platform="collector" hidden></span><span data-platform="privacyNotice" hidden> Read our <a href="/legal/privacy">Privacy Policy</a>, which explains how we handle them and how to contact us.</span>
+                <!-- Filled from src/lib/platformInfo.ts (companyName, legalPublished). -->
               </p>
             </form>
 
@@ -335,21 +330,63 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
     <footer class="site-footer" data-canopy>
       <div class="wrap site-footer__inner" data-quiet>
-        <div class="site-footer__brand">
-          <a class="brand" href="#top" aria-label="Odip, back to the top">
-            <span class="brand__tile"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-travel-explore" /></svg></span>
-            <span class="brand__name">Odip</span>
-          </a>
-          <p>NDIS trip management for supported holidays.</p>
-          <a class="signin" href="/login"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-login" /></svg><span>Sign in</span></a>
+        <div class="site-footer__ack">
+          <h2>Acknowledgement of Country</h2>
+          <p>We acknowledge the Aboriginal and Torres Strait Islander Traditional Custodians of Country throughout Australia, and recognise their continuing connection to land, sea, culture and community. We pay our respects to Elders past and present.</p>
+        </div>
+        <div class="site-footer__cols">
+          <div class="site-footer__brand">
+            <a class="brand" href="#top" aria-label="Odip, back to the top">
+              <span class="brand__tile"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-travel-explore" /></svg></span>
+              <span class="brand__name">Odip</span>
+            </a>
+            <p>NDIS trip management for supported holidays.</p>
+            <a class="signin" href="/login"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-login" /></svg><span>Sign in</span></a>
+          </div>
+          <div class="site-footer__col">
+            <h2>Product</h2>
+            <ul>
+              <li><a href="#before">Before the trip</a></li>
+              <li><a href="#during">During the trip</a></li>
+              <li><a href="#after">After the trip</a></li>
+              <li><a href="#early-access">Request early access</a></li>
+            </ul>
+          </div>
+          <div class="site-footer__col" data-platform-group hidden>
+            <h2>Company</h2>
+            <ul>
+              <li data-platform="companyName" hidden></li>
+              <li data-platform="abn" hidden></li>
+            </ul>
+          </div>
+          <div class="site-footer__col">
+            <h2>Legal</h2>
+            <ul>
+              <li data-platform="privacy" hidden><a href="/legal/privacy">Privacy Policy</a></li>
+              <li data-platform="terms" hidden><a href="/legal/terms">Terms of Service</a></li>
+              <li><a href="/accessibility">Accessibility</a></li>
+            </ul>
+          </div>
+          <div class="site-footer__col" data-platform-group hidden>
+            <h2>Support</h2>
+            <ul>
+              <li data-platform="supportEmail" hidden><a></a></li>
+              <li data-platform="statusUrl" hidden><a target="_blank" rel="noopener noreferrer">Status<span class="sr-only"> (opens in a new tab)</span></a></li>
+            </ul>
+          </div>
         </div>
         <div class="site-footer__notes">
-          <h2>Collection notice</h2>
-          <p>We will only use these details to reply about early access to Odip.</p>
-          <!-- TODO(release): name the collector (legal entity) and give a privacy contact here, matching the notice under the form. -->
-          <h2>Sample data</h2>
-          <p>The screens and moments on this page show sample data. The people, trips and organisations in them are fictional, and some on-screen notes were written for the sample.</p>
+          <div>
+            <h2>Collection notice</h2>
+            <p>We will only use these details to reply about early access to Odip.<span data-platform="collector" hidden></span><span data-platform="privacyNotice" hidden> Read our <a href="/legal/privacy">Privacy Policy</a>, which explains how we handle them and how to contact us.</span></p>
+            <!-- Filled from src/lib/platformInfo.ts (companyName, legalPublished). -->
+          </div>
+          <div>
+            <h2>Sample data</h2>
+            <p>The screens and moments on this page show sample data. The people, trips and organisations in them are fictional, and some on-screen notes were written for the sample.</p>
+          </div>
         </div>
+        <p class="site-footer__legal" data-platform="copyright" hidden></p>
       </div>
     </footer>
 

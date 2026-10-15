@@ -59,9 +59,12 @@ vi.mock('@/api/hooks/admin', () => ({
   useUpdateTenant: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
-vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false }),
-}))
+vi.mock('@/lib/permissions', async () => {
+  const { SETTINGS_PERMS } = await import('@/test/fixtures/settingsPermissions')
+  return { usePermissions: () => SETTINGS_PERMS.SuperAdmin }
+})
+// The rail is how these tests leave Users and come back, so they run at desktop width.
+vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))
 vi.mock('@/lib/firebase', () => ({ auth: { name: 'auth-stub' } }))
 
@@ -75,17 +78,16 @@ beforeEach(() => {
 
 async function openUsersTab() {
   const u = userEvent.setup()
-  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings'] })
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings?section=users'] })
   render(<RouterProvider router={router} />)
-  await u.click(screen.getByRole('tab', { name: 'Users' }))
   return u
 }
 
-describe('SettingsPage Users tab: creating a user', () => {
+describe('SettingsPage Users section: creating a user', () => {
   it('stays open to say the set-password email went, and Done closes the panel', async () => {
     const u = await openUsersTab()
 
-    await u.click(screen.getByRole('button', { name: '+ Add User' }))
+    await u.click(screen.getByRole('button', { name: 'New user' }))
     await u.click(screen.getByRole('button', { name: 'Tenant *' }))
     await u.click(await screen.findByRole('option', { name: 'Sample Support Co' }))
     await u.type(screen.getByLabelText(/first name/i), 'New')
@@ -94,7 +96,7 @@ describe('SettingsPage Users tab: creating a user', () => {
     await u.type(screen.getByLabelText(/username/i), 'newperson')
     await u.click(screen.getByRole('button', { name: 'Role *' }))
     await u.click(await screen.findByRole('option', { name: 'Coordinator' }))
-    await u.click(screen.getByRole('button', { name: 'Create User' }))
+    await u.click(screen.getByRole('button', { name: 'Create user' }))
 
     expect(
       await screen.findByText("We've sent new.person@example.com a link to set their password. It can take a few minutes, so ask them to check spam."),
@@ -112,7 +114,7 @@ describe('SettingsPage Users tab: creating a user', () => {
   })
 })
 
-describe('SettingsPage Users tab: Send set-password email', () => {
+describe('SettingsPage Users section: Send set-password email', () => {
   it('says, in the notices above the table, that the email went', async () => {
     const u = await openUsersTab()
 
@@ -137,34 +139,34 @@ describe('SettingsPage Users tab: Send set-password email', () => {
   })
 })
 
-describe('SettingsPage Users tab: the notices survive leaving the tab', () => {
+describe('SettingsPage Users section: the notices survive leaving the section', () => {
   const SENT = "We've sent ann@example.com a link to set their password. It can take a few minutes, so ask them to check spam."
   const NOT_SENT = 'No link was sent to ann@example.com. To try again, use Send set-password email on their row.'
 
-  it('keeps an unacknowledged failure through a visit to another tab', async () => {
+  it('keeps an unacknowledged failure through a visit to another section', async () => {
     sendPasswordResetEmail.mockRejectedValue(new Error('auth/network-request-failed'))
     const u = await openUsersTab()
     await u.click(screen.getByRole('button', { name: 'Send set-password email to Ann One' }))
     await within(screen.getByRole('status')).findByText(NOT_SENT)
 
-    await u.click(screen.getByRole('tab', { name: 'Appearance' }))
+    await u.click(screen.getByRole('link', { name: 'Appearance' }))
     expect(screen.queryByText(NOT_SENT)).not.toBeInTheDocument()
-    await u.click(screen.getByRole('tab', { name: 'Users' }))
+    await u.click(screen.getByRole('link', { name: 'Users' }))
 
     expect(await within(screen.getByRole('status')).findByText(NOT_SENT)).toBeInTheDocument()
   })
 
-  it('reports a send that finishes after the tab was left, instead of saying it to nobody', async () => {
+  it('reports a send that finishes after the section was left, instead of saying it to nobody', async () => {
     let finishSend!: () => void
     sendPasswordResetEmail.mockReturnValue(new Promise<void>(resolve => { finishSend = resolve }))
     const u = await openUsersTab()
     await u.click(screen.getByRole('button', { name: 'Send set-password email to Ann One' }))
     await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1))
 
-    await u.click(screen.getByRole('tab', { name: 'Appearance' }))
+    await u.click(screen.getByRole('link', { name: 'Appearance' }))
     finishSend()
     await waitFor(() => expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1))
-    await u.click(screen.getByRole('tab', { name: 'Users' }))
+    await u.click(screen.getByRole('link', { name: 'Users' }))
 
     expect(await within(screen.getByRole('status')).findByText(SENT)).toBeInTheDocument()
   })
@@ -175,8 +177,8 @@ describe('SettingsPage Users tab: the notices survive leaving the tab', () => {
     await u.click(screen.getByRole('button', { name: 'Send set-password email to Ann One' }))
     await u.click(await within(screen.getByRole('status')).findByRole('button', { name: 'Dismiss notice about Ann One' }))
 
-    await u.click(screen.getByRole('tab', { name: 'Appearance' }))
-    await u.click(screen.getByRole('tab', { name: 'Users' }))
+    await u.click(screen.getByRole('link', { name: 'Appearance' }))
+    await u.click(screen.getByRole('link', { name: 'Users' }))
 
     expect(screen.getByRole('status')).toBeEmptyDOMElement()
   })

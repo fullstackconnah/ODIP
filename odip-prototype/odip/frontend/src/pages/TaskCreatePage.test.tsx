@@ -5,7 +5,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import TaskCreatePage from './TaskCreatePage'
 import type { TaskDto } from '@/api/types'
 
-const { mockCreateMutateAsync, mockUpdateMutateAsync, mockUseTask } = vi.hoisted(() => ({
+const { mockCreateMutateAsync, mockUpdateMutateAsync, mockUseTask, createState } = vi.hoisted(() => ({
+  createState: { error: null as unknown },
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
   mockUseTask: vi.fn((): { data: TaskDto | undefined; isError: boolean } => ({ data: undefined, isError: false })),
@@ -15,7 +16,7 @@ const { mockCreateMutateAsync, mockUpdateMutateAsync, mockUseTask } = vi.hoisted
 // actual Owner picker wiring (UX-01: migrated from a native <select> to SearchableSelect) and the
 // Trip picker (GEN-1: also migrated from a native <select> to SearchableSelect).
 vi.mock('@/api/hooks', () => ({
-  useCreateTask: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false }),
+  useCreateTask: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: createState.error != null, error: createState.error }),
   useUpdateTask: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
   useTask: mockUseTask,
   useTrips: () => ({ data: [{ id: 'trip-1', tripName: 'Gold Coast Beach Break' }] }),
@@ -54,6 +55,7 @@ beforeEach(() => {
   mockCreateMutateAsync.mockReset()
   mockUpdateMutateAsync.mockReset()
   mockUseTask.mockReset()
+  createState.error = null
   mockUseTask.mockReturnValue({ data: undefined, isError: false })
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-task-1' } })
 })
@@ -134,16 +136,62 @@ describe('TaskCreatePage — edit mode single-task fetch (PP-10/PP-11)', () => {
   })
 })
 
-// Density polish (touch): the "← Back to Tasks" text link was a 19px tap target. It takes the shared TAP_FLOOR
-// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
-// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
-describe('TaskCreatePage — Back link touch target', () => {
-  it('floors the "Back to Tasks" link at --tap-min and keeps its destination and hover colour', () => {
+// The one Back standard (UI survey s.1): the icon BackButton left of the title, named for where it goes.
+describe('TaskCreatePage — Back', () => {
+  it('is the icon Back before the title, a real link to /tasks', () => {
     renderCreatePage()
 
     const back = screen.getByRole('link', { name: /back to tasks/i })
     expect(back).toHaveAttribute('href', '/tasks')
-    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
-    expect(back.className).not.toMatch(/44px/)
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+// Q2 fix round: ReadOnly reads a task only through this form, so it opens as a view: every field disabled, no Save, no write.
+describe('TaskCreatePage — view mode for a role that cannot write', () => {
+  const task = {
+    id: 'task-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
+    participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,
+    taskType: 'Other', title: 'Confirm accommodation booking', ownerId: null, ownerName: null,
+    priority: 'Medium', dueDate: null, status: 'NotStarted', completedDate: null, notes: 'Ring the host',
+  } as unknown as TaskDto
+
+  it('shows ReadOnly "View task" with every field disabled and no Save', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    mockUseTask.mockReturnValue({ data: task, isError: false })
+    renderEditPage()
+
+    expect(screen.getByRole('heading', { name: 'View task' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Confirm accommodation booking')).toBeDisabled()
+    expect(screen.getByDisplayValue('Ring the host')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+    localStorage.clear()
+  })
+
+  it('keeps the editable form for a Coordinator', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    mockUseTask.mockReturnValue({ data: task, isError: false })
+    renderEditPage()
+
+    expect(screen.getByRole('heading', { name: 'Edit task' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Confirm accommodation booking')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    localStorage.clear()
+  })
+})
+
+// STAFF-7 (UI-SURVEY "Generic failure text"): a refused save says the server's reason, and loading says what is loading.
+describe('TaskCreatePage — load and save feedback', () => {
+  it('shows the server message when the save is refused', () => {
+    createState.error = { response: { status: 400, data: { message: 'Due date must be after the trip starts.' } } }
+    renderCreatePage()
+    expect(screen.getByText('Due date must be after the trip starts.')).toBeInTheDocument()
+  })
+
+  it('says it is loading while the task loads', () => {
+    renderEditPage()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading task…')
   })
 })

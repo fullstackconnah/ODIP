@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import indexHtml from './index.html?raw'
 import appIndexHtml from '../index.html?raw'
 import manifestRaw from './assets/screens/manifest.json?raw'
+import { ACKNOWLEDGEMENT_OF_COUNTRY } from '../src/lib/platformFacts'
 
 // CSS is read from disk: the test run does not process CSS (vite.config.ts `css: false`).
 const css = readFileSync(join(__dirname, 'welcome.css'), 'utf-8')
@@ -162,7 +163,6 @@ describe('claims: only what PRODUCT-TRUTH and the finish reviews allow', () => {
   it('times the overdue flag from when the incident was logged, and says Odip exports while the provider uploads', () => {
     expect(visibleText).toContain('still unreported 24 hours after it was logged')
     expect(visibleText).toContain('Odip exports the files; you upload them.')
-    expect(visibleText).toContain("Each claim in a batch is checked against its service booking's balance and claim window before you upload")
   })
 
   it('counts exactly the numbers in the code, and names Oassist as the provider it was built with', () => {
@@ -199,19 +199,19 @@ describe('proof: the real product, every figure tagged as sample data', () => {
 
   it('gives every image real alt text', () => {
     const imgs = Array.from(doc.querySelectorAll('img'))
-    expect(imgs.length).toBe(15)
+    expect(imgs.length).toBe(14)
     for (const img of imgs) {
       expect(img.hasAttribute('alt')).toBe(true)
       expect(img.getAttribute('alt')!.length).toBeGreaterThan(30)
     }
   })
 
-  it('shows all 15 proof screens, each a lazy WebP at 1x and 2x', () => {
+  it('shows all 14 proof screens, each a lazy WebP at 1x and 2x', () => {
     const names = Array.from(doc.querySelectorAll('img')).map((i) => fileOf(i.getAttribute('src')).replace('.webp', ''))
     expect(names).toEqual([
       'crew-roster-warning', 'plan-trip-glance', 'plan-dashboard-missing', 'stay-accommodation', 'crew-roster-board', 'crew-credentials',
       'care-shift-notes-phone', 'report-overdue', 'care-risk-alerts', 'care-shift-detail-phone', 'report-body-map-m',
-      'fund-claim-funding-split-m', 'fund-claim-preview', 'fund-claim-batch', 'report-history',
+      'fund-claim-funding-split-m', 'fund-claim-preview', 'report-history',
     ])
     for (const img of Array.from(doc.querySelectorAll('img'))) {
       expect(img.getAttribute('src')).toMatch(/\.webp$/)
@@ -222,7 +222,7 @@ describe('proof: the real product, every figure tagged as sample data', () => {
 
   it('serves the art-directed narrow crops below 1024px as 1x/2x WebP sources', () => {
     const sources = Array.from(doc.querySelectorAll('picture source'))
-    expect(sources.length).toBe(9)
+    expect(sources.length).toBe(8)
     for (const s of sources) {
       expect(s.getAttribute('media')).toBe('(max-width: 1023px)')
       expect(s.getAttribute('srcset')).toMatch(/-m\.webp 1x, .*-m@2x\.webp 2x$/)
@@ -351,11 +351,79 @@ describe('structure, actions and accessibility', () => {
     expect(doc.querySelector('[data-success] [data-success-email]')).not.toBeNull()
   })
 
-  it('shows the neutral collection notice twice, and leaves the pre-release items as TODO(release) comments', () => {
+  it('shows the neutral collection notice twice, binds its collector and privacy sentences (hidden by default), and keeps early access a TODO(release)', () => {
     const notice = 'We will only use these details to reply about early access to Odip.'
     expect(visibleText.split(notice).length - 1).toBe(2)
     expect(indexHtml).toMatch(/<!-- TODO\(release\): say what early access is/)
-    expect(indexHtml).toMatch(/<!-- TODO\(release\): collection notice\./)
-    expect(indexHtml).toMatch(/<!-- TODO\(release\): name the collector/)
+    expect(indexHtml).not.toMatch(/TODO\(release\): (collection notice|name the collector)/)
+    expect(indexHtml.split('<!-- Filled from src/lib/platformInfo.ts (companyName, legalPublished). -->').length - 1).toBe(2)
+    for (const key of ['collector', 'privacyNotice']) {
+      const sentences = Array.from(doc.querySelectorAll(`[data-platform="${key}"]`))
+      expect(sentences, key).toHaveLength(2)
+      for (const s of sentences) expect(s.hasAttribute('hidden'), key).toBe(true)
+    }
+    // RELEASE-CHECKLIST item 2: the two notices stay identical.
+    expect(squash(doc.querySelector('#form-notice')!.textContent)).toBe(squash(doc.querySelector('.site-footer__notes p')!.textContent))
+  })
+})
+
+describe('the app page (frontend/index.html)', () => {
+  it('declares Australian English, like the landing', () => {
+    expect(appIndexHtml).toMatch(/<html lang="en-AU">/)
+    expect(doc.documentElement.getAttribute('lang')).toBe('en-AU')
+  })
+})
+
+describe('the footer: the acknowledgement, the columns and the bound facts', () => {
+  const footer = doc.querySelector('.site-footer')!
+
+  it('opens with the Acknowledgement of Country, word for word as the app shows it', () => {
+    const ack = footer.querySelector('.site-footer__ack')!
+    expect(footer.querySelector('.site-footer__inner')!.firstElementChild).toBe(ack)
+    expect(squash(ack.querySelector('h2')!.textContent)).toBe('Acknowledgement of Country')
+    expect(squash(ack.querySelector('p')!.textContent)).toBe(ACKNOWLEDGEMENT_OF_COUNTRY)
+  })
+
+  it('heads each column with an h2 over a list: Product, Company, Legal and Support', () => {
+    const cols = Array.from(footer.querySelectorAll('.site-footer__col'))
+    expect(cols.map((c) => squash(c.querySelector('h2')!.textContent))).toEqual(['Product', 'Company', 'Legal', 'Support'])
+    for (const c of cols) expect(c.querySelector('h2 + ul')).not.toBeNull()
+    expect(Array.from(cols[0].querySelectorAll('a')).map((a) => [a.getAttribute('href'), squash(a.textContent)])).toEqual([
+      ['#before', 'Before the trip'], ['#during', 'During the trip'], ['#after', 'After the trip'], ['#early-access', 'Request early access'],
+    ])
+    expect(footer.querySelector('[data-section-link]')).toBeNull()
+  })
+
+  it('always links Accessibility, ships every bound element hidden and every bound fact empty, so nothing false shows without JavaScript', () => {
+    const accessibility = footer.querySelector('a[href="/accessibility"]')!
+    expect(squash(accessibility.textContent)).toBe('Accessibility')
+    expect(accessibility.closest('[hidden]')).toBeNull()
+    const bound = Array.from(doc.querySelectorAll('[data-platform], [data-platform-group]'))
+    expect(bound.map((el) => el.getAttribute('data-platform')).filter(Boolean).sort()).toEqual([
+      'abn', 'collector', 'collector', 'companyName', 'copyright', 'privacy', 'privacyNotice', 'privacyNotice', 'statusUrl', 'supportEmail', 'terms',
+    ])
+    for (const el of bound) expect(el.hasAttribute('hidden'), el.outerHTML.slice(0, 60)).toBe(true)
+    for (const key of ['companyName', 'abn', 'copyright', 'collector', 'supportEmail']) {
+      for (const el of Array.from(doc.querySelectorAll(`[data-platform="${key}"]`))) expect(squash(el.textContent), key).toBe('')
+    }
+  })
+
+  it('keeps the brand to its own width, so the link columns sit beside it rather than pushed to the far edge', () => {
+    const brand = css.split('\n.site-footer__brand {')[1].split('}')[0]
+    expect(brand).toContain('flex: 0 1 16rem;')
+  })
+
+  it('opens Status in a new tab and says so', () => {
+    const status = footer.querySelector('[data-platform="statusUrl"] a')!
+    expect(status.getAttribute('target')).toBe('_blank')
+    expect(status.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(squash(status.querySelector('.sr-only')!.textContent)).toBe('(opens in a new tab)')
+  })
+})
+
+describe('the fixed header', () => {
+  it('is a hair short of opaque, so a software compositor never culls the canvas foot behind it (the black band)', () => {
+    const header = css.split('\n.site-header {')[1].split('}')[0]
+    expect(header).toContain('background: color-mix(in srgb, var(--forest) 99%, transparent);')
   })
 })

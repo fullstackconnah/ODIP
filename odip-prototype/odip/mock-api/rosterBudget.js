@@ -5,7 +5,7 @@
 //
 // What it answers is chosen by switches, like MOCK_COMPETENCY. Each is an environment variable AND can be changed while the mock runs, with POST /api/v1/mock/budget (a test harness that cannot set the mock's
 // environment, like the server screenshot run, changes the scene between states this way):
-//   MOCK_BUDGET_MODE=warn|hard          the organisation's budget mode (default warn). Under hard, a one-off shift that raises the cost past the budget is Blocking for a Coordinator.
+//   MOCK_BUDGET_MODE=warn|hard          the organisation's budget mode (default warn). Under hard, a one-off shift that raises the cost over budget is Blocking for a Coordinator.
 //   MOCK_BUDGET_CALLER=coordinator|admin who is saving (default coordinator). An Admin gets the same finding as a warning that needs a reason.
 //   MOCK_BUDGET_WARNINGS=over           makes Generate, an approval preview and a confirmed booking each return a budget warning (Sienna's Core pool, which is forecast over this quarter).
 // The body of POST /api/v1/mock/budget is any of { mode, caller, warnings, unpriced, review, reset }:
@@ -19,6 +19,7 @@
 // start, and does not end the next day) is refused, as the server refuses it.
 
 const { ledgerFor } = require('./mock-ledger.js')
+const { approachingAt } = require('./mock-money.js')
 
 const RATE = 60
 const BLOCKING = 'Blocking'
@@ -27,13 +28,16 @@ const EN_DASH = '–'
 const WORD_JOINER = '⁠'
 const WRITTEN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const NO_LENGTH_MESSAGE = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift."
+const NO_LENGTH_CODE = 'shift-no-length'
 const round2 = (n) => Math.round(n * 100) / 100
 const money = (n) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const dayMonth = (isoDate) => { const [, m, d] = isoDate.split('-').map(Number); return `${d} ${WRITTEN[m - 1]}` }
 const dayMonthYear = (isoDate) => { const [y, m, d] = isoDate.split('-').map(Number); return `${d} ${WRITTEN[m - 1]} ${y}` }
 // A no-break space on each side of the en dash and a word joiner after it, so a line never splits at the dash (the server's ShiftBudgetAssessor.Period: an en dash allows a break after it even in front of a no-break space).
 const dash = `${NBSP}${EN_DASH}${WORD_JOINER}${NBSP}`
-const periodWords = (start, end) => (start.slice(0, 4) === end.slice(0, 4) ? `${dayMonth(start)}${dash}${dayMonthYear(end)}` : `${dayMonthYear(start)}${dash}${dayMonthYear(end)}`)
+// Each date is one unit too (no-break spaces between its day, month and year), so "1 Oct" never splits.
+const whole = (date) => date.replace(/ /g, NBSP)
+const periodWords = (start, end) => (start.slice(0, 4) === end.slice(0, 4) ? `${whole(dayMonth(start))}${dash}${whole(dayMonthYear(end))}` : `${whole(dayMonthYear(start))}${dash}${whole(dayMonthYear(end))}`)
 
 function minutesOf(t) {
   const [h, m] = String(t).split(':').map(Number)
@@ -98,6 +102,7 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
       bookedAhead: round2(period.bookedAhead - oldCost), unpricedShiftCount: overrides.unpriced,
     }
     const when = periodWords(period.periodStart, period.periodEnd)
+    const periodEnd = whole(dayMonthYear(period.periodEnd))
     const findings = []
     if (forecast > available) {
       const hard = mode() === 'HardLimit' && oneOff && raises
@@ -109,10 +114,12 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
         message: `Takes ${pool.name} to ${money(forecast)} of ${money(available)} for ${when}, ${money(overBy)} over.${already}${costWords}`, budget: figures,
       })
     }
+    const pct = approachingAt(used, available, approaching())
     if (used > available) {
-      findings.push({ code: 'BUDGET_OVER', severity: 'Warning', requiresReason: false, message: `${pool.name} is already over for ${when}: ${money(used)} used of ${money(available)}.`, budget: figures })
-    } else if (available > 0 && used * 100 >= approaching() * available) {
-      findings.push({ code: 'BUDGET_APPROACHING', severity: 'Warning', requiresReason: false, message: `${pool.name} is ${Math.floor((used * 100) / available)}% used for ${when}: ${money(used)} of ${money(available)}.`, budget: figures })
+      // The over and approaching sentences are phase 2b's participant alert words ("{pool} is $X over this period's $Y (to {end})"), so one condition is said one way everywhere.
+      findings.push({ code: 'BUDGET_OVER', severity: 'Warning', requiresReason: false, message: `${pool.name} is ${money(round2(used - available))} over this period's ${money(available)} (to ${periodEnd}).`, budget: figures })
+    } else if (pct !== null) {
+      findings.push({ code: 'BUDGET_APPROACHING', severity: 'Warning', requiresReason: false, message: `${pool.name} is at ${pct}% of this period's ${money(available)} (to ${periodEnd}).`, budget: figures })
     }
     return { findings, note: null }
   }
@@ -123,7 +130,7 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
     if (tasks.some((t) => t.id === id)) return
     tasks.push({
       id, participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null, taskType: 'BudgetEmergencyReview',
-      title: `Review emergency shift past budget: ${participantName} on ${dayMonthYear(shift.serviceDate)}`, ownerId: null, ownerName: null, priority: 'Medium',
+      title: `Review emergency shift over budget: ${participantName} on ${dayMonthYear(shift.serviceDate)}`, ownerId: null, ownerName: null, priority: 'Medium',
       dueDate: new Date(Date.parse(`${today()}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10), status: 'NotStarted', completedDate: null,
       linkTo: `/rostering?date=${shift.serviceDate}&participant=${shift.participantId}`, sourceKey: `budget-emergency:${shift.id}`, shiftId: shift.id,
     })
@@ -148,6 +155,20 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
 
   const dtoOf = (shift, findings) => ({ ...shift, findings })
 
+  /** The server's 400 for a pair of times with no length, with its code (RosteringController.ShiftNoLengthCode); null when the pair has a length. */
+  const refuseNoLength = (times) => (lengthMinutes(times.startTime, times.endTime, times.endsNextDay) <= 0 ? respond(400, failEnvelope(null, [NO_LENGTH_MESSAGE], NO_LENGTH_CODE)) : null)
+
+  /**
+   * A pattern's create (`existing` null) or update, as the server refuses it: the times it would have give no length. An update is only refused when it CHANGES the times (the form sends them back as "HH:mm"
+   * where the store holds "HH:mm:ss"), so a pattern saved before the rule can still be switched off or have its notes edited.
+   */
+  function refusePatternNoLength(existing, body) {
+    const next = { startTime: body.startTime ?? existing?.startTime, endTime: body.endTime ?? existing?.endTime, endsNextDay: body.endsNextDay ?? existing?.endsNextDay }
+    const hhmm = (time) => String(time).slice(0, 5)
+    if (existing && hhmm(next.startTime) === hhmm(existing.startTime) && hhmm(next.endTime) === hhmm(existing.endTime) && !!next.endsNextDay === !!existing.endsNextDay) return null
+    return refuseNoLength(next)
+  }
+
   const get = []
   const post = [
     // The scene, for a harness that cannot set the mock's environment (see the header). Answers the settings now in force.
@@ -163,13 +184,15 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
     }],
     // The shift panel's live dry run: the findings, and the informational line in the envelope's message when the shift could not be checked.
     ['rostering/shifts/check', (body) => {
-      if (lengthMinutes(body.startTime, body.endTime, body.endsNextDay) <= 0) return respond(400, failEnvelope(null, [NO_LENGTH_MESSAGE]))
+      const noLength = refuseNoLength(body)
+      if (noLength) return noLength
       const { findings, note } = assess(body)
       return note ? respond(200, { success: true, data: findings, message: note, errors: null }) : findings
     }],
     // Create: refuses what the server refuses, accepts an emergency (with the Admin's review task), and keeps the shift so the board shows it and its marker.
     ['rostering/shifts', (body) => {
-      if (lengthMinutes(body.startTime, body.endTime, body.endsNextDay) <= 0) return respond(400, failEnvelope(null, [NO_LENGTH_MESSAGE]))
+      const noLength = refuseNoLength(body)
+      if (noLength) return noLength
       const { findings } = assess(body)
       const forecastOver = findings.find((f) => f.code === 'BUDGET_FORECAST_OVER')
       const emergency = !!body.emergency && !!forecastOver
@@ -194,7 +217,7 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
         startTime: `${String(body.startTime).slice(0, 5)}:00`, endTime: `${String(body.endTime).slice(0, 5)}:00`, endsNextDay: !!body.endsNextDay,
         durationHours: hoursOf(body.startTime, body.endTime, body.endsNextDay), ratio: body.ratio, nightType: body.nightType, status: 'Draft', shiftPatternId: null, notes: body.notes || null,
         overrideReason: emergency ? `Emergency or safety: ${body.overrideReason.trim()}` : adminOverride ? body.overrideReason.trim() : null, assigneeOnApprovedLeave: false, findings: [],
-        ...(emergency ? { acknowledgedFindingCodes: ['BUDGET_EMERGENCY'], budgetReview: { state: 'Pending', recordedAt: new Date().toISOString(), reviewTaskTitle: `Review emergency shift past budget: ${who ? who.fullName : 'Participant'} on ${dayMonthYear(body.serviceDate)}` } } : adminOverride ? { acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] } : {}),
+        ...(emergency ? { acknowledgedFindingCodes: ['BUDGET_EMERGENCY'], budgetReview: { state: 'Pending', recordedAt: new Date().toISOString(), reviewTaskTitle: `Review emergency shift over budget: ${who ? who.fullName : 'Participant'} on ${dayMonthYear(body.serviceDate)}` } } : adminOverride ? { acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] } : {}),
       }
       rosterShifts.push(shift)
       if (emergency) raiseTask(shift, who ? who.fullName : 'Participant')
@@ -222,7 +245,7 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
     }]
   }
 
-  return { get, post, put, assess, sampleWarnings, raiseTask }
+  return { get, post, put, assess, sampleWarnings, raiseTask, refuseNoLength, refusePatternNoLength }
 }
 
 module.exports = { create }

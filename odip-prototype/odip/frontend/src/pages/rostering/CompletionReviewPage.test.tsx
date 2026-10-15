@@ -52,6 +52,8 @@ function makeQueueItem(overrides: Partial<CompletionQueueItemDto> = {}): Complet
     dosesWithoutOutcome: 0,
     breakMinutes: 0,
     startWasManual: false,
+    timesAdjusted: false,
+    incidentCount: 0,
     ...overrides,
   }
 }
@@ -140,7 +142,7 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^approve$/i }))
 
@@ -157,7 +159,7 @@ describe('CompletionReviewPage', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^approve$/i }))
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
 
     expect(screen.getByText(/incidents during this shift/i)).toBeInTheDocument()
     expect(screen.getByText(/missed evening medication dose/i)).toBeInTheDocument()
@@ -168,7 +170,7 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^return$/i }))
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^return$/i }))
 
@@ -212,8 +214,8 @@ describe('CompletionReviewPage', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
-    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^return$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^approve/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^return/i })).not.toBeInTheDocument()
     expect(screen.getByText(/read-only access/i)).toBeInTheDocument()
   })
 
@@ -242,5 +244,85 @@ describe('CompletionReviewPage', () => {
     await user.click(nextButton)
 
     expect(mockUseCompletions).toHaveBeenCalledWith(expect.objectContaining({ status: 'PendingReview' }), 2, 50)
+  })
+})
+
+// A failed load is the house error banner (a danger Callout, announced at once, with its retry), not an EmptyState that reads as "nothing here".
+describe('CompletionReviewPage — a failed load', () => {
+  it('shows the error banner with Try again, not an empty state', async () => {
+    const refetch = vi.fn()
+    mockUseCompletions.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderPage()
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/couldn't load shift completions/i)
+    await userEvent.setup().click(within(alert).getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
+  })
+})
+
+describe('CompletionReviewPage: what the worker confirmed at Finish', () => {
+  it('flags only the rows whose times the worker moved, beside the variance badge', () => {
+    mockUseCompletions.mockReturnValue({
+      data: makePaged([makeQueueItem({ timesAdjusted: true }), makeQueueItem({ shiftId: 'shift-2', completionId: 'sc-2', participantName: 'Mia Chen' })]),
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+
+    expect(screen.getAllByText('Times adjusted by the worker')).toHaveLength(1)
+  })
+
+  it('shows the stamped and moved times, the reason, the kilometres and the report answer in the review dialog', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ timesAdjusted: true })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({
+      data: makeCompletionDetail({
+        actualStart: '2026-09-07T21:55:00Z', originalActualStart: '2026-09-07T22:02:00Z', timesAdjusted: true,
+        timeAdjustmentReason: 'Arrived early to help with breakfast.', kilometres: 12.5, anythingToReport: true,
+      }),
+    })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText(/Start 8:02\s?am, changed to 7:55\s?am\./i)).toBeInTheDocument()
+    expect(within(dialog).getByText('Reason: Arrived early to help with breakfast.')).toBeInTheDocument()
+    expect(within(dialog).getByText('12.5 km driven with the participant')).toBeInTheDocument()
+    expect(within(dialog).getByText('The worker said there was something to report.')).toBeInTheDocument()
+  })
+
+  it('says nothing extra for a completion the worker did not change', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail() })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+
+    expect(screen.queryByText(/changed to/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/km driven/)).not.toBeInTheDocument()
+  })
+})
+
+describe('CompletionReviewPage: shifts sent back before (review CR-B Must 1)', () => {
+  it('says on the queue row how many times the shift was returned, and only when it was', () => {
+    mockUseCompletions.mockReturnValue({
+      data: makePaged([makeQueueItem({ returnCount: 2 }), makeQueueItem({ shiftId: 'shift-2', completionId: 'sc-2', participantName: 'Mia Chen' })]),
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+
+    expect(screen.getAllByText('Returned 2 times')).toHaveLength(1)
+  })
+
+  it('says it in the review dialog too', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ returnCount: 1 })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ shiftReturnCount: 1 }) })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+
+    expect(within(screen.getByRole('alertdialog')).getByText('Returned to the worker 1 time before.')).toBeInTheDocument()
   })
 })

@@ -15,13 +15,13 @@ export type PageKey =
   | 'bookings'
   | 'qualifications'
   | 'claims'
-  | 'billing'
   | 'rostering'
   | 'leave-approvals'
   | 'settings'
   | 'medications'
   | 'caregiver-submissions'
-  | 'agreement-drafts';
+  | 'agreement-drafts'
+  | 'budgets';
 
 const SUPPORT_WORKER_PAGES: PageKey[] = [
   'dashboard',
@@ -38,19 +38,21 @@ const SUPPORT_WORKER_PAGES: PageKey[] = [
 /**
  * The pages ReadOnly cannot open. ReadOnly reads most of the app, but each of these sits behind a controller that admits only
  * SuperAdmin, Admin and Coordinator for EVERY request, reads included (ReadOnlyMiddleware, which 403s writes, never gets that far):
- * RosteringController (the five Rostering pages, and the flagged-notes read that Incidents makes), LeaveController, BillingController
- * and ClaimsController (billing, claims), CaregiverSubmissionsController, SettingsController / ProviderSettingsController, and the GETs of ServiceAgreementDraftsController (the agreement draft
- * page: a draft carries unit prices, totals and the pricing answer, and money is never visible to ReadOnly or SupportWorker; SupportWorker's allow-list above does not name it either).
+ * RosteringController (the five Rostering pages, and the flagged-notes read that Incidents makes), LeaveController,
+ * ClaimsController (claims), CaregiverSubmissionsController, ProviderSettingsController and the admin controllers behind the Settings page
+ * (its one GET ReadOnly may make, GET /settings for the qualification warning window, is read by the Qualifications, Staff and Dashboard pages, not here), and the GETs of ServiceAgreementDraftsController (the agreement draft
+ * page: a draft carries unit prices, totals and the pricing answer, and money is never visible to ReadOnly or SupportWorker; SupportWorker's allow-list above does not name it either), and the
+ * Budgets list (GET api/v1/funding/budgets is class-wide SuperAdmin, Admin and Coordinator, like the participant's Funding tab: every figure on it is money, and `canManageFunding` below is its rule).
  * Listing them here keeps the menu, the routes and the in-page links from offering ReadOnly a page that can only answer 403.
  */
 const READ_ONLY_REFUSED_PAGES: PageKey[] = [
   'rostering',
   'leave-approvals',
-  'billing',
   'claims',
   'settings',
   'caregiver-submissions',
   'agreement-drafts',
+  'budgets',
 ];
 
 function getCurrentUser(): Record<string, unknown> {
@@ -77,6 +79,9 @@ export function usePermissions() {
   // always matches who the server will actually attribute a new record to. Used for read-only
   // "administered by" style displays (see RecordAdministrationModal) rather than any write path.
   const fullName = (user.fullName ?? null) as string | null;
+  // The signed-in user's sign-in name and organisation, from the same odip_user blob (AuthResponseDto). Settings › Profile shows them.
+  const username = (user.username ?? null) as string | null;
+  const tenantName = (user.tenantName ?? null) as string | null;
 
   const isSuperAdmin = role === 'SuperAdmin';
   const isAdmin = role === 'Admin';
@@ -88,6 +93,8 @@ export function usePermissions() {
     role,
     id,
     fullName,
+    username,
+    tenantName,
     isSuperAdmin,
     isAdmin,
     isCoordinator,
@@ -102,25 +109,25 @@ export function usePermissions() {
     },
 
     /**
-     * Controls create/edit/delete button visibility.
+     * Controls create/edit/delete button visibility, and the requiresWrite routes.
      * SupportWorker: false — buttons hidden (except canCreateIncidents).
-     * ReadOnly: true — buttons visible, backend blocks the actual mutations.
+     * ReadOnly: false — owner decision 2026-10-12: ReadOnly hides write controls, since ReadOnlyMiddleware refuses every write it sends.
      */
-    canWrite: !isSupportWorker,
+    canWrite: !isSupportWorker && !isReadOnly,
 
     /**
      * Participant inquiry, draft-intake, and onboarding mutations are restricted by
      * ParticipantInquiriesController to Admin, Coordinator, and SuperAdmin. This is
      * deliberately separate from canWrite: ReadOnly historically satisfied canWrite
-     * even though the lifecycle API rejects its mutation requests.
+     * even though the lifecycle API rejects its mutation requests (canWrite now excludes ReadOnly too).
      */
     canManageParticipantLifecycle: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
      * SupportWorker can create incidents (their only write action).
-     * ReadOnly: true — button visible, backend blocks the save.
+     * ReadOnly: false — ReadOnlyMiddleware refuses the save, so the button is hidden.
      */
-    canCreateIncidents: true,
+    canCreateIncidents: !isReadOnly,
 
     /**
      * Medication CRUD (create/edit medications, amend administrations) is limited to
@@ -261,6 +268,24 @@ export function usePermissions() {
      * any non-ReadOnly authenticated user manages their own (ReadOnlyMiddleware already 403s the
      * PUT ahead of the controller). */
     canManageNotifications: isSuperAdmin || isAdmin,
+
+    /**
+     * Settings → Import data and the Import buttons. ImportsController admits Admin and SuperAdmin, and the import refuses a SuperAdmin who is
+     * not viewing an organisation (an import belongs to one), so: an Admin, or a SuperAdmin viewing as an organisation.
+     */
+    canImportData: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+
+    /**
+     * Settings → Integrations (Employment Hero). EmploymentHeroController admits Admin and SuperAdmin and refuses a SuperAdmin who is not viewing an
+     * organisation (an integration belongs to one), as the import does.
+     */
+    canManageIntegrations: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+
+    /**
+     * Whether an organisation's settings are in scope: an Admin or a Coordinator always has one, a SuperAdmin only while viewing one
+     * (the tenant switcher's odip_viewing_tenant). Settings shows its Organisation, Pricing and budgets, Content and Data groups only then.
+     */
+    hasOrganisation: isAdmin || isCoordinator || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
 
     /**
      * A participant's plan budget (the Funding tab, and the budget card on Intake and the Profile wizard). It is money, and money is never visible to SupportWorker or ReadOnly:

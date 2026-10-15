@@ -3,7 +3,7 @@ import type { ChecklistItemType, ChecklistItemValue } from './enums'
 /**
  * INTAKE-03/04, CommunityAccessDailyLiving stream. `id` is null for a synthesized "not yet
  * assessed" placeholder — the backend always returns exactly one entry per ChecklistItemType (see
- * ParticipantChecklistItemsController.GetForParticipant), even for a participant with no rows
+ * ParticipantChecklistItemsController.MaterializeAll), even for a participant with no rows
  * yet. Same shape as ParticipantAdlAssessmentDto (INTAKE sub-wave C2).
  */
 export interface ParticipantChecklistItemDto {
@@ -25,11 +25,6 @@ export interface ParticipantChecklistItemDto {
  */
 export interface CreateParticipantChecklistItemDto {
   itemType: ChecklistItemType
-  value: ChecklistItemValue | null
-  notes?: string | null
-}
-
-export interface UpsertParticipantChecklistItemDto {
   value: ChecklistItemValue | null
   notes?: string | null
 }

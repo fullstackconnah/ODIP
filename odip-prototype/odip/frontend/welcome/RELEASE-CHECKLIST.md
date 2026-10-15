@@ -12,7 +12,7 @@ The public landing page lives at `/welcome/` (its own Vite HTML entry, `welcome/
 
 The page ships a neutral notice: "We will only use these details to reply about early access to Odip." It appears under the form and in the footer.
 
-- [ ] Name who is collecting the details (the legal entity) and give a privacy contact. Two `TODO(release)` comments in `welcome/index.html` mark the spots: one under the form, one in the footer. Keep the two notices identical.
+- [ ] Name who is collecting the details (the legal entity) and give a privacy contact. Both notices, under the form and in the footer, fill themselves from `src/lib/platformInfo.ts`: `companyName` adds the collector sentence, and `legalPublished` (set in the PR that commits the approved Privacy Policy) adds the sentence linking to it. Nothing in `welcome/index.html` needs to change. `page.test.ts` keeps the two notices identical.
 - [ ] Decide the retention period for stored requests and say so in the notice if it is stated anywhere.
 - [ ] Say what early access is. The line above the form still only says "We will reply by email about early access to Odip." A `TODO(release)` comment under it marks the spot: who early access is for, any cost or commitment, who will write, and when. State a timeframe only if it will be honoured. The success message already repeats the address the person typed.
 
@@ -36,7 +36,7 @@ The figures and sentences on the page were counted and checked against the code 
 - [ ] 25 audited record types (`AuditedEntities.cs`).
 - [ ] The 24-hour overdue flag for reportable incidents: the 24 hours run from when the incident record was created in Odip, not from when it happened (`QscReporting.cs`), so the page says "still unreported 24 hours after it was logged".
 - [ ] The dashboard's 60-day "still missing" counts. The first viewport repeats the sample counts of the dashboard screen as text (1 accommodation, 1 vehicle, 2 staff); keep them equal to `plan-dashboard-missing` after any recapture.
-- [ ] Fund wording: the app labels the trip-claim export "BPR CSV" (`ClaimDetailPage.tsx`) and the claim-batch download "PRODA file" (`ClaimBatchDetailPage.tsx`). The page calls the NDIA-managed export "the NDIS bulk payment file", says plan-managed and self-managed travellers each get an invoice PDF, and "Odip exports the files; you upload them". Re-verify both exports and their labels on the release commit.
+- [ ] Fund wording: the app labels the trip-claim export "BPR CSV" (`ClaimDetailPage.tsx`). The page calls the NDIA-managed export "the NDIS bulk payment file", says plan-managed and self-managed travellers each get an invoice PDF, and "Odip exports the files; you upload them". Re-verify the export and its label on the release commit.
 - [ ] The shift-note caption says "A shift note that mentions an injury prompts an incident report." The prompt is a keyword scan the code calls advisory, with false positives and false negatives (`ShiftNoteFlagging.cs`), so never reword it as detection.
 - [ ] The page never says "compliant", and never promises a compliance outcome (no complaints register, no 5-day rule, no submission to the Commission). The test fails on "complian" anywhere in the page source, file names included, which is why the report-on-time screens are named `report-*`. Say "accommodation", never "rooms".
 - [ ] QSC is defined once, by its full name: "QSC is the NDIS Quality and Safeguards Commission" (dashboard caption).

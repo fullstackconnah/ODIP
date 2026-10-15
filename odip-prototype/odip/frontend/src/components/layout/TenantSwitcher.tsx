@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAdminTenantsSummary } from '@/api/hooks'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { switchViewAndReload } from '@/lib/viewAsSwitch'
+import { TONE } from '@/lib/tone'
 
 export default function TenantSwitcher() {
   const [open, setOpen] = useState(false)
@@ -65,7 +67,7 @@ export default function TenantSwitcher() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open])
 
-  const switchTenant = (tenantId: string) => {
+  const switchTenant = (tenantId: string) => switchViewAndReload(() => {
     // Restore original SuperAdmin user if we were impersonating
     const savedAdmin = localStorage.getItem('odip_superadmin_user')
     if (savedAdmin) {
@@ -75,8 +77,7 @@ export default function TenantSwitcher() {
     localStorage.removeItem('odip_viewing_user')
     localStorage.setItem('odip_viewing_tenant', tenantId)
     localStorage.setItem('odip_last_tenant', tenantId)
-    window.location.reload()
-  }
+  })
 
   return (
     <div ref={ref} className="relative">
@@ -90,16 +91,16 @@ export default function TenantSwitcher() {
         aria-expanded={open}
         aria-label={`SA ${current?.name ?? 'Loading…'}`}
         title={current?.name}
-        className="flex min-h-[var(--tap-min)] items-center gap-1.5 bg-[#eef2ff] border border-[#c7d2fe] rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-[#e0e7ff] transition-colors"
+        className={`flex min-h-[var(--tap-min)] items-center gap-1.5 ${TONE.info.solid} border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 cursor-pointer hover:brightness-95 transition-[filter]`}
       >
-        <span className="text-xs bg-[#6366f1] text-white px-1.5 py-0.5 rounded font-bold tracking-wide">SA</span>
-        <span className="hidden text-sm font-semibold text-[#3730a3] sm:inline">{current?.name ?? 'Loading…'}</span>
-        <span className="text-[#6366f1] text-xs">▾</span>
+        <span className="text-xs bg-[var(--color-info)] text-[var(--color-secondary-foreground)] px-1.5 py-0.5 rounded font-bold tracking-wide">SA</span>
+        <span className="hidden text-sm font-semibold sm:inline">{current?.name ?? 'Loading…'}</span>
+        <span className="text-xs">▾</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-[#1e2030] border border-[#334155] rounded-xl shadow-2xl overflow-hidden z-50">
-          <div className="px-3 py-2 border-b border-[#334155] text-xs text-[#64748b] uppercase tracking-wider">
+        <div className="absolute right-0 mt-1 w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+          <div className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
             Viewing as tenant
           </div>
           <div className="p-1.5">
@@ -109,19 +110,19 @@ export default function TenantSwitcher() {
                 onClick={() => setPendingTenant({ id: tenant.id, name: tenant.name })}
                 className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
                   tenant.id === viewingId
-                    ? 'bg-[rgba(99,102,241,0.15)]'
-                    : 'hover:bg-[rgba(255,255,255,0.05)]'
+                    ? TONE.info.soft
+                    : 'hover:bg-[var(--color-accent)]'
                 } ${!tenant.isActive ? 'opacity-50' : ''}`}
               >
-                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${tenant.isActive ? 'bg-[#22c55e]' : 'bg-[#ef4444]'}`} />
-                <span className={`text-sm flex-1 ${tenant.id === viewingId ? 'text-[#e2e8f0] font-medium' : 'text-[#94a3b8]'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${tenant.isActive ? 'bg-[var(--color-success)]' : 'bg-[var(--color-destructive)]'}`} />
+                <span className={`text-sm flex-1 ${tenant.id === viewingId ? 'text-[var(--color-foreground)] font-medium' : 'text-[var(--color-muted-foreground)]'}`}>
                   {tenant.name}
                 </span>
                 {tenant.id === ownTenantId && (
-                  <span className="text-[13px] text-[#94a3b8]">(yours)</span>
+                  <span className="text-[13px] text-[var(--color-muted-foreground)]">(yours)</span>
                 )}
                 {!tenant.isActive && (
-                  <span className="text-[13px] text-[#64748b]">inactive</span>
+                  <span className="text-[13px] text-[var(--color-muted-foreground)]">inactive</span>
                 )}
               </button>
             ))}

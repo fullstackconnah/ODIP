@@ -3,8 +3,10 @@ import { CalendarOff, Plus } from 'lucide-react'
 import { useMyLeave, useCreateLeaveRequest, useCancelMyLeave, useCreateMyUnavailability, useCancelMyUnavailability } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
+import { BackButton } from '@/components/BackButton'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Tabs } from '@/components/Tabs'
@@ -14,6 +16,8 @@ import { LEAVE_TYPE_LABELS, LEAVE_STATUS_COLORS } from '@/api/types'
 import type { LeaveRequestDto, RecurringUnavailabilityDto, CreateLeaveRequestDto, CreateRecurringUnavailabilityDto } from '@/api/types'
 import { formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 type WithdrawTarget = { kind: 'leave' | 'unavailability'; id: string }
 
@@ -86,13 +90,9 @@ export default function PortalLeavePage() {
     ) },
     ...(canRequestLeave ? [{
       key: 'actions', header: '', align: 'right' as const, render: (r: LeaveRequestDto) => r.status === 'Pending' && (
-        <button
-          type="button"
-          onClick={() => setWithdrawTarget({ kind: 'leave', id: r.id })}
-          className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline"
-        >
+        <Button variant="ghost-danger" size="sm" onClick={() => setWithdrawTarget({ kind: 'leave', id: r.id })} aria-label={`Withdraw: ${formatEffectiveRange(r.startDate, r.endDate)}`}>
           Withdraw
-        </button>
+        </Button>
       ),
     }] : []),
   ]
@@ -111,35 +111,31 @@ export default function PortalLeavePage() {
     ) },
     ...(canRequestLeave ? [{
       key: 'actions', header: '', align: 'right' as const, render: (r: RecurringUnavailabilityDto) => r.status === 'Pending' && (
-        <button
-          type="button"
-          onClick={() => setWithdrawTarget({ kind: 'unavailability', id: r.id })}
-          className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline"
-        >
+        <Button variant="ghost-danger" size="sm" onClick={() => setWithdrawTarget({ kind: 'unavailability', id: r.id })} aria-label={`Withdraw: ${r.dayOfWeek} ${r.startTime.slice(0, 5)}–${r.endTime.slice(0, 5)}, ${formatEffectiveRange(r.effectiveFrom, r.effectiveTo)}`}>
           Withdraw
-        </button>
+        </Button>
       ),
     }] : []),
   ]
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="My leave" subtitle="Request leave or a regular weekly unavailability, and track what's been decided.">
-        {canRequestLeave && (
-          <button
-            type="button"
-            onClick={openForm}
-            className="flex items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)] shadow-md hover:opacity-90"
-          >
-            <Plus className="w-4 h-4" /> {tab === 'leave' ? 'Request leave' : 'Add unavailability'}
-          </button>
-        )}
-      </PageHeader>
+      <div className="flex items-start gap-2">
+        <BackButton to="/portal" label="my shifts" variant="icon" history={false} />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title="My leave"
+            action={canRequestLeave && (
+              <Button size="md" onClick={openForm}>
+                <Plus className="w-4 h-4" /> {tab === 'leave' ? 'Request leave' : 'Add unavailability'}
+              </Button>
+            )}
+          />
+        </div>
+      </div>
 
       {actionError && (
-        <div role="alert" className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {actionError}
-        </div>
+        <Callout tone="error">{actionError}</Callout>
       )}
 
       <Tabs
@@ -150,14 +146,11 @@ export default function PortalLeavePage() {
       />
 
       {isLoading ? (
-        <p className="text-sm text-[var(--color-muted-foreground)]">Loading…</p>
+        <PageState kind="loading" noun="leave requests" />
       ) : isError ? (
-        <EmptyState
-          icon={CalendarOff}
-          title="Couldn't load leave requests."
-          description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: () => refetch() }}
-        />
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
+          Couldn't load your leave. Check your connection and try again.
+        </Callout>
       ) : tab === 'leave' ? (
         leave.length === 0 ? (
           <EmptyState

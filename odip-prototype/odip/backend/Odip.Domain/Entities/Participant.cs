@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 
@@ -119,7 +120,7 @@ public class Participant : ITenantEntity
     public string? SilProviderName { get; set; }
     public string? SilProviderContactPhone { get; set; }
     /// <summary>
-    /// Free text rather than a validated picklist (judged against field-registry conventions —
+    /// Free text rather than a validated picklist (judged against the Master Data Dictionary's conventions —
     /// c.f. Region, MobilityNotes): unlike MobilitySupportOptions, there is no curated Master
     /// Data Dictionary list for accommodation type to validate against, and the ruling explicitly
     /// allows "free text or small enum".
@@ -131,8 +132,7 @@ public class Participant : ITenantEntity
     /// LIVING-01's one genuinely shared field: modelled ONCE and shown for whichever arrangement
     /// is selected (Family, Independent, or Supported Accommodation), rather than duplicated per
     /// arrangement type — mirrors INTAKE-04's de-duplication principle. Also satisfies LIVING-04's
-    /// ruled "notes" field. See conditionalFields.ts's multi-def pitfall warning for why this is a
-    /// single unioned ConditionalFieldDef on the frontend rather than one per arrangement type.
+    /// ruled "notes" field.
     /// </summary>
     public string? LivingArrangementNotes { get; set; }
 
@@ -152,7 +152,7 @@ public class Participant : ITenantEntity
 
     /// <summary>
     /// Transfer/mobility support methods. Values come from the Master Data Dictionary
-    /// mobility picklist (SeedData/DataDictionarySeed.json) — the spreadsheet is the
+    /// mobility picklist (ODIP Master Data Dictionary.xlsx at the repo root) — the spreadsheet is the
     /// source of truth for the allowed set.
     /// </summary>
     public List<string> MobilitySupportOptions { get; set; } = new();
@@ -255,6 +255,33 @@ public class Participant : ITenantEntity
     /// introduction.
     /// </summary>
     public DateTime? IntakeCompletedAt { get; set; }
+
+    /// <summary>
+    /// When "Begin services" was used on the onboarding checklist (UTC; owner decision 2026-10-13). Set once, on a draft in onboarding, together with
+    /// <see cref="IsActive"/>; the participant stays a draft (the Onboarding tab) but can receive services until "Make active" finalises them.
+    /// </summary>
+    public DateTime? ServicesStartedAt { get; set; }
+
+    // ── Who can receive services ──────────────────────────────────────────────────────────
+    // Query-shaped so they compose into SQL (ParticipantStagesSqlTests checks the Npgsql translation). They live on the entity, not in the API's
+    // ParticipantStages, because Infrastructure services (budgets, alerts) read them too.
+
+    /// <summary>Past the start of services: finalised, or a draft whose services have begun. The portal and medications ask only this (an archived participant's records stay).</summary>
+    public static readonly Expression<Func<Participant, bool>> ServicesBegunRule = p => !p.IsDraft || p.ServicesStartedAt != null;
+    private static readonly Func<Participant, bool> ServicesBegunCheck = ServicesBegunRule.Compile();
+
+    /// <summary>
+    /// The one "can receive services" rule every operational surface uses (roster board, placement, budgets, alerts): active, and past the start of
+    /// services. KEEP IN STEP with <see cref="ServicesBegunRule"/> (it is that rule plus IsActive).
+    /// </summary>
+    public static readonly Expression<Func<Participant, bool>> CanReceiveServicesRule = p => p.IsActive && (!p.IsDraft || p.ServicesStartedAt != null);
+    private static readonly Func<Participant, bool> CanReceiveServicesCheck = CanReceiveServicesRule.Compile();
+
+    /// <summary><see cref="ServicesBegunRule"/> for a participant already in memory.</summary>
+    public static bool ServicesBegun(Participant participant) => ServicesBegunCheck(participant);
+
+    /// <summary><see cref="CanReceiveServicesRule"/> for a participant already in memory.</summary>
+    public static bool CanReceiveServices(Participant participant) => CanReceiveServicesCheck(participant);
 
     // ── Key Identifiers (INTAKE sub-wave A, Master Data Dictionary CARD-*, PHY-*) ──────────
     // Wizard step "Key Identifiers", placed after "NDIS & Funding" — see

@@ -32,8 +32,6 @@ public class WireTimeConventionTests
     [InlineData(typeof(MarPrnDto), nameof(MarPrnDto.LastDoseAt))]                                  // L4-01 PRN "Last dose"
     [InlineData(typeof(AdminUserDto), nameof(AdminUserDto.LastLoginAt))]                          // L4-02 Last login
     [InlineData(typeof(FlaggedShiftNoteDto), nameof(FlaggedShiftNoteDto.CreatedAt))]              // L4-02 flagged-note Age
-    [InlineData(typeof(ClaimBatchListDto), nameof(ClaimBatchListDto.CreatedAt))]                  // L4-02 claim-batch times
-    [InlineData(typeof(ClaimBatchListDto), nameof(ClaimBatchListDto.SubmittedAt))]
     [InlineData(typeof(ShiftCompletionDto), nameof(ShiftCompletionDto.ActualStart))]              // L4-02 "started Xh ago"
     [InlineData(typeof(CompletionQueueItemDto), nameof(CompletionQueueItemDto.ActualStart))]
     [InlineData(typeof(IncidentShiftNoteContextDto), nameof(IncidentShiftNoteContextDto.CreatedAt))] // L4-07 date-only sites

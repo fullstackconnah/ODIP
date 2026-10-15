@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import AvailabilityList from './AvailabilityList'
@@ -40,6 +40,24 @@ describe('AvailabilityList — header + manage link', () => {
     renderList([makeItem()])
     const link = screen.getByRole('link', { name: /manage on leave page/i })
     expect(link).toHaveAttribute('href', '/rostering/leave?userId=staff-1')
+  })
+})
+
+// CORE-6: the Leave page refuses ReadOnly and SupportWorker (the route sends them away), so they are not offered a link to it.
+describe('AvailabilityList — manage link by role', () => {
+  afterEach(() => localStorage.clear())
+
+  it.each(['ReadOnly', 'SupportWorker'])('offers %s no link to the Leave page, and still lists the records', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    renderList([])
+    expect(screen.getByText(/no leave, unavailability or availability records/i)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /manage on leave page/i })).not.toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s the link', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    renderList([makeItem()])
+    expect(screen.getByRole('link', { name: /manage on leave page/i })).toBeInTheDocument()
   })
 })
 
@@ -121,12 +139,14 @@ describe('AvailabilityList — 44px coarse-pointer hit area', () => {
     const link = screen.getByRole('link', { name: /manage on leave page/i })
     expect(link).toHaveClass(...pad, 'text-[13px]', 'text-[var(--color-primary)]', 'hover:underline')
   })
+})
 
-  it('leaves the inline link inside the empty-state sentence unpadded (a pad there would overlap the prose)', () => {
+// V2-G: the empty sentence used to carry a second "Manage on Leave page" link beside the one in the header row.
+describe('AvailabilityList — one way to the Leave page', () => {
+  it('links to the Leave page once when the list is empty', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     renderList([])
-    const [header, inline] = screen.getAllByRole('link', { name: /manage on leave page/i })
-    expect(header).toHaveClass(...pad)
-    expect(inline.className).not.toContain('before:')
-    expect(inline).not.toHaveClass('relative')
+    expect(screen.getAllByRole('link', { name: /manage on leave page/i })).toHaveLength(1)
+    localStorage.clear()
   })
 })

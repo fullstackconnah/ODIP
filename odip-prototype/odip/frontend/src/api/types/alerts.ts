@@ -14,7 +14,7 @@ export interface ParticipantAlertDto {
   severity: AlertSeverity
   message: string
   deepLinkTab: string
-  linkTo: string | null
+  linkTo?: string | null
 }
 
 /** Ranked alerts (Critical first) for one participant, plus per-severity counts. */
@@ -30,14 +30,13 @@ export interface ParticipantAlertsDto {
    * participant too (this field will be `false` there), so it must not be filtered out.
    */
   isActive: boolean
+  /**
+   * The participant has a funding plan running now, so a budget can warn about them (budget phase 2b). Not an alert: it is what tells "no budget is at risk" (a plan is running and nothing is over)
+   * from "no budget is recorded", about which a screen says nothing, least of all "all clear". Omitted by an older answer, and then read as no.
+   */
+  budgetInForce?: boolean
   alerts: ParticipantAlertDto[]
   criticalCount: number
   warningCount: number
   infoCount: number
-}
-
-export const ALERT_SEVERITY_ORDER: Record<AlertSeverity, number> = {
-  Critical: 0,
-  Warning: 1,
-  Info: 2,
 }

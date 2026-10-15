@@ -14,6 +14,8 @@ import { ROUTINE_CATEGORIES } from '@/api/types/enums'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import type { ParticipantRoutineDto } from '@/api/types/routines'
 import type { RoutineCategory } from '@/api/types/enums'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 /** Monday-first for display, independent of the .NET DayOfWeek (Sunday=0) wire ordering. */
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
@@ -232,7 +234,8 @@ export default function RoutinesTab({ participantId }: { participantId: string |
     const next: { title?: string; description?: string; time?: string; days?: string } = {}
     if (!form.title.trim()) next.title = 'Title is required'
     if (!form.description.trim()) next.description = 'Description is required'
-    if (form.startTime && form.endTime && form.endTime <= form.startTime) next.time = 'End time must be after start time'
+    // An end before the start is a routine that runs past midnight (the shift screen and the server read it so); only an empty window is wrong.
+    if (form.startTime && form.endTime && form.endTime === form.startTime) next.time = 'End time must differ from the start time'
     if (form.days.length === 0) next.days = 'Select at least one day'
     setErrors(next)
     return Object.keys(next).length === 0
@@ -282,27 +285,17 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[var(--color-foreground)]">Routines &amp; Specifics</h2>
         {canWriteRoutines && participantId && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all shadow-md shadow-[var(--color-primary)]/20"
-          >
+          <Button onClick={openCreate}>
             <Plus className="w-4 h-4" /> New routine
-          </button>
+          </Button>
         )}
       </div>
 
       {listError && (
-        <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          <span>{listError}</span>
-          <button
-            type="button"
-            onClick={() => setListError(null)}
-            className="shrink-0 text-xs font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Callout tone="error"
+          actions={<Button variant="ghost" size="sm" onClick={() => setListError(null)}>Dismiss</Button>}>
+          {listError}
+        </Callout>
       )}
 
       {phase === 'loading' ? (
@@ -366,29 +359,18 @@ export default function RoutinesTab({ participantId }: { participantId: string |
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save routine'}
-            </button>
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Title" required error={errors.title}>
             <input
@@ -456,7 +438,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
             <FormField label="Start time" error={errors.time} hint="Leave blank if this task has no fixed start">
               <input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />
             </FormField>
-            <FormField label="End time" hint="Leave blank if this task has no fixed end">
+            <FormField label="End time" hint="Leave blank if this task has no fixed end. An end before the start runs past midnight.">
               <input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} />
             </FormField>
           </div>

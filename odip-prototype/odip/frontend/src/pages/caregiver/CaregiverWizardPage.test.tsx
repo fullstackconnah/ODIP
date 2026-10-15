@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import type { CaregiverFormDto } from '@/api/types/caregiver'
+import { ACKNOWLEDGEMENT_OF_COUNTRY } from '@/lib/platformFacts'
 
 const { mockUsePublicCaregiverForm, mockSaveDraftMutateAsync, mockSubmitMutateAsync } = vi.hoisted(() => ({
   mockUsePublicCaregiverForm: vi.fn(),
@@ -59,6 +60,30 @@ describe('CaregiverWizardPage — invalid link', () => {
     expect(await screen.findByText(/this link is no longer valid/i)).toBeInTheDocument()
     expect(screen.queryByText(/expired/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/revoked/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('CaregiverWizardPage — landmarks and the platform footer', () => {
+  it('puts the form in one main and the footer beside it, with the acknowledgement and no Support link', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
+    const footer = screen.getByRole('contentinfo')
+    expect(footer.closest('main')).toBeNull()
+    expect(screen.getByRole('main').nextElementSibling).toBe(footer)
+    expect(within(footer).getByText(ACKNOWLEDGEMENT_OF_COUNTRY)).toBeInTheDocument()
+    expect(within(footer).getByRole('link', { name: 'Accessibility' })).toHaveAttribute('href', '/accessibility')
+    expect(within(footer).queryByRole('link', { name: /support/i })).toBeNull()
+    expect(screen.getAllByRole('navigation')).toHaveLength(1)
+  })
+
+  it('keeps the same frame on the invalid-link page', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: true, data: undefined })
+    renderCaregiverPage()
+    await screen.findByText(/this link is no longer valid/i)
+    expect(screen.getByRole('main').nextElementSibling).toBe(screen.getByRole('contentinfo'))
   })
 })
 
@@ -290,5 +315,53 @@ describe('App — /caregiver/:token route registration', () => {
     await screen.findByLabelText(/^your name/i)
     expect(window.location.pathname).toBe('/caregiver/route-test-token')
     expect(screen.queryByRole('navigation', { name: /main/i })).not.toBeInTheDocument()
+  })
+})
+
+// PARTICIPANTS-6: "Save and continue later" checks the name first, says when the save failed, and says when it worked.
+describe('CaregiverWizardPage — Save and continue later', () => {
+  async function open() {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    return user
+  }
+
+  it('asks for the name before saving, with the message the form uses', async () => {
+    const user = await open()
+    await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
+
+    expect(mockSaveDraftMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('alert')[0]).toHaveTextContent('Please enter your name')
+    // The field itself is marked too, with its inline message.
+    expect(screen.getByLabelText(/your name/i)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('says the save failed, in plain words', async () => {
+    const user = await open()
+    mockSaveDraftMutateAsync.mockRejectedValue({ response: { status: 500, data: { message: 'NullReferenceException at Odip.Api' } } })
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't save your progress.")
+    expect(screen.queryByText(/NullReferenceException/)).not.toBeInTheDocument()
+  })
+
+  it('says the progress was saved in a live region that was already on the page, and clears it on the next edit', async () => {
+    const user = await open()
+    const regionsBefore = screen.queryAllByRole('status')
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: 'Save and continue later' }))
+
+    expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(1)
+    const saved = await screen.findByText(/Progress saved/)
+    expect(saved).toHaveAttribute('role', 'status')
+    // Screen readers announce a change inside a live region, not a region inserted already filled.
+    expect(regionsBefore).toContain(saved)
+
+    await user.type(screen.getByLabelText(/your name/i), 's')
+    expect(saved).toBeInTheDocument()
+    expect(saved).toHaveTextContent(/^$/)
   })
 })

@@ -39,23 +39,6 @@ export interface PersonDto {
   activeRoleCount: number
 }
 
-export interface CreatePersonDto {
-  firstName: string
-  lastName: string
-  phone?: string | null
-  mobile?: string | null
-  email?: string | null
-  addressLine?: string | null
-  suburb?: string | null
-  state?: string | null
-  postcode?: string | null
-  organisation?: string | null
-  dateOfBirth?: string | null
-  notes?: string | null
-}
-
-export type UpdatePersonDto = CreatePersonDto
-
 // ══════════════════════════════════════════════════════════════
 // ParticipantContactRole (CONTACT-01/02/03)
 // ══════════════════════════════════════════════════════════════
@@ -163,7 +146,7 @@ export const CONTACT_ROLE_STATUS_LABELS: Record<ContactRoleStatus, string> = {
   Superseded: 'Superseded',
 }
 
-// ── CONTACT-02 gating (form-local convenience — INTAKE-07 style) ──────────
+// ── CONTACT-02 gating (form-local convenience) ──────────
 
 /** Mirrors Odip.Domain.Enums.ContactRoleRules.CalculateAge — whole years as of today, or null
  * when dateOfBirth is unset. */

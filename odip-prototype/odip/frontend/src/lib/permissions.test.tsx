@@ -20,7 +20,7 @@ function PermissionsProbe({ pages }: { pages: PageKey[] }) {
 }
 
 function CapabilityProbe() {
-  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications, canManageParticipantLifecycle, canManageFunding, canWrite } = usePermissions()
+  const { canRequestLeave, canApproveLeave, canCompleteOwnShifts, canReviewCompletions, canManageNotifications, canManageParticipantLifecycle, canManageFunding, canWrite, canCreateIncidents } = usePermissions()
   return (
     <ul>
       <li data-testid="can-request-leave">{String(canRequestLeave)}</li>
@@ -31,6 +31,7 @@ function CapabilityProbe() {
       <li data-testid="can-manage-participant-lifecycle">{String(canManageParticipantLifecycle)}</li>
       <li data-testid="can-manage-funding">{String(canManageFunding)}</li>
       <li data-testid="can-write">{String(canWrite)}</li>
+      <li data-testid="can-create-incidents">{String(canCreateIncidents)}</li>
     </ul>
   )
 }
@@ -172,7 +173,7 @@ describe('usePermissions.canManageFunding', () => {
   })
 
   // A participant's plan budget is money, and money is never visible to SupportWorker or ReadOnly: ParticipantFundingController admits SuperAdmin, Admin and Coordinator for every request,
-  // reads included. canWrite is NOT that gate (ReadOnly historically satisfied it), which is why the Funding tab has a boolean of its own.
+  // reads included. canWrite is NOT that gate (it is about writes, not money), which is why the Funding tab has a boolean of its own.
   it('is true for SuperAdmin, Admin and Coordinator only', () => {
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
       setUserRole(role)
@@ -188,12 +189,45 @@ describe('usePermissions.canManageFunding', () => {
     }
   })
 
-  it('is not canWrite: ReadOnly satisfies canWrite and must still never see a budget', () => {
+  it('is false for ReadOnly, like canWrite', () => {
     setUserRole('ReadOnly')
     render(<CapabilityProbe />)
 
-    expect(screen.getByTestId('can-write')).toHaveTextContent('true')
+    expect(screen.getByTestId('can-write')).toHaveTextContent('false')
     expect(screen.getByTestId('can-manage-funding')).toHaveTextContent('false')
+  })
+})
+
+// Owner decision 2026-10-12: ReadOnly HIDES write controls. ReadOnlyMiddleware refuses every POST, PUT, PATCH and DELETE it sends, so it is offered none.
+describe('usePermissions.canWrite and canCreateIncidents', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it.each<[UserRole, string, string]>([
+    ['SuperAdmin', 'true', 'true'],
+    ['Admin', 'true', 'true'],
+    ['Coordinator', 'true', 'true'],
+    ['SupportWorker', 'false', 'true'],
+    ['ReadOnly', 'false', 'false'],
+  ])('%s: canWrite %s, canCreateIncidents %s', (role, write, incidents) => {
+    setUserRole(role)
+    render(<CapabilityProbe />)
+    expect(screen.getByTestId('can-write')).toHaveTextContent(write)
+    expect(screen.getByTestId('can-create-incidents')).toHaveTextContent(incidents)
+  })
+
+  it('sends ReadOnly and SupportWorker away from a write-only route, and admits the three management roles', () => {
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      const { unmount } = renderGuarded(role, '/trips/new', { page: 'trips', requiresWrite: true })
+      expect(screen.getByText('The page'), role).toBeInTheDocument()
+      unmount()
+    }
+    for (const role of ['ReadOnly', 'SupportWorker'] as UserRole[]) {
+      const { unmount } = renderGuarded(role, '/trips/new', { page: 'trips', requiresWrite: true })
+      expect(screen.getByText('Redirected'), role).toBeInTheDocument()
+      unmount()
+    }
   })
 })
 
@@ -293,13 +327,13 @@ describe('usePermissions.canAccessPage — ReadOnly', () => {
   })
 
   // Each of these sits behind a controller that admits only SuperAdmin, Admin and Coordinator, reads included: see READ_ONLY_REFUSED_PAGES.
-  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'billing', 'claims', 'settings', 'caregiver-submissions', 'agreement-drafts']
+  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'claims', 'settings', 'caregiver-submissions', 'agreement-drafts', 'budgets']
   const ALLOWED: PageKey[] = [
     'dashboard', 'portal', 'portal-leave', 'trips', 'schedule', 'participants', 'accommodation', 'vehicles', 'staff', 'tasks', 'incidents', 'bookings',
     'qualifications', 'medications',
   ]
 
-  it('refuses ReadOnly the pages its API refuses (rostering, leave, billing, claims, caregiver forms, settings, agreement drafts)', () => {
+  it('refuses ReadOnly the pages its API refuses (rostering, leave, claims, caregiver forms, settings, agreement drafts, the Budgets list)', () => {
     setUserRole('ReadOnly')
     render(<PermissionsProbe pages={REFUSED} />)
     for (const page of REFUSED) expect(screen.getByTestId(`page-${page}`), page).toHaveTextContent('false')
@@ -326,10 +360,25 @@ describe('usePermissions.canAccessPage — ReadOnly', () => {
   // Round 1b (review F18, decided): a service agreement draft carries money, and money is never visible to SupportWorker or ReadOnly: the API refuses them every GET of it.
   it("keeps the agreement drafts off a SupportWorker's pages too: their allow-list does not name them, as it does not name the other pages that carry money", () => {
     setUserRole('SupportWorker')
-    render(<PermissionsProbe pages={['agreement-drafts', 'billing', 'claims', 'participants']} />)
+    render(<PermissionsProbe pages={['agreement-drafts', 'claims', 'participants']} />)
     expect(screen.getByTestId('page-agreement-drafts')).toHaveTextContent('false')
-    expect(screen.getByTestId('page-billing')).toHaveTextContent('false')
+    expect(screen.getByTestId('page-claims')).toHaveTextContent('false')
     expect(screen.getByTestId('page-participants')).toHaveTextContent('true')
+  })
+
+  // Budget phase 2b: the Budgets list is every participant's money, behind a controller that admits only SuperAdmin, Admin and Coordinator (canManageFunding is its rule), so neither SupportWorker nor ReadOnly is offered it.
+  it('keeps the Budgets list off a SupportWorker (it is not on their allow-list) and a ReadOnly viewer, and offers it to the three management roles', () => {
+    setUserRole('SupportWorker')
+    const { unmount } = render(<PermissionsProbe pages={['budgets', 'participants']} />)
+    expect(screen.getByTestId('page-budgets')).toHaveTextContent('false')
+    expect(screen.getByTestId('page-participants')).toHaveTextContent('true')
+    unmount()
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
+      setUserRole(role)
+      const view = render(<PermissionsProbe pages={['budgets']} />)
+      expect(screen.getByTestId('page-budgets'), role).toHaveTextContent('true')
+      view.unmount()
+    }
   })
 
   it("keeps Caregiver forms off a SupportWorker's pages too, as it was (their allow-list does not name it)", () => {
@@ -353,6 +402,38 @@ function renderGuarded(role: UserRole, path: string, route: { page: PageKey; req
   )
 }
 
+// Q2 fix round: a record whose only read view is its edit form opens as a view for ReadOnly; its /new route and SupportWorker stay out.
+describe('PrivateRoute — viewableByReadOnly', () => {
+  afterEach(() => localStorage.clear())
+
+  function renderView(role: UserRole, path: string) {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    localStorage.setItem('odip_token', 'test-token')
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/" element={<div>Redirected</div>} />
+          <Route path="/tasks/new" element={<PrivateRoute page="tasks" requiresWrite><div>The page</div></PrivateRoute>} />
+          <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite viewableByReadOnly><div>The page</div></PrivateRoute>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('admits ReadOnly to the edit route, not to /new', () => {
+    const { unmount } = renderView('ReadOnly', '/tasks/t-1/edit')
+    expect(screen.getByText('The page')).toBeInTheDocument()
+    unmount()
+    renderView('ReadOnly', '/tasks/new')
+    expect(screen.getByText('Redirected')).toBeInTheDocument()
+  })
+
+  it('still sends SupportWorker away from the edit route', () => {
+    renderView('SupportWorker', '/tasks/t-1/edit')
+    expect(screen.getByText('Redirected')).toBeInTheDocument()
+  })
+})
+
 describe('PrivateRoute — pages ReadOnly is refused', () => {
   afterEach(() => {
     localStorage.clear()
@@ -361,11 +442,11 @@ describe('PrivateRoute — pages ReadOnly is refused', () => {
   it.each<[string, PageKey, boolean]>([
     ['/rostering', 'rostering', false],
     ['/rostering/leave', 'leave-approvals', false],
-    ['/billing', 'billing', false],
     ['/claims/c-1', 'claims', false],
     ['/settings', 'settings', false],
     ['/caregiver-submissions', 'caregiver-submissions', true],
     ['/participants/p-1/agreement-draft', 'agreement-drafts', false],
+    ['/budgets', 'budgets', false],
   ])('sends ReadOnly away from %s, and still admits a Coordinator', (path, page, requiresWrite) => {
     const { unmount } = renderGuarded('ReadOnly', path, { page, requiresWrite })
     expect(screen.getByText('Redirected')).toBeInTheDocument()
@@ -374,7 +455,7 @@ describe('PrivateRoute — pages ReadOnly is refused', () => {
     expect(screen.getByText('The page')).toBeInTheDocument()
   })
 
-  // The route used to be page="participants" with requiresWrite, and ReadOnly satisfies canWrite: it opened the draft page, which now meets a 403 on the list.
+  // The route used to be page="participants" with requiresWrite, and ReadOnly then satisfied canWrite: it opened the draft page, which now meets a 403 on the list.
   it('admits SuperAdmin, Admin and Coordinator to the agreement draft and sends ReadOnly and SupportWorker away from it', () => {
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator'] as UserRole[]) {
       const { unmount } = renderGuarded(role, '/participants/p-1/agreement-draft', { page: 'agreement-drafts' })
@@ -403,17 +484,17 @@ describe('HomeRoute', () => {
         <Suspense fallback={<div>Loading</div>}>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
-            <Route path="/portal" element={<div>My Shifts page</div>} />
+            <Route path="/portal" element={<div>My shifts page</div>} />
           </Routes>
         </Suspense>
       </MemoryRouter>,
     )
   }
 
-  it('sends a SupportWorker from / to My Shifts, replacing the entry so Back does not bounce them again', () => {
+  it('sends a SupportWorker from / to My shifts, replacing the entry so Back does not bounce them again', () => {
     setUserRole('SupportWorker')
     renderHome()
-    expect(screen.getByText('My Shifts page')).toBeInTheDocument()
+    expect(screen.getByText('My shifts page')).toBeInTheDocument()
     expect(screen.queryByText('Dashboard page')).not.toBeInTheDocument()
   })
 
@@ -421,7 +502,7 @@ describe('HomeRoute', () => {
     setUserRole(role)
     renderHome()
     expect(await screen.findByText('Dashboard page')).toBeInTheDocument()
-    expect(screen.queryByText('My Shifts page')).not.toBeInTheDocument()
+    expect(screen.queryByText('My shifts page')).not.toBeInTheDocument()
   })
 
   it('still sends someone with no token to the login route (the shell guard is the first hop; PrivateRoute is the second)', () => {

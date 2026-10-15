@@ -39,6 +39,39 @@ public class CaregiverFieldPolicyTests
         Assert.Equal("Sophie", projection["firstName"]!.GetValue<string>());
     }
 
+    // The projection is read by the caregiver page and the coordinator review as the same JSON the signed-in API sends:
+    // enums by name (the page parses the HIDPA flags from "A, B"; the review compares the consent keys with the payload's).
+    [Fact]
+    public void ProjectionWritesFlagsEnumsAsNames()
+    {
+        var detail = new ParticipantDetailDto
+        {
+            Id = Guid.NewGuid(), FirstName = "S", LastName = "B",
+            HidpaSupportCategories = HidpaSupportCategory.ComplexBowelCare | HidpaSupportCategory.EnteralFeeding,
+            ServiceStreams = ServiceStreams.STA | ServiceStreams.Trip,
+        };
+
+        var projection = CaregiverFieldPolicy.BuildProjection(detail);
+
+        Assert.Equal("ComplexBowelCare, EnteralFeeding", projection["hidpaSupportCategories"]!.GetValue<string>());
+        Assert.Equal("STA, Trip", projection["serviceStreams"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void ProjectionWritesPlainEnumsAndCollectionKeysAsNames()
+    {
+        var detail = new ParticipantDetailDto
+        {
+            Id = Guid.NewGuid(), FirstName = "S", LastName = "B", AmbulantStatus = AmbulantStatus.Frame,
+            Consents = new() { new ParticipantConsentDto { ConsentType = ConsentType.Privacy, Granted = true } },
+        };
+
+        var projection = CaregiverFieldPolicy.BuildProjection(detail);
+
+        Assert.Equal("Frame", projection["ambulantStatus"]!.GetValue<string>());
+        Assert.Equal("Privacy", projection["consents"]![0]!["consentType"]!.GetValue<string>());
+    }
+
     [Fact]
     public void EveryProfileFieldIsEitherEditableOrInternal()
     {

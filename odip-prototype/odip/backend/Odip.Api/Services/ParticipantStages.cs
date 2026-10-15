@@ -10,8 +10,8 @@ namespace Odip.Api.Services;
 /// whether an enquiry or an <see cref="ParticipantOnboarding"/> row happens to exist (that is how the Onboarding tab used to miss people).
 /// <list type="bullet">
 /// <item><b>Intake in progress</b>: a draft whose intake is open. The Enquiries tab shows it, with its enquiry when there is one.</item>
-/// <item><b>In onboarding</b>: a draft whose intake is complete. The Onboarding tab. Completing the profile
-/// (<c>POST /participants/{id}/complete-profile</c>) finalises them, and the organisation's readiness mode decides whether that is allowed.</item>
+/// <item><b>In onboarding</b>: a draft whose intake is complete. The Onboarding tab. "Make active"
+/// (<c>POST /participants/{id}/make-active</c>) finalises them, and the organisation's readiness mode decides whether that is allowed.</item>
 /// <item><b>Active / archived</b>: finalised participants, by <c>IsActive</c>. The Active participants tab and its Archived view.</item>
 /// </list>
 /// A draft's stage follows its intake alone: <c>IsActive</c> is not read for a draft. The status endpoint never activates a draft and Create and

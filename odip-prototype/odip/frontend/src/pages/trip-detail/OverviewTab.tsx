@@ -6,6 +6,7 @@ import type { BookingListDto } from '@/api/types/bookings'
 import type { ReservationDto } from '@/api/types/reservations'
 import type { StaffAssignmentDto } from '@/api/types/staff'
 import type { VehicleAssignmentDto } from '@/api/types/vehicles'
+import { plural } from '@/lib/format'
 
 interface OverviewTabProps {
   tripId: string
@@ -62,12 +63,12 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
           </div>
         )}
 
-        {/* The Team */}
+        {/* The team */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--color-foreground)]">The Team</h3>
+            <h3 className="text-sm font-semibold text-[var(--color-foreground)]">The team</h3>
             <button className={`${TAP_AREA} text-[var(--color-primary)] text-xs font-bold hover:opacity-70 transition-opacity`} onClick={() => onSwitchTab('bookings')}>
-              Manage All
+              Manage all
             </button>
           </div>
 
@@ -175,7 +176,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
           <div className="bg-[var(--color-surface-container-high)] p-[var(--card-pad)] rounded-[var(--radius-md)] space-y-2">
             <h3 className="font-semibold text-sm flex items-center gap-2 text-[var(--color-foreground)]">
               <span className="material-symbols-outlined text-[var(--color-secondary)]" style={{ fontSize: '18px' }}>local_shipping</span>
-              Fleet Manifest
+              Fleet manifest
             </h3>
             <div className="space-y-1.5">
               {vehicles.map((v: VehicleAssignmentDto) => (
@@ -186,7 +187,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, sta
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[var(--color-foreground)] truncate">{v.vehicleName || 'Vehicle'}</p>
                     <p className="text-[13px] tabular-nums leading-tight text-[var(--color-muted-foreground)]">
-                      {[v.wheelchairPositionRequirement && `${v.wheelchairPositionRequirement} WC`, v.seatRequirement && `${v.seatRequirement} seats`].filter(Boolean).join(' · ') || 'Vehicle'}
+                      {[v.wheelchairPositionRequirement && plural(v.wheelchairPositionRequirement, 'wheelchair position'), v.seatRequirement && `${v.seatRequirement} seats`].filter(Boolean).join(' · ') || 'Vehicle'}
                     </p>
                   </div>
                 </div>

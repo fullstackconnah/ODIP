@@ -6,13 +6,13 @@ using Moq;
 using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Infrastructure.Notifications.Templates;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Notifications;
 
@@ -22,14 +22,7 @@ namespace Odip.Tests.Notifications;
 /// </summary>
 public class NotificationDispatchBackgroundServiceTests
 {
-    private static OdipDbContext SeedDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext SeedDb(string dbName) => TestDb.Create(dbName);
 
     private static User SeedUser(OdipDbContext db, Guid tenantId, string email = "")
     {
@@ -299,5 +292,74 @@ public class NotificationDispatchBackgroundServiceTests
         var row = await verifyDb.NotificationOutbox.SingleAsync(o => o.Id == rowId);
         Assert.Equal(NotificationOutboxStatus.Skipped, row.Status);
         Assert.Equal("Recipient has no email address", row.LastError);
+    }
+
+    [Fact]
+    public async Task An_intake_visit_for_a_name_with_a_line_break_never_throws_out_of_the_tick()
+    {
+        // Fix round 1, S1: an enquiry name can hold an embedded CR/LF (the API only trims). Through the real SMTP channel the tick must finish.
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId, "sam.lee@provider.example");
+            var payload = new IntakeVisitStaffPayload(IntakeWording.Booked, "sam.lee@provider.example", "Sam Lee", "Noah\r\nFitzgerald",
+                new DateTime(2026, 10, 15, 23, 0, 0, DateTimeKind.Utc), 90, "Australia/Sydney", "12 Smith St", null, null, null, "Dana Smith",
+                "dana@provider.example", "Sample Support Co", null, null, "abc@odip", 0, DateTime.UtcNow);
+            db.NotificationOutbox.Add(new NotificationOutbox
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, EventType = NotificationEventType.IntakeBooked, EntityType = "IntakeVisit", EntityId = Guid.NewGuid(),
+                RecipientUserId = user.Id, PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload),
+                Status = NotificationOutboxStatus.Pending, NextAttemptAt = DateTime.UtcNow.AddMinutes(-1), CreatedAt = DateTime.UtcNow.AddMinutes(-1),
+            });
+            db.SaveChanges();
+        }
+        var smtpConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Notifications:Smtp:Host"] = "127.0.0.1", ["Notifications:Smtp:Port"] = "1",
+        }).Build();
+        var channel = new SmtpEmailChannel(smtpConfig, NullLogger<SmtpEmailChannel>.Instance);
+
+        await BuildService(dbName, channel, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        // The tick finished and saved: the row was tried once and backs off (no SMTP listens on port 1), instead of the batch going unsaved.
+        using var verifyDb = SeedDb(dbName);
+        var row = await verifyDb.NotificationOutbox.SingleAsync();
+        Assert.Equal(1, row.Attempts);
+        Assert.True(row.NextAttemptAt > DateTime.UtcNow);
+    }
+
+    [Fact]
+    public async Task An_intake_visit_row_renders_with_its_calendar_invite_and_is_sent()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId, "sam.lee@provider.example");
+            var payload = new IntakeVisitStaffPayload(IntakeWording.Booked, "sam.lee@provider.example", "Sam Lee", "Noah Fitzgerald",
+                new DateTime(2026, 10, 15, 23, 0, 0, DateTimeKind.Utc), 90, "Australia/Sydney", "12 Smith St", null, null, null, "Dana Smith",
+                "dana@provider.example", "Sample Support Co", null, null, "abc@odip", 0, DateTime.UtcNow);
+            db.NotificationOutbox.Add(new NotificationOutbox
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, EventType = NotificationEventType.IntakeBooked, EntityType = "IntakeVisit", EntityId = Guid.NewGuid(),
+                RecipientUserId = user.Id, PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload),
+                Status = NotificationOutboxStatus.Pending, NextAttemptAt = DateTime.UtcNow.AddMinutes(-1), CreatedAt = DateTime.UtcNow.AddMinutes(-1),
+            });
+            db.SaveChanges();
+        }
+        NotificationMessage? sent = null;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, null, null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        using var verifyDb = SeedDb(dbName);
+        Assert.Equal(NotificationOutboxStatus.Sent, (await verifyDb.NotificationOutbox.SingleAsync()).Status);
+        Assert.Equal("Intake visit booked: Noah Fitzgerald, Fri 16 Oct at 10:00 am", sent!.Subject);
+        Assert.Equal("REQUEST", sent.Ics!.Method);
     }
 }

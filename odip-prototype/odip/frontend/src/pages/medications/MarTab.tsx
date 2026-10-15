@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import { Dropdown } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { formatRelative } from '@/lib/format'
@@ -15,6 +17,7 @@ import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import { ROUTE_LABELS, FORM_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MarEntryDto, MarPrnDto, AdministrationDto } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
+import { Button } from '@/components/Button'
 
 /**
  * Connection map: for a Refused/Withheld/Missed/WrongMedication administration, either a link to
@@ -77,9 +80,9 @@ export default function MarTab() {
   const { canRecordAdministrations, canManageMedications, canCreateIncidents } = usePermissions()
   const [date, setDate] = useState(todayIso())
   const [participantId, setParticipantId] = useState('')
-  const { data: mar, isLoading } = useMar(date, participantId || undefined)
+  const { data: mar, isLoading, isError, refetch } = useMar(date, participantId || undefined)
   // INTAKE-08: the medication picker excludes drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
   const recordPrnOutcome = useRecordPrnOutcome()
 
   const [recordingSlot, setRecordingSlot] = useState<MarEntryDto | null>(null)
@@ -178,6 +181,8 @@ export default function MarTab() {
           <SkeletonRow />
           <SkeletonRow />
         </div>
+      ) : isError && !mar ? (
+        <PageState kind="error" noun="medication round" onRetry={() => refetch()} />
       ) : groups.length === 0 ? (
         <EmptyState
           icon={CalendarClock}
@@ -248,13 +253,9 @@ export default function MarTab() {
                           />
                         </div>
                       ) : canRecordAdministrations ? (
-                        <button
-                          type="button"
-                          onClick={() => setRecordingSlot(entry)}
-                          className="min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 active:scale-[0.98] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-                        >
+                        <Button onClick={() => setRecordingSlot(entry)}>
                           Record
-                        </button>
+                        </Button>
                       ) : (
                         <span className="text-xs text-[var(--color-muted-foreground)]">Not recorded</span>
                       )}
@@ -304,14 +305,12 @@ export default function MarTab() {
                   </div>
                   <div className="flex items-center gap-2">
                     {canRecordAdministrations && (
-                      <button
-                        type="button"
+                      <Button
                         title={ceilingReached ? 'Dose ceiling reached for the last 24 hours — you can still record it, but it will require acknowledgement.' : undefined}
                         onClick={() => setRecordingPrn(prn)}
-                        className="min-h-[44px] px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
                       >
                         Record
-                      </button>
+                      </Button>
                     )}
                     {prn.outcomePendingAdministrationId && (
                       <button
@@ -387,13 +386,9 @@ export default function MarTab() {
         title="Missed medication — what to do"
         size="lg"
         footer={
-          <button
-            type="button"
-            onClick={() => setShowGuidance(false)}
-            className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all"
-          >
+          <Button onClick={() => setShowGuidance(false)}>
             Close
-          </button>
+          </Button>
         }
       >
         <MissedMedicationGuidance />
@@ -406,21 +401,12 @@ export default function MarTab() {
         size="sm"
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => { setOutcomeFor(null); setOutcomeText('') }}
-              className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-            >
+            <Button variant="secondary" onClick={() => { setOutcomeFor(null); setOutcomeText('') }}>
               Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!outcomeText.trim() || recordPrnOutcome.isPending}
-              onClick={submitPrnOutcome}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all"
-            >
+            </Button>
+            <Button disabled={!outcomeText.trim() || recordPrnOutcome.isPending} onClick={submitPrnOutcome}>
               {recordPrnOutcome.isPending ? 'Saving...' : 'Save outcome'}
-            </button>
+            </Button>
           </>
         }
       >

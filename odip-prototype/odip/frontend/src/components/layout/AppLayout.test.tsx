@@ -13,10 +13,12 @@ import { TAP_AREA } from '@/components/tapArea'
 // still imported transitively) so this suite doesn't need a QueryClientProvider or a real
 // network call, matching how the other hook-backed page tests in this codebase mock
 // '@/api/hooks' rather than provide a live client.
-const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount } = vi.hoisted(() => ({
+const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockUseInbox, mockEndSession } = vi.hoisted(() => ({
+  mockEndSession: vi.fn(),
   mockUsePendingLeaveCount: vi.fn(() => 0),
   mockUsePendingWitnessRequests: vi.fn(() => ({ data: [] as unknown[], isLoading: false })),
   mockUsePendingCompletionCount: vi.fn(() => 0),
+  mockUseInbox: vi.fn(() => ({ data: undefined as { items: unknown[]; unreadCount: number; hasMore: boolean } | undefined, isError: false, refetch: vi.fn() })),
 }))
 
 vi.mock('@/api/hooks', async (importOriginal) => {
@@ -29,8 +31,15 @@ vi.mock('@/api/hooks', async (importOriginal) => {
     // entry would call the real usePendingCompletionCount, which calls useQuery and needs a
     // QueryClientProvider this suite doesn't set up.
     usePendingCompletionCount: mockUsePendingCompletionCount,
+    // The header bell (NotificationBell) polls the inbox and marks items read: stubbed for the same reason as the counts above.
+    useInbox: mockUseInbox,
+    useMarkInboxRead: () => ({ mutate: vi.fn() }),
+    useMarkAllInboxRead: () => ({ mutate: vi.fn(), reset: vi.fn(), isError: false }),
   }
 })
+
+// Signing out is endSession's job (the server cookie, the Firebase user, the browser keys, the redirect); this suite only checks that the button calls it.
+vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), endSession: mockEndSession }))
 
 // A SuperAdmin's header also renders the tenant switcher, whose own TanStack Query hook needs a QueryClientProvider this
 // suite does not set up. It is header chrome, not navigation, so stub it: the role-by-role nav tests below cover SuperAdmin.
@@ -51,29 +60,29 @@ describe('AppLayout nav active state', () => {
     localStorage.clear()
   })
 
-  it('marks the Rostering "Board" entry active only on exactly /rostering', () => {
+  it('marks the "Roster board" entry active only on exactly /rostering', () => {
     renderAt('/rostering')
-    // Board's NavLink uses `end` matching, so it's active on exactly this path. The accessible
-    // name includes the leading material-icon ligature text (e.g. "calendar_view_week Board"),
+    // Roster board's NavLink uses `end` matching, so it's active on exactly this path. The accessible
+    // name includes the leading material-icon ligature text (e.g. "calendar_view_week Roster board"),
     // so these match on the visible label rather than the full name.
-    expect(screen.getByRole('link', { name: /Board$/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: /Patterns$/ })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: /Roster board$/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /Shift patterns$/ })).not.toHaveAttribute('aria-current')
   })
 
-  it('activates the "Patterns" entry, not the "Board" parent, on /rostering/patterns', () => {
+  it('activates the "Patterns" entry, not the "Roster board" parent, on /rostering/patterns', () => {
     renderAt('/rostering/patterns')
-    expect(screen.getByRole('link', { name: /Patterns$/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: /Board$/ })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: /Shift patterns$/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /Roster board$/ })).not.toHaveAttribute('aria-current')
   })
 
-  it('still activates "All Trips" on a /trips/:id detail route (prefix match must not regress)', () => {
+  it('still activates the Trips link on a /trips/:id detail route (prefix match must not regress)', () => {
     renderAt('/trips/trip-123')
-    expect(screen.getByRole('link', { name: /All Trips$/ })).toHaveAttribute('aria-current', 'page')
+    expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: /Trips$/ })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('activates "All Trips" on the exact /trips path too', () => {
+  it('activates the Trips link on the exact /trips path too', () => {
     renderAt('/trips')
-    expect(screen.getByRole('link', { name: /All Trips$/ })).toHaveAttribute('aria-current', 'page')
+    expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: /Trips$/ })).toHaveAttribute('aria-current', 'page')
   })
 })
 
@@ -162,7 +171,7 @@ describe('AppLayout — witness-approval nav badge (leave-2, shares NavCountBadg
   it('gives the /portal link an accessible name ending in "Portal" and announcing the pending count', () => {
     mockUsePendingWitnessRequests.mockReturnValue({ data: [{}, {}], isLoading: false })
     renderAt('/trips')
-    expect(screen.getByRole('link', { name: '2 witness approvals pending, My Shifts' })).toHaveAttribute('href', '/portal')
+    expect(screen.getByRole('link', { name: '2 witness approvals pending, My shifts' })).toHaveAttribute('href', '/portal')
   })
 })
 
@@ -263,11 +272,11 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...pad)
   })
 
-  it('pads the header "Notifications" button (32px, disabled placeholder)', () => {
+  it('pads the header "Notifications" bell (32px), a working button now', () => {
     renderAt('/trips')
     const bell = screen.getByRole('button', { name: 'Notifications' })
     expect(bell).toHaveClass(...pad, 'w-8', 'h-8')
-    expect(bell).toBeDisabled()
+    expect(bell).toBeEnabled()
   })
 
   it('gives every mobile bottom-nav cell, "More" included, a --tap-min floor each way, its content centred, so the 42px cells are 44px', () => {
@@ -309,12 +318,36 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     }
   })
 
-  it('sizes the bottom nav with --mobile-nav-h, the var the sticky wizard footer sits above, and main clears it by the same var', () => {
+  it('sizes the bottom nav with --mobile-nav-h, the var the sticky wizard footer sits above, and the footer after main clears it by the same var', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     const { container } = renderAt('/trips')
     const nav = screen.getByRole('navigation', { name: 'Mobile' })
     expect(nav).toHaveClass('h-[var(--mobile-nav-h)]', 'fixed', 'bottom-0', 'lg:hidden')
-    expect(container.querySelector('main')).toHaveClass('pb-[calc(var(--mobile-nav-h)+1.75rem)]', 'lg:pb-6')
+    // The clearance moved from main to the platform footer, the last thing in the content column.
+    const main = container.querySelector('main')!
+    expect(main).toHaveClass('pb-6')
+    expect(main.className).not.toContain('mobile-nav-h')
+    const footer = screen.getByRole('contentinfo')
+    expect(main.nextElementSibling).toBe(footer)
+    expect(footer.parentElement!.lastElementChild).toBe(footer)
+    expect(footer).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+0.75rem)]', 'lg:pb-3')
+    // md:p-6 once overrode the clearance between 768 and 1024px; no breakpoint below lg may set padding-bottom on either element.
+    expect(footer.className).not.toMatch(/(^|\s)(sm|md):pb-/)
+    expect(main.className).not.toMatch(/(^|\s)(sm|md|lg):pb-/)
+  })
+
+  it('always renders the platform footer beside main, never inside it, with its Accessibility link, for the office and the field', () => {
+    for (const [role, path] of [['Admin', '/trips'], ['SupportWorker', '/portal']]) {
+      localStorage.setItem('odip_user', JSON.stringify({ role }))
+      const { container, unmount } = renderAt(path)
+      expect(container.querySelectorAll('main'), role).toHaveLength(1)
+      expect(screen.getAllByRole('contentinfo'), role).toHaveLength(1)
+      const footer = screen.getByRole('contentinfo')
+      expect(footer.closest('main, article, aside, nav, section'), role).toBeNull()
+      expect(within(footer).getByRole('link', { name: 'Accessibility' }), role).toHaveAttribute('href', '/accessibility')
+      unmount()
+      localStorage.clear()
+    }
   })
 
   it('defines --mobile-nav-h for both pointer types as exactly what the nav content needs: 12px + the taller of the 42px link and --tap-min + 12px', () => {
@@ -346,7 +379,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
   })
 })
 
-// Density polish (touch): the drawer's items were 28-32px, and with the drawer open "Sign Out" sat UNDER the fixed bottom
+// Density polish (touch): the drawer's items were 28-32px, and with the drawer open "Sign out" sat UNDER the fixed bottom
 // nav (both were z-50, the nav later in the DOM), so it could not be tapped. The items take a --tap-min floor (0px on a
 // mouse, 44px under `pointer: coarse`), and below lg the drawer and its scrim sit above the nav.
 describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
@@ -358,11 +391,11 @@ describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
     localStorage.clear()
   })
 
-  it('puts the drawer above the fixed bottom nav below lg, so "Sign Out" is not covered by it', () => {
+  it('puts the drawer above the fixed bottom nav below lg, so "Sign out" is not covered by it', () => {
     renderAt('/trips')
 
     const nav = screen.getByRole('navigation', { name: 'Mobile' })
-    // The nav is z-50 and the drawer used to be z-50 too, the nav coming later in the DOM: it painted over Sign Out.
+    // The nav is z-50 and the drawer used to be z-50 too, the nav coming later in the DOM: it painted over Sign out.
     expect(nav).toHaveClass('z-50')
     expect(sidebar()).toHaveClass('z-[60]', 'fixed', 'inset-y-0', 'left-0')
     expect(sidebar().className).not.toMatch(/(^|\s)z-50(\s|$)/)
@@ -390,7 +423,7 @@ describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('floors every drawer item at --tap-min: top-level links, group toggles, group children and Sign Out', () => {
+  it('floors every drawer item at --tap-min: top-level links, group toggles, group children and Sign out', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     renderAt('/trips')
     const main = within(sidebar()).getByRole('navigation', { name: 'Main' })
@@ -400,7 +433,7 @@ describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
     const tripsToggle = within(main).getByRole('button', { name: /Trips$/ })
     expect(tripsToggle).toHaveClass(FLOOR, 'py-1.5', 'w-full')
     // A group child stays h-7 (28px) on a mouse; the floor lifts it to 44px on touch.
-    const allTrips = within(main).getByRole('link', { name: /All Trips$/ })
+    const allTrips = within(main).getByRole('link', { name: /Trips$/ })
     expect(allTrips).toHaveClass('h-7', FLOOR)
     // Staff lives in the Staff & roster group, closed at /trips, and a closed panel is `aria-hidden`: open it first.
     const rosterToggle = within(main).getByRole('button', { name: /Staff & roster$/ })
@@ -408,7 +441,7 @@ describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
     fireEvent.click(rosterToggle)
     const staff = within(main).getByRole('link', { name: /Staff$/ })
     expect(staff).toHaveClass('h-7', FLOOR)
-    const signOut = within(sidebar()).getByRole('button', { name: /Sign Out$/ })
+    const signOut = within(sidebar()).getByRole('button', { name: /Sign out$/ })
     expect(signOut).toHaveClass('h-8', FLOOR)
   })
 
@@ -416,7 +449,7 @@ describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     renderAt('/trips')
 
-    // Everything interactive in the aside: the Main nav's links and group toggles, and Sign Out. Nothing is exempt: the
+    // Everything interactive in the aside: the Main nav's links and group toggles, and Sign out. Nothing is exempt: the
     // "New Trip" call to action above the nav (a Button md, which took its own 44px token) is gone.
     const items = Array.from(sidebar().querySelectorAll('a, button'))
     expect(items.length).toBeGreaterThan(12)
@@ -462,7 +495,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
   const sidebar = () => document.querySelector('aside') as HTMLElement
   const mainNav = () => within(sidebar()).getByRole('navigation', { name: 'Main' })
   const hrefs = (root: HTMLElement) => Array.from(root.querySelectorAll('a')).map(a => a.getAttribute('href'))
-  // Links and buttons in the sidebar outside its Main nav: only Sign Out. The CTA lived in exactly this slot, between
+  // Links and buttons in the sidebar outside its Main nav: only Sign out. The CTA lived in exactly this slot, between
   // the brand and the nav, so any control added back there (whatever its label) fails.
   const controlsOutsideNav = () =>
     Array.from(sidebar().querySelectorAll('a, button'))
@@ -481,11 +514,11 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     expect(container).not.toHaveTextContent(/new trip/i)
   })
 
-  it.each(ROLES)('has no call to action in the sidebar for %s: outside the Main nav its only control is Sign Out', role => {
+  it.each(ROLES)('has no call to action in the sidebar for %s: outside the Main nav its only control is Sign out', role => {
     signIn(role)
     renderAt('/trips')
 
-    expect(controlsOutsideNav()).toEqual(['Sign Out'])
+    expect(controlsOutsideNav()).toEqual(['Sign out'])
     expect(sidebar().querySelector('a[href^="/trips/new"]')).toBeNull()
     expect(sidebar()).not.toHaveTextContent(/new trip/i)
   })
@@ -498,13 +531,13 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     // Open: the same <aside> slides in, so this is the drawer a phone user sees.
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true')
     expect(sidebar()).toHaveClass('translate-x-0')
-    expect(controlsOutsideNav()).toEqual(['Sign Out'])
+    expect(controlsOutsideNav()).toEqual(['Sign out'])
     expect(sidebar().querySelector('a[href^="/trips/new"]')).toBeNull()
     expect(sidebar()).not.toHaveTextContent(/new trip/i)
   })
 
   // The bar's links, in order, then "More" (a button, so not in this list). Generated from navConfig: the office roles' bar leads with
-  // the Dashboard and carries the Staff & roster group as "Roster"; a SupportWorker's leads with My Shifts and carries Incidents.
+  // the Dashboard and carries the Staff & roster group as "Roster"; a SupportWorker's leads with My shifts and carries Incidents.
   const OFFICE_BOTTOM_NAV = ['/', '/trips', '/rostering', '/participants']
   it.each<[string, string[]]>([
     ['SuperAdmin', OFFICE_BOTTOM_NAV],
@@ -532,17 +565,17 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
       '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles', '/tasks',
       '/participants', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
-      '/billing', '/billing/claim-batches',
+      '/budgets',
       '/incidents', '/settings',
     ])
   })
 
-  it('still hides the pages a SupportWorker may not open (Bookings, Rostering, Billing, Staff, Qualifications, Settings, Caregiver forms) from the sidebar', () => {
+  it('still hides the pages a SupportWorker may not open (Bookings, Rostering, Staff, Qualifications, Settings, Caregiver forms) from the sidebar', () => {
     signIn('SupportWorker')
     renderAt('/trips')
 
     // Caregiver forms used to be listed here (the link was shown to a role the route then bounces), and so did the Dashboard (a SupportWorker's
-    // home is My Shifts).
+    // home is My shifts).
     expect(hrefs(mainNav())).toEqual([
       '/portal',
       '/trips', '/schedule', '/tasks',
@@ -586,22 +619,22 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
 
   const FULL_MENU = [
     'Dashboard',
-    'My Shifts',
-    'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+    'My shifts',
+    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
     'Participants: Participants | Medications | Caregiver forms',
-    'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
-    'Finance: Billing | Claim batches',
+    'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+    'Budgets',
     'Incidents',
     'Settings',
   ]
-  // A SupportWorker starts from My Shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
-  const SUPPORT_WORKER_MENU = ['My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
-  // ReadOnly reads most of the app but its API refuses Rostering (all five pages), Billing and Claim batches, Caregiver forms and
-  // Settings, so the menu does not offer them: Finance and Settings disappear, Staff & roster is down to Staff and Qualifications.
+  // A SupportWorker starts from My shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
+  const SUPPORT_WORKER_MENU = ['My shifts', 'Trips: Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
+  // ReadOnly reads most of the app but its API refuses Rostering (all five pages), Budgets, Caregiver forms and
+  // Settings, so the menu does not offer them: Budgets and Settings disappear, Staff & roster is down to Staff and Qualifications.
   const READ_ONLY_MENU = [
     'Dashboard',
-    'My Shifts',
-    'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+    'My shifts',
+    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
     'Participants: Participants | Medications',
     'Staff & roster: Staff | Qualifications',
     'Incidents',
@@ -613,7 +646,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     expect(navShape()).toEqual(FULL_MENU)
   })
 
-  it('gives a SupportWorker only the pages their role may open, and no Dashboard (their home is My Shifts)', () => {
+  it('gives a SupportWorker only the pages their role may open, and no Dashboard (their home is My shifts)', () => {
     signIn('SupportWorker')
     renderAt('/')
     expect(navShape()).toEqual(SUPPORT_WORKER_MENU)
@@ -624,10 +657,9 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     signIn('ReadOnly')
     renderAt('/')
     expect(navShape()).toEqual(READ_ONLY_MENU)
-    for (const name of [/Board$/, /Patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Billing$/, /Claim batches$/, /Caregiver forms$/, /Settings$/]) {
+    for (const name of [/Roster board$/, /Shift patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Budgets$/, /Caregiver forms$/, /Settings$/]) {
       expect(screen.queryByRole('link', { name }), String(name)).not.toBeInTheDocument()
     }
-    expect(screen.queryByRole('button', { name: /Finance$/ })).not.toBeInTheDocument()
   })
 
   it('shows Caregiver forms only to a role whose route would not bounce it (the route needs write access)', () => {
@@ -644,19 +676,6 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     renderAt('/onboarding/p-1')
     // NavLink's own matching would not light it (the path is not under /participants), and its aria-current would have said nothing.
     expect(within(mainNav()).getByRole('link', { name: /Participants$/ })).toHaveAttribute('aria-current', 'page')
-  })
-
-  it('lights Claim batches, not Billing, on the batch pages and on a claim (/claims/:id has no entry of its own); Billing only on /billing', () => {
-    for (const [path, lit] of [
-      ['/claims/claim-1', 'Claim batches'], ['/billing/claim-batches', 'Claim batches'], ['/billing/claim-batches/cb-1', 'Claim batches'], ['/billing', 'Billing'],
-    ] as const) {
-      const { unmount } = renderAt(path)
-      const links = within(mainNav()).getAllByRole('link', { name: /(Billing|Claim batches)$/ })
-      expect(links.filter(link => link.getAttribute('aria-current') === 'page').map(link => link.textContent), path).toEqual([expect.stringContaining(lit)])
-      // Whichever of the two is lit, Finance opens itself for the page.
-      expect(openGroupToggle(/Finance$/), path).toHaveAttribute('aria-expanded', 'true')
-      unmount()
-    }
   })
 
   it('opens the group that holds the page you navigate to, and closes the drawer you navigated from', async () => {
@@ -829,11 +848,11 @@ describe('AppLayout — a closed group that holds the current page stays marked 
   it('takes the lit fill and aria-current when the user closes the group they are in, and loses both when it opens', () => {
     renderAt('/rostering/leave')
     const toggle = openGroupToggle(/Staff & roster$/)
-    // Open: the child link is the lit one, the header only turns bold.
+    // Open: the child link is the lit one, and the only one (the header stays as it is).
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(toggle).not.toHaveAttribute('aria-current')
     expect(toggle).not.toHaveClass(FILL)
-    expect(toggle).toHaveClass('font-bold')
+    expect(toggle).not.toHaveClass('font-bold')
 
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
@@ -872,10 +891,10 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
     expect(barLabels()).toEqual(['dashboardDashboard', 'mapTrips', 'calendar_view_weekRoster', 'groupParticipants', 'menuMore'])
   })
 
-  it('gives a SupportWorker a bar that starts with My Shifts, and Incidents instead of the Dashboard and the roster', () => {
+  it('gives a SupportWorker a bar that starts with My shifts, and Incidents instead of the Dashboard and the roster', () => {
     signIn('SupportWorker')
     renderAt('/trips')
-    expect(barLabels()).toEqual(['calendar_todayMy Shifts', 'mapTrips', 'groupParticipants', 'emergencyIncidents', 'menuMore'])
+    expect(barLabels()).toEqual(['calendar_todayMy shifts', 'mapTrips', 'groupParticipants', 'emergencyIncidents', 'menuMore'])
   })
 
   it('gives ReadOnly a Roster cell that opens Staff (the Board is refused it), still lit on its pages', () => {
@@ -910,7 +929,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
 
   it('lights More on a page the bar does not list, and only then', () => {
     signIn('Coordinator')
-    for (const path of ['/billing', '/incidents', '/settings', '/portal']) {
+    for (const path of ['/budgets', '/incidents', '/settings', '/portal']) {
       const { unmount } = renderAt(path)
       expect(lit(), path).toEqual(['menuMore'])
       expect(moreButton(), path).toHaveAttribute('aria-current', 'true')
@@ -930,7 +949,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
     expect(within(mobileNav()).getByRole('link', { name: 'Trips' })).toHaveAttribute('aria-current', 'true')
   })
 
-  it('shows the Staff & roster count on the Roster cell and My Shifts\' on a SupportWorker\'s, announced in the name', () => {
+  it('shows the Staff & roster count on the Roster cell and My shifts\' on a SupportWorker\'s, announced in the name', () => {
     signIn('Coordinator')
     mockUsePendingLeaveCount.mockReturnValue(3)
     mockUsePendingCompletionCount.mockReturnValue(4)
@@ -942,7 +961,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
     signIn('SupportWorker')
     mockUsePendingWitnessRequests.mockReturnValue({ data: [{}, {}], isLoading: false })
     renderAt('/')
-    expect(within(mobileNav()).getByRole('link', { name: '2 witness approvals pending, My Shifts' })).toHaveTextContent('2')
+    expect(within(mobileNav()).getByRole('link', { name: '2 witness approvals pending, My shifts' })).toHaveTextContent('2')
   })
 
   it('opens the drawer from More, the same one as the header toggle', () => {
@@ -1004,11 +1023,11 @@ describe('AppLayout — the drawer is a dialog while it is a drawer (below lg)',
     expect(document.activeElement).toBe(within(dialog()).getByRole('link', { name: 'Dashboard' }))
   })
 
-  it('keeps Tab inside: from Sign Out it wraps to the first item, and Shift+Tab from the first item wraps to Sign Out', () => {
+  it('keeps Tab inside: from Sign out it wraps to the first item, and Shift+Tab from the first item wraps to Sign out', () => {
     renderAt('/trips')
     openWithHeaderToggle()
     const first = within(dialog()).getByRole('link', { name: 'Dashboard' })
-    const signOut = within(dialog()).getByRole('button', { name: 'Sign Out' })
+    const signOut = within(dialog()).getByRole('button', { name: 'Sign out' })
 
     signOut.focus()
     fireEvent.keyDown(signOut, { key: 'Tab' })
@@ -1132,5 +1151,74 @@ describe('AppLayout — a page that throws, or is still loading, leaves the shel
     fireEvent.click(within(mainNav()).getByRole('link', { name: 'Dashboard' }))
     expect(screen.getByText('A working page')).toBeInTheDocument()
     expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument()
+  })
+})
+
+describe('AppLayout — Sign out', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockEndSession.mockReset()
+  })
+
+  it('ends the whole session (cookie, Firebase user and keys), not just the browser keys', () => {
+    localStorage.setItem('odip_token', 'a-session')
+    renderAt('/trips')
+
+    fireEvent.click(screen.getByRole('button', { name: /Sign out$/ }))
+
+    expect(mockEndSession).toHaveBeenCalledTimes(1)
+  })
+})
+
+// V2-G: the sidebar holds one group open for the page you are on, not every group you have passed through, and the page has ONE active signal.
+describe('AppLayout — only the current group and the saved ones stay open', () => {
+  afterEach(() => localStorage.clear())
+
+  it('closes a group that opened itself for the page you left when you move to a page in another group', async () => {
+    const router = createMemoryRouter([{ path: '*', element: <AppLayout /> }], { initialEntries: ['/trips'] })
+    render(<RouterProvider router={router} />)
+    expect(openGroupToggle(/Trips$/)).toHaveAttribute('aria-expanded', 'true')
+
+    await act(async () => { await router.navigate('/participants') })
+    await act(async () => { await router.navigate('/staff') })
+
+    expect(openGroupToggle(/Staff & roster$/)).toHaveAttribute('aria-expanded', 'true')
+    expect(openGroupToggle(/Trips$/)).toHaveAttribute('aria-expanded', 'false')
+    expect(openGroupToggle(/Participants$/)).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('keeps a group the user opened open across navigation', async () => {
+    const router = createMemoryRouter([{ path: '*', element: <AppLayout /> }], { initialEntries: ['/'] })
+    render(<RouterProvider router={router} />)
+    fireEvent.click(openGroupToggle(/Trips$/))
+    await act(async () => { await router.navigate('/staff') })
+    expect(openGroupToggle(/Trips$/)).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('lights only the page link inside an open group: the group header is not bold too', () => {
+    renderAt('/rostering/leave')
+    const toggle = openGroupToggle(/Staff & roster$/)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).not.toHaveClass('font-bold')
+    expect(within(mainNav()).getByRole('link', { current: 'page' })).toHaveClass('font-bold')
+  })
+})
+
+describe('AppLayout — the notifications bell is in the header for every role', () => {
+  afterEach(() => {
+    localStorage.clear()
+    mockUseInbox.mockImplementation(() => ({ data: undefined, isError: false, refetch: vi.fn() }))
+  })
+
+  it.each([
+    ['Admin', '/trips'],
+    ['Coordinator', '/trips'],
+    ['ReadOnly', '/trips'],
+    ['SupportWorker', '/portal'],
+  ])('%s on %s sees it, named with the unread count', (role, path) => {
+    signIn(role)
+    mockUseInbox.mockImplementation(() => ({ data: { items: [], unreadCount: 3, hasMore: false }, isError: false, refetch: vi.fn() }))
+    renderAt(path)
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: '3 unread, Notifications' })).toBeInTheDocument()
   })
 })

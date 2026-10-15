@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
-import { Pencil, Trash2, ArchiveRestore } from 'lucide-react'
+import { Pencil, Trash2, Archive, ArchiveRestore } from 'lucide-react'
 import { TAP_ICON_SQUARE } from './tapArea'
+import { Button } from './Button'
 
 export type ActionButtonsProps = {
   editTo?: string
@@ -8,6 +9,8 @@ export type ActionButtonsProps = {
   onDelete?: () => void
   onRestore?: () => void
   showArchived?: boolean
+  /** A card's footer row of labelled secondary Buttons (Accommodation, Vehicles) instead of the icon squares a table row uses. */
+  labelled?: boolean
 }
 
 /**
@@ -20,10 +23,20 @@ export type ActionButtonsProps = {
  */
 const ICON_BUTTON = `${TAP_ICON_SQUARE} rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors`
 
-export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchived }: ActionButtonsProps) {
+export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchived, labelled }: ActionButtonsProps) {
   const stop = (e: React.MouseEvent, fn?: () => void) => {
     e.stopPropagation()
     fn?.()
+  }
+
+  if (labelled) {
+    return (
+      <div className="flex gap-2 border-t border-[var(--color-border)] pt-2">
+        {editTo && <Button to={editTo} variant="secondary" size="sm" className="flex-1"><Pencil className="w-3.5 h-3.5" /> Edit</Button>}
+        {showArchived && onRestore && <Button onClick={e => stop(e, onRestore)} variant="secondary" size="sm" className="flex-1"><ArchiveRestore className="w-3.5 h-3.5" /> Restore</Button>}
+        {!showArchived && onDelete && <Button onClick={e => stop(e, onDelete)} variant="secondary" size="sm" className="flex-1"><Archive className="w-3.5 h-3.5" /> Archive</Button>}
+      </div>
+    )
   }
 
   return (
@@ -44,14 +57,14 @@ export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchive
       )}
       {showArchived && onRestore && (
         <button onClick={e => stop(e, onRestore)}
-          className={`${ICON_BUTTON} hover:bg-green-500/20 hover:text-green-400`}
+          className={`${ICON_BUTTON} hover:bg-[var(--color-primary-fixed)]/40 hover:text-[var(--color-primary)]`}
           title="Restore" aria-label="Restore">
           <ArchiveRestore className="w-4 h-4" />
         </button>
       )}
       {!showArchived && onDelete && (
         <button onClick={e => stop(e, onDelete)}
-          className={`${ICON_BUTTON} hover:bg-red-500/20 hover:text-red-400`}
+          className={`${ICON_BUTTON} hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]`}
           title="Archive" aria-label="Archive">
           <Trash2 className="w-4 h-4" />
         </button>

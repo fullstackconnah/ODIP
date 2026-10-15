@@ -21,7 +21,7 @@ export type NavBadge = { source: NavBadgeSource; noun: string }
 
 /**
  * The bottom bar has two shapes: the office roles' and the field role's. A SupportWorker is the one role that works from a phone,
- * on shift, so their bar leads with My Shifts and Incidents instead of the Dashboard and the roster.
+ * on shift, so their bar leads with My shifts and Incidents instead of the Dashboard and the roster.
  */
 export type BarAudience = 'office' | 'field'
 
@@ -43,7 +43,7 @@ export type NavLeaf = {
   /** The route also needs write access (App.tsx `requiresWrite`), so a role without it would be bounced: do not offer the link. */
   requiresWrite?: boolean
   requiresParticipantLifecycleMutation?: boolean
-  /** Roles that can open the page but have somewhere better to start (the Dashboard, for a SupportWorker: My Shifts). */
+  /** Roles that can open the page but have somewhere better to start (the Dashboard, for a SupportWorker: My shifts). */
   hideForRoles?: UserRole[]
   matchActive?: NavMatch
   badge?: NavBadge
@@ -76,12 +76,12 @@ const participantsHubActive: NavMatch = pathname =>
   pathname === '/participants' || pathname.startsWith('/participants/') || pathname.startsWith('/onboarding/')
 
 export const navItems: NavEntry[] = [
-  // A SupportWorker starts from My Shifts: the Dashboard is KPIs they cannot act on. They keep 'dashboard' on their allow-list (so a link
+  // A SupportWorker starts from My shifts: the Dashboard is KPIs they cannot act on. They keep 'dashboard' on their allow-list (so a link
   // to it still resolves), but `/` sends them to /portal (App.tsx HomeRoute) and the menu does not offer it.
   { to: '/', label: 'Dashboard', msIcon: 'dashboard', page: 'dashboard', hideForRoles: ['SupportWorker'], bar: { order: 1, audience: 'office' } },
   {
     to: '/portal',
-    label: 'My Shifts',
+    label: 'My shifts',
     msIcon: 'calendar_today',
     page: 'portal',
     badge: { source: 'pendingWitness', noun: 'witness approval' },
@@ -93,7 +93,7 @@ export const navItems: NavEntry[] = [
     msIcon: 'map',
     bar: { order: 2 },
     children: [
-      { to: '/trips', label: 'All Trips', msIcon: 'map', page: 'trips' },
+      { to: '/trips', label: 'Trips', msIcon: 'map', page: 'trips' },
       { to: '/schedule', label: 'Schedule', msIcon: 'calendar_month', page: 'schedule' },
       { to: '/bookings', label: 'Bookings', msIcon: 'description', page: 'bookings' },
       { to: '/accommodation', label: 'Accommodation', msIcon: 'home_work', page: 'accommodation' },
@@ -123,8 +123,8 @@ export const navItems: NavEntry[] = [
     badgeNoun: 'approval',
     bar: { order: 3, label: 'Roster', audience: 'office' },
     children: [
-      { to: '/rostering', label: 'Board', msIcon: 'calendar_view_week', page: 'rostering' },
-      { to: '/rostering/patterns', label: 'Patterns', msIcon: 'event_repeat', page: 'rostering' },
+      { to: '/rostering', label: 'Roster board', msIcon: 'calendar_view_week', page: 'rostering' },
+      { to: '/rostering/patterns', label: 'Shift patterns', msIcon: 'event_repeat', page: 'rostering' },
       { to: '/rostering/compatibility', label: 'Compatibility', msIcon: 'join_inner', page: 'rostering' },
       {
         to: '/rostering/leave',
@@ -146,23 +146,8 @@ export const navItems: NavEntry[] = [
       { to: '/qualifications', label: 'Qualifications', msIcon: 'health_and_safety', page: 'qualifications' },
     ],
   },
-  {
-    id: 'finance',
-    label: 'Finance',
-    msIcon: 'payments',
-    children: [
-      // /billing is exact-only (isExactMatchOnly: Claim batches is nested under it), so the batch and claim pages light Claim batches.
-      { to: '/billing', label: 'Billing', msIcon: 'receipt_long', page: 'billing' },
-      {
-        to: '/billing/claim-batches',
-        label: 'Claim batches',
-        msIcon: 'inventory_2',
-        page: 'billing',
-        // A claim is opened from a trip or a participant, so /claims/:id has no entry of its own: it belongs with the batches.
-        matchActive: pathname => pathname.startsWith('/billing/claim-batches') || pathname.startsWith('/claims/'),
-      },
-    ],
-  },
+  // Every participant's budget for the funding period running now, sorted by risk (budget phase 2b). Money, so its own page key: SupportWorker's allow-list does not name it and ReadOnly is refused it.
+  { to: '/budgets', label: 'Budgets', msIcon: 'account_balance_wallet', page: 'budgets' },
   { to: '/incidents', label: 'Incidents', msIcon: 'emergency', page: 'incidents', bar: { order: 5, audience: 'field' } },
   { to: '/settings', label: 'Settings', msIcon: 'settings', page: 'settings' },
 ]
@@ -187,7 +172,7 @@ export function isRouteActive(to: string, pathname: string): boolean {
 
 /**
  * Whether a leaf needs an EXACT path match rather than the prefix match. It does when another leaf is nested under it
- * (/rostering has /rostering/patterns, /billing has /billing/claim-batches): otherwise it would stay lit on every one of its
+ * (/rostering has /rostering/patterns): otherwise it would stay lit on every one of its
  * children's pages next to their own entry. A leaf with no such nested sibling (/trips, whose /trips/:id is not a leaf) keeps the
  * prefix match so it stays lit on its own detail pages.
  */
@@ -314,3 +299,7 @@ export function toBarItem(entry: ResolvedEntry, pathname: string, counts: NavCou
     noun: entry.leaf.badge?.noun ?? '',
   }
 }
+
+/** The nav item looks, shared by the sidebar and the Settings rail: the lit "you are here" item, and every other item. */
+export const NAV_ACTIVE = 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
+export const NAV_IDLE = 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'

@@ -64,7 +64,7 @@ async function fillAndCreate(u: ReturnType<typeof userEvent.setup>) {
   await u.type(screen.getByLabelText(/first name/i), 'Sam')
   await u.type(screen.getByLabelText(/last name/i), 'Staff')
   await u.type(screen.getByLabelText(/^email/i), 'Sam.Staff@Acme.Example.com')
-  await u.click(screen.getByRole('button', { name: 'Create Staff Member' }))
+  await u.click(screen.getByRole('button', { name: 'Create staff member' }))
 }
 
 /** Firebase's own errors carry the reason in `code`. */
@@ -143,7 +143,7 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
     await waitFor(() => expect(mockEnsure).toHaveBeenCalledTimes(1))
     const busy = await screen.findByRole('button', { name: 'Sending link...' })
     expect(busy).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Create Staff Member' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create staff member' })).not.toBeInTheDocument()
 
     // Enter in a field submits the form the same way a click does, and must not post the staff member a second time.
     await u.type(screen.getByLabelText(/first name/i), '{Enter}')
@@ -162,9 +162,9 @@ describe('StaffCreatePage: the sign-in email after a create', () => {
     await fillAndCreate(u)
 
     await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Staff Member' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create staff member' })).toBeEnabled())
 
-    await u.click(screen.getByRole('button', { name: 'Create Staff Member' }))
+    await u.click(screen.getByRole('button', { name: 'Create staff member' }))
 
     expect(await screen.findByText("We've sent sam.staff@acme.example.com a link to set their password. It can take a few minutes, so ask them to check spam.")).toBeInTheDocument()
     expect(mockCreate).toHaveBeenCalledTimes(2)

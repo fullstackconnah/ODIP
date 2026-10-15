@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import ParticipantDetailPage from './ParticipantDetailPage'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
 import { TONE } from '@/lib/tone'
+import { __testHooks } from '@/hooks/useBackNavigation'
 
 const {
   mockUseParticipant, mockUseParticipantBookings, mockUseParticipantAlerts,
@@ -32,7 +33,7 @@ const {
   // above so its own tests never run the real axios mutationFn body.
   mockUseGenerateCaregiverLink: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false, isError: false })),
   mockUseRevokeCaregiverLink: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isError: false })),
-  mockUseCaregiverSubmissions: vi.fn<(status?: string) => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
+  mockUseCaregiverSubmissions: vi.fn<(status?: string, options?: { participantId?: string; enabled?: boolean }) => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
 }))
 
 // Only the API layer is mocked. The nested-CRUD sections (Contacts/Risks/Consents/Health
@@ -152,6 +153,17 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear()
 })
+
+/** The header's one menu (VISUAL-1 V2): the documents, the agreement draft and the caregiver link, at every width. */
+const documentsTrigger = () => screen.getByRole('button', { name: /^(Documents|Preparing…)$/ })
+async function openDocuments() {
+  await userEvent.setup().click(documentsTrigger())
+}
+async function chooseFromDocuments(name: RegExp | string) {
+  const user = userEvent.setup()
+  await user.click(documentsTrigger())
+  await user.click(screen.getByRole('option', { name }))
+}
 
 describe('ParticipantDetailPage — INTAKE-03 Community Access card', () => {
   it('is absent when the participant does not have the CommunityAccessDailyLiving stream', () => {
@@ -359,7 +371,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       data: makeParticipant({
         medicareNumber: 'MED123', isCald: true, primaryDiagnosis: 'Autism', memory: 'Fair',
         serviceStreams: 'CommunityAccessDailyLiving', favouriteBreakfast: 'Toast',
-        behaviourRiskSummary: 'Escalates when routine changes.',
+        behaviourRiskSummary: 'Escalates when routine changes.', addressSuburb: 'Ipswich',
       }),
       isLoading: false,
     })
@@ -374,6 +386,31 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     ]
     const inDocumentOrder = [...expectedOrder].sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
     expect(inDocumentOrder).toEqual(expectedOrder)
+  })
+
+  // VISUAL-1 V2: a card with nothing recorded was a block of "Not recorded" or a wall of dashes; they fold into one line naming them.
+  it('folds the cards with nothing recorded into one "Not recorded" line that opens to them, for an editor', async () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123' }), isLoading: false })
+    renderAt('participant-1')
+
+    const fold = screen.getByText(/^Not recorded:/).closest('details') as HTMLElement
+    expect(fold).not.toHaveAttribute('open')
+    expect(fold.querySelector('summary')).toHaveTextContent(
+      'Not recorded: Address & Living Arrangements, Cultural Background, Medical, Behaviour & Communication, Meals & Diet, About Me and Risks & Hazards Summary',
+    )
+    // The cards inside are the real ones, Edit and all; a card with something recorded stays in the grid.
+    expect(within(fold).getByRole('heading', { name: 'Medical' })).toBeInTheDocument()
+    expect(within(fold).queryByRole('heading', { name: 'Key Identifiers' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Key Identifiers' }).closest('details')).toBeNull()
+  })
+
+  it('has nothing to fold for a role that cannot edit: an empty card is not shown to it at all', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.queryByText(/^Not recorded:/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Medical' })).not.toBeInTheDocument()
   })
 
   it('uses the auto-fill items-start section grid with a min(26rem,100%) floor, and gives the table-based Health/ADL sections a bare wrapper instead of a second bordered Card', () => {
@@ -430,110 +467,6 @@ describe('ParticipantDetailPage — header meta row', () => {
   })
 })
 
-// DOC-01 — header Documents buttons (Intake Form PDF / Participant Profile PDF). Both hooks are
-// mocked (see the vi.hoisted block above) so these tests never exercise the real axios/blob
-// mutationFn body — that body is identical to useDownloadProdaFile's, already covered by
-// billing.ts's own test coverage.
-describe('ParticipantDetailPage — DOC-01 Documents header buttons', () => {
-  function setup() {
-    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    return renderAt('participant-1')
-  }
-
-  it('renders both Documents buttons with their labels', () => {
-    setup()
-
-    expect(screen.getByRole('button', { name: /intake form pdf/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /participant profile pdf/i })).toBeInTheDocument()
-  })
-
-  it('calls the intake form mutation with the participant id and a filename when clicked', async () => {
-    const user = userEvent.setup()
-    const mutate = vi.fn()
-    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate, isPending: false, isError: false })
-    setup()
-
-    await user.click(screen.getByRole('button', { name: /intake form pdf/i }))
-
-    expect(mutate).toHaveBeenCalledWith({ id: 'participant-1', fileName: expect.stringContaining('.pdf') })
-  })
-
-  it('calls the participant profile mutation with the participant id and a filename when clicked', async () => {
-    const user = userEvent.setup()
-    const mutate = vi.fn()
-    mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate, isPending: false, isError: false })
-    setup()
-
-    await user.click(screen.getByRole('button', { name: /participant profile pdf/i }))
-
-    expect(mutate).toHaveBeenCalledWith({ id: 'participant-1', fileName: expect.stringContaining('.pdf') })
-  })
-
-  it('disables the Intake Form button and shows loading state while its mutation is pending', () => {
-    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
-    setup()
-
-    const button = screen.getByRole('button', { name: /preparing/i })
-    expect(button).toBeDisabled()
-  })
-
-  it('disables the Participant Profile button and shows loading state while its mutation is pending', () => {
-    mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
-    setup()
-
-    // Both buttons share the same "Preparing…" label while pending — assert two are showing it
-    // (the Intake Form button stays in its default, non-pending state).
-    expect(screen.getAllByRole('button', { name: /preparing/i })).toHaveLength(1)
-  })
-
-  it('shows an error alert under the Intake Form button when its mutation errors', () => {
-    mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
-    setup()
-
-    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't download the file/i)
-  })
-
-  it('shows an error alert under the Participant Profile button when its mutation errors', () => {
-    mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
-    setup()
-
-    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't download the file/i)
-  })
-
-  // PF-10.6 — third Documents button (Client Overview PDF), no tripId since this page has no
-  // trip context (the safer-default, more-availability product call — see this branch's report).
-  it('renders the Client Overview PDF button', () => {
-    setup()
-
-    expect(screen.getByRole('button', { name: /client overview pdf/i })).toBeInTheDocument()
-  })
-
-  it('calls the client overview mutation with the participant id (no tripId) and a filename when clicked', async () => {
-    const user = userEvent.setup()
-    const mutate = vi.fn()
-    mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate, isPending: false, isError: false })
-    setup()
-
-    await user.click(screen.getByRole('button', { name: /client overview pdf/i }))
-
-    expect(mutate).toHaveBeenCalledWith({ id: 'participant-1', fileName: expect.stringContaining('.pdf') })
-  })
-
-  it('disables the Client Overview button and shows loading state while its mutation is pending', () => {
-    mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
-    setup()
-
-    expect(screen.getAllByRole('button', { name: /preparing/i })).toHaveLength(1)
-  })
-
-  it('shows an error alert under the Client Overview button when its mutation errors', () => {
-    mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
-    setup()
-
-    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't download the file/i)
-  })
-})
-
 // PD-1 — the header's Draft signal is the existing role="status" banner alone. A separate amber
 // "Draft" pill was deliberately NOT added alongside it: the banner already carries the status
 // role, the explanatory text, and (for canWrite users) the "Resume intake" action, so a second
@@ -571,6 +504,26 @@ describe('ParticipantDetailPage — PD-1 header warning pill', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/this participant is a draft/i)
     expect(screen.queryByRole('link', { name: /resume intake/i })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Sophie Brown' })).toBeInTheDocument()
+  })
+
+  // PARTICIPANTS-3 / PARTICIPANTS-4 (owner decision 2026-10-12): ReadOnly is refused the profile wizard and the intake, so it gets neither Edit nor Resume intake.
+  it('offers ReadOnly the draft banner with no Edit and no Resume intake', () => {
+    setUserRole('ReadOnly')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('status')).toHaveTextContent(/this participant is a draft/i)
+    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /resume intake/i })).not.toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s Edit and Resume intake on a draft', role => {
+    setUserRole(role)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('link', { name: /^edit$/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /resume intake/i })).toBeInTheDocument()
   })
 
   it('keeps the draft banner and its Resume intake action regardless of the button cluster width (Edit button present, PDF download pending)', () => {
@@ -611,6 +564,26 @@ describe('ParticipantDetailPage — PF-10.5 three-way resume banner', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/profile isn't finished yet/i)
   })
 
+  it('services started, still onboarding: says they can be rostered while onboarding finishes, and links to the checklist', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: true, intakeCompletedAt: '2026-08-01T00:00:00Z', servicesStartedAt: '2026-10-10T01:00:00Z' }), isLoading: false })
+    renderAt('participant-1')
+
+    const banner = screen.getByRole('status')
+    expect(banner).toHaveTextContent(/Services have started, and onboarding is still open/i)
+    expect(banner).not.toHaveTextContent(/Excluded from rosters/i)
+    expect(screen.getByRole('link', { name: /open checklist/i })).toHaveAttribute('href', '/onboarding/participant-1')
+  })
+
+  it('services started but then switched off: the ordinary onboarding banner, not "they can be rostered" (V5)', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false, intakeCompletedAt: '2026-08-01T00:00:00Z', servicesStartedAt: '2026-10-10T01:00:00Z' }), isLoading: false })
+    renderAt('participant-1')
+
+    expect(screen.getByRole('status')).not.toHaveTextContent(/Services have started/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/profile isn't finished yet/i)
+  })
+
   it('IsDraft false: no banner at all, regardless of IntakeCompletedAt', () => {
     setUserRole('Admin')
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: false, intakeCompletedAt: '2026-08-01T00:00:00Z' }), isLoading: false })
@@ -622,10 +595,9 @@ describe('ParticipantDetailPage — PF-10.5 three-way resume banner', () => {
   })
 })
 
-// cg04 Task 9 — the header's caregiver-link control (design §5): gated on
-// canWriteParticipantDetails (not canWrite — see B14 in the discovery fact sheet), showing a
-// status chip plus Generate/Regenerate and, once a link is active, Revoke. A freshly generated
-// URL is shown exactly once with a Copy button.
+// cg04 Task 9 — the caregiver link (design §5): gated on canWriteParticipantDetails (not canWrite — see B14 in the discovery fact
+// sheet). Since VISUAL-1 V2 its Generate/Regenerate and, once a link is active, Revoke are items of the header's Documents menu, and
+// the Regenerate item names the active link's status. A freshly generated URL is shown exactly once with a Copy button.
 describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
   function activeSubmission(overrides: Record<string, unknown> = {}) {
     return {
@@ -635,39 +607,61 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
       ...overrides,
     }
   }
+  const withActiveLink = () => mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
+    data: status === 'Submitted' ? [activeSubmission()] : [],
+  }))
 
   function setup() {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     return renderAt('participant-1')
   }
 
-  it('hides the control for a role without canWriteParticipantDetails', () => {
+  it('hides the control for a role without canWriteParticipantDetails', async () => {
     setUserRole('SupportWorker')
     setup()
+    await openDocuments()
 
-    expect(screen.queryByRole('button', { name: /generate caregiver link/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /generate caregiver link/i })).not.toBeInTheDocument()
     expect(screen.queryByTestId('caregiver-link-control')).not.toBeInTheDocument()
   })
 
-  it('shows Generate link for a role with canWriteParticipantDetails (Coordinator)', () => {
+  it('asks for no caregiver submissions at all for a role the list route refuses (SupportWorker)', () => {
+    mockUseCaregiverSubmissions.mockClear()
+    setUserRole('SupportWorker')
+    setup()
+
+    expect(mockUseCaregiverSubmissions).toHaveBeenCalled()
+    for (const [, options] of mockUseCaregiverSubmissions.mock.calls as unknown as [string, { enabled?: boolean }][]) expect(options.enabled).toBe(false)
+  })
+
+  it('asks only for this participant\x27s caregiver submissions (Coordinator)', () => {
     setUserRole('Coordinator')
     setup()
 
-    expect(screen.getByRole('button', { name: /generate caregiver link/i })).toBeInTheDocument()
+    expect(mockUseCaregiverSubmissions).toHaveBeenCalledWith('Draft', { participantId: 'participant-1', enabled: true })
+    expect(mockUseCaregiverSubmissions).toHaveBeenCalledWith('Submitted', { participantId: 'participant-1', enabled: true })
+  })
+
+  it('offers Generate caregiver link in the menu (Coordinator), and no Revoke without a link', async () => {
+    setUserRole('Coordinator')
+    setup()
+    await openDocuments()
+
+    expect(screen.getByRole('option', { name: /generate caregiver link/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /revoke caregiver link/i })).not.toBeInTheDocument()
   })
 
   it('after generating, shows the URL once with a Copy button and the expiry, and never again once dismissed by navigation away', async () => {
     setUserRole('Admin')
-    const user = userEvent.setup()
     const mutateAsync = vi.fn(async () => ({ success: true, data: { token: 'tok-123', expiresAt: '2026-09-17T00:00:00Z' } }))
     mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync, isPending: false, isError: false })
     const first = setup()
 
-    await user.click(screen.getByRole('button', { name: /generate caregiver link/i }))
+    await chooseFromDocuments(/generate caregiver link/i)
 
     expect(mutateAsync).toHaveBeenCalledWith({ participantId: 'participant-1' })
     const control = screen.getByTestId('caregiver-link-control')
-    expect(within(control).getByText(`${window.location.origin}/caregiver/tok-123`)).toBeInTheDocument()
+    expect(await within(control).findByText(`${window.location.origin}/caregiver/tok-123`)).toBeInTheDocument()
     expect(within(control).getByRole('button', { name: /copy/i })).toBeInTheDocument()
     expect(within(control).getByText(/won't be shown again/i)).toBeInTheDocument()
 
@@ -679,32 +673,26 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     expect(screen.queryByText(`${window.location.origin}/caregiver/tok-123`)).not.toBeInTheDocument()
   })
 
-  it('shows a status chip and Revoke when a link is active', () => {
+  it('names the active link on Regenerate and offers Revoke when a link is active', async () => {
     setUserRole('Admin')
-    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
-      data: status === 'Submitted' ? [activeSubmission()] : [],
-    }))
+    withActiveLink()
     setup()
+    await openDocuments()
 
-    const control = screen.getByTestId('caregiver-link-control')
-    expect(within(control).getByText('Submitted')).toBeInTheDocument()
-    expect(within(control).getByRole('button', { name: /^revoke$/i })).toBeInTheDocument()
-    expect(within(control).getByRole('button', { name: /regenerate caregiver link/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /regenerate caregiver link/i })).toHaveTextContent('Current link: submitted')
+    expect(screen.getByRole('option', { name: /revoke caregiver link/i })).toBeInTheDocument()
   })
 
-  // PP-40 — Revoke now stages behind a ConfirmDialog rather than firing immediately, same
-  // pattern as RiskEntriesSection's delete.
+  // PP-40 — Revoke stages behind a ConfirmDialog rather than firing immediately, same pattern as RiskEntriesSection's delete.
   it('Revoke does not call the mutation until confirmed in the dialog', async () => {
     setUserRole('Admin')
     const user = userEvent.setup()
     const revokeMutateAsync = vi.fn(async () => ({ success: true }))
     mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: revokeMutateAsync, isPending: false, isError: false })
-    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
-      data: status === 'Submitted' ? [activeSubmission()] : [],
-    }))
+    withActiveLink()
     setup()
 
-    await user.click(screen.getByRole('button', { name: /^revoke$/i }))
+    await chooseFromDocuments(/revoke caregiver link/i)
     expect(revokeMutateAsync).not.toHaveBeenCalled()
 
     const dialog = screen.getByRole('alertdialog')
@@ -720,17 +708,33 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     const user = userEvent.setup()
     const revokeMutateAsync = vi.fn(async () => ({ success: true }))
     mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: revokeMutateAsync, isPending: false, isError: false })
-    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
-      data: status === 'Submitted' ? [activeSubmission()] : [],
-    }))
+    withActiveLink()
     setup()
 
-    await user.click(screen.getByRole('button', { name: /^revoke$/i }))
-    const dialog = screen.getByRole('alertdialog')
-    await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
+    await chooseFromDocuments(/revoke caregiver link/i)
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /cancel/i }))
 
     expect(revokeMutateAsync).not.toHaveBeenCalled()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  // Q4a follow-up: the line showed the Revoke error whenever both had failed, so a later failed Generate still read as the old Revoke refusal.
+  it('shows the latest refusal: a failed Generate after a failed Revoke shows the Generate error', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const refused = (message: string) => async () => { throw { response: { data: { message } } } }
+    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: vi.fn(refused('Revoke refused')), isPending: false, isError: false })
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn(refused('Generate refused')), isPending: false, isError: false })
+    withActiveLink()
+    setup()
+
+    await chooseFromDocuments(/revoke caregiver link/i)
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /^revoke$/i }))
+    const control = screen.getByTestId('caregiver-link-control')
+    expect(await within(control).findByRole('alert')).toHaveTextContent('Revoke refused')
+
+    await chooseFromDocuments(/regenerate caregiver link/i)
+    await waitFor(() => expect(within(control).getByRole('alert')).toHaveTextContent('Generate refused'))
   })
 })
 
@@ -810,21 +814,10 @@ describe('ParticipantDetailPage — Rostering tab', () => {
   })
 })
 
-// Density verdict (mobile) — below md the header can't fit three PDF buttons, "Agreement draft" and Edit
-// without stacking five 44px rows over the participant's name, so the four document actions fold into
-// one "Documents" menu (the shared Dropdown "menu" variant) and Edit stays a visible button. jsdom has no
-// matchMedia — every test above therefore sees the wide layout — so these stub one.
-describe('ParticipantDetailPage — Documents menu below md', () => {
+// VISUAL-1 V2 — the header carried seven controls at 1440 (three PDFs, Agreement draft, the caregiver link and Revoke, Edit). The
+// Documents menu (the shared Dropdown "menu" variant, secondary look) holds all but Edit at every width, and Edit is the one primary.
+describe('ParticipantDetailPage — Documents menu', () => {
   const ERROR_COPY = /couldn't download the file/i
-
-  function stubMatchMedia(matches: boolean) {
-    const mql = {
-      matches, media: '', onchange: null,
-      addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    }
-    window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia
-  }
 
   function idleDownloads() {
     mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
@@ -848,73 +841,56 @@ describe('ParticipantDetailPage — Documents menu below md', () => {
     setUserRole('Admin')
     idleDownloads()
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    stubMatchMedia(false)
   })
 
   afterEach(() => {
-    Reflect.deleteProperty(window, 'matchMedia')
     idleDownloads()
   })
 
-  it('folds the three PDF buttons and Agreement draft into one Documents menu and keeps Edit visible', () => {
+  it('holds the PDFs, Agreement draft and the caregiver link in one secondary-look menu, and keeps Edit the one primary', () => {
     renderAt('participant-1')
 
-    expect(screen.getByRole('button', { name: 'Documents' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /intake form pdf/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /participant profile pdf/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /client overview pdf/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Documents' })).toHaveClass('bg-[var(--color-card)]', 'border')
+    expect(screen.getByRole('button', { name: 'Documents' })).not.toHaveClass('bg-[var(--color-primary)]')
+    for (const name of [/intake form pdf/i, /participant profile pdf/i, /client overview pdf/i, /caregiver link/i, /^revoke$/i]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
     expect(screen.queryByRole('link', { name: /agreement draft/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /^edit$/i })).toHaveAttribute('href', '/participants/participant-1/profile')
   })
 
   // Round 1b (review F18, decided): an agreement draft carries money, which is never visible to ReadOnly or SupportWorker (the API refuses them its GETs). ReadOnly satisfies canWrite, so it was offered the page.
-  it.each(['ReadOnly', 'SupportWorker'])('does not offer Agreement draft to %s, in the menu or as a button, and still offers the PDFs', async role => {
-    const user = userEvent.setup()
+  it.each(['ReadOnly', 'SupportWorker'])('does not offer Agreement draft to %s, and still offers the PDFs', async role => {
     setUserRole(role)
-    const menu = renderAt('participant-1')
-    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    renderAt('participant-1')
+    await openDocuments()
     expect(screen.getByRole('option', { name: 'Intake Form PDF' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Agreement draft' })).not.toBeInTheDocument()
-    menu.unmount()
-
-    stubMatchMedia(true)
-    renderAt('participant-1')
-    expect(screen.getByRole('button', { name: /intake form pdf/i })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /agreement draft/i })).not.toBeInTheDocument()
   })
 
-  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('offers Agreement draft to %s, in the menu and as a button', async role => {
-    const user = userEvent.setup()
+  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('offers Agreement draft to %s', async role => {
     setUserRole(role)
-    const menu = renderAt('participant-1')
-    await user.click(screen.getByRole('button', { name: 'Documents' }))
-    expect(screen.getByRole('option', { name: 'Agreement draft' })).toBeInTheDocument()
-    menu.unmount()
-
-    stubMatchMedia(true)
     renderAt('participant-1')
-    expect(screen.getByRole('link', { name: /agreement draft/i })).toHaveAttribute('href', '/participants/participant-1/agreement-draft')
+    await openDocuments()
+    expect(screen.getByRole('option', { name: 'Agreement draft' })).toBeInTheDocument()
   })
 
-  it('lists the three PDFs and Agreement draft when the menu opens', async () => {
-    const user = userEvent.setup()
+  it('lists the three PDFs, Agreement draft and the caregiver link when the menu opens', async () => {
     renderAt('participant-1')
 
-    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    await openDocuments()
 
     expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual([
-      'Intake Form PDF', 'Participant Profile PDF', 'Client Overview PDF', 'Agreement draft',
+      'Intake Form PDF', 'Participant Profile PDF', 'Client Overview PDF', 'Agreement draft', 'Generate caregiver link',
     ])
   })
 
-  it('carries the coarse-pointer height floor on every option row and on the trigger, since Dropdown takes no height prop', async () => {
+  it('carries the coarse-pointer height floor on every option row and on the trigger', async () => {
     const user = userEvent.setup()
     renderAt('participant-1')
 
-    // Trigger: the skin wrapper (button -> Dropdown's own div -> wrapper) gives the button --control-h
-    // (32px, 44px under a touch pointer).
-    const skin = screen.getByRole('button', { name: 'Documents' }).parentElement!.parentElement!
-    expect(skin).toHaveClass('[&_button]:h-[var(--control-h)]')
+    // Trigger: a secondary md Button, --control-h (32px, 44px under a touch pointer).
+    expect(screen.getByRole('button', { name: 'Documents' })).toHaveClass('h-[var(--control-h)]')
 
     await user.click(screen.getByRole('button', { name: 'Documents' }))
 
@@ -1005,24 +981,6 @@ describe('ParticipantDetailPage — Documents menu below md', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('keeps the full button set (and no menu) from md up', () => {
-    stubMatchMedia(true)
-    renderAt('participant-1')
-
-    expect(screen.queryByRole('button', { name: 'Documents' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /intake form pdf/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /participant profile pdf/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /client overview pdf/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /agreement draft/i })).toHaveAttribute('href', '/participants/participant-1/agreement-draft')
-  })
-
-  it('still renders the caregiver control and Edit next to the menu, so nothing is lost below md', () => {
-    renderAt('participant-1')
-
-    expect(screen.getByTestId('caregiver-link-control')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /generate caregiver link/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^edit$/i })).toBeInTheDocument()
-  })
 })
 
 // Density verdict (mobile) — coarse-pointer tap targets and the compact empty state. jsdom applies no CSS,
@@ -1033,16 +991,6 @@ describe('ParticipantDetailPage — coarse-pointer targets and empty tables', ()
     renderAt('participant-1')
 
     expect(screen.getByRole('link', { name: 'Back to participants' })).toHaveClass('min-h-[var(--tap-min)]', 'min-w-[var(--tap-min)]')
-  })
-
-  it('renders the caregiver-link buttons as Buttons (--control-h tall, 44px under a coarse pointer)', () => {
-    setUserRole('Admin')
-    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    mockUseCaregiverSubmissions.mockReturnValue({ data: [{ id: 's1', participantId: 'participant-1', status: 'Draft' }] })
-    renderAt('participant-1')
-
-    expect(screen.getByRole('button', { name: /regenerate caregiver link/i })).toHaveClass('h-[var(--control-h)]')
-    expect(screen.getByRole('button', { name: 'Revoke' })).toHaveClass('h-[var(--control-h)]')
   })
 
   it('gives the bookings-tab trip link the --tap-min floor so the row link is a real tap target', () => {
@@ -1240,7 +1188,7 @@ describe('ParticipantDetailPage — Funding tab', () => {
     expect(tab).toHaveAttribute('data-plan-type', makeParticipant().planType)
   })
 
-  it.each(['SupportWorker', 'ReadOnly'])('has no Funding tab for a %s (ReadOnly satisfies canWrite and must still not see money), and reads ?tab=funding as Details', role => {
+  it.each(['SupportWorker', 'ReadOnly'])('has no Funding tab for a %s (neither may see money), and reads ?tab=funding as Details', role => {
     setUserRole(role)
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAtTab('participant-1', 'funding')
@@ -1275,7 +1223,9 @@ describe('ParticipantDetailPage — copying the caregiver link on a page that is
     document.execCommand = execCommand
     try {
       renderAt('participant-1')
-      await user.click(screen.getByRole('button', { name: /Generate/ }))
+      // This test's own `user`: another userEvent.setup() would put its clipboard stub back on navigator.
+      await user.click(documentsTrigger())
+      await user.click(screen.getByRole('option', { name: /Generate/ }))
       await user.click(await screen.findByRole('button', { name: 'Copy' }))
 
       expect(execCommand).toHaveBeenCalledWith('copy')
@@ -1283,5 +1233,117 @@ describe('ParticipantDetailPage — copying the caregiver link on a page that is
       if (original) Object.defineProperty(navigator, 'clipboard', original)
       else delete (navigator as unknown as Record<string, unknown>).clipboard
     }
+  })
+})
+
+// PARTICIPANTS-5: a refused Revoke closes its confirm, so the server's reason is not hidden behind it.
+describe('ParticipantDetailPage — a refused caregiver link Revoke', () => {
+  it('closes the confirm and shows the server message', async () => {
+    setUserRole('Admin')
+    const user = userEvent.setup()
+    const refused = { response: { status: 409, data: { message: 'This link has already been used.' } } }
+    mockUseRevokeCaregiverLink.mockReturnValue({ mutate: vi.fn(), mutateAsync: vi.fn().mockRejectedValue(refused), isPending: false, isError: true, error: refused } as ReturnType<typeof mockUseRevokeCaregiverLink>)
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
+      data: status === 'Submitted' ? [{ id: 'submission-1', participantId: 'participant-1', status: 'Submitted' }] : [],
+    }))
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    await chooseFromDocuments(/revoke caregiver link/i)
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /^revoke$/i }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByText('This link has already been used.')).toBeInTheDocument()
+  })
+})
+
+// Review N6: a refused Generate is caught and shown on the existing error line, not left as an unhandled rejection.
+describe('ParticipantDetailPage — a refused caregiver link Generate', () => {
+  it('shows the server message', async () => {
+    setUserRole('Admin')
+    const refused = { response: { status: 400, data: { message: 'Participant has no consent on file.' } } }
+    mockUseGenerateCaregiverLink.mockReturnValue({ mutateAsync: vi.fn().mockRejectedValue(refused), isPending: false, isError: true, error: refused } as ReturnType<typeof mockUseGenerateCaregiverLink>)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+
+    await chooseFromDocuments(/generate caregiver link/i)
+
+    expect(screen.getByText('Participant has no consent on file.')).toBeInTheDocument()
+  })
+})
+
+// VD1 design review: a one-row scrolling strip hid Funding, Rostering and History at 1440 with no cue on macOS or iPad. From md up
+// the strip wraps, so every tab stays on screen; below md it is the default one scrolling row.
+describe('ParticipantDetailPage — every tab visible from md up', () => {
+  it('renders all twelve Admin tabs in a strip that wraps from md up', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+    expect(screen.getAllByRole('tab')).toHaveLength(12)
+    expect(screen.getByRole('tablist', { name: 'Participant detail sections' })).toHaveClass('md:flex-wrap')
+  })
+})
+
+// NAV F2: Back was pinned to /participants (Active), where a draft is never listed.
+describe('ParticipantDetailPage — Back returns to where the user came from, else to the stage list', () => {
+  afterEach(() => __testHooks.reset())
+  const back = () => screen.getByRole('link', { name: /^Back to / })
+
+  it('falls back to Enquiries for a draft whose intake is not complete', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false }), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/participants?tab=enquiries')
+  })
+
+  it('falls back to Onboarding for a draft whose intake is complete', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: false, intakeCompletedAt: '2026-10-01T00:00:00Z' }), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/participants?tab=onboarding')
+  })
+
+  it('falls back to the Active list for a finalised participant', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/participants')
+  })
+
+  it('returns to the previous in-app screen when there is one', () => {
+    __testHooks.recordCurrentPath('/onboarding/participant-1')
+    __testHooks.recordCurrentPath('/participants/participant-1')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+    expect(back()).toHaveAttribute('href', '/onboarding/participant-1')
+  })
+})
+
+// NAV F8: a submitted caregiver form had no route to its review from the participant.
+describe('ParticipantDetailPage — Review caregiver form', () => {
+  it('offers the review of a submitted form in the Documents menu, and opens it', async () => {
+    setUserRole('Admin')
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
+      data: status === 'Submitted' ? [{ id: 'submission-1', participantId: 'participant-1', participantName: 'Sophie Brown', status: 'Submitted', caregiverName: 'Jane Doe', createdAt: '2026-08-01T00:00:00Z', expiresAt: '2026-09-17T00:00:00Z', submittedAt: '2026-08-02T00:00:00Z' }] : [],
+    }))
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    render(
+      <MemoryRouter initialEntries={['/participants/participant-1']}>
+        <Routes>
+          <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+          <Route path="/caregiver-submissions/:id" element={<div data-testid="review-route" />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await chooseFromDocuments('Review caregiver form')
+    expect(screen.getByTestId('review-route')).toBeInTheDocument()
+  })
+
+  it('does not offer it while the form is only a draft', async () => {
+    setUserRole('Admin')
+    mockUseCaregiverSubmissions.mockImplementation((status?: string) => ({
+      data: status === 'Draft' ? [{ id: 'submission-2', participantId: 'participant-1', participantName: 'Sophie Brown', status: 'Draft', caregiverName: null, createdAt: '2026-08-01T00:00:00Z', expiresAt: '2026-09-17T00:00:00Z', submittedAt: null }] : [],
+    }))
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAt('participant-1')
+    await openDocuments()
+    expect(screen.queryByRole('option', { name: 'Review caregiver form' })).not.toBeInTheDocument()
   })
 })

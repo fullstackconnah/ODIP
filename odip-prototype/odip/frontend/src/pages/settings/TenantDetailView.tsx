@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react'
-import { Users, UserCheck, Clock, ChevronDown, ChevronRight } from 'lucide-react'
+import { Users, UserCheck, Clock, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { BackButton } from '@/components/BackButton'
 import { useAdminTenantUsers } from '@/api/hooks/settings'
 import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
-import { DataTable } from '@/components/DataTable'
+import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
+import { Button } from '@/components/Button'
+import { formatInstantDateAu } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -59,9 +61,9 @@ export default function TenantDetailView({
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-[var(--color-foreground)]">
+            <h3 className="text-xl font-bold text-[var(--color-foreground)]">
               {tenant.name}
-            </h2>
+            </h3>
             <span
               className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
                 tenant.isActive
@@ -78,20 +80,12 @@ export default function TenantDetailView({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onEditTenant}
-            className="px-4 py-2 rounded-full text-sm font-semibold border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)] transition-all"
-          >
-            Edit Tenant
-          </button>
-          <button
-            type="button"
-            onClick={() => onAddUser(tenant.id)}
-            className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-all"
-          >
-            + Add User
-          </button>
+          <Button variant="secondary" onClick={onEditTenant}>
+            Edit
+          </Button>
+          <Button onClick={() => onAddUser(tenant.id)}>
+            <Plus className="w-4 h-4" /> New user
+          </Button>
         </div>
       </div>
 
@@ -111,7 +105,7 @@ export default function TenantDetailView({
         />
         <SummaryCard
           icon={<Clock className="w-5 h-5 text-[var(--color-muted-foreground)]" />}
-          value={new Date(tenant.createdAt).toLocaleDateString()}
+          value={formatInstantDateAu(tenant.createdAt)}
           label="Created"
           loading={false}
         />
@@ -120,7 +114,7 @@ export default function TenantDetailView({
       {/* ── Users Table ────────────────────────────────────────── */}
       <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-4 py-3 border-b border-[var(--color-border)]">
-          <h3 className="text-sm font-semibold text-[var(--color-foreground)]">Users</h3>
+          <h4 className="text-sm font-semibold text-[var(--color-foreground)]">Users</h4>
         </div>
 
         {usersLoading ? (
@@ -171,13 +165,11 @@ export default function TenantDetailView({
                 header: '',
                 align: 'right',
                 render: (user: TenantUserDto) => (
-                  <button
-                    type="button"
-                    onClick={() => onEditUser(user.id)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-primary)] transition-colors"
-                  >
-                    Edit
-                  </button>
+                  <RowActions>
+                    <Button variant="ghost" size="sm" onClick={() => onEditUser(user.id)} aria-label={`Edit: ${user.fullName}`}>
+                      Edit
+                    </Button>
+                  </RowActions>
                 ),
               },
             ]}
@@ -192,9 +184,9 @@ export default function TenantDetailView({
           onClick={() => setProviderOpen(prev => !prev)}
           className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-[var(--color-accent)]/50 transition-colors"
         >
-          <h3 className="text-sm font-semibold text-[var(--color-foreground)]">
+          <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
             Provider Settings
-          </h3>
+          </h4>
           {providerOpen ? (
             <ChevronDown className="w-4 h-4 text-[var(--color-muted-foreground)]" />
           ) : (

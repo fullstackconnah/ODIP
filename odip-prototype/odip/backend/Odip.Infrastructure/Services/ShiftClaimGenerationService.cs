@@ -8,6 +8,7 @@ using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Infrastructure.Services;
 
@@ -90,22 +91,27 @@ public class ShiftClaimGenerationService
     public async Task<ShiftClaimGenerated> GenerateAsync(
         Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default)
     {
+        // Two requests at the same moment would both find the same shifts unclaimed and claim them twice, so the second waits here, then reads what the first saved.
+        await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, scope: "claim-generate");
+
         var (lineItems, leftOut, participant) = await CalculateAsync(participantId, from, to, ct);
 
         var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("Provider settings are not configured.");
 
-        var gstCode = settings.GSTRegistered ? GSTCode.P1 : GSTCode.P2;
+        // shortcut: no per-item GST flag; P1 only via legacy lines; add a catalogue GST flag if a taxable support appears
+        var gstCode = GSTCode.P2;
 
+        var claimId = Guid.NewGuid();
         var claim = new TripClaim
         {
-            Id = Guid.NewGuid(),
+            Id = claimId,
             Kind = ClaimKind.Shift,
             ParticipantId = participantId,
             PeriodFrom = from,
             PeriodTo = to,
             Status = TripClaimStatus.Draft,
-            ClaimReference = BuildClaimReference(participant),
+            ClaimReference = BuildClaimReference(participant, claimId),
             CreatedAt = DateTime.UtcNow
         };
         _db.TripClaims.Add(claim);
@@ -132,6 +138,7 @@ public class ShiftClaimGenerationService
         claim.TotalAmount = claimLineItems.Sum(l => l.TotalAmount);
 
         await _db.SaveChangesAsync(ct);
+        await held.CommitAsync(ct);
         // A caveat (an overnight shift: evening and night rates are not applied yet) is shown on the preview line, but a claim line has no column to keep it in, so once the claim exists
         // nothing on it would say so. The response echoes the flagged shifts for the screen that generated it; a lasting flag on the line is a column and a migration, left to the L3-03 follow-up.
         var flagged = lineItems
@@ -192,8 +199,18 @@ public class ShiftClaimGenerationService
 
         var lineItems = new List<ShiftLineCalc>();
         var leftOut = new List<ShiftClaimLeftOutDto>();
+        // No line for an NDIS-funded participant without an NDIS number: services can begin before the profile is complete, so this is reachable. The
+        // shifts are left out with the reason, never dropped silently. A participant funded another way has no NDIS number by design and is claimed as before.
+        var noNdisNumber = participant.FundingSource == ParticipantFundingSource.Ndis && string.IsNullOrWhiteSpace(participant.NdisNumber)
+            ? $"{participant.FullName}: NDIS number missing. Add it to the participant's profile, then generate the claim again."
+            : null;
         foreach (var shift in shifts)
         {
+            if (noNdisNumber is not null)
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = noNdisNumber });
+                continue;
+            }
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
             var outcome = ShiftPriceEstimator.Price(
                 catalogueItems, shift.ServiceDate, shift.DurationHours, shift.Ratio, shift.NightType, participant.IsIntensiveSupport, state, publicHolidays);
@@ -251,15 +268,8 @@ public class ShiftClaimGenerationService
 
     // ─── Helpers ─
 
-    private static string BuildClaimReference(Participant participant)
-    {
-        var code = !string.IsNullOrWhiteSpace(participant.NdisNumber)
-            ? participant.NdisNumber
-            : participant.Id.ToString("N")[..8].ToUpper();
-        var date = DateTime.UtcNow.ToString("yyyyMMdd");
-        var raw = $"TC-{code}-{date}";
-        return raw.Length > 50 ? raw[..50] : raw;
-    }
+    private static string BuildClaimReference(Participant participant, Guid claimId) =>
+        TripClaim.ReferenceFor(!string.IsNullOrWhiteSpace(participant.NdisNumber) ? participant.NdisNumber : participant.Id.ToString("N")[..8].ToUpper(), claimId);
 
     private class ShiftLineCalc
     {

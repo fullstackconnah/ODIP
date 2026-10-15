@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Modal } from '@/components/Modal'
@@ -8,6 +8,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import type { CreateRecurringUnavailabilityDto } from '@/api/types'
+import { Button } from '@/components/Button'
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const
 
@@ -69,7 +70,8 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
   const schema = useMemo(() => buildSchema(requireStaff), [requireStaff])
   const resetValues = useMemo<UnavailabilityFormValues>(() => ({ ...DEFAULT_VALUES, ...initialValues }), [initialValues])
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<UnavailabilityFormValues>({
-    resolver: zodResolver(schema),
+    // The schema marks some fields optional, but the defaults keep every field a string, so the parsed values match.
+    resolver: zodResolver(schema) as Resolver<UnavailabilityFormValues>,
     defaultValues: resetValues,
   })
   // Same wiring as LeaveRequestFormModal — see that component's doc comment for the quoted
@@ -109,17 +111,12 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
         closeOnBackdrop={false}
         footer={
           <>
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={submitting}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={submit} disabled={submitting}>
               {submitting ? 'Saving…' : isEdit ? 'Save changes' : requireStaff ? 'Save' : 'Submit request'}
-            </button>
+            </Button>
           </>
         }
       >

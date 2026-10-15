@@ -4,10 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SchedulePage from './SchedulePage'
 import type { ScheduleOverviewDto, ScheduleStaffDto, ScheduleTripDto, ScheduleVehicleDto } from '@/api/types'
 
-vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canWrite: true }),
-}))
-
 const overview: ScheduleOverviewDto = {
   trips: [{
     id: 'trip-1', tripName: 'Gold Coast Beach Break', tripCode: null, destination: null, region: null,
@@ -28,9 +24,13 @@ const overview: ScheduleOverviewDto = {
 // The hook mock reads this at render time, so a test can swap the data the page sees.
 let currentOverview: ScheduleOverviewDto = overview
 let currentError: unknown = null
+// A refetch that failed behind data already on screen: TanStack keeps the data and sets the error.
+let refetchError: unknown = null
 
 vi.mock('@/api/hooks', () => ({
-  useScheduleOverview: () => ({ data: currentError ? undefined : currentOverview, isLoading: false, error: currentError }),
+  useIntakeVisits: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useConvertParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
+  useScheduleOverview: () => ({ data: currentError ? undefined : currentOverview, isLoading: false, error: currentError ?? refetchError }),
   useCreateStaffAssignment: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useCreateVehicleAssignment: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDeleteStaffAssignment: () => ({ mutate: vi.fn(), isPending: false }),
@@ -82,9 +82,12 @@ const richOverview: ScheduleOverviewDto = {
   vehicles: [vehicle],
 }
 
+// The real permissions, from the signed-in role: a Coordinator unless a test says otherwise.
 beforeEach(() => {
+  localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
   currentOverview = overview
   currentError = null
+  refetchError = null
 })
 
 describe('SchedulePage — Tentative badge for pending leave', () => {
@@ -132,11 +135,19 @@ describe('SchedulePage — density (spec §7)', () => {
     expect(within(strip).getByText('0')).not.toHaveClass('text-[var(--color-conflict)]')
   })
 
-  it('puts the subtitle inline with the heading via PageHeader instead of on its own line', () => {
+  // Title = nav label, and no subtitle restating it (UI survey s.1).
+  it('titles the page with its nav label and no subtitle', () => {
     renderPage()
 
-    const h1 = screen.getByRole('heading', { level: 1, name: 'Schedule Overview' })
-    expect(h1.parentElement).toHaveTextContent('Staff and vehicle assignment across active trips · Click Available to assign')
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Schedule' })
+    expect(h1.parentElement).toHaveTextContent(/^Schedule$/)
+  })
+
+  it('offers no dead controls: no view toggle, no disabled Timeline, Filter or Download', () => {
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /grid view|timeline/i })).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Coming soon')).not.toBeInTheDocument()
   })
 
   it('sets the cell font size at the source: the table itself is text-sm (14px), not the inherited 16px', () => {
@@ -215,8 +226,9 @@ describe('SchedulePage — density (spec §7)', () => {
     expect(name).not.toHaveClass('md:flex-1')
     expect(meta).toHaveClass('min-w-0', 'truncate', 'md:flex-1')
     expect(meta.className).not.toMatch(/shrink-\[/)
-    // The wheelchair count is an icon on screen; the title spells it out.
-    expect(meta).toHaveAttribute('title', 'ABC123 · Mini Bus · 12 seats · 2 wheelchair')
+    // One wording for wheelchair positions across the app, on screen and in the title.
+    expect(meta).toHaveAttribute('title', 'ABC123 · Mini Bus · 12 seats · 2 wheelchair positions')
+    expect(meta).toHaveTextContent('ABC123 · Mini Bus · 12 seats · 2 wheelchair positions')
   })
 
   it('sizes the Resources column at 20rem from md up, the width the longest staff name needs beside the chip strip', () => {
@@ -265,8 +277,17 @@ describe('SchedulePage — density (spec §7)', () => {
     currentError = new Error('boom')
     renderPage()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Schedule Overview' })).toBeInTheDocument()
-    expect(screen.getByText('Failed to load schedule overview.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Schedule' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this schedule.")
+  })
+
+  it('keeps the grid when a background refetch fails behind data already on screen', () => {
+    refetchError = new Error('refetch failed')
+    renderPage()
+
+    expect(screen.getByRole('group', { name: 'Resource health' })).toBeInTheDocument()
+    expect(screen.getAllByRole('table').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows the empty state, with the summary strip still present, when there are no trips', () => {
@@ -337,5 +358,27 @@ describe('SchedulePage — staff role is the role alone, the region is in the ti
     renderPage()
     const button = screen.getByRole('button', { name: /^Priya Nadarajah/ })
     expect(button).toHaveAttribute('title', 'Priya Nadarajah')
+  })
+})
+
+// TRIPS-5 (owner decision 2026-10-12): assigning and unassigning are writes the server refuses ReadOnly and SupportWorker, so the grid offers them neither.
+describe('SchedulePage — assign and unassign by role', () => {
+  it.each(['ReadOnly', 'SupportWorker'])('offers %s no Assign or Unassign, and still shows the assignments', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    currentOverview = richOverview
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /^Assign/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Unassign/ })).not.toBeInTheDocument()
+    expect(screen.getAllByText('Alex Rivera').length).toBeGreaterThan(0)
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s Assign and Unassign', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    currentOverview = richOverview
+    renderPage()
+
+    expect(screen.getAllByRole('button', { name: /^Assign/ }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /^Unassign/ }).length).toBeGreaterThan(0)
   })
 })

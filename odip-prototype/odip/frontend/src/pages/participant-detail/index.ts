@@ -10,6 +10,7 @@ export { default as ContactsTab } from './ContactsTab'
 export { default as SupportProfileTab } from './SupportProfileTab'
 export { default as ClaimsTab } from './ClaimsTab'
 export { default as RosteringTab } from './RosteringTab'
+export { default as BookingsTab } from './BookingsTab'
 export { default as FundingTab } from './FundingTab'
 export { SectionEditPanel } from './SectionEditPanel'
 
@@ -25,3 +26,5 @@ export { default as ParticipantCommunityAccessSection } from './ParticipantCommu
 export { default as ParticipantMealsDietSection } from './ParticipantMealsDietSection'
 export { default as ParticipantAboutMeSection } from './ParticipantAboutMeSection'
 export { default as ParticipantRisksHazardsSummarySection } from './ParticipantRisksHazardsSummarySection'
+export { NotRecordedFold } from './NotRecordedFold'
+export { hasAddressLiving, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary } from './recorded'

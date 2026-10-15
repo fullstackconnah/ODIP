@@ -10,7 +10,7 @@ namespace Odip.Domain.Entities;
 /// Section 8 checkbox lists (research spec §3). Exact same fixed-enumerated-set shape as
 /// <see cref="ParticipantAdlAssessment"/> — one row per type, GET always materializes all
 /// twenty-one with an unanswered placeholder for any type with no row yet (see
-/// ParticipantChecklistItemsController.GetForParticipant), created/updated transactionally with
+/// ParticipantChecklistItemsController.MaterializeAll), created/updated transactionally with
 /// the participant (ParticipantsController.UpsertChecklistItemsAsync, copying
 /// UpsertAdlAssessmentsAsync's documented load-bearing empty/null guard again).
 ///

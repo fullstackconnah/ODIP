@@ -1,12 +1,14 @@
 import { useParticipants, useDeleteParticipant, useRestoreParticipant, useUpdateParticipantStatus, useParticipantAlertsAggregate } from '@/api/hooks'
 import { extractErrorMessage, maskNdisNumber } from '@/lib/utils'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
-import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { Callout } from '@/components/Callout'
+import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
-import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
+import { PageState } from '@/components/PageState'
+import { ServiceStreamBadges, CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { Button } from '@/components/Button'
@@ -16,24 +18,35 @@ import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
 import type { ParticipantListDto } from '@/api/types'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Users, ChevronRight, Pill } from 'lucide-react'
+import { Users, ChevronRight, Pill, Check } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
-import { plural } from '@/lib/format'
 import { queryPhase } from '@/lib/queryPhase'
 import { readParticipantActivatedNotice } from './profile/participantActivated'
+import { AgreementsEndingList } from './AgreementsEndingList'
 
 const ACTIVE_STATUS_COLORS: Record<string, string> = {
   Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
   Inactive: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
 }
 
-/** The two views of the register: finalised participants only. A draft is never listed here: it is an Enquiries row (intake open) or an Onboarding row (intake complete). */
-type View = 'active' | 'archived'
+/** The views of the register: finalised participants only (a draft is an Enquiries or an Onboarding row), and, for the roles that manage participants, their agreements ending (agreement PR 2). */
+type View = 'active' | 'archived' | 'ending'
 const VIEW_OPTIONS: { key: View; label: string }[] = [
   { key: 'active', label: 'Active' },
   { key: 'archived', label: 'Archived' },
 ]
+const ENDING_OPTION: { key: View; label: string } = { key: 'ending', label: 'Agreements ending' }
+
+// A care need the phone card must not lose: the table keeps the tick a 'boolean' column draws, the card shows the need as a chip.
+function CareNeed({ label }: { label: string }) {
+  return (
+    <>
+      <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto max-md:hidden" aria-label={label} />
+      <span className={`${CHIP_CLASS} md:hidden`}>{label}</span>
+    </>
+  )
+}
 
 /**
  * What each view asks the server for. Active is the operational register (the server owns the stage rule, so a browser filter cannot
@@ -51,35 +64,8 @@ function listParams(view: View, search: string): Record<string, string> {
 /** The row of the participant the user has just activated: the same highlight the Onboarding table gives the participant who has just completed intake. */
 const ARRIVAL_ROW = 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40'
 
-export default function ParticipantsPage() {
-  const screen = useParticipantsScreen()
-  return (
-    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      {/* PageHeader's title row and filter row are siblings. Directly inside this flex column the
-          section gap opens between them (32 + 16 + 8 + 32 = 88px); in a plain wrapper they stay in
-          block flow: 32px title row + 8px + 32px filters = 72px, the spec §3 header budget. */}
-      <div>
-        <PageHeader
-          title="Participants"
-          subtitle={screen.countLabel}
-          action={screen.view === 'active' && screen.canWrite && (
-            <Button to="/participants/new" size="md">
-              <Plus className="w-4 h-4" /> New Participant
-            </Button>
-          )}
-        >
-          {screen.toolbar}
-        </PageHeader>
-      </div>
-
-      {screen.body}
-    </div>
-  )
-}
-
 /**
- * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns one PageHeader; the standalone page above keeps
- * the same controls in its own header. The hub used to render only the body, which left the Active / Archived toggle and the search
+ * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns one PageHeader. The hub used to render only the body, which left the Active / Archived toggle and the search
  * with no screen to live on (L2-02): Archive could not be undone, and the register could not be searched.
  */
 export function ParticipantsTable() {
@@ -93,7 +79,8 @@ export function ParticipantsTable() {
 }
 
 function useParticipantsScreen() {
-  const { canWrite, canViewAlerts } = usePermissions()
+  const { canWrite, canViewAlerts, canManageParticipantLifecycle } = usePermissions()
+  const viewOptions = canManageParticipantLifecycle ? [...VIEW_OPTIONS, ENDING_OPTION] : VIEW_OPTIONS
   const navigate = useNavigate()
   const location = useLocation()
   // A one-off confirmation from the Profile wizard ("{name} is now an active participant."), carried by navigation state when completing a participant's
@@ -145,7 +132,9 @@ function useParticipantsScreen() {
     setStatusNotice(null)
   }
 
-  const participantsQuery = useParticipants(listParams(view, search.trim()))
+  // Asked once typing pauses, not on every keystroke (each one sent a request and flashed the table to loading).
+  const term = useDebouncedValue(search.trim(), 300)
+  const participantsQuery = useParticipants(listParams(view, term))
   const { data: participants = [], refetch } = participantsQuery
   // Three different facts: loading, failed, and loaded. A failed load is not an empty register, and neither is a request that has not run
   // (TanStack Query pauses it while the browser reports offline: isLoading false, isError false, data undefined), so "No participants yet"
@@ -211,7 +200,7 @@ function useParticipantsScreen() {
 
   const toolbar = (
     <>
-      <ToggleGroup options={VIEW_OPTIONS} value={view} onChange={key => changeView(key as View)} ariaLabel="Participant list view" />
+      <ToggleGroup options={viewOptions} value={view} onChange={key => changeView(key as View)} ariaLabel="Participant list view" />
       <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." />
     </>
   )
@@ -230,6 +219,7 @@ function useParticipantsScreen() {
       key: 'fullName',
       header: 'Name',
       sortable: true,
+      mobile: 'primary',
       render: (p) => (
         // The link itself truncates (inline-block + truncate), not a wrapper around it: a wrapper's
         // overflow would clip the link's focus ring.
@@ -243,12 +233,13 @@ function useParticipantsScreen() {
         </Link>
       ),
     },
-    { key: 'ndisNumber', header: 'NDIS Number', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
-    { key: 'planType', header: 'Plan Type', priority: 'lowest', maxWidth: '10rem' },
-    { key: 'region', header: 'Region', sortable: true, priority: 'medium', maxWidth: '11rem' },
+    { key: 'ndisNumber', header: 'NDIS Number', mobile: 'hidden', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
+    { key: 'planType', header: 'Plan Type', maxWidth: '10rem', mobile: 'meta', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem', mobile: 'meta' },
     {
       key: 'serviceStreams',
       header: 'Streams',
+      mobile: 'hidden',
       // Chips never wrap onto a second line (w-max), the group is clipped at 10rem instead.
       render: (p) => (
         <div className="md:max-w-[10rem] md:overflow-hidden">
@@ -266,16 +257,18 @@ function useParticipantsScreen() {
           <span className="sr-only">Wheelchair</span>
         </span>
       ),
-      type: 'boolean',
       align: 'center',
+      mobile: 'meta',
+      render: (p) => p.mobilityAidWheelchair ? <CareNeed label="Wheelchair" /> : null,
     },
-    { key: 'isHighSupport', header: 'High', type: 'boolean', align: 'center' },
-    { key: 'supportRatio', header: 'Support Ratio', priority: 'low', maxWidth: '10rem' },
-    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', priority: 'low' },
+    { key: 'isHighSupport', header: 'High', align: 'center', mobile: 'meta', render: (p) => p.isHighSupport ? <CareNeed label="High support" /> : null },
+    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', mobile: 'meta', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
+    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', mobile: 'hidden' },
     {
       key: 'status',
       header: 'Status',
       sortable: true,
+      mobile: 'status',
       render: (p) => {
         const current = p.isActive ? 'Active' : 'Inactive'
         return (
@@ -407,13 +400,10 @@ function useParticipantsScreen() {
         </Callout>
       )}
       {errorNotice}
-      {loadFailed ? (
-        <Callout
-          tone="error"
-          actions={<button type="button" className="font-medium underline shrink-0" onClick={() => refetch()}>Retry</button>}
-        >
-          Could not load participants. Please try again.
-        </Callout>
+      {view === 'ending' ? (
+        <AgreementsEndingList search={term} />
+      ) : loadFailed ? (
+        <PageState kind="error" noun="participant list" onRetry={() => refetch()} />
       ) : !isLoading && participants.length === 0 ? (
         emptyState
       ) : (
@@ -424,6 +414,7 @@ function useParticipantsScreen() {
           sortable
           loading={isLoading}
           emptyMessage="No participants found"
+          onRowClick={p => navigate(`/participants/${p.id}`)}
           rowClassName={p => (arrival && p.id === arrival.participantId ? ARRIVAL_ROW : '')}
         />
       )}
@@ -467,12 +458,5 @@ function useParticipantsScreen() {
     </>
   )
 
-  return {
-    canWrite,
-    view,
-    toolbar,
-    // A failed load has no count: "0 participants" would read as an empty tenant.
-    countLabel: loadFailed || isLoading ? undefined : plural(participants.length, 'participant'),
-    body,
-  }
+  return { toolbar, body }
 }

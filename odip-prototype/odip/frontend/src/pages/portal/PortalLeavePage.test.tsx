@@ -130,8 +130,10 @@ describe('PortalLeavePage', () => {
     })
     renderPage()
 
-    const withdrawButtons = screen.getAllByRole('button', { name: /withdraw/i })
+    const withdrawButtons = screen.getAllByRole('button', { name: /^withdraw: /i })
     expect(withdrawButtons).toHaveLength(1)
+    // Each row has its own, so the name says which request it withdraws.
+    expect(withdrawButtons[0]).toHaveAccessibleName('Withdraw: 14 Sep 2026 – 18 Sep 2026')
 
     await user.click(withdrawButtons[0])
     const dialog = screen.getByRole('alertdialog')
@@ -151,7 +153,7 @@ describe('PortalLeavePage', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /withdraw/i }))
+    await user.click(screen.getByRole('button', { name: /^withdraw: /i }))
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /^withdraw$/i }))
 
@@ -207,5 +209,24 @@ describe('PortalLeavePage', () => {
     renderPage()
     expect(screen.queryByRole('button', { name: /request leave/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /withdraw/i })).not.toBeInTheDocument()
+  })
+})
+
+// A failed load is the house error banner (a danger Callout, announced at once, with its retry), not an EmptyState that reads as "nothing here".
+describe('PortalLeavePage — a failed load', () => {
+  it('shows the error banner with Try again, not an empty state', async () => {
+    const refetch = vi.fn()
+    mockUseMyLeave.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderPage()
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/couldn't load your leave/i)
+    await userEvent.setup().click(within(alert).getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
+  })
+
+  // One Back rule across the portal's sub-pages: the BackButton icon beside the title, to My shifts.
+  it('offers Back to My shifts beside the title', () => {
+    renderPage()
+    expect(screen.getByRole('link', { name: 'Back to my shifts' })).toHaveAttribute('href', '/portal')
   })
 })

@@ -1,30 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MissedMedicationGuidance } from './MissedMedicationGuidance'
-import type { ProviderSettingsDto } from '@/api/types'
+import type { MissedMedicationContactDto } from '@/api/types'
 
-const { mockUseProviderSettings } = vi.hoisted(() => ({
-  mockUseProviderSettings: vi.fn(),
+const { mockUseContact } = vi.hoisted(() => ({
+  mockUseContact: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
-  useProviderSettings: mockUseProviderSettings,
+  // Provider settings are Admin/Coordinator only: a support worker's read is refused, so the guidance must not depend on it (PARTICIPANTS-2).
+  useProviderSettings: () => ({ data: undefined }),
+  useMissedGuidanceContact: mockUseContact,
 }))
 
-function makeProviderSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSettingsDto {
-  return {
-    id: 'provider-1', registrationNumber: '123', abn: '456', organisationName: 'Test Org',
-    address: '1 Test St', state: 'VIC', gstRegistered: true, isPaceProvider: false,
-    bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
-    managerName: 'Priya Sharma', managerPhone: '0412 345 007',
-    participantReadinessMode: 'Warn',
-    medicationCompetencyMode: 'Warn',
-    ...overrides,
-  }
-}
-
-function setProviderSettings(overrides: Partial<ProviderSettingsDto> = {}) {
-  mockUseProviderSettings.mockReturnValue({ data: makeProviderSettings(overrides) })
+function setContact(overrides: Partial<MissedMedicationContactDto> = {}) {
+  mockUseContact.mockReturnValue({ data: { managerName: 'Priya Sharma', managerPhone: '0412 345 007', state: 'VIC', ...overrides } })
 }
 
 const baseEvent = {
@@ -35,21 +25,21 @@ const baseEvent = {
 
 describe('MissedMedicationGuidance outcome gating', () => {
   it.each(['Refused', 'Withheld', 'Missed', 'WrongMedication'] as const)('renders for a %s outcome', (outcome) => {
-    setProviderSettings()
+    setContact()
     render(<MissedMedicationGuidance event={{ ...baseEvent, outcome }} />)
 
     expect(screen.getByText(/what to do now/i)).toBeInTheDocument()
   })
 
   it('does not render for an Administered outcome', () => {
-    setProviderSettings()
+    setContact()
     const { container } = render(<MissedMedicationGuidance event={{ ...baseEvent, outcome: 'Administered' }} />)
 
     expect(container).toBeEmptyDOMElement()
   })
 
   it('renders the generic reference version when no event is given', () => {
-    setProviderSettings()
+    setContact()
     render(<MissedMedicationGuidance />)
 
     expect(screen.getByText(/what to do if a medication is missed, refused, withheld, or given wrong/i)).toBeInTheDocument()
@@ -58,7 +48,7 @@ describe('MissedMedicationGuidance outcome gating', () => {
 
 describe('MissedMedicationGuidance manager contact', () => {
   it('shows the configured manager as a tap-to-call link', () => {
-    setProviderSettings({ managerName: 'Priya Sharma', managerPhone: '0412 345 007' })
+    setContact({ managerName: 'Priya Sharma', managerPhone: '0412 345 007' })
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     const link = screen.getByRole('link', { name: /priya sharma.*0412 345 007/i })
@@ -66,15 +56,15 @@ describe('MissedMedicationGuidance manager contact', () => {
   })
 
   it('falls back to a "see your team leader" message, with an admin pointer, when unset', () => {
-    setProviderSettings({ managerName: null, managerPhone: null })
+    setContact({ managerName: null, managerPhone: null })
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.getByText(/no manager contact is configured for this organisation — see your team leader/i)).toBeInTheDocument()
-    expect(screen.getByText(/settings.*provider settings.*manager contact/i)).toBeInTheDocument()
+    expect(screen.getByText(/Admins: add it in Settings › Safety checks\./)).toBeInTheDocument()
   })
 
   it('falls back when only one of name/phone is configured', () => {
-    setProviderSettings({ managerName: 'Priya Sharma', managerPhone: null })
+    setContact({ managerName: 'Priya Sharma', managerPhone: null })
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.getByText(/no manager contact is configured/i)).toBeInTheDocument()
@@ -83,7 +73,7 @@ describe('MissedMedicationGuidance manager contact', () => {
 
 describe('MissedMedicationGuidance health advice line', () => {
   it('shows Nurse-on-Call plus the national fallback for a VIC tenant', () => {
-    setProviderSettings({ state: 'VIC' })
+    setContact({ state: 'VIC' })
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.getByRole('link', { name: /nurse-on-call.*1300 60 60 24/i })).toHaveAttribute('href', 'tel:1300606024')
@@ -92,7 +82,7 @@ describe('MissedMedicationGuidance health advice line', () => {
   })
 
   it('shows only the national line, with no fallback line, for a non-VIC tenant', () => {
-    setProviderSettings({ state: 'NSW' })
+    setContact({ state: 'NSW' })
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.getByRole('link', { name: /national health advice line.*1800 022 222/i })).toBeInTheDocument()
@@ -101,7 +91,7 @@ describe('MissedMedicationGuidance health advice line', () => {
   })
 
   it('shows only the national line for an unset state', () => {
-    setProviderSettings({ state: undefined as unknown as string })
+    setContact({ state: undefined as unknown as string })
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.getByRole('link', { name: /national health advice line.*1800 022 222/i })).toBeInTheDocument()
@@ -110,7 +100,7 @@ describe('MissedMedicationGuidance health advice line', () => {
 
 describe('MissedMedicationGuidance pharmacy contact', () => {
   it('shows a "call the pharmacy on ..." link when PharmacyPhone is present', () => {
-    setProviderSettings()
+    setContact()
     render(<MissedMedicationGuidance event={{ ...baseEvent, pharmacyName: 'Chemist Warehouse', pharmacyPhone: '03 9123 4567' }} />)
 
     const link = screen.getByRole('link', { name: /call the pharmacy on 03 9123 4567.*chemist warehouse/i })
@@ -118,7 +108,7 @@ describe('MissedMedicationGuidance pharmacy contact', () => {
   })
 
   it('omits the pharmacy call link when PharmacyPhone is absent, but still shows the packaging-check instruction', () => {
-    setProviderSettings()
+    setContact()
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.queryByText(/call the pharmacy on/i)).not.toBeInTheDocument()
@@ -126,7 +116,7 @@ describe('MissedMedicationGuidance pharmacy contact', () => {
   })
 
   it('tailors the packaging-check wording to a Webster pack when specified', () => {
-    setProviderSettings()
+    setContact()
     render(<MissedMedicationGuidance event={{ ...baseEvent, packaging: 'WebsterPack' }} />)
 
     expect(screen.getByText(/check the webster pack label/i)).toBeInTheDocument()
@@ -135,14 +125,14 @@ describe('MissedMedicationGuidance pharmacy contact', () => {
 
 describe('MissedMedicationGuidance always-present escalations', () => {
   it('always shows the Poisons Information Centre number', () => {
-    setProviderSettings()
+    setContact()
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.getByRole('link', { name: /poisons information centre.*13 11 26/i })).toHaveAttribute('href', 'tel:131126')
   })
 
   it('always shows the 000 emergency line as the last step', () => {
-    setProviderSettings()
+    setContact()
     render(<MissedMedicationGuidance event={baseEvent} />)
 
     expect(screen.getByRole('link', { name: /call 000 immediately/i })).toHaveAttribute('href', 'tel:000')
@@ -162,7 +152,7 @@ describe('MissedMedicationGuidance contains no dosing advice', () => {
   ]
 
   it('never contains dosing-advice or search-engine language, for any trigger outcome or the reference view', () => {
-    setProviderSettings()
+    setContact()
     const outcomes = ['Refused', 'Withheld', 'Missed', 'WrongMedication'] as const
     for (const outcome of outcomes) {
       const { container, unmount } = render(

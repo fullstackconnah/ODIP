@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, X, AlertTriangle, Pencil, ExternalLink, Trash2, Building2 } from 'lucide-react'
+import { Plus, AlertTriangle, Pencil, ExternalLink, Trash2, Building2 } from 'lucide-react'
 import {
   useAccommodation,
   useCreateAccommodation,
@@ -18,10 +18,11 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
+import { Modal } from '@/components/Modal'
 import { reservationCountsLabel } from './reservationCounts'
 import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
-import type { ReservationDto } from '@/api/types/reservations'
+import { toUpdateReservationDto, type ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
 
 /** "Sat, 3 Oct": the weekday and date of a calendar day ("2026-10-03"), the same in every viewer zone (it is never a local midnight). */
@@ -115,8 +116,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
   const handleUpdateReservation = () => {
     if (!editingReservation) return
-    const data: import('@/api/types/reservations').UpdateReservationDto = {
-      tripInstanceId: editReservationForm.tripInstanceId,
+    const data = toUpdateReservationDto(editingReservation, {
       accommodationPropertyId: editReservationForm.accommodationPropertyId,
       checkInDate: editReservationForm.checkInDate,
       checkOutDate: editReservationForm.checkOutDate,
@@ -129,7 +129,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
       dateConfirmed: editReservationForm.dateConfirmed || undefined,
       cancellationReason: editReservationForm.cancellationReason || undefined,
       comments: editReservationForm.comments || undefined,
-    }
+    })
     updateReservation.mutate({ id: editingReservation.id, data }, {
       onSuccess: () => setEditingReservation(null),
     })
@@ -374,7 +374,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
             {/* Missing nights warning */}
             {coverage && !coverage.allCovered && (
-              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-[rgba(195,201,181,0.15)]">
+              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-[var(--color-border)]/15">
                 <AlertTriangle className="w-3.5 h-3.5 text-[var(--color-destructive)] shrink-0" />
                 <p className="text-xs text-[var(--color-destructive)]">
                   Missing: {coverage.uncoveredNights.map(dayLabel).join(', ')}
@@ -394,287 +394,275 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
       {/* Add Accommodation Modal */}
       {showAddAccommodation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAddAccommodation(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Add Accommodation</h3>
-              <button onClick={() => setShowAddAccommodation(false)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Property Select or Create */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label id="addAccommPropertyLabel" className="block text-sm font-medium">Property</label>
-                  <button type="button" onClick={() => { setCreatingNewProperty(!creatingNewProperty); setAccommForm({ ...accommForm, accommodationPropertyId: '' }) }}
-                    className="text-xs text-[var(--color-primary)] hover:underline">
-                    {creatingNewProperty ? 'Select existing' : '+ Create new'}
-                  </button>
-                </div>
-                {creatingNewProperty ? (
-                  <div className="space-y-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-container)]/30">
+        <Modal
+          stickyFooter
+          open
+          onClose={() => setShowAddAccommodation(false)}
+          title="Add Accommodation"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowAddAccommodation(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateReservation}
+                disabled={creatingNewProperty ? !newPropertyForm.propertyName || createAccommodation.isPending || createReservation.isPending : !accommForm.accommodationPropertyId || createReservation.isPending}>
+                {createAccommodation.isPending || createReservation.isPending ? 'Adding...' : 'Add Reservation'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            {/* Property Select or Create */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label id="addAccommPropertyLabel" className="block text-sm font-medium">Property</label>
+                <button type="button" onClick={() => { setCreatingNewProperty(!creatingNewProperty); setAccommForm({ ...accommForm, accommodationPropertyId: '' }) }}
+                  className="text-xs text-[var(--color-primary)] hover:underline">
+                  {creatingNewProperty ? 'Select existing' : '+ Create new'}
+                </button>
+              </div>
+              {creatingNewProperty ? (
+                <div className="space-y-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-container)]/30">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Property Name *</label>
+                    <input type="text" value={newPropertyForm.propertyName} onChange={e => setNewPropertyForm({ ...newPropertyForm, propertyName: e.target.value })}
+                      className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                      placeholder="e.g. Beach House Resort" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium mb-1">Property Name *</label>
-                      <input type="text" value={newPropertyForm.propertyName} onChange={e => setNewPropertyForm({ ...newPropertyForm, propertyName: e.target.value })}
+                      <label className="block text-xs font-medium mb-1">Location</label>
+                      <input type="text" value={newPropertyForm.location} onChange={e => setNewPropertyForm({ ...newPropertyForm, location: e.target.value })}
                         className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                        placeholder="e.g. Beach House Resort" />
+                        placeholder="e.g. Gold Coast, QLD" />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Location</label>
-                        <input type="text" value={newPropertyForm.location} onChange={e => setNewPropertyForm({ ...newPropertyForm, location: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                          placeholder="e.g. Gold Coast, QLD" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Region</label>
-                        <input type="text" value={newPropertyForm.region} onChange={e => setNewPropertyForm({ ...newPropertyForm, region: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                          placeholder="e.g. South East QLD" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Bedrooms</label>
-                        <input type="number" min="0" value={newPropertyForm.bedroomCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedroomCount: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Beds</label>
-                        <input type="number" min="0" value={newPropertyForm.bedCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedCount: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Max Capacity</label>
-                        <input type="number" min="0" value={newPropertyForm.maxCapacity} onChange={e => setNewPropertyForm({ ...newPropertyForm, maxCapacity: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                      </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Region</label>
+                      <input type="text" value={newPropertyForm.region} onChange={e => setNewPropertyForm({ ...newPropertyForm, region: e.target.value })}
+                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                        placeholder="e.g. South East QLD" />
                     </div>
                   </div>
-                ) : (
-                  <SearchableSelect
-                    aria-labelledby="addAccommPropertyLabel"
-                    value={accommForm.accommodationPropertyId}
-                    onChange={val => setAccommForm({ ...accommForm, accommodationPropertyId: val })}
-                    placeholder="Select property..."
-                    items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
-                  />
-                )}
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Check-in</label>
-                  <input type="date" value={accommForm.checkInDate} onChange={e => setAccommForm({ ...accommForm, checkInDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Bedrooms</label>
+                      <input type="number" min="0" value={newPropertyForm.bedroomCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedroomCount: e.target.value })}
+                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Beds</label>
+                      <input type="number" min="0" value={newPropertyForm.bedCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedCount: e.target.value })}
+                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Max Capacity</label>
+                      <input type="number" min="0" value={newPropertyForm.maxCapacity} onChange={e => setNewPropertyForm({ ...newPropertyForm, maxCapacity: e.target.value })}
+                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Check-out</label>
-                  <input type="date" value={accommForm.checkOutDate} onChange={e => setAccommForm({ ...accommForm, checkOutDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-              </div>
-
-              {/* Bedrooms / Beds */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Bedrooms</label>
-                  <input type="number" min="0" value={accommForm.bedroomsReserved} onChange={e => setAccommForm({ ...accommForm, bedroomsReserved: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Beds</label>
-                  <input type="number" min="0" value={accommForm.bedsReserved} onChange={e => setAccommForm({ ...accommForm, bedsReserved: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
-                </div>
-              </div>
-
-              {/* Cost */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Cost</label>
-                <input type="number" min="0" step="0.01" value={accommForm.cost} onChange={e => setAccommForm({ ...accommForm, cost: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
-              </div>
-
-              {/* Status */}
-              <div>
-                <label id="addAccommStatusLabel" className="block text-sm font-medium mb-1">Status</label>
-                <Dropdown
-                  variant="form"
-                  aria-labelledby="addAccommStatusLabel"
-                  value={accommForm.reservationStatus}
-                  onChange={val => setAccommForm({ ...accommForm, reservationStatus: val })}
-                  items={RESERVATION_STATUS_ITEMS}
+              ) : (
+                <SearchableSelect
+                  aria-labelledby="addAccommPropertyLabel"
+                  value={accommForm.accommodationPropertyId}
+                  onChange={val => setAccommForm({ ...accommForm, accommodationPropertyId: val })}
+                  placeholder="Select property..."
+                  items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
                 />
-              </div>
-
-              {/* Comments */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Comments</label>
-                <textarea value={accommForm.comments} onChange={e => setAccommForm({ ...accommForm, comments: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                  placeholder="Optional notes..." />
-              </div>
-
-              {/* Error */}
-              {(createReservation.isError || createAccommodation.isError) && (
-                <p className="text-sm text-[var(--color-destructive)]">Failed to add reservation. Please try again.</p>
               )}
+            </div>
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setShowAddAccommodation(false)}
-                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
-                  Cancel
-                </button>
-                <button onClick={handleCreateReservation}
-                  disabled={creatingNewProperty ? !newPropertyForm.propertyName || createAccommodation.isPending || createReservation.isPending : !accommForm.accommodationPropertyId || createReservation.isPending}
-                  className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                  {createAccommodation.isPending || createReservation.isPending ? 'Adding...' : 'Add Reservation'}
-                </button>
+            {/* Dates */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Check-in</label>
+                <input type="date" value={accommForm.checkInDate} onChange={e => setAccommForm({ ...accommForm, checkInDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Check-out</label>
+                <input type="date" value={accommForm.checkOutDate} onChange={e => setAccommForm({ ...accommForm, checkOutDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
               </div>
             </div>
+
+            {/* Bedrooms / Beds */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Bedrooms</label>
+                <input type="number" min="0" value={accommForm.bedroomsReserved} onChange={e => setAccommForm({ ...accommForm, bedroomsReserved: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Beds</label>
+                <input type="number" min="0" value={accommForm.bedsReserved} onChange={e => setAccommForm({ ...accommForm, bedsReserved: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
+              </div>
+            </div>
+
+            {/* Cost */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Cost</label>
+              <input type="number" min="0" step="0.01" value={accommForm.cost} onChange={e => setAccommForm({ ...accommForm, cost: e.target.value })}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label id="addAccommStatusLabel" className="block text-sm font-medium mb-1">Status</label>
+              <Dropdown
+                variant="form"
+                aria-labelledby="addAccommStatusLabel"
+                value={accommForm.reservationStatus}
+                onChange={val => setAccommForm({ ...accommForm, reservationStatus: val })}
+                items={RESERVATION_STATUS_ITEMS}
+              />
+            </div>
+
+            {/* Comments */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Comments</label>
+              <textarea value={accommForm.comments} onChange={e => setAccommForm({ ...accommForm, comments: e.target.value })} rows={3}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                placeholder="Optional notes..." />
+            </div>
+
+            {/* Error */}
+            {(createReservation.isError || createAccommodation.isError) && (
+              <p className="text-sm text-[var(--color-destructive)]">Failed to add reservation. Please try again.</p>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Edit Reservation Modal */}
       {editingReservation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditingReservation(null)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] p-4 md:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-[0_24px_32px_-12px_rgba(27,28,26,0.12)] mx-2" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Edit Reservation — {editingReservation.propertyName}</h3>
-              <button onClick={() => setEditingReservation(null)} className="p-1 rounded hover:bg-[var(--color-surface-container)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
+        <Modal
+          stickyFooter
+          open
+          onClose={() => setEditingReservation(null)}
+          title={`Edit Reservation — ${editingReservation.propertyName}`}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setEditingReservation(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateReservation} disabled={updateReservation.isPending}>
+                {updateReservation.isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            {/* Property */}
+            <div>
+              <label id="editReservationPropertyLabel" className="block text-sm font-medium mb-1">Property</label>
+              <SearchableSelect
+                aria-labelledby="editReservationPropertyLabel"
+                value={editReservationForm.accommodationPropertyId}
+                onChange={val => setEditReservationForm({ ...editReservationForm, accommodationPropertyId: val })}
+                items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
+              />
             </div>
 
-            <div className="space-y-4">
-              {/* Property */}
+            {/* Dates */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label id="editReservationPropertyLabel" className="block text-sm font-medium mb-1">Property</label>
-                <SearchableSelect
-                  aria-labelledby="editReservationPropertyLabel"
-                  value={editReservationForm.accommodationPropertyId}
-                  onChange={val => setEditReservationForm({ ...editReservationForm, accommodationPropertyId: val })}
-                  items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
-                />
+                <label className="block text-sm font-medium mb-1">Check-in</label>
+                <input type="date" value={editReservationForm.checkInDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkInDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
               </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Check-in</label>
-                  <input type="date" value={editReservationForm.checkInDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkInDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Check-out</label>
-                  <input type="date" value={editReservationForm.checkOutDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkOutDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-              </div>
-
-              {/* Bedrooms / Beds / Cost */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Bedrooms</label>
-                  <input type="number" min="0" value={editReservationForm.bedroomsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedroomsReserved: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Beds</label>
-                  <input type="number" min="0" value={editReservationForm.bedsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedsReserved: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Cost</label>
-                  <input type="number" min="0" step="0.01" value={editReservationForm.cost} onChange={e => setEditReservationForm({ ...editReservationForm, cost: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-              </div>
-
-              {/* Status */}
               <div>
-                <label id="editReservationStatusLabel" className="block text-sm font-medium mb-1">Status</label>
-                <Dropdown
-                  variant="form"
-                  aria-labelledby="editReservationStatusLabel"
-                  value={editReservationForm.reservationStatus}
-                  onChange={val => setEditReservationForm({ ...editReservationForm, reservationStatus: val })}
-                  items={RESERVATION_STATUS_ITEMS}
-                />
+                <label className="block text-sm font-medium mb-1">Check-out</label>
+                <input type="date" value={editReservationForm.checkOutDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkOutDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
               </div>
+            </div>
 
-              {/* Confirmation Reference */}
+            {/* Bedrooms / Beds / Cost */}
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-medium mb-1">Confirmation Reference</label>
-                <input type="text" value={editReservationForm.confirmationReference} onChange={e => setEditReservationForm({ ...editReservationForm, confirmationReference: e.target.value })}
+                <label className="block text-sm font-medium mb-1">Bedrooms</label>
+                <input type="number" min="0" value={editReservationForm.bedroomsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedroomsReserved: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Beds</label>
+                <input type="number" min="0" value={editReservationForm.bedsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedsReserved: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Cost</label>
+                <input type="number" min="0" step="0.01" value={editReservationForm.cost} onChange={e => setEditReservationForm({ ...editReservationForm, cost: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label id="editReservationStatusLabel" className="block text-sm font-medium mb-1">Status</label>
+              <Dropdown
+                variant="form"
+                aria-labelledby="editReservationStatusLabel"
+                value={editReservationForm.reservationStatus}
+                onChange={val => setEditReservationForm({ ...editReservationForm, reservationStatus: val })}
+                items={RESERVATION_STATUS_ITEMS}
+              />
+            </div>
+
+            {/* Confirmation Reference */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Confirmation Reference</label>
+              <input type="text" value={editReservationForm.confirmationReference} onChange={e => setEditReservationForm({ ...editReservationForm, confirmationReference: e.target.value })}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
+                placeholder="e.g. booking ref number" />
+            </div>
+
+            {/* Date Booked / Date Confirmed */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Date Booked</label>
+                <input type="date" value={editReservationForm.dateBooked} onChange={e => setEditReservationForm({ ...editReservationForm, dateBooked: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Date Confirmed</label>
+                <input type="date" value={editReservationForm.dateConfirmed} onChange={e => setEditReservationForm({ ...editReservationForm, dateConfirmed: e.target.value })}
+                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
+              </div>
+            </div>
+
+            {/* Comments */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Comments</label>
+              <textarea value={editReservationForm.comments} onChange={e => setEditReservationForm({ ...editReservationForm, comments: e.target.value })} rows={3}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+                placeholder="Optional notes..." />
+            </div>
+
+            {/* Cancellation Reason (only show if cancelled) */}
+            {editReservationForm.reservationStatus === 'Cancelled' && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Cancellation Reason</label>
+                <input type="text" value={editReservationForm.cancellationReason} onChange={e => setEditReservationForm({ ...editReservationForm, cancellationReason: e.target.value })}
                   className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                  placeholder="e.g. booking ref number" />
+                  placeholder="Reason for cancellation..." />
               </div>
+            )}
 
-              {/* Date Booked / Date Confirmed */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Date Booked</label>
-                  <input type="date" value={editReservationForm.dateBooked} onChange={e => setEditReservationForm({ ...editReservationForm, dateBooked: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Date Confirmed</label>
-                  <input type="date" value={editReservationForm.dateConfirmed} onChange={e => setEditReservationForm({ ...editReservationForm, dateConfirmed: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                </div>
-              </div>
-
-              {/* Comments */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Comments</label>
-                <textarea value={editReservationForm.comments} onChange={e => setEditReservationForm({ ...editReservationForm, comments: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                  placeholder="Optional notes..." />
-              </div>
-
-              {/* Cancellation Reason (only show if cancelled) */}
-              {editReservationForm.reservationStatus === 'Cancelled' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Cancellation Reason</label>
-                  <input type="text" value={editReservationForm.cancellationReason} onChange={e => setEditReservationForm({ ...editReservationForm, cancellationReason: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                    placeholder="Reason for cancellation..." />
-                </div>
-              )}
-
-              {/* Error */}
-              {updateReservation.isError && (
-                <p className="text-sm text-[var(--color-destructive)]">Failed to update reservation. Please try again.</p>
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setEditingReservation(null)}
-                  className="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm hover:bg-[var(--color-surface-container)] transition-colors">
-                  Cancel
-                </button>
-                <button onClick={handleUpdateReservation} disabled={updateReservation.isPending}
-                  className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                  {updateReservation.isPending ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </div>
+            {/* Error */}
+            {updateReservation.isError && (
+              <p className="text-sm text-[var(--color-destructive)]">Failed to update reservation. Please try again.</p>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Delete/Cancel Reservation Confirmation */}
       <ConfirmDialog
         open={deletingReservation !== null}
         onCancel={() => setDeletingReservation(null)}
-        title="Remove Reservation"
+        title="Remove reservation"
         message={
           <>
             <p>
@@ -691,18 +679,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             <button
               onClick={() => {
                 if (!deletingReservation) return
-                const data: import('@/api/types/reservations').UpdateReservationDto = {
-                  tripInstanceId: deletingReservation.tripInstanceId,
-                  accommodationPropertyId: deletingReservation.accommodationPropertyId,
-                  checkInDate: deletingReservation.checkInDate,
-                  checkOutDate: deletingReservation.checkOutDate,
-                  bedroomsReserved: deletingReservation.bedroomsReserved ?? undefined,
-                  bedsReserved: deletingReservation.bedsReserved ?? undefined,
-                  cost: deletingReservation.cost ?? undefined,
-                  reservationStatus: 'Cancelled',
-                  comments: deletingReservation.comments ?? undefined,
-                  confirmationReference: deletingReservation.confirmationReference ?? undefined,
-                }
+                const data = toUpdateReservationDto(deletingReservation, { reservationStatus: 'Cancelled' })
                 cancelReservation.mutate({ id: deletingReservation.id, data }, { onSuccess: () => setDeletingReservation(null) })
               }}
               disabled={cancelReservation.isPending || deleteReservation.isPending}

@@ -106,21 +106,6 @@ public class ParticipantFundingController : ControllerBase
             : Ok(ApiResponse<ApplyPlanDatesResultDto>.Ok(result));
     }
 
-    /// <summary>
-    /// What the participant's Billing funding sources already say (the active ones on an NDIS route with a budget above zero), for the editor to offer once as a starting point
-    /// for a Core (flexible) pool. Read-only: nothing here changes a Billing row.
-    /// </summary>
-    [HttpGet("billing-sources-hint")]
-    public async Task<ActionResult<ApiResponse<BillingSourcesHintDto>>> BillingSourcesHint(Guid participantId, CancellationToken ct)
-    {
-        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<BillingSourcesHintDto>.Fail(ChooseOrganisation));
-
-        var hint = await _service.BillingSourcesHintAsync(tenantId, participantId, ct);
-        return hint is null
-            ? NotFound(ApiResponse<BillingSourcesHintDto>.Fail(FundingPlanService.ParticipantNotFound))
-            : Ok(ApiResponse<BillingSourcesHintDto>.Ok(hint));
-    }
-
     /// <summary>The answer to a save that did not produce a plan: 404, 409 (stale revision, or an overlap naming the other plan), or 400 with every reason.</summary>
     private ActionResult<ApiResponse<FundingPlanDto>> Refusal(FundingSaveResult result)
     {

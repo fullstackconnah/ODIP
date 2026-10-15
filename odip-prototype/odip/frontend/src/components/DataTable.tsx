@@ -4,19 +4,13 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
-import { TAP_AREA_LINKS } from './tapArea'
+import { ROW_ACTIONS_CARD, TAP_AREA_LINKS } from './tapArea'
 import { plural } from '@/lib/format'
+import { PageState } from '@/components/PageState'
 
 // ── Types ────────────────────────────────────────────────────────
 
 export type ColumnType = 'text' | 'date' | 'currency' | 'boolean' | 'badge' | 'custom'
-
-/**
- * @deprecated Retired, and ignored: no column is ever removed at any width (the column rule, below). It used to drop a column below
- * xl / 2xl / 1792px, which deleted the Overnight and Manual flags, a task's Trip and Type, a reservation's Ref and Nights from the page
- * (L3-04). Kept only so a call site written before the rule still compiles; delete it from a column when you next touch the file.
- */
-export type ColumnPriority = 'high' | 'medium' | 'low' | 'lowest'
 
 /** Which edge of the scroll box a pinned column holds to (see `pin`). */
 export type ColumnPin = 'start' | 'end'
@@ -42,8 +36,6 @@ type ColumnBase<T> = {
    * itself, see `CellText`.
    */
   maxWidth?: number | string
-  /** @deprecated Ignored, see `ColumnPriority`. Every column stays on the page at every width. */
-  priority?: ColumnPriority
   /**
    * The column rule (L3-04): no column is removed at md+; a table wider than its box scrolls sideways inside the box, and two columns stay
    * on screen while it does, so a row is never anonymous and its actions are never out of reach. By default the FIRST column (the one that
@@ -55,6 +47,12 @@ type ColumnBase<T> = {
   /** Let this column's cells wrap onto several lines (prose such as notes). The row then grows past
    * `--row-h`. Default: body cells never wrap, so every row is exactly `--row-h` at any width. */
   wrap?: boolean
+  /**
+   * Where this column goes on the phone card (below md). Unset keeps the labelled field every column gets by default. `primary` is the
+   * title line, `status` a pill at the end of it, `meta` folds into one muted line under it (no caps labels, empty values skipped) and
+   * `hidden` leaves the card. The table from md up is unchanged.
+   */
+  mobile?: 'primary' | 'meta' | 'status' | 'hidden'
   editable?: {
     /**
      * `ctx.errorId` is the id of the row's error message element (see `rowError` on
@@ -96,6 +94,13 @@ export type DataTableProps<T> = {
   emptyMessage?: string
   footer?: ReactNode
   loading?: boolean
+  /**
+   * The list query failed (its `isError`). With no rows to show, the table is replaced by the house error banner with a "Try again" that calls
+   * `onRetry` (normally the query's `refetch`), never the `emptyMessage`: an empty list is an answer, a failed load is not. Rows already on
+   * screen stay when a background refetch fails, as with `PageState`.
+   */
+  error?: boolean
+  onRetry?: () => void
   editingRow?: string | number | null
   /**
    * Row keys currently in "every editable column open at once" mode — the shape DS-01's
@@ -125,11 +130,6 @@ export type DataTableProps<T> = {
   selectable?: boolean
   selectedRows?: Set<string>
   onSelectionChange?: (ids: Set<string>) => void
-  /** Adds a vertical border between every column (header + body cells), for tables dense enough
-   * that scanning across a row benefits from a rule to track against. When omitted, falls back
-   * to the user's `tableVerticalDividers` preference (GEN-2, see `useUiPreferences`) — pass an
-   * explicit `true`/`false` here to override that preference for this table specifically. */
-  verticalDividers?: boolean
   /**
    * Signals that `data` is one server-paged slice of `totalCount`, not the full result set.
    * Its presence is the sole switch: when provided, `DataTable` renders "Showing X-Y of Z" +
@@ -234,6 +234,16 @@ function pinsOf<T>(columns: Column<T>[]): Array<ColumnPin | undefined> {
   })
 }
 
+// The phone card's placement of a column that opts in (`mobile`), on top of the card CSS in index.css: the title and its status come
+// first, a break, then the meta cells as one muted line without caps labels (index.css), a break, then the
+// labelled fields as before. An empty meta value leaves the card, so the line never shows a dash.
+const CARD_CLASS: Record<NonNullable<ColumnBase<unknown>['mobile']>, string> = {
+  primary: 'max-md:-order-2 max-md:flex-1 max-md:min-w-0',
+  status: 'max-md:-order-2 max-md:ml-auto',
+  meta: 'max-md:-order-1 max-md:flex max-md:items-center max-md:min-w-0 max-md:text-[13px] max-md:text-[var(--color-muted-foreground)]',
+  hidden: 'max-md:hidden',
+}
+
 /** A number is px, a string is passed through as a CSS length. */
 function cssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value
@@ -282,6 +292,8 @@ export function DataTable<T>({
   emptyMessage = 'No data',
   footer,
   loading = false,
+  error = false,
+  onRetry,
   editingRow,
   editingRows,
   onEditChange,
@@ -291,16 +303,16 @@ export function DataTable<T>({
   selectable = false,
   selectedRows,
   onSelectionChange,
-  verticalDividers,
   pagination,
 }: DataTableProps<T>) {
   const { prefs } = useUiPreferences()
-  const showVerticalDividers = verticalDividers ?? prefs.tableVerticalDividers
   const [internalSort, setInternalSort] = useState<SortState | null>(defaultSort ?? null)
   const isControlled = controlledSort !== undefined
   const activeSort = isControlled ? controlledSort ?? null : internalSort
 
   const visibleColumns = useMemo(() => columns.filter(c => !c.hidden), [columns])
+  // A server-paged table holds one slice, so it can only offer sorting if the caller turns it into a server request (onSortChange).
+  const canSort = sortable && (!pagination || !!onSortChange)
 
   const sortedData = useMemo(() => {
     // Once a caller pages server-side, `data` is only one slice of the full result set — sorting
@@ -357,7 +369,7 @@ export function DataTable<T>({
   }, [visibleColumns.length, sortedData.length])
 
   function handleSort(key: string) {
-    if (!sortable) return
+    if (!canSort) return
     const col = columns.find(c => c.key === key)
     if (!col?.sortable) return
 
@@ -415,7 +427,9 @@ export function DataTable<T>({
     col.minWidth != null ? ({ '--col-min': cssLength(col.minWidth) } as CSSProperties) : undefined
   const bodyRowHeight = compact ? 'md:h-[calc(var(--row-h)-4px)]' : 'md:h-[var(--row-h)]'
   const headerRowHeight = 'h-[var(--table-head-h)]'
-  const dividerClass = showVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
+  const dividerClass = prefs.tableVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
+
+  if (error && data.length === 0) return <PageState kind="error" noun="list" onRetry={onRetry} />
 
   return (
     <div ref={scrollRef} className={className ?? 'relative bg-[var(--color-card)] rounded-md border border-[var(--color-border)] overflow-x-auto'}>
@@ -453,7 +467,7 @@ export function DataTable<T>({
               </th>
             )}
             {visibleColumns.map((col, colIndex) => {
-              const isSortable = sortable && col.sortable
+              const isSortable = canSort && col.sortable
               const isSorted = activeSort?.key === col.key
               const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
 
@@ -525,7 +539,12 @@ export function DataTable<T>({
               <Fragment key={rowKey}>
                 <tr
                   className={`group/row ${bodyRowHeight} hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
-                  onClick={isClickable ? () => onRowClick(row) : undefined}
+                  onClick={isClickable ? (e) => {
+                    // A link or button in the row does its own job: a link that navigated and a row that navigated too
+                    // pushed two history entries, or sent the user to the row's target instead of the link's.
+                    if ((e.target as Element).closest('a, button, input, select, textarea, label')) return
+                    onRowClick(row)
+                  } : undefined}
                   onKeyDown={isClickable ? (e) => {
                     // Only the row itself activates it. Enter/Space on a control inside the row (a
                     // row action, a status pill, a checkbox) bubbles up here too, and must keep doing
@@ -569,6 +588,7 @@ export function DataTable<T>({
                     }
 
                     const content = renderCell(row, col, rowIndex)
+                    const card = col.mobile === 'meta' && (content == null || content === '' || content === '—') ? 'hidden' : col.mobile
                     const text = col.wrap ? null : plainTextOf(row, col, content)
 
                     // TAP_AREA_LINKS: under a coarse pointer every link in a body cell (a name, a trip, "Open")
@@ -577,9 +597,10 @@ export function DataTable<T>({
                     return (
                       <td
                         key={col.key}
-                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${card ? CARD_CLASS[card] : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
                         style={columnStyle(col)}
                         data-label={typeof col.header === 'string' ? col.header : ''}
+                        data-card={card === 'hidden' ? undefined : card}
                       >
                         {text != null ? (
                           <span
@@ -611,7 +632,8 @@ export function DataTable<T>({
           </tfoot>
         )}
       </table>
-      {pagination && pagination.totalCount > 0 && (
+      {/* One page has nothing to page through; a later page keeps its way back while the list still has rows. */}
+      {pagination && pagination.totalCount > 0 && (pagination.totalCount > pagination.pageSize || pagination.page > 1) && (
         <div className={`flex min-h-[var(--row-h)] items-center justify-between text-sm ${cellPaddingX} border-t border-[var(--color-border)]`}>
           <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
             Showing {(pagination.page - 1) * pagination.pageSize + 1}-
@@ -655,6 +677,8 @@ const ROW_ACTIONS_REVEAL = [
   'opacity-0 transition-opacity',
   'group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-within:opacity-100',
   '[@media(pointer:coarse)]:opacity-100',
+  // The phone card has no hover either.
+  'max-md:opacity-100',
 ].join(' ')
 
 // Bridge for the hand-rolled icon group in `ActionButtons` (what `useArchiveRestore().actionButtons`
@@ -702,7 +726,7 @@ const ROW_ACTIONS_OVERLAY = [
 export function RowActions({ children, overlay = false }: { children: ReactNode; overlay?: boolean }) {
   if (overlay && Children.toArray(children).length === 0) return null
   return (
-    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
+    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${ROW_ACTIONS_CARD} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
       {children}
     </div>
   )

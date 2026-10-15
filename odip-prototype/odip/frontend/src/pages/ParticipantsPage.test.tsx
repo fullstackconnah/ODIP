@@ -3,16 +3,17 @@ import { useState } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
-import ParticipantsPage, { ParticipantsTable } from './ParticipantsPage'
+import { ParticipantsTable } from './ParticipantsPage'
 import { participantActivatedState } from './profile/participantActivated'
 
-const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockStatusMutate, mockRestoreMutate, mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
+const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockStatusMutate, mockRestoreMutate, mockUseParticipantAlertsAggregate, mockUseAgreementsEnding } = vi.hoisted(() => ({
   mockUseParticipants: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
   mockStatusMutate: vi.fn(),
   mockRestoreMutate: vi.fn(),
   mockUseParticipantAlertsAggregate: vi.fn(),
+  mockUseAgreementsEnding: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -22,6 +23,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateParticipantStatus: () => ({ mutate: mockStatusMutate, isPending: false }),
   useRestoreParticipant: () => ({ mutate: mockRestoreMutate, isPending: false }),
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
+  useAgreementsEnding: mockUseAgreementsEnding,
 }))
 
 /** An axios-shaped failure: the API's envelope sits on `response.data`, where `extractErrorMessage` reads it. */
@@ -50,7 +52,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/participants']}>
       <Routes>
-        <Route path="/participants" element={<ParticipantsPage />} />
+        <Route path="/participants" element={<ParticipantsTable />} />
         <Route path="/participants/:id" element={<div>Participant detail page</div>} />
       </Routes>
     </MemoryRouter>
@@ -61,6 +63,7 @@ beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
   mockUseParticipants.mockReturnValue({ data: [], isLoading: false })
   mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+  mockUseAgreementsEnding.mockReturnValue({ data: [{ participantId: 'p-9', participantName: 'Ben Ng', draftId: 'd-9', version: 1, agreementEndDate: '2026-10-30', daysLeft: 20, renewalVersion: null, status: 'Agreement ends in 20 days' }], isLoading: false, isError: false, refetch: vi.fn() })
 })
 
 afterEach(() => {
@@ -69,6 +72,21 @@ afterEach(() => {
   // clearAllMocks keeps implementations: a test that made the mutation succeed or fail must not leak that into the next.
   mockStatusMutate.mockReset()
   mockRestoreMutate.mockReset()
+})
+
+describe('ParticipantsPage — plan type and support ratio in words', () => {
+  it('prints the labels, never the enum names the API sends', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ planType: 'AgencyManaged', supportRatio: 'TwoToOne' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByText('Agency Managed')).toBeInTheDocument()
+    expect(screen.getByText('2:1')).toBeInTheDocument()
+    expect(screen.queryByText('AgencyManaged')).not.toBeInTheDocument()
+    expect(screen.queryByText('TwoToOne')).not.toBeInTheDocument()
+  })
 })
 
 describe('ParticipantsPage — service stream badges', () => {
@@ -198,7 +216,7 @@ describe('ParticipantsPage — alerts badge column', () => {
 })
 
 describe('ParticipantsPage — operational register stage boundary', () => {
-  it('offers only the Active and Archived views: a draft is an Enquiries or an Onboarding row, never a register row', async () => {
+  it('offers the Active, Archived and Agreements ending views, never Drafts: a draft is an Enquiries or an Onboarding row, never a register row', async () => {
     // L2-04 added a Drafts view here because a draft saved from the Intake wizard had no onboarding row and so belonged to no tab. Drafts now
     // live on the Enquiries tab (intake open) and the Onboarding tab (intake complete), so the register has two views and never asks for drafts.
     const user = userEvent.setup()
@@ -206,7 +224,7 @@ describe('ParticipantsPage — operational register stage boundary', () => {
     renderPage()
 
     const views = screen.getByRole('radiogroup', { name: /participant list view/i })
-    expect(within(views).getAllByRole('radio').map(radio => radio.getAttribute('aria-label') ?? radio.textContent)).toEqual(['Active', 'Archived'])
+    expect(within(views).getAllByRole('radio').map(radio => radio.getAttribute('aria-label') ?? radio.textContent)).toEqual(['Active', 'Archived', 'Agreements ending'])
     expect(screen.queryByRole('radio', { name: 'Drafts' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('radio', { name: 'Archived' }))
@@ -231,6 +249,23 @@ describe('ParticipantsPage — operational register stage boundary', () => {
 
     expect(screen.getByText('Legacy visible participant')).toBeInTheDocument()
     expect(screen.queryByText('Incomplete onboarding participant')).not.toBeInTheDocument()
+  })
+
+  it('shows the agreements ending to the roles that manage participants, and only the two views to the rest', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    const { unmount } = renderPage()
+
+    await user.click(screen.getByRole('radio', { name: 'Agreements ending' }))
+
+    expect(screen.getByText('Ben Ng')).toBeInTheDocument()
+    expect(screen.getByText('Agreement ends in 20 days')).toBeInTheDocument()
+    expect(screen.queryByText('Jamie Smith')).not.toBeInTheDocument()
+    unmount()
+
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    renderPage()
+    expect(screen.queryByRole('radio', { name: 'Agreements ending' })).not.toBeInTheDocument()
   })
 })
 
@@ -427,7 +462,7 @@ describe('ParticipantsPage — status change safety', () => {
     expect(mockStatusMutate).toHaveBeenCalledWith({ id: 'p2', isActive: false }, expect.any(Object))
   })
 
-  it('no longer navigates when clicking the Status cell itself (row click target is the Name link, not the whole row)', async () => {
+  it('opens the participant from a click anywhere on the row, like its name link (owner decision 2026-10-13, reversing PR 144)', async () => {
     const user = userEvent.setup()
     mockUseParticipants.mockReturnValue({
       data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
@@ -435,13 +470,26 @@ describe('ParticipantsPage — status change safety', () => {
     })
     renderPage()
 
-    // Clicking the Status cell (the read-only pill) must not navigate nor mutate.
-    const rows3 = screen.getAllByRole('row')
-    const jamieRow3 = rows3.find(r => r.textContent?.includes('Jamie Smith'))!
-    await user.click(within(jamieRow3).getByText('Active'))
+    // The Status cell holds a read-only pill: a click on it is a click on the row.
+    const jamieRow = screen.getAllByRole('row').find(r => r.textContent?.includes('Jamie Smith'))!
+    await user.click(within(jamieRow).getByText('Active'))
 
-    expect(screen.queryByText('Participant detail page')).not.toBeInTheDocument()
+    expect(screen.getByText('Participant detail page')).toBeInTheDocument()
     expect(mockStatusMutate).not.toHaveBeenCalled()
+  })
+
+  it('opens the participant from the keyboard on the row (Enter)', async () => {
+    const user = userEvent.setup()
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true })],
+      isLoading: false,
+    })
+    renderPage()
+
+    screen.getAllByRole('row').find(r => r.textContent?.includes('Jamie Smith'))!.focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.getByText('Participant detail page')).toBeInTheDocument()
   })
 })
 
@@ -632,15 +680,16 @@ describe('ParticipantsPage — density row actions', () => {
     expect(within(row).queryAllByRole('button')).toHaveLength(0)
   })
 
-  it('keeps the title row and the filter row in one block-flow wrapper so the header is 72px, not gap-spaced', () => {
+  // PARTICIPANTS-3 (owner decision 2026-10-12): ReadOnly is refused every participant write, so its row offers no Change status, Edit or Archive.
+  it('offers ReadOnly no Change status, Edit or Archive in the row', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ hasActiveMedications: false })], isLoading: false })
     renderPage()
 
-    const h1 = screen.getByRole('heading', { level: 1, name: 'Participants' })
-    const search = screen.getByPlaceholderText(/search participants/i)
-    const wrapper = h1.parentElement?.parentElement?.parentElement as HTMLElement
-    expect(wrapper).toContainElement(search)
-    expect(wrapper.tagName).toBe('DIV')
-    expect(wrapper.className).toBe('')
+    const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    expect(within(row).queryByRole('button', { name: /change status/i })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(within(row).queryAllByRole('button')).toHaveLength(0)
   })
 
   it('renders the NDIS number at 13px, not the 12px micro type, and keeps the Streams chips on one line', () => {
@@ -676,11 +725,12 @@ describe('ParticipantsPage — narrow-desktop columns', () => {
     const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
     const cells = within(row).getAllByRole('cell')
     const headers = screen.getAllByRole('columnheader')
+    // From md up (the Column Rule); max-md:hidden only leaves a field off the phone card.
     for (const label of ['Name', 'NDIS Number', 'Streams', 'Status', 'High', 'Plan Type', 'Region', 'Support Ratio', 'Repeat']) {
       const index = headers.findIndex(h => h.textContent?.includes(label))
       expect(index, label).toBeGreaterThanOrEqual(0)
-      expect(headers[index].className, label).not.toMatch(/hidden/)
-      expect(cells[index].className, label).not.toMatch(/hidden/)
+      expect(headers[index].className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
+      expect(cells[index].className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
     }
   })
 
@@ -766,5 +816,61 @@ describe('ParticipantsPage — name link touch target', () => {
     )
     expect(link).toHaveAttribute('title', 'Grace Palmer-Hughes')
     expect(link.className).not.toMatch(/before:/)
+  })
+})
+
+// Platform review VISUAL-1 (Participants, phone): each row was an 8-field caps card, 4,700px for 21 rows. Name, status and plan type;
+// the rest is on the detail page.
+describe('ParticipantsPage — phone card', () => {
+  it('puts the name and status on the title line, plan type, ratio and region on one muted line, and leaves the rest off the card', () => {
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ planType: 'PlanManaged' })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Plan Managed').closest('tr') as HTMLElement
+    expect(row.querySelector('td[data-label="Name"]')).toHaveAttribute('data-card', 'primary')
+    expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
+    for (const label of ['Plan Type', 'Support Ratio', 'Region']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    for (const label of ['NDIS Number', 'Streams', 'Repeat']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass('max-md:hidden')
+  })
+})
+
+// VC design review fix 1: the card had dropped the care needs. Wheelchair and High support stay on the card as chips when true.
+describe('ParticipantsPage — care needs on the phone card', () => {
+  it('shows Wheelchair and High support as phone-only chips beside the desktop tick, and nothing when false', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [baseParticipant({ mobilityAidWheelchair: true, isHighSupport: true }), baseParticipant({ id: 'p2', fullName: 'Ava Lee' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const row = screen.getByRole('link', { name: /Jamie Smith/ }).closest('tr') as HTMLElement
+    for (const label of ['Wheelchair', 'High support']) {
+      const chip = within(row).getByText(label)
+      expect(chip, label).toHaveClass('md:hidden')
+      const cell = chip.closest('td') as HTMLElement
+      expect(cell, label).toHaveAttribute('data-card', 'meta')
+      expect(cell.querySelector('svg'), label).toHaveClass('max-md:hidden')
+    }
+    const ava = screen.getByRole('link', { name: /Ava Lee/ }).closest('tr') as HTMLElement
+    expect(within(ava).queryByText('Wheelchair')).not.toBeInTheDocument()
+    expect(within(ava).queryByText('High support')).not.toBeInTheDocument()
+    expect(ava.querySelector('td[data-label="High"]')).toHaveClass('max-md:hidden')
+  })
+})
+
+// V-D1 follow-up: each keystroke in the header search sent a request and flashed the table to loading. The search waits for a pause.
+describe('ParticipantsPage — search debounce', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('asks the server once typing pauses, not once per keystroke', () => {
+    renderPage()
+    const box = screen.getByPlaceholderText('Search participants...')
+    for (const value of ['s', 'so', 'sop']) fireEvent.change(box, { target: { value } })
+    const searched = () => mockUseParticipants.mock.calls.map(([params]) => (params as Record<string, string>).search).filter(Boolean)
+    expect(searched()).toEqual([])
+
+    act(() => { vi.advanceTimersByTime(300) })
+    expect(new Set(searched())).toEqual(new Set(['sop']))
   })
 })

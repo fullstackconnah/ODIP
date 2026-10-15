@@ -212,7 +212,7 @@ public class BudgetLedgerStartedTripTests
     }
 
     [Fact]
-    public async Task TheRowsEndpointHandsOutTheSameRowsTheLedgerDoes_StartedTripsIncluded()
+    public async Task AStartedUnclaimedTripIsCountedOnItsPeriodAndPool()
     {
         var (kit, person) = Arrange();
         Booked(kit, person, new DateOnly(2026, 10, 1), 2, name: "Finished");                            // started and unclaimed
@@ -222,13 +222,8 @@ public class BudgetLedgerStartedTripTests
         var ledger = await kit.Ledger.GetLedgerAsync(kit.TenantId, person.Id, Ct);
         var pool = ledger!.Pools[0];
         var period = pool.Periods[1];
-        var page = await kit.Ledger.GetRowsAsync(kit.TenantId, person.Id, pool.Id, period.Id, 0, 200, Ct);
 
         Assert.Equal(3, period.RowCount);
-        Assert.Equal(3, page!.Total);
-        Assert.Equal(
-            period.Rows.Select(r => (r.Id, r.Kind, r.Group, r.Date, r.Amount, r.Note)),
-            page.Rows.Select(r => (r.Id, r.Kind, r.Group, r.Date, r.Amount, r.Note)));
         Assert.Equal(1, period.StartedUnclaimedTripCount);       // the wire carries the flag on the period and on the pool
         Assert.Equal(1, pool.StartedUnclaimedTripCount);
     }

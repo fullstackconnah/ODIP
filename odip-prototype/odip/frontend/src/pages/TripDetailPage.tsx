@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import { formatDateRange } from '@/lib/dateRange'
 import { Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -27,38 +28,59 @@ type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 't
 
 const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'incidents', 'history']
 
+// What a tab's failed list is called in its error: "Couldn't load this booking list".
+const LIST_NOUNS: Partial<Record<Tab, string>> = {
+  bookings: 'booking list', accommodation: 'accommodation list', vehicles: 'vehicle list', staff: 'staff list',
+  tasks: 'task list', activities: 'activity schedule', claims: 'claim list', incidents: 'incident list',
+}
+
 export default function TripDetailPage() {
   const { canWrite, canAccessPage, isAdmin: isAdminRole, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const isAdmin = isAdminRole || isSuperAdmin
   const canAccessIncidents = canAccessPage('incidents')
+  // ClaimsController admits only SuperAdmin, Admin and Coordinator: anyone else gets no Claims tab and sends no claims request.
+  const canAccessClaims = canAccessPage('claims')
   // PP-60: URL-synced so a shared/reloaded link lands on the same tab. Only the tabs this role can see are valid keys (L5-05): a ?tab= for
   // a tab it cannot see (incidents, history) reads as Overview, instead of selecting nothing over an empty body.
   const tabKeys = useMemo(
-    () => TAB_KEYS.filter(key => (key === 'incidents' ? canAccessIncidents : key === 'history' ? isAdmin : true)),
-    [canAccessIncidents, isAdmin],
+    () => TAB_KEYS.filter(key => (key === 'incidents' ? canAccessIncidents : key === 'claims' ? canAccessClaims : key === 'history' ? isAdmin : true)),
+    [canAccessIncidents, canAccessClaims, isAdmin],
   )
   const [activeTab, setActiveTab] = useTabParam(tabKeys, 'overview')
   const [showEditTrip, setShowEditTrip] = useState(false)
 
   const { data: trip, isLoading, isError, error, refetch } = useTrip(id)
-  const { data: bookings = [] } = useTripBookings(id)
-  const { data: accommodation = [] } = useTripAccommodation(id)
-  const { data: vehicles = [] } = useTripVehicles(id)
-  const { data: staff = [] } = useTripStaff(id)
-  const { data: tasks = [] } = useTripTasks(id)
-  // PP-61 follow-up: NOT gated by activeTab, despite schedule/claims being among the
-  // least-visited tabs — both `schedule.reduce(...)` and `claims.length` feed the tab-label
-  // count badges below, which render outside the Activities/Claims tabpanels (i.e. before
-  // either tab is ever opened). Gating these on `activeTab` made those badges misleadingly show
-  // 0 until the corresponding tab was visited once. The `enabled` option added to
-  // useTripSchedule/useTripClaims for this stays in place as a harmless additive parameter, but
-  // nothing on this page currently uses it.
-  const { data: schedule = [] } = useTripSchedule(id)
-  const { data: claims = [] } = useTripClaims(id)
-  const { data: incidents = [] } = useTripIncidents(id)
+  // Each tab's own list, by tab key: a list that failed to load shows its error in the tab, never the tab's "none yet" body.
+  const tabLists = {
+    bookings: useTripBookings(id),
+    accommodation: useTripAccommodation(id),
+    vehicles: useTripVehicles(id),
+    staff: useTripStaff(id),
+    tasks: useTripTasks(id),
+    // PP-61 follow-up: NOT gated by activeTab, despite schedule/claims being among the
+    // least-visited tabs — both `schedule.reduce(...)` and `claims.length` feed the tab-label
+    // count badges below, which render outside the Activities/Claims tabpanels (i.e. before
+    // either tab is ever opened). Gating these on `activeTab` made those badges misleadingly show
+    // 0 until the corresponding tab was visited once. The `enabled` option added to
+    // useTripSchedule/useTripClaims for this stays in place; the claims call uses it for the role gate only.
+    activities: useTripSchedule(id),
+    claims: useTripClaims(id, { enabled: canAccessClaims }),
+    incidents: useTripIncidents(id),
+  }
+  const bookings = tabLists.bookings.data ?? []
+  const accommodation = tabLists.accommodation.data ?? []
+  const vehicles = tabLists.vehicles.data ?? []
+  const staff = tabLists.staff.data ?? []
+  const tasks = tabLists.tasks.data ?? []
+  const schedule = tabLists.activities.data ?? []
+  const claims = tabLists.claims.data ?? []
+  const incidents = tabLists.incidents.data ?? []
+  // A refetch that fails over rows already on screen keeps them (Q4b): only a list with nothing loaded counts as failed.
+  const activeList: { isError: boolean; data?: unknown[]; refetch: () => unknown } | undefined = tabLists[activeTab as keyof typeof tabLists]
+  const activeListFailed = !!activeList?.isError && !activeList.data?.length
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
 
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 
@@ -78,7 +100,7 @@ export default function TripDetailPage() {
     { id: 'staff', label: 'Staff', icon: UserCog, badge: staff.length },
     { id: 'tasks', label: 'Tasks', icon: ListChecks, badge: tasks.length },
     { id: 'activities', label: 'Activities', icon: Calendar, badge: schedule.reduce((sum: number, d: any) => sum + (d.scheduledActivities?.length || 0), 0) },
-    { id: 'claims', label: 'Claims', icon: FileText, badge: claims.length },
+    ...(canAccessClaims ? [{ id: 'claims' as string, label: 'Claims', icon: FileText, badge: claims.length }] : []),
     ...(canAccessIncidents ? [{ id: 'incidents' as string, label: 'Incidents', icon: ShieldAlert, badge: incidents.length }] : []),
     ...(isAdmin ? [{ id: 'history' as string, label: 'History', icon: ClockIcon }] : []),
   ]
@@ -120,30 +142,30 @@ export default function TripDetailPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {/* Detail header pattern: display title + meta row (PageHeader variant="detail"), then the glance strip
           (FactBar variant="glance"). The tab strip and everything below it is the ordinary dense page. */}
-      <PageHeader
-        variant="detail"
-        title={trip.tripName}
-        subtitle={
-          <PageHeaderMeta>
-            <StatusBadge status={trip.status} label={TRIP_STATUS_LABELS[trip.status] ?? trip.status} size="md" />
-            {trip.destination}
-            {trip.tripCode && <span className="font-mono text-[var(--color-secondary)]">{trip.tripCode}</span>}
-            {formatDateRange(trip.startDate, trip.endDate)}
-            {typeof trip.durationDays === 'number' && plural(trip.durationDays, 'day')}
-          </PageHeaderMeta>
-        }
-        action={
-          <div className="flex gap-2 shrink-0">
-            <BackButton to="/trips" label="trips" history={false} />
-            {canWrite && (
+      <div className="flex items-start gap-2">
+        <BackButton to="/trips" label="trips" variant="icon" history={false} className="mt-1.5" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            variant="detail"
+            title={trip.tripName}
+            subtitle={
+              <PageHeaderMeta>
+                <StatusBadge status={trip.status} label={TRIP_STATUS_LABELS[trip.status] ?? trip.status} size="md" />
+                {trip.destination}
+                {trip.tripCode && <span className="font-mono text-[var(--color-secondary)]">{trip.tripCode}</span>}
+                {formatDateRange(trip.startDate, trip.endDate)}
+                {typeof trip.durationDays === 'number' && plural(trip.durationDays, 'day')}
+              </PageHeaderMeta>
+            }
+            action={canWrite && (
               <Button variant="primary" size="md" onClick={() => setShowEditTrip(true)}>
                 <Pencil className="w-4 h-4" />
-                Edit Trip
+                Edit
               </Button>
             )}
-          </div>
-        }
-      />
+          />
+        </div>
+      </div>
 
       <FactBar variant="glance" segments={factBarSegments} />
 
@@ -165,6 +187,10 @@ export default function TripDetailPage() {
         id={`trip-tabpanel-${activeTab}`}
         aria-labelledby={`trip-tab-${activeTab}`}
       >
+        {activeListFailed ? (
+          <PageState kind="error" noun={LIST_NOUNS[activeTab] ?? 'list'} onRetry={() => activeList?.refetch()} />
+        ) : (
+          <>
         {activeTab === 'overview' && id && (
           <OverviewTab tripId={id} trip={trip} bookings={bookings} accommodation={accommodation} staff={staff} vehicles={vehicles} onSwitchTab={tab => setActiveTab(tab as Tab)} />
         )}
@@ -182,7 +208,7 @@ export default function TripDetailPage() {
         )}
 
         {activeTab === 'staff' && (
-          <StaffTab tripId={id} trip={trip} staff={staff} bookings={bookings} canWrite={canWrite} />
+          <StaffTab tripId={id} trip={trip} staff={staff} canWrite={canWrite} />
         )}
 
         {activeTab === 'tasks' && (
@@ -193,7 +219,7 @@ export default function TripDetailPage() {
           <ActivitiesTab tripId={id} trip={trip} schedule={schedule} canWrite={canWrite} isReadOnly={isReadOnly} />
         )}
 
-        {activeTab === 'claims' && trip && (
+        {activeTab === 'claims' && canAccessClaims && trip && (
           <ClaimsTab tripId={String(trip.id)} claims={claims} trip={trip} canWrite={canWrite} />
         )}
 
@@ -203,6 +229,8 @@ export default function TripDetailPage() {
 
         {activeTab === 'history' && isAdmin && trip && (
           <AuditHistoryTab entityType="TripInstance" entityId={String(trip.id)} />
+        )}
+          </>
         )}
       </div>
 

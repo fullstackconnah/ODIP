@@ -28,6 +28,7 @@ public class ParticipantsController : ControllerBase
     private readonly SafetyNoteSyncService _safetyNoteSync;
     private readonly ParticipantIntakeSnapshotService _intakeSnapshots;
     private readonly TimeProvider _clock;
+    private readonly ParticipantCreateService _creator;
     public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null, TimeProvider? clock = null)
     {
         _clock = clock ?? TimeProvider.System;
@@ -36,6 +37,7 @@ public class ParticipantsController : ControllerBase
         _documentService = documentService;
         _safetyNoteSync = safetyNoteSync;
         _intakeSnapshots = intakeSnapshots ?? new ParticipantIntakeSnapshotService(db);
+        _creator = new ParticipantCreateService(db, compatLink, safetyNoteSync, _intakeSnapshots, _clock);
     }
 
     /// <summary>
@@ -52,100 +54,11 @@ public class ParticipantsController : ControllerBase
     private string CompletionActor() =>
         User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("sub") ?? "unknown";
 
-    /// <summary>
-    /// PF-10.2, CommunityAccessDailyLiving stream — upserts every Community Access Risk Assessment
-    /// row submitted with a create/update payload, keyed by
-    /// <see cref="Domain.Enums.CommunityAccessRiskItemType"/>. Copies UpsertChecklistItemsAsync's
-    /// documented pattern exactly, including the load-bearing empty/null guard below (same
-    /// reasoning: an Update caller that never mentions CommunityAccessRiskItems round-trips an
-    /// empty list, which must mean "leave existing rows alone", not "clear every rating"). Called
-    /// before SaveChangesAsync so every row lands in the same transaction as the participant
-    /// insert/update. Sparse on creation (see the guard inside the loop below): the wizard always
-    /// submits the full fixed twenty-two-row array with every hidden/unrated row already null (see
-    /// <see cref="CreateParticipantCommunityAccessRiskItemDto"/>'s doc), so a blank incoming row
-    /// must not become a permanent database row just because it was present in the payload.
-    /// </summary>
-    private async Task UpsertCommunityAccessRiskItemsAsync(Guid participantId, List<CreateParticipantCommunityAccessRiskItemDto> items, CancellationToken ct)
-    {
-        if (items is null || items.Count == 0) return;
-        var existing = await _db.ParticipantCommunityAccessRiskItems.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
-        var byType = existing.ToDictionary(a => a.ItemType);
-        foreach (var dto in items)
-        {
-            if (!byType.TryGetValue(dto.ItemType, out var row))
-            {
-                // Load-bearing skip — same reasoning as UpsertChecklistItemsAsync's: only skip
-                // when there is both no existing row for this type AND the incoming dto carries no
-                // answer whatsoever; a dto that clears an EXISTING row to null still falls through
-                // to ApplyAnswer below and keeps the row.
-                if (dto.Rating is null && string.IsNullOrWhiteSpace(dto.StrategyNotes)) continue;
-                row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
-                _db.ParticipantCommunityAccessRiskItems.Add(row);
-                byType[dto.ItemType] = row;
-            }
-            ParticipantCommunityAccessRiskItemsController.ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
-        }
-    }
-
     // ValidateNames/ValidateGender/ValidateFundingSource/ValidateLivingArrangement/
     // ValidateAddressPostcode/ValidatePhone/ValidateEmail/ValidateWeight/ValidateHeight/
     // ValidateDiagnoses moved to Odip.Infrastructure.Services.ParticipantPatchApplier (see that
     // class's type doc for why) so the extracted Patch applier and this controller's Create/Update
     // share one copy. Call sites below now read ParticipantPatchApplier.ValidateXyz(...).
-
-    /// <summary>
-    /// INTAKE-08 fix round 2 (Finding 1): true iff <paramref name="role"/> identifies a person
-    /// either way CONTACT-03 allows (an existing Person via <see cref="CreateParticipantContactRoleDto.PersonId"/>,
-    /// or a new one via a non-blank NewPersonFirstName/NewPersonLastName) — shared by
-    /// <see cref="ValidateContactRoles"/> and <see cref="Create"/>'s persistence loop below so the
-    /// two never disagree about which rows are "real".
-    /// </summary>
-    private static bool ContactRoleHasPerson(CreateParticipantContactRoleDto role) =>
-        role.PersonId != null || !string.IsNullOrWhiteSpace(role.NewPersonFirstName) || !string.IsNullOrWhiteSpace(role.NewPersonLastName);
-
-    /// <summary>
-    /// CONTACT-02: server-side gate + CONTACT-03 uniqueness for every contact role row submitted
-    /// transactionally with a new participant (mirrors RiskEntries' validate-before-save shape).
-    /// Checked against <paramref name="dto"/>'s own PlanType/DateOfBirth (the participant entity
-    /// doesn't exist yet at validation time) and against the other rows already in the same
-    /// submission (a brand-new participant has no pre-existing rows to check against).
-    ///
-    /// INTAKE-08 fix round 2 (Finding 1): unlike every other validator in this controller, this
-    /// one IS gated on <paramref name="dto"/>.IsDraft — mirrored on <see cref="ValidateNames"/>'s
-    /// shape, not the "always runs identically" doctrine documented on
-    /// <see cref="CreateParticipantDto.IsDraft"/>. Reason: the wizard's Contacts step lets a
-    /// caller add a contact row and then abandon it mid-fill (or never touch it at all) before
-    /// clicking "Save as draft" — <see cref="ContactRoleHasPerson"/>-false rows are silently
-    /// skipped (not validated, not persisted — see Create's loop below) rather than hard-failing
-    /// the entire draft save on the existing-or-new-person requirement. A row that DOES identify
-    /// a person is still gated + uniqueness-checked exactly as a full submission, since a person
-    /// being provided at all means it's actually going to be persisted. Format-level checks on
-    /// whatever a caller DID provide (e.g. NewPersonFirstName's [StringLength(100)]) still run
-    /// regardless of IsDraft — those are enforced automatically by [ApiController]'s model
-    /// validation filter before this method is ever reached, same as every other DTO field. A
-    /// non-draft (IsDraft false) submission hard-fails a personless row exactly as before.
-    /// </summary>
-    private static string? ValidateContactRoles(CreateParticipantDto dto, DateOnly asOf)
-    {
-        var seen = new List<(ContactRoleType RoleType, bool IsPrimary, ContactRoleStatus Status)>();
-        foreach (var role in dto.ContactRoles)
-        {
-            if (!ContactRoleHasPerson(role))
-            {
-                if (dto.IsDraft) continue;
-                return "Each contact needs either an existing person or a new person's name.";
-            }
-
-            var gateError = ContactRoleRules.Validate(role.RoleType, dto.PlanType, dto.DateOfBirth, role.RegisteredProviderFlag, asOf);
-            if (gateError != null) return gateError;
-
-            var uniquenessError = ContactRoleRules.ValidateUniqueness(role.RoleType, role.IsPrimary, role.Status, seen);
-            if (uniquenessError != null) return uniquenessError;
-
-            seen.Add((role.RoleType, role.IsPrimary, role.Status));
-        }
-        return null;
-    }
 
     /// <summary>
     /// PF-2 (SPEC-02): loads this participant's persisted, active contact roles and computes the
@@ -171,15 +84,6 @@ public class ParticipantsController : ControllerBase
     // sites below now read ParticipantPatchApplier.ApplyLivingArrangementFields(...).
 
     /// <summary>
-    /// A blank onboarding record for <paramref name="participant"/>, in the participant's own
-    /// tenant. Same shape ParticipantInquiriesController.Convert creates. A brand-new participant's
-    /// TenantId is still default here and is stamped, with the participant's, by
-    /// OdipDbContext.SaveChangesAsync.
-    /// </summary>
-    private static ParticipantOnboarding NewOnboarding(Participant participant) =>
-        new() { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id };
-
-    /// <summary>
     /// Idempotent "ensure the onboarding row exists" for an existing participant, the same
     /// AnyAsync-then-Add pattern ParticipantInquiriesController.Convert uses, scoped to the
     /// participant's tenant. Tracked only — the caller's single SaveChangesAsync persists it, so
@@ -188,7 +92,7 @@ public class ParticipantsController : ControllerBase
     private async Task EnsureOnboardingAsync(Participant participant, CancellationToken ct)
     {
         if (await _db.ParticipantOnboardings.AnyAsync(x => x.ParticipantId == participant.Id && x.TenantId == participant.TenantId, ct)) return;
-        _db.ParticipantOnboardings.Add(NewOnboarding(participant));
+        _db.ParticipantOnboardings.Add(ParticipantCreateService.NewOnboarding(participant));
     }
 
     /// <summary>List participants with optional filters.</summary>
@@ -197,7 +101,7 @@ public class ParticipantsController : ControllerBase
         [FromQuery] string? search, [FromQuery] string? region, [FromQuery] bool? isActive,
         [FromQuery] bool? wheelchairRequired, [FromQuery] bool? isHighSupport, [FromQuery] bool? isDraft,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default,
-        [FromQuery] bool operationalOnly = false)
+        [FromQuery] bool operationalOnly = false, [FromQuery] bool canReceiveServices = false, [FromQuery] bool servicesBegun = false)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
 
@@ -210,6 +114,10 @@ public class ParticipantsController : ControllerBase
         if (isHighSupport.HasValue) query = query.Where(p => p.IsHighSupport == isHighSupport.Value);
         // A caller can still explicitly select drafts for back-office work.
         if (isDraft.HasValue) query = query.Where(p => p.IsDraft == isDraft.Value);
+        // The pickers of operational screens: who can receive services (active, finalised or services started), never an archived participant.
+        if (canReceiveServices) query = query.Where(Participant.CanReceiveServicesRule);
+        // Pickers of records about the past as well (incidents, the medication report): past the start of services, archived participants kept.
+        if (servicesBegun) query = query.Where(Participant.ServicesBegunRule);
         if (operationalOnly)
         {
             // The register is a stage boundary, not a presentation-only draft filter. A record
@@ -239,6 +147,7 @@ public class ParticipantsController : ControllerBase
                 HasActiveMedications = _db.ParticipantMedications.Any(m => m.ParticipantId == p.Id && m.Status != MedicationStatus.Ceased),
                 IsDraft = p.IsDraft,
                 IntakeCompletedAt = p.IntakeCompletedAt,
+                ServicesStartedAt = p.ServicesStartedAt,
             });
 
         var result = await PagedResult<ParticipantListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -286,245 +195,18 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> Create([FromBody] CreateParticipantDto dto, CancellationToken ct)
     {
-        // A retried "Complete Intake" (the response was lost to a 502 or a dropped connection) carries the same completion request
-        // id as the attempt that already committed. The snapshot is keyed per participant, and Create always mints a new participant,
-        // so without this lookup the retry made a second participant, a second PDF and a second onboarding row. Tenant-scoped by
-        // the snapshot's own query filter.
-        if (dto.CompleteIntake && !string.IsNullOrWhiteSpace(dto.CompletionRequestId))
-        {
-            var priorParticipantId = await _db.ParticipantIntakeSnapshots
-                .Where(s => s.RequestId == dto.CompletionRequestId)
-                .Select(s => s.ParticipantId)
-                .FirstOrDefaultAsync(ct);
-            if (priorParticipantId != Guid.Empty)
-            {
-                var prior = await _db.Participants.FirstOrDefaultAsync(x => x.Id == priorParticipantId, ct);
-                if (prior != null)
-                    return Ok(ApiResponse<ParticipantDetailDto>.Ok(CreatedBody(prior, await ComputePlanTypeComplianceWarningAsync(prior.Id, prior.PlanType, ct))));
-            }
-        }
+        // A retried "Complete Intake" (the response was lost to a 502 or a dropped connection) answers with the participant the first attempt made.
+        var prior = await _creator.FindCompletedReplayAsync(dto, ct);
+        if (prior != null)
+            return Ok(ApiResponse<ParticipantDetailDto>.Ok(CreatedBody(prior, await ComputePlanTypeComplianceWarningAsync(prior.Id, prior.PlanType, ct))));
 
-        var namesError = ParticipantPatchApplier.ValidateNames(dto);
-        if (namesError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(namesError));
+        var (participant, error) = await _creator.StageAsync(dto, CompletionActor(), ct);
+        if (error != null)
+            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(error));
 
-        var invalidOptions = dto.MobilitySupportOptions.Where(o => !MobilitySupportOptions.IsValid(o)).ToList();
-        if (invalidOptions.Count > 0)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(
-                $"Invalid mobility support option(s): {string.Join(", ", invalidOptions)}"));
-
-        var genderError = ParticipantPatchApplier.ValidateGender(dto);
-        if (genderError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(genderError));
-
-        var fundingError = ParticipantPatchApplier.ValidateFundingSource(dto);
-        if (fundingError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(fundingError));
-
-        var livingError = ParticipantPatchApplier.ValidateLivingArrangement(dto);
-        if (livingError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(livingError));
-
-        var postcodeError = ParticipantPatchApplier.ValidateAddressPostcode(dto);
-        if (postcodeError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(postcodeError));
-
-        var phoneError = ParticipantPatchApplier.ValidatePhone(dto);
-        if (phoneError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(phoneError));
-
-        var emailError = ParticipantPatchApplier.ValidateEmail(dto);
-        if (emailError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(emailError));
-
-        var weightError = ParticipantPatchApplier.ValidateWeight(dto);
-        if (weightError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(weightError));
-
-        var heightError = ParticipantPatchApplier.ValidateHeight(dto);
-        if (heightError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(heightError));
-
-        var diagnosesError = ParticipantPatchApplier.ValidateDiagnoses(dto);
-        if (diagnosesError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(diagnosesError));
-
-        var contactRolesError = ValidateContactRoles(dto, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
-        if (contactRolesError != null)
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(contactRolesError));
-
-        if (!await IsValidPreferredUserRefAsync(dto.PreferredStaffId, ct))
-            return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
-
-        var participant = new Participant
-        {
-            Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName, PreferredName = dto.PreferredName,
-            MiddleName = dto.MiddleName,
-            DateOfBirth = dto.DateOfBirth, Gender = dto.Gender, GenderSelfDescription = dto.GenderSelfDescription,
-            PlaceOfBirth = dto.PlaceOfBirth, Country = dto.Country, Phone = dto.Phone, Email = dto.Email,
-            NdisNumber = dto.NdisNumber, PlanStartDate = dto.PlanStartDate, PlanEndDate = dto.PlanEndDate,
-            PlanType = dto.PlanType, Region = dto.Region, IsDsoa = dto.IsDsoa,
-            // Key Identifiers (INTAKE sub-wave A).
-            PensionCardNumber = dto.PensionCardNumber, PensionCardExpiry = dto.PensionCardExpiry,
-            MedicareNumber = dto.MedicareNumber, MedicareExpiry = dto.MedicareExpiry,
-            CompanionCardNumber = dto.CompanionCardNumber, CompanionCardExpiry = dto.CompanionCardExpiry,
-            PrivateHealthFund = dto.PrivateHealthFund, PrivateHealthMembershipNumber = dto.PrivateHealthMembershipNumber,
-            TaxiCardNumber = dto.TaxiCardNumber, HairColour = dto.HairColour, EyeColour = dto.EyeColour,
-            WeightKg = dto.WeightKg, HeightCm = dto.HeightCm,
-            FundingSource = dto.FundingSource,
-            // Ndis ignores whatever the client sent for the reused "Other — specify" field —
-            // stored as null rather than trusting the client's INTAKE-07 payload exclusion alone.
-            FundingOrganisation = dto.FundingSource == ParticipantFundingSource.Other ? dto.FundingOrganisation : null,
-            IsRepeatClient = dto.IsRepeatClient,
-            MobilityAidWheelchair = dto.MobilityAidWheelchair, MobilityAidWalker = dto.MobilityAidWalker,
-            MobilitySupportOptions = dto.MobilitySupportOptions,
-            PrimaryDiagnosis = dto.PrimaryDiagnosis?.Trim(), OtherDiagnoses = dto.OtherDiagnoses.Select(d => d.Trim()).ToList(), HidpaSupportCategories = dto.HidpaSupportCategories,
-            IsHighSupport = dto.IsHighSupport, IsIntensiveSupport = dto.IsIntensiveSupport,
-            OvernightSupport = dto.OvernightSupport, OvernightRatio = dto.OvernightRatio,
-            RequiresHiLoBed = dto.RequiresHiLoBed, RequiresHoist = dto.RequiresHoist, RequiresShowerChair = dto.RequiresShowerChair,
-            RequiresCommode = dto.RequiresCommode, RequiresStandingMachine = dto.RequiresStandingMachine,
-            // HasRestrictivePracticeFlag is intentionally not set from dto — derived on read only.
-            SupportRatio = dto.SupportRatio, MobilityNotes = dto.MobilityNotes,
-            EquipmentRequirements = dto.EquipmentRequirements, TransportRequirements = dto.TransportRequirements,
-            MedicalSummary = dto.MedicalSummary, BehaviourRiskSummary = dto.BehaviourRiskSummary, Notes = dto.Notes,
-            PreferredUserId = dto.PreferredStaffId,
-            ServiceStreams = dto.ServiceStreams,
-            // INTAKE-06 — plain participant-level fields, not arrangement-conditional.
-            AddressStreet = dto.AddressStreet, AddressSuburb = dto.AddressSuburb,
-            AddressState = dto.AddressState, AddressPostcode = dto.AddressPostcode,
-            IsDraft = dto.IsDraft,
-            // A newly created participant cannot possess pre-existing, participant-bound
-            // approval evidence. Never inherit Participant.IsActive's legacy default and never
-            // accept an activation boolean from the client.
-            IsActive = false,
-            // SPEC-05 (PF-10.3) — stamped server-side, never client-supplied, only when the
-            // Intake wizard's own final-step create call sets CompleteIntake; a mid-intake
-            // "save as draft" POST (IsDraft=true, CompleteIntake omitted/false) must not stamp it.
-            IntakeCompletedAt = null,
-            // INTAKE sub-wave B — Cultural & Consent step.
-            IsCald = dto.IsCald, IsLgbtqi = dto.IsLgbtqi, IsFamilyCommunity = dto.IsFamilyCommunity,
-            IsAboriginalOrTorresStraitIslander = dto.IsAboriginalOrTorresStraitIslander,
-            ReceivedRightsAndResponsibilitiesInfo = dto.ReceivedRightsAndResponsibilitiesInfo,
-            ReceivedPrivacyAndConfidentialityInfo = dto.ReceivedPrivacyAndConfidentialityInfo,
-            ReceivedFeedbackInfo = dto.ReceivedFeedbackInfo, ReceivedBeingSafeInfo = dto.ReceivedBeingSafeInfo,
-            ReceivedAdvocacyInfo = dto.ReceivedAdvocacyInfo,
-            PersonalInterests = dto.PersonalInterests, ChoiceControlNotes = dto.ChoiceControlNotes,
-            // INTAKE sub-wave C1 — Allergies/Anaphylaxis.
-            AllergiesDetail = dto.AllergiesDetail, IsAnaphylaxisRisk = dto.IsAnaphylaxisRisk,
-            AllergyManagementNotes = dto.AllergyManagementNotes,
-            // INTAKE sub-wave C1 — Mobility & Functional.
-            AmbulantStatus = dto.AmbulantStatus, FallsRiskRating = dto.FallsRiskRating,
-            UnevenGroundFlag = dto.UnevenGroundFlag, LevelOfPersonalCare = dto.LevelOfPersonalCare,
-            Orthotics = dto.Orthotics, ContinenceSupportDetail = dto.ContinenceSupportDetail,
-            BowelCareDetail = dto.BowelCareDetail, MenstruationSupport = dto.MenstruationSupport,
-            SkinIntegrity = dto.SkinIntegrity,
-            // INTAKE sub-wave C1 — Behaviour & Communication.
-            Memory = dto.Memory, MemoryAids = dto.MemoryAids,
-            ImpairedUnderstanding = dto.ImpairedUnderstanding, ImpairedJudgementReasoning = dto.ImpairedJudgementReasoning,
-            BehavioursOfConcernCurrent = dto.BehavioursOfConcernCurrent,
-            BehavioursOfConcernFiveYearHistory = dto.BehavioursOfConcernFiveYearHistory,
-            BehaviourRiskRating = dto.BehaviourRiskRating,
-            RidsLogged = dto.RidsLogged, BspPlanProvided = dto.BspPlanProvided, BocChartProvided = dto.BocChartProvided,
-            ExpressiveSkills = dto.ExpressiveSkills, ReceptiveSkills = dto.ReceptiveSkills,
-            ReadingAbility = dto.ReadingAbility, CommunicationAids = dto.CommunicationAids,
-            // INTAKE sub-wave C2 — Meals & Diet.
-            MealAssistanceDetail = dto.MealAssistanceDetail, ChokingRiskMealDetail = dto.ChokingRiskMealDetail,
-            ModifiedDietDetail = dto.ModifiedDietDetail, PegRegimeMealDetail = dto.PegRegimeMealDetail,
-            SpecialUtensilsDetail = dto.SpecialUtensilsDetail, SpecialDietaryNeedsDetail = dto.SpecialDietaryNeedsDetail,
-            FavouriteBreakfast = dto.FavouriteBreakfast, FavouriteLunch = dto.FavouriteLunch, FavouriteDinner = dto.FavouriteDinner,
-            MedicationTricks = dto.MedicationTricks, FoodsAlwaysEaten = dto.FoodsAlwaysEaten,
-            // INTAKE sub-wave C2 — About Me.
-            Goals = dto.Goals, SupportAreas = dto.SupportAreas, StrengthsFears = dto.StrengthsFears,
-            ThingsToKnow = dto.ThingsToKnow, WhoIsImportant = dto.WhoIsImportant, LikesDislikes = dto.LikesDislikes,
-            // DIAG-02/INTAKE-03 reconciliation.
-            HidpaNotes = dto.HidpaNotes,
-            // INTAKE-03 — Community Access Behaviour & Support Detail.
-            SignsHappyAndSettled = dto.SignsHappyAndSettled, WhatHelpsMeCalmDown = dto.WhatHelpsMeCalmDown,
-            BocTriggers = dto.BocTriggers, BocEarlyWarningSigns = dto.BocEarlyWarningSigns,
-            BocDeEscalationStrategies = dto.BocDeEscalationStrategies, BocWhatNotToDo = dto.BocWhatNotToDo,
-            SupportsLookLikeMorning = dto.SupportsLookLikeMorning, SupportsLookLikeDay = dto.SupportsLookLikeDay,
-            SupportsLookLikeAfternoonEvening = dto.SupportsLookLikeAfternoonEvening, SupportsLookLikeOvernight = dto.SupportsLookLikeOvernight,
-            OverallCommunityAccessRiskRating = dto.OverallCommunityAccessRiskRating,
-        };
-        ParticipantPatchApplier.ApplyLivingArrangementFields(participant, dto);
-        _db.Participants.Add(participant);
-        // INTAKE-09: risk-entry rows submitted alongside a new participant are created in the
-        // same SaveChangesAsync call as the participant insert below — transactional with it.
-        // Edit-mode manages risk entries afterwards via the separate nested CRUD
-        // (ParticipantRiskEntriesController), not via this DTO's collection.
-        foreach (var entry in dto.RiskEntries)
-        {
-            _db.ParticipantRiskEntries.Add(new ParticipantRiskEntry
-            {
-                Id = Guid.NewGuid(),
-                ParticipantId = participant.Id,
-                AtRiskParty = entry.AtRiskParty,
-                Description = entry.Description.Trim(),
-                MitigationNotes = string.IsNullOrWhiteSpace(entry.MitigationNotes) ? null : entry.MitigationNotes.Trim(),
-                IsActive = entry.IsActive,
-            });
-        }
-        // CONTACT-02: contact-role rows submitted alongside a new participant, in the same
-        // SaveChangesAsync call as the participant insert below — transactional with it, same
-        // pattern as the RiskEntries loop above. Validated (gating + uniqueness) up-front by
-        // ValidateContactRoles; a "new person" row creates its Person here, an "existing person"
-        // row looks it up by id (already tenant-scoped via _db.People's query filter).
-        foreach (var roleDto in dto.ContactRoles)
-        {
-            // INTAKE-08 fix round 2 (Finding 1): mirrors ValidateContactRoles' skip above — a
-            // draft's wholly-empty/abandoned-mid-fill row (no person identified) is silently
-            // dropped from the save entirely, rather than trying to create a Person with a blank
-            // name. A non-draft reaches here having already 400'd on this same row inside
-            // ValidateContactRoles, so this branch is unreachable for it.
-            if (!ContactRoleHasPerson(roleDto) && dto.IsDraft) continue;
-
-            var roleError = await AddContactRoleAsync(participant.Id, participant.TenantId, roleDto, ct);
-            if (roleError != null)
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(roleError));
-        }
-
-        // Task 6d: a preferred-staff selection on create also upserts a Preferred row in the
-        // rostering compatibility matrix, in the same transaction as the participant insert.
-        // INTAKE-08 fix round 1 (Finding 3): isDraft suppresses that upsert entirely for a draft.
-        await _compatLink.SyncFromParticipantPreferredStaffAsync(participant.Id, null, dto.PreferredStaffId, ct, isDraft: dto.IsDraft);
-        // INTAKE sub-wave B — consent rows submitted alongside a new/drafted participant, in the
-        // same SaveChangesAsync call as the participant insert below.
-        await ParticipantPatchApplier.UpsertConsentsAsync(_db, participant.Id, dto.Consents, ct);
-        // INTAKE sub-wave C1 — health-condition grid rows submitted alongside a new/drafted
-        // participant, in the same SaveChangesAsync call as the participant insert below.
-        await ParticipantPatchApplier.UpsertHealthConditionsAsync(_db, participant.Id, dto.HealthConditions, ct);
-        // INTAKE sub-wave C2 — ADL-assessment grid rows submitted alongside a new/drafted
-        // participant, in the same SaveChangesAsync call as the participant insert below.
-        await ParticipantPatchApplier.UpsertAdlAssessmentsAsync(_db, participant.Id, dto.AdlAssessments, ct);
-        // INTAKE-03/04 — Community Access checklist-item grid rows submitted alongside a
-        // new/drafted participant, in the same SaveChangesAsync call as the participant insert below.
-        await ParticipantPatchApplier.UpsertChecklistItemsAsync(_db, participant.Id, dto.ChecklistItems, ct);
-        // PF-10.2 — Community Access Risk Assessment matrix rows submitted alongside a
-        // new/drafted participant, in the same SaveChangesAsync call as the participant insert below.
-        await UpsertCommunityAccessRiskItemsAsync(participant.Id, dto.CommunityAccessRiskItems, ct);
-        // PD-5: syncs the safety-critical auto-notes (allergies/behaviours-of-concern/falls-risk/
-        // risks-hazards) in the same SaveChangesAsync as the participant insert. Reads
-        // participant.RiskEntries via the change tracker (see SafetyNoteSyncService), which sees
-        // the RiskEntries loop's just-added, not-yet-persisted rows above — closes the
-        // "ParticipantRiskEntry rows" hole in SPEC-03's Trigger coverage table for the create path.
-        await _safetyNoteSync.SyncFromParticipantAsync(participant, ct);
-        if (dto.CompleteIntake)
-        {
-            var snapshot = await _intakeSnapshots.PrepareCaptureAsync(participant, CompletionActor(), dto.CompletionRequestId, ct);
-            // Completion metadata and its immutable evidence share one server-issued UTC instant.
-            participant.IntakeCompletedAt = snapshot.CompletedAtUtc;
-            // Completing intake is what puts a participant on the onboarding worklist. A brand-new
-            // participant cannot have an onboarding row yet, so no existence check is needed; the
-            // row lands in the same SaveChangesAsync as the participant (and its tenant is stamped
-            // with the participant's, by OdipDbContext.SaveChangesAsync).
-            _db.ParticipantOnboardings.Add(NewOnboarding(participant));
-        }
         await _db.SaveChangesAsync(ct);
-        // PF-2: computed from what actually landed in the ParticipantContactRoles table (just
-        // inserted above, in the same SaveChangesAsync), not from dto.ContactRoles — a role row
-        // that failed some other validation and never persisted can't produce a false "satisfied"
-        // reading.
-        var createPlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(participant.Id, participant.PlanType, ct);
+        // PF-2: computed from what actually landed in the ParticipantContactRoles table, not from dto.ContactRoles.
+        var createPlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(participant!.Id, participant.PlanType, ct);
         return CreatedAtAction(nameof(GetById), new { id = participant.Id },
             ApiResponse<ParticipantDetailDto>.Ok(CreatedBody(participant, createPlanTypeComplianceWarning)));
     }
@@ -597,6 +279,7 @@ public class ParticipantsController : ControllerBase
             return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Preferred staff member not found."));
 
         var previousPreferredStaffId = p.PreferredUserId;
+        var previousSupportRatio = p.SupportRatio;
 
         p.FirstName = dto.FirstName; p.LastName = dto.LastName; p.PreferredName = dto.PreferredName;
         p.MiddleName = dto.MiddleName;
@@ -687,7 +370,7 @@ public class ParticipantsController : ControllerBase
         // "ignored by Update" doc note (PF-10.3): that was written before this resume path existed.
         // Never overwrites an already-set value (set once, never cleared — see
         // Participant.IntakeCompletedAt's doc) and never touches IsDraft — resuming Intake alone
-        // does not finalise the participant; only a subsequent Profile completion does that.
+        // does not finalise the participant; only "Make active" on the onboarding checklist does that.
         p.UpdatedAt = DateTime.UtcNow;
 
         if (dto.CompleteIntake)
@@ -703,27 +386,13 @@ public class ParticipantsController : ControllerBase
         }
 
         // A full-profile PUT may edit profile data, but it cannot promote an intake-incomplete
-        // participant. More importantly, neither CompleteIntake nor raw IsActive/IsDraft values
-        // can bypass tenant-matched persisted onboarding and verified immutable agreement evidence.
-        // Preserve already-active legacy rows instead of mass-deactivating them. Intake must be
-        // complete in every mode (a draft is never activated). Beyond that the organisation's
-        // readiness mode decides: Warn (the default) activates a non-draft participant and the
-        // gaps show as readiness issues; Enforce keeps the fail-closed rule, activating only on
-        // persisted, tenant-matched, verified agreement evidence.
+        // participant, and neither CompleteIntake nor raw IsActive/IsDraft values activate anyone.
+        // Already-active legacy rows stay active (IsActive is never written here).
         // A finalised participant is never sent back to draft by an update (the rule above rejects an explicit isDraft: true), and a
         // legacy participant whose IntakeCompletedAt was never stamped is NOT a draft because of that: they stay finalised.
-        // Only a record that is still a draft can stay one (no completed intake, or the client says so).
-        p.IsDraft = p.IsDraft && (!p.IntakeCompletedAt.HasValue || dto.IsDraft);
-        // Intake must be complete in every mode. It used to be implied by IsDraft (an intake-incomplete record was always a draft);
-        // now that a legacy non-draft record stays non-draft, it is stated here, so editing one never activates it by the side.
-        if (!p.IsActive)
-            p.IsActive = !p.IsDraft && p.IntakeCompletedAt.HasValue && await ParticipantReadiness.MayActivateAsync(_db, p, _clock, ct);
-
-        // A full profile submission can change identity, DOB, gender, or NDIS details. It never
-        // preserves a prior onboarding attestation: staff must re-run the separate server-side
-        // validation endpoint after saving corrected canonical data.
-        var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-        onboarding?.InvalidateProfileValidation(DateTime.UtcNow);
+        // Nor is a draft finalised by one: IsDraft is never written here. Only "Make active" finishes onboarding (it applies the readiness rule this would skip).
+        // Saving never activates anyone (owner decision 2026-10-13): "Make active" on the onboarding checklist does, and the status
+        // endpoint restores an archived participant. This used to activate here, which re-activated an archived participant on every save.
 
         // Task 6d: a changed/cleared preferred-staff selection upserts/downgrades the matching
         // compatibility row, in the same transaction as the participant update. Draft state is
@@ -739,9 +408,10 @@ public class ParticipantsController : ControllerBase
         // INTAKE-03/04 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
         await ParticipantPatchApplier.UpsertChecklistItemsAsync(_db, p.Id, dto.ChecklistItems, ct);
         // PF-10.2 — same read-on-both-paths convention as Consents/HealthConditions/AdlAssessments/ChecklistItems above.
-        await UpsertCommunityAccessRiskItemsAsync(p.Id, dto.CommunityAccessRiskItems, ct);
+        await ParticipantPatchApplier.UpsertCommunityAccessRiskItemsAsync(_db, p.Id, dto.CommunityAccessRiskItems, ct);
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
+        if (p.SupportRatio != previousSupportRatio) await TripStaffing.RecalculateForParticipantAsync(_db, p.Id, ct);
         await _db.SaveChangesAsync(ct);
         // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
         // warning is computed from the participant's live ContactRoles exactly as GetById does.
@@ -789,7 +459,7 @@ public class ParticipantsController : ControllerBase
         var rolesSoFar = existingRoles.Select(r => (r.RoleType, r.IsPrimary, r.Status)).ToList();
         foreach (var roleDto in dto.ContactRoles)
         {
-            if (!ContactRoleHasPerson(roleDto))
+            if (!ParticipantCreateService.ContactRoleHasPerson(roleDto))
             {
                 // An abandoned, half-filled row: dropped from a draft save exactly as Create drops it.
                 if (dto.IsDraft) continue;
@@ -821,12 +491,12 @@ public class ParticipantsController : ControllerBase
         }
 
         // ── Write ──
-        var identityBefore = IntakeIdentity(p);
+        var previousSupportRatio = p.SupportRatio;
         ApplyIntakeScope(p, dto);
         p.UpdatedAt = DateTime.UtcNow;
 
         foreach (var roleDto in newRoles)
-            await AddContactRoleAsync(p.Id, p.TenantId, roleDto, ct);
+            await _creator.AddContactRoleAsync(p.Id, p.TenantId, roleDto, ct);
         foreach (var entry in newRisks)
         {
             _db.ParticipantRiskEntries.Add(new ParticipantRiskEntry
@@ -845,16 +515,9 @@ public class ParticipantsController : ControllerBase
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 
-        // A correction to identity, DOB or NDIS details drops a stale onboarding "profile validated" attestation; re-saving the
-        // same values is inert.
-        if (identityBefore != IntakeIdentity(p))
-        {
-            var onboarding = await _db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-            onboarding?.InvalidateProfileValidation(p.UpdatedAt);
-        }
-
         // PD-5: the safety-critical auto-notes read behavioursOfConcern, the risks summary and the risk entries, all in this scope.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
+        if (p.SupportRatio != previousSupportRatio) await TripStaffing.RecalculateForParticipantAsync(_db, p.Id, ct);
 
         if (dto.CompleteIntake)
         {
@@ -864,7 +527,28 @@ public class ParticipantsController : ControllerBase
             await EnsureOnboardingAsync(p, ct);
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.All(e => e.Entity is ParticipantInquiry))
+        {
+            // A booking wrote the linked enquiry meanwhile (its IntakeIcsSequence/IntakeUid are concurrency tokens). This save only copies the
+            // name and contact onto it, never the booking, so take the enquiry's current tokens and save once more rather than lose the intake.
+            foreach (var entry in ex.Entries)
+            {
+                var stored = await entry.GetDatabaseValuesAsync(ct);
+                if (stored is null) { entry.State = EntityState.Detached; continue; } // the enquiry is gone: nothing of it to keep in step
+                foreach (var property in entry.Properties)
+                {
+                    var mine = property.IsModified;
+                    property.OriginalValue = stored[property.Metadata];
+                    if (!mine) property.CurrentValue = stored[property.Metadata]; // keep what the booking wrote
+                    property.IsModified = mine;
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+        }
         var warning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
         {
@@ -873,10 +557,6 @@ public class ParticipantsController : ControllerBase
             UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = warning,
         }));
     }
-
-    /// <summary>The identity-bearing intake fields the onboarding "profile validated" attestation depends on.</summary>
-    private static (string, string, DateOnly?, string?, ParticipantFundingSource) IntakeIdentity(Participant p) =>
-        (p.FirstName?.Trim() ?? string.Empty, p.LastName?.Trim() ?? string.Empty, p.DateOfBirth, p.NdisNumber?.Trim(), p.FundingSource);
 
     /// <summary>
     /// Writes the intake scope, and only the intake scope, from a wizard payload. Keep in step with
@@ -932,36 +612,6 @@ public class ParticipantsController : ControllerBase
 
     private static bool SameName(string? a, string? b) => string.Equals((a ?? "").Trim(), (b ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Tracks a Person (new, or an existing one looked up by id) and a role linking it to the participant. Saved by the caller.</summary>
-    private async Task<string?> AddContactRoleAsync(Guid participantId, Guid tenantId, CreateParticipantContactRoleDto roleDto, CancellationToken ct)
-    {
-        Person person;
-        if (roleDto.PersonId.HasValue)
-        {
-            var existingPerson = await _db.People.FirstOrDefaultAsync(p => p.Id == roleDto.PersonId.Value, ct);
-            if (existingPerson == null) return "Selected person not found";
-            person = existingPerson;
-        }
-        else
-        {
-            person = new Person
-            {
-                Id = Guid.NewGuid(), TenantId = tenantId,
-                FirstName = (roleDto.NewPersonFirstName ?? "").Trim(), LastName = (roleDto.NewPersonLastName ?? "").Trim(),
-                Phone = roleDto.NewPersonPhone, Mobile = roleDto.NewPersonMobile, Email = roleDto.NewPersonEmail,
-                Organisation = roleDto.NewPersonOrganisation,
-            };
-            _db.People.Add(person);
-        }
-
-        // The participant's tenant, set explicitly: SaveChanges only stamps a tenant that is still default, and the intake evidence
-        // (prepared before that save) matches tracked rows to the participant by tenant.
-        var role = new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, PersonId = person.Id };
-        ParticipantContactRolesController.ApplyRoleFields(role, roleDto);
-        _db.ParticipantContactRoles.Add(role);
-        return null;
-    }
-
     /// <summary>The body POST /participants answers with (and a replayed completion answers with again).</summary>
     private static ParticipantDetailDto CreatedBody(Participant p, string? planTypeComplianceWarning) => new()
     {
@@ -972,6 +622,8 @@ public class ParticipantsController : ControllerBase
     private const string DraftCannotBeActivated = "A draft participant cannot be activated. Complete their intake and profile first.";
     private const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
     private const string ActivationFundingRequired = "This participant cannot be activated until their plan budget is recorded on the Funding tab.";
+    private const string FromUndoneImport = "This person came from an import that was undone. Import them again.";
+    private const string BeginServicesEnforced = "Your organisation enforces readiness, so services begin when the participant is made active.";
 
     /// <summary>The 400 message for an activation the organisation's readiness rule refuses.</summary>
     private static string ActivationRefusal(ActivationBlock block) =>
@@ -1013,6 +665,9 @@ public class ParticipantsController : ControllerBase
         if (activate)
         {
             if (p.IsDraft) return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(DraftCannotBeActivated));
+            // Undo archives an onboarding import's drafts as finalised, so restoring one would make them Active without onboarding.
+            if (await _db.ImportBatchItems.AnyAsync(i => i.EntityId == p.Id && i.Batch!.UndoneAt != null, ct))
+                return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(FromUndoneImport));
             var block = await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct);
             if (block != ActivationBlock.None)
                 return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(ActivationRefusal(block)));
@@ -1069,17 +724,16 @@ public class ParticipantsController : ControllerBase
     }
 
     /// <summary>
-    /// Finalises a participant whose intake is complete: the Profile wizard's "Complete Profile". It carries no profile field (each
-    /// step is saved by its own PATCH), so it cannot wipe one. Idempotent; and it only ever finalises a DRAFT, so completing the
-    /// profile of an archived participant does not bring them back (the full PUT it replaces did).
-    /// Finalising a draft is also what activates them, under the organisation's readiness rule (the status endpoint refuses a draft). Where that rule
-    /// does not let them be activated (Enforce, no verified signed-agreement evidence) the step is refused with the same message the status endpoint gives
-    /// and they stay a draft on the Onboarding tab, where the agreement-evidence gate says why: finalised but not activated would leave them in no stage.
-    /// A draft that is already marked active has nothing to activate and is finalised as before.
+    /// "Make active" on the onboarding checklist: finalises a participant whose intake is complete and moves them to the Active tab. It carries no
+    /// profile field, so it cannot wipe one. Open checklist items do not stop it (the screen lists them in its confirm step; owner decision 2026-10-13).
+    /// Idempotent; it only ever finalises a DRAFT, so an archived participant is not brought back (the status endpoint restores them).
+    /// The organisation's readiness rule applies (the status endpoint refuses a draft). Where it does not let them be activated (Enforce, no verified
+    /// signed-agreement evidence) the step is refused with the same message the status endpoint gives and they stay a draft on the Onboarding tab:
+    /// finalised but not activated would leave them in no stage. A legacy draft already marked active has nothing to activate and is finalised as before.
     /// </summary>
-    [HttpPost("{id:guid}/complete-profile")]
+    [HttpPost("{id:guid}/make-active")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> CompleteProfile(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> MakeActive(Guid id, CancellationToken ct)
     {
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
@@ -1087,9 +741,10 @@ public class ParticipantsController : ControllerBase
         if (p.IsDraft)
         {
             if (!p.IntakeCompletedAt.HasValue)
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before completing their profile."));
-            // The activation rule the full PUT applied to a record that has just been finalised: Warn (the default) activates, Enforce needs evidence.
-            if (!p.IsActive && await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct) is var block && block != ActivationBlock.None)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before making them active."));
+            // Warn (the default) activates, Enforce needs evidence. A draft whose services started is active already but has never been
+            // through this rule, so it is asked too.
+            if ((!p.IsActive || p.ServicesStartedAt != null) && await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct) is var block && block != ActivationBlock.None)
                 return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(ActivationRefusal(block)));
             p.IsDraft = false;
             p.UpdatedAt = DateTime.UtcNow;
@@ -1097,12 +752,48 @@ public class ParticipantsController : ControllerBase
             await _db.SaveChangesAsync(ct);
         }
 
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
-        {
-            Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
-            IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, UpdatedAt = p.UpdatedAt,
-        }));
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(LifecycleBody(p)));
     }
+
+    /// <summary>
+    /// "Begin services" on the onboarding checklist (owner decision 2026-10-13): a participant in onboarding (a draft, intake complete) can receive
+    /// services (the roster board, shifts and patterns, the support-worker portal, medications, budgets and alerts: see
+    /// <see cref="Participant.CanReceiveServicesRule"/>) while staying on the Onboarding tab until "Make active". Sets <see cref="Participant.ServicesStartedAt"/>
+    /// and <see cref="Participant.IsActive"/> and keeps the draft. Idempotent: a second call changes nothing, except that a services-started draft which was
+    /// archived is switched back on (the first date kept). An organisation that enforces readiness keeps its placement rule
+    /// (<see cref="ParticipantReadiness.CheckAsync"/>, which <c>MayPlaceAsync</c> uses), which refuses a draft: there, services begin when the participant is made active.
+    /// </summary>
+    [HttpPost("{id:guid}/begin-services")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantDetailDto>>> BeginServices(Guid id, CancellationToken ct)
+    {
+        var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
+
+        // Nothing to do once services run (or the participant was made active). A services-started draft that was archived is switched back on,
+        // keeping the first date.
+        if (p.ServicesStartedAt == null || (p.IsDraft && !p.IsActive))
+        {
+            if (!p.IsDraft) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Services can only begin for a participant in onboarding."));
+            if (!p.IntakeCompletedAt.HasValue) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before services begin."));
+            // Enforce keeps its strict placement rule (owner decision): it refuses until verified signed-agreement evidence exists.
+            if (await ParticipantReadiness.IsEnforcedAsync(_db, p.TenantId, ct) && !(await ParticipantReadiness.CheckAsync(_db, p.Id, ct)).Allowed)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(BeginServicesEnforced));
+            p.ServicesStartedAt ??= DateTime.UtcNow;
+            p.IsActive = true;
+            p.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(LifecycleBody(p)));
+    }
+
+    /// <summary>What make-active and begin-services answer: the participant's lifecycle state.</summary>
+    private static ParticipantDetailDto LifecycleBody(Participant p) => new()
+    {
+        Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName,
+        IsActive = p.IsActive, IsDraft = p.IsDraft, IntakeCompletedAt = p.IntakeCompletedAt, ServicesStartedAt = p.ServicesStartedAt, UpdatedAt = p.UpdatedAt,
+    };
 
     /// <summary>
     /// CORE-02: partial save. Patches only the semantic field groups present in <paramref name="dto"/>
@@ -1141,6 +832,8 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/bookings")]
     public async Task<ActionResult<ApiResponse<List<BookingListDto>>>> GetBookings(Guid id, CancellationToken ct)
     {
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<List<BookingListDto>>.Fail("Participant not found"));
+
         var bookings = await _db.ParticipantBookings.Include(b => b.TripInstance)
             .Where(b => b.ParticipantId == id)
             .Select(b => new BookingListDto
@@ -1158,6 +851,9 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/support-profile")]
     public async Task<ActionResult<ApiResponse<SupportProfileDto>>> GetSupportProfile(Guid id, CancellationToken ct)
     {
+        // SupportProfile has no organisation column or query filter: it is the caller's only if its participant is.
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<SupportProfileDto>.Fail("Participant not found"));
+
         var sp = await _db.SupportProfiles.FirstOrDefaultAsync(s => s.ParticipantId == id, ct);
         if (sp == null) return NotFound(ApiResponse<SupportProfileDto>.Fail("Support profile not found"));
 
@@ -1176,6 +872,8 @@ public class ParticipantsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<SupportProfileDto>>> UpdateSupportProfile(Guid id, [FromBody] UpdateSupportProfileDto dto, CancellationToken ct)
     {
+        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<SupportProfileDto>.Fail("Participant not found"));
+
         var sp = await _db.SupportProfiles.FirstOrDefaultAsync(s => s.ParticipantId == id, ct);
         if (sp == null)
         {

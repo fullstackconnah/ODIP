@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useTrips, usePatchTrip, useTrip } from '@/api/hooks'
-import type { TripStatus, TripListDto } from '@/api/types'
+import { TRIP_STATUSES, type TripStatus, type TripListDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
-import { TONE, statusClass } from '@/lib/tone'
+import { TONE, TRIP_STATUS_LABELS, statusClass, statusItems } from '@/lib/tone'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, MapPin, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
+import { StatusBadge } from '@/components/StatusBadge'
 import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { TAP_AREA } from '@/components/tapArea'
@@ -21,19 +24,9 @@ import { EditTripModal } from './trip-detail'
 type Tab = 'active' | 'completed'
 type TripsView = 'table' | 'cards'
 
-const activeStatuses = ['Draft', 'Planning', 'OpenForBookings', 'Confirmed', 'InProgress']
+const activeStatuses: TripStatus[] = ['Draft', 'Planning', 'OpenForBookings', 'Confirmed', 'InProgress']
 
-const TRIP_STATUS_ITEMS = [
-  { value: 'Draft', label: 'Draft' },
-  { value: 'Planning', label: 'Planning' },
-  { value: 'OpenForBookings', label: 'Open For Bookings' },
-  { value: 'WaitlistOnly', label: 'Waitlist Only' },
-  { value: 'Confirmed', label: 'Confirmed' },
-  { value: 'InProgress', label: 'In Progress' },
-  { value: 'Completed', label: 'Completed' },
-  { value: 'Cancelled', label: 'Cancelled' },
-  { value: 'Archived', label: 'Archived' },
-]
+const TRIP_STATUS_ITEMS = statusItems(TRIP_STATUSES, TRIP_STATUS_LABELS)
 
 const VIEW_STORAGE_KEY = 'odip.trips.view'
 const WIDE_QUERY = '(min-width: 1280px)'
@@ -112,7 +105,7 @@ export default function TripsPage() {
     params.status = 'Completed'
   }
 
-  const { data: allTrips = [], isLoading } = useTrips(params)
+  const { data: allTrips = [], isLoading, isError, refetch } = useTrips(params)
   // PP-63: the exact data EditTripModal needs — TripsPage already fetched it for the old
   // hand-rolled modal, so this stays even though the modal itself moved to trip-detail/.
   const { data: tripDetail } = useTrip(editingTripId ?? undefined)
@@ -123,13 +116,7 @@ export default function TripsPage() {
     : allTrips
 
   const statusOptions = tab === 'active'
-    ? [
-        { value: 'Draft', label: 'Draft' },
-        { value: 'Planning', label: 'Planning' },
-        { value: 'OpenForBookings', label: 'Open for Bookings' },
-        { value: 'Confirmed', label: 'Confirmed' },
-        { value: 'InProgress', label: 'In Progress' },
-      ]
+    ? statusItems(activeStatuses, TRIP_STATUS_LABELS)
     : []
 
   const switchTab = (newTab: string) => {
@@ -220,7 +207,7 @@ export default function TripsPage() {
       // caret in the pill + 24 of cell padding = 162px. Reserved up front so the column doesn't jump
       // when a trip's status changes to it.
       minWidth: '10.25rem',
-      render: (t) => (
+      render: (t) => canWrite ? (
         <span onClick={e => e.stopPropagation()} className="inline-flex items-center">
           <Dropdown
             variant="pill"
@@ -230,7 +217,7 @@ export default function TripsPage() {
             items={TRIP_STATUS_ITEMS}
           />
         </span>
-      ),
+      ) : <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />,
     },
     {
       key: 'currentParticipantCount',
@@ -293,7 +280,7 @@ export default function TripsPage() {
               />
               {canWrite && (
                 <Button to="/trips/new" size="md">
-                  <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Trip</span><span className="sm:hidden">New</span>
+                  <Plus className="h-4 w-4" /> New trip
                 </Button>
               )}
             </div>
@@ -325,17 +312,16 @@ export default function TripsPage() {
       </div>
 
       {statusChangeError && (
-        <div role="alert" className="flex items-start gap-3 rounded-[var(--radius-md)] bg-[var(--color-error-container)] p-[var(--card-pad)] text-[var(--color-destructive)]">
-          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" aria-hidden="true" />
-          <p className="text-sm">
-            <strong>Couldn't update {statusChangeError.tripName}.</strong> {statusChangeError.message}
-          </p>
-        </div>
+        <Callout tone="error">
+          <strong>Couldn't update {statusChangeError.tripName}.</strong> {statusChangeError.message}
+        </Callout>
       )}
 
       {/* Trips list */}
       {isLoading ? (
-        <div className="py-12 text-center text-[var(--color-muted-foreground)]">Loading trips...</div>
+        <PageState kind="loading" noun="trips" />
+      ) : isError && allTrips.length === 0 ? (
+        <PageState kind="error" noun="trip list" onRetry={() => refetch()} />
       ) : trips.length === 0 ? (
         tab === 'completed' ? (
           search ? (
@@ -364,7 +350,6 @@ export default function TripsPage() {
             icon={MapPin}
             title="No trips yet"
             description="Trips are the group outings you plan for participants — set dates, capacity, and requirements, then book people onto them."
-            action={canWrite ? { label: 'Create trip', to: '/trips/new' } : undefined}
           />
         )
       ) : view === 'table' ? (
@@ -412,13 +397,15 @@ export default function TripsPage() {
                       </button>
                     </div>
                   )}
-                  <Dropdown
-                    variant="pill"
-                    value={t.status}
-                    onChange={val => handleStatusChange(t, val as TripStatus)}
-                    colorClass={statusClass(t.status)}
-                    items={TRIP_STATUS_ITEMS}
-                  />
+                  {canWrite ? (
+                    <Dropdown
+                      variant="pill"
+                      value={t.status}
+                      onChange={val => handleStatusChange(t, val as TripStatus)}
+                      colorClass={statusClass(t.status)}
+                      items={TRIP_STATUS_ITEMS}
+                    />
+                  ) : <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">person</span> {t.currentParticipantCount}/{t.maxParticipants || '—'}</span>

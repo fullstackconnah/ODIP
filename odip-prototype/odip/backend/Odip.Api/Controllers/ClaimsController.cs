@@ -3,9 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -22,13 +25,18 @@ public class ClaimsController : ControllerBase
     private readonly InvoiceService _invoiceService;
     private readonly BudgetLedgerService _ledger;
     private readonly ICurrentTenant _tenant;
+    private readonly TimeProvider _clock;
+
+    /// <summary>A claim generation waited for another one for the same trip or participant (see the generators' advisory lock) and gave up.</summary>
+    private const string ClaimBusy = "Another claim is still being generated for this trip or participant. Wait a moment, then try again.";
 
     public ClaimsController(OdipDbContext db, ClaimGenerationService generator,
         ShiftClaimGenerationService shiftGenerator, BprCsvService bprService, InvoiceService invoiceService,
-        BudgetLedgerService ledger, ICurrentTenant tenant)
+        BudgetLedgerService ledger, ICurrentTenant tenant, TimeProvider? clock = null)
     {
         _ledger = ledger;
         _tenant = tenant;
+        _clock = clock ?? TimeProvider.System;
         _db = db;
         _generator = generator;
         _shiftGenerator = shiftGenerator;
@@ -36,16 +44,22 @@ public class ClaimsController : ControllerBase
         _invoiceService = invoiceService;
     }
 
+    /// <summary>
+    /// The caller's own claims. TripClaim has no organisation column and no query filter, so a claim is theirs only if the trip (a Trip claim) or the participant (a Shift claim) it belongs to
+    /// is: both sets are tenant-filtered. Every read or write of a claim by id starts here, so another organisation's claim is "not found".
+    /// </summary>
+    private IQueryable<TripClaim> TenantClaims() =>
+        _db.TripClaims.Where(c => _db.TripInstances.Any(t => t.Id == c.TripInstanceId) || _db.Participants.Any(p => p.Id == c.ParticipantId));
+
     // POST /api/v1/trips/{tripId}/claims/preview
     [HttpPost("trips/{tripId:guid}/claims/preview")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ClaimPreviewResponseDto>>> PreviewClaim(
         Guid tripId, [FromBody] ClaimPreviewRequestDto dto, CancellationToken ct)
     {
-        // No tenant guard here on purpose. The preview's own lines and total have always been returned to any caller the class-level
-        // [Authorize] admits, and narrowing that is a wider product change than the budget finding asks for. The budget block it now
-        // carries is scoped inside the generator, under the CALLER's tenant (budget security audit F-1), so a SuperAdmin with no
-        // organisation chosen gets a preview with no budget rather than another organisation's.
+        // No separate guard here: the generator reads the trip through the tenant-filtered TripInstances, so another organisation's trip is "Trip not found" (400),
+        // as it is for GenerateClaim; only a SuperAdmin with no organisation chosen previews any trip, by design. The budget block it carries is scoped inside
+        // the generator, under the CALLER's tenant (budget security audit F-1), so that SuperAdmin gets a preview with no budget rather than another organisation's.
         try
         {
             var preview = await _generator.PreviewClaimAsync(tripId, dto, ct);
@@ -74,6 +88,10 @@ public class ClaimsController : ControllerBase
                 TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate
             }));
         }
+        catch (RosterBusyException)   // before InvalidOperationException, which it is
+        {
+            return Conflict(ApiResponse<TripClaimListDto>.Fail(ClaimBusy));
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(ApiResponse<TripClaimListDto>.Fail(ex.Message));
@@ -84,6 +102,9 @@ public class ClaimsController : ControllerBase
     [HttpGet("trips/{tripId:guid}/claims")]
     public async Task<ActionResult<ApiResponse<List<TripClaimListDto>>>> GetClaimsForTrip(Guid tripId, CancellationToken ct)
     {
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == tripId, ct))
+            return NotFound(ApiResponse<List<TripClaimListDto>>.Fail("Trip not found"));
+
         var items = await _db.TripClaims
             .Include(c => c.TripInstance)
             .Where(c => c.TripInstanceId == tripId)
@@ -174,6 +195,10 @@ public class ClaimsController : ControllerBase
                 Flagged = generated.Flagged.ToList(),
             }));
         }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftClaimGeneratedDto>.Fail(ClaimBusy));
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(ApiResponse<ShiftClaimGeneratedDto>.Fail(ex.Message));
@@ -184,7 +209,7 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}")]
     public async Task<ActionResult<ApiResponse<TripClaimDetailDto>>> GetClaim(Guid claimId, CancellationToken ct)
     {
-        var c = await _db.TripClaims
+        var c = await TenantClaims()
             .Include(x => x.TripInstance)
             .Include(x => x.AuthorisedByUser)
             .Include(x => x.LineItems)
@@ -208,7 +233,7 @@ public class ClaimsController : ControllerBase
             ParticipantId = c.ParticipantId, PeriodFrom = c.PeriodFrom, PeriodTo = c.PeriodTo,
             Status = c.Status, ClaimReference = c.ClaimReference,
             TotalAmount = c.TotalAmount, TotalApprovedAmount = c.TotalApprovedAmount,
-            CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate, PaidDate = c.PaidDate,
+            CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate, PaidDate = c.PaidDate, RejectedDate = c.RejectedDate, RejectionCode = c.RejectionCode,
             AuthorisedByStaffId = c.AuthorisedByUserId,
             AuthorisedByStaffName = c.AuthorisedByUser != null ? $"{c.AuthorisedByUser.FirstName} {c.AuthorisedByUser.LastName}" : null,
             Notes = c.Notes,
@@ -243,20 +268,61 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> UpdateClaim(Guid claimId, [FromBody] UpdateClaimDto dto, CancellationToken ct)
     {
-        var c = await _db.TripClaims.FirstOrDefaultAsync(x => x.Id == claimId, ct);
+        var c = await TenantClaims().FirstOrDefaultAsync(x => x.Id == claimId, ct);
         if (c == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
+        // The authoriser is a user of the caller's organisation (Users is tenant-filtered); checked before anything is changed, so a refusal writes nothing.
+        if (dto.AuthorisedByStaffId is { } authoriserId && !await _db.Users.AnyAsync(u => u.Id == authoriserId, ct))
+            return BadRequest(ApiResponse<bool>.Fail("Authorising staff member not found."));
+
+        // The NDIA's code for a rejection (budget phase 2b) is checked before anything is changed, so a refusal writes nothing: no control characters (Postgres refuses a NUL in text), at most ten
+        // characters, and only with a claim that is, or is being made, Rejected.
+        var code = NdiaRejectionCodes.Normalise(dto.RejectionCode);
+        if (dto.RejectionCode != null)
+        {
+            if (dto.RejectionCode.Any(char.IsControl)) return BadRequest(ApiResponse<bool>.Fail("The NDIA code cannot contain a control character (a line break, a tab, a NUL)."));
+            if (code is { Length: > NdiaRejectionCodes.MaxLength }) return BadRequest(ApiResponse<bool>.Fail($"The NDIA code is at most {NdiaRejectionCodes.MaxLength} characters."));
+            if (code != null && (dto.Status ?? c.Status) != TripClaimStatus.Rejected)
+                return BadRequest(ApiResponse<bool>.Fail("An NDIA rejection code goes with a rejected claim: mark the claim as Rejected to record it."));
+        }
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var before = c.Status;
         if (dto.AuthorisedByStaffId.HasValue) c.AuthorisedByUserId = dto.AuthorisedByStaffId;
         if (dto.Notes != null) c.Notes = dto.Notes;
         if (dto.Status.HasValue)
         {
             c.Status = dto.Status.Value;
-            if (dto.Status.Value == TripClaimStatus.Submitted) c.SubmittedDate = DateTime.UtcNow;
-            if (dto.Status.Value == TripClaimStatus.Paid) c.PaidDate = DateTime.UtcNow;
+            if (dto.Status.Value == TripClaimStatus.Submitted) c.SubmittedDate = now;
+            if (dto.Status.Value == TripClaimStatus.Paid) c.PaidDate = now;
+        }
+        KeepRejectionRecord(c, before, now);
+        if (dto.RejectionCode != null && c.Status == TripClaimStatus.Rejected)
+        {
+            c.RejectionCode = code;
+            // A claim marked Rejected before the day was kept has no day, and the NDIA's word (the alert and the Funding tab's note) needs one: recording its code is the first day the claim is known
+            // to have been refused, so that is the day. A day that is already there never moves.
+            if (code != null && c.RejectedDate is null) c.RejectedDate = now;
         }
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    /// <summary>
+    /// What a claim remembers about being rejected, kept in step with its status whichever way the status moved (the claim's own Mark as Rejected, or every line rejected): the moment it became Rejected
+    /// is stamped once, and a claim that is no longer Rejected forgets the moment and the NDIA's code, so a later rejection starts afresh.
+    /// </summary>
+    private static void KeepRejectionRecord(TripClaim claim, TripClaimStatus before, DateTime now)
+    {
+        if (claim.Status == TripClaimStatus.Rejected)
+        {
+            if (before != TripClaimStatus.Rejected) claim.RejectedDate = now;
+            return;
+        }
+
+        claim.RejectedDate = null;
+        claim.RejectionCode = null;
     }
 
     // PATCH /api/v1/claims/{claimId}/line-items/{id}
@@ -264,6 +330,8 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> UpdateLineItem(Guid claimId, Guid id, [FromBody] UpdateClaimLineItemDto dto, CancellationToken ct)
     {
+        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+
         var item = await _db.ClaimLineItems
             .Include(l => l.TripClaim)
             .FirstOrDefaultAsync(x => x.Id == id && x.TripClaimId == claimId, ct);
@@ -296,11 +364,13 @@ public class ClaimsController : ControllerBase
 
         // Auto-update claim status based on line item statuses
         var statuses = otherItems.Select(l => l.Status).Append(item.Status).ToList();
+        var claimBefore = item.TripClaim.Status;
         if (statuses.All(s => s == ClaimLineItemStatus.Paid))
             item.TripClaim.Status = TripClaimStatus.Paid;
         else if (statuses.All(s => s == ClaimLineItemStatus.Rejected))
             item.TripClaim.Status = TripClaimStatus.Rejected;
         // NOTE: TripClaimStatus.PartiallyPaid exists (value 4) but partial auto-promotion is omitted intentionally
+        KeepRejectionRecord(item.TripClaim, claimBefore, _clock.GetUtcNow().UtcDateTime);
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
@@ -311,7 +381,7 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteClaim(Guid claimId, CancellationToken ct)
     {
-        var claim = await _db.TripClaims
+        var claim = await TenantClaims()
             .Include(c => c.LineItems)
             .FirstOrDefaultAsync(x => x.Id == claimId, ct);
 
@@ -346,6 +416,8 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}/bpr-csv")]
     public async Task<IActionResult> DownloadBprCsv(Guid claimId, CancellationToken ct)
     {
+        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+
         try
         {
             var (bytes, fileName) = await _bprService.GenerateBprCsvAsync(claimId, ct);
@@ -361,6 +433,8 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}/invoices/{bookingId:guid}")]
     public async Task<IActionResult> DownloadInvoice(Guid claimId, Guid bookingId, CancellationToken ct)
     {
+        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+
         try
         {
             var (bytes, fileName) = await _invoiceService.GenerateInvoiceAsync(claimId, bookingId, ct);

@@ -9,6 +9,7 @@ import { Callout } from '@/components/Callout'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { useParticipants, useStaff, useUpsertCompatibility } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { CompatibilityLevel, CompatibilityRowDto } from '@/api/types'
 import { useCompatibilityMatrix } from './lib/useCompatibilityMatrix'
 
@@ -88,7 +89,7 @@ function CompatibilityMatrixSkeleton() {
 export default function CompatibilityPage() {
   const { canWrite } = usePermissions()
   // INTAKE-08: the compatibility matrix excludes drafts.
-  const { data: participants = [], isLoading: participantsLoading, isError: participantsError, refetch: refetchParticipants } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [], isLoading: participantsLoading, isError: participantsError, refetch: refetchParticipants } = useParticipants(CAN_RECEIVE_SERVICES)
   const { data: staff = [], isLoading: staffLoading, isError: staffError, refetch: refetchStaff } = useStaff()
 
   // PP-53: text filters on a matrix that can otherwise grow unbrowsably wide/tall.
@@ -208,10 +209,7 @@ export default function CompatibilityPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title="Staff–participant compatibility"
-        subtitle="Preferred and excluded pairings the roster board and conflict checks use when suggesting or warning about a match."
-      />
+      <PageHeader title="Compatibility" />
 
       {saveError && (
         <Callout
@@ -382,21 +380,12 @@ export default function CompatibilityPage() {
         )}
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => setExcludeDraft(null)}
-              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-accent"
-            >
+            <Button variant="secondary" onClick={() => setExcludeDraft(null)}>
               Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!excludeDraft?.reason.trim()}
-              onClick={handleConfirmExclude}
-              className="px-4 py-2 text-sm rounded-lg bg-destructive text-destructive-foreground hover:opacity-90 disabled:opacity-50"
-            >
+            </Button>
+            <Button variant="danger" disabled={!excludeDraft?.reason.trim()} onClick={handleConfirmExclude}>
               Exclude
-            </button>
+            </Button>
           </>
         }
       />

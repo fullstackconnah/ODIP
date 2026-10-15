@@ -29,7 +29,7 @@ export function IncidentDetailsStep({ register, control, errors, incidentType, w
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      <Card title="Incident Details">
+      <Card title="Incident details">
         <div className={formGrid}>
           <FormField label="Date & Time" required error={errors.incidentDateTime?.message} className={span.date}>
             <input type="datetime-local" {...register('incidentDateTime')} />

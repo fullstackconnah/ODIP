@@ -189,16 +189,19 @@ public class ServiceAgreementDraftServiceTests
 
             var (first, firstError) = await service.CreateAsync(tenantId, participant.Id, Request(), "synthetic-actor", CancellationToken.None);
             Assert.Null(firstError);
+            // An earlier revision nobody did anything with is replaced by the next save; one that was approved is kept exactly as it was saved.
+            db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = tenantId, DraftId = first!.Id, ParticipantId = participant.Id, DraftVersion = first.Version, ApprovedAt = new DateTime(2025, 7, 1, 0, 0, 0, DateTimeKind.Utc), ApprovedByName = "Synthetic Approver" });
             catalogue.PriceLimit_VIC = 99.50m;
             catalogue.CatalogueVersion = "synthetic-v2";
             await db.SaveChangesAsync();
             var (second, secondError) = await service.CreateAsync(tenantId, participant.Id, Request(), "synthetic-actor", CancellationToken.None);
 
             Assert.Null(secondError);
-            Assert.Equal(1, first!.Version);
+            Assert.Equal(1, first.Version);
             Assert.Equal(2, second!.Version);
-            Assert.Equal(71.25m, Assert.Single(first.Lines).UnitPrice);
-            Assert.Equal("synthetic-v1", Assert.Single(first.Lines).CatalogueVersion);
+            var storedFirst = await db.ServiceAgreementDraftLines.SingleAsync(line => line.DraftId == first.Id);
+            Assert.Equal(71.25m, storedFirst.UnitPrice);
+            Assert.Equal("synthetic-v1", storedFirst.CatalogueVersion);
             Assert.Equal(99.50m, Assert.Single(second.Lines).UnitPrice);
             Assert.Equal("synthetic-v2", Assert.Single(second.Lines).CatalogueVersion);
             Assert.Equal("UnapprovedDraft", new ServiceAgreementDraftDto().Status);

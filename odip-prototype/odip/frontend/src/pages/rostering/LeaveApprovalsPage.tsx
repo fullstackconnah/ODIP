@@ -5,6 +5,8 @@ import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
+import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
@@ -30,6 +32,7 @@ import { extractErrorMessage, formatDateAu, parseApiDate } from '@/lib/utils'
 import { localIsoDate } from '@/lib/dateOnly'
 import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
+import { Button } from '@/components/Button'
 
 type LegacyRecord = StaffAvailabilityDto & { userFullName: string }
 
@@ -110,14 +113,15 @@ function OverlapShiftsList({ shifts, unassigningShiftId, unassignedShiftIds, una
               {done ? (
                 <span className="shrink-0 text-xs font-medium text-[var(--color-primary)]">Unassigned</span>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
                   onClick={() => onUnassign(shift.shiftId)}
                   disabled={busy}
-                  className="shrink-0 min-h-[36px] px-3 text-xs rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] disabled:opacity-50"
                 >
                   {busy ? 'Unassigning…' : 'Unassign and mark open'}
-                </button>
+                </Button>
               )}
             </div>
             {error && <p role="alert" className="mt-1 text-xs text-[var(--color-destructive)]">{error}</p>}
@@ -469,7 +473,7 @@ export default function LeaveApprovalsPage() {
     return `${who} · ${localIsoDate(parseApiDate(requestedAt))}`
   }
 
-  // Column budget (density §4): the Edit / Decline / Approve buttons take ~260px, so with uncapped text columns this table needed ~1170px
+  // Column budget (density §4): the Edit / Decline / Approve buttons took ~260px at md (~170px now they are sm), so with uncapped text columns this table needed ~1170px
   // against a ~1006px box at 1280 and pushed the buttons off-screen. The text columns are capped (ellipsis, full text in the tooltip);
   // Requested (who asked, and when) stays, and the buttons stay pinned while the table scrolls in its box (DataTable's column rule).
   const columns: Column<ApprovalRow>[] = [
@@ -489,42 +493,44 @@ export default function LeaveApprovalsPage() {
     ) },
     ...(canApproveLeave ? [{
       key: 'actions', header: '', align: 'right' as const, render: (row: ApprovalRow) => {
+        // Every row has these, so each name carries the row's subject: who, and when. sm keeps the row at --row-h.
+        const named = (label: string) => `${label}: ${row.data.userFullName}, ${rowWindow(row)}`
+        const edit = (
+          <Button variant="secondary" size="sm" onClick={() => openEdit(row)} aria-label={named('Edit')}>
+            Edit
+          </Button>
+        )
         if (row.rowKind === 'legacy') {
           return (
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
-                Edit
-              </button>
-              <button type="button" onClick={() => setDeleteLegacyTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
+            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
+              {edit}
+              <Button variant="ghost-danger" size="sm" onClick={() => setDeleteLegacyTarget(row)} aria-label={named('Delete')}>
                 Delete
-              </button>
+              </Button>
             </div>
           )
         }
         if (row.data.status === 'Pending') {
           return (
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
-                Edit
-              </button>
-              <button type="button" onClick={() => setDeclineTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
+              {edit}
+              <Button variant="secondary" size="sm" onClick={() => setDeclineTarget(row)} aria-label={named('Decline')}>
                 Decline
-              </button>
-              <button type="button" onClick={() => setApproveTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90">
+              </Button>
+              <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={named('Approve')}>
                 Approve
-              </button>
+              </Button>
             </div>
           )
         }
         if (row.data.status === 'Approved') {
+          const label = row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'
           return (
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => openEdit(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
-                Edit
-              </button>
-              <button type="button" onClick={() => setCancelTarget(row)} className="min-h-[44px] px-3 text-sm text-[var(--color-destructive)] hover:underline">
-                {row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'}
-              </button>
+            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
+              {edit}
+              <Button variant="ghost-danger" size="sm" onClick={() => setCancelTarget(row)} aria-label={named(label)}>
+                {label}
+              </Button>
             </div>
           )
         }
@@ -535,8 +541,9 @@ export default function LeaveApprovalsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Leave approvals" subtitle="Review and decide staff leave and regular-unavailability requests.">
-        {canApproveLeave && (
+      <PageHeader
+        title="Leave"
+        action={canApproveLeave && (
           <Dropdown
             variant="menu"
             label="Enter on behalf"
@@ -549,7 +556,7 @@ export default function LeaveApprovalsPage() {
             onSelect={value => { setOnBehalfError(null); setOnBehalfMode(value as 'leave' | 'unavailability' | 'availability') }}
           />
         )}
-      </PageHeader>
+      />
 
       {!canApproveLeave && (
         <p className="text-sm text-[var(--color-muted-foreground)]">
@@ -580,14 +587,11 @@ export default function LeaveApprovalsPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-[var(--color-muted-foreground)]">Loading…</p>
+        <PageState kind="loading" noun="leave requests" />
       ) : isError ? (
-        <EmptyState
-          icon={CalendarOff}
-          title="Couldn't load leave requests."
-          description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: refetchAll }}
-        />
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={refetchAll}>Try again</Button>}>
+          Couldn't load leave requests. Check your connection and try again.
+        </Callout>
       ) : rows.length === 0 ? (
         <EmptyState icon={CalendarOff} title="No requests match these filters" description="Try a different status, staff member or date range." />
       ) : (
@@ -688,7 +692,7 @@ export default function LeaveApprovalsPage() {
         onConfirm={handleDeleteLegacyConfirm}
         title="Delete record"
         variant="danger"
-        confirmLabel="Yes, delete it"
+        confirmLabel="Delete"
         cancelLabel="Keep"
         loading={deleteStaffAvailability.isPending}
         message={
@@ -765,7 +769,7 @@ export default function LeaveApprovalsPage() {
         onConfirm={handleCancelConfirm}
         title="Cancel approved request"
         variant="danger"
-        confirmLabel="Yes, cancel it"
+        confirmLabel="Cancel request"
         cancelLabel="Keep"
         loading={cancelLeave.isPending || cancelUnavailability.isPending}
         message={

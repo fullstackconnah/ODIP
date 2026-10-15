@@ -44,7 +44,9 @@ public record PortalShiftSummaryDto(
     SupportRatio Ratio,
     SleepoverType NightType,
     ShiftStatus Status,
-    string? Notes);
+    string? Notes,
+    /// <summary>How many times a coordinator returned this shift; a Published shift above 0 is shown as Returned.</summary>
+    int ReturnCount);
 
 /// <summary>One of the caller's own upcoming trip staffing assignments — included in the shifts list when cheap; see brief.</summary>
 public record PortalTripAssignmentSummaryDto(
@@ -65,7 +67,9 @@ public record PortalTripAssignmentSummaryDto(
 /// </summary>
 public record PortalShiftsResponseDto(
     List<PortalShiftSummaryDto> Shifts,
-    List<PortalTripAssignmentSummaryDto> TripAssignments);
+    List<PortalTripAssignmentSummaryDto> TripAssignments,
+    /// <summary>The provider's IANA zone: the shifts' dates and times are wall-clock there, so the list judges "today" and "ended" in it.</summary>
+    string TimeZoneId);
 
 /// <summary>
 /// Participant fields a support worker needs on shift — support/risk flags, mobility and

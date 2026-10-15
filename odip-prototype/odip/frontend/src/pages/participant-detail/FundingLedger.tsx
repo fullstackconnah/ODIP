@@ -7,13 +7,15 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { DataTable } from '@/components/DataTable'
-import { FactBar, FactChip } from '@/components/FactBar'
+import { FactBar } from '@/components/FactBar'
+import { ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { chipToneOf, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence, unpricedTripDaySentence } from '@/lib/budgetLedger'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { plural } from '@/lib/format'
+import { NdiaRejectionNote } from './NdiaRejectionNote'
 
 // The budget ledger on the Funding tab (budget feature, phase 2a): for each pool of the current plan, the current period's figures, the one sentence that says what is left and
 // where the booked shifts would take it, the strip of periods, the rows of the selected period in their three groups, and the plan's total. Every figure is the server's: this screen
@@ -147,7 +149,10 @@ function PoolLedger({ pool }: { pool: LedgerPool }) {
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">{pool.name}</h3>
         {focus && <BudgetStatusBadge status={focus.status} />}
+        {/* ODIP's arithmetic can say On track while the NDIA has just refused a claim for want of funds: its word is beside ODIP's, and its note is the first thing under the title, above the figures. */}
+        {pool.ndiaRejection && <StatusBadge tone="danger" label={ALERT_TYPE_LABELS['budget-ndia-exhausted']} />}
       </div>
+      {pool.ndiaRejection && <NdiaRejectionNote rejection={pool.ndiaRejection} />}
 
       {focus ? (
         <>
@@ -208,8 +213,8 @@ function GlanceStrip({ period }: { period: LedgerPeriod }) {
           },
           {
             label: 'Status',
+            // The word once: the chip that stood beside it said the same thing again, and the pool's title already wears the status in its tone.
             value: <span className="text-base font-medium">{BUDGET_STATUS_LABELS[period.status]}</span>,
-            badge: <FactChip tone={chipToneOf(period.status)}>{BUDGET_STATUS_LABELS[period.status]}</FactChip>,
           },
         ]}
       />

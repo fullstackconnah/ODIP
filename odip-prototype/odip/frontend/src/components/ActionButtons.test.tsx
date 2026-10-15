@@ -88,8 +88,8 @@ describe('ActionButtons — 44px hit areas on a coarse pointer', () => {
     }
     expect(link).toHaveClass('inline-block', 'hover:bg-[var(--color-accent)]', 'hover:text-[var(--color-primary)]')
     expect(edit).toHaveClass('hover:bg-[var(--color-accent)]', 'hover:text-[var(--color-primary)]')
-    expect(archive).toHaveClass('hover:bg-red-500/20', 'hover:text-red-400')
-    expect(restore).toHaveClass('hover:bg-green-500/20', 'hover:text-green-400')
+    expect(archive).toHaveClass('hover:bg-[var(--color-error-container)]', 'hover:text-[var(--color-destructive)]')
+    expect(restore).toHaveClass('hover:bg-[var(--color-primary-fixed)]/40', 'hover:text-[var(--color-primary)]')
   })
 
   it('opens the gap from 4px to 8px on touch: two 36px buttons with 4px pads each touch, never overlap', () => {
@@ -104,5 +104,25 @@ describe('ActionButtons — 44px hit areas on a coarse pointer', () => {
       expect(control.className).not.toMatch(/(^|\s)[a-z:-]*(?:size|h|w|min-h|min-w)-\[?\d/)
       expect(control.className).not.toMatch(/44px/)
     }
+  })
+})
+
+// V4: the card footer Accommodation and Vehicles share: labelled secondary Buttons, and a click does not reach the card under it.
+describe('ActionButtons — labelled (card footer)', () => {
+  it('renders labelled Edit and Archive, then Restore on the Archived view, without bubbling', async () => {
+    const onDelete = vi.fn()
+    const outer = vi.fn()
+    const { unmount } = render(<MemoryRouter><div onClick={outer}><ActionButtons labelled editTo="/things/1/edit" onDelete={onDelete} onRestore={vi.fn()} /></div></MemoryRouter>)
+
+    expect(screen.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/things/1/edit')
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(onDelete).toHaveBeenCalledOnce()
+    expect(outer).not.toHaveBeenCalled()
+    unmount()
+
+    renderButtons({ labelled: true, onDelete: vi.fn(), onRestore: vi.fn(), showArchived: true })
+    expect(screen.getByRole('button', { name: 'Restore' })).toHaveTextContent('Restore')
+    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
   })
 })

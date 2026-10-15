@@ -11,6 +11,7 @@ import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
 import type { VehicleType, RosterFindingDto } from '@/api/types'
 import { Dropdown } from './Dropdown'
 import { plural } from '@/lib/format'
+import { Button } from '@/components/Button'
 
 interface AddVehicleModalProps {
   tripInstanceId: string
@@ -38,6 +39,8 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
   const [isInternal, setIsInternal] = useState(true)
   const [isActive, setIsActive] = useState(true)
   const [noIdReturned, setNoIdReturned] = useState(false)
+  // The vehicle this form already created: when its assignment is refused, the next click assigns it instead of creating another.
+  const [newVehicleId, setNewVehicleId] = useState<string>()
 
   const { data: allVehicles = [] } = useVehicles()
   const createAssignment = useCreateVehicleAssignment()
@@ -108,29 +111,32 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
   const handleCreateAndAssign = async () => {
     if (!vehicleName || !vehicleType || totalSeats === '') return
     setNoIdReturned(false)
-    let newVehicleId: string | undefined
-    try {
-      const res = await createVehicle.mutateAsync({
-        vehicleName,
-        registration: registration || undefined,
-        vehicleType: vehicleType as VehicleType,
-        totalSeats: Number(totalSeats),
-        wheelchairPositions: Number(wheelchairPositions),
-        isInternal,
-        isActive,
-      })
-      newVehicleId = res.data?.id
-    } catch {
-      return // createVehicle.isError shows the inline error
+    let vehicleId = newVehicleId
+    if (!vehicleId) {
+      try {
+        const res = await createVehicle.mutateAsync({
+          vehicleName,
+          registration: registration || undefined,
+          vehicleType: vehicleType as VehicleType,
+          totalSeats: Number(totalSeats),
+          wheelchairPositions: Number(wheelchairPositions),
+          isInternal,
+          isActive,
+        })
+        vehicleId = res.data?.id
+      } catch {
+        return // createVehicle.isError shows the inline error
+      }
+      if (!vehicleId) {
+        // Mutation succeeded but response had no ID — unexpected API shape.
+        // Vehicle was created; user can assign it manually from the fleet list.
+        setNoIdReturned(true)
+        return
+      }
+      setNewVehicleId(vehicleId)
     }
-    if (!newVehicleId) {
-      // Mutation succeeded but response had no ID — unexpected API shape.
-      // Vehicle was created; user can assign it manually from the fleet list.
-      setNoIdReturned(true)
-      return
-    }
     try {
-      await createAssignment.mutateAsync({ tripInstanceId, vehicleId: newVehicleId })
+      await createAssignment.mutateAsync({ tripInstanceId, vehicleId })
       onClose()
     } catch {
       // createAssignment.isError shows the inline error.
@@ -152,29 +158,21 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
       footer={
         activeTab === 'existing' ? (
           <>
-            <button onClick={onClose} className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors">
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              onClick={handleAssignExisting}
-              disabled={!tab1CanSubmit}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={handleAssignExisting} disabled={!tab1CanSubmit}>
               {createAssignment.isPending ? 'Assigning...' : gate.needsReason ? 'Assign with override' : 'Assign Vehicle'}
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <button onClick={onClose} className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors">
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              onClick={handleCreateAndAssign}
-              disabled={!tab2CanSubmit}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {createVehicle.isPending || createAssignment.isPending ? 'Saving...' : 'Create Vehicle & Assign'}
-            </button>
+            </Button>
+            <Button onClick={handleCreateAndAssign} disabled={!tab2CanSubmit}>
+              {createVehicle.isPending || createAssignment.isPending ? 'Saving...' : newVehicleId ? 'Assign Vehicle' : 'Create Vehicle & Assign'}
+            </Button>
           </>
         )
       }
@@ -241,7 +239,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   <p className="font-medium text-sm">{v.vehicleName}</p>
                   <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">
                     {v.registration || 'No rego'} · {v.vehicleType} · {v.totalSeats} seats
-                    {v.wheelchairPositions ? <> · <span className="material-symbols-outlined text-base leading-none">accessible</span> {v.wheelchairPositions}</> : ''}
+                    {v.wheelchairPositions > 0 && ` · ${plural(v.wheelchairPositions, 'wheelchair position')}`}
                   </p>
                 </button>
               ))}
@@ -271,6 +269,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                 type="text"
                 value={vehicleName}
                 onChange={e => setVehicleName(e.target.value)}
+                disabled={!!newVehicleId}
                 placeholder="e.g. Toyota HiAce"
                 className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
               />
@@ -283,6 +282,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   type="text"
                   value={registration}
                   onChange={e => setRegistration(e.target.value)}
+                  disabled={!!newVehicleId}
                   placeholder="ABC-123"
                   className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
@@ -296,6 +296,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   items={['Car', 'Van', 'Bus', 'MiniBus', 'AccessibleVan', 'Other'].map(t => ({ value: t, label: t }))}
                   value={vehicleType}
                   onChange={setVehicleType}
+                  disabled={!!newVehicleId}
                   label="Select type"
                 />
               </div>
@@ -308,6 +309,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   min={0}
                   value={totalSeats}
                   onChange={e => setTotalSeats(e.target.value)}
+                  disabled={!!newVehicleId}
                   className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
               </div>
@@ -318,6 +320,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
                   min={0}
                   value={wheelchairPositions}
                   onChange={e => setWheelchairPositions(e.target.value)}
+                  disabled={!!newVehicleId}
                   className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 />
               </div>
@@ -325,11 +328,11 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
 
             <div className={`flex gap-5 ${modalSpan.full}`}>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={isInternal} onChange={e => setIsInternal(e.target.checked)} className="rounded" />
+                <input type="checkbox" checked={isInternal} onChange={e => setIsInternal(e.target.checked)} disabled={!!newVehicleId} className="rounded" />
                 Internal fleet
               </label>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="rounded" />
+                <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} disabled={!!newVehicleId} className="rounded" />
                 Active
               </label>
             </div>
@@ -337,7 +340,10 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
             {createVehicle.isError && (
               <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Failed to create vehicle. Please try again.</p>
             )}
-            {(createAssignment.isError || noIdReturned) && !createVehicle.isError && (
+            {newVehicleId && !createAssignment.isPending && (
+              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Vehicle created. Assigning it to the trip failed: try again.</p>
+            )}
+            {(createAssignment.isError || noIdReturned) && !createVehicle.isError && !newVehicleId && (
               <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>
                 Vehicle was created but could not be assigned. Find it in the Vehicles list and assign it manually.
               </p>

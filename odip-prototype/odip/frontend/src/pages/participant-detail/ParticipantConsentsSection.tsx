@@ -1,15 +1,21 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { FileCheck2 } from 'lucide-react'
+import { NotRecordedFold } from './NotRecordedFold'
+import { plural } from '@/lib/format'
 import { useParticipantConsents, useUpsertConsent } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { CONSENT_TYPES } from '@/api/types/enums'
 import { CONSENT_TYPE_LABELS } from '@/api/types/consents'
 import type { ParticipantConsentDto } from '@/api/types/consents'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 type ConsentFormState = {
   granted: 'true' | 'false' | ''
@@ -31,10 +37,6 @@ function consentStatus(granted: boolean | null): { status: string; label: string
   return { status: 'draft', label: 'Not recorded' }
 }
 
-function ConsentSkeleton() {
-  return <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] animate-pulse h-14" />
-}
-
 /**
  * INTAKE sub-wave B — a compact section (not a full tab) on the participant detail page's Details
  * tab, mirroring RiskEntriesSection's placement judgement: consents are a short, fixed 7-row list
@@ -46,7 +48,10 @@ function ConsentSkeleton() {
  */
 export default function ParticipantConsentsSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteConsents } = usePermissions()
-  const { data: consents = [], isLoading } = useParticipantConsents(participantId)
+  const consentsQuery = useParticipantConsents(participantId)
+  const consents = consentsQuery.data ?? []
+  // A failed or paused request is not an empty list: "No consents recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(consentsQuery)
   const upsertConsent = useUpsertConsent()
 
   const [editing, setEditing] = useState<ParticipantConsentDto | null>(null)
@@ -95,22 +100,25 @@ export default function ParticipantConsentsSection({ participantId }: { particip
     }
   }
 
+  // VISUAL-1 V2: seven "Not recorded" rows on a new participant fold into one line that opens to them.
+  const foldIfNoneRecorded = (list: ReactNode) =>
+    ordered.every((c) => c.granted == null) ? <NotRecordedFold summary={plural(ordered.length, 'consent')}>{list}</NotRecordedFold> : list
+
   return (
     <div className="space-y-4">
       <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
         <FileCheck2 className="w-4 h-4" /> Consents
       </h3>
 
-      {isLoading ? (
-        <div className="space-y-2">
-          <ConsentSkeleton />
-          <ConsentSkeleton />
-        </div>
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="consent list" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="consent list" onRetry={() => consentsQuery.refetch()} />
       ) : ordered.length === 0 ? (
         // GetForParticipant normally returns a row per ConsentType, but a still-empty list must not
         // leave a titled card with an empty body — say so in one muted line (density spec §5).
         <p className="text-sm text-[var(--color-muted-foreground)]">No consents recorded</p>
-      ) : (
+      ) : foldIfNoneRecorded(
         <div className="space-y-2">
           {ordered.map((consent) => {
             const { status, label } = consentStatus(consent.granted)
@@ -149,29 +157,18 @@ export default function ParticipantConsentsSection({ participantId }: { particip
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={upsertConsent.isPending}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={upsertConsent.isPending}>
               {upsertConsent.isPending ? 'Saving...' : 'Save consent'}
-            </button>
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Granted">
             {/* Three options, not two: this is a bool? control (Granted is a tri-state), so it

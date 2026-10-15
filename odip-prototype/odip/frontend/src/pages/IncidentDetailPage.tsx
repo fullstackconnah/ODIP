@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { Pill, CalendarClock, FileText } from 'lucide-react'
 import { useIncident } from '@/api/hooks'
+import { usePermissions } from '@/lib/permissions'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
@@ -13,6 +14,8 @@ import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { formatWallClock } from '@/lib/wallClock'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
+import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
+import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS } from '@/api/types/enums'
 
 /**
@@ -33,6 +36,8 @@ function FlagChip({ category }: { category: ShiftNoteFlagCategory }) {
 export default function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: incident, isLoading, isError, error, refetch } = useIncident(id)
+  // PUT /incidents/:id is Admin, Coordinator and SuperAdmin only, the roles canWrite admits.
+  const { canWrite } = usePermissions()
 
   if (isLoading) return <PageState kind="loading" noun="incident" />
   if (!incident) {
@@ -46,27 +51,29 @@ export default function IncidentDetailPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader
-        title={incident.title}
-        subtitle={
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={incident.severity} label={INCIDENT_SEVERITY_LABELS[incident.severity]} />
-            <StatusBadge status={incident.status} label={INCIDENT_STATUS_LABELS[incident.status]} />
-            <span>
-              {INCIDENT_TYPE_LABELS[incident.incidentType] ?? incident.incidentType}
-              {incident.involvedParticipantName ? ` · ${incident.involvedParticipantName}` : ''}
-            </span>
-          </div>
-        }
-        action={
-          <div className="flex shrink-0 items-center gap-2">
-            <BackButton to="/incidents" label="incidents" history={false} />
-            <Button to={`/incidents/${incident.id}/edit`} variant="secondary" size="md">
-              Edit
-            </Button>
-          </div>
-        }
-      />
+      <div className="flex items-start gap-2">
+        <BackButton to="/incidents" label="incidents" variant="icon" history={false} className="mt-1" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={incident.title}
+            subtitle={
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge status={incident.severity} label={INCIDENT_SEVERITY_LABELS[incident.severity]} />
+                <StatusBadge status={incident.status} label={INCIDENT_STATUS_LABELS[incident.status]} />
+                <span>
+                  {INCIDENT_TYPE_LABELS[incident.incidentType] ?? incident.incidentType}
+                  {incident.involvedParticipantName ? ` · ${incident.involvedParticipantName}` : ''}
+                </span>
+              </div>
+            }
+            action={canWrite && (
+              <Button to={`/incidents/${incident.id}/edit`} variant="secondary" size="md">
+                Edit
+              </Button>
+            )}
+          />
+        </div>
+      </div>
 
       <Card>
         <FactList
@@ -79,6 +86,21 @@ export default function IncidentDetailPage() {
           ]}
         />
       </Card>
+
+      {/* Read-only: the practice as the incident recorded it, and the authorisation determined when it was reported (or lowered since). */}
+      {incident.incidentType === 'RestrictivePracticeUse' && (
+        <Card title="Restrictive practice">
+          <FactList
+            items={[
+              { label: 'Type', value: incident.restrictivePracticeType ? RESTRICTIVE_PRACTICE_TYPE_LABELS[incident.restrictivePracticeType] : '—' },
+              incident.restrictivePracticeId
+                ? { label: 'Linked practice', value: incident.restrictivePracticeDescription || '—' }
+                : { label: 'Practice not on the register', value: <span className="whitespace-pre-wrap">{incident.unapprovedRestrictivePracticeDetails || '—'}</span> },
+              { label: 'Authorisation', value: incident.isRestrictivePracticeAuthorised == null ? 'Not determined' : <RpAuthorisationBadge authorised={incident.isRestrictivePracticeAuthorised} /> },
+            ]}
+          />
+        </Card>
+      )}
 
       {/* Connection map: only rendered when the incident is actually linked to a medication
           administration, a shift, or a shift note — a bare incident (the common case) shows no

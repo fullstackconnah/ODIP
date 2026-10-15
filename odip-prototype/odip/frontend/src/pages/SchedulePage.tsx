@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import {
   CalendarRange, Users, Truck, ChevronDown, ChevronRight,
   Car, Shield, Pill, HandMetal, Moon,
-  Filter, Download,
 } from 'lucide-react'
 import {
   useScheduleOverview, useCreateStaffAssignment, useCreateVehicleAssignment, useDeleteStaffAssignment,
@@ -12,12 +11,14 @@ import { usePermissions } from '@/lib/permissions'
 import { formatRatio, plural } from '@/lib/format'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
+import { PageState } from '@/components/PageState'
 import { PageHeader } from '@/components/PageHeader'
 import {
   ScheduleAssignmentCell, QualBadgeList, ScheduleSummary, TripStatusBadge, AvailabilityList,
   StaffAssignModal, VehicleAssignModal,
   formatDate, tripAccentText,
 } from './schedule'
+import { IntakeVisitsSection } from './schedule/IntakeVisitsSection'
 import type {
   ScheduleTripDto, ScheduleStaffDto, ScheduleVehicleDto,
   ScheduleStaffTripStatusDto, ScheduleVehicleTripStatusDto,
@@ -43,9 +44,9 @@ const ROW = 'group md:h-[var(--row-h)]'
 // ── Main Page ──
 
 export default function SchedulePage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, canManageParticipantLifecycle } = usePermissions()
   const queryClient = useQueryClient()
-  const { data, isLoading, error } = useScheduleOverview()
+  const { data, isLoading, refetch } = useScheduleOverview()
   const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set())
   const [sectionStaff, setSectionStaff] = useState(true)
   const [sectionVehicles, setSectionVehicles] = useState(true)
@@ -100,13 +101,12 @@ export default function SchedulePage() {
     )
   }
 
-  if (error || !data) {
+  // Only a first load that failed: a refetch that fails behind data already on screen keeps the grid (PageState rule).
+  if (!data) {
     return (
       <div className="flex flex-col gap-[var(--section-gap)]">
-        <PageHeader title="Schedule Overview" />
-        <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-10 text-center">
-          <p className="text-[var(--color-muted-foreground)]">Failed to load schedule overview.</p>
-        </div>
+        <PageHeader title="Schedule" />
+        <PageState kind="error" noun="schedule" onRetry={() => refetch()} />
       </div>
     )
   }
@@ -129,28 +129,7 @@ export default function SchedulePage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      <PageHeader
-        title="Schedule Overview"
-        subtitle="Staff and vehicle assignment across active trips · Click Available to assign"
-        action={
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-[var(--radius-sm)] bg-[var(--color-surface-container)] p-0.5">
-              <button className="h-[calc(var(--control-h)_-_4px)] rounded-[var(--radius-sm)] bg-[var(--color-card)] px-3 text-sm font-bold text-[var(--color-foreground)] shadow-sm">
-                Grid View
-              </button>
-              <button disabled title="Coming soon" className="h-[calc(var(--control-h)_-_4px)] px-3 text-sm font-medium text-[var(--color-muted-foreground)] transition-colors hover:text-[var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50">
-                Timeline
-              </button>
-            </div>
-            <button disabled title="Coming soon" className="flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-surface-container)] disabled:cursor-not-allowed disabled:opacity-50">
-              <Filter className="h-4 w-4" />
-            </button>
-            <button disabled title="Coming soon" className="flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-surface-container)] disabled:cursor-not-allowed disabled:opacity-50">
-              <Download className="h-4 w-4" />
-            </button>
-          </div>
-        }
-      />
+      <PageHeader title="Schedule" />
 
       {/* ── Summary strip (one line: trips + resource health) ── */}
       <ScheduleSummary
@@ -162,6 +141,8 @@ export default function SchedulePage() {
         conflicts={conflictsCount}
         utilization={utilization}
       />
+
+      {canManageParticipantLifecycle && <IntakeVisitsSection />}
 
       {/* ── Empty State ── */}
       {tripCount === 0 ? (
@@ -377,8 +358,8 @@ export default function SchedulePage() {
 
                 {sectionVehicles && vehicles?.map((v: ScheduleVehicleDto) => {
                   const vehicleType = v.vehicleType?.replace(/([A-Z])/g, ' $1').trim() ?? ''
-                  // Plain-text twin of the meta line below, for its title: the wheelchair count is an icon there.
-                  const metaText = `${v.registration || '—'} · ${vehicleType} · ${v.totalSeats} seats${v.wheelchairPositions > 0 ? ` · ${v.wheelchairPositions} wheelchair` : ''}`
+                  // The meta line, also its title: it truncates in the grid.
+                  const metaText = `${v.registration || '—'} · ${vehicleType} · ${v.totalSeats} seats${v.wheelchairPositions > 0 ? ` · ${plural(v.wheelchairPositions, 'wheelchair position')}` : ''}`
                   return (
                     <tr key={v.id} className={ROW}>
                       <td className={`${STICKY_COL} px-[var(--cell-px)] py-1 align-middle md:py-0 ${ROW_LINE}`}>
@@ -387,8 +368,7 @@ export default function SchedulePage() {
                         <div className="flex min-w-0 flex-col pl-5 md:flex-row md:items-center md:gap-2">
                           <span className="min-w-0 truncate text-sm font-semibold" title={v.vehicleName}>{v.vehicleName}</span>
                           <span className="min-w-0 truncate text-[13px] text-[var(--color-muted-foreground)] md:flex-1" title={metaText}>
-                            {v.registration || '—'} · {vehicleType} · {v.totalSeats} seats
-                            {v.wheelchairPositions > 0 && <> · {v.wheelchairPositions} <span className="material-symbols-outlined align-middle text-[14px] leading-none">accessible</span></>}
+                            {metaText}
                           </span>
                         </div>
                       </td>

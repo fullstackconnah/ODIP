@@ -22,6 +22,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   'ServiceAgreementSent',
   'ServiceAgreementSigned',
   'IntegrationDegraded',
+  'ShiftUnassigned',
+  'IntakeBooked',
 ] as const
 export type NotificationEventType = typeof NOTIFICATION_EVENT_TYPES[number]
 
@@ -38,37 +40,35 @@ export const NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, strin
   ServiceAgreementSent: 'Service agreement sent',
   ServiceAgreementSigned: 'Service agreement signed',
   IntegrationDegraded: 'Integration degraded',
+  ShiftUnassigned: 'Taken off a shift',
+  IntakeBooked: 'Intake visits',
 }
 
 /**
  * Grouping for the preference grid (§6: "rows = event types grouped by area (Leave, Rostering,
  * Medications, Caregiver, Incidents)"). `BuildGridAsync` on the backend returns every
- * `NotificationEventType` regardless of whether its trigger point is wired yet (v1 wires 7 of
- * the 11; ShiftCompletion(PendingReview/Returned) is wired but under a sibling PR,
+ * `NotificationEventType` regardless of whether its trigger point is wired yet (v1 wires 9 of
+ * the 13, ShiftUnassigned and IntakeBooked included; ShiftCompletion(PendingReview/Returned) is wired but under a sibling PR,
  * ServiceAgreement(Sent/Signed) and IntegrationDegraded are enum values reserved for later specs)
  * — so the grid still needs a place to show every
  * value. Agreements/Integrations aren't named in §6's example list; grouped here rather than
- * omitted so the grid always accounts for all 11 values the backend can return.
+ * omitted so the grid always accounts for all 13 values the backend can return.
  */
 export const NOTIFICATION_EVENT_TYPE_GROUPS: { label: string; eventTypes: NotificationEventType[] }[] = [
   { label: 'Leave', eventTypes: ['LeaveRequestSubmitted', 'LeaveRequestDecided'] },
-  { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
+  { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftUnassigned', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
   { label: 'Medications', eventTypes: ['WitnessRequested'] },
   { label: 'Caregiver', eventTypes: ['CaregiverSubmissionReceived'] },
   { label: 'Incidents', eventTypes: ['IncidentReported'] },
+  { label: 'Intake', eventTypes: ['IntakeBooked'] },
   { label: 'Agreements', eventTypes: ['ServiceAgreementSent', 'ServiceAgreementSigned'] },
   { label: 'Integrations', eventTypes: ['IntegrationDegraded'] },
 ]
 
-export const NOTIFICATION_CHANNELS = ['Email', 'Sms'] as const
-export type NotificationChannel = typeof NOTIFICATION_CHANNELS[number]
-
 /** SMS renders disabled with "Not available yet" everywhere in the UI — ruling 1: no SMS
  * provider is implemented in v1, SmsChannel always resolves NotSupported/Skipped. */
-export const NOTIFICATION_CHANNEL_LABELS: Record<NotificationChannel, string> = {
-  Email: 'Email',
-  Sms: 'SMS',
-}
+export const NOTIFICATION_CHANNELS = ['Email', 'Sms'] as const
+export type NotificationChannel = typeof NOTIFICATION_CHANNELS[number]
 
 export const NOTIFICATION_OUTBOX_STATUSES = ['Pending', 'Sent', 'Failed', 'Skipped'] as const
 export type NotificationOutboxStatus = typeof NOTIFICATION_OUTBOX_STATUSES[number]
@@ -135,4 +135,21 @@ export interface SendTestEmailDto {
 export interface TestEmailResultDto {
   sent: boolean
   error?: string
+}
+
+/** One bell item, GET api/v1/notifications/inbox. `title` is plain text built on the server: render it as text, never as HTML.
+ * `linkTo` (an app route) and `readAt` are omitted when null (WhenWritingNull). No event type: the bell doesn't need one. */
+export interface InAppNotificationDto {
+  id: string
+  title: string
+  linkTo?: string
+  createdAt: string
+  readAt?: string
+}
+
+/** GET api/v1/notifications/inbox: the caller's own newest items, their unread count over every item they have, and whether older ones exist. */
+export interface InboxDto {
+  items: InAppNotificationDto[]
+  unreadCount: number
+  hasMore: boolean
 }

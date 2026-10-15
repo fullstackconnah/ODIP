@@ -20,11 +20,15 @@ let isAdmin = false
 let isSuperAdmin = false
 // Pages a test denies (canAccessPage returns false for them); cleared before each test.
 const deniedPages = new Set<string>()
+// Tab lists a test makes fail (their query is in error with nothing loaded); cleared before each test.
+const failedLists = new Set<string>()
+const listRefetch = vi.fn()
+const tabList = (tab: string) => (failedLists.has(tab) ? { data: undefined, isError: true, refetch: listRefetch } : { data: [] })
 
 const { mockUseTripSchedule, mockUseTripClaims, mockUseTripIncidents } = vi.hoisted(() => ({
-  mockUseTripSchedule: vi.fn(() => ({ data: [] })),
-  mockUseTripClaims: vi.fn(() => ({ data: [] })),
-  mockUseTripIncidents: vi.fn(() => ({ data: [] as { id: string }[] })),
+  mockUseTripSchedule: vi.fn((): { data?: unknown[]; isError?: boolean } => ({ data: [] })),
+  mockUseTripClaims: vi.fn((): { data?: unknown[]; isError?: boolean } => ({ data: [] })),
+  mockUseTripIncidents: vi.fn((): { data?: { id: string }[]; isError?: boolean } => ({ data: [] })),
 }))
 
 vi.mock('@/lib/permissions', () => ({
@@ -33,11 +37,11 @@ vi.mock('@/lib/permissions', () => ({
 
 vi.mock('@/api/hooks', () => ({
   useTrip: () => ({ data: trip, isLoading: tripLoading, isError: tripFailure !== null, error: tripFailure?.error, refetch: tripRefetch }),
-  useTripBookings: () => ({ data: [] }),
-  useTripAccommodation: () => ({ data: [] }),
-  useTripVehicles: () => ({ data: [] }),
-  useTripStaff: () => ({ data: [] }),
-  useTripTasks: () => ({ data: [] }),
+  useTripBookings: () => tabList('bookings'),
+  useTripAccommodation: () => tabList('accommodation'),
+  useTripVehicles: () => tabList('vehicles'),
+  useTripStaff: () => tabList('staff'),
+  useTripTasks: () => tabList('tasks'),
   useTripSchedule: mockUseTripSchedule,
   useTripClaims: mockUseTripClaims,
   useTripIncidents: mockUseTripIncidents,
@@ -80,7 +84,39 @@ beforeEach(() => {
   mockUseTripSchedule.mockClear()
   mockUseTripClaims.mockClear()
   mockUseTripIncidents.mockClear()
-  mockUseTripIncidents.mockReturnValue({ data: [] })
+  failedLists.clear()
+  listRefetch.mockClear()
+  mockUseTripSchedule.mockImplementation(() => tabList('activities'))
+  mockUseTripClaims.mockImplementation(() => tabList('claims'))
+  mockUseTripIncidents.mockImplementation(() => tabList('incidents'))
+})
+
+// Platform review Q4b follow-up: a tab whose list failed to load said "none" (its empty state). It says the load failed, with a retry.
+describe('TripDetailPage — a tab list that fails to load', () => {
+  it.each([
+    ['bookings', 'booking list'], ['accommodation', 'accommodation list'], ['vehicles', 'vehicle list'], ['staff', 'staff list'],
+    ['tasks', 'task list'], ['activities', 'activity schedule'], ['claims', 'claim list'], ['incidents', 'incident list'],
+  ])(
+    '%s shows the error and a retry, not the tab body',
+    async (tab, noun) => {
+      failedLists.add(tab)
+      const user = userEvent.setup()
+      renderPage(`/trips/trip-1?tab=${tab}`)
+
+      const panel = screen.getByRole('tabpanel')
+      expect(within(panel).getByText(`Couldn't load this ${noun}. Check your connection and try again.`)).toBeInTheDocument()
+      expect(within(panel).queryByText(/ panel$/)).not.toBeInTheDocument()
+      await user.click(within(panel).getByRole('button', { name: 'Try again' }))
+      expect(listRefetch).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('leaves the other tabs alone', () => {
+    failedLists.add('bookings')
+    renderPage('/trips/trip-1?tab=vehicles')
+    expect(screen.getByText('Vehicles panel')).toBeInTheDocument()
+    expect(screen.queryByText(/couldn't load/i)).not.toBeInTheDocument()
+  })
 })
 
 describe('TripDetailPage — PP-60 URL-synced tabs', () => {
@@ -134,7 +170,7 @@ describe('TripDetailPage — PP-61 sub-resource fetches', () => {
     renderPage()
 
     expect(mockUseTripSchedule).toHaveBeenCalledWith('trip-1')
-    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1')
+    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1', { enabled: true })
   })
 
   it('still fetches schedule and claims the same way after switching tabs', async () => {
@@ -144,7 +180,26 @@ describe('TripDetailPage — PP-61 sub-resource fetches', () => {
     await user.click(screen.getByRole('tab', { name: /claims/i }))
 
     expect(mockUseTripSchedule).toHaveBeenCalledWith('trip-1')
-    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1')
+    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1', { enabled: true })
+  })
+})
+
+// TRIPS-4: ClaimsController admits only SuperAdmin, Admin and Coordinator, so a role refused the claims page gets no Claims tab and no claims request.
+describe('TripDetailPage — Claims tab by role', () => {
+  it('hides the tab from a role refused claims, sends no request, and reads ?tab=claims as Overview', () => {
+    deniedPages.add('claims')
+    renderPage('/trips/trip-1?tab=claims')
+
+    expect(screen.queryByRole('tab', { name: /claims/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Claims panel')).not.toBeInTheDocument()
+    expect(screen.getByText('Overview panel')).toBeInTheDocument()
+    expect(mockUseTripClaims).toHaveBeenCalledWith('trip-1', { enabled: false })
+  })
+
+  it('shows the tab to a role allowed claims', () => {
+    renderPage('/trips/trip-1?tab=claims')
+    expect(screen.getByRole('tab', { name: /claims/i })).toBeInTheDocument()
+    expect(screen.getByText('Claims panel')).toBeInTheDocument()
   })
 })
 
@@ -250,18 +305,18 @@ describe('TripDetailPage — detail header (the bolder header pattern)', () => {
     expect(row.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2)
   })
 
-  it('keeps the Back link and the Edit Trip action', () => {
+  it('keeps the Back link, left of the title, and the Edit action', () => {
     renderPage()
 
     expect(screen.getByRole('link', { name: 'Back to trips' })).toHaveAttribute('href', '/trips')
-    expect(screen.getByRole('button', { name: /edit trip/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
-  it('still hides Edit Trip from a read-only user', () => {
+  it('still hides Edit from a read-only user', () => {
     canWrite = false
     renderPage()
 
-    expect(screen.queryByRole('button', { name: /edit trip/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.getByRole('link', { name: /back/i })).toBeInTheDocument()
   })
 
@@ -498,5 +553,16 @@ describe('TripDetailPage — the tabpanel is named by its tab', () => {
 
     const selected = screen.getByRole('tab', { selected: true })
     expect(document.getElementById(selected.getAttribute('aria-controls') as string)).toBe(screen.getByRole('tabpanel'))
+  })
+})
+
+// VD1 design review: a one-row scrolling strip hid History at 1440 with no cue on macOS or iPad (no drawn scrollbar). From md up the
+// strip wraps, so every tab stays on screen; below md it is the default one scrolling row.
+describe('TripDetailPage — every tab visible from md up', () => {
+  it('renders all ten tabs in a strip that wraps from md up', () => {
+    isAdmin = true
+    renderPage()
+    expect(screen.getAllByRole('tab')).toHaveLength(10)
+    expect(screen.getByRole('tablist', { name: 'Trip detail sections' })).toHaveClass('md:flex-wrap')
   })
 })

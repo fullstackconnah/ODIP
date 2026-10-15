@@ -1,4 +1,3 @@
-using Odip.Domain.Billing;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 
@@ -138,34 +137,6 @@ public record ApplyPlanDatesResultDto
     public DateOnly Start { get; init; }
     public DateOnly End { get; init; }
     public bool Changed { get; init; }
-}
-
-/// <summary>One Billing funding source row behind the hint. The rows are never changed by anything in this feature.</summary>
-public record BillingSourceHintRowDto
-{
-    public Guid Id { get; init; }
-    public FundingRouteType RouteType { get; init; }
-    public string? BudgetCategory { get; init; }
-    public decimal Budget { get; init; }
-    public DateOnly? PlanStartDate { get; init; }
-    public DateOnly? PlanEndDate { get; init; }
-    public string? PayerName { get; init; }
-}
-
-/// <summary>
-/// <c>GET .../funding/billing-sources-hint</c>: what the participant's Billing funding sources already say, as a one-off starting point for a Core (flexible)
-/// pool. The sources are the active ones on an NDIS route (agency, plan or self managed) with a budget above zero, the same filter the plan builder's budget bar
-/// uses. Empty <see cref="Rows"/> means there is nothing to start from.
-/// </summary>
-public record BillingSourcesHintDto
-{
-    public decimal Total { get; init; }
-    /// <summary>The earliest start and latest end among the rows' own plan dates; omitted when none of them has one.</summary>
-    public DateOnly? PlanStart { get; init; }
-    public DateOnly? PlanEnd { get; init; }
-    /// <summary>The management type of the rows holding most of the money.</summary>
-    public PlanType? ManagementType { get; init; }
-    public List<BillingSourceHintRowDto> Rows { get; init; } = new();
 }
 
 /// <summary>The organisation's budget settings. <see cref="IsDefault"/> says nothing is stored yet and these are the defaults.</summary>

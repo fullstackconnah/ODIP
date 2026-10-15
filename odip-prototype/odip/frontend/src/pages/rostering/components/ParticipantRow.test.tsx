@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { ParticipantRow } from './ParticipantRow'
 import { makeParticipantRow, WEEK_DAYS } from '../test-fixtures'
 import { TONE } from '@/lib/tone'
+import type { PendingAgreementDto } from '@/api/types'
 
 function noop() {}
 
@@ -260,5 +261,47 @@ describe('ParticipantRow header — readiness chip', () => {
     expect(tail).toHaveClass('shrink-0', 'ml-auto', 'gap-2')
     expect(tail).toContainElement(badge)
     expect(tail.textContent).not.toMatch(/not ready/i)
+  })
+})
+
+describe('ParticipantRow: a participant whose services have started but who is still onboarding', () => {
+  it('carries a small "Onboarding" tag beside the ratio chip, and none for an active participant', () => {
+    renderRow({ fullName: 'Sam Started', inOnboarding: true })
+    const tag = within(headerOf('Sam Started')).getByText('Onboarding')
+    expect(tag).toHaveAttribute('title', 'Services started; onboarding is still open')
+  })
+
+  it('shows no tag for a participant who has been made active', () => {
+    renderRow({ fullName: 'Amy Active' })
+    expect(within(headerOf('Amy Active')).queryByText('Onboarding')).not.toBeInTheDocument()
+  })
+})
+
+describe('ParticipantRow: an agreement waiting for approval, and the Enforce row (spec 2026-10-15, decision A)', () => {
+  const words = "Agreement v2 not approved: its shifts appear once it's approved for rostering"
+  const waiting: PendingAgreementDto = { participantId: 'participant-1', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }
+  const renderWith = (pendingAgreement?: PendingAgreementDto, overrides: Parameters<typeof makeParticipantRow>[0] = {}) => render(
+    <MemoryRouter>
+      <ParticipantRow row={makeParticipantRow({ fullName: 'Daniel Osei', ...overrides })} days={WEEK_DAYS} canWrite pendingAgreement={pendingAgreement}
+        onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} onAddShift={noop} hideCoverageBadge={false} />
+    </MemoryRouter>,
+  )
+
+  it('marks the row with a muted Hourglass after the name, its words in its name and title', () => {
+    renderWith(waiting)
+    const marker = screen.getByRole('img', { name: words })
+    expect(marker).toHaveAttribute('title', words)
+    expect(marker).toHaveClass('shrink-0', 'text-muted-foreground')
+    expect(isBefore(screen.getByRole('link', { name: 'Daniel Osei' }), marker)).toBe(true)
+  })
+
+  it('has no marker when nothing waits', () => {
+    renderWith(undefined)
+    expect(screen.queryByRole('img', { name: /not approved/ })).not.toBeInTheDocument()
+  })
+
+  it('says "Not ready for rostering" on a row the organisation refuses, even with no reasons', () => {
+    renderWith(undefined, { notReadyForRostering: true })
+    expect(within(headerOf('Daniel Osei')).getByText('Not ready for rostering')).toBeInTheDocument()
   })
 })

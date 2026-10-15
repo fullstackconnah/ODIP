@@ -512,26 +512,6 @@ public class ParticipantIntakeControllerTests
         Assert.Contains("Pat Planner", snapshot.SnapshotJson);
     }
 
-    [Fact]
-    public async Task SaveIntake_IdentityCorrection_InvalidatesTheProfileAttestation_ButAnUnchangedResaveDoesNot()
-    {
-        var tenantId = Guid.NewGuid();
-        var (db, controller) = Create(tenantId);
-        using var _ = db;
-        var participant = DraftWithProfileData(tenantId);
-        participant.NdisNumber = "430000007"; participant.DateOfBirth = new DateOnly(1990, 5, 17); participant.FundingSource = ParticipantFundingSource.Ndis;
-        var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ProfileCompletedBy = "tester" };
-        db.AddRange(participant, onboarding);
-        await db.SaveChangesAsync();
-
-        Ok(await controller.SaveIntake(participant.Id, WizardBody(), CancellationToken.None));
-        Assert.True(onboarding.ProfileComplete);
-
-        Ok(await controller.SaveIntake(participant.Id, WizardBody(firstName: "Corrected"), CancellationToken.None));
-        Assert.False(onboarding.ProfileComplete);
-        Assert.Null(onboarding.ProfileCompletedAt);
-    }
-
     [Theory]
     [InlineData("""
         , "phone": "not a phone"

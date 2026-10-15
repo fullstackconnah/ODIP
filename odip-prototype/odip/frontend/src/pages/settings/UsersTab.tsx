@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Pencil, Mail } from 'lucide-react'
+import { Search, Pencil, Mail, Plus } from 'lucide-react'
 import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -59,7 +59,7 @@ const MONTH_MS = 30 * 86_400_000
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return 'Never'
   const date = parseApiDate(dateStr) // an instant: UTC, never the viewer's local time
-  if (Date.now() - date.getTime() >= MONTH_MS) return date.toLocaleDateString()
+  if (Date.now() - date.getTime() >= MONTH_MS) return date.toLocaleDateString('en-AU')
   return formatRelative(date, { style: 'compact' })
 }
 
@@ -85,7 +85,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
   const ownNotices = useNotices()
   const { notices, notify, dismiss } = lifted ?? ownNotices
   const { data: tenants = [] } = useAdminTenantsSummary()
-  const { data: pagedResult, isLoading } = useAdminUsers({
+  const { data: pagedResult, isLoading, isError, refetch } = useAdminUsers({
     tenantId: tenantId || undefined,
     role: role || undefined,
     status: status || undefined,
@@ -180,12 +180,9 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
           />
         </div>
 
-        <button
-          onClick={() => onAddUser(tenantId || undefined)}
-          className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
-        >
-          + Add User
-        </button>
+        <Button onClick={() => onAddUser(tenantId || undefined)}>
+          <Plus className="w-4 h-4" /> New user
+        </Button>
       </div>
 
       {/* Notices for the row actions. Always mounted (a live region must exist before its content), and collapsed while empty. */}
@@ -196,6 +193,8 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
         data={users}
         keyField="id"
         loading={isLoading}
+        error={isError}
+        onRetry={() => refetch()}
         emptyMessage="No users found."
         columns={[
           { key: 'fullName', header: 'Name', className: 'font-medium' },
@@ -235,7 +234,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
           },
           {
             key: 'lastLoginAt',
-            header: 'Last Login',
+            header: 'Last sign-in',
             className: 'text-[var(--color-muted-foreground)]',
             render: (user: AdminUserDto) => formatRelativeTime(user.lastLoginAt),
           },

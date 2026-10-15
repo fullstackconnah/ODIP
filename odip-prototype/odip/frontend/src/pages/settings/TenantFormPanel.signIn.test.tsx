@@ -64,7 +64,7 @@ async function createTenant({ firstUser = true, password = '', beforeCreate }: {
     if (password) await u.type(screen.getByLabelText('Password'), password)
   }
   beforeCreate?.()
-  await u.click(screen.getByRole('button', { name: 'Create Tenant' }))
+  await u.click(screen.getByRole('button', { name: 'Create tenant' }))
   return { u, onClose }
 }
 

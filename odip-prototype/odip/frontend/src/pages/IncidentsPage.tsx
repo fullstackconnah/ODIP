@@ -1,14 +1,15 @@
-import { useIncidents, useUpdateIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
+import { useIncidents, useRestoreIncident, useDeleteIncident, useOverdueQscIncidents, useFlaggedShiftNotes } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
-import { INCIDENT_STATUS_LABELS, type IncidentStatus } from '@/api/types/enums'
-import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
+import { INCIDENT_STATUS_LABELS, INCIDENT_TYPE_LABELS, type IncidentStatus, type IncidentType } from '@/api/types/enums'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -46,7 +47,7 @@ function buildFlaggedNotePrefill(row: FlaggedShiftNoteDto, reportedByUserId: str
   }
 }
 
-function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShiftNoteDto[]; isLoading: boolean }) {
+function FlaggedNotesTab({ flaggedNotes, isLoading, isError, onRetry }: { flaggedNotes: FlaggedShiftNoteDto[]; isLoading: boolean; isError: boolean; onRetry: () => void }) {
   const navigate = useNavigate()
   const { id: currentUserId } = usePermissions()
 
@@ -113,7 +114,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
     },
   ]
 
-  if (!isLoading && flaggedNotes.length === 0) {
+  if (!isLoading && !isError && flaggedNotes.length === 0) {
     return (
       <EmptyState
         icon={FileWarning}
@@ -129,6 +130,8 @@ function FlaggedNotesTab({ flaggedNotes, isLoading }: { flaggedNotes: FlaggedShi
       columns={columns}
       keyField="shiftNoteId"
       loading={isLoading}
+      error={isError}
+      onRetry={onRetry}
       emptyMessage="No flagged notes found"
     />
   )
@@ -177,7 +180,7 @@ export default function IncidentsPage() {
   // the Incidents tab. Only sets the initial tab — switching tabs afterwards via Tabs doesn't
   // write the param back, matching how qscOverdueOnly is a one-way filter, not a synced tab state.
   const [tab, setTab] = useState<IncidentsTab>(searchParams.get('view') === 'flagged-notes' ? 'flagged-notes' : 'incidents')
-  const { data: flaggedNotes = [], isLoading: flaggedNotesLoading } = useFlaggedShiftNotes(
+  const { data: flaggedNotes = [], isLoading: flaggedNotesLoading, isError: flaggedNotesError, refetch: refetchFlaggedNotes } = useFlaggedShiftNotes(
     { withoutIncident: true },
     { enabled: canViewFlaggedNotes },
   )
@@ -192,18 +195,18 @@ export default function IncidentsPage() {
       return next
     })
   }
-  const updateIncident = useUpdateIncident()
+  const restoreIncident = useRestoreIncident()
   const deleteIncident = useDeleteIncident()
-  const { data: overdueQsc = [] } = useOverdueQscIncidents()
+  const { data: overdueQsc = [], isError: overdueQscError, refetch: refetchOverdueQsc } = useOverdueQscIncidents()
 
-  const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteIncident,
-    restoreMutation: updateIncident,
+    restoreMutation: restoreIncident,
     entityName: (i) => i.title,
     entityId: (i) => i.id,
     archiveVia: 'status',
     archiveStatus: 'Closed',
-    restoreData: (i) => ({ ...i, status: 'Draft', isActive: true }),
+    restoreData: () => ({ status: 'Draft' }),   // the hook builds the rest of the body from the stored incident
     editPath: (i) => `/incidents/${i.id}/edit`,
   })
 
@@ -218,7 +221,7 @@ export default function IncidentsPage() {
   // client-side `.filter(i => i.isOverdue24h)`, which ran unconditionally too.
   if (qscOverdueOnly) queryParams.isOverdueQsc = 'true'
 
-  const { data: incidents = [], isLoading } = useIncidents(queryParams)
+  const { data: incidents = [], isLoading, isError, refetch } = useIncidents(queryParams)
   // `incidents` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as ParticipantPicker.
@@ -248,15 +251,16 @@ export default function IncidentsPage() {
     {
       key: 'title',
       header: 'Title',
-      sortable: true,
+      mobile: 'primary',
       className: 'font-medium',
-      render: (i) => <CellText className="md:max-w-[15rem] 2xl:max-w-[18rem]">{i.title ?? '—'}</CellText>,
+      // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
+      render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`block md:truncate md:max-w-[15rem] 2xl:max-w-[18rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
     },
-    { key: 'incidentType', header: 'Type', sortable: true, maxWidth: '9rem' },
+    { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
       key: 'tripName',
       header: 'Trip',
-      sortable: true,
+      mobile: 'meta',
       render: (i) => i.tripInstanceId && i.tripName ? (
         <Link
           to={`/trips/${i.tripInstanceId}`}
@@ -270,6 +274,7 @@ export default function IncidentsPage() {
     {
       key: 'involvedParticipantName',
       header: 'Participant',
+      mobile: 'meta',
       render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
         <Link
           to={`/participants/${i.involvedParticipantId}`}
@@ -280,10 +285,10 @@ export default function IncidentsPage() {
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
-    { key: 'severity', header: 'Severity', sortable: true, render: (i) => <StatusBadge status={i.severity} /> },
-    { key: 'status', header: 'Status', sortable: true, render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
+    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
+    { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
     { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
-    { key: 'incidentDateTime', header: 'Date', type: 'date', sortable: true },
+    { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
     {
       key: 'qscReportingStatus',
       header: 'QSC',
@@ -312,7 +317,7 @@ export default function IncidentsPage() {
     : `${overdueQsc.length} incidents require QSC reporting — 24-hour deadline exceeded`
   const reportIncidentAction = !showFlaggedNotes && !showArchived && canCreateIncidents && (
     <Button to="/incidents/new" size="md">
-      <Plus className="w-4 h-4" /> Report Incident
+      <Plus className="w-4 h-4" /> Report incident
     </Button>
   )
 
@@ -324,23 +329,25 @@ export default function IncidentsPage() {
           the title and filter rows in block flow, without the flex column's section gap between them. */}
       <div className="[&>div:first-child]:flex-wrap [&>div:first-child]:gap-y-1">
         <PageHeader
-          title="Incident Reports"
+          title="Incidents"
           subtitle={showFlaggedNotes ? undefined : plural(totalCount, 'incident')}
           action={(canViewFlaggedNotes || reportIncidentAction) && (
             <div className="flex flex-auto flex-wrap items-center gap-x-4 gap-y-1">
               {canViewFlaggedNotes && (
                 <Tabs
                   tabs={[
-                    { id: 'incidents', label: 'Incidents' },
-                    { id: 'flagged-notes', label: `Flagged notes (${flaggedNotes.length})` },
+                    { id: 'incidents', label: 'Reports' },
+                    // A failed load is not a count of 0: the label drops the count until there is one.
+                    { id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` },
                   ]}
                   active={tab}
                   onChange={key => setTab(key as IncidentsTab)}
                   ariaLabel="Incidents sections"
-                  className="min-w-0"
+                  className="min-w-0 max-md:basis-full"
                 />
               )}
-              {reportIncidentAction && <div className="ml-auto">{reportIncidentAction}</div>}
+              {/* On a phone the action leads the row, under the title as on the other list pages, and the tabs take the row below it. */}
+              {reportIncidentAction && <div className="max-md:order-first md:ml-auto">{reportIncidentAction}</div>}
             </div>
           )}
         >
@@ -378,7 +385,7 @@ export default function IncidentsPage() {
       </div>
 
       {showFlaggedNotes ? (
-        <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} />
+        <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} isError={flaggedNotesError} onRetry={() => refetchFlaggedNotes()} />
       ) : (
       <>
       {/* QSC Overdue Alert Banner — one 40px line: the headline, the reason and the link all stay,
@@ -399,6 +406,13 @@ export default function IncidentsPage() {
         </div>
       )}
 
+      {/* The overdue check is a compliance warning: a failed check says so, it never hides the banner as if nothing were overdue. */}
+      {!showArchived && overdueQscError && overdueQsc.length === 0 && (
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetchOverdueQsc()}>Try again</Button>}>
+          Couldn't check for incidents past the 24-hour QSC deadline.
+        </Callout>
+      )}
+
       {qscOverdueOnly && (
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Showing only incidents past the 24-hour QSC deadline.{' '}
@@ -406,7 +420,9 @@ export default function IncidentsPage() {
         </p>
       )}
 
-      {!isLoading && incidents.length === 0 ? (
+      {errorNotice}
+
+      {!isLoading && !isError && incidents.length === 0 ? (
         qscOverdueOnly ? (
           <EmptyState
             icon={ShieldAlert}
@@ -425,7 +441,6 @@ export default function IncidentsPage() {
             icon={ShieldAlert}
             title="No incidents reported"
             description="Incident reports log injuries, behaviours of concern, and other events that happen on a trip, including any NDIS Quality and Safeguards Commission reporting. Report one to get started."
-            action={!showArchived && canCreateIncidents ? { label: 'Report incident', to: '/incidents/new' } : undefined}
           />
         )
       ) : (
@@ -433,8 +448,9 @@ export default function IncidentsPage() {
           data={incidents}
           columns={incidentColumns}
           keyField="id"
-          sortable
           loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
           emptyMessage="No incidents found"
           pagination={{
             page,

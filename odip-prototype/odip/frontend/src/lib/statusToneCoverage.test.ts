@@ -10,12 +10,10 @@ import {
   CLAIM_STATUSES, SHIFT_STATUSES, MEDICATION_STATUSES, MEDICATION_ADMINISTRATION_STATUSES, WITNESS_STATUSES,
   CONTACT_ROLE_STATUSES, PLAN_TYPES,
 } from '@/api/types/enums'
-import { BILLABLE_EVENT_STATUSES } from '@/api/types/billing'
 import { LEAVE_STATUSES, LEAVE_STATUS_COLORS } from '@/api/types/leave'
 import { NOTIFICATION_OUTBOX_STATUSES, NOTIFICATION_STATUS_COLORS } from '@/api/types/notifications'
 import { CAREGIVER_SUBMISSION_STATUSES } from '@/api/types/caregiver'
 import { BUDGET_STATUSES } from '@/api/types/funding'
-import { BILLABLE_EVENT_STATUS_COLORS } from '@/pages/billing/constants'
 
 /**
  * L3-02 guard: every status word the API can send has a deliberate tone, and a status nobody listed falls back to NEUTRAL, never to
@@ -51,7 +49,6 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
   WitnessStatus: WITNESS_STATUSES,
   ContactRoleStatus: CONTACT_ROLE_STATUSES,
   PlanType: PLAN_TYPES,
-  BillableEventStatus: BILLABLE_EVENT_STATUSES,
   LeaveStatus: LEAVE_STATUSES,
   NotificationOutboxStatus: NOTIFICATION_OUTBOX_STATUSES,
   CaregiverSubmissionStatus: CAREGIVER_SUBMISSION_STATUSES,
@@ -60,6 +57,7 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
 
 /** C# enums called `*Status` that are never printed through a status pill, and why. */
 const NOT_A_PILL: Record<string, string> = {
+  ImportRowStatus: `the state of a row in an import preview; ImportWizardPage gives each value its own word and tone (Ready info, Skipped neutral, Invalid printed as "Can't import", danger), never this word through STATUS_TONE`,
   AmbulantStatus: 'a mobility level, chosen from a list and printed as a plain label',
   MedicationCompetencyStatus: 'the result of the competency gate; the UI sees error codes and a flag, never the word',
   DemoTickStatus: 'the outcome of one demo-data top-up tick, read from logs and tests; no API sends it and no screen shows it',
@@ -84,8 +82,6 @@ describe('every real status has a deliberate tone (L3-02)', () => {
       underreview: 'warning', escalated: 'danger', resolved: 'success', closed: 'neutral',
       // Claims: Approved is green for leave and witnesses too.
       ready: 'info', approved: 'success', declined: 'danger',
-      // Billable events: the same words Billing shows (billing/constants.ts), so the claim batch page agrees with it.
-      validated: 'info', routed: 'info', claimed: 'success', invoiced: 'success',
       // Not yet on the trip, or not yet confirmed: awaiting a decision, a hold running out, a queue.
       enquiry: 'warning', held: 'warning', waitlist: 'warning', requested: 'warning', booked: 'warning',
       researching: 'neutral', planned: 'neutral',
@@ -132,7 +128,6 @@ describe('every real status has a deliberate tone (L3-02)', () => {
     const maps: Record<string, Record<string, Tone>> = {
       LEAVE_STATUS_COLORS: LEAVE_STATUS_COLORS,
       NOTIFICATION_STATUS_COLORS: NOTIFICATION_STATUS_COLORS,
-      BILLABLE_EVENT_STATUS_COLORS: BILLABLE_EVENT_STATUS_COLORS,
     }
     const disagreements: string[] = []
     for (const [mapName, map] of Object.entries(maps)) {
@@ -160,7 +155,7 @@ const HAS_BACKEND = existsSync(join(BACKEND, 'Odip.sln'))
 
 function csFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (['bin', 'obj', 'Migrations', 'node_modules', 'Odip.Tests', 'Odip.ProtoTests'].includes(entry.name)) continue
+    if (['bin', 'obj', 'Migrations', 'node_modules', 'Odip.Tests'].includes(entry.name)) continue
     const full = join(dir, entry.name)
     if (entry.isDirectory()) csFiles(full, out)
     else if (entry.name.endsWith('.cs')) out.push(full)

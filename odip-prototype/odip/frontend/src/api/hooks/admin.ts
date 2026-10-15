@@ -17,13 +17,15 @@ import type {
 
 // ── Tenant Hooks ──────────────────────────────────────────────
 
-export function useAdminTenantsSummary() {
+/** SuperAdmin only on the server (TenantsController): a caller mounted for other roles passes `enabled` false. */
+export function useAdminTenantsSummary(enabled = true) {
   return useQuery({
     queryKey: ['admin-tenants'],
     queryFn: () =>
       apiClient
         .get<ApiResponse<TenantSummaryDto[]>>('/admin/tenants')
         .then(r => r.data.data ?? []),
+    enabled,
   })
 }
 

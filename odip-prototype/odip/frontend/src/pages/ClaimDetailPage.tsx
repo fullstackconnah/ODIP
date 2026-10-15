@@ -1,5 +1,4 @@
 import { useParams, Link } from 'react-router-dom'
-import type { AxiosError } from 'axios'
 import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
@@ -9,7 +8,10 @@ import { apiClient } from '@/api/client'
 import { NoShowModal } from '@/components/NoShowModal'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { formatCurrency, formatDateAu } from '@/lib/utils'
+import { RejectClaimDialog } from '@/components/RejectClaimDialog'
+import { ndiaCodeMeaning } from '@/lib/ndiaCodes'
+import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
+import { formatInstantDateAu } from '@/lib/format'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
@@ -25,6 +27,11 @@ const inputClass = 'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-
 /** The API sends the enum name ('AgencyManaged'); this page once mapped a spelling it never sends ('NdiaManaged') and printed the raw name. */
 function planTypeLabel(planType: string) {
   return PLAN_TYPE_LABELS[planType as PlanType] ?? planType
+}
+
+/** The server's own words for why it refused a change of status or of the NDIA code, else a sentence of ours. */
+function refusalOf(err: unknown): string {
+  return extractErrorMessage(err, "Couldn't update the claim status. Please try again.")
 }
 
 async function downloadFile(url: string, filename: string) {
@@ -48,6 +55,8 @@ export default function ClaimDetailPage() {
   const [saved, setSaved] = useState(false)
   const [statusConfirmTarget, setStatusConfirmTarget] = useState<TripClaimStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
+  // Recording the NDIA's code on a claim that is already rejected (the reason often arrives after the status was set): the same dialog, asking only for the code.
+  const [recordingCode, setRecordingCode] = useState(false)
   // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the page can cancel it: left
   // running it fires setSaved into a tree that is gone.
   const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -68,7 +77,7 @@ export default function ClaimDetailPage() {
   if (!claim) {
     return isError && !isNotFoundError(error)
       ? <PageState kind="error" noun="claim" onRetry={() => refetch()} />
-      : <PageState kind="not-found" noun="claim" backTo="/billing" backLabel="billing" />
+      : <PageState kind="not-found" noun="claim" backTo="/trips" backLabel="trips" />
   }
 
   const totalAmount = (claim.lineItems ?? []).reduce((sum: number, l: ClaimLineItemDto) => sum + (l.totalAmount ?? 0), 0)
@@ -84,15 +93,23 @@ export default function ClaimDetailPage() {
     })
   }
 
-  function handleStatusChange(status: TripClaimStatus) {
+  function handleStatusChange(status: TripClaimStatus, rejectionCode?: string | null) {
     if (!id) return
     setStatusError(null)
-    updateClaim.mutate({ claimId: id, data: { status } }, {
+    // The NDIA's code goes with a rejection only, and only when somebody gave one: any other status change carries no code, so the server's "only with a rejected claim" rule cannot trip.
+    updateClaim.mutate({ claimId: id, data: rejectionCode ? { status, rejectionCode } : { status } }, {
       onSuccess: () => setStatusConfirmTarget(null),
-      onError: (err) => {
-        const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-        setStatusError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || "Couldn't update the claim status. Please try again.")
-      },
+      onError: (err) => setStatusError(refusalOf(err)),
+    })
+  }
+
+  // The code on its own, with no status in the request: the claim stays as it is, and the server accepts a code only on a claim that is rejected.
+  function handleRecordCode(code: string | null) {
+    if (!id || !code) return
+    setStatusError(null)
+    updateClaim.mutate({ claimId: id, data: { rejectionCode: code } }, {
+      onSuccess: () => setRecordingCode(false),
+      onError: (err) => setStatusError(refusalOf(err)),
     })
   }
 
@@ -102,8 +119,6 @@ export default function ClaimDetailPage() {
         return { title: 'Mark as submitted?', message: 'Mark this claim as submitted to the NDIA?', confirmLabel: 'Mark as Submitted', variant: 'default' as const }
       case 'Paid':
         return { title: 'Mark as paid?', message: 'Mark this claim as paid? This cannot be undone.', confirmLabel: 'Mark as Paid', variant: 'default' as const }
-      case 'Rejected':
-        return { title: 'Mark as rejected?', message: 'Mark this claim as rejected? This cannot be undone.', confirmLabel: 'Mark as Rejected', variant: 'danger' as const }
       default:
         return null
     }
@@ -196,12 +211,28 @@ export default function ClaimDetailPage() {
 
       <FactBar
         segments={[
-          { label: 'Total Amount', value: <span className="tabular-nums">{`$${totalAmount.toFixed(2)}`}</span> },
+          { label: 'Total Amount', value: <span className="tabular-nums">{formatCurrency(totalAmount)}</span> },
           claim.kind === 'Shift'
             ? { label: 'Period', value: <span className="tabular-nums">{`${formatDateAu(claim.periodFrom)} – ${formatDateAu(claim.periodTo)}`}</span> }
             : { label: 'Trip', value: claim.tripName || '—' },
-          { label: 'Created', value: <span className="tabular-nums">{claim.createdAt ? new Date(claim.createdAt).toLocaleDateString('en-AU') : '—'}</span> },
-          { label: 'Submitted', value: <span className="tabular-nums">{claim.submittedDate ? new Date(claim.submittedDate).toLocaleDateString('en-AU') : '—'}</span> },
+          { label: 'Created', value: <span className="tabular-nums">{formatInstantDateAu(claim.createdAt)}</span> },
+          { label: 'Submitted', value: <span className="tabular-nums">{formatInstantDateAu(claim.submittedDate)}</span> },
+          // What the NDIA said, once it has refused the claim: when, and the code it gave (V17, V18, V27 and V28 say the funds ran out). Nothing is said of a claim that is not rejected.
+          ...(claim.status === 'Rejected'
+            ? [{
+              label: 'Rejected',
+              value: (
+                <>
+                  <span className="tabular-nums">
+                    {formatInstantDateAu(claim.rejectedDate)}
+                    {' · '}{claim.rejectionCode ? `NDIA code ${claim.rejectionCode}${ndiaCodeMeaning(claim.rejectionCode) ? ` (${ndiaCodeMeaning(claim.rejectionCode)})` : ''}` : 'no NDIA code recorded'}
+                  </span>
+                  {/* The code is the one input that switches the budget warning on, and the reason often arrives after the status is set: a claim rejected with none can be given one here. */}
+                  {!claim.rejectionCode && <Button variant="secondary" size="sm" className="ml-2" onClick={() => { setStatusError(null); setRecordingCode(true) }}>Record the NDIA code</Button>}
+                </>
+              ),
+            }]
+            : []),
         ]}
       />
 
@@ -374,7 +405,25 @@ export default function ClaimDetailPage() {
           onSuccess={() => setNoShowTarget(null)}
         />
       )}
-      {statusConfirmTarget && (() => {
+      {/* A rejection asks, optionally, for the NDIA's code (V17, V18, V27, V28 or another): the codes that say the funds ran out warn on the participant's budget. */}
+      {statusConfirmTarget === 'Rejected' && (
+        <RejectClaimDialog
+          error={statusError}
+          loading={updateClaim.isPending}
+          onCancel={() => { if (!updateClaim.isPending) setStatusConfirmTarget(null) }}
+          onConfirm={code => handleStatusChange('Rejected', code)}
+        />
+      )}
+      {recordingCode && (
+        <RejectClaimDialog
+          recordOnly
+          error={statusError}
+          loading={updateClaim.isPending}
+          onCancel={() => { if (!updateClaim.isPending) setRecordingCode(false) }}
+          onConfirm={handleRecordCode}
+        />
+      )}
+      {statusConfirmTarget && statusConfirmTarget !== 'Rejected' && (() => {
         const copy = statusConfirmCopy(statusConfirmTarget)!
         return (
           <ConfirmDialog

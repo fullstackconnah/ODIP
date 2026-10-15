@@ -2,8 +2,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
-import type { AxiosError } from 'axios'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useCreateMedication, useUpdateMedication, useMedication, useParticipant } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
@@ -15,12 +14,16 @@ import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT
 import type { MedicationForm, MedicationRoute, Weekday } from '@/api/types/enums'
 import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS, FREQUENCY_LABELS, WEEKDAY_LABELS } from '@/api/types/medications'
 import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medications'
-import { formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { PageHeader } from '@/components/PageHeader'
+import { usePermissions } from '@/lib/permissions'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import { plural } from '@/lib/format'
+import { useFillOnce } from '@/hooks/useFillOnce'
+import { Callout } from '@/components/Callout'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -120,12 +123,7 @@ const medicationResolver: Resolver<MedicationFormData> = (values) => {
 }
 
 function extractMedicationErrorMessage(err: unknown, isEdit: boolean): string {
-  const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-  return (
-    axiosErr?.response?.data?.errors?.[0] ||
-    axiosErr?.response?.data?.message ||
-    `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`
-  )
+  return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`)
 }
 
 export default function MedicationFormPage() {
@@ -134,10 +132,16 @@ export default function MedicationFormPage() {
   const [searchParams] = useSearchParams()
   const participantIdParam = searchParams.get('participantId')
   const isEdit = !!id
+  // ReadOnly reads a medication's full record only here (the route admits it to /:id/edit, not /new): every field is disabled and nothing is saved.
+  const { canManageMedications } = usePermissions()
+  const viewOnly = isEdit && !canManageMedications
   const createMedication = useCreateMedication()
   const updateMedication = useUpdateMedication()
   const { data: existing, isLoading: isLoadingExisting } = useMedication(isEdit ? id : undefined)
   const participantId = isEdit ? existing?.participantId : participantIdParam
+  // Back, Cancel and Save return to where the form was opened: the /medications register or the participant's Medications tab, which is
+  // also the fallback for a deep link.
+  const back = useBackTarget(`/participants/${participantId}?tab=medications`)
   const { data: participant } = useParticipant(participantId ?? undefined)
   const mutation = isEdit ? updateMedication : createMedication
 
@@ -179,49 +183,47 @@ export default function MedicationFormPage() {
   const formMismatch = !!routeValue && !!formValue && !compatibleForms.includes(formValue as MedicationForm)
   const formOptions = formMismatch ? [...compatibleForms, formValue as MedicationForm] : compatibleForms
 
-  useEffect(() => {
-    if (existing) {
-      reset({
-        name: existing.name ?? '',
-        strength: existing.strength ?? '',
-        form: existing.form ?? 'Tablet',
-        route: existing.route ?? 'Oral',
-        packaging: existing.packaging ?? 'OriginalPackaging',
-        doseDescription: existing.doseDescription ?? '',
-        directions: existing.directions ?? '',
-        type: existing.type ?? 'Regular',
-        timesOfDayList: existing.timesOfDay ? existing.timesOfDay.split(',').filter(Boolean) : [],
-        frequency: existing.frequency ?? 'Daily',
-        daysOfWeek: existing.daysOfWeek ?? [],
-        intervalDays: existing.intervalDays != null ? String(existing.intervalDays) : '',
-        anchorDate: existing.anchorDate ?? '',
-        prnIndication: existing.prnIndication ?? '',
-        prnMaxDosesPer24h: existing.prnMaxDosesPer24h != null ? String(existing.prnMaxDosesPer24h) : '',
-        prnMinIntervalMinutes: existing.prnMinIntervalMinutes != null ? String(existing.prnMinIntervalMinutes) : '',
-        purpose: existing.purpose ?? '',
-        isHighRisk: existing.isHighRisk ?? false,
-        isPsychotropic: existing.isPsychotropic ?? false,
-        isChemicalRestraint: existing.isChemicalRestraint ?? false,
-        bspInPlace: existing.bspInPlace ?? false,
-        restrictivePracticeAuthorisationRef: existing.restrictivePracticeAuthorisationRef ?? '',
-        isHighIntensitySupport: existing.isHighIntensitySupport ?? false,
-        drugSchedule: existing.drugSchedule ?? 'Unscheduled',
-        supportLevel: existing.supportLevel ?? 'SelfAdministered',
-        prescriberName: existing.prescriberName ?? '',
-        pharmacyName: existing.pharmacyName ?? '',
-        pharmacyPhone: existing.pharmacyPhone ?? '',
-        consentObtained: existing.consentObtained ?? false,
-        consentGivenBy: existing.consentGivenBy ?? '',
-        consentDate: existing.consentDate ? existing.consentDate.split('T')[0] : '',
-        storageRequirements: existing.storageRequirements ?? '',
-        startDate: existing.startDate ? existing.startDate.split('T')[0] : '',
-        endDate: existing.endDate ? existing.endDate.split('T')[0] : '',
-        nextReviewDue: existing.nextReviewDue ? existing.nextReviewDue.split('T')[0] : '',
-        notes: existing.notes ?? '',
-        status: existing.status ?? 'Active',
-      })
-    }
-  }, [existing, reset])
+  useFillOnce(existing, record => {
+    reset({
+      name: record.name ?? '',
+      strength: record.strength ?? '',
+      form: record.form ?? 'Tablet',
+      route: record.route ?? 'Oral',
+      packaging: record.packaging ?? 'OriginalPackaging',
+      doseDescription: record.doseDescription ?? '',
+      directions: record.directions ?? '',
+      type: record.type ?? 'Regular',
+      timesOfDayList: record.timesOfDay ? record.timesOfDay.split(',').filter(Boolean) : [],
+      frequency: record.frequency ?? 'Daily',
+      daysOfWeek: record.daysOfWeek ?? [],
+      intervalDays: record.intervalDays != null ? String(record.intervalDays) : '',
+      anchorDate: record.anchorDate ?? '',
+      prnIndication: record.prnIndication ?? '',
+      prnMaxDosesPer24h: record.prnMaxDosesPer24h != null ? String(record.prnMaxDosesPer24h) : '',
+      prnMinIntervalMinutes: record.prnMinIntervalMinutes != null ? String(record.prnMinIntervalMinutes) : '',
+      purpose: record.purpose ?? '',
+      isHighRisk: record.isHighRisk ?? false,
+      isPsychotropic: record.isPsychotropic ?? false,
+      isChemicalRestraint: record.isChemicalRestraint ?? false,
+      bspInPlace: record.bspInPlace ?? false,
+      restrictivePracticeAuthorisationRef: record.restrictivePracticeAuthorisationRef ?? '',
+      isHighIntensitySupport: record.isHighIntensitySupport ?? false,
+      drugSchedule: record.drugSchedule ?? 'Unscheduled',
+      supportLevel: record.supportLevel ?? 'SelfAdministered',
+      prescriberName: record.prescriberName ?? '',
+      pharmacyName: record.pharmacyName ?? '',
+      pharmacyPhone: record.pharmacyPhone ?? '',
+      consentObtained: record.consentObtained ?? false,
+      consentGivenBy: record.consentGivenBy ?? '',
+      consentDate: record.consentDate ? record.consentDate.split('T')[0] : '',
+      storageRequirements: record.storageRequirements ?? '',
+      startDate: record.startDate ? record.startDate.split('T')[0] : '',
+      endDate: record.endDate ? record.endDate.split('T')[0] : '',
+      nextReviewDue: record.nextReviewDue ? record.nextReviewDue.split('T')[0] : '',
+      notes: record.notes ?? '',
+      status: record.status ?? 'Active',
+    })
+  }, !isDirty)
 
   const onSubmit = async (data: MedicationFormData) => {
     const payload: CreateMedicationDto = {
@@ -269,13 +271,13 @@ export default function MedicationFormPage() {
         const res = await updateMedication.mutateAsync({ id: id!, data: updatePayload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(`/participants/${existing?.participantId}?tab=medications`)
+          navigate(back.to)
         }
       } else if (participantId) {
         const res = await createMedication.mutateAsync({ participantId, data: payload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(`/participants/${participantId}?tab=medications`)
+          navigate(back.to)
         }
       }
     } catch {
@@ -288,25 +290,22 @@ export default function MedicationFormPage() {
   if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
   if (!isEdit && !participantIdParam) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">A participant is required to add a medication. Go to a participant's Medications tab to add one.</div>
 
-  const backTo = isEdit ? `/participants/${existing?.participantId}?tab=medications` : `/participants/${participantIdParam}?tab=medications`
-
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-center gap-4">
-        <BackButton to={backTo} label="medications" variant="icon" history={false} />
+        <BackButton to={`/participants/${participantId}?tab=medications`} label="medications" variant="icon" />
         <div className="flex-1">
-          <PageHeader title={isEdit ? 'Edit Medication' : 'New Medication'} subtitle={participant?.fullName} />
+          <PageHeader title={viewOnly ? 'View medication' : isEdit ? 'Edit medication' : 'New medication'} subtitle={participant?.fullName} />
         </div>
       </div>
 
       {mutation.isError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {extractMedicationErrorMessage(mutation.error, isEdit)}
-        </div>
+        <Callout tone="error">{extractMedicationErrorMessage(mutation.error, isEdit)}</Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+        <fieldset disabled={viewOnly} className="flex flex-col gap-[var(--section-gap)] min-w-0">
         {/* Medication */}
         <Card title="Medication">
           <div className={formGrid}>
@@ -424,15 +423,14 @@ export default function MedicationFormPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className="px-3 h-[var(--control-h)] rounded-[var(--radius-md)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
                         onClick={() => {
                           if (newTime && !times.includes(newTime)) field.onChange([...times, newTime].sort())
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 h-[var(--control-h)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors"
                       >
                         <Plus className="w-4 h-4" /> Add
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )
@@ -681,13 +679,15 @@ export default function MedicationFormPage() {
         </div>
         </Card>
 
+        </fieldset>
+
         {/* Submit */}
-        <div className="flex justify-end gap-2">
-          <Button to={backTo} variant="secondary">Cancel</Button>
+        {!viewOnly && <div className="flex justify-end gap-2">
+          <Button to={back.to} variant="secondary">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Medication')}
+            {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create medication')}
           </Button>
-        </div>
+        </div>}
       </form>
     </div>
   )

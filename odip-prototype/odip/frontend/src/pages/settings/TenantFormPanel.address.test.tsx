@@ -57,7 +57,7 @@ async function submitTenantWithFirstUser() {
   await u.type(screen.getByLabelText('Last Name'), 'Smith')
   await u.type(screen.getByLabelText('Email'), EMAIL)
   await u.type(screen.getByLabelText('Username'), 'jane.smith')
-  await u.click(screen.getByRole('button', { name: 'Create Tenant' }))
+  await u.click(screen.getByRole('button', { name: 'Create tenant' }))
   return { u, onClose }
 }
 
@@ -100,7 +100,7 @@ describe('TenantFormPanel create: a first user address the server wants checked'
     expect(onClose).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Email')).toHaveValue(EMAIL)
     expect(screen.getByPlaceholderText('e.g. acme.com.au')).toHaveValue('brightside.example.com')
-    expect(screen.getByRole('button', { name: 'Create Tenant' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Create tenant' })).toBeEnabled()
   })
 
   it('still shows any other refusal as the error it is, with no question', async () => {

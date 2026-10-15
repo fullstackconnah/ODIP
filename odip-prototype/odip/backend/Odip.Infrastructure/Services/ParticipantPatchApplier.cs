@@ -21,11 +21,8 @@ namespace Odip.Infrastructure.Services;
 /// documented convention for cross-project members, see ParticipantDocumentService's doc comment).
 /// ParticipantsController.Create/Update now call these as ParticipantPatchApplier.XyzAsync(...).
 ///
-/// The four per-item ApplyAnswer assignment blocks (Consent/HealthCondition/Adl/ChecklistItem) are
-/// inlined into the Upsert*Async methods below rather than moved, for the same cross-assembly
-/// reason: their originals stay on ParticipantConsentsController etc. (still called from those
-/// controllers' own single-item PUT endpoints), and moving would touch four more controllers and
-/// their test suites for no behavioural benefit. Both copies are intentionally byte-identical.
+/// The per-row answer rules (Consent/HealthCondition/Adl/ChecklistItem) live in
+/// <see cref="ParticipantGridRules"/>, shared with the single-row PUT controllers.
 /// </summary>
 public static class ParticipantPatchApplier
 {
@@ -116,11 +113,6 @@ public static class ParticipantPatchApplier
             if (diagnosesError != null) return diagnosesError;
         }
 
-        // The fields ParticipantInquiriesController.ProfileMissing validates for the onboarding
-        // "profile essentials" gate. Snapshotted so a PATCH that actually changes one of them can
-        // drop the stale attestation below, exactly as a full PUT and SaveIntake already do.
-        var canonicalBefore = CanonicalProfileFields(p);
-
         // ── Apply — plain property assignment, scoped to present group(s) only. Literally the
         // same statements Update already has above, just gated on group presence.
         if (dto.PersonalDetails is { } pd)
@@ -200,8 +192,10 @@ public static class ParticipantPatchApplier
             p.PersonalInterests = cb.PersonalInterests; p.ChoiceControlNotes = cb.ChoiceControlNotes;
         }
 
+        var ratioChanged = false;
         if (dto.SupportNeedsMobility is { } snm)
         {
+            ratioChanged = p.SupportRatio != snm.SupportRatio;
             p.IsHighSupport = snm.IsHighSupport; p.IsIntensiveSupport = snm.IsIntensiveSupport;
             p.SupportRatio = snm.SupportRatio; p.MobilityAidWheelchair = snm.MobilityAidWheelchair;
             p.MobilityAidWalker = snm.MobilityAidWalker; p.MobilitySupportOptions = snm.MobilitySupportOptions;
@@ -274,17 +268,6 @@ public static class ParticipantPatchApplier
 
         p.UpdatedAt = DateTime.UtcNow;
 
-        // The Profile wizard lets staff correct identity, DOB, gender, NDIS number and funding
-        // source after intake, one step at a time via this endpoint. A prior onboarding
-        // "profile validated" attestation must not survive a change to any of them: staff re-run
-        // the separate server-side validation afterwards. Tenant-matched, and only when a value
-        // really changed, so re-saving an unchanged step (the wizard echoes every field) is inert.
-        if (canonicalBefore != CanonicalProfileFields(p))
-        {
-            var onboarding = await db.ParticipantOnboardings.FirstOrDefaultAsync(x => x.ParticipantId == p.Id && x.TenantId == p.TenantId, ct);
-            onboarding?.InvalidateProfileValidation(p.UpdatedAt);
-        }
-
         // Task 6d: only sync the compatibility matrix when PreferredStaff was actually touched AND
         // actually changed — see PatchPreferredStaffDto's doc for why this group is isolated.
         if (preferredStaffChanged)
@@ -305,18 +288,11 @@ public static class ParticipantPatchApplier
         // needless sync pass.
         if (dto.Medical != null || dto.BehaviourCommunication != null || dto.RisksHazardsSummary != null || dto.SupportNeedsMobility != null)
             await safetyNoteSync.SyncFromParticipantAsync(p, ct);
+        if (ratioChanged) await TripStaffing.RecalculateForParticipantAsync(db, p.Id, ct);
 
         await db.SaveChangesAsync(ct);
         return null;
     }
-
-    /// <summary>
-    /// Value snapshot of the canonical fields the onboarding profile-essentials gate reads
-    /// (identity, DOB, gender, NDIS number and the funding source that makes it mandatory).
-    /// Names/NDIS number are compared trimmed, like SaveIntake's identityChanged.
-    /// </summary>
-    private static (string, string, DateOnly?, Gender?, string?, ParticipantFundingSource) CanonicalProfileFields(Participant p) =>
-        (p.FirstName?.Trim() ?? string.Empty, p.LastName?.Trim() ?? string.Empty, p.DateOfBirth, p.Gender, p.NdisNumber?.Trim(), p.FundingSource);
 
     // ── Shared helpers (also called by ParticipantsController.Create/Update) ──────────────
 
@@ -333,10 +309,8 @@ public static class ParticipantPatchApplier
     /// <summary>
     /// INTAKE sub-wave B — upserts every consent row submitted with a create/update payload, keyed
     /// by <see cref="Domain.Enums.ConsentType"/>. Moved verbatim from ParticipantsController; see
-    /// that type's history for the full upsert-by-key rationale. The per-row assignment below is
-    /// intentionally identical to ParticipantConsentsController.ApplyAnswer (kept there too, for
-    /// that controller's own single-item PUT — see this class's type doc for why it's duplicated
-    /// rather than shared across the Api/Infrastructure assembly boundary).
+    /// that type's history for the full upsert-by-key rationale. The per-row assignment is
+    /// <see cref="ParticipantGridRules"/>, shared with ParticipantConsentsController.
     /// </summary>
     public static async Task UpsertConsentsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantConsentDto> consents, CancellationToken ct)
     {
@@ -351,20 +325,14 @@ public static class ParticipantPatchApplier
                 db.ParticipantConsents.Add(row);
                 byType[dto.ConsentType] = row;
             }
-            if (row.Granted != dto.Granted)
-                row.RecordedAt = dto.Granted.HasValue ? DateTime.UtcNow : null;
-            row.Granted = dto.Granted;
-            row.SignedByName = string.IsNullOrWhiteSpace(dto.SignedByName) ? null : dto.SignedByName.Trim();
-            row.SignedDate = dto.SignedDate;
-            row.UpdatedAt = DateTime.UtcNow;
+            ParticipantGridRules.ApplyAnswer(row, dto.Granted, dto.SignedByName, dto.SignedDate);
         }
     }
 
     /// <summary>
     /// INTAKE sub-wave C1 — upserts every health-condition row, keyed by
     /// <see cref="Domain.Enums.HealthConditionType"/>. Moved verbatim from ParticipantsController;
-    /// see this class's type doc for why the per-row assignment (identical to
-    /// ParticipantHealthConditionsController.ApplyAnswer) is duplicated rather than shared.
+    /// the per-row assignment is <see cref="ParticipantGridRules"/>.
     /// </summary>
     public static async Task UpsertHealthConditionsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantHealthConditionDto> conditions, CancellationToken ct)
     {
@@ -379,12 +347,7 @@ public static class ParticipantPatchApplier
                 db.ParticipantHealthConditions.Add(row);
                 byType[dto.ConditionType] = row;
             }
-            row.Has = dto.Has;
-            row.Severity = string.IsNullOrWhiteSpace(dto.Severity) ? null : dto.Severity.Trim();
-            row.PlanProvided = dto.PlanProvided;
-            row.TrainingRequired = dto.TrainingRequired;
-            row.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
-            row.UpdatedAt = DateTime.UtcNow;
+            ParticipantGridRules.ApplyAnswer(row, dto.Has, dto.Severity, dto.PlanProvided, dto.TrainingRequired, dto.Notes);
         }
     }
 
@@ -392,7 +355,7 @@ public static class ParticipantPatchApplier
     /// INTAKE sub-wave C2 — upserts every ADL-assessment row, keyed by
     /// <see cref="Domain.Enums.AdlType"/>. Moved verbatim from ParticipantsController; sparse on
     /// creation exactly as the original (see the guard inside the loop). Per-row assignment is
-    /// identical to ParticipantAdlAssessmentsController.ApplyAnswer (duplicated — see type doc).
+    /// <see cref="ParticipantGridRules"/>.
     /// </summary>
     public static async Task UpsertAdlAssessmentsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantAdlAssessmentDto> assessments, CancellationToken ct)
     {
@@ -408,18 +371,15 @@ public static class ParticipantPatchApplier
                 db.ParticipantAdlAssessments.Add(row);
                 byType[dto.AdlType] = row;
             }
-            row.Level = dto.Level;
-            row.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
-            row.HowToHelpNotes = string.IsNullOrWhiteSpace(dto.HowToHelpNotes) ? null : dto.HowToHelpNotes.Trim();
-            row.UpdatedAt = DateTime.UtcNow;
+            ParticipantGridRules.ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
         }
     }
 
     /// <summary>
     /// INTAKE-03/04, CommunityAccessDailyLiving stream — upserts every checklist-item row, keyed by
     /// <see cref="Domain.Enums.ChecklistItemType"/>. Moved verbatim from ParticipantsController;
-    /// sparse on creation exactly as the original. Per-row assignment is identical to
-    /// ParticipantChecklistItemsController.ApplyAnswer (duplicated — see type doc).
+    /// sparse on creation exactly as the original. Per-row assignment is
+    /// <see cref="ParticipantGridRules"/>.
     /// </summary>
     public static async Task UpsertChecklistItemsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantChecklistItemDto> items, CancellationToken ct)
     {
@@ -435,9 +395,42 @@ public static class ParticipantPatchApplier
                 db.ParticipantChecklistItems.Add(row);
                 byType[dto.ItemType] = row;
             }
-            row.Value = dto.Value;
-            row.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
-            row.UpdatedAt = DateTime.UtcNow;
+            ParticipantGridRules.ApplyAnswer(row, dto.Value, dto.Notes);
+        }
+    }
+
+    /// <summary>
+    /// PF-10.2, CommunityAccessDailyLiving stream — upserts every Community Access Risk Assessment
+    /// row submitted with a create/update payload, keyed by
+    /// <see cref="Domain.Enums.CommunityAccessRiskItemType"/>. Copies UpsertChecklistItemsAsync's
+    /// documented pattern exactly, including the load-bearing empty/null guard below (same
+    /// reasoning: an Update caller that never mentions CommunityAccessRiskItems round-trips an
+    /// empty list, which must mean "leave existing rows alone", not "clear every rating"). Called
+    /// before SaveChangesAsync so every row lands in the same transaction as the participant
+    /// insert/update. Sparse on creation (see the guard inside the loop below): the wizard always
+    /// submits the full fixed twenty-two-row array with every hidden/unrated row already null (see
+    /// <see cref="CreateParticipantCommunityAccessRiskItemDto"/>'s doc), so a blank incoming row
+    /// must not become a permanent database row just because it was present in the payload.
+    /// </summary>
+    public static async Task UpsertCommunityAccessRiskItemsAsync(OdipDbContext db, Guid participantId, List<CreateParticipantCommunityAccessRiskItemDto> items, CancellationToken ct)
+    {
+        if (items is null || items.Count == 0) return;
+        var existing = await db.ParticipantCommunityAccessRiskItems.Where(a => a.ParticipantId == participantId).ToListAsync(ct);
+        var byType = existing.ToDictionary(a => a.ItemType);
+        foreach (var dto in items)
+        {
+            if (!byType.TryGetValue(dto.ItemType, out var row))
+            {
+                // Load-bearing skip — same reasoning as UpsertChecklistItemsAsync's: only skip
+                // when there is both no existing row for this type AND the incoming dto carries no
+                // answer whatsoever; a dto that clears an EXISTING row to null still falls through
+                // to ParticipantGridRules.ApplyAnswer below and keeps the row.
+                if (dto.Rating is null && string.IsNullOrWhiteSpace(dto.StrategyNotes)) continue;
+                row = new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = participantId, ItemType = dto.ItemType };
+                db.ParticipantCommunityAccessRiskItems.Add(row);
+                byType[dto.ItemType] = row;
+            }
+            ParticipantGridRules.ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
         }
     }
 

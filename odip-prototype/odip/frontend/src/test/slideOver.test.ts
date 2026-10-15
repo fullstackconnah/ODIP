@@ -22,12 +22,9 @@ const offendersOf = (test: (text: string) => boolean, allowed: string[] = []) =>
   FILES.filter(f => test(f.text) && !allowed.includes(f.path)).map(f => f.path)
 const textOf = (path: string) => FILES.find(f => f.path === path)?.text ?? ''
 
-/** The nine side panels that used to hand-roll `fixed right-0 top-0 ... z-50` over a `bg-black/40` scrim. */
+/** The six side panels that used to hand-roll `fixed right-0 top-0 ... z-50` over a `bg-black/40` scrim. */
 const PANELS = [
   'components/TemplateFormPanel.tsx',
-  'pages/billing/BillableEventFormPanel.tsx',
-  'pages/billing/FundingSourceFormPanel.tsx',
-  'pages/billing/ServiceBookingFormPanel.tsx',
   'pages/rostering/components/ExceptionsDrawer.tsx',
   'pages/rostering/components/PatternSlideOver.tsx',
   'pages/rostering/components/ShiftSlideOver.tsx',
@@ -36,7 +33,7 @@ const PANELS = [
 ]
 
 describe('SlideOver', () => {
-  it('is how every side panel is built: each of the nine renders a SlideOver and draws no scrim or fixed panel of its own', () => {
+  it('is how every side panel is built: each of the six renders a SlideOver and draws no scrim or fixed panel of its own', () => {
     for (const path of PANELS) {
       const text = textOf(path)
       expect(text, `${path} should render <SlideOver`).toMatch(/<SlideOver\b/)
@@ -61,8 +58,8 @@ describe('useDialogBehavior', () => {
     expect(offendersOf(text => /const FOCUSABLE_SELECTOR\s*=/.test(text), ['hooks/useDialogBehavior.ts'])).toEqual([])
   })
 
-  it('is what Modal, SlideOver, EditTripModal, the unsaved-changes dialog and the nav drawer run on', () => {
-    for (const path of ['components/Modal.tsx', 'components/SlideOver.tsx', 'pages/trip-detail/EditTripModal.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'components/layout/AppLayout.tsx']) {
+  it('is what Modal, SlideOver, the unsaved-changes dialog and the nav drawer run on', () => {
+    for (const path of ['components/Modal.tsx', 'components/SlideOver.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'components/layout/AppLayout.tsx']) {
       expect(textOf(path), `${path} should call useDialogBehavior`).toMatch(/useDialogBehavior\(/)
     }
   })
@@ -72,6 +69,8 @@ describe('useDialogBehavior', () => {
    * and why each may stay: the list is a ratchet: no new one may appear, and a file that moved onto the hook leaves it.
    *   Dropdown, SearchableSelect: an open list closing itself (they call preventDefault, which the hook respects).
    *   TenantSwitcher, UserSwitcher: header popovers, not dialogs.
+   *   NotificationBell: the bell's desktop panel, a header popover like the switchers (below lg it is a SlideOver on the hook).
+   *   QuickGroup: a dashboard row's inline form closing itself (in the page's flow, not a layer; it calls preventDefault).
    * (AppLayout, the nav drawer, left this list when the nav regroup moved it onto the hook.)
    */
   const KNOWN_ESCAPE_HANDLERS: Record<string, number> = {
@@ -79,6 +78,8 @@ describe('useDialogBehavior', () => {
     'components/SearchableSelect.tsx': 1,
     'components/layout/TenantSwitcher.tsx': 1,
     'components/layout/UserSwitcher.tsx': 1,
+    'components/layout/NotificationBell.tsx': 1,
+    'pages/dashboard/QuickGroup.tsx': 1,
     'hooks/useDialogBehavior.ts': 1,
   }
   const found: Record<string, number> = {}
@@ -100,7 +101,7 @@ describe('useDialogBehavior', () => {
   })
 
   it('aria-modal appears only on dialogs that run on the hook', () => {
-    const allowed = ['components/Modal.tsx', 'components/SlideOver.tsx', 'components/layout/AppLayout.tsx', 'hooks/useUnsavedChangesWarning.tsx', 'pages/trip-detail/EditTripModal.tsx']
+    const allowed = ['components/Modal.tsx', 'components/SlideOver.tsx', 'components/layout/AppLayout.tsx', 'hooks/useUnsavedChangesWarning.tsx']
     expect(offendersOf(text => /aria-modal=/.test(text), allowed)).toEqual([])
     for (const path of allowed) expect(textOf(path), `${path} marks itself modal, so it must run on the hook`).toMatch(/useDialogBehavior\(/)
   })

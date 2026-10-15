@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Activity } from 'lucide-react'
+import { NotRecordedFold } from './NotRecordedFold'
+import { plural } from '@/lib/format'
 import { useParticipantAdlAssessments, useUpsertAdlAssessment } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -7,11 +9,15 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { ADL_TYPES, adlCategoryOf } from '@/api/types/enums'
 import { ADL_TYPE_LABELS, ADL_LEVEL_LABELS } from '@/api/types/adl-assessments'
 import type { ParticipantAdlAssessmentDto } from '@/api/types/adl-assessments'
 import type { AdlCategory, AdlLevel } from '@/api/types/enums'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 const LEVEL_OPTIONS = [
   { key: 'Independent', label: 'I' },
@@ -49,7 +55,10 @@ function levelStatus(level: AdlLevel | null): { status: string; label: string } 
  */
 export default function ParticipantAdlAssessmentsSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteAdlAssessments } = usePermissions()
-  const { data: assessments = [], isLoading } = useParticipantAdlAssessments(participantId)
+  const assessmentsQuery = useParticipantAdlAssessments(participantId)
+  const assessments = assessmentsQuery.data ?? []
+  // A failed or paused request is not an empty list: "No personal ADLs recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(assessmentsQuery)
   const upsertAssessment = useUpsertAdlAssessment()
 
   const [editing, setEditing] = useState<ParticipantAdlAssessmentDto | null>(null)
@@ -132,34 +141,44 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
     ]
   }
 
+  if (phase === 'loading') return <PageState kind="loading" noun="ADL assessment list" />
+  if (phase === 'error') return <PageState kind="error" noun="ADL assessment list" onRetry={() => assessmentsQuery.refetch()} />
+
+  // VISUAL-1 V2: a table of "Not recorded" rows on a new participant folds into one line that opens to it.
+  function foldIfNoneRecorded(rows: ParticipantAdlAssessmentDto[], noun: string, table: ReactNode) {
+    return rows.length > 0 && rows.every((a) => a.level == null && !a.notes) ? <NotRecordedFold summary={plural(rows.length, noun)}>{table}</NotRecordedFold> : table
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
         <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
           <Activity className="w-4 h-4" /> Personal ADLs
         </h3>
-        <DataTable
-          data={orderedFor('Personal')}
-          columns={columns()}
-          keyField="adlType"
-          loading={isLoading}
-          emptyMessage="No personal ADLs recorded."
-          compact
-        />
+        {foldIfNoneRecorded(orderedFor('Personal'), 'personal ADL', (
+          <DataTable
+            data={orderedFor('Personal')}
+            columns={columns()}
+            keyField="adlType"
+            emptyMessage="No personal ADLs recorded."
+            compact
+          />
+        ))}
       </div>
 
       <div className="space-y-4">
         <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
           <Activity className="w-4 h-4" /> Community &amp; Domestic ADLs
         </h3>
-        <DataTable
-          data={orderedFor('CommunityDomestic')}
-          columns={columns()}
-          keyField="adlType"
-          loading={isLoading}
-          emptyMessage="No community/domestic ADLs recorded."
-          compact
-        />
+        {foldIfNoneRecorded(orderedFor('CommunityDomestic'), 'community or domestic ADL', (
+          <DataTable
+            data={orderedFor('CommunityDomestic')}
+            columns={columns()}
+            keyField="adlType"
+            emptyMessage="No community/domestic ADLs recorded."
+            compact
+          />
+        ))}
       </div>
 
       <Modal
@@ -169,29 +188,18 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={upsertAssessment.isPending}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={upsertAssessment.isPending}>
               {upsertAssessment.isPending ? 'Saving...' : 'Save assessment'}
-            </button>
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Level" hint="I = Independent, S = Supervision, A = Assistance, F = Full Support.">
             <ToggleGroup

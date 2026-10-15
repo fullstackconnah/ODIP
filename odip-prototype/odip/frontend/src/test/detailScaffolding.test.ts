@@ -23,7 +23,13 @@ const offendersOf = (test: (text: string) => boolean, allowed: string[] = []) =>
 
 describe('BackButton', () => {
   it('owns useBackTarget: no page calls it, so no hook can sit below an early return (the #155 class of bug)', () => {
-    expect(offendersOf(text => /\buseBackTarget\(/.test(text), ['hooks/useBackNavigation.tsx', 'components/BackButton.tsx'])).toEqual([])
+    // The wizard footer's Cancel goes where the header Back goes, and two forms send Save there too (NAV F3, F4, F7). Each calls the hook on
+    // its first lines, above every early return; the list stays closed so every new caller is a reviewed decision.
+    const allowed = [
+      'hooks/useBackNavigation.tsx', 'components/BackButton.tsx', 'components/wizard/WizardNavFooter.tsx',
+      'pages/profile/ProfileWizardPage.tsx', 'pages/MedicationFormPage.tsx',
+    ]
+    expect(offendersOf(text => /\buseBackTarget\(/.test(text), allowed)).toEqual([])
   })
 
   it('is the only file that draws a Back arrow: no page imports ArrowLeft to hand-roll one', () => {
@@ -69,8 +75,9 @@ describe('PageState', () => {
 
 describe('useTabParam', () => {
   it('is the only code that reads or writes ?tab= for a page tab: no page keeps its own copy of the logic', () => {
-    // useBackNavigation only PARSES a path string to name a hub tab for its accessible label; it never reads the live URL.
-    expect(offendersOf(text => /\.get\(['"]tab['"]\)/.test(text), ['hooks/useTabParam.ts', 'hooks/useBackNavigation.tsx'])).toEqual([])
+    // useBackNavigation only PARSES a path string to name a hub tab for its accessible label; it never reads the live URL. Settings has no
+    // tabs since its redesign: settingsSections only maps an old ?tab= link to its ?section=, and the page rewrites it away.
+    expect(offendersOf(text => /\.get\(['"]tab['"]\)/.test(text), ['hooks/useTabParam.ts', 'hooks/useBackNavigation.tsx', 'pages/settings/settingsSections.ts'])).toEqual([])
   })
 
   it.each(['pages/TripDetailPage.tsx', 'pages/ParticipantDetailPage.tsx', 'pages/StaffDetailPage.tsx', 'pages/ParticipantsHubPage.tsx'])(

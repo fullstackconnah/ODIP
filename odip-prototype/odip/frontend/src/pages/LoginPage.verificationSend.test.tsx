@@ -59,7 +59,7 @@ function renderPage(): User {
   return userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime })
 }
 
-const pressSignIn = (u: User) => u.click(screen.getByRole('button', { name: 'Sign In' }))
+const pressSignIn = (u: User) => u.click(screen.getByRole('button', { name: 'Sign in' }))
 const wait = (ms: number) => act(async () => { vi.advanceTimersByTime(ms) })
 
 async function signIn(u: User) {

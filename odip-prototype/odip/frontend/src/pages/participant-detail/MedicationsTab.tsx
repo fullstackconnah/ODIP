@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ChevronDown, Plus, Info, Pill } from 'lucide-react'
 import { useParticipantMedications, useParticipantAdministrations } from '@/api/hooks'
 import { Card } from '@/components/Card'
+import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -56,12 +57,11 @@ function IncidentLinkOrAction({ administration, canFile }: { administration: Adm
 
 const NO_MEDICATIONS: MedicationListDto[] = []
 
-function MedicationCard({ medication }: { medication: MedicationListDto }) {
-  return (
-    <Link
-      to={`/medications/${medication.id}/edit`}
-      className="block p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[var(--color-primary)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-    >
+// The card opens the medication form (a view for ReadOnly); a role the route sends away (SupportWorker) gets the same card as plain content.
+function MedicationCard({ medication, canOpen }: { medication: MedicationListDto; canOpen: boolean }) {
+  const className = 'block p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[var(--color-primary)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors'
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium text-[var(--color-foreground)]">
@@ -84,16 +84,21 @@ function MedicationCard({ medication }: { medication: MedicationListDto }) {
           </span>
         )}
       </div>
-    </Link>
+    </>
   )
+  return canOpen
+    ? <Link to={`/medications/${medication.id}/edit`} className={className}>{body}</Link>
+    : <div className={className}>{body}</div>
 }
 
 export default function MedicationsTab({ participantId }: { participantId: string | undefined }) {
-  const { canManageMedications, canCreateIncidents } = usePermissions()
+  const { canManageMedications, canCreateIncidents, isReadOnly } = usePermissions()
   const [showInactive, setShowInactive] = useState(false)
   const { data: medicationsData, isLoading, isError, refetch } = useParticipantMedications(participantId, true)
   const medications = medicationsData ?? NO_MEDICATIONS
-  const { data: administrations = [] } = useParticipantAdministrations(participantId, isoDaysAgo(14), isoDaysAgo(0))
+  const administrationsQuery = useParticipantAdministrations(participantId, isoDaysAgo(14), isoDaysAgo(0))
+  const administrations = administrationsQuery.data ?? []
+  const administrationsPhase = queryPhase(administrationsQuery)
 
   const activeMeds = useMemo(() => medications.filter(m => m.status !== 'Ceased'), [medications])
   const inactiveMeds = useMemo(() => medications.filter(m => m.status === 'Ceased'), [medications])
@@ -115,12 +120,9 @@ export default function MedicationsTab({ participantId }: { participantId: strin
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[var(--color-foreground)]">Medications</h2>
         {canManageMedications && participantId && (
-          <Link
-            to={`/medications/new?participantId=${participantId}`}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-all shadow-md shadow-[var(--color-primary)]/20"
-          >
+          <Button to={`/medications/new?participantId=${participantId}`}>
             <Plus className="w-4 h-4" /> New medication
-          </Link>
+          </Button>
         )}
       </div>
 
@@ -144,7 +146,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
         />
       ) : (
         <div className="grid sm:grid-cols-2 gap-3">
-          {activeMeds.map(m => <MedicationCard key={m.id} medication={m} />)}
+          {activeMeds.map(m => <MedicationCard key={m.id} medication={m} canOpen={canManageMedications || isReadOnly} />)}
         </div>
       )}
 
@@ -161,7 +163,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
           </button>
           {showInactive && (
             <div className="grid sm:grid-cols-2 gap-3 mt-3">
-              {inactiveMeds.map(m => <MedicationCard key={m.id} medication={m} />)}
+              {inactiveMeds.map(m => <MedicationCard key={m.id} medication={m} canOpen={canManageMedications || isReadOnly} />)}
             </div>
           )}
         </div>
@@ -169,7 +171,11 @@ export default function MedicationsTab({ participantId }: { participantId: strin
 
       <div>
         <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">Recent administrations (last 14 days)</h3>
-        {administrations.length === 0 ? (
+        {administrationsPhase === 'loading' ? (
+          <PageState kind="loading" noun="administration list" />
+        ) : administrationsPhase === 'error' ? (
+          <PageState kind="error" noun="administration list" onRetry={() => administrationsQuery.refetch()} />
+        ) : administrations.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">No administrations recorded in the last 14 days.</p>
         ) : (
           <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-x-auto">

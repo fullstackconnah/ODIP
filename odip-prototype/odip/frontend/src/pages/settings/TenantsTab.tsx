@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react'
-import { Search } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { useAdminTenantsSummary } from '@/api/hooks/admin'
-import { DataTable } from '@/components/DataTable'
+import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto } from '@/api/types'
+import { Button } from '@/components/Button'
+import { PageState } from '@/components/PageState'
+import { formatInstantDateAu } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -23,7 +26,7 @@ export default function TenantsTab({
   onEditTenant,
   onViewTenantDetail,
 }: TenantsTabProps) {
-  const { data: tenants = [], isLoading } = useAdminTenantsSummary()
+  const { data: tenants = [], isLoading, isError, refetch } = useAdminTenantsSummary()
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(() => {
@@ -37,13 +40,7 @@ export default function TenantsTab({
   }, [tenants, search])
 
   // ── Loading state ────────────────────────────────────────────────────────
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-sm text-[var(--color-muted-foreground)]">
-        Loading tenants...
-      </div>
-    )
-  }
+  if (isLoading) return <PageState kind="loading" noun="tenants" />
 
   return (
     <div className="space-y-4">
@@ -60,22 +57,20 @@ export default function TenantsTab({
           />
         </div>
 
-        <button
-          type="button"
-          onClick={onAddTenant}
-          className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-all"
-        >
-          + Add Tenant
-        </button>
+        <Button onClick={onAddTenant}>
+          <Plus className="w-4 h-4" /> New tenant
+        </Button>
       </div>
 
       {/* Table */}
       <DataTable
         data={filtered}
         keyField="id"
+        error={isError}
+        onRetry={() => refetch()}
         emptyMessage={
           tenants.length === 0
-            ? 'No tenants yet. Click "+ Add Tenant" to create the first one.'
+            ? 'No tenants yet. Select "New tenant" to create the first one.'
             : 'No tenants match your search.'
         }
         columns={[
@@ -100,7 +95,7 @@ export default function TenantsTab({
             key: 'createdAt',
             header: 'Created',
             className: 'text-[var(--color-muted-foreground)]',
-            render: (tenant: TenantSummaryDto) => new Date(tenant.createdAt).toLocaleDateString(),
+            render: (tenant: TenantSummaryDto) => formatInstantDateAu(tenant.createdAt),
           },
           { key: 'userCount', header: 'Users', className: 'text-[var(--color-muted-foreground)]' },
           {
@@ -108,22 +103,14 @@ export default function TenantsTab({
             header: '',
             align: 'right',
             render: (tenant: TenantSummaryDto) => (
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => onEditTenant(tenant)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-foreground)] transition-colors"
-                >
+              <RowActions>
+                <Button variant="ghost" size="sm" onClick={() => onEditTenant(tenant)} aria-label={`Edit: ${tenant.name}`}>
                   Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onViewTenantDetail(tenant)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-[var(--color-accent)] text-[var(--color-primary)] transition-colors"
-                >
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onViewTenantDetail(tenant)} aria-label={`View Users: ${tenant.name}`}>
                   View Users
-                </button>
-              </div>
+                </Button>
+              </RowActions>
             ),
           },
         ]}

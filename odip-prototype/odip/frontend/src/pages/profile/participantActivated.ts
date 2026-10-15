@@ -1,8 +1,7 @@
 /**
- * Hand-off between the Profile wizard and the Active participants tab. Completing the profile of a participant in onboarding finalises them, and
- * when the organisation's readiness rule lets them be activated they have left the Onboarding tab for the Active tab. So the wizard sends the user
- * there instead of to the participant's record, and passes who it was through router navigation state so the tab can confirm it once (the same
- * idea as the Intake wizard's hand-off to the Onboarding tab, see intakeComplete.ts).
+ * Hand-off between the onboarding checklist's "Make active" and the Active participants tab. Making a participant active finalises them, so they
+ * have left the Onboarding tab for the Active tab: the checklist sends the user there and passes who it was through router navigation state, so the
+ * tab can confirm it once (the same idea as the Intake wizard's hand-off to the Onboarding tab, see intakeComplete.ts).
  */
 
 /** The Active participants tab of the Participants hub. */

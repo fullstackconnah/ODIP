@@ -12,6 +12,7 @@ using Odip.Domain.Notifications;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications.Templates;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Notifications;
 
@@ -29,14 +30,7 @@ public class AdminNotificationsControllerTests
         return new OdipDbContext(options, tenant.Object);
     }
 
-    private static OdipDbContext SuperAdminDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext SuperAdminDb(string dbName) => TestDb.Create(dbName);
 
     private static User SeedUser(OdipDbContext db, Guid tenantId)
     {

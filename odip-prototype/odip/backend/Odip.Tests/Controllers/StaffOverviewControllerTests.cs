@@ -77,7 +77,7 @@ public class StaffOverviewControllerTests
 
     private static IncidentReport SeedIncident(OdipDbContext db, Guid reportedByUserId, Guid? involvedUserId, DateTime incidentDateTime, bool isActive = true) => Seed(db, new IncidentReport
     {
-        Id = Guid.NewGuid(), ReportedByUserId = reportedByUserId, InvolvedUserId = involvedUserId,
+        Id = Guid.NewGuid(), TenantId = db.Users.Single(u => u.Id == reportedByUserId).TenantId, ReportedByUserId = reportedByUserId, InvolvedUserId = involvedUserId,
         IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Low, Status = IncidentStatus.Draft,
         Title = "Incident", Description = "What happened.", IncidentDateTime = incidentDateTime, IsActive = isActive,
     });

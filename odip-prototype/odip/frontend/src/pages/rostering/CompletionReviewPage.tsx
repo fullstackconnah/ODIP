@@ -5,6 +5,8 @@ import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
+import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
@@ -15,6 +17,8 @@ import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBa
 import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatVarianceMinutes } from './lib/roster'
 import { plural } from '@/lib/format'
+import { Button } from '@/components/Button'
+import { TONE } from '@/lib/tone'
 
 const PAGE_SIZE = 50
 
@@ -83,6 +87,21 @@ function IncidentsList({ incidents }: { incidents: ShiftCompletionDto['incidents
       </ul>
     </div>
   )
+}
+
+/** What the worker confirmed at Finish (My shifts redesign): moved times with the stamps they replaced, the reason, kilometres, the report answer. */
+function WorkerAnswers({ c }: { c: ShiftCompletionDto }) {
+  const t = (iso: string) => formatWithTimeZone(iso, c.timeZoneId, { hour: 'numeric', minute: '2-digit' })
+  const lines = [
+    c.originalActualStart && `Start ${t(c.originalActualStart)}, changed to ${t(c.actualStart)}.`,
+    c.originalActualEnd && c.actualEnd && `Finish ${t(c.originalActualEnd)}, changed to ${t(c.actualEnd)}.`,
+    c.timeAdjustmentReason && `Reason: ${c.timeAdjustmentReason}`,
+    c.kilometres != null && `${c.kilometres} km driven with the participant`,
+    c.anythingToReport && 'The worker said there was something to report.',
+    c.shiftReturnCount > 0 && `Returned to the worker ${plural(c.shiftReturnCount, 'time')} before.`,
+  ].filter((line): line is string => typeof line === 'string')
+  if (lines.length === 0) return null
+  return <ul className="space-y-0.5 text-xs">{lines.map(line => <li key={line}>{line}</li>)}</ul>
 }
 
 export default function CompletionReviewPage() {
@@ -186,24 +205,32 @@ export default function CompletionReviewPage() {
     { key: 'times', header: 'Rostered vs actual', render: rosteredVsActual },
     {
       key: 'variance', header: 'Variance', render: row => (
-        <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-1">   {/* the badges wrap in a narrow column instead of running under the buttons */}
           <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${varianceBadgeClass(row.isOutlierVariance)}`}>
             {formatVarianceMinutes(row.varianceMinutesStart)} / {formatVarianceMinutes(row.varianceMinutesEnd)}
           </span>
+          {row.timesAdjusted && (
+            // An adjustment is not a compliance warning, so it takes the info tone (SHAPE §7).
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.info.solid}`}>Times adjusted by the worker</span>
+          )}
+          {row.returnCount > 0 && (
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Returned {plural(row.returnCount, 'time')}</span>
+          )}
           <IncidentIndicator shiftId={row.shiftId} />
         </div>
       ),
     },
     ...(canReviewCompletions ? [{
       key: 'actions', header: '', align: 'right' as const, render: (row: CompletionQueueItemDto) => (
+        // Always visible (not a hover-revealed RowActions): reviewing is this queue's whole purpose. sm keeps the row at --row-h.
         row.status === 'PendingReview' ? (
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setReturnTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+          <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setReturnTarget(row)} aria-label={`Return ${row.staffName} with ${row.participantName} on ${formatDateAu(row.serviceDate)}`}>
               Return
-            </button>
-            <button type="button" onClick={() => setApproveTarget(row)} className="min-h-[44px] px-3 text-sm rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90">
+            </Button>
+            <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={`Approve ${row.staffName} with ${row.participantName} on ${formatDateAu(row.serviceDate)}`}>
               Approve
-            </button>
+            </Button>
           </div>
         ) : null
       ),
@@ -212,15 +239,11 @@ export default function CompletionReviewPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Completion review" subtitle="Review submitted shift completions against their rostered times before they're billed.">
+      <PageHeader title="Completions">
         {canReviewCompletions && selectedRows.size > 0 && (
-          <button
-            type="button"
-            onClick={() => setBatchConfirmOpen(true)}
-            className="min-h-[44px] px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90"
-          >
+          <Button onClick={() => setBatchConfirmOpen(true)}>
             Approve selected ({selectedRows.size})
-          </button>
+          </Button>
         )}
       </PageHeader>
 
@@ -274,14 +297,11 @@ export default function CompletionReviewPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-[var(--color-muted-foreground)]">Loading…</p>
+        <PageState kind="loading" noun="shift completions" />
       ) : isError ? (
-        <EmptyState
-          icon={ClipboardCheck}
-          title="Couldn't load shift completions."
-          description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: refetch }}
-        />
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
+          Couldn't load shift completions. Check your connection and try again.
+        </Callout>
       ) : rows.length === 0 ? (
         <EmptyState icon={ClipboardCheck} title="No completions match these filters" description="Try a different status, staff member or date range." />
       ) : (
@@ -331,6 +351,7 @@ export default function CompletionReviewPage() {
         message={
           <div className="space-y-3">
             <p>{approveTarget ? `Approve ${approveTarget.participantName}'s shift on ${formatDateAu(approveTarget.serviceDate)} for ${approveTarget.staffName}?` : ''}</p>
+            {detail && <WorkerAnswers c={detail} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
           </div>
@@ -348,6 +369,7 @@ export default function CompletionReviewPage() {
         message={
           <div className="space-y-3">
             <p>{returnTarget ? `Return ${returnTarget.participantName}'s shift on ${formatDateAu(returnTarget.serviceDate)} to ${returnTarget.staffName} for correction?` : ''}</p>
+            {detail && <WorkerAnswers c={detail} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
             <label className="block text-sm text-[var(--color-foreground)]">
               Reason (required)

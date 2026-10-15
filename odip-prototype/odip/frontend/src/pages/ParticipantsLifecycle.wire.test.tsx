@@ -25,7 +25,7 @@ vi.mock('@/api/client', async () => {
 type Mode = 'Warn' | 'Enforce'
 type FakeParticipant = {
   id: string; firstName: string; lastName: string; phone: string | null; email: string | null
-  isDraft: boolean; isActive: boolean; intakeCompletedAt: string | null
+  isDraft: boolean; isActive: boolean; intakeCompletedAt: string | null; servicesStartedAt?: string | null
 }
 type FakeInquiry = { id: string; firstName: string; lastName: string; phone: string | null; source: string; participantId: string | null; createdAt: string }
 
@@ -78,16 +78,21 @@ function createServer(mode: Mode, extra: FakeParticipant[] = []) {
   // it: a draft is on Enquiries or Onboarding by its intake alone (the seeded demo draft is a draft that is marked active).
   const inOnboarding = () => participants.filter(p => p.isDraft && p.intakeCompletedAt)
   const worklist = () => inOnboarding().map(p => ({
-    participantId: p.id, fullName: name(p), stage: 'Onboarding incomplete', nextAction: 'Validate profile essentials', completedSteps: 1, totalSteps: 5,
-    reasons: ['Profile requires date of birth.'],
+    participantId: p.id, fullName: name(p), servicesStartedAt: p.servicesStartedAt ?? null, completedSteps: 1, totalSteps: 4, firstMissing: 'Service needs',
   }))
+  // ParticipantInquiriesController.BuildDetail: four derived items; this participant has only the profile done.
   const checklist = (id: string) => ({
-    participantId: id, intakeComplete: true, profileComplete: false, serviceTypeConfirmed: false, serviceAgreementSigned: false, isReady: false,
-    reasons: ['Profile requires date of birth.'],
+    participantId: id, isReady: false, servicesStartedAt: find(id).servicesStartedAt ?? null, agreementSignedOn: null, noAgreementReason: null,
+    items: [
+      { key: 'profile', label: 'Profile details', done: true, missing: null },
+      { key: 'serviceNeeds', label: 'Service needs', done: false, missing: 'No current agreement draft with dated, priced support lines.' },
+      { key: 'agreement', label: 'Signed agreement', done: false, missing: 'Record the date it was signed, or why there is no written agreement.' },
+      { key: 'funding', label: 'Funding', done: false, missing: 'No plan budget recorded.' },
+    ],
   })
   const listRow = (p: FakeParticipant) => ({
     id: p.id, firstName: p.firstName, lastName: p.lastName, preferredName: null, fullName: name(p), maskedNdisNumber: null, ndisNumber: null, planType: 'SelfManaged',
-    region: 'QLD', isRepeatClient: false, isActive: p.isActive, isDraft: p.isDraft, intakeCompletedAt: p.intakeCompletedAt, mobilityAidWheelchair: false,
+    region: 'QLD', isRepeatClient: false, isActive: p.isActive, isDraft: p.isDraft, intakeCompletedAt: p.intakeCompletedAt, servicesStartedAt: p.servicesStartedAt ?? null, mobilityAidWheelchair: false,
     isHighSupport: false, supportRatio: 'SharedSupport', serviceStreams: 'None', hasActiveMedications: false,
   })
   // What both wizards read for one participant: the same shape as the wizards' own wire-test fixtures.
@@ -140,22 +145,28 @@ function createServer(mode: Mode, extra: FakeParticipant[] = []) {
     return { success: true, data: { id: url.split('/')[2] } }
   })
 
-  // ParticipantsController.CompleteProfile / ChangeStatus / Restore: a draft is finalised only by complete-profile, which also activates them: Warn
-  // does, Enforce (no signed-agreement evidence exists) refuses with the evidence message and leaves the draft on Onboarding. The status endpoint
-  // refuses a draft, and refuses activation under Enforce.
+  // ParticipantsController.BeginServices / MakeActive / ChangeStatus / Restore. Begin services: a draft in onboarding can receive services (IsActive,
+  // ServicesStartedAt) and stays a draft; Enforce refuses with the placement reason. Make active finalises a draft whose intake is complete, open
+  // checklist items or not: Warn does, Enforce (no signed-agreement evidence exists) refuses with the evidence message. The status endpoint refuses a
+  // draft, and refuses activation under Enforce.
   mockApiPostRaw.mockImplementation(async (url: string, body: { isActive?: boolean }) => {
     calls.push(`POST ${url}`)
-    const completeProfile = /^\/participants\/([^/]+)\/complete-profile$/.exec(url)
-    if (completeProfile) {
-      const participant = find(completeProfile[1])
-      if (participant.isDraft) {
-        if (!participant.intakeCompletedAt) throw httpError(400, "Complete the participant's intake before completing their profile.")
-        // A draft marked active has nothing to activate; otherwise Enforce refuses and the participant stays a draft.
-        if (!participant.isActive && mode === 'Enforce') throw httpError(400, EVIDENCE_REQUIRED)
+    const lifecycle = /^\/participants\/([^/]+)\/(begin-services|make-active)$/.exec(url)
+    if (lifecycle) {
+      const participant = find(lifecycle[1])
+      if (lifecycle[2] === 'begin-services' && !participant.servicesStartedAt) {
+        if (!participant.isDraft) throw httpError(400, 'Services can only begin for a participant in onboarding.')
+        if (mode === 'Enforce') throw httpError(400, 'Your organisation enforces readiness, so services begin when the participant is made active.')
+        participant.servicesStartedAt = '2026-10-13T01:00:00Z'
+        participant.isActive = true
+      }
+      if (lifecycle[2] === 'make-active' && participant.isDraft) {
+        if (!participant.intakeCompletedAt) throw httpError(400, "Complete the participant's intake before making them active.")
+        if ((!participant.isActive || participant.servicesStartedAt) && mode === 'Enforce') throw httpError(400, EVIDENCE_REQUIRED)
         participant.isDraft = false
         participant.isActive = true
       }
-      return { success: true, data: { id: participant.id, fullName: name(participant), isDraft: participant.isDraft, isActive: participant.isActive, intakeCompletedAt: participant.intakeCompletedAt } }
+      return { success: true, data: { id: participant.id, fullName: name(participant), isDraft: participant.isDraft, isActive: participant.isActive, intakeCompletedAt: participant.intakeCompletedAt, servicesStartedAt: participant.servicesStartedAt ?? null } }
     }
     const status = /^\/participants\/([^/]+)\/(status|restore)$/.exec(url)
     if (status) {
@@ -191,20 +202,22 @@ const findRow = async (text: string) => (await screen.findByText(text)).closest(
 
 /** Enquiries tab -> Start intake -> the Intake wizard, to the end: lands on the Onboarding tab. */
 async function startAndCompleteIntake(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(await findRow('Ada Lovelace')).getByRole('button', { name: 'Start intake' }))
+  await user.click(within(await findRow('Ada Lovelace')).getByRole('button', { name: /^Start intake/ }))
   await screen.findByDisplayValue('Ada')
   for (let i = 0; i < 8; i++) await next(user)
   await user.click(await screen.findByRole('button', { name: /complete intake/i }))
 }
 
-/** Onboarding tab -> the checklist -> its Complete profile button -> the Profile wizard, to the end. */
-async function openChecklistAndCompleteProfile(user: ReturnType<typeof userEvent.setup>, fullName = 'Ada Lovelace') {
+/** Onboarding tab -> the checklist. */
+async function openChecklist(user: ReturnType<typeof userEvent.setup>, fullName = 'Ada Lovelace') {
   await user.click(await screen.findByRole('button', { name: `Open onboarding for ${fullName}` }))
   await screen.findByRole('heading', { name: fullName, level: 1 })
-  await user.click(await screen.findByRole('link', { name: 'Complete profile' }))
-  await screen.findByRole('heading', { name: /profile/i })
-  for (let i = 0; i < 6; i++) await next(user)
-  await user.click(await screen.findByRole('button', { name: /complete profile/i }))
+}
+
+/** The checklist's Make active, past its warning about the open items. */
+async function makeActive(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Make active' }))
+  await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Make active' }))
 }
 
 beforeEach(() => {
@@ -217,7 +230,7 @@ afterEach(() => {
 })
 
 describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
-  it('takes an enquiry from the Enquiries tab, through intake, onboarding and the Profile wizard, to the Active participants tab', async () => {
+  it('takes an enquiry from the Enquiries tab, through intake, onboarding, Begin services and Make active, to the Active participants tab', async () => {
     const server = createServer('Warn')
     const user = userEvent.setup()
     renderApp('/participants?tab=enquiries')
@@ -226,14 +239,14 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
     expect(within(await findRow('Ada Lovelace')).getByText('New')).toBeInTheDocument()
     expect(within(await findRow('Dana Direct')).getByText('Draft intake')).toBeInTheDocument()
-    expect(within(await findRow('Dana Direct')).getByRole('button', { name: 'Resume intake' })).toBeInTheDocument()
+    expect(within(await findRow('Dana Direct')).getByRole('button', { name: /^Resume intake/ })).toBeInTheDocument()
     expect(screen.queryByText('Alex Active')).not.toBeInTheDocument()
 
     // 2. Start intake, then complete it in the wizard: the participant is on the Onboarding tab, with a one-off confirmation.
     await startAndCompleteIntake(user)
     expect(await screen.findByText('Intake complete — Ada Lovelace is now in onboarding.', {}, ARRIVAL)).toBeInTheDocument()
     expect(tab('Onboarding')).toHaveAttribute('aria-selected', 'true')
-    expect(within(await findRow('Ada Lovelace')).getByText('Validate profile essentials')).toBeInTheDocument()
+    expect(within(await findRow('Ada Lovelace')).getByText('Service needs')).toBeInTheDocument()
     expect(server.calls).toContain('PUT /participants/p-ada/intake')
 
     // 3. Their enquiry has moved on: it is not an open enquiry any more, and they are not an active participant yet.
@@ -244,15 +257,21 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     expect(await screen.findByText('Alex Active')).toBeInTheDocument()
     expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument()
 
-    // 4. Complete onboarding: the checklist, then the Profile wizard's Complete Profile. They land on the Active tab, confirmed and highlighted.
+    // 4. The checklist: Begin services (they stay in onboarding, now able to receive services), then Make active with items still open. They land on
+    // the Active tab, confirmed and highlighted.
     await user.click(tab('Onboarding'))
-    await openChecklistAndCompleteProfile(user)
+    await openChecklist(user)
+    await user.click(await screen.findByRole('button', { name: 'Begin services' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Begin services' }))
+    expect(await screen.findByText(/^Services started [0-9]/)).toBeInTheDocument()
+    expect(server.participants.find(p => p.id === 'p-ada')).toMatchObject({ isDraft: true, isActive: true })
+    await makeActive(user)
     expect(await screen.findByText('Ada Lovelace is now an active participant.', {}, ARRIVAL)).toBeInTheDocument()
     expect(tab('Active participants')).toHaveAttribute('aria-selected', 'true')
     expect(within(await findRow('Ada Lovelace')).getByText('Active')).toBeInTheDocument()
     expect(screen.getByText('Alex Active')).toBeInTheDocument()
-    // The finalising call is complete-profile with an empty body. A draft cannot be activated through the status endpoint, so it was never used.
-    expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/p-ada/complete-profile', {})
+    // The finalising call is make-active with an empty body. A draft cannot be activated through the status endpoint, so it was never used.
+    expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/p-ada/make-active', {})
     expect(server.calls.filter(call => /\/(status|restore)$/.test(call))).toEqual([])
 
     // 5. And they have left Onboarding.
@@ -267,13 +286,13 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     renderApp('/participants?tab=enquiries')
 
     await screen.findByText('Dana Direct')
-    await user.click(within(await findRow('Dana Direct')).getByRole('button', { name: 'Resume intake' }))
+    await user.click(within(await findRow('Dana Direct')).getByRole('button', { name: /^Resume intake/ }))
     await screen.findByDisplayValue('Dana')
     for (let i = 0; i < 8; i++) await next(user)
     await user.click(await screen.findByRole('button', { name: /complete intake/i }))
 
     expect(await screen.findByText('Intake complete — Dana Direct is now in onboarding.', {}, ARRIVAL)).toBeInTheDocument()
-    expect(within(await findRow('Dana Direct')).getByText('Validate profile essentials')).toBeInTheDocument()
+    expect(within(await findRow('Dana Direct')).getByText('Service needs')).toBeInTheDocument()
     // Their intake is done, so nothing of theirs is left on the Enquiries tab, and Ada's enquiry is still open there.
     await user.click(tab('Enquiries'))
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
@@ -288,14 +307,15 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     renderApp('/participants?tab=enquiries')
 
     expect(within(await findRow('Priya Preseed')).getByText('Draft intake')).toBeInTheDocument()
-    await user.click(within(await findRow('Priya Preseed')).getByRole('button', { name: 'Resume intake' }))
+    await user.click(within(await findRow('Priya Preseed')).getByRole('button', { name: /^Resume intake/ }))
     await screen.findByDisplayValue('Priya')
     for (let i = 0; i < 8; i++) await next(user)
     await user.click(await screen.findByRole('button', { name: /complete intake/i }))
 
     expect(await screen.findByText('Intake complete — Priya Preseed is now in onboarding.', {}, ARRIVAL)).toBeInTheDocument()
-    expect(within(await findRow('Priya Preseed')).getByText('Validate profile essentials')).toBeInTheDocument()
-    await openChecklistAndCompleteProfile(user, 'Priya Preseed')
+    expect(within(await findRow('Priya Preseed')).getByText('Service needs')).toBeInTheDocument()
+    await openChecklist(user, 'Priya Preseed')
+    await makeActive(user)
 
     expect(await screen.findByText('Priya Preseed is now an active participant.', {}, ARRIVAL)).toBeInTheDocument()
     expect(tab('Active participants')).toHaveAttribute('aria-selected', 'true')
@@ -304,7 +324,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
 })
 
 describe('Participants lifecycle (wire) — readiness in Enforce mode', () => {
-  it('refuses Complete Profile with the server\'s reason and keeps the participant on Onboarding: nothing is finalised, so nobody falls out of a tab', async () => {
+  it('refuses Make active with the server\'s reason and keeps the participant on Onboarding: nothing is finalised, so nobody falls out of a tab', async () => {
     createServer('Enforce')
     const user = userEvent.setup()
     const router = renderApp('/participants?tab=enquiries')
@@ -312,17 +332,18 @@ describe('Participants lifecycle (wire) — readiness in Enforce mode', () => {
 
     await startAndCompleteIntake(user)
     await screen.findByText('Intake complete — Ada Lovelace is now in onboarding.', {}, ARRIVAL)
-    await openChecklistAndCompleteProfile(user)
+    await openChecklist(user)
+    await makeActive(user)
 
-    // The wizard shows the server's reason and stays where it is: no hand-off to the Active tab, and not on the record either.
+    // The checklist shows the server's reason and stays where it is: no hand-off to the Active tab.
     expect(await screen.findByRole('alert', {}, ARRIVAL)).toHaveTextContent(EVIDENCE_REQUIRED)
-    expect(router.state.location.pathname).toBe('/participants/p-ada/profile')
-    expect(screen.queryByText('Participant detail')).not.toBeInTheDocument()
-    expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/p-ada/complete-profile', {})
+    expect(router.state.location.pathname).toBe('/onboarding/p-ada')
+    expect(mockApiPostRaw).toHaveBeenCalledWith('/participants/p-ada/make-active', {})
 
     // Still a draft in onboarding: listed on Onboarding, and on neither the Active tab nor its Archived view.
     await router.navigate('/participants?tab=onboarding')
-    expect(within(await findRow('Ada Lovelace')).getByText('Validate profile essentials')).toBeInTheDocument()
+    // The checklist's own heading is the same name, so wait for the table row itself.
+    expect(within(await screen.findByRole('row', { name: /Ada Lovelace/ })).getByText('Service needs')).toBeInTheDocument()
     await user.click(tab('Active participants'))
     expect(await screen.findByText('Alex Active')).toBeInTheDocument()
     expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument()

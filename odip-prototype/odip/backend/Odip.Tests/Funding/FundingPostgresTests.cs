@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Moq;
 using Npgsql;
 using Odip.Application.DTOs;
-using Odip.Domain.Billing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -12,6 +11,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Postgres;
+using Odip.Tests.Support;
 using Xunit;
 using static Odip.Tests.Funding.FundingTestKit;
 
@@ -113,19 +113,17 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
         await using var db = PostgresFixture.NewContext(connectionString);
         var migrator = db.GetService<IMigrator>();
 
-        // 1. The schema as it was before this migration, holding live-shaped rows: a tenant with settings, a participant with plan dates, and a Billing funding source with a budget.
+        // 1. The schema as it was before this migration, holding live-shaped rows: a tenant with settings, and a participant with plan dates.
         var all = db.Database.GetMigrations().ToList();
         var mine = all.Single(m => m.EndsWith("_" + MigrationName, StringComparison.Ordinal));
         await migrator.MigrateAsync(all[all.IndexOf(mine) - 1]);
 
         var tenantId = Guid.NewGuid();
         var participantId = Guid.NewGuid();
-        var sourceId = Guid.NewGuid();
         db.Tenants.Add(new Tenant { Id = tenantId, Name = "Live Provider", EmailDomain = $"{tenantId:N}.example.com" });
         db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Live Provider", State = "NSW", BSB = "062000", AccountNumber = "12345678" });
         db.Participants.Add(new Participant { Id = participantId, TenantId = tenantId, FirstName = "Live", LastName = "Participant", IsActive = true, PlanStartDate = D(2026, 7, 1), PlanEndDate = D(2027, 6, 30) });
-        db.FundingSources.Add(new FundingSource { Id = sourceId, TenantId = tenantId, ParticipantId = participantId, RouteType = FundingRouteType.PlanManaged, Budget = 20_000.5m, IsActive = true, BudgetCategory = "Core - Social & Community Participation" });
-        await db.SaveChangesAsync();
+        await OlderSchemaSeeds.SaveWithLaterParticipantColumnsAsync(db);
 
         // 2. The migration applies without error and keeps every one of them as it was.
         await migrator.MigrateAsync();
@@ -134,8 +132,6 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(("Live Provider", "NSW", "062000", "12345678"), (provider.OrganisationName, provider.State, provider.BSB, provider.AccountNumber));
         var participant = await after.Participants.AsNoTracking().SingleAsync();
         Assert.Equal((participantId, D(2026, 7, 1), D(2027, 6, 30)), (participant.Id, participant.PlanStartDate, participant.PlanEndDate));
-        var source = await after.FundingSources.AsNoTracking().SingleAsync();
-        Assert.Equal((sourceId, 20_000.5m, "Core - Social & Community Participation"), (source.Id, source.Budget, source.BudgetCategory));
 
         // 3. The new tables are there and empty: a plan budget is typed in, never derived from what was there.
         Assert.Equal(0, await CountAsync(connectionString, "SELECT COUNT(*) FROM \"FundingPlans\""));
@@ -283,17 +279,11 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
     // ── The service on Npgsql ───────────────────────────────────────────────
 
     [SkippableFact]
-    public async Task TheService_RunsOnNpgsql_CreatesListsReplacesAndDeletes_AndTheHintAndTheOverlapQueriesTranslate()
+    public async Task TheService_RunsOnNpgsql_CreatesListsReplacesAndDeletes_AndTheOverlapQueriesTranslate()
     {
         RequirePostgres();
         var (connectionString, tenantId, participants) = await SetUpAsync();
         var participantId = participants[0];
-        await using (var seed = Open(connectionString, tenantId))
-        {
-            seed.FundingSources.Add(new FundingSource { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, RouteType = FundingRouteType.PlanManaged, Budget = 12_500.25m, IsActive = true, PlanStartDate = D(2026, 7, 1), PlanEndDate = D(2027, 6, 30) });
-            await seed.SaveChangesAsync();
-        }
-
         await using var db = Open(connectionString, tenantId);
         var service = new FundingPlanService(db, TimeProvider.System);
         var first = (await service.CreateAsync(tenantId, participantId, Plan(), "user-1", default)).Plan!;
@@ -309,9 +299,6 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
 
         var replaced = await service.UpdateAsync(tenantId, participantId, first.Id, Plan() with { Revision = 1, Notes = "edited" }, "user-2", default);
         Assert.Equal((2, "edited"), (replaced.Plan!.Revision, replaced.Plan.Notes));
-
-        var hint = (await service.BillingSourcesHintAsync(tenantId, participantId, default))!;
-        Assert.Equal((12_500.25m, PlanType.PlanManaged), (hint.Total, hint.ManagementType));
 
         Assert.True(await service.DeleteAsync(tenantId, participantId, first.Id, default));
         Assert.Equal(1, await CountAsync(connectionString, "SELECT COUNT(*) FROM \"FundingPlans\""));

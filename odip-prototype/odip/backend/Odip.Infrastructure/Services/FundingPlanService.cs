@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Odip.Application.DTOs;
 using Odip.Application.Funding;
-using Odip.Domain.Billing;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Infrastructure.Data;
@@ -25,8 +24,7 @@ public sealed class FundingSaveResult
 }
 
 /// <summary>
-/// A participant's plan budget (budget feature, phase 1): list, create, replace, delete, the explicit "use this plan's dates on the profile", and the read-only
-/// Billing hint. Every method takes the tenant the controller already resolved and re-checks that the participant belongs to it (an id from another organisation is
+/// A participant's plan budget (budget feature, phase 1): list, create, replace, delete, and the explicit "use this plan's dates on the profile". Every method takes the tenant the controller already resolved and re-checks that the participant belongs to it (an id from another organisation is
 /// "not found", never a leak). The rules are <see cref="FundingPlanValidator"/>'s; what only the database can answer is here:
 /// <list type="bullet">
 /// <item><b>Overlap.</b> The plans of one participant must not overlap in dates. A create or replace takes <see cref="FundingPlanLock"/> (the participant's row, held until the
@@ -74,44 +72,6 @@ public sealed class FundingPlanService
 
         return new FundingPlansDto { Plans = plans.Select(ToDto).ToList(), ProfilePlanDates = profile };
     }
-
-    /// <summary>
-    /// What the participant's Billing funding sources already say, as a one-off starting point: the active ones on an NDIS route with a budget above zero (the same filter
-    /// the plan builder's budget bar uses, minus its agreement window). Read-only: nothing is written and no Billing row is changed. Null when the participant is not in this tenant.
-    /// </summary>
-    public async Task<BillingSourcesHintDto?> BillingSourcesHintAsync(Guid tenantId, Guid participantId, CancellationToken ct)
-    {
-        if (await FindProfileDatesAsync(tenantId, participantId, ct) is null) return null;
-
-        var rows = await HintSources(tenantId, participantId).OrderBy(f => f.PlanStartDate).ThenBy(f => f.Id).ToListAsync(ct);
-        if (rows.Count == 0) return new BillingSourcesHintDto();
-
-        // The management type of the rows holding most of the money (a Core pool has one management type, so a mixture is reduced to the biggest).
-        var biggest = rows.GroupBy(f => f.RouteType).OrderByDescending(g => g.Sum(f => f.Budget ?? 0m)).First().Key;
-        return new BillingSourcesHintDto
-        {
-            Total = rows.Sum(f => f.Budget ?? 0m),
-            PlanStart = rows.Where(f => f.PlanStartDate is not null).Min(f => f.PlanStartDate),
-            PlanEnd = rows.Where(f => f.PlanEndDate is not null).Max(f => f.PlanEndDate),
-            ManagementType = biggest switch
-            {
-                FundingRouteType.PlanManaged => PlanType.PlanManaged,
-                FundingRouteType.SelfManaged => PlanType.SelfManaged,
-                _ => PlanType.AgencyManaged,
-            },
-            Rows = rows.Select(f => new BillingSourceHintRowDto
-            {
-                Id = f.Id, RouteType = f.RouteType, BudgetCategory = f.BudgetCategory, Budget = f.Budget ?? 0m,
-                PlanStartDate = f.PlanStartDate, PlanEndDate = f.PlanEndDate, PayerName = f.PayerName,
-            }).ToList(),
-        };
-    }
-
-    /// <summary>The Billing funding sources the hint reads: the participant's active ones on an NDIS route with a budget above zero. A query of its own so a test can show it translates to SQL.</summary>
-    public IQueryable<FundingSource> HintSources(Guid tenantId, Guid participantId) =>
-        _db.FundingSources.AsNoTracking()
-            .Where(f => f.ParticipantId == participantId && f.TenantId == tenantId && f.IsActive && f.Budget > 0
-                && (f.RouteType == FundingRouteType.AgencyManaged || f.RouteType == FundingRouteType.PlanManaged || f.RouteType == FundingRouteType.SelfManaged));
 
     // ── Writing ─────────────────────────────────────────────────────────────
 

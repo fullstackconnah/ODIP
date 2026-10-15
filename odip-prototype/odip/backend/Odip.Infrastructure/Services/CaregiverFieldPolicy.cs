@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 
@@ -27,7 +28,8 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class CaregiverFieldPolicy
 {
-    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+    // Enums by name, as everywhere else the API serialises (Program.cs): the caregiver page and the review compare them as names.
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>
     /// JSON property names on ParticipantDetailDto that must never reach a caregiver, grouped by

@@ -394,27 +394,43 @@ describe('RoutinesTab', () => {
       expect(screen.getByText('9:30am–11:30am')).toBeInTheDocument()
     })
 
-    it('shows an end-before-start validation error only when both times are present', async () => {
+    it('refuses an end time equal to the start time, only when both times are present', async () => {
       const user = userEvent.setup()
       render(<RoutinesTab participantId="participant-1" />)
 
       await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
-      await user.type(screen.getByLabelText(/title/i), 'Bad window')
-      await user.type(screen.getByLabelText(/description/i), 'End is before start.')
-      fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: '17:00' } })
+      await user.type(screen.getByLabelText(/title/i), 'Empty window')
+      await user.type(screen.getByLabelText(/description/i), 'Start and end are the same minute.')
+      fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: '07:00' } })
       fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '07:00' } })
       await user.click(screen.getByRole('button', { name: /save routine/i }))
 
-      expect(screen.getByText('End time must be after start time')).toBeInTheDocument()
+      expect(screen.getByText('End time must differ from the start time')).toBeInTheDocument()
       expect(mockCreateMutateAsync).not.toHaveBeenCalled()
 
-      // Clearing the end time (start-only) removes the ordering error entirely — the rule only
-      // fires when both times are present.
+      // Clearing the end time (start-only) removes the error entirely — the rule only fires when both times are present.
       fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '' } })
       await user.click(screen.getByRole('button', { name: /save routine/i }))
 
-      expect(screen.queryByText('End time must be after start time')).not.toBeInTheDocument()
+      expect(screen.queryByText('End time must differ from the start time')).not.toBeInTheDocument()
       expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    })
+
+    // The shift screen (rostering/lib/routines.ts) and the server (RoutineWindowMatcher) both read an end before the start as running past midnight.
+    it('saves an overnight routine as one routine: an end before the start is a night that runs past midnight', async () => {
+      const user = userEvent.setup()
+      render(<RoutinesTab participantId="participant-1" />)
+
+      await user.click(screen.getAllByRole('button', { name: /new routine/i })[0])
+      await user.type(screen.getByLabelText(/title/i), 'Night settling')
+      await user.type(screen.getByLabelText(/description/i), 'Settle for the night and check on them.')
+      fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: '22:00' } })
+      fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '06:00' } })
+      await user.click(screen.getByRole('button', { name: /save routine/i }))
+
+      expect(screen.queryByText(/end time must/i)).not.toBeInTheDocument()
+      expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+      expect(mockCreateMutateAsync.mock.calls[0][0].data).toMatchObject({ title: 'Night settling' })
     })
 
     it('round-trips all three time states through edit-mode hydration', async () => {

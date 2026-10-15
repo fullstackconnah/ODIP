@@ -41,12 +41,6 @@ beforeEach(() => {
 })
 
 describe('AccommodationCreatePage — email validation (PP-70)', () => {
-  // NOTE: this environment's installed @hookform/resolvers (3.10.0) predates zod 4's ZodError
-  // shape (confirmed directly against the resolver: it throws instead of returning a field
-  // error map for *any* zod validation failure here — a pre-existing, repo-wide mismatch, not
-  // something introduced by this fix). So the rendered "Enter a valid email" copy can't be
-  // asserted in this suite today; what IS verifiable, and what PP-70 is actually about, is that
-  // an invalid email blocks the create call while a blank (optional) one does not.
   it('blocks submission when the email is malformed', async () => {
     const user = userEvent.setup()
     renderCreatePage()
@@ -84,16 +78,14 @@ describe('AccommodationCreatePage — specific server error surfaced (PP-71)', (
   })
 })
 
-// Density polish (touch): the "← Back to Accommodation" text link was a 19px tap target. It takes the shared TAP_FLOOR
-// (a --tap-min height floor, inline-flex + centring under `pointer: coarse` only), so it is 44px tall on touch and
-// exactly what it was, box for box, on a mouse (--tap-min is 0px there).
-describe('AccommodationCreatePage — Back link touch target', () => {
-  it('floors the "Back to Accommodation" link at --tap-min and keeps its destination and hover colour', () => {
+// The one Back standard (UI survey s.1): the icon BackButton left of the title, named for where it goes.
+describe('AccommodationCreatePage — Back', () => {
+  it('is the icon Back before the title, a real link to /accommodation', () => {
     renderCreatePage()
 
     const back = screen.getByRole('link', { name: /back to accommodation/i })
     expect(back).toHaveAttribute('href', '/accommodation')
-    expect(back).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:items-center', 'hover:text-[var(--color-foreground)]', 'transition-colors')
-    expect(back.className).not.toMatch(/44px/)
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

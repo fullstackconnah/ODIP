@@ -28,6 +28,7 @@ import {
   type WizardStepDef, type WizardValidate, type ReviewGroup,
 } from '@/components/wizard'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
+import PlatformFooter from '@/components/layout/PlatformFooter'
 import {
   PROFILE_STEP_SCHEMAS_BY_KEY,
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
@@ -61,6 +62,7 @@ export default function CaregiverWizardPage() {
   const saveDraft = useSaveCaregiverDraft(token)
   const submit = useSubmitCaregiverForm(token)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [progressSaved, setProgressSaved] = useState(false)
 
   const { control, register, getValues, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
     defaultValues: {
@@ -130,6 +132,7 @@ export default function CaregiverWizardPage() {
       }
     }
     setSaveError(null)
+    setProgressSaved(false)
     try {
       await saveDraft.mutateAsync(buildDraftBody())
       return null
@@ -147,6 +150,25 @@ export default function CaregiverWizardPage() {
     setError: (path, err) => setError(path as keyof CaregiverFormData, err),
     clearErrors: (paths) => clearErrors(paths as (keyof CaregiverFormData)[]),
   })
+
+  // "Save and continue later": the draft needs a name, as the About you step does. A public page, so the failure copy names no internals.
+  const saveForLater = async () => {
+    setSaveError(null)
+    setProgressSaved(false)
+    const named = aboutYouSchema.safeParse(getValues())
+    if (!named.success) {
+      const message = named.error.issues[0].message
+      setSaveError(message)
+      setError('caregiverName', { type: 'manual', message })
+      return
+    }
+    try {
+      await saveDraft.mutateAsync(buildDraftBody())
+      setProgressSaved(true)
+    } catch {
+      setSaveError("We couldn't save your progress. Please check your connection and try again.")
+    }
+  }
 
   const onSubmit = async () => {
     setSaveError(null)
@@ -173,6 +195,8 @@ export default function CaregiverWizardPage() {
         </div>
       )}
       {saveError && <p role="alert" className="mb-4 text-sm text-[var(--color-destructive)]">{saveError}</p>}
+      {/* Always mounted: screen readers announce a change inside a live region, not a region inserted already filled. */}
+      <p role="status" className={progressSaved ? 'mb-4 text-sm' : undefined}>{progressSaved ? 'Progress saved. Open this link again to carry on.' : ''}</p>
 
       <WizardStepRail
         steps={stepsForRail}
@@ -182,7 +206,8 @@ export default function CaregiverWizardPage() {
         ariaLabel="Caregiver form steps"
       />
 
-      <form onSubmit={(e) => { e.preventDefault(); void onSubmit() }} noValidate>
+      {/* "Progress saved" holds only until the caregiver changes something. */}
+      <form onSubmit={(e) => { e.preventDefault(); void onSubmit() }} onChange={() => setProgressSaved(false)} noValidate>
         <WizardStepHeading
           stepKey={wizard.isReviewStep ? REVIEW_STEP_KEY : wizard.currentStep.key}
           label={wizard.isReviewStep ? 'Review' : wizard.currentStep.label}
@@ -218,8 +243,9 @@ export default function CaregiverWizardPage() {
           onBack={wizard.handleBack}
           onNext={wizard.handleNext}
           isReviewStep={wizard.isReviewStep}
-          secondaryActions={[{ key: 'saveLater', label: 'Save and continue later', onClick: async () => { await saveDraft.mutateAsync(buildDraftBody()) } }]}
+          secondaryActions={[{ key: 'saveLater', label: 'Save and continue later', onClick: saveForLater }]}
           cancelTo={`/caregiver/${token}`}
+          history={false}
           submitLabel={submit.isPending ? 'Submitting…' : 'Submit for review'}
           isSubmitting={submit.isPending || wizard.isAdvancing}
         />
@@ -229,14 +255,19 @@ export default function CaregiverWizardPage() {
 }
 
 function PublicShell({ children }: { children: React.ReactNode }) {
+  // The footer sits beside main, not inside it, so it is the page's contentinfo landmark. No Support link: a carer contacts the
+  // provider who sent the link, and a platform inbox would draw health information to the wrong place.
   return (
-    <main className="min-h-screen bg-[var(--color-background)] text-[var(--color-foreground)]">
-      <div className="max-w-3xl mx-auto p-4 sm:p-8">
-        <h1 className="text-xl font-bold mb-1">Participant profile</h1>
-        <p className="text-sm text-[var(--color-muted-foreground)] mb-6">Please check the information below and update anything that is missing or out of date.</p>
-        {children}
-      </div>
-    </main>
+    <div className="min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
+      <main className="flex-1">
+        <div className="max-w-3xl mx-auto p-4 sm:p-8">
+          <h1 className="text-xl font-bold mb-1">Participant profile</h1>
+          <p className="text-sm text-[var(--color-muted-foreground)] mb-6">Please check the information below and update anything that is missing or out of date.</p>
+          {children}
+        </div>
+      </main>
+      <PlatformFooter variant="public" support={false} />
+    </div>
   )
 }
 

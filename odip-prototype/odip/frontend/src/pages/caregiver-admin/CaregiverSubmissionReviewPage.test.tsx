@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import CaregiverSubmissionReviewPage from './CaregiverSubmissionReviewPage'
 import type { CaregiverSubmissionDetailDto } from '@/api/types/caregiver'
+import { __testHooks } from '@/hooks/useBackNavigation'
 
 const {
   mockUseCaregiverSubmission, mockUseAcceptCaregiverSubmission, mockUseRejectCaregiverSubmission,
@@ -174,5 +175,58 @@ describe('CaregiverSubmissionReviewPage — failed request vs. missing record (P
     mockUseCaregiverSubmission.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
     renderPage()
     expect(screen.getByRole('status')).toHaveTextContent('Loading submission…')
+  })
+})
+
+// PARTICIPANTS-5: a refused Accept or Reject (a 409 when someone else got there first) closes its dialog, says why and reloads the submission.
+describe('CaregiverSubmissionReviewPage — a refused Accept or Reject', () => {
+  const conflict = { response: { status: 409, data: { message: 'This submission has already been reviewed.' } } }
+
+  it('closes the Accept confirm, shows the server message and refetches', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn()
+    mockUseCaregiverSubmission.mockReturnValue({ data: makeSubmission(), isLoading: false, refetch })
+    mockAcceptMutateAsync.mockRejectedValue(conflict)
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /^accept$/i }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: /^accept$/i }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByText('This submission has already been reviewed.')).toBeInTheDocument()
+    expect(refetch).toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('closes the Reject dialog, shows the server message and refetches', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn()
+    mockUseCaregiverSubmission.mockReturnValue({ data: makeSubmission(), isLoading: false, refetch })
+    mockRejectMutateAsync.mockRejectedValue(conflict)
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: /reject/i }))
+    await user.type(screen.getByLabelText(/what should the caregiver fix/i), 'Fix the phone.')
+    await user.click(screen.getByRole('button', { name: /reject and reopen link/i }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('This submission has already been reviewed.')).toBeInTheDocument()
+    expect(refetch).toHaveBeenCalled()
+  })
+})
+
+// NAV F8: the review is reached from the list and from the participant's Documents menu.
+describe('CaregiverSubmissionReviewPage — links', () => {
+  it('links to the participant record', () => {
+    renderPage()
+    expect(screen.getByRole('link', { name: 'View participant record' })).toHaveAttribute('href', '/participants/p1')
+  })
+
+  it('Back returns to the participant when the review was opened from there', () => {
+    __testHooks.recordCurrentPath('/participants/p1')
+    __testHooks.recordCurrentPath('/caregiver-submissions/sub-1')
+    renderPage()
+    expect(screen.getByRole('link', { name: /^Back to / })).toHaveAttribute('href', '/participants/p1')
+    __testHooks.reset()
   })
 })

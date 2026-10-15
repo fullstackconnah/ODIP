@@ -6,6 +6,7 @@ import { TAP_AREA } from '@/components/tapArea'
 import type { TripDetailDto } from '@/api/types/trips'
 import type { BookingListDto } from '@/api/types/bookings'
 import type { StaffAssignmentDto } from '@/api/types/staff'
+import type { VehicleAssignmentDto } from '@/api/types/vehicles'
 
 // The itinerary is its own suite and pulls in data hooks; the side panel is what this file exercises.
 vi.mock('@/components/ItineraryTab', () => ({ default: () => <div>Itinerary</div> }))
@@ -23,20 +24,20 @@ function renderTab(onSwitchTab = vi.fn()) {
   return onSwitchTab
 }
 
-// Density verdict, touch: "Manage All" is a 16px text button and the three roster call icons are 24px squares.
+// Density verdict, touch: "Manage all" is a 16px text button and the three roster call icons are 24px squares.
 // Under `pointer: coarse` each carries the TAP_AREA pad (a 44px hit area centred on it) without growing.
 describe('OverviewTab — 44px coarse-pointer hit areas', () => {
   const pad = TAP_AREA.split(' ')
 
-  it('pads the "Manage All" team button and keeps its text styling', () => {
+  it('pads the "Manage all" team button and keeps its text styling', () => {
     renderTab()
-    expect(screen.getByRole('button', { name: 'Manage All' })).toHaveClass(...pad, 'text-xs', 'font-bold', 'text-[var(--color-primary)]')
+    expect(screen.getByRole('button', { name: 'Manage all' })).toHaveClass(...pad, 'text-xs', 'font-bold', 'text-[var(--color-primary)]')
   })
 
   it('still switches to the bookings tab from the padded button', async () => {
     const user = userEvent.setup()
     const onSwitchTab = renderTab()
-    await user.click(screen.getByRole('button', { name: 'Manage All' }))
+    await user.click(screen.getByRole('button', { name: 'Manage all' }))
     expect(onSwitchTab).toHaveBeenCalledWith('bookings')
   })
 
@@ -52,5 +53,27 @@ describe('OverviewTab — 44px coarse-pointer hit areas', () => {
     renderTab()
     const more = screen.getByRole('button', { name: /\+1 more staff assigned/ })
     expect(more.className).not.toContain('before:')
+  })
+})
+
+// Q5 review: the overview's headings and link are sentence case like the rest of the app.
+describe('OverviewTab — sentence case', () => {
+  it('reads "The team", "Manage all" and "Fleet manifest"', () => {
+    const vehicles = [{ id: 'va1', vehicleName: 'Big Red', seatRequirement: 8 }] as unknown as VehicleAssignmentDto[]
+    render(<OverviewTab tripId="trip-1" trip={trip} bookings={bookings} accommodation={[]} staff={staff} vehicles={vehicles} onSwitchTab={vi.fn()} />)
+    expect(screen.getByRole('heading', { name: 'The team' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Manage all' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Fleet manifest/ })).toBeInTheDocument()
+  })
+})
+
+// Q4/V-A follow-up: one wheelchair wording across Vehicles and the trip tabs, "N wheelchair positions", not "1 WC".
+describe('OverviewTab — fleet manifest wording', () => {
+  it('says "1 wheelchair position", not "1 WC"', () => {
+    const vehicles = [{ id: 'va1', vehicleName: 'Big Red', wheelchairPositionRequirement: 1, seatRequirement: 8 }] as unknown as VehicleAssignmentDto[]
+    render(<OverviewTab tripId="trip-1" trip={trip} bookings={bookings} accommodation={[]} staff={staff} vehicles={vehicles} onSwitchTab={vi.fn()} />)
+
+    expect(screen.getByText('1 wheelchair position · 8 seats')).toBeInTheDocument()
+    expect(screen.queryByText(/\bWC\b/)).not.toBeInTheDocument()
   })
 })

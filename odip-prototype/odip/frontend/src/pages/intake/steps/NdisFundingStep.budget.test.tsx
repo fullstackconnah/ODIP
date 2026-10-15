@@ -16,7 +16,6 @@ vi.mock('@/api/hooks', () => ({
   useCreateFundingPlan: () => ({ mutate: create, isPending: false }),
   useUpdateFundingPlan: () => ({ mutate: update, isPending: false }),
   usePaceCategories: () => ({ data: PACE_CATEGORIES }),
-  useBillingSourcesHint: () => ({ data: { total: 0, rows: [] } }),
 }))
 
 function Harness({ fundingSource = 'Ndis', participantId }: { fundingSource?: string; participantId?: string }) {

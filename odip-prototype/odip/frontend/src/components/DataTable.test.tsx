@@ -40,6 +40,25 @@ describe('DataTable — basic rendering', () => {
   })
 })
 
+describe('DataTable — a failed load (error)', () => {
+  it('shows the error banner with a working Try again instead of the empty message', async () => {
+    const onRetry = vi.fn()
+    render(<DataTable data={[]} columns={columns} keyField="id" emptyMessage="Nothing here yet" error onRetry={onRetry} />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load this list/i)
+    expect(screen.queryByText('Nothing here yet')).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps rows already on screen when a later refetch fails', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" error />)
+
+    expect(screen.getByText('Bianca')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
 describe('DataTable — sortable columns', () => {
   it('marks a sortable header with aria-sort and toggles it on click: none -> asc -> desc -> none', async () => {
     const user = userEvent.setup()
@@ -286,25 +305,6 @@ describe('DataTable — editingRows (RP-01 all-rows-editable mode)', () => {
   })
 })
 
-describe('DataTable — verticalDividers (DS-02)', () => {
-  it('applies no vertical-divider classes by default', () => {
-    render(<DataTable data={rows} columns={columns} keyField="id" />)
-
-    const headerRow = screen.getAllByRole('row')[0]
-    expect(headerRow.className).not.toMatch(/divide-x/)
-  })
-
-  it('applies divide-x to the header and body rows when verticalDividers is set', () => {
-    render(<DataTable data={rows} columns={columns} keyField="id" verticalDividers />)
-
-    const allRows = screen.getAllByRole('row')
-    expect(allRows.length).toBeGreaterThan(1)
-    for (const row of allRows) {
-      expect(row.className).toMatch(/divide-x/)
-    }
-  })
-})
-
 describe('DataTable — vertical dividers driven by the GEN-2 UI preference', () => {
   afterEach(() => {
     localStorage.clear()
@@ -339,32 +339,6 @@ describe('DataTable — vertical dividers driven by the GEN-2 UI preference', ()
     render(
       <UiPreferencesProvider>
         <DataTable data={rows} columns={columns} keyField="id" />
-      </UiPreferencesProvider>
-    )
-
-    expectAllRowsToMatchDivider(false)
-  })
-
-  it('an explicit verticalDividers={true} prop wins over a preference that is off', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1' }))
-    localStorage.setItem('odip_ui_prefs:user-1', JSON.stringify({ tableVerticalDividers: false }))
-
-    render(
-      <UiPreferencesProvider>
-        <DataTable data={rows} columns={columns} keyField="id" verticalDividers={true} />
-      </UiPreferencesProvider>
-    )
-
-    expectAllRowsToMatchDivider(true)
-  })
-
-  it('an explicit verticalDividers={false} prop wins over a preference that is on', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1' }))
-    localStorage.setItem('odip_ui_prefs:user-1', JSON.stringify({ tableVerticalDividers: true }))
-
-    render(
-      <UiPreferencesProvider>
-        <DataTable data={rows} columns={columns} keyField="id" verticalDividers={false} />
       </UiPreferencesProvider>
     )
 
@@ -514,7 +488,7 @@ describe('DataTable — pagination prop (pagination rollout wave 1)', () => {
     expect(onPageChange).toHaveBeenCalledWith(1)
   })
 
-  it('suppresses client-side sorting when pagination is present, trusting the server order', async () => {
+  it('offers no sorting on a server-paged table that cannot ask the server to sort: no arrow state, no click effect, rows in server order', async () => {
     const user = userEvent.setup()
     render(
       <DataTable
@@ -526,14 +500,38 @@ describe('DataTable — pagination prop (pagination rollout wave 1)', () => {
       />
     )
 
-    // Clicking the sortable header still toggles aria-sort (the affordance stays live)...
+    // A page is only a slice of the result, so the table cannot sort it; a header that claimed to would misstate the order of the whole list.
     const nameHeader = screen.getByRole('columnheader', { name: /name/i })
+    expect(nameHeader).not.toHaveAttribute('aria-sort')
+    expect(nameHeader).not.toHaveAttribute('tabindex')
     await user.click(nameHeader)
-    expect(nameHeader).toHaveAttribute('aria-sort', 'ascending')
+    expect(nameHeader).not.toHaveAttribute('aria-sort')
 
-    // ...but row order is untouched — still server/data order (Bianca, Alex), not re-sorted to Alex-first.
     const cells = screen.getAllByRole('cell')
     expect(cells[0]).toHaveTextContent('Bianca')
+  })
+
+  it('offers sorting on a server-paged table once the caller handles onSortChange, leaving the row order to the server', async () => {
+    const user = userEvent.setup()
+    const onSortChange = vi.fn()
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyField="id"
+        sortable
+        onSortChange={onSortChange}
+        pagination={{ page: 1, pageSize: 2, totalCount: 2, onPageChange: vi.fn() }}
+      />
+    )
+
+    const nameHeader = screen.getByRole('columnheader', { name: /name/i })
+    expect(nameHeader).toHaveAttribute('aria-sort', 'none')
+    await user.click(nameHeader)
+    expect(onSortChange).toHaveBeenCalledWith({ key: 'name', direction: 'asc' })
+
+    // The table does not reorder the page itself: still Bianca first until the server answers.
+    expect(screen.getAllByRole('cell')[0]).toHaveTextContent('Bianca')
   })
 
   it('does not render pagination controls when totalCount is 0', () => {
@@ -965,6 +963,26 @@ describe('DataTable — keyboard activation of a clickable row', () => {
     await user.keyboard(' ')
 
     expect(onRowClick).toHaveBeenCalledTimes(2)
+    expect(onRowClick).toHaveBeenCalledWith(rows[0])
+  })
+
+  it('leaves a click on a link or button inside the row to that control, even when it does not stop the click', async () => {
+    const user = userEvent.setup()
+    const onRowClick = vi.fn()
+    const onButton = vi.fn()
+    const plainColumns: Column<Row>[] = [
+      { key: 'name', header: 'Name', render: r => <a href={`#/people/${r.id}`}><span>{r.name}</span></a> },
+      { key: 'age', header: 'Age', render: r => <button type="button" onClick={onButton}>Open {r.name}</button> },
+    ]
+    render(<DataTable data={rows} columns={plainColumns} keyField="id" onRowClick={onRowClick} />)
+
+    // A link that navigates and a row that navigates too pushed two history entries, or the row overrode the link's target.
+    await user.click(screen.getByText('Bianca'))
+    await user.click(screen.getByRole('button', { name: 'Open Bianca' }))
+    expect(onButton).toHaveBeenCalledTimes(1)
+    expect(onRowClick).not.toHaveBeenCalled()
+
+    await user.click(screen.getAllByRole('row')[1])
     expect(onRowClick).toHaveBeenCalledWith(rows[0])
   })
 })

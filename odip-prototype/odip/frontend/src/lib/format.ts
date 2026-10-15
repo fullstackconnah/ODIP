@@ -9,7 +9,7 @@
 // "Sept" in others (the rule dateRange.ts follows). The two date-time formatters at the bottom are the exception and stay Intl-backed, so
 // they print exactly what they always printed. Nothing reads the clock unless you leave `now` out.
 import { calendarDaysUntil, isDateOnly } from './dateOnly'
-import { formatWithTimeZone, parseApiDate } from './utils'
+import { formatDateAu, formatWithTimeZone, parseApiDate } from './utils'
 
 /**
  * The count and the noun that agrees with it: "1 day", "2 days", "0 days". Only exactly 1 is singular. Pass the plural for an
@@ -119,7 +119,7 @@ export function formatAge(value: string | Date | null | undefined, { now = new D
 
 /**
  * "27/03/2026, 01:45 pm": an INSTANT as a date and time in the viewer's zone, en-AU; '—' for nothing. Intl-backed, so the space before "pm" follows the
- * ICU build, exactly as it did when this lived in the claim-batch pages. Read with parseApiDate, so a zone-less instant is UTC (a claim batch
+ * ICU build, exactly as it always did. Read with parseApiDate, so a zone-less instant is UTC (a record
  * created at 3 pm in Sydney printed "05:00 am" when it was read as local time).
  */
 export function formatDateTimeAu(value: string | null | undefined): string {
@@ -129,7 +129,25 @@ export function formatDateTimeAu(value: string | null | undefined): string {
   })
 }
 
+/**
+ * "02/03/2026": the calendar day of an INSTANT (a UTC DateTime: a record's created, submitted or rejected time) in the viewer's zone; '—' for
+ * nothing. Read with parseApiDate, so 23:30Z is the next day in Sydney and a zone-less instant is UTC, never local time. A date-only value is a
+ * calendar day already and goes through formatDateAu unchanged.
+ */
+export function formatInstantDateAu(value: string | null | undefined): string {
+  if (!value || isDateOnly(value)) return formatDateAu(value)
+  return parseApiDate(value).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
 /** "8 Sept 2026, 7:30 pm": the medium date and short time of a shift note, in the viewer's own zone. Intl-backed, like formatDateTimeAu. */
 export function formatNoteTimestamp(iso: string): string {
   return formatWithTimeZone(iso, undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+/** "512 KB", "12.4 MB", "1.3 GB": a byte count as the export's progress shows it. KB below 1 MB, then one decimal; 1 KB is 1024 bytes. */
+export function formatBytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024)
+  if (mb < 1) return `${Math.round(bytes / 1024)} KB`
+  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  return `${(mb / 1024).toFixed(1)} GB`
 }

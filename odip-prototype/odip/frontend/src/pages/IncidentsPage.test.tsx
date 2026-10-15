@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import IncidentsPage from './IncidentsPage'
 
-const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate } = vi.hoisted(() => ({
+const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, mockNavigate, mockRestoreMutate, mockDeleteMutate } = vi.hoisted(() => ({
+  mockDeleteMutate: vi.fn(),
+  mockRestoreMutate: vi.fn(),
   mockUseIncidents: vi.fn(),
   mockUseOverdueQscIncidents: vi.fn(),
   mockUseFlaggedShiftNotes: vi.fn(),
@@ -17,8 +19,8 @@ const { mockUseIncidents, mockUseOverdueQscIncidents, mockUseFlaggedShiftNotes, 
 vi.mock('@/api/hooks', () => ({
   useIncidents: mockUseIncidents,
   useOverdueQscIncidents: mockUseOverdueQscIncidents,
-  useUpdateIncident: () => ({ mutate: vi.fn(), isPending: false }),
-  useDeleteIncident: () => ({ mutate: vi.fn(), isPending: false }),
+  useRestoreIncident: () => ({ mutate: mockRestoreMutate, isPending: false }),
+  useDeleteIncident: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useFlaggedShiftNotes: mockUseFlaggedShiftNotes,
 }))
 
@@ -424,11 +426,12 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     renderPage()
 
     const cells = within(screen.getByText('Slip in kitchen').closest('tr') as HTMLElement).getAllByRole('cell')
+    // From md up (the Column Rule); max-md:hidden only leaves a field off the phone card.
     for (const label of ['Title', 'Severity', 'Status', 'Date', 'QSC', 'Participant', 'Type', 'Trip', 'Reported By']) {
       const index = headerIndex(label)
       expect(index, label).toBeGreaterThanOrEqual(0)
       const th = screen.getAllByRole('columnheader')[index]
-      for (const el of [th, cells[index]]) expect(el.className, label).not.toMatch(/hidden/)
+      for (const el of [th, cells[index]]) expect(el.className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
     }
   })
 
@@ -486,7 +489,7 @@ describe('IncidentsPage — header row', () => {
   it('puts the H1 and the section tabs on one header row', () => {
     renderPage()
 
-    const h1 = screen.getByRole('heading', { level: 1, name: 'Incident Reports' })
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Incidents' })
     const tablist = screen.getByRole('tablist', { name: 'Incidents sections' })
     // PageHeader's title row: h1 group + action slot. The tabs live in that same row (spec §3).
     const titleRow = h1.parentElement?.parentElement as HTMLElement
@@ -499,14 +502,14 @@ describe('IncidentsPage — header row', () => {
 
     await user.click(screen.getByRole('tab', { name: /flagged notes/i }))
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Incident Reports' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Incidents' })).toBeInTheDocument()
     expect(screen.getByRole('tablist', { name: 'Incidents sections' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /report incident/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Archived' })).not.toBeInTheDocument()
   })
 
-  it('shows the Report Incident action and the filters on the Incidents tab', () => {
-    // A row present, so the empty state (which has its own "Report incident" link) is not rendered.
+  it('shows the Report incident action and the filters on the Reports tab', () => {
+    // A row present, so the list (not its empty state) is on screen.
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
 
@@ -515,12 +518,24 @@ describe('IncidentsPage — header row', () => {
     expect(screen.getByRole('button', { name: /all statuses/i })).toBeInTheDocument()
   })
 
+  // VB review: at 390 "Report incident" landed right-aligned under the tabs. On a phone it leads the header's action row, directly under
+  // the title as on the other list pages, and the tabs take the row below; from md up it stays at the right end of the tab row.
+  it('puts Report incident first in the action row on a phone, and at the end of the tab row from md up', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+
+    const action = screen.getByRole('link', { name: /report incident/i }).parentElement as HTMLElement
+    expect(action).toHaveClass('max-md:order-first', 'md:ml-auto')
+    expect(action).not.toHaveClass('ml-auto')
+    expect(screen.getByRole('tablist', { name: 'Incidents sections' }).closest('[class~="max-md:basis-full"]')).not.toBeNull()
+  })
+
   it('renders the H1 and the action but no tab strip for a role that cannot see flagged notes', () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1', role: 'SupportWorker' }))
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Incident Reports' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Incidents' })).toBeInTheDocument()
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /report incident/i })).toBeInTheDocument()
   })
@@ -686,5 +701,78 @@ describe('IncidentsPage — status labels', () => {
 
     expect(screen.getByText('Under Review')).toBeInTheDocument()
     expect(screen.queryByText('UnderReview')).not.toBeInTheDocument()
+  })
+})
+
+// Restoring an archived incident is a full-replace update, and the list row has no description, injuries or witnesses. The page asks only for the status change;
+// the hook builds the rest of the body from the stored incident (useRestoreIncident, tested with the real hook).
+describe('IncidentsPage — restoring an archived incident', () => {
+  it('asks to restore the incident to Draft and sends nothing taken from the list row', async () => {
+    const user = userEvent.setup()
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ id: 'inc-9', status: 'Closed' })], isLoading: false })
+    renderPage()
+
+    await user.click(screen.getByRole('radio', { name: 'Archived' }))
+    await user.click(screen.getByRole('button', { name: 'Restore' }))
+    // The row's Restore opens a confirmation whose own button is also named Restore (the last in the DOM).
+    await user.click(screen.getAllByRole('button', { name: 'Restore' }).at(-1)!)
+
+    expect(mockRestoreMutate).toHaveBeenCalledTimes(1)
+    expect(mockRestoreMutate.mock.calls[0][0]).toEqual({ id: 'inc-9', data: { status: 'Draft' } })
+  })
+})
+
+// STAFF-5: an archive the server refuses says why above the list.
+describe('IncidentsPage — a refused archive', () => {
+  it('shows the server message', async () => {
+    const user = userEvent.setup()
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    mockDeleteMutate.mockImplementation((_id: unknown, o?: { onError?: (e: unknown) => void }) => o?.onError?.({ response: { status: 403, data: { message: 'You do not have permission to do that.' } } }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Archive' }))
+
+    expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
+  })
+})
+
+// STAFF-6: the title opens the incident, for every role that sees the list (the detail route admits them all).
+describe('IncidentsPage — the title links to the incident', () => {
+  it.each(['Admin', 'Coordinator', 'ReadOnly', 'SupportWorker'])('links the title for %s', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'user-1', role }))
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Slip in kitchen' })).toHaveAttribute('href', '/incidents/inc-1')
+  })
+})
+
+// Platform review V2-B: the Type column printed the raw enum ("MedicationError").
+describe('IncidentsPage — incident type label', () => {
+  it('shows the incident type in words', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError' })], isLoading: false })
+    renderPage()
+
+    expect(screen.getByText('Medication Error')).toBeInTheDocument()
+    expect(screen.queryByText('MedicationError')).not.toBeInTheDocument()
+  })
+})
+
+// Platform review V2-A (Incidents 3): the phone card was a grid of caps labels with blank space under it.
+describe('IncidentsPage — phone card', () => {
+  it('puts the title and status on the title line, the facts on one muted line, and the reporter as a labelled field', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError', reportedByName: 'Pat Jones' })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Medication Error').closest('tr') as HTMLElement
+    expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
+    expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
+    for (const label of ['Type', 'Severity', 'Date']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    // On the muted line the reporter's name sat unlabelled beside the participant's; as a labelled field it says who it is.
+    const reporter = row.querySelector('td[data-label="Reported By"]') as HTMLElement
+    expect(reporter).not.toHaveAttribute('data-card')
+    expect(reporter).not.toHaveClass('max-md:hidden')
+    expect(reporter).toHaveTextContent('Pat Jones')
   })
 })

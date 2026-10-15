@@ -65,7 +65,7 @@ describe('AccommodationDetailPage — section grid', () => {
 
     // jsdom has no layout, so the class is the only observable proof: a bare minmax(26rem,1fr)
     // floor (416px) overflows a 390px viewport.
-    const grid = screen.getByRole('heading', { name: 'Property Details' }).closest('.rounded-md')!.parentElement!
+    const grid = screen.getByRole('heading', { name: 'Property details' }).closest('.rounded-md')!.parentElement!
     expect(grid).toHaveClass('grid', 'items-start', 'grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))]')
   })
 })
@@ -87,7 +87,7 @@ describe('AccommodationDetailPage — long unbreakable values', () => {
     })
     renderPage()
 
-    const lists = ['Property Details', 'Contact & Address', 'Notes'].map(
+    const lists = ['Property details', 'Contact & address', 'Notes'].map(
       name => screen.getByRole('heading', { name }).closest('.rounded-md')!.querySelector('dl')!,
     )
     for (const dl of lists) {
@@ -97,7 +97,7 @@ describe('AccommodationDetailPage — long unbreakable values', () => {
 })
 
 describe('AccommodationDetailPage — Back', () => {
-  it('is a real link to the accommodation list: the text says "Back", the accessible name says where it goes', () => {
+  it('is the icon Back before the title, a real link to the accommodation list named for where it goes', () => {
     mockUseAccommodationDetail.mockReturnValue({
       data: { id: 'acc-1', propertyName: 'Sunrise House', isActive: true, location: 'Gold Coast', maxCapacity: 4 },
       isLoading: false, isError: false, refetch: vi.fn(),
@@ -105,7 +105,9 @@ describe('AccommodationDetailPage — Back', () => {
     renderPage()
     const back = screen.getByRole('link', { name: 'Back to accommodation' })
     expect(back).toHaveAttribute('href', '/accommodation')
-    expect(back).toHaveTextContent(/^Back$/)
+    // The icon Back left of the title (UI survey s.1), not a "Back" button beside Edit.
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -124,5 +126,19 @@ describe('AccommodationDetailPage — a 404 is not a failure (PageState)', () =>
     renderPage()
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading property…')
+  })
+})
+
+// Owner decision 2026-10-12: ReadOnly HIDES write controls; the edit route sends it away and the server refuses the save.
+describe('AccommodationDetailPage — Edit by role', () => {
+  const property = { id: 'acc-1', propertyName: 'Sunrise House', isActive: true, location: 'Gold Coast', maxCapacity: 4 }
+
+  it.each([['ReadOnly', false], ['SupportWorker', false], ['Admin', true], ['Coordinator', true]] as const)('%s: Edit offered %s', (role, offered) => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    mockUseAccommodationDetail.mockReturnValue({ data: property, isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.queryByRole('link', { name: /Edit/ }) !== null).toBe(offered)
+    localStorage.clear()
   })
 })

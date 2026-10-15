@@ -41,10 +41,19 @@ public class ParticipantInquiriesController : ControllerBase
             ? new Dictionary<Guid, (bool IsDraft, bool IsActive, DateTime? IntakeCompletedAt)>()
             : (await _db.Participants.Where(p => participantIds.Contains(p.Id)).Select(p => new { p.Id, p.IsDraft, p.IsActive, p.IntakeCompletedAt }).ToListAsync(ct))
                 .ToDictionary(p => p.Id, p => (p.IsDraft, p.IsActive, p.IntakeCompletedAt));
+        // The booked staff members' names, and the provider's zone the visit times are shown in. One query each for the page.
+        var staffIds = inquiries.Where(x => x.IntakeStaffUserId != null).Select(x => x.IntakeStaffUserId!.Value).Distinct().ToList();
+        var staffById = staffIds.Count == 0 ? new Dictionary<Guid, User>() : await _db.Users.Where(u => staffIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
+        var zoneId = (_tenant.TenantId is Guid tenantId ? await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct) : await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Id;
+        User? StaffOf(ParticipantInquiry x) => x.IntakeStaffUserId is Guid id ? staffById.GetValueOrDefault(id) : null;
         var rows = inquiries.Select(x =>
             x.ParticipantId is Guid participantId && states.TryGetValue(participantId, out var state)
-                ? ToDto(x) with { ParticipantIsDraft = state.IsDraft, ParticipantIsActive = state.IsActive, ParticipantIntakeCompletedAt = state.IntakeCompletedAt }
-                : ToDto(x)).ToList();
+                ? ToDto(x, StaffOf(x), zoneId) with { ParticipantIsDraft = state.IsDraft, ParticipantIsActive = state.IsActive, ParticipantIntakeCompletedAt = state.IntakeCompletedAt }
+                : ToDto(x, StaffOf(x), zoneId)).ToList();
+        // A visit's address (often a home), its internal notes and the staff member's full name are for the lifecycle roles, as on /intake-visits.
+        // Everyone else who can open the Enquiries tab still sees when it is, the staff member's first name and what the invite did.
+        var seesVisitDetails = User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true;
+        if (!seesVisitDetails) rows = rows.Select(r => r with { IntakeLocation = null, IntakeNotes = null, IntakeStaffName = null }).ToList();
 
         // A draft intake started in the Intake wizard (/participants/new) has no enquiry. It used to be reachable only through the register's
         // Drafts view; with that view gone it rides here so it is not lost. A draft an enquiry already links is that enquiry's row, never a second one.
@@ -54,7 +63,7 @@ public class ParticipantInquiriesController : ControllerBase
         rows.AddRange(direct.Select(p => new ParticipantInquiryDto
         {
             Id = p.Id, ParticipantId = p.Id, FirstName = p.FirstName, LastName = p.LastName, Phone = p.Phone, Email = p.Email, CreatedAt = p.CreatedAt,
-            ParticipantIsDraft = true, ParticipantIsActive = p.IsActive, ParticipantIntakeCompletedAt = null, IsDirectIntake = true,
+            ParticipantIsDraft = true, ParticipantIsActive = p.IsActive, ParticipantIntakeCompletedAt = null, IsDirectIntake = true, TimeZoneId = zoneId,
         }));
         return Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok(rows.OrderByDescending(x => x.CreatedAt).ToList()));
     }
@@ -79,27 +88,16 @@ public class ParticipantInquiriesController : ControllerBase
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         foreach (var p in participants)
         {
+            // Everyone in onboarding stays listed, every item done or not: only "Make active" moves them on. The page counts the same "n of N".
             var detail = await BuildDetail(p, rowsByParticipant.GetValueOrDefault(p.Id) ?? BlankOnboarding(p), ct, today);
-            if (detail.IsReady) continue;
-            // "Funding recorded" is a step of the activation checklist for an NDIS-funded participant (FundingRecorded is null for any other, who have five steps, not six). The schedule review is the last step: complete once a revision has been approved for rostering, which is how the checklist page counts it, so the two say the same "n of N".
-            var completed = (detail.IntakeComplete ? 1 : 0) + (detail.ProfileComplete ? 1 : 0) + (detail.ServiceTypeConfirmed ? 1 : 0) + (detail.ServiceAgreementSigned ? 1 : 0) + (detail.FundingRecorded == true ? 1 : 0) + (detail.ScheduleApprovedVersion is not null ? 1 : 0);
-            result.Add(new ParticipantOnboardingWorklistDto { ParticipantId = p.Id, FullName = p.FullName, Stage = !detail.IntakeComplete ? "Intake incomplete" : "Onboarding incomplete", NextAction = NextActionOf(detail), CompletedSteps = completed, TotalSteps = detail.FundingRecorded is null ? 5 : 6, Reasons = detail.Reasons });
+            result.Add(new ParticipantOnboardingWorklistDto
+            {
+                ParticipantId = p.Id, FullName = p.FullName, ServicesStartedAt = p.ServicesStartedAt,
+                CompletedSteps = detail.Items.Count(i => i.Done), TotalSteps = detail.Items.Count, FirstMissing = detail.Items.FirstOrDefault(i => !i.Done)?.Label,
+            });
         }
         return Ok(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Ok(result));
     }
-
-    /// <summary>
-    /// The one next step the worklist names: the first open gate, in the order the checklist page lists them. "Funding recorded" (an NDIS-funded participant with no current plan budget)
-    /// comes after the agreement evidence, so it is named once everything before it is done. The last step is the schedule review, named as the checklist page names it: approve the agreement for rostering until a revision has been approved, then check the roster it made.
-    /// </summary>
-    internal static string NextActionOf(ParticipantOnboardingDto detail) =>
-        !detail.IntakeComplete ? "Complete intake"
-        : !detail.ProfileComplete ? "Validate profile essentials"
-        : !detail.ServiceTypeConfirmed ? "Confirm service needs"
-        : !detail.ServiceAgreementSigned ? "Review agreement evidence"
-        : detail.FundingRecorded == false ? "Record plan budget"
-        : detail.ScheduleApprovedVersion is null ? "Approve the agreement for rostering"
-        : "Check the roster";
 
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -119,7 +117,8 @@ public class ParticipantInquiriesController : ControllerBase
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
         inquiry.FirstName = dto.FirstName.Trim(); inquiry.LastName = dto.LastName.Trim(); inquiry.Phone = Blank(dto.Phone); inquiry.Email = Blank(dto.Email); inquiry.Source = dto.Source; inquiry.Provenance = Blank(dto.Provenance); inquiry.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct); return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
+        return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
     }
 
     [HttpPost("{id:guid}/convert")]
@@ -135,7 +134,7 @@ public class ParticipantInquiriesController : ControllerBase
             else { participant = new Participant { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = inquiry.FirstName, LastName = inquiry.LastName, Phone = inquiry.Phone, Email = inquiry.Email, IsActive = false, IsDraft = true }; _db.Participants.Add(participant); }
             inquiry.ParticipantId = participant.Id; inquiry.UpdatedAt = DateTime.UtcNow;
             if (!await _db.ParticipantOnboardings.AnyAsync(x => x.ParticipantId == participant.Id, ct)) _db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, ParticipantId = participant.Id });
-            await _db.SaveChangesAsync(ct);
+            if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
         }
         else if (dto.ParticipantId is Guid requested && requested != inquiry.ParticipantId) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry has already been converted."));
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
@@ -149,29 +148,27 @@ public class ParticipantInquiriesController : ControllerBase
         return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, onboarding, ct)));
     }
 
-    // No boolean is accepted. This server validates currently saved canonical profile fields and records actor/time.
-    [HttpPost("{id:guid}/onboarding/profile-validation")]
+    /// <summary>
+    /// The checklist's "Signed agreement" item, the one item recorded by hand: the date the written agreement was signed, OR why there is no
+    /// written agreement. Exactly one; a date may not be after the provider's today, and a reason is at most 500 characters. A new record replaces
+    /// the last. Field errors come back as a ValidationProblemDetails keyed by the field. The e-sign evidence is untouched (signing stays closed).
+    /// </summary>
+    [HttpPost("{id:guid}/onboarding/agreement-record")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> ValidateProfile(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> RecordAgreement(Guid id, RecordOnboardingAgreementDto dto, CancellationToken ct)
     {
         var (participant, onboarding) = await FindOwnedAsync(id, storeMissingRow: true, ct);
         if (participant == null || onboarding == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
-        var missing = ProfileMissing(participant);
-        if (missing.Count > 0) return BadRequest(ApiResponse<ParticipantOnboardingDto>.Fail(string.Join(" ", missing)));
-        var saved = await RecordAndSaveAsync(participant, onboarding, row => row.RecordProfileValidation(Actor(), DateTime.UtcNow), ct);
-        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, saved, ct)));
-    }
-
-    // Confirmation is only recorded against an existing draft with dated, catalogue-resolved provisional lines.
-    [HttpPost("{id:guid}/onboarding/service-needs-confirmation")]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> ConfirmServiceNeeds(Guid id, CancellationToken ct)
-    {
-        var (participant, onboarding) = await FindOwnedAsync(id, storeMissingRow: true, ct);
-        if (participant == null || onboarding == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
-        var currentDraft = await CurrentValidDraftAsync(participant, ct);
-        if (currentDraft == null) return BadRequest(ApiResponse<ParticipantOnboardingDto>.Fail("Create a current dated provisional service-agreement draft with valid catalogue-priced support lines first."));
-        var saved = await RecordAndSaveAsync(participant, onboarding, row => row.RecordServiceNeedsConfirmation(Actor(), DateTime.UtcNow), ct);
+        var reason = Blank(dto.NoAgreementReason);
+        var errors = new Dictionary<string, string[]>();
+        if (dto.SignedOn is null && reason is null) errors["signedOn"] = ["Enter the date it was signed, or why there is no written agreement."];
+        else if (dto.SignedOn is not null && reason is not null) errors["noAgreementReason"] = ["Give a signed date or a reason, not both."];
+        else if (dto.SignedOn > await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct)) errors["signedOn"] = ["The signed date cannot be in the future."];
+        // NDIS agreements start in 2013; anything before 1990 is a typo, not a date.
+        else if (dto.SignedOn < new DateOnly(1990, 1, 1)) errors["signedOn"] = ["Check the signed date: it is before 1990."];
+        else if (reason?.Length > 500) errors["noAgreementReason"] = ["Keep the reason to 500 characters or fewer."];
+        if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
+        var saved = await RecordAndSaveAsync(participant, onboarding, row => row.RecordAgreement(dto.SignedOn, reason, Actor(), DateTime.UtcNow), ct);
         return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, saved, ct)));
     }
 
@@ -224,67 +221,78 @@ public class ParticipantInquiriesController : ControllerBase
     private static ParticipantOnboarding BlankOnboarding(Participant participant) =>
         new() { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id };
 
+    /// <summary>
+    /// The checklist (owner decision 2026-10-13): four items derived from data, in order, the funding one for an NDIS-funded participant only.
+    /// The derived checks are <see cref="ParticipantReadinessGate.ProfileDetailsRule"/> and <see cref="ParticipantReadinessGate.ServiceNeedsParticipants"/>,
+    /// the same ones the roster issues and the strict gate read.
+    /// </summary>
     private async Task<ParticipantOnboardingDto> BuildDetail(Participant participant, ParticipantOnboarding onboarding, CancellationToken ct, DateOnly? today = null)
     {
-        var reasons = new List<string>();
-        var intakeComplete = participant.IntakeCompletedAt != null;
-        if (!intakeComplete) reasons.Add("Intake PDF completion is required.");
-        if (!onboarding.ProfileComplete) reasons.AddRange(ProfileMissing(participant).DefaultIfEmpty("Profile essentials need server validation."));
-        var newestDraft = await CurrentValidDraftAsync(participant, ct);
-        // Drafts are immutable revisions, so a confirmation predating the current revision is stale.
-        var serviceNeedsCurrent = newestDraft != null && onboarding.ServiceTypeConfirmed && onboarding.ServiceTypeConfirmedAt >= newestDraft.CreatedAt;
-        if (!serviceNeedsCurrent) reasons.Add(newestDraft != null ? "Service needs require server confirmation for the current draft revision." : "A current dated provisional service-agreement draft with valid catalogue-priced support lines is required.");
-        // The activation checklist's funding step: an NDIS-funded participant needs a plan budget on record that has not ended (provider time). Null for any other funding: no step.
-        bool? fundingRecorded = participant.FundingSource == ParticipantFundingSource.Ndis
-            ? await ParticipantReadinessGate.HasFundingRecordedAsync(_db, participant.Id, today ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct), ct)
-            : null;
-        // Say which it is: nothing was ever recorded, or the plans there are have all ended (the Funding tab shows that plan as Ended, so "not recorded" would send the coordinator looking for something that is there).
-        if (fundingRecorded == false)
-            reasons.Add(await _db.FundingPlans.AnyAsync(f => f.ParticipantId == participant.Id && f.TenantId == participant.TenantId, ct)
-                ? "The plan budget has ended: record the new plan on the participant's Funding tab."
-                : "Funding is not recorded: add the plan budget on the participant's Funding tab.");
-        var evidenceVerified = newestDraft != null && await _db.ElectronicSigningSnapshots.AnyAsync(s => s.ParticipantId == participant.Id && s.DraftId == newestDraft.Id && s.DraftVersion == newestDraft.Version && _db.ElectronicSigningEvidence.Any(e => e.SnapshotId == s.Id && e.Status == "Verified"), ct);
-        if (!evidenceVerified || !onboarding.ServiceAgreementSigned) reasons.Add("Current immutable agreement evidence is pending; the UnapprovedDraft source is not complete or eligible.");
-        // The schedule is made when an agreement revision is approved for rostering (plan builder, phase D), never from onboarding. Until one is approved that is a gap, and the list says where it is made; once one is, nothing about the
-        // schedule is missing, so the list says nothing and the checklist's own row says which revision (ScheduleApprovedVersion, ScheduleApprovedAt).
-        var approved = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
-            .Where(a => a.ParticipantId == participant.Id && a.TenantId == participant.TenantId)
-            .OrderByDescending(a => a.DraftVersion).Select(a => new { a.DraftVersion, a.ApprovedAt }).FirstOrDefaultAsync(ct);
-        if (approved is null)
-            reasons.Add("The schedule is made when an agreement revision is approved for rostering, from its draft page; nothing is created from onboarding itself.");
-        return new ParticipantOnboardingDto { ParticipantId = participant.Id, IntakeComplete = intakeComplete, ProfileComplete = onboarding.ProfileComplete, ProfileCompletedAt = onboarding.ProfileCompletedAt, ProfileCompletedBy = onboarding.ProfileCompletedBy, ServiceTypeConfirmed = serviceNeedsCurrent, ServiceTypeConfirmedAt = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedAt : null, ServiceTypeConfirmedBy = serviceNeedsCurrent ? onboarding.ServiceTypeConfirmedBy : null, ServiceAgreementSigned = onboarding.ServiceAgreementSigned, FundingRecorded = fundingRecorded, IsReady = false, Reasons = reasons, ScheduleApprovedVersion = approved?.DraftVersion, ScheduleApprovedAt = approved?.ApprovedAt };
+        var profileMissing = ProfileMissing(participant);
+        var serviceNeedsDone = await ParticipantReadinessGate.ServiceNeedsParticipants(_db).AnyAsync(p => p.Id == participant.Id, ct);
+        var agreementDone = onboarding.AgreementSignedOn != null || onboarding.NoAgreementReason != null;
+        var items = new List<OnboardingChecklistItemDto>
+        {
+            Item("profile", "Profile details", profileMissing.Count == 0, $"Missing: {string.Join(", ", profileMissing)}."),
+            Item("serviceNeeds", "Service needs", serviceNeedsDone, "No current agreement draft with dated, priced support lines."),
+            Item("agreement", "Signed agreement", agreementDone, "Record the date it was signed, or why there is no written agreement."),
+        };
+        if (participant.FundingSource == ParticipantFundingSource.Ndis)
+        {
+            var fundingDone = await ParticipantReadinessGate.HasFundingRecordedAsync(_db, participant.Id, today ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct), ct);
+            // Say which it is: nothing was ever recorded, or the plans there are have all ended (the Funding tab shows that plan as Ended).
+            var missing = !fundingDone && await _db.FundingPlans.AnyAsync(f => f.ParticipantId == participant.Id && f.TenantId == participant.TenantId, ct)
+                ? "The plan budget has ended: record the new plan."
+                : "No plan budget recorded.";
+            items.Add(Item("funding", "Funding", fundingDone, missing));
+        }
+        return new ParticipantOnboardingDto
+        {
+            ParticipantId = participant.Id, Items = items, IsReady = items.All(i => i.Done), ServicesStartedAt = participant.ServicesStartedAt,
+            AgreementSignedOn = onboarding.AgreementSignedOn, NoAgreementReason = onboarding.NoAgreementReason,
+        };
     }
 
-    private async Task<ServiceAgreementDraft?> CurrentValidDraftAsync(Participant participant, CancellationToken ct)
-    {
-        var draft = await _db.ServiceAgreementDrafts.Include(x => x.Lines)
-            .Where(x => x.ParticipantId == participant.Id && x.TenantId == participant.TenantId)
-            .OrderByDescending(x => x.Version).FirstOrDefaultAsync(ct);
-        if (draft == null || draft.PlanStartDate == default || draft.PlanEndDate == default || draft.AgreementStartDate == default || draft.AgreementEndDate == default
-            || draft.PlanEndDate < draft.PlanStartDate || draft.AgreementEndDate < draft.AgreementStartDate
-            || draft.AgreementStartDate < draft.PlanStartDate || draft.AgreementEndDate > draft.PlanEndDate
-            || draft.Lines.Count == 0
-            || draft.Lines.Any(line => line.Hours <= 0 || line.UnitPrice <= 0 || string.IsNullOrWhiteSpace(line.ItemCode) || string.IsNullOrWhiteSpace(line.CatalogueVersion)
-                // A hand-typed line was priced on the agreement's start date, so its catalogue row has to be valid on it. A line the plan builder generated (it names its block) is priced on
-                // the date of each shift: its row is the one valid on that shift, and when the plan crosses a catalogue price change that row starts after the agreement does.
-                || (string.IsNullOrEmpty(line.BlockKey)
-                    && (line.CatalogueEffectiveFrom > draft.AgreementStartDate || (line.CatalogueEffectiveTo != null && line.CatalogueEffectiveTo < draft.AgreementStartDate)))))
-            return null;
-        return draft;
-    }
+    private static OnboardingChecklistItemDto Item(string key, string label, bool done, string missing) =>
+        new() { Key = key, Label = label, Done = done, Missing = done ? null : missing };
 
-    private static List<string> ProfileMissing(Participant p)
+    /// <summary>What "Profile details" still needs, in words. KEEP IN STEP with <see cref="ParticipantReadinessGate.ProfileDetailsRule"/> (a test holds them together).</summary>
+    internal static List<string> ProfileMissing(Participant p)
     {
         var missing = new List<string>();
-        if (string.IsNullOrWhiteSpace(p.FirstName) || string.IsNullOrWhiteSpace(p.LastName)) missing.Add("Profile requires identity (first and last name).");
-        if (p.DateOfBirth == null) missing.Add("Profile requires date of birth.");
-        if (p.Gender == null) missing.Add("Profile requires gender.");
-        if (p.FundingSource == ParticipantFundingSource.Ndis && string.IsNullOrWhiteSpace(p.NdisNumber)) missing.Add("Profile requires an NDIS number for NDIS-funded participants.");
+        if (string.IsNullOrWhiteSpace(p.FirstName)) missing.Add("first name");
+        if (string.IsNullOrWhiteSpace(p.LastName)) missing.Add("last name");
+        if (p.DateOfBirth == null) missing.Add("date of birth");
+        if (p.FundingSource == ParticipantFundingSource.Ndis && string.IsNullOrWhiteSpace(p.NdisNumber)) missing.Add("NDIS number");
         return missing;
     }
 
     /// <summary>A form's "left blank" arrives as "" or spaces: store nothing, trimmed otherwise, never an empty string.</summary>
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static ParticipantInquiryDto ToDto(ParticipantInquiry x) => new() { Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName, Phone = x.Phone, Email = x.Email, Source = x.Source, Provenance = x.Provenance, CreatedAt = x.CreatedAt };
+    /// <summary>The enquiry as the API sends it. <paramref name="staff"/> is the booked staff member (for their names); <paramref name="timeZoneId"/> is the provider's zone.</summary>
+    private const string ChangedByOther = "Someone else just changed this enquiry. Reload and try again.";
+
+    // The enquiry's intake booking columns IntakeIcsSequence and IntakeUid are concurrency tokens: an edit racing a booking write matches no row.
+    private async Task<bool> SavedAsync(CancellationToken ct)
+    {
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
+
+    internal static ParticipantInquiryDto ToDto(ParticipantInquiry x, User? staff = null, string? timeZoneId = null) => new()
+    {
+        Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName, Phone = x.Phone, Email = x.Email, Source = x.Source,
+        Provenance = x.Provenance, CreatedAt = x.CreatedAt,
+        IntakeStartsAt = x.IntakeStartsAt, IntakeDurationMinutes = x.IntakeDurationMinutes, IntakeLocation = x.IntakeLocation,
+        IntakeStaffUserId = x.IntakeStaffUserId, IntakeStaffFirstName = staff?.FirstName, IntakeStaffName = staff?.FullName, IntakeNotes = x.IntakeNotes,
+        IntakeInviteSentAt = x.IntakeInviteSentAt, IntakeInviteError = x.IntakeInviteError, IntakeConfirmedAt = x.IntakeConfirmedAt, TimeZoneId = timeZoneId,
+    };
 }

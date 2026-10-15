@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../client'
-import { refreshLedgers } from './funding-ledger'
+import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
 import type {
   TripClaimListDto,
   TripClaimDetailDto,
@@ -69,6 +69,7 @@ export function useGenerateClaim() {
       // for a Trip-kind claim (no participantId, no line items), so this lands on the fallback:
       // refresh the ledger keys this client actually holds open.
       refreshLedgers(qc, claimParticipantIds(created))
+      refreshBudgetWarnings(qc)
     },
   })
 }
@@ -92,6 +93,8 @@ export function useUpdateClaim() {
       qc.invalidateQueries({ queryKey: ['claim', claimId] })
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
       refreshLedgers(qc, participants)
+      // Marking a claim Rejected (with the NDIA's code, which starts the "funds ran out" signal), Paid or back to Draft moves what the alerts, the dashboard's tile and the Budgets list say.
+      refreshBudgetWarnings(qc)
     },
   })
 }
@@ -109,6 +112,7 @@ export function useUpdateClaimLineItem() {
       const participants = item?.participantId ? [item.participantId] : claimParticipantIds(claim)
       qc.invalidateQueries({ queryKey: ['claim', claimId] })
       refreshLedgers(qc, participants)
+      refreshBudgetWarnings(qc)
     },
   })
 }
@@ -123,6 +127,7 @@ export function useDeleteClaim() {
       const participants = claimParticipantIds(cachedClaim(qc, claimId))
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
       refreshLedgers(qc, participants)
+      refreshBudgetWarnings(qc)
     },
   })
 }
@@ -165,6 +170,7 @@ export function useGenerateShiftClaim() {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
       refreshLedgers(qc, [participantId])
+      refreshBudgetWarnings(qc)
     },
   })
 }

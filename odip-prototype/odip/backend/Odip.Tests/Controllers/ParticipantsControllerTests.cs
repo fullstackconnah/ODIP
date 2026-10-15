@@ -12,6 +12,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Controllers;
 
@@ -31,18 +32,7 @@ public class ParticipantsControllerTests
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     /// <summary>
     /// Puts the (default-tenant) organisation in Enforce mode: the strict, fail-closed readiness
@@ -69,6 +59,8 @@ public class ParticipantsControllerTests
     private static void SeedVerifiedAgreementEvidence(OdipDbContext db, Participant participant, Guid? evidenceTenantId = null, int draftVersion = 1)
     {
         var tenantId = evidenceTenantId ?? participant.TenantId;
+        // The strict predicate reads the checklist's derived items: a complete profile and a draft with a priced line.
+        OnboardingSeeds.CompleteProfile(participant);
         var onboarding = new ParticipantOnboarding
         {
             Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id,
@@ -83,6 +75,7 @@ public class ParticipantsControllerTests
             State = ProvisionalAgreementTemplate.State, ParticipantNameSnapshot = participant.FullName,
             PlanStartDate = new DateOnly(2026, 1, 1), PlanEndDate = new DateOnly(2026, 12, 31),
             AgreementStartDate = new DateOnly(2026, 1, 1), AgreementEndDate = new DateOnly(2026, 12, 31),
+            Lines = { OnboardingSeeds.PricedLine() },
         };
         var snapshot = new ElectronicSigningSnapshot
         {
@@ -431,7 +424,7 @@ public class ParticipantsControllerTests
 
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.False(body.Data!.IsActive);
-        Assert.False(body.Data.IsDraft); // profile completion is retained; activation is separately gated.
+        Assert.True(body.Data.IsDraft); // the full PUT neither finalises nor activates: Make active does both.
         Assert.NotNull(body.Data.IntakeCompletedAt);
     }
 
@@ -1983,13 +1976,11 @@ public class ParticipantsControllerTests
         db.SaveChanges();
 
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
-        // The profile update below finalises this participant, so establish completion
-        // evidence through the server-owned intake transition rather than bypassing the
-        // lifecycle guard with a directly seeded timestamp.
+        // A finalised participant (a draft's preferred staff are not auto-linked), completed through the server-owned intake transition.
         var createDto = MinimalCreateDto() with
         {
             PreferredStaffId = oldStaff.Id,
-            IsDraft = true,
+            IsDraft = false,
             CompleteIntake = true,
         };
         var created = await controller.Create(createDto, CancellationToken.None);
@@ -2119,8 +2110,8 @@ public class ParticipantsControllerTests
     {
         // Server-side defence in depth: even if a client sends FundingOrganisation text alongside
         // FundingSource = Ndis (e.g. a stale value left over from switching Other -> Ndis
-        // client-side before the INTAKE-07 engine's payload exclusion kicks in), the server never
-        // persists it — Ndis ignores the field entirely, mirroring the frontend's exclusion rule.
+        // client-side before the wizard clears it), the server never persists it —
+        // Ndis ignores the field entirely.
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
 
@@ -2842,7 +2833,7 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
-    public async Task Update_FinalSubmissionFromDraft_ClearsIsDraft()
+    public async Task Update_FinalSubmissionFromDraft_KeepsTheDraft_OnlyMakeActiveFinalises()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var draft = new Participant { Id = Guid.NewGuid(), FirstName = "Priya", IsDraft = true, IsActive = true };
@@ -2874,7 +2865,7 @@ public class ParticipantsControllerTests
 
         var getResult = await controller.GetById(draft.Id, CancellationToken.None);
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
-        Assert.False(body.Data!.IsDraft);
+        Assert.True(body.Data!.IsDraft);
         Assert.Equal("Sharma", body.Data.LastName);
     }
 

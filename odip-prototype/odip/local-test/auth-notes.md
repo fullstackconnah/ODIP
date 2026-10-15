@@ -93,9 +93,8 @@ Fixed user IDs (for `mint-jwt.js` "userId" argument):
 - `daniel.williams` → `b2000000-0000-0000-0000-000000000003`
 - `coordinator.read` → `b2000000-0000-0000-0000-000000000004`
 
-`DbSeeder` also unconditionally force-upgrades `admin@odip.com.au` to `SuperAdmin` if
-it was ever seeded with a different role (defensive fixup), and repairs any users
-whose `TenantId` ended up `Guid.Empty` or on the wrong tenant.
+`DbSeeder` no longer repairs existing rows on start-up (it used to move demo rows to the Demo tenant,
+force `admin@odip.com.au` to `SuperAdmin` and fix empty `TenantId`s); it only seeds what is missing.
 
 **Caveat / surprise:** a second SuperAdmin user, `info@connah.com.au`
 (username `superadmin`), is created with `TenantId = 00000000-0000-0000-0000-000000000001`
@@ -132,7 +131,7 @@ tenant. Not reproduced here since it's not needed for auth testing; re-read
 
 Note: the `Admin` enum value exists and appears in many `[Authorize(Roles=...)]` lists
 (e.g. `AuditController`, `SupportCatalogueController` import endpoints,
-`PlanPricingController` PUT settings, `DevController`; the `PublicHolidaysController` write endpoints were SuperAdmin-only from plan builder phase B), but **`DbSeeder` never
+`PlanPricingController` PUT settings; the `PublicHolidaysController` write endpoints were SuperAdmin-only from plan builder phase B), but **`DbSeeder` never
 seeds any user with `Role = Admin`** — only `SuperAdmin`, `Coordinator`,
 `SupportWorker`, `ReadOnly` exist in seed data. To test `Admin`-gated endpoints,
 mint a JWT with `role=Admin` directly (mint-jwt.js supports any role string; the

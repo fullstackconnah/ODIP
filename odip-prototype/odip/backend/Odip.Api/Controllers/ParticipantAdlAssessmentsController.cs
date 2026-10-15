@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -17,7 +18,7 @@ namespace Odip.Api.Controllers;
 /// type with no row yet) and an upsert-by-type endpoint. This is the write path for ongoing edits
 /// from the participant detail page; the wizard's initial/draft submissions instead go through
 /// <see cref="ParticipantsController.UpsertAdlAssessmentsAsync"/>, sharing the same upsert semantics
-/// via <see cref="ApplyAnswer"/>.
+/// via <see cref="ParticipantGridRules"/>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -55,22 +56,13 @@ public class ParticipantAdlAssessmentsController : ControllerBase
             _db.ParticipantAdlAssessments.Add(row);
         }
 
-        ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
+        ParticipantGridRules.ApplyAnswer(row, dto.Level, dto.Notes, dto.HowToHelpNotes);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ParticipantAdlAssessmentDto>.Ok(ToDto(row)));
     }
 
     // ── Helpers ────────────────────────────────────────────────────
-
-    /// <summary>Sets an ADL row's answer — same "no separate audit timestamp" shape as ParticipantHealthCondition.ApplyAnswer.</summary>
-    internal static void ApplyAnswer(ParticipantAdlAssessment row, AdlLevel? level, string? notes, string? howToHelpNotes)
-    {
-        row.Level = level;
-        row.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        row.HowToHelpNotes = string.IsNullOrWhiteSpace(howToHelpNotes) ? null : howToHelpNotes.Trim();
-        row.UpdatedAt = DateTime.UtcNow;
-    }
 
     /// <summary>Every <see cref="AdlType"/>, in declaration order (Personal ADLs first, then Community/Domestic —
     /// see <see cref="AdlTypeGroups"/>), backed by <paramref name="existingRows"/> where a row exists and a

@@ -80,10 +80,39 @@ describe('TenantFormPanel as a dialog', () => {
     render(<TenantFormPanel isOpen onClose={onClose} />)
     await user.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Acme')
     await user.type(screen.getByPlaceholderText('e.g. acme.com.au'), 'acme.com.au')
-    await user.click(screen.getByRole('button', { name: 'Create Tenant' }))
+    await user.click(screen.getByRole('button', { name: 'Create tenant' }))
     expect(await screen.findByText('Tenant created')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+})
+
+// The Active toggle is a switch, as UserFormPanel's twin is: a screen reader hears its name and whether it is on.
+describe('TenantFormPanel — Active switch', () => {
+  const tenant = { id: 'tenant-1', name: 'Sample Support Co', emailDomain: 'sample.com.au', isActive: true, createdAt: '2026-01-01T00:00:00Z', userCount: 2 }
+
+  it('is a named switch that reports and flips its state', async () => {
+    const user = userEvent.setup()
+    render(<TenantFormPanel isOpen onClose={vi.fn()} tenant={tenant} />)
+    const toggle = screen.getByRole('switch', { name: 'Active' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+  })
+})
+
+// V-D2 follow-up: the labels sat beside their inputs without naming them, so a screen reader announced every field as an unnamed edit box.
+describe('TenantFormPanel — every field is named by its label', () => {
+  it('finds each create-mode field by its visible label', async () => {
+    const user = userEvent.setup()
+    render(<TenantFormPanel isOpen onClose={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: /provider settings/i }))
+    for (const label of ['Organisation Name *', 'Email Domain *', 'Registration Number', 'ABN', 'Organisation Name', 'Address', 'Bank Account Name', 'BSB', 'Account Number', 'Invoice Footer Notes']) {
+      expect(screen.getByLabelText(label, { selector: 'input, textarea' }), label).toBeInTheDocument()
+    }
+    expect(screen.getByLabelText('State')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /initial admin user/i }))
+    expect(screen.getByLabelText('Role')).toBeInTheDocument()
   })
 })

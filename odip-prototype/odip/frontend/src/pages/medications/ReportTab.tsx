@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FileClock } from 'lucide-react'
 import { useAdministrationsReport, useParticipants } from '@/api/hooks'
+import { SERVICES_BEGUN } from '@/api/types/participants'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
@@ -23,9 +24,9 @@ export default function ReportTab() {
 
   const rangeInvalid = Boolean(from && to && from > to)
 
-  // INTAKE-08: the medication picker excludes drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
-  const { data: report, isLoading } = useAdministrationsReport({
+  // INTAKE-08: drafts before services are left out; archived participants stay, their history is reportable.
+  const { data: participants = [] } = useParticipants(SERVICES_BEGUN)
+  const { data: report, isLoading, isError, refetch } = useAdministrationsReport({
     participantId: participantId || undefined,
     from: from || undefined,
     to: to || undefined,
@@ -111,7 +112,7 @@ export default function ReportTab() {
         </p>
       )}
 
-      {rangeInvalid ? null : !isLoading && items.length === 0 ? (
+      {rangeInvalid ? null : !isLoading && !isError && items.length === 0 ? (
         <EmptyState
           icon={FileClock}
           title="No administrations found"
@@ -124,6 +125,8 @@ export default function ReportTab() {
           keyField="id"
           sortable
           loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
           emptyMessage="No administrations found"
         />
       )}

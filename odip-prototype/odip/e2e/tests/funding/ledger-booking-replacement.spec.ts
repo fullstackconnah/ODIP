@@ -1,7 +1,7 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { call, test } from '../../support/fixtures';
-import { expectStatus, login, type ApiResult, type Session } from '../../support/api';
-import { SEEDED } from '../../support/env';
+import { expectStatus, type ApiResult, type Session } from '../../support/api';
+import { ensureProviderSettings } from '../../support/data';
 import { addDays, nextWednesday, sydneyToday } from '../../support/dates';
 
 // PR193 browser acceptance, run against the real candidate API and PostgreSQL in real Chromium.
@@ -226,7 +226,7 @@ async function createTripWithConfirmedBooking(
   return { tripId, bookingId: booking.data.id as string };
 }
 
-/** Step the real modal to its preview: "+ Generate Claim" then "Preview Claim". The preview is the claim
+/** Step the real modal to its preview: "Generate Claim" then "Preview Claim". The preview is the claim
  *  engine's own answer for this trip: what it would build, from the catalogue, today.
  *
  *  DELIBERATELY no page.goto and no navigation of any kind: this helper runs while the Funding tab's ledger
@@ -234,46 +234,13 @@ async function createTripWithConfirmedBooking(
  *  down, which would replace exactly the state R2 is about. The caller has already arrived on the trip's
  *  Claims tab by real in-app navigation and owns that step. */
 async function previewClaim(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: '+ Generate Claim' }).click();
+  await page.getByRole('button', { name: 'Generate Claim', exact: true }).click();
   const modal = page.getByRole('dialog', { name: 'Generate NDIS Claim' });
   await expect(modal, 'the generate-claim modal opens').toBeVisible();
   await modal.getByRole('button', { name: 'Preview Claim →' }).click();
   const preview = page.getByRole('dialog', { name: 'Claim Preview' });
   await expect(preview, 'the preview step replaces the input step').toBeVisible();
   return preview;
-}
-
-/** The claim engine will not price anything without provider settings ("Provider settings are not
- *  configured", ClaimGenerationService) and prices the trip in the organisation's own state. The scratch
- *  database's seeded provider row is replaced once, by the SuperAdmin, if it is missing -- API setup against
- *  this isolated app only. The claim itself is still generated through the UI. */
-async function ensureProviderSettings(session: Session): Promise<void> {
-  const sa: Session = await login(SEEDED.superAdmin);
-  const current: ApiResult = await expectStatus(
-    'GET provider-settings',
-    200,
-    await call(sa, 'GET', '/provider-settings'),
-  );
-  if (current.data?.organisationName) return;
-  await expectStatus(
-    'PUT provider-settings',
-    [200, 201],
-    await call(sa, 'PUT', '/provider-settings', {
-      registrationNumber: 'E2E-0000-01',
-      abn: '00000000000',
-      organisationName: 'E2E Browser Acceptance (SYNTHETIC)',
-      address: '1 Example Street, Newtown NSW 2042',
-      state: 'NSW',
-      gstRegistered: true,
-      isPaceProvider: false,
-      bankAccountName: 'E2E Browser Acceptance',
-      bsb: '000000',
-      accountNumber: '00000000',
-      invoiceFooterNotes: 'SYNTHETIC E2E TEST DATA.',
-      managerName: 'E2E Manager',
-      managerPhone: '0412345678',
-    }),
-  );
 }
 
 /** The Funding tab's ledger region for the pool's current period, addressed by its own aria-label. */
@@ -439,7 +406,7 @@ async function bookingBecomesPending(
     //    claim was generated, and a closed modal is not an interaction target: clicking its hidden buttons
     //    would prove nothing. Preview has no status checks (ClaimGenerationService.PreviewClaimAsync), so it
     //    succeeds; the refusal happens on the write, which is the mutation under test. ──
-    await page.getByRole('button', { name: '+ Generate Claim' }).click();
+    await page.getByRole('button', { name: 'Generate Claim', exact: true }).click();
     const second = page.getByRole('dialog', { name: 'Generate NDIS Claim' });
     await expect(second, 'the generate-claim modal reopens').toBeVisible();
     await second.getByRole('button', { name: 'Preview Claim →' }).click();

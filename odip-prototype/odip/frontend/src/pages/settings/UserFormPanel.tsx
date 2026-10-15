@@ -1,3 +1,4 @@
+import { labelClass } from '@/components/FormField'
 import { useState, useEffect, useId, useRef } from 'react'
 import {
   useAdminTenantsSummary,
@@ -75,7 +76,8 @@ export default function UserFormPanel({
   const roleLabelId = useId()
   const passwordHintId = useId()
 
-  const { data: tenants = [] } = useAdminTenantsSummary()
+  // Settings mounts this panel for Admin and Coordinator too; GET /admin/tenants is SuperAdmin only, and the panel opens only from the SuperAdmin Users tab.
+  const { data: tenants = [] } = useAdminTenantsSummary(isOpen)
   const createMutation = useCreateAdminUser()
   const updateMutation = useUpdateAdminUser()
   const ensureAccount = useEnsureUserSignInAccount()
@@ -273,8 +275,6 @@ export default function UserFormPanel({
 
   const inputClass =
     'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
-  const labelClass =
-    'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   if (!isOpen) return null
 
@@ -334,21 +334,12 @@ export default function UserFormPanel({
       footerClassName="px-6 py-4"
       footer={
         <div className="flex items-center gap-3 justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSubmit()}
-            disabled={isBusy || !isFormValid}
-            className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
-          >
-            {isBusy ? 'Saving...' : isEdit ? 'Save Changes' : 'Create User'}
-          </button>
+          </Button>
+          <Button onClick={() => handleSubmit()} disabled={isBusy || !isFormValid}>
+            {isBusy ? 'Saving…' : isEdit ? 'Save' : 'Create user'}
+          </Button>
         </div>
       }
     >
@@ -492,13 +483,14 @@ export default function UserFormPanel({
             type="button"
             role="switch"
             aria-checked={isActive}
+            aria-label="Active"
             onClick={() => setIsActive(v => !v)}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
               isActive ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'
             }`}
           >
             <span
-              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+              className={`inline-block h-4 w-4 rounded-full bg-[var(--color-card)] transition-transform ${
                 isActive ? 'translate-x-6' : 'translate-x-1'
               }`}
             />
@@ -511,9 +503,7 @@ export default function UserFormPanel({
 
       {/* Error message */}
       {error && (
-        <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-          {error}
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       <ConfirmDialog

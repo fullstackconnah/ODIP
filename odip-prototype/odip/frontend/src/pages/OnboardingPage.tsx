@@ -1,64 +1,23 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { ClipboardCheck } from 'lucide-react'
-import { apiGet } from '@/api/client'
+import { useOnboardingWorklist } from '@/api/hooks'
+import type { OnboardingWorklistRow as WorklistRow } from '@/api/types/inquiries'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { ProgressBar } from '@/components/ProgressBar'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
-import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase } from '@/lib/queryPhase'
-import { readIntakeCompleteNotice } from './intake/intakeComplete'
-import { plural } from '@/lib/format'
-
-type WorklistRow = {
-  participantId: string
-  fullName: string
-  stage: string
-  nextAction: string
-  completedSteps: number
-  totalSteps: number
-  reasons?: string[]
-}
-
-/**
- * The worklist API returns a coarse `stage` ("Intake incomplete" / "Onboarding
- * incomplete"), which is too flat to triage on. The actionable signal is `reasons`
- * (what is blocking) plus whether any gate has been completed, so the badge tone is
- * derived from those instead of being echoed from the stage string.
- */
-function stageBadge(row: WorklistRow): { status: string; label: string } {
-  if (row.reasons?.length) return { status: 'needsattention', label: row.reasons[0] }
-  if (row.completedSteps === 0) return { status: 'blocked', label: row.stage }
-  return { status: 'stalled', label: row.stage }
-}
-
-export default function OnboardingPage() {
-  const screen = useOnboardingScreen()
-  return (
-    <div className="flex flex-col gap-[var(--section-gap)]">
-      <PageHeader
-        title="Onboarding"
-        subtitle={`${plural(screen.allRowsCount, 'participant')} in onboarding. Completing a participant's profile activates them, and moves them to Active participants, when your organisation's readiness rule allows it.`}
-      >
-        {screen.toolbar}
-      </PageHeader>
-      {screen.body}
-    </div>
-  )
-}
+import { useIntakeCompleteNotice } from './intake/intakeComplete'
 
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
- * one PageHeader. The standalone /onboarding route is now redirected to
- * /participants?tab=onboarding, so this default page component is only retained for the
- * dedicated OnboardingPage test that mounts it under its own MemoryRouter.
+ * one PageHeader. The standalone /onboarding route is redirected to /participants?tab=onboarding.
  */
 export function OnboardingTable() {
   const screen = useOnboardingScreen()
@@ -73,19 +32,11 @@ export function OnboardingTable() {
 
 function useOnboardingScreen() {
   const navigate = useNavigate()
-  const location = useLocation()
-  // A one-off confirmation from the Intake wizard ("Intake complete — {name} is now in onboarding."), carried by
-  // navigation state. Held in state so it survives the history-state clear below, and cleared from history so a
-  // reload or coming back to this URL later does not replay it.
-  const [completed] = useState(() => readIntakeCompleteNotice(location.state))
-  useEffect(() => {
-    if (completed) navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
-    // Only the arrival matters: run once for the notice this screen mounted with.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // A one-off confirmation from the Intake wizard ("Intake complete — {name} is now in onboarding."), carried by navigation state.
+  const completed = useIntakeCompleteNotice()
   const { canManageParticipantLifecycle, canAccessPage } = usePermissions()
   // The API scopes this query to the current tenant; this page does not add a client-side tenant filter.
-  const worklist = useQuery({ queryKey: ['participant-onboarding-worklist'], queryFn: () => apiGet<WorklistRow[]>('/inquiries/onboarding-worklist') })
+  const worklist = useOnboardingWorklist()
   // A request that has not run (paused while the browser reports offline) is loading, not an empty worklist.
   const worklistLoading = queryPhase(worklist) === 'loading'
   const [search, setSearch] = useState('')
@@ -95,63 +46,35 @@ function useOnboardingScreen() {
     const term = search.trim().toLowerCase()
     if (!term) return allRows
     return allRows.filter(row =>
-      [row.fullName, row.stage, row.nextAction, ...(row.reasons ?? [])]
+      [row.fullName, row.firstMissing]
         .filter(Boolean)
         .some(field => String(field).toLowerCase().includes(term)))
   }, [allRows, search])
-  // Column budget (md+; below md the mobile card layout lets everything wrap). DataTable cells never wrap and its box
-  // scrolls sideways, and two of these columns hold free text of any length: the stage chip (the first blocking
-  // reason, a full sentence) and the reasons list under the next action. Left alone they set the column widths, so a
-  // worklist with one long reason was about 2000px wide at 1280 and pushed "Action" off the right edge, and the
-  // Complete Intake hand-off lands here. So the two free-text columns wrap inside a cap and may shrink, the
-  // participant name wraps rather than being cut, and Progress and Action (fixed-size content) keep a floor.
+  // Column budget (md+; below md the mobile card layout lets everything wrap). DataTable cells never wrap and its box scrolls sideways, so the
+  // participant name wraps rather than being cut, and every column keeps a floor so "Action" is never pushed off the right edge.
   const columns: Column<WorklistRow>[] = [
-    { key: 'fullName', header: 'Participant', sortable: true, wrap: true, minWidth: '9rem' },
     {
-      key: 'stage',
-      header: 'Current stage',
-      sortable: true,
-      minWidth: '11rem',
-      render: row => {
-        const badge = stageBadge(row)
-        return (
-          <StatusBadge
-            status={badge.status}
-            label={badge.label}
-            className="md:inline-block md:my-1.5 md:max-w-[18rem] md:whitespace-normal md:rounded-xl md:leading-snug"
-          />
-        )
-      },
+      key: 'fullName', header: 'Participant', sortable: true, wrap: true, minWidth: '9rem',
+      render: row => (
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+          {/* A real link to the same place as the row and its Open button, so it can open in a new tab. */}
+          <Link to={`/onboarding/${row.participantId}`} className="font-medium text-[var(--color-foreground)] group-hover/row:text-[var(--color-primary)] transition-colors hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] rounded-sm">{row.fullName}</Link>
+          {row.servicesStartedAt && <StatusBadge tone="success" label="Services started" />}
+        </span>
+      ),
     },
     {
       key: 'completedSteps',
       header: 'Progress',
       minWidth: '10rem',
-      render: row => (
-        <ProgressBar
-          value={row.completedSteps}
-          total={row.totalSteps}
-          label={`${row.completedSteps} of ${row.totalSteps} gates`}
-        />
-      ),
+      render: row => <ProgressBar value={row.completedSteps} total={row.totalSteps} label={`${row.completedSteps} of ${row.totalSteps} done`} />,
     },
     {
-      key: 'nextAction',
-      header: 'Recommended next action',
+      key: 'firstMissing',
+      header: 'Still to do',
       wrap: true,
-      minWidth: '16rem',
-      render: row => (
-        <div className="md:max-w-[32rem] md:py-1.5">
-          <span className="font-medium">{row.nextAction}</span>
-          {row.reasons && row.reasons.length > 1 && (
-            <ul className="mt-1 text-xs text-[var(--color-muted-foreground)] space-y-0.5">
-              {row.reasons.slice(1).map(reason => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ),
+      minWidth: '10rem',
+      render: row => row.firstMissing ?? <span className="text-[var(--color-muted-foreground)]">All done</span>,
     },
     {
       key: 'participantId',
@@ -185,18 +108,14 @@ function useOnboardingScreen() {
           action={canAccessPage('participants') ? { label: 'View enquiries', to: '/participants?tab=enquiries' } : undefined}
         />
       ) : (
-        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklistLoading} sortable emptyMessage="No incomplete onboarding work." rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
+        <DataTable data={rows} columns={columns} keyField="participantId" loading={worklistLoading} sortable emptyMessage="No incomplete onboarding work." onRowClick={row => navigate(`/onboarding/${row.participantId}`)} rowClassName={row => (completed && row.participantId === completed.participantId ? 'bg-[var(--color-primary)]/10 outline outline-2 -outline-offset-2 outline-[var(--color-primary)]/40' : '')} />
       ))}
     </>
   )
 
   const toolbar = allRows.length > 0
-    ? <SearchInput value={search} onChange={setSearch} placeholder="Search participants, stages or gates..." />
+    ? <SearchInput value={search} onChange={setSearch} placeholder="Search participants or what is still to do..." />
     : null
 
-  return {
-    allRowsCount: allRows.length,
-    toolbar,
-    body,
-  }
+  return { toolbar, body }
 }

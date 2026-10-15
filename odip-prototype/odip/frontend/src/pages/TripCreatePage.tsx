@@ -1,4 +1,4 @@
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
@@ -9,10 +9,12 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { TAP_FLOOR } from '@/components/tapArea'
+import { TRIP_STATUS_LABELS, statusItems } from '@/lib/tone'
+import { BackButton } from '@/components/BackButton'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
+import { Callout } from '@/components/Callout'
 
 const tripSchema = z.object({
   tripName: z.string().min(1, 'Trip name is required'),
@@ -42,7 +44,7 @@ export default function TripCreatePage() {
   const { data: staffList = [] } = useStaff()
   const { data: templates = [] } = useEventTemplates()
 
-  const { register, handleSubmit, setValue, control, reset, formState: { errors, isDirty } } = useForm<TripFormData>({
+  const { register, handleSubmit, setValue, control, reset, formState: { errors, isDirty } } = useForm({
     resolver: zodResolver(tripSchema),
     defaultValues: { durationDays: 1, status: 'Draft' },
   })
@@ -83,15 +85,15 @@ export default function TripCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        <Link to="/trips" className={`${TAP_FLOOR} hover:text-[var(--color-foreground)] transition-colors`}>&larr; Back to Trips</Link>
+      <div className="flex items-start gap-2">
+        <BackButton to="/trips" label="trips" variant="icon" history={false} />
+        <div className="flex-1 min-w-0"><PageHeader title="New trip" /></div>
       </div>
-      <PageHeader title="Create New Trip" />
 
       {createTrip.isError && (
-        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
+        <Callout tone="error">
           {extractErrorMessage(createTrip.error, 'Failed to create trip. Please check your input and try again.')}
-        </div>
+        </Callout>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
@@ -156,11 +158,7 @@ export default function TripCreatePage() {
                     value={field.value ?? ''}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
-                    items={[
-                      { value: 'Draft', label: 'Draft' },
-                      { value: 'Planning', label: 'Planning' },
-                      { value: 'OpenForBookings', label: 'Open For Bookings' },
-                    ]}
+                    items={statusItems(['Draft', 'Planning', 'OpenForBookings'], TRIP_STATUS_LABELS)}
                   />
                 )}
               />
@@ -189,7 +187,7 @@ export default function TripCreatePage() {
         </Card>
 
         {/* Capacity & Requirements */}
-        <Card title="Capacity & Requirements">
+        <Card title="Capacity & requirements">
           <div className={formGrid}>
             <FormField label="Min Participants" hint="Smallest group size this trip needs to go ahead." className={span.short}>
               <input type="number" min={0} {...register('minParticipants')} />
@@ -206,7 +204,7 @@ export default function TripCreatePage() {
             <FormField label="Required Bedrooms" hint="Total bedrooms needed, e.g. for privacy or support needs." className={span.short}>
               <input type="number" min={0} {...register('requiredBedrooms')} />
             </FormField>
-            <FormField label="Min Staff Required" hint="Minimum staff that must be assigned before the trip can proceed." className={span.short}>
+            <FormField label="Min Staff Required" hint="The trip needs at least this many staff, even if its bookings need fewer." className={span.short}>
               <input type="number" min={0} {...register('minStaffRequired')} />
             </FormField>
           </div>
@@ -224,7 +222,7 @@ export default function TripCreatePage() {
         <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/trips">Cancel</Button>
           <Button type="submit" disabled={createTrip.isPending}>
-            {createTrip.isPending ? 'Creating...' : 'Create Trip'}
+            {createTrip.isPending ? 'Creating…' : 'Create trip'}
           </Button>
         </div>
       </form>

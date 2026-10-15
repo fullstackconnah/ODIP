@@ -115,7 +115,7 @@ describe('StaffDetailPage — header', () => {
 
     expect(screen.getByRole('heading', { name: 'Alex Rivera' })).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
-    expect(screen.getByText(/SupportWorker.*North/)).toBeInTheDocument()
+    expect(screen.getByText(/Support worker.*North/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /edit/i })).toHaveAttribute('href', '/staff/staff-1/edit')
     expect(screen.getByRole('link', { name: /leave.*availability/i })).toHaveAttribute('href', '/rostering/leave?userId=staff-1')
   })
@@ -152,9 +152,8 @@ describe('StaffDetailPage — Availability tab (default)', () => {
 
     // "Availability" itself is ambiguous — it's both the active TabNav button's label and
     // AvailabilityList's own section heading — so assert on the manage-link text unique to
-    // AvailabilityList instead. It's ambiguous too (the header link plus the empty-state's own
-    // repeated link), hence getAllByText rather than getByText.
-    expect(screen.getAllByText(/manage on leave page/i).length).toBeGreaterThan(0)
+    // AvailabilityList instead: one link now (the empty sentence no longer repeats it, V2-G).
+    expect(screen.getByText(/manage on leave page/i)).toBeInTheDocument()
   })
 
   it('flushes the list to the Card padding — AvailabilityList\'s own pl-8 indent (built for the Schedule accordion) read as a blank ~30px icon slot here', () => {
@@ -329,6 +328,8 @@ describe('StaffDetailPage — Completions tab', () => {
             actualStart: '2026-09-08T08:02:00Z', actualEnd: '2026-09-08T16:05:00Z',
             varianceMinutesStart: 2, varianceMinutesEnd: 5, status: 'Completed', timeZoneId: 'Australia/Brisbane',
             isOutlierVariance: false, varianceReviewMinutes: 15, returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 0, startWasManual: false,
+            timesAdjusted: false,
+            incidentCount: 0,
           },
         ],
       }),
@@ -354,12 +355,12 @@ describe('StaffDetailPage — Completions tab', () => {
 // phone (scrollWidth 400 at 390, 401 at 360). PageHeader now stacks the cluster on its own row below
 // md; the cluster itself must be allowed to wrap. jsdom applies no CSS, so these assert the class contract.
 describe('StaffDetailPage — mobile header and tap targets', () => {
-  it('lets the Back / Leave / Edit cluster wrap instead of holding it at its full width', () => {
+  it('lets the Leave / Edit cluster wrap instead of holding it at its full width, with Back left of the title', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
     renderAt('staff-1')
 
     const cluster = screen.getByRole('link', { name: /edit/i }).parentElement!
-    expect(cluster).toContainElement(screen.getByRole('link', { name: /back to staff/i }))
+    expect(cluster).not.toContainElement(screen.getByRole('link', { name: /back to staff/i }))
     expect(cluster).toHaveClass('flex', 'flex-wrap')
     expect(cluster).not.toHaveClass('shrink-0')
   })

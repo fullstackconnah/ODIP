@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { HeartPulse } from 'lucide-react'
+import { NotRecordedFold } from './NotRecordedFold'
+import { plural } from '@/lib/format'
 import { useParticipantHealthConditions, useUpsertHealthCondition } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -7,10 +9,14 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, type Column } from '@/components/DataTable'
 import { usePermissions } from '@/lib/permissions'
+import { PageState } from '@/components/PageState'
+import { queryPhase } from '@/lib/queryPhase'
 import { HEALTH_CONDITION_TYPES } from '@/api/types/enums'
 import { HEALTH_CONDITION_TYPE_LABELS } from '@/api/types/health-conditions'
 import type { ParticipantHealthConditionDto } from '@/api/types/health-conditions'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 type ConditionFormState = {
   has: 'true' | 'false' | ''
@@ -44,7 +50,10 @@ function hasStatus(has: boolean | null): { status: string; label: string } {
  */
 export default function ParticipantHealthConditionsSection({ participantId }: { participantId: string | undefined }) {
   const { canWriteHealthConditions } = usePermissions()
-  const { data: conditions = [], isLoading } = useParticipantHealthConditions(participantId)
+  const conditionsQuery = useParticipantHealthConditions(participantId)
+  const conditions = conditionsQuery.data ?? []
+  // A failed or paused request is not an empty list: "No health conditions recorded" is only for one that succeeded and came back empty.
+  const phase = queryPhase(conditionsQuery)
   const upsertCondition = useUpsertHealthCondition()
 
   const [editing, setEditing] = useState<ParticipantHealthConditionDto | null>(null)
@@ -121,20 +130,29 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
     },
   ]
 
+  // VISUAL-1 V2: ten "Not recorded" rows on a new participant fold into one line that opens to them.
+  const foldIfNoneRecorded = (table: ReactNode) =>
+    ordered.length > 0 && ordered.every((c) => c.has == null) ? <NotRecordedFold summary={plural(ordered.length, 'health condition')}>{table}</NotRecordedFold> : table
+
   return (
     <div className="space-y-4">
       <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
         <HeartPulse className="w-4 h-4" /> Health Conditions
       </h3>
 
-      <DataTable
-        data={ordered}
-        columns={columns}
-        keyField="conditionType"
-        loading={isLoading}
-        emptyMessage="No health conditions recorded."
-        compact
-      />
+      {phase === 'loading' ? (
+        <PageState kind="loading" noun="health condition list" />
+      ) : phase === 'error' ? (
+        <PageState kind="error" noun="health condition list" onRetry={() => conditionsQuery.refetch()} />
+      ) : foldIfNoneRecorded(
+        <DataTable
+          data={ordered}
+          columns={columns}
+          keyField="conditionType"
+          emptyMessage="No health conditions recorded."
+          compact
+        />
+      )}
 
       <Modal
         open={!!editing}
@@ -143,29 +161,18 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
         size="md"
         footer={
           <>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={upsertCondition.isPending}
-              className="min-h-[44px] px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-all"
-            >
+            </Button>
+            <Button onClick={handleSave} disabled={upsertCondition.isPending}>
               {upsertCondition.isPending ? 'Saving...' : 'Save condition'}
-            </button>
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
           {modalError && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {modalError}
-            </div>
+            <Callout tone="error">{modalError}</Callout>
           )}
           <FormField label="Has this condition / support need">
             {/* Same tri-state affordance as ParticipantConsentsSection's Granted toggle — this is

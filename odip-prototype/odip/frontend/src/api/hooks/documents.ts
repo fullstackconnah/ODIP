@@ -1,14 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from '../client'
-import type { TripDocumentDto, ItineraryDto } from '../types'
-
-export function useTripDocuments(tripId: string | undefined) {
-  return useQuery({
-    queryKey: ['trip-documents', tripId],
-    queryFn: () => apiGet<TripDocumentDto[]>(`/trips/${tripId}/documents`),
-    enabled: !!tripId,
-  })
-}
+import type { ItineraryDto } from '../types'
 
 export function useTripItinerary(tripId: string | undefined) {
   return useQuery({

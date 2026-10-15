@@ -5,7 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import TripsPage from './TripsPage'
 import type { TripListDto } from '@/api/types'
 import { TAP_AREA } from '@/components/tapArea'
-import { TONE } from '@/lib/tone'
+import { TONE, TRIP_STATUS_LABELS } from '@/lib/tone'
 
 const { mockUseTrips, mockUseTrip, mockPatchMutate } = vi.hoisted(() => ({
   mockUseTrips: vi.fn(),
@@ -246,11 +246,11 @@ describe('TripsPage — narrow-desktop table', () => {
     }
   })
 
-  it('keeps the status pill on one line, in a column wide enough for "Open For Bookings" plus its caret', () => {
+  it('keeps the status pill on one line, in a column wide enough for "Open for bookings" plus its caret', () => {
     mockUseTrips.mockReturnValue({ data: [trip({ status: 'OpenForBookings' })], isLoading: false })
     renderPage()
 
-    const pill = screen.getByRole('button', { name: 'Open For Bookings' })
+    const pill = screen.getByRole('button', { name: 'Open for bookings' })
     expect(pill).toHaveClass('whitespace-nowrap', 'h-[var(--control-h-sm)]')
     const header = screen.getByRole('columnheader', { name: 'Status' })
     const cell = pill.closest('td') as HTMLElement
@@ -337,14 +337,14 @@ describe('TripsPage — starting a new trip', () => {
   it('keeps the "New Trip" button in the page header, linking to /trips/new', () => {
     renderPage()
 
-    expect(screen.getByRole('link', { name: /New Trip/ })).toHaveAttribute('href', '/trips/new')
+    expect(screen.getByRole('link', { name: /New trip/ })).toHaveAttribute('href', '/trips/new')
   })
 
   it('hides the button from a role that cannot write', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
     renderPage()
 
-    expect(screen.queryByRole('link', { name: /New Trip/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /New trip/ })).not.toBeInTheDocument()
   })
 })
 
@@ -359,7 +359,7 @@ describe('TripsPage — trip status pills use the shared tones', () => {
     ['InProgress', 'info'], // owner decision: in progress is information (blue)
   ] as const)('colours a %s trip with the %s tone in the table and in the cards', (status, tone) => {
     mockUseTrips.mockReturnValue({ data: [trip({ status })], isLoading: false })
-    const label = status.replace(/([A-Z])/g, ' $1').trim()
+    const label = TRIP_STATUS_LABELS[status]
 
     const table = renderPage()
     expect(screen.getByRole('button', { name: label })).toHaveClass(...TONE[tone].solid.split(' '))
@@ -389,5 +389,33 @@ describe('TripsPage — Pax ratio', () => {
 
     expect(screen.getByText('6 / 8')).toBeInTheDocument()
     expect(screen.getByText('3 / —')).toBeInTheDocument()
+  })
+})
+
+// Owner decision 2026-10-12 (TRIPS-5, TRIPS-6): a role the server refuses PATCH /trips/:id is shown the status as a badge, not a pill it can change,
+// and no New Trip or edit pencil, in the table and in the cards.
+describe('TripsPage — write controls follow the role', () => {
+  it.each(['ReadOnly', 'SupportWorker'])('shows %s the status as plain text with no pill, New Trip or edit, in both views', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    const table = renderPage()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /New trip/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit Beach Weekend' })).not.toBeInTheDocument()
+    table.unmount()
+
+    localStorage.setItem('odip.trips.view', 'cards')
+    renderPage()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Edit/ })).not.toBeInTheDocument()
+  })
+
+  it.each(['Admin', 'Coordinator'])('offers %s the status pill, New Trip and edit', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    renderPage()
+    expect(screen.getByRole('button', { name: 'Confirmed' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /New trip/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit Beach Weekend' })).toBeInTheDocument()
   })
 })

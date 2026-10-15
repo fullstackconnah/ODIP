@@ -155,22 +155,48 @@ export function suggestedIncidentSeverity(outcome: MedicationAdministrationStatu
 // ── INC-04 / INC-05: restrictive-practice incident helpers ──────────────────
 
 /**
+ * The one "Authorised" rule for a register entry (owner decision 2026-10-14): active, AND who authorised it, AND when. Anything else reads
+ * "Not authorised". The frontend twin of the backend's RestrictivePracticeAuthorisation.IsAuthorised, used by the badges and the banner below.
+ */
+export function isRpAuthorised(p: Pick<RestrictivePracticeDto, 'isActive' | 'authorisedBy' | 'authorisationDate'>): boolean {
+  return p.isActive && !!p.authorisedBy?.trim() && !!p.authorisationDate
+}
+
+/**
  * INC-04 client-side preview of the authorised/unauthorised determination — mirrors
- * IncidentsController.DetermineRestrictivePracticeAuthorisationAsync exactly (active entries of
- * the reported type for the involved participant, same tenant-scoped register the picker reads),
- * so the banner on the create form updates live as the coordinator changes the participant or
- * type, before the backend computes and freezes the real value at submit. 'unknown' — not yet
- * determinable — when either the participant or the type hasn't been chosen yet.
+ * IncidentsController.DetermineRestrictivePracticeAuthorisationAsync step for step, so the banner on
+ * the create form shows what the backend will compute and freeze at submit. 'unknown' — not yet
+ * determinable — when either the participant or the type hasn't been chosen yet. Then: "None of
+ * these" or "This use was not authorised" is unauthorised; a linked entry decides by itself;
+ * otherwise any Authorised entry of the type.
  */
 export type RpAuthorisationPreview = 'authorised' | 'unauthorised' | 'unknown'
 
 export function previewRpAuthorisation(
   involvedParticipantId: string | undefined | null,
   restrictivePracticeType: string | undefined | null,
-  participantActivePractices: Pick<RestrictivePracticeDto, 'type'>[],
+  participantPractices: Pick<RestrictivePracticeDto, 'id' | 'type' | 'isActive' | 'authorisedBy' | 'authorisationDate'>[],
+  selection: { restrictivePracticeId?: string; unapproved?: boolean; usedWithoutAuthorisation?: boolean } = {},
 ): RpAuthorisationPreview {
   if (!involvedParticipantId || !restrictivePracticeType) return 'unknown'
-  return participantActivePractices.some(p => p.type === restrictivePracticeType) ? 'authorised' : 'unauthorised'
+  if (selection.unapproved || selection.usedWithoutAuthorisation) return 'unauthorised'
+  return participantPractices.some(p => p.type === restrictivePracticeType
+    && (!selection.restrictivePracticeId || p.id === selection.restrictivePracticeId) && isRpAuthorised(p))
+    ? 'authorised' : 'unauthorised'
+}
+
+/**
+ * What an edit will store, mirroring IncidentsController.Update: the stored determination stays frozen, except that it is LOWERED to false
+ * by a ticked "This use was not authorised" with a link, or by switching to "None of these" (`wasUnapproved`: the incident did not already
+ * describe one). A relink to a Not authorised entry ticks the box, so it is covered too. Null (or the key left out) is "not determined".
+ */
+export function editedRpAuthorisation(
+  stored: boolean | null | undefined,
+  wasUnapproved: boolean,
+  selection: { restrictivePracticeId?: string; unapproved?: boolean; usedWithoutAuthorisation?: boolean },
+): boolean | null {
+  if ((selection.restrictivePracticeId && selection.usedWithoutAuthorisation) || (!wasUnapproved && selection.unapproved)) return false
+  return stored ?? null
 }
 
 /** INC-05: prepopulation skeleton once the coordinator links a specific register entry — saves
@@ -178,7 +204,7 @@ export function previewRpAuthorisation(
  * buildIncidentDescriptionSkeleton (INC-03). */
 export function buildRpIncidentDescriptionSkeleton(practice: Pick<RestrictivePracticeDto, 'description' | 'reviewDate'>): string {
   const lines = [
-    `Linked to the participant's authorised restrictive practice on file: ${practice.description}`,
+    `Linked to the participant's restrictive practice register entry: ${practice.description}`,
   ]
   if (practice.reviewDate) {
     lines.push(`(Register entry review due ${formatDateAu(practice.reviewDate)}.)`)
@@ -208,6 +234,8 @@ export interface ShiftNoteIncidentPrefillState {
    * CreateIncidentDto.shiftId. Populated by the portal producer (ShiftNotesSection); this side
    * only carries it through to the create payload. */
   shiftId: string
+  /** Where the form goes after the report is filed (the shift's finish flow reopens at its report step); see incidentReturnPath. */
+  returnTo?: string
 }
 
 /** Narrows an unknown value (react-router location.state) down to a shift-note incident prefill. */
@@ -242,4 +270,43 @@ export function buildShiftNoteIncidentDescriptionSkeleton(p: ShiftNoteIncidentPr
 /** Best-effort incidentDateTime for the datetime-local field — the shift's own start time, in the same "no timezone context to correct for" shape as a portal-authored note. */
 export function buildShiftNoteIncidentDateTime(p: ShiftNoteIncidentPrefillState): string {
   return `${p.serviceDate}T${p.startTime.slice(0, 5)}`
+}
+
+// ── My shifts redesign: "Anything to report?" from the finish flow ──────────
+// The same router-state idiom with no note behind it: the worker said yes on the shift's report step. Nothing is filed until they submit.
+
+export interface ShiftIncidentPrefillState {
+  source: 'shift'
+  shiftId: string
+  participantId: string
+  participantName: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  /** The signed-in worker (the reportedByStaffId default). */
+  reportedByUserId?: string | null
+  /** Where the form goes after the report is filed: back to the shift, whose finish flow reopens at its report step. */
+  returnTo?: string
+  /** The shift's actual start, provider-local "yyyy-MM-ddTHH:mm": the incident's default time. Without it, the rostered start. */
+  incidentAt?: string
+}
+
+export function isShiftIncidentPrefillState(state: unknown): state is ShiftIncidentPrefillState {
+  return !!state && typeof state === 'object' && (state as { source?: unknown }).source === 'shift'
+}
+
+export function buildShiftIncidentTitleSkeleton(p: ShiftIncidentPrefillState): string {
+  return `Incident during shift — ${p.participantName}`
+}
+
+export function buildShiftIncidentDescriptionSkeleton(p: ShiftIncidentPrefillState): string {
+  const when = `${formatDayAccessibleName(p.serviceDate)}, ${formatShiftRange(p.startTime, p.endTime, p.endsNextDay)}`
+  return [`During ${p.participantName}'s shift on ${when}:`, '', '[Describe what happened, the immediate response and any follow-up.]'].join('\n')
+}
+
+/** Where the form goes after filing: a shift prefill's `returnTo` when it is a portal shift path (router state is ours, but never trust a path blindly), else the incidents list. */
+export function incidentReturnPath(state: unknown): string {
+  const to = (state as { returnTo?: unknown } | null | undefined)?.returnTo
+  return typeof to === 'string' && to.startsWith('/portal/shifts/') ? to : '/incidents'
 }

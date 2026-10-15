@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Odip.Domain.Dictionary;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
@@ -111,144 +110,6 @@ public static class DbSeeder
                 Role = UserRole.SuperAdmin,
                 IsActive = true,
             });
-            await context.SaveChangesAsync(ct);
-        }
-
-        // Fix any existing seeded users that have Guid.Empty TenantId
-        var orphanedUsers = await context.Users
-            .IgnoreQueryFilters()
-            .Where(u => u.TenantId == Guid.Empty)
-            .ToListAsync(ct);
-        if (orphanedUsers.Count > 0)
-        {
-            foreach (var u in orphanedUsers) u.TenantId = tenantId;
-            await context.SaveChangesAsync(ct);
-        }
-
-        // Fixup: reassign demo users previously placed on Odip tenant to Demo tenant
-        var demoUserIds = new[]
-        {
-            Guid.Parse("b1000000-0000-0000-0000-000000000002"),
-            Guid.Parse("b1000000-0000-0000-0000-000000000003"),
-            Guid.Parse("b2000000-0000-0000-0000-000000000001"),
-            Guid.Parse("b2000000-0000-0000-0000-000000000002"),
-            Guid.Parse("b2000000-0000-0000-0000-000000000003"),
-            Guid.Parse("b2000000-0000-0000-0000-000000000004"),
-            // The 5 new SupportWorker users replacing the former orphaned Staff rows.
-            Guid.Parse("a2000000-0000-0000-0000-000000000001"),
-            Guid.Parse("a2000000-0000-0000-0000-000000000002"),
-            Guid.Parse("a2000000-0000-0000-0000-000000000003"),
-            Guid.Parse("a2000000-0000-0000-0000-000000000004"),
-            Guid.Parse("a2000000-0000-0000-0000-000000000005"),
-        };
-        var misplacedDemoUsers = await context.Users
-            .IgnoreQueryFilters()
-            .Where(u => demoUserIds.Contains(u.Id) && u.TenantId != demoTenantId)
-            .ToListAsync(ct);
-        if (misplacedDemoUsers.Count > 0)
-        {
-            foreach (var u in misplacedDemoUsers) u.TenantId = demoTenantId;
-            await context.SaveChangesAsync(ct);
-        }
-
-        // Ensure admin@odip.com.au has SuperAdmin role (upgrade from Admin if already seeded)
-        var adminUser = await context.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.Email == "admin@odip.com.au", ct);
-        if (adminUser is not null && adminUser.Role != UserRole.SuperAdmin)
-        {
-            adminUser.Role = UserRole.SuperAdmin;
-            await context.SaveChangesAsync(ct);
-        }
-
-        // Fixup: reassign existing demo entities (Participants, EventTemplates,
-        // AccommodationProperties, Vehicles, TripInstances) to the Demo tenant if they
-        // were previously seeded under the Odip tenant. The 10 staff/user accounts are covered
-        // by the demoUserIds fixup above (Staff no longer exists as a separate entity).
-        var demoTemplateIds = new[]
-        {
-            Guid.Parse("c1000000-0000-0000-0000-000000000001"), Guid.Parse("c1000000-0000-0000-0000-000000000002"),
-            Guid.Parse("c1000000-0000-0000-0000-000000000003"), Guid.Parse("c2000000-0000-0000-0000-000000000001"),
-        };
-        var misplacedTemplates = await context.EventTemplates
-            .IgnoreQueryFilters()
-            .Where(t => demoTemplateIds.Contains(t.Id) && t.TenantId != demoTenantId)
-            .ToListAsync(ct);
-        if (misplacedTemplates.Count > 0)
-        {
-            foreach (var t in misplacedTemplates) t.TenantId = demoTenantId;
-            await context.SaveChangesAsync(ct);
-        }
-
-        var demoParticipantIds = new[]
-        {
-            Guid.Parse("d1000000-0000-0000-0000-000000000001"), Guid.Parse("d1000000-0000-0000-0000-000000000002"),
-            Guid.Parse("d1000000-0000-0000-0000-000000000003"), Guid.Parse("d1000000-0000-0000-0000-000000000004"),
-            Guid.Parse("d1000000-0000-0000-0000-000000000005"), Guid.Parse("d1000000-0000-0000-0000-000000000006"),
-            Guid.Parse("d1000000-0000-0000-0000-000000000007"), Guid.Parse("d1000000-0000-0000-0000-000000000008"),
-            Guid.Parse("d1000000-0000-0000-0000-000000000009"), Guid.Parse("d1000000-0000-0000-0000-000000000010"),
-            Guid.Parse("d2000000-0000-0000-0000-000000000001"), Guid.Parse("d2000000-0000-0000-0000-000000000002"),
-            Guid.Parse("d2000000-0000-0000-0000-000000000003"), Guid.Parse("d2000000-0000-0000-0000-000000000004"),
-            Guid.Parse("d2000000-0000-0000-0000-000000000005"), Guid.Parse("d2000000-0000-0000-0000-000000000006"),
-            Guid.Parse("d2000000-0000-0000-0000-000000000007"), Guid.Parse("d2000000-0000-0000-0000-000000000008"),
-            Guid.Parse("d2000000-0000-0000-0000-000000000009"), Guid.Parse("d2000000-0000-0000-0000-000000000010"),
-        };
-        var misplacedParticipants = await context.Participants
-            .IgnoreQueryFilters()
-            .Where(p => demoParticipantIds.Contains(p.Id) && p.TenantId != demoTenantId)
-            .ToListAsync(ct);
-        if (misplacedParticipants.Count > 0)
-        {
-            foreach (var p in misplacedParticipants) p.TenantId = demoTenantId;
-            await context.SaveChangesAsync(ct);
-        }
-
-        var demoPropertyIds = new[]
-        {
-            Guid.Parse("f1000000-0000-0000-0000-000000000001"), Guid.Parse("f1000000-0000-0000-0000-000000000002"),
-            Guid.Parse("f1000000-0000-0000-0000-000000000003"), Guid.Parse("f1000000-0000-0000-0000-000000000004"),
-            Guid.Parse("f3000000-0000-0000-0000-000000000001"), Guid.Parse("f3000000-0000-0000-0000-000000000002"),
-        };
-        var misplacedProperties = await context.AccommodationProperties
-            .IgnoreQueryFilters()
-            .Where(p => demoPropertyIds.Contains(p.Id) && p.TenantId != demoTenantId)
-            .ToListAsync(ct);
-        if (misplacedProperties.Count > 0)
-        {
-            foreach (var p in misplacedProperties) p.TenantId = demoTenantId;
-            await context.SaveChangesAsync(ct);
-        }
-
-        var demoVehicleIds = new[]
-        {
-            Guid.Parse("f2000000-0000-0000-0000-000000000001"), Guid.Parse("f2000000-0000-0000-0000-000000000002"),
-            Guid.Parse("f4000000-0000-0000-0000-000000000001"), Guid.Parse("f4000000-0000-0000-0000-000000000002"),
-        };
-        var misplacedVehicles = await context.Vehicles
-            .IgnoreQueryFilters()
-            .Where(v => demoVehicleIds.Contains(v.Id) && v.TenantId != demoTenantId)
-            .ToListAsync(ct);
-        if (misplacedVehicles.Count > 0)
-        {
-            foreach (var v in misplacedVehicles) v.TenantId = demoTenantId;
-            await context.SaveChangesAsync(ct);
-        }
-
-        var demoTripIds = new[]
-        {
-            Guid.Parse("01000000-0000-0000-0000-000000000001"), Guid.Parse("01000000-0000-0000-0000-000000000002"),
-            Guid.Parse("01000000-0000-0000-0000-000000000003"), Guid.Parse("01000000-0000-0000-0000-000000000004"),
-            Guid.Parse("01000000-0000-0000-0000-000000000005"), Guid.Parse("09000000-0000-0000-0000-000000000001"),
-            Guid.Parse("09000000-0000-0000-0000-000000000002"), Guid.Parse("09000000-0000-0000-0000-000000000003"),
-            Guid.Parse("09000000-0000-0000-0000-000000000004"), Guid.Parse("09000000-0000-0000-0000-000000000005"),
-        };
-        var misplacedTrips = await context.TripInstances
-            .IgnoreQueryFilters()
-            .Where(t => demoTripIds.Contains(t.Id) && t.TenantId != demoTenantId)
-            .ToListAsync(ct);
-        if (misplacedTrips.Count > 0)
-        {
-            foreach (var t in misplacedTrips) t.TenantId = demoTenantId;
             await context.SaveChangesAsync(ct);
         }
 
@@ -739,35 +600,36 @@ public static class DbSeeder
         context.StaffAvailabilities.AddRange(staffAvailability);
 
         // ── Activities (25) ──────────────────────────────────────
+        var starter = StarterActivities.For(demoTenantId, keepSeedIds: true);   // the generic activities, shared with tenant set-up (see StarterActivities)
         var activities = new List<Activity>
         {
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000001"), EventTemplateId = templates[0].Id, ActivityName = "Beach Morning — Surfers Paradise", Category = ActivityCategory.Leisure, Location = "Surfers Paradise Beach", AccessibilityNotes = "Beach wheelchair available", SuitabilityNotes = "All abilities" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000002"), EventTemplateId = templates[0].Id, ActivityName = "Currumbin Wildlife Sanctuary", Category = ActivityCategory.Sightseeing, Location = "Currumbin", AccessibilityNotes = "Fully wheelchair accessible", SuitabilityNotes = "All abilities. Some animal encounters may not suit sensory sensitivities." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000003"), EventTemplateId = templates[0].Id, ActivityName = "Broadwater Parklands Picnic", Category = ActivityCategory.Leisure, Location = "Southport", AccessibilityNotes = "Accessible paths and facilities" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000004"), EventTemplateId = templates[0].Id, ActivityName = "Pacific Fair Shopping", Category = ActivityCategory.Leisure, Location = "Broadbeach", AccessibilityNotes = "Fully accessible shopping centre" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000005"), EventTemplateId = templates[0].Id, ActivityName = "Gold Coast Aquatic Centre", Category = ActivityCategory.Sport, Location = "Southport", AccessibilityNotes = "Pool hoist available. Accessible change rooms.", SuitabilityNotes = "Swimming ability varies — assess individually" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000006"), EventTemplateId = templates[1].Id, ActivityName = "Three Sisters Lookout", Category = ActivityCategory.Sightseeing, Location = "Echo Point, Katoomba", AccessibilityNotes = "Main lookout wheelchair accessible", SuitabilityNotes = "All abilities at lookout. Walking tracks require mobility." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000007"), EventTemplateId = templates[1].Id, ActivityName = "Scenic World", Category = ActivityCategory.Adventure, Location = "Katoomba", AccessibilityNotes = "Skyway and Railway have accessibility limitations. Cableway is accessible.", SuitabilityNotes = "May not suit anxiety/heights" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000008"), EventTemplateId = templates[1].Id, ActivityName = "Leura Village Walk", Category = ActivityCategory.Leisure, Location = "Leura", AccessibilityNotes = "Footpaths mostly level. Some shops have steps." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000009"), EventTemplateId = templates[1].Id, ActivityName = "Govetts Leap Lookout", Category = ActivityCategory.Sightseeing, Location = "Blackheath", AccessibilityNotes = "Lookout accessible. Walking tracks are not." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000010"), EventTemplateId = templates[2].Id, ActivityName = "National Gallery of Victoria", Category = ActivityCategory.Cultural, Location = "Melbourne CBD", AccessibilityNotes = "Fully accessible", SuitabilityNotes = "All abilities. Quiet hours available." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000011"), EventTemplateId = templates[2].Id, ActivityName = "Melbourne Museum", Category = ActivityCategory.Cultural, Location = "Carlton", AccessibilityNotes = "Fully accessible. Sensory guides available." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000012"), EventTemplateId = templates[2].Id, ActivityName = "Lygon Street Lunch", Category = ActivityCategory.Dining, Location = "Carlton", AccessibilityNotes = "Most restaurants have step-free access" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000013"), EventTemplateId = templates[2].Id, ActivityName = "Queen Victoria Market", Category = ActivityCategory.Sightseeing, Location = "Melbourne CBD", AccessibilityNotes = "Outdoor areas accessible. Some indoor sheds have narrow aisles." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000014"), ActivityName = "Group Dinner Out", Category = ActivityCategory.Dining, Location = "Various", SuitabilityNotes = "Check dietary requirements and sensory environment" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000015"), ActivityName = "Movie Night In", Category = ActivityCategory.Leisure, Location = "Accommodation", SuitabilityNotes = "All abilities. Good wind-down activity." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000016"), ActivityName = "Arrival & Settling In", Category = ActivityCategory.Transport, SuitabilityNotes = "Allow extra time for transitions" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000017"), ActivityName = "Departure & Travel Home", Category = ActivityCategory.Transport },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000018"), ActivityName = "Free Time / Rest", Category = ActivityCategory.Leisure, SuitabilityNotes = "All abilities. Build into every day." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000019"), ActivityName = "Bowling", Category = ActivityCategory.Sport, AccessibilityNotes = "Most bowling alleys have ramps and lightweight balls", SuitabilityNotes = "All abilities with support" },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000020"), ActivityName = "Local Café Visit", Category = ActivityCategory.Dining, Location = "Various", AccessibilityNotes = "Check accessibility per venue" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000001"), TenantId = demoTenantId, EventTemplateId = templates[0].Id, ActivityName = "Beach Morning — Surfers Paradise", Category = ActivityCategory.Leisure, Location = "Surfers Paradise Beach", AccessibilityNotes = "Beach wheelchair available", SuitabilityNotes = "All abilities" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000002"), TenantId = demoTenantId, EventTemplateId = templates[0].Id, ActivityName = "Currumbin Wildlife Sanctuary", Category = ActivityCategory.Sightseeing, Location = "Currumbin", AccessibilityNotes = "Fully wheelchair accessible", SuitabilityNotes = "All abilities. Some animal encounters may not suit sensory sensitivities." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, EventTemplateId = templates[0].Id, ActivityName = "Broadwater Parklands Picnic", Category = ActivityCategory.Leisure, Location = "Southport", AccessibilityNotes = "Accessible paths and facilities" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000004"), TenantId = demoTenantId, EventTemplateId = templates[0].Id, ActivityName = "Pacific Fair Shopping", Category = ActivityCategory.Leisure, Location = "Broadbeach", AccessibilityNotes = "Fully accessible shopping centre" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000005"), TenantId = demoTenantId, EventTemplateId = templates[0].Id, ActivityName = "Gold Coast Aquatic Centre", Category = ActivityCategory.Sport, Location = "Southport", AccessibilityNotes = "Pool hoist available. Accessible change rooms.", SuitabilityNotes = "Swimming ability varies — assess individually" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000006"), TenantId = demoTenantId, EventTemplateId = templates[1].Id, ActivityName = "Three Sisters Lookout", Category = ActivityCategory.Sightseeing, Location = "Echo Point, Katoomba", AccessibilityNotes = "Main lookout wheelchair accessible", SuitabilityNotes = "All abilities at lookout. Walking tracks require mobility." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000007"), TenantId = demoTenantId, EventTemplateId = templates[1].Id, ActivityName = "Scenic World", Category = ActivityCategory.Adventure, Location = "Katoomba", AccessibilityNotes = "Skyway and Railway have accessibility limitations. Cableway is accessible.", SuitabilityNotes = "May not suit anxiety/heights" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000008"), TenantId = demoTenantId, EventTemplateId = templates[1].Id, ActivityName = "Leura Village Walk", Category = ActivityCategory.Leisure, Location = "Leura", AccessibilityNotes = "Footpaths mostly level. Some shops have steps." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000009"), TenantId = demoTenantId, EventTemplateId = templates[1].Id, ActivityName = "Govetts Leap Lookout", Category = ActivityCategory.Sightseeing, Location = "Blackheath", AccessibilityNotes = "Lookout accessible. Walking tracks are not." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000010"), TenantId = demoTenantId, EventTemplateId = templates[2].Id, ActivityName = "National Gallery of Victoria", Category = ActivityCategory.Cultural, Location = "Melbourne CBD", AccessibilityNotes = "Fully accessible", SuitabilityNotes = "All abilities. Quiet hours available." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000011"), TenantId = demoTenantId, EventTemplateId = templates[2].Id, ActivityName = "Melbourne Museum", Category = ActivityCategory.Cultural, Location = "Carlton", AccessibilityNotes = "Fully accessible. Sensory guides available." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000012"), TenantId = demoTenantId, EventTemplateId = templates[2].Id, ActivityName = "Lygon Street Lunch", Category = ActivityCategory.Dining, Location = "Carlton", AccessibilityNotes = "Most restaurants have step-free access" },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000013"), TenantId = demoTenantId, EventTemplateId = templates[2].Id, ActivityName = "Queen Victoria Market", Category = ActivityCategory.Sightseeing, Location = "Melbourne CBD", AccessibilityNotes = "Outdoor areas accessible. Some indoor sheds have narrow aisles." },
+            starter[0],
+            starter[1],
+            starter[2],
+            starter[3],
+            starter[4],
+            starter[5],
+            starter[6],
             // New activities for Cairns
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000021"), EventTemplateId = templates[3].Id, ActivityName = "Cairns Esplanade Lagoon", Category = ActivityCategory.Leisure, Location = "Cairns Esplanade", AccessibilityNotes = "Free public pool. Accessible entry ramps. Changing facilities accessible.", SuitabilityNotes = "All abilities. Lifeguards on duty." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000022"), EventTemplateId = templates[3].Id, ActivityName = "Great Barrier Reef Pontoon Tour", Category = ActivityCategory.Adventure, Location = "Outer Great Barrier Reef", AccessibilityNotes = "Accessible boarding ramp on pontoon. Semi-submersible suitable for non-swimmers. Call ahead for wheelchair boarding.", SuitabilityNotes = "Confirm medical suitability. Not suitable for participants with severe epilepsy unless cleared." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000023"), EventTemplateId = templates[3].Id, ActivityName = "Kuranda Scenic Railway & Village", Category = ActivityCategory.Sightseeing, Location = "Kuranda, QLD", AccessibilityNotes = "Train carriages accessible. Kuranda village mostly accessible.", SuitabilityNotes = "All abilities. Long journey — bring snacks." },
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000024"), EventTemplateId = templates[3].Id, ActivityName = "Cairns Night Markets", Category = ActivityCategory.Dining, Location = "Cairns CBD", AccessibilityNotes = "Accessible paths. Some vendor stalls may have narrow access.", SuitabilityNotes = "Evening sensory environment — assess individually." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000021"), TenantId = demoTenantId, EventTemplateId = templates[3].Id, ActivityName = "Cairns Esplanade Lagoon", Category = ActivityCategory.Leisure, Location = "Cairns Esplanade", AccessibilityNotes = "Free public pool. Accessible entry ramps. Changing facilities accessible.", SuitabilityNotes = "All abilities. Lifeguards on duty." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000022"), TenantId = demoTenantId, EventTemplateId = templates[3].Id, ActivityName = "Great Barrier Reef Pontoon Tour", Category = ActivityCategory.Adventure, Location = "Outer Great Barrier Reef", AccessibilityNotes = "Accessible boarding ramp on pontoon. Semi-submersible suitable for non-swimmers. Call ahead for wheelchair boarding.", SuitabilityNotes = "Confirm medical suitability. Not suitable for participants with severe epilepsy unless cleared." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000023"), TenantId = demoTenantId, EventTemplateId = templates[3].Id, ActivityName = "Kuranda Scenic Railway & Village", Category = ActivityCategory.Sightseeing, Location = "Kuranda, QLD", AccessibilityNotes = "Train carriages accessible. Kuranda village mostly accessible.", SuitabilityNotes = "All abilities. Long journey — bring snacks." },
+            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000024"), TenantId = demoTenantId, EventTemplateId = templates[3].Id, ActivityName = "Cairns Night Markets", Category = ActivityCategory.Dining, Location = "Cairns CBD", AccessibilityNotes = "Accessible paths. Some vendor stalls may have narrow access.", SuitabilityNotes = "Evening sensory environment — assess individually." },
             // Generic
-            new() { Id = Guid.Parse("06000000-0000-0000-0000-000000000025"), ActivityName = "Sensory Art Session", Category = ActivityCategory.Cultural, Location = "Accommodation / Community Hall", AccessibilityNotes = "All abilities. Low sensory environment.", SuitabilityNotes = "Particularly good for participants with ABI or sensory sensitivities." },
+            starter[7],
         };
         context.Activities.AddRange(activities);
 
@@ -2289,133 +2151,6 @@ public static class DbSeeder
 
         context.RestrictivePractices.AddRange(practices);
         await context.SaveChangesAsync(ct);
-    }
-
-    /// <summary>
-    /// Seeds the ODIP Master Data Dictionary (field registry) for every tenant that
-    /// doesn't already have one. Runs on every startup — idempotent per tenant via a
-    /// single existence check (not per-field), so a restart never duplicates the
-    /// ~280 field definitions and re-checking N tenants stays cheap.
-    /// </summary>
-    public static async Task SeedDataDictionaryAsync(OdipDbContext context, CancellationToken ct = default)
-    {
-        var tenantIds = await context.Tenants.Select(t => t.Id).ToListAsync(ct);
-        if (tenantIds.Count == 0)
-            return;
-
-        string? seedJson = null;
-        var anyAdded = false;
-
-        foreach (var tenantId in tenantIds)
-        {
-            // Single existence check per tenant — never a per-row (per-field) check.
-            var alreadySeeded = await context.FieldDefinitions
-                .IgnoreQueryFilters()
-                .AnyAsync(f => f.TenantId == tenantId, ct);
-            if (alreadySeeded)
-                continue;
-
-            seedJson ??= File.ReadAllText(ResolveDataDictionarySeedPath());
-            var definitions = DataDictionarySeeder.LoadFromJson(seedJson, tenantId);
-            context.FieldDefinitions.AddRange(definitions);
-            anyAdded = true;
-        }
-
-        if (anyAdded)
-            await context.SaveChangesAsync(ct);
-    }
-
-    /// <summary>
-    /// Resolves DataDictionarySeed.json against the running process's base directory
-    /// first (the path it lands at once Odip.Domain's CopyToOutputDirectory content
-    /// item flows through the Domain → Infrastructure → Api project-reference chain,
-    /// which is how it resolves in both a dev bin folder and a published container
-    /// image). Falls back to walking up from the base directory to find it under
-    /// Odip.Domain/SeedData for dev-only scenarios where that copy hasn't happened
-    /// (mirrors Odip.ProtoTests/Program.cs and BillingPrototypeTests's resolution).
-    /// </summary>
-    private static string ResolveDataDictionarySeedPath()
-    {
-        var primary = Path.Combine(AppContext.BaseDirectory, "SeedData", "DataDictionarySeed.json");
-        if (File.Exists(primary))
-            return primary;
-
-        var dir = AppContext.BaseDirectory;
-        for (var i = 0; i < 8; i++)
-        {
-            var candidate = Path.Combine(dir, "Odip.Domain", "SeedData", "DataDictionarySeed.json");
-            if (File.Exists(candidate))
-                return candidate;
-            dir = Path.GetFullPath(Path.Combine(dir, ".."));
-        }
-
-        throw new FileNotFoundException(
-            "Could not locate DataDictionarySeed.json via the publish-layout path or the dev source-tree fallback.");
-    }
-
-    /// <summary>
-    /// Deletes the data a reseed replaces, in FK-safe order. Its own method so a test can run the deletes without the seeding (which does not run on InMemory).
-    /// </summary>
-    public static async Task ClearAllDataAsync(OdipDbContext context, CancellationToken ct = default)
-    {
-        // Delete in reverse FK dependency order
-        // A participant's plan budget (budget phase 1): FundingPlan → Participant is Restrict, so the plans must go before Participants.RemoveRange below or a database that holds one fails
-        // the delete. Children first (periods, pools, then plans), so the delete never leans on a cascade the context is not tracking.
-        context.FundingPeriods.RemoveRange(context.FundingPeriods);
-        context.FundingPools.RemoveRange(context.FundingPools);
-        context.FundingPlans.RemoveRange(context.FundingPlans);
-        context.MedicationAdministrations.RemoveRange(context.MedicationAdministrations);
-        context.ParticipantMedications.RemoveRange(context.ParticipantMedications);
-        context.ParticipantNotes.RemoveRange(context.ParticipantNotes);
-        // RestrictivePractice/ParticipantRoutine → Participant is Restrict (see OdipDbContext),
-        // so both must be cleared before Participants.RemoveRange below or SaveChangesAsync would
-        // throw an FK violation on any DB that already has rows in either table (seed-expansion
-        // task fix — these two were previously missing from the delete list).
-        context.RestrictivePractices.RemoveRange(context.RestrictivePractices);
-        context.ShiftRoutineChecks.RemoveRange(context.ShiftRoutineChecks);   // ShiftRoutineCheck → ParticipantRoutine is Restrict
-        context.ParticipantRoutines.RemoveRange(context.ParticipantRoutines);
-        context.ScheduledActivities.RemoveRange(context.ScheduledActivities);
-        context.TripDays.RemoveRange(context.TripDays);
-        context.BookingTasks.RemoveRange(context.BookingTasks);
-        context.StaffAssignments.RemoveRange(context.StaffAssignments);
-        context.VehicleAssignments.RemoveRange(context.VehicleAssignments);
-        context.AccommodationReservations.RemoveRange(context.AccommodationReservations);
-        context.ParticipantBookings.RemoveRange(context.ParticipantBookings);
-        context.ParticipantContacts.RemoveRange(context.ParticipantContacts);
-        context.SupportProfiles.RemoveRange(context.SupportProfiles);
-        context.TripInstances.RemoveRange(context.TripInstances);
-        context.Participants.RemoveRange(context.Participants);
-        context.Contacts.RemoveRange(context.Contacts);
-        context.Activities.RemoveRange(context.Activities);
-        context.EventTemplates.RemoveRange(context.EventTemplates);
-        context.AccommodationProperties.RemoveRange(context.AccommodationProperties);
-        context.Vehicles.RemoveRange(context.Vehicles);
-        context.StaffAvailabilities.RemoveRange(context.StaffAvailabilities);
-        context.Users.RemoveRange(context.Users);
-
-        await context.SaveChangesAsync(ct);
-    }
-
-    /// <summary>
-    /// Clears all data in FK-safe order then re-seeds fresh data.
-    /// </summary>
-    public static async Task ReseedAsync(OdipDbContext context, CancellationToken ct = default)
-    {
-        await ClearAllDataAsync(context, ct);
-        await SeedAsync(context, ct);
-        await SeedMedicationsAsync(context, ct);
-        await SeedParticipantNotesAsync(context, ct);
-        // Seed-expansion task fix — these two were previously missing here, so a Reseed via the
-        // dev endpoint silently dropped routines and the restrictive-practices register even
-        // though Program.cs seeds both on every normal startup.
-        await SeedParticipantRoutinesAsync(context, ct);
-        await SeedRestrictivePracticesAsync(context, ct);
-        await SeedParticipantConsentsAsync(context, ct);
-        await SeedParticipantHealthConditionsAsync(context, ct);
-        await SeedParticipantClinicalEnrichmentAsync(context, ct);
-        await SeedParticipantAdlAssessmentsAsync(context, ct);
-        await SeedParticipantDailyLivingAsync(context, ct);
-        await SeedCommunityAccessDailyLivingAsync(context, ct);
     }
 
     /// <summary>

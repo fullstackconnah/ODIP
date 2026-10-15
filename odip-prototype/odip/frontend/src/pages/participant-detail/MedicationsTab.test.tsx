@@ -10,7 +10,7 @@ const { mockUseParticipantMedications, mockUseParticipantAdministrations, mockNa
   mockUseParticipantMedications: vi.fn(),
   mockUseParticipantAdministrations: vi.fn(),
   mockNavigate: vi.fn(),
-  permissionsOverride: { canCreateIncidents: true },
+  permissionsOverride: { canCreateIncidents: true, canManageMedications: true, isReadOnly: false },
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -19,7 +19,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canManageMedications: true, canCreateIncidents: permissionsOverride.canCreateIncidents }),
+  usePermissions: () => permissionsOverride,
 }))
 
 vi.mock('react-router-dom', async () => {
@@ -49,7 +49,7 @@ function renderTab() {
 }
 
 beforeEach(() => {
-  permissionsOverride.canCreateIncidents = true
+  Object.assign(permissionsOverride, { canCreateIncidents: true, canManageMedications: true, isReadOnly: false })
   mockNavigate.mockReset()
   mockUseParticipantMedications.mockReturnValue({ data: [], isLoading: false })
 })
@@ -143,5 +143,29 @@ describe('participant-detail/MedicationsTab — administration outcome tones (L3
     for (const [status, tone] of Object.entries(tones)) {
       for (const cls of TONE[tone].solid.split(' ')) expect(screen.getByText(status), `${status} ${cls}`).toHaveClass(cls)
     }
+  })
+})
+
+// Q2 fix round: the card opens the medication form (a view for ReadOnly). SupportWorker is sent away from that route, so its card is plain content.
+describe('MedicationsTab — the medication card by role', () => {
+  const med = {
+    id: 'med-1', participantId: 'participant-1', name: 'Metformin', strength: '500mg', form: 'Tablet', route: 'Oral', doseDescription: '1 tablet',
+    type: 'Regular', timesOfDay: '08:00', status: 'Active', supportLevel: 'FullSupport', complianceFlags: [], nextReviewDue: null,
+  }
+
+  it.each([
+    ['Coordinator', { canManageMedications: true, isReadOnly: false }, true],
+    ['ReadOnly', { canManageMedications: false, isReadOnly: true }, true],
+    ['SupportWorker', { canManageMedications: false, isReadOnly: false }, false],
+  ] as const)('%s: the card links to the form: %s', (_role, perms, links) => {
+    Object.assign(permissionsOverride, perms)
+    mockUseParticipantMedications.mockReturnValue({ data: [med], isLoading: false })
+    mockUseParticipantAdministrations.mockReturnValue({ data: [] })
+    renderTab()
+
+    expect(screen.getByText('Metformin')).toBeInTheDocument()
+    const link = screen.getByText('Metformin').closest('a')
+    if (links) expect(link).toHaveAttribute('href', '/medications/med-1/edit')
+    else expect(link).toBeNull()
   })
 })

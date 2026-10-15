@@ -14,6 +14,8 @@ import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/inciden
 import { MissedMedicationGuidance } from './MissedMedicationGuidance'
 import type { MedicationAdministrationStatus, PackagingType } from '@/api/types/enums'
 import type { AdministrationDto, CreateAdministrationDto, UpdateAdministrationDto } from '@/api/types/medications'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 export type RecordAdministrationModalProps = {
   open: boolean
@@ -103,8 +105,8 @@ export function RecordAdministrationModal({
   const [doseGiven, setDoseGiven] = useState(existingAdministration?.doseGiven ?? doseDescription ?? '')
   const [reason, setReason] = useState(existingAdministration?.reason ?? '')
   const [prnReason, setPrnReason] = useState(existingAdministration?.prnReason ?? '')
-  // Legacy free-text witness — only ever shown/edited when amending an administration that
-  // already used it (the create flow below always uses the staff picker instead).
+  // Legacy free-text witness — only shown/edited when amending a dose with no staff witness
+  // (the create flow below always uses the staff picker instead).
   const [witnessName, setWitnessName] = useState(existingAdministration?.witnessName ?? '')
   const [witnessStaffId, setWitnessStaffId] = useState(existingAdministration?.witnessStaffId ?? '')
   const [notes, setNotes] = useState(existingAdministration?.notes ?? '')
@@ -134,6 +136,8 @@ export function RecordAdministrationModal({
   const requiresReason = status !== 'Administered'
   const requiresPrnReason = isPrn && status === 'Administered'
   const requiresWitness = isHighRisk && status === 'Administered'
+  // An amended dose that already has a staff witness keeps it; no typed name is asked for or saved.
+  const hasStaffWitness = isAmend && !!existingAdministration?.witnessStaffId
   // MED-03: wrong-medication recording additionally requires a note on what was actually given
   // instead of the prescribed medication — required both ends (see MedicationsController).
   const requiresWrongMedNote = status === 'WrongMedication'
@@ -192,7 +196,7 @@ export function RecordAdministrationModal({
     if (requiresWrongMedNote && !notes.trim()) errs.notes = 'Required — what was actually given instead'
     if (requiresPrnReason && !prnReason.trim()) errs.prnReason = 'Required for a PRN dose'
     if (requiresWitness) {
-      if (isAmend && !witnessName.trim()) errs.witnessName = 'A second worker must witness this dose'
+      if (isAmend && !hasStaffWitness && !witnessName.trim()) errs.witnessName = 'A second worker must witness this dose'
       if (!isAmend && !witnessStaffId) errs.witnessStaffId = 'Select the staff member who witnessed this dose'
       // Belt-and-suspenders: the picker already excludes the signed-in user (see activeStaff
       // above), but catch it here too rather than letting a self-selection reach the backend's
@@ -237,8 +241,9 @@ export function RecordAdministrationModal({
       ...buildCommonFields(),
       // Amending only ever edits the legacy free-text witness field — the staff-witness
       // Pending/Approved/Declined workflow (see the portal's Witness approvals queue) is managed
-      // separately and isn't reassignable through this form.
-      witnessName: requiresWitness ? witnessName : undefined,
+      // separately and isn't reassignable through this form. Always sent back, so an amendment that no
+      // longer needs a witness (e.g. changed to Refused) doesn't blank the one already recorded.
+      witnessName,
       // The backend unconditionally overwrites prnOutcome/prnOutcomeAt on PUT — pass through
       // the existing values so amending an administration doesn't silently wipe a previously
       // recorded PRN outcome.
@@ -311,47 +316,26 @@ export function RecordAdministrationModal({
           savedTriggerAdministration ? (
             canCreateIncidents ? (
               <>
-                <button
-                  type="button"
-                  onClick={dismissIncidentPrompt}
-                  className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-                >
+                <Button variant="secondary" onClick={dismissIncidentPrompt}>
                   Not now
-                </button>
-                <button
-                  type="button"
-                  onClick={goToIncident}
-                  className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all"
-                >
+                </Button>
+                <Button onClick={goToIncident}>
                   Report as incident
-                </button>
+                </Button>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={dismissIncidentPrompt}
-                className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 transition-all"
-              >
+              <Button onClick={dismissIncidentPrompt}>
                 Got it
-              </button>
+              </Button>
             )
           ) : (
             <>
-              <button
-                type="button"
-                onClick={handleClose}
-                className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] transition-colors"
-              >
+              <Button variant="secondary" onClick={handleClose}>
                 Cancel
-              </button>
-              <button
-                type="submit"
-                form="record-administration-form"
-                disabled={isPending}
-                className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-white font-medium hover:bg-[var(--color-primary)]/90 disabled:opacity-50 transition-all"
-              >
+              </Button>
+              <Button type="submit" form="record-administration-form" disabled={isPending}>
                 {isPending ? 'Saving...' : (isAmend ? 'Save amendment' : SUBMIT_LABEL[status])}
-              </button>
+              </Button>
             </>
           )
         }
@@ -395,9 +379,7 @@ export function RecordAdministrationModal({
         ) : (
         <form id="record-administration-form" onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-              {error}
-            </div>
+            <Callout tone="error">{error}</Callout>
           )}
 
           <FormField label="Status" required>
@@ -434,7 +416,12 @@ export function RecordAdministrationModal({
           </AnimatedField>
 
           <AnimatedField show={requiresWitness}>
-            {isAmend ? (
+            {hasStaffWitness ? (
+              <div>
+                <p className={labelClass}>Witness</p>
+                <p className="text-sm text-[var(--color-foreground)]">{existingAdministration?.witnessName || 'Recorded staff witness'}</p>
+              </div>
+            ) : isAmend ? (
               <FormField label="Witness name" required error={fieldErrors.witnessName} hint={!fieldErrors.witnessName ? 'High-risk medication — a second worker must witness this dose' : undefined}>
                 <input value={witnessName} onChange={e => { setWitnessName(e.target.value); clearFieldError('witnessName') }} />
               </FormField>

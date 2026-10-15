@@ -30,6 +30,15 @@ public class TripsController : ControllerBase
     }
 
     /// <summary>
+    /// Null is always fine, otherwise the id must resolve to an event template of the caller's organisation (EventTemplates is tenant-filtered). Not required to be active: editing an
+    /// old trip re-sends the id of a template that has since been deactivated.
+    /// </summary>
+    private Task<bool> IsValidEventTemplateRefAsync(Guid? templateId, CancellationToken ct) =>
+        templateId.HasValue
+            ? _db.EventTemplates.AnyAsync(e => e.Id == templateId.Value, ct)
+            : Task.FromResult(true);
+
+    /// <summary>
     /// §4.4 same-tenant validation for the lead-coordinator picker: null is always fine,
     /// otherwise the id must resolve to an active User — same-tenant scoping comes for free from
     /// _db.Users' ambient OdipDbContext query filter.
@@ -64,7 +73,12 @@ public class TripsController : ControllerBase
         var query = _db.TripInstances.Include(t => t.LeadCoordinator).Include(t => t.Bookings).AsQueryable();
         if (status.HasValue) query = query.Where(t => t.Status == status.Value);
         if (!string.IsNullOrWhiteSpace(region)) query = query.Where(t => t.Region == region);
-        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(t => t.TripName.Contains(search) || (t.Destination != null && t.Destination.Contains(search)));
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // Lower-cased both sides: Contains alone is a case-sensitive LIKE on Npgsql (as ParticipantQueries.SearchByName).
+            var term = search.Trim().ToLower();
+            query = query.Where(t => t.TripName.ToLower().Contains(term) || (t.Destination != null && t.Destination.ToLower().Contains(term)));
+        }
         if (startFrom.HasValue) query = query.Where(t => t.StartDate >= startFrom.Value);
         if (startTo.HasValue) query = query.Where(t => t.StartDate <= startTo.Value);
 
@@ -106,7 +120,7 @@ public class TripsController : ControllerBase
             LeadCoordinatorName = t.LeadCoordinator != null ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null,
             RequiredWheelchairCapacity = t.RequiredWheelchairCapacity, RequiredBeds = t.RequiredBeds,
             RequiredBedrooms = t.RequiredBedrooms, MinStaffRequired = t.MinStaffRequired,
-            CalculatedStaffRequired = t.CalculatedStaffRequired, Notes = t.Notes,
+            CalculatedStaffRequired = t.CalculatedStaffRequired, StaffRequired = t.StaffRequired, Notes = t.Notes,
             ActiveHoursPerDay = t.ActiveHoursPerDay, DepartureTime = t.DepartureTime, ReturnTime = t.ReturnTime,
             CurrentParticipantCount = t.Bookings.Count(b => b.BookingStatus == BookingStatus.Confirmed),
             WaitlistCount = t.Bookings.Count(b => b.BookingStatus == BookingStatus.Waitlist),
@@ -128,6 +142,8 @@ public class TripsController : ControllerBase
     {
         if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
+        if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
+            return BadRequest(ApiResponse<TripDetailDto>.Fail("Event template not found."));
 
         var trip = new TripInstance
         {
@@ -161,7 +177,7 @@ public class TripsController : ControllerBase
                 LeadCoordinatorName = created.LeadCoordinator != null ? created.LeadCoordinator.FirstName + " " + created.LeadCoordinator.LastName : null,
                 RequiredWheelchairCapacity = created.RequiredWheelchairCapacity, RequiredBeds = created.RequiredBeds,
                 RequiredBedrooms = created.RequiredBedrooms, MinStaffRequired = created.MinStaffRequired,
-                CalculatedStaffRequired = created.CalculatedStaffRequired, Notes = created.Notes,
+                CalculatedStaffRequired = created.CalculatedStaffRequired, StaffRequired = created.StaffRequired, Notes = created.Notes,
                 ActiveHoursPerDay = created.ActiveHoursPerDay, DepartureTime = created.DepartureTime, ReturnTime = created.ReturnTime,
                 CurrentParticipantCount = created.Bookings.Count(b => b.BookingStatus == BookingStatus.Confirmed),
                 WaitlistCount = created.Bookings.Count(b => b.BookingStatus == BookingStatus.Waitlist),
@@ -186,6 +202,8 @@ public class TripsController : ControllerBase
 
         if (!await IsValidLeadCoordinatorRefAsync(dto.LeadCoordinatorId, ct))
             return BadRequest(ApiResponse<TripDetailDto>.Fail("Lead coordinator not found."));
+        if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
+            return BadRequest(ApiResponse<TripDetailDto>.Fail("Event template not found."));
 
         t.TripName = dto.TripName; t.TripCode = dto.TripCode; t.EventTemplateId = dto.EventTemplateId;
         t.Destination = dto.Destination; t.Region = dto.Region; t.StartDate = dto.StartDate;
@@ -217,7 +235,7 @@ public class TripsController : ControllerBase
             LeadCoordinatorName = updated.LeadCoordinator != null ? updated.LeadCoordinator.FirstName + " " + updated.LeadCoordinator.LastName : null,
             RequiredWheelchairCapacity = updated.RequiredWheelchairCapacity, RequiredBeds = updated.RequiredBeds,
             RequiredBedrooms = updated.RequiredBedrooms, MinStaffRequired = updated.MinStaffRequired,
-            CalculatedStaffRequired = updated.CalculatedStaffRequired, Notes = updated.Notes,
+            CalculatedStaffRequired = updated.CalculatedStaffRequired, StaffRequired = updated.StaffRequired, Notes = updated.Notes,
             ActiveHoursPerDay = updated.ActiveHoursPerDay, DepartureTime = updated.DepartureTime, ReturnTime = updated.ReturnTime,
             CurrentParticipantCount = updated.Bookings.Count(b => b.BookingStatus == BookingStatus.Confirmed),
             WaitlistCount = updated.Bookings.Count(b => b.BookingStatus == BookingStatus.Waitlist),
@@ -265,7 +283,7 @@ public class TripsController : ControllerBase
             var hasProviderSettings = await _db.ProviderSettings.AnyAsync(ct);
             var taskTitle = hasProviderSettings
                 ? $"Generate NDIS claims for {t.TripName}"
-                : $"Generate NDIS claims for {t.TripName} — configure Provider Settings first";
+                : $"Generate NDIS claims for {t.TripName} — fill in Settings › Organisation profile first";
 
             var alreadyExists = await _db.BookingTasks.AnyAsync(bt =>
                 bt.TripInstanceId == id && bt.TaskType == TaskType.GenerateNdisClaims, ct);
@@ -337,7 +355,7 @@ public class TripsController : ControllerBase
                 ConfirmationReference = r.ConfirmationReference, BedroomsReserved = r.BedroomsReserved,
                 BedsReserved = r.BedsReserved, Cost = r.Cost, HasOverlapConflict = r.HasOverlapConflict,
                 Comments = r.Comments, RequestSentDate = r.RequestSentDate, DateBooked = r.DateBooked,
-                DateConfirmed = r.DateConfirmed
+                DateConfirmed = r.DateConfirmed, CancellationReason = r.CancellationReason
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<ReservationDto>>.Ok(items));
     }
@@ -402,6 +420,9 @@ public class TripsController : ControllerBase
     [HttpGet("{id:guid}/schedule")]
     public async Task<ActionResult<ApiResponse<List<TripDayDto>>>> GetSchedule(Guid id, CancellationToken ct)
     {
+        // TripDay has no organisation column or query filter: a trip's days are the caller's only if the trip is.
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == id, ct)) return NotFound(ApiResponse<List<TripDayDto>>.Fail("Trip not found"));
+
         var days = await _db.TripDays.Include(d => d.ScheduledActivities).ThenInclude(sa => sa.Activity)
             .Where(d => d.TripInstanceId == id).OrderBy(d => d.DayNumber)
             .Select(d => new TripDayDto
@@ -423,20 +444,6 @@ public class TripsController : ControllerBase
                     }).ToList()
             }).ToListAsync(ct);
         return Ok(ApiResponse<List<TripDayDto>>.Ok(days));
-    }
-
-    /// <summary>Get documents for a trip.</summary>
-    [HttpGet("{id:guid}/documents")]
-    public async Task<ActionResult<ApiResponse<List<TripDocumentDto>>>> GetDocuments(Guid id, CancellationToken ct)
-    {
-        var items = await _db.TripDocuments.Where(d => d.TripInstanceId == id)
-            .Select(d => new TripDocumentDto
-            {
-                Id = d.Id, TripInstanceId = d.TripInstanceId, ParticipantBookingId = d.ParticipantBookingId,
-                DocumentType = d.DocumentType, FileName = d.FileName, FilePath = d.FilePath,
-                FileSize = d.FileSize, DocumentDate = d.DocumentDate, Notes = d.Notes, UploadedAt = d.UploadedAt
-            }).ToListAsync(ct);
-        return Ok(ApiResponse<List<TripDocumentDto>>.Ok(items));
     }
 
     /// <summary>Ensure TripDay records exist for a trip, reconciling with DurationDays.</summary>

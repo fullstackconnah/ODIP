@@ -9,6 +9,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Bookings;
 
@@ -23,18 +24,7 @@ namespace Odip.Tests.Bookings;
 /// </summary>
 public class BookingsControllerTests
 {
-    private static OdipDbContext CreateDb(string dbName)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     private static TripInstance SeedTrip(OdipDbContext db)
     {
@@ -54,8 +44,9 @@ public class BookingsControllerTests
         db.Participants.Add(participant);
         if (ready)
         {
-            var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId, ProfileComplete = true, ProfileCompletedAt = DateTime.UtcNow, ServiceTypeConfirmed = true, ServiceTypeConfirmedAt = DateTime.UtcNow };
-            var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31) };
+            OnboardingSeeds.CompleteProfile(participant);
+            var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId };
+            var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Version = 1, State = "Approved", ParticipantNameSnapshot = participant.FullName, PlanStartDate = new(2026, 1, 1), PlanEndDate = new(2026, 12, 31), AgreementStartDate = new(2026, 1, 1), AgreementEndDate = new(2026, 12, 31), Lines = { OnboardingSeeds.PricedLine() } };
             var snapshot = new ElectronicSigningSnapshot { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, DraftId = draft.Id, DraftVersion = 1, DocumentJson = "{\"immutable\":true}", DocumentHash = new string('a', 64) };
             var evidence = new ElectronicSigningEvidence { Id = Guid.NewGuid(), TenantId = participant.TenantId, SnapshotId = snapshot.Id, IdempotencyKey = Guid.NewGuid().ToString(), SignerName = "Fixture", SignerCapacity = "Representative", IsAuthorisedRepresentative = true, ConsentToElectronicMethod = true, IntendsToSign = true, DocumentWasDisplayed = true, EvidenceHash = new string('b', 64), PreviousEvidenceHash = "GENESIS", Status = "Verified" };
             db.AddRange(onboarding, draft, snapshot, evidence);
@@ -121,9 +112,8 @@ public class BookingsControllerTests
         EnforceReadiness(db);
         var trip = SeedTrip(db);
         var participant = SeedParticipant(db);
-        var onboarding = await db.ParticipantOnboardings.SingleAsync();
-        if (missing == "profile") onboarding.ProfileComplete = false;
-        if (missing == "service-type") onboarding.ServiceTypeConfirmed = false;
+        if (missing == "profile") participant.DateOfBirth = null;
+        if (missing == "service-type") (await db.ServiceAgreementDraftLines.SingleAsync()).UnitPrice = 0;
         if (missing == "agreement") (await db.ElectronicSigningEvidence.SingleAsync()).Status = "PendingVerification";
         await db.SaveChangesAsync();
 
@@ -239,6 +229,40 @@ public class BookingsControllerTests
 
         Assert.Equal(expectedTiedOrder, firstTiedOrder);
         Assert.Equal(expectedTiedOrder, secondTiedOrder);
+    }
+
+    /// <summary>
+    /// VISUAL-1 V4: the Bookings list is paged on the server, so its search must be too (a client filter would only search one page).
+    /// It matches the participant's full or preferred name, or the trip name, ignoring case (lower-cased both sides, as
+    /// ParticipantQueries.SearchByName: Contains alone is a case-sensitive LIKE on Npgsql), and the total counts the matches.
+    /// </summary>
+    [Fact]
+    public async Task GetAll_Search_MatchesParticipantOrTripName_IgnoringCase_AndCountsOnlyMatches()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var beach = SeedTrip(db);
+        var snow = new TripInstance { Id = Guid.NewGuid(), TripName = "Snowy Mountains Week", StartDate = new DateOnly(2026, 7, 1), DurationDays = 5, Status = TripStatus.Planning };
+        db.TripInstances.Add(snow);
+        var sophie = SeedParticipant(db, firstName: "Sophie", lastName: "Brown");
+        var harrison = SeedParticipant(db, firstName: "Harrison", lastName: "Lee");
+        db.ParticipantBookings.AddRange(
+            new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = beach.Id, ParticipantId = sophie.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 8, 1) },
+            new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = snow.Id, ParticipantId = harrison.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 6, 1) });
+        await db.SaveChangesAsync();
+        var controller = new BookingsController(db);
+
+        async Task<PagedResult<BookingListDto>> Search(string? term) =>
+            Assert.IsType<ApiResponse<PagedResult<BookingListDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(tripId: null, status: null, search: term, ct: CancellationToken.None)).Result).Value).Data!;
+
+        var byParticipant = await Search("  sophie b ");
+        Assert.Equal(1, byParticipant.TotalCount);
+        Assert.Equal(sophie.Id, Assert.Single(byParticipant.Items).ParticipantId);
+
+        var byTrip = await Search("SNOWY");
+        Assert.Equal(harrison.Id, Assert.Single(byTrip.Items).ParticipantId);
+
+        Assert.Equal(0, (await Search("nobody")).TotalCount);
+        Assert.Equal(2, (await Search(null)).TotalCount);
     }
 
     /// <summary>

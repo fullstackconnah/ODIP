@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { Dropdown, type DropdownItem } from './Dropdown'
 import { DataTable, type Column } from './DataTable'
+import { Button } from './Button'
 import { FormField } from './FormField'
 import {
   BODY_REGION_LABELS,
@@ -105,15 +106,15 @@ function BodySvg({ view, regions, draftRegion, hasInjury, onSelect }: BodySvgPro
         const fill = selected
           ? 'var(--color-primary)'
           : marked
-          ? 'var(--color-primary-container, #ddd6fe)'
-          : 'var(--color-muted, #e5e7eb)'
+          ? 'var(--color-primary-container)'
+          : 'var(--color-muted)'
 
         const shared = {
           'data-region': region,
           'data-testid': `svg-region-${view}-${region}`,
           onClick: () => onSelect(region),
           fill,
-          stroke: 'var(--color-border, #94a3b8)',
+          stroke: 'var(--color-border)',
           strokeWidth: 1,
           style: { cursor: 'pointer' as const },
         }
@@ -182,14 +183,11 @@ export function BodyDiagram({ injuries, onAdd, onRemove }: BodyDiagramProps) {
     {
       key: 'actions',
       header: 'Remove',
-      render: (_row, rowIndex) => (
-        <button
-          type="button"
-          onClick={() => onRemove(rowIndex)}
-          className="text-sm font-medium text-[var(--color-destructive)]"
-        >
+      // Every row has one, so its name says which injury it removes.
+      render: (row, rowIndex) => (
+        <Button variant="ghost-danger" size="sm" onClick={() => onRemove(rowIndex)} aria-label={`Remove: ${BODY_REGION_LABELS[row.region]}, ${INJURY_TYPE_LABELS[row.injuryType]}`}>
           Remove
-        </button>
+        </Button>
       ),
     },
   ]
@@ -278,13 +276,7 @@ export function BodyDiagram({ injuries, onAdd, onRemove }: BodyDiagramProps) {
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={handleAdd}
-        className="rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-[var(--color-primary-foreground)]"
-      >
-        Add injury
-      </button>
+      <Button onClick={handleAdd}>Add injury</Button>
 
       <DataTable data={rows} columns={columns} keyField="_key" emptyMessage="No injuries recorded yet." />
     </div>

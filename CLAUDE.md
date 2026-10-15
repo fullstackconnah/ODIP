@@ -2,8 +2,7 @@
 
 ODIP is an NDIS trip and participant operations management platform. It covers participants,
 trips and itineraries, accommodation bookings, vehicle and staff scheduling, NDIS claims with
-PRODA bulk-file generation, incident reporting, audit logging, a support catalogue with pricing,
-and a field-registry/forms engine. The codebase is a fork-in-progress of an existing product
+the NDIA bulk payment file (BPR CSV), incident reporting, audit logging, and a support catalogue with pricing. The codebase is a fork-in-progress of an existing product
 called "TripCore", retargeted from net9.0 to net8.0. For the fuller vision and architecture
 picture, see `PROTOTYPE_NOTES.md` and the `Platform Plan/` directory.
 
@@ -65,12 +64,11 @@ supporting tooling all live nested two levels down, inside `odip-prototype/odip/
 <root>
 ├── Platform Plan/                 # planning docs 00–10 (vision, architecture, data model, fork plan)
 ├── PROTOTYPE_NOTES.md             # fork/build status notes + local run commands
-├── ODIP Master Data Dictionary.xlsx  # source-of-truth field registry (seeded as SeedData/DataDictionarySeed.json)
+├── ODIP Master Data Dictionary.xlsx  # the owner's source document for participant fields (not seeded or read by code)
 ├── _to_delete/                    # legacy docs staged for deletion — ignore
 ├── odip-prototype.zip             # duplicate of tree below — NEVER search/index it
 └── odip-prototype/odip/           # ACTUAL APPLICATION ROOT
     ├── backend/                   # .NET 8: Odip.sln → Odip.{Api,Application,Domain,Infrastructure,Tests}
-    │   └── Odip.ProtoTests/       # package-free console harness, deliberately NOT in the .sln
     ├── frontend/                  # React 19 + TypeScript 5.9 + Vite 7 + Tailwind 4
     ├── mock-api/server.js         # Node mock API for offline frontend preview
     ├── local-test/                # fake Firebase SA + JWT minting; run-api.ps1 starts the API on :5100
@@ -140,11 +138,11 @@ npm run lint
   switching handled via the `X-View-As-Tenant`/`X-View-As-User` request headers — tenant-scoped
   code needs to respect this switching mechanism rather than assuming a single ambient tenant.
 
-- Billing/NDIS logic lives in `Odip.Domain/Billing/`: entities in `BillingEntities.cs` at the
-  top level, with `ProdaBulkFileWriter.cs` (PRODA bulk CSV), `BillingValidator.cs`, and
-  `BillingRouter.cs` one level down in `Billing/Services/`. The claiming flow continues in
-  Infrastructure services — `ClaimGenerationService`, `InvoiceService`, `BprCsvService`,
-  `CatalogueImportService` — with Excel and PDF output via ClosedXML and QuestPDF respectively.
+- Billing/NDIS logic lives in `Odip.Domain/Billing/`: the shared price rules in `Services/ClaimPricing.cs`
+  and the plan pricing engine in `Pricing/`. The claiming
+  flow continues in Infrastructure services — `ClaimGenerationService`, `InvoiceService`, `BprCsvService`
+  (the NDIA bulk payment file), `CatalogueImportService` — with Excel and PDF output via ClosedXML and
+  QuestPDF respectively. The old funding-source / billable-event / claim-batch / service-booking pipeline was retired.
 
 - Startup in `Program.cs` also registers `HolidaySyncBackgroundService` (a hosted service that
   syncs public holidays via the Nager provider, driven by `HolidaySync:*` config), wraps DB
@@ -152,9 +150,9 @@ npm run lint
   `DbSeeder.SeedAsync` + `SeedNdisDataAsync` (`Odip.Infrastructure/Data/DbSeeder.cs`, ~850
   lines) — check there before touching seed data.
 
-- The field registry/forms engine lives in `Odip.Domain/Dictionary/` and is seeded from the
-  Master Data Dictionary spreadsheet — the spreadsheet is the source of truth, so field/form
-  changes should trace back to it rather than being made ad hoc in code.
+- The Master Data Dictionary spreadsheet (repo root) is the owner's source document for participant
+  fields and picklists; no code reads it. The field registry/forms engine that was seeded from it was
+  retired, so field changes should still trace back to the spreadsheet rather than being made ad hoc.
 
 - On the frontend, each domain has a typed API layer under `src/api/hooks/*` and
   `src/api/types/*`, built on the shared Axios client `src/api/client.ts`. Data fetching/caching
@@ -201,11 +199,6 @@ npm run lint
   startup silently with no obvious error pointing back to the cause, so migrations must be
   touched with extreme care.
 
-- `Odip.ProtoTests` is deliberately excluded from `Odip.sln` — it's a sandbox harness that
-  duplicates coverage already present in `Odip.Tests/Billing`. This means a solution-level
-  build/test run will silently skip it entirely, so don't rely on `dotnet build`/`dotnet test`
-  at the solution level to catch issues there.
-
 - `start-preview.ps1`'s opening comment says the mock API runs on port 5050, but the comment is
   stale — `mock-api/server.js` actually listens on 5062 (overridable via `MOCK_PORT`).
 
@@ -231,7 +224,7 @@ npm run lint
 
 ## Testing
 
-- Backend tests live in `Odip.Tests` and use xUnit, covering `Billing/BillingPrototypeTests.cs`,
+- Backend tests live in `Odip.Tests` and use xUnit, covering `Billing/ShiftClaimGenerationServiceTests.cs`,
   the `Services/*Tests.cs` files, `Middleware/ExceptionHandlingMiddlewareTests.cs`, and
   `CurrentTenantTests.cs`. They rely on Moq for mocking and EF Core InMemory for the database
   layer, with fixtures defined inline within each test file rather than shared through a common

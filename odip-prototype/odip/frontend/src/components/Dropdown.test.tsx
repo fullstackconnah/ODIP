@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { Dropdown } from './Dropdown'
+import { Button } from './Button'
 import { TAP_AREA } from './tapArea'
 
 const ITEMS = [
@@ -35,9 +36,19 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
     expect(trigger).not.toHaveClass('relative')
   })
 
-  it('pads the menu trigger (the 40px call-to-action pill)', () => {
-    render(<Dropdown variant="menu" label="Export" items={ITEMS} onSelect={() => {}} />)
-    expect(screen.getByRole('button', { name: 'Export' })).toHaveClass(...pad, 'px-5', 'py-2.5')
+  // A header action is one primary md Button (UI survey s.1), menu or not: no gradient pill. md is --control-h, 44px on a touch screen,
+  // so the menu trigger needs no pad, like the form trigger.
+  it('draws the menu trigger exactly as a primary md Button', () => {
+    render(<><Dropdown variant="menu" label="Export" items={ITEMS} onSelect={() => {}} /><Button>Plain</Button></>)
+    const classesOf = (el: HTMLElement) => el.className.split(/\s+/).filter(Boolean).sort()
+    expect(classesOf(screen.getByRole('button', { name: 'Export' }))).toEqual(classesOf(screen.getByRole('button', { name: 'Plain' })))
+  })
+
+  // A page has one filled primary: an in-page menu (Export trip package, the agreement week presets) reads as a secondary md Button.
+  it('draws the menu trigger as a secondary md Button when triggerVariant="secondary"', () => {
+    render(<><Dropdown variant="menu" triggerVariant="secondary" label="Export" items={ITEMS} onSelect={() => {}} /><Button variant="secondary">Plain</Button></>)
+    const classesOf = (el: HTMLElement) => el.className.split(/\s+/).filter(Boolean).sort()
+    expect(classesOf(screen.getByRole('button', { name: 'Export' }))).toEqual(classesOf(screen.getByRole('button', { name: 'Plain' })))
   })
 
   it('does not pad the form trigger: it is --control-h tall, 44px on a touch screen already', () => {
@@ -52,5 +63,19 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
     const chevronWrap = container.querySelector('span.absolute') as HTMLElement
     expect(chevronWrap).toHaveClass('pointer-events-none')
     expect(chevronWrap.previousElementSibling).toBe(screen.getByRole('button', { name: 'Alpha' }))
+  })
+})
+
+// Fix round 1 (intake booking): the menu's rows are a phone's actions too. Under `pointer: coarse` each option is at least --tap-min (44px)
+// tall; on a mouse --tap-min is 0px, so the desktop rows keep their size. jsdom has no media queries, so this pins the class contract.
+describe('Dropdown — 44px option rows under a coarse pointer', () => {
+  it('gives every option the --tap-min floor', async () => {
+    render(<Dropdown variant="icon" label="More actions" icon={<span>i</span>} items={ITEMS} onSelect={() => {}} />)
+
+    screen.getByRole('button', { name: 'More actions' }).click()
+
+    const options = await screen.findAllByRole('option')
+    expect(options).toHaveLength(2)
+    for (const option of options) expect(option).toHaveClass('min-h-[var(--tap-min)]')
   })
 })

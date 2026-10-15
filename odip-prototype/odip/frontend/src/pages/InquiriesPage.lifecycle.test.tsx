@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import InquiriesPage from './InquiriesPage'
+import { InquiriesTable } from './InquiriesPage'
 
 // The Enquiries tab shows the pipeline's first stage only: open enquiries. An enquiry with no participant is "New", one whose intake has started and
 // is not complete is "Draft intake". Once the intake is complete the participant is on the Onboarding tab, and once they are finalised they are on the
@@ -10,6 +10,11 @@ import InquiriesPage from './InquiriesPage'
 // holds: a row says where it has got to and offers the next step that is real. Resuming an intake that is already complete led to the L2-03 data loss.
 const mocks = vi.hoisted(() => ({ inquiries: vi.fn(), convert: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
+  useConfirmIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSetIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useResendIntakeInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useStaff: () => ({ data: [], isLoading: false }),
   useParticipantInquiries: mocks.inquiries,
   useCreateParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
@@ -35,7 +40,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/inquiries']}>
       <Routes>
-        <Route path="/inquiries" element={<InquiriesPage />} />
+        <Route path="/inquiries" element={<InquiriesTable />} />
         <Route path="/participants/:id/intake" element={<p>Intake wizard destination</p>} />
         <Route path="/participants/new-inquiry" element={<p>Enquiry form destination</p>} />
       </Routes>
@@ -55,7 +60,7 @@ describe('InquiriesPage — open enquiries only', () => {
     renderPage()
 
     expect(within(screen.getByRole('table')).getByText('Draft intake')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Resume intake' }))
+    await user.click(screen.getByRole('button', { name: /^Resume intake/ }))
     expect(screen.getByText('Intake wizard destination')).toBeInTheDocument()
   })
 
@@ -63,7 +68,7 @@ describe('InquiriesPage — open enquiries only', () => {
     mocks.inquiries.mockReturnValue({ data: [row(NO_PARTICIPANT)], isLoading: false })
     renderPage()
 
-    expect(screen.getByRole('button', { name: 'Start intake' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Start intake/ })).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getByText('New')).toBeInTheDocument()
   })
 
@@ -112,7 +117,7 @@ describe('InquiriesPage — open enquiries only', () => {
     expect(screen.getByText('No open enquiries')).toBeInTheDocument()
     expect(screen.queryByText('No enquiries captured yet')).not.toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'New enquiry' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New enquiry' })).not.toBeInTheDocument() // the hub header's action
   })
 })
 
@@ -128,7 +133,7 @@ describe('InquiriesPage — a draft intake started without an enquiry', () => {
     expect(within(table).getByText('0411111111')).toBeInTheDocument()
     // No enquiry was captured, and the cell says so instead of showing an empty source.
     expect(within(table).getByText('Direct intake')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Resume intake' }))
+    await user.click(screen.getByRole('button', { name: /^Resume intake/ }))
     expect(screen.getByText('Intake wizard destination')).toBeInTheDocument()
   })
 
@@ -137,9 +142,9 @@ describe('InquiriesPage — a draft intake started without an enquiry', () => {
     renderPage()
 
     // One Edit enquiry button, for the real enquiry only.
-    expect(screen.getAllByRole('button', { name: 'Edit enquiry' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /^Edit enquiry/ })).toHaveLength(1)
     const directRow = screen.getByText('Dana Direct').closest('tr') as HTMLElement
-    expect(within(directRow).queryByRole('button', { name: 'Edit enquiry' })).not.toBeInTheDocument()
+    expect(within(directRow).queryByRole('button', { name: /^Edit enquiry/ })).not.toBeInTheDocument()
   })
 
   it('is found by the same search as an enquiry', async () => {
@@ -161,7 +166,7 @@ describe('InquiriesPage — Start intake failures', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: 'Start intake' }))
+    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
 
     expect(screen.getByRole('alert')).toHaveTextContent('Inquiry has already been converted.')
   })

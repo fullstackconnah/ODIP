@@ -45,8 +45,9 @@ public sealed record ApprovalOutcome(
 /// <summary>
 /// "Mark approved" (plan builder, phase D). Approving the NEWEST revision of an agreement draft, for a caller whose role the organisation lets approve, in one transaction: records who and when,
 /// makes the weekly roster patterns of the revision's blocks (<see cref="AgreementPatternMapper"/>), ends the patterns of the revisions approved before it the day before this one starts, and, when the
-/// participant may be rostered, generates open shifts from the provider's today up to the horizon (56 days; <see cref="RosterTopUpOptions"/>) through <see cref="RosterShiftGenerator"/>. No shift that
-/// exists is changed, cancelled or deleted: the old revision's shifts are counted for a coordinator to tidy by hand. There is no un-approving: a change is a new revision, approved in its turn.
+/// participant may be rostered, generates open shifts from the provider's today up to the horizon (56 days; <see cref="RosterTopUpOptions"/>) through <see cref="RosterShiftGenerator"/>. The
+/// revisions before it keep their shifts up to the day before this one starts; from that day (or today) their unfilled Draft shifts are removed in the same transaction, unless something is
+/// recorded against one, and the rest (a worker on them, published, or recorded against) stay and are listed for a coordinator to move or cancel. No other shift is changed. There is no un-approving: a change is a new revision, approved in its turn.
 /// <para>
 /// What stops it is read from the revision as it was saved, never from a re-quote: anything the stored pricing flagged (an issue, a line to review, a public holiday nobody has decided), a revision with
 /// no blocks, a block that cannot be read, an agreement that has already ended, a delivery state in another time zone than the provider's, and more than a hundred patterns. Being over a budget
@@ -93,8 +94,8 @@ public sealed class ServiceAgreementApprovalService
     public async Task<ApprovalOutcome> PreviewAsync(Guid tenantId, Guid participantId, Guid draftId, ApprovalCaller caller, CancellationToken ct)
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
-        if (found is null) return new ApprovalOutcome(ApprovalStatus.NotFound, Errors: new[] { "Draft not found." });
-        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: true, ct);
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
 
         var (draft, participant) = found.Value;
         var plan = await PlanAsync(tenantId, draft, participant, ct, includeBudget: true);
@@ -106,8 +107,8 @@ public sealed class ServiceAgreementApprovalService
     public async Task<ApprovalOutcome> ApproveAsync(Guid tenantId, Guid participantId, Guid draftId, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct)
     {
         var found = await FindAsync(tenantId, participantId, draftId, ct);
-        if (found is null) return new ApprovalOutcome(ApprovalStatus.NotFound, Errors: new[] { "Draft not found." });
-        if (!await MayApproveAsync(tenantId, caller, ct)) return NotAnApprover();
+        if (found is null) return await NotThereAsync(tenantId, participantId, caller, preview: false, ct);
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
 
         try
         {
@@ -118,6 +119,12 @@ public sealed class ServiceAgreementApprovalService
         {
             return new ApprovalOutcome(ApprovalStatus.Busy, Errors: new[] { busy.Message });
         }
+        // A shift this approval moves to a new pattern was deleted by another request before the save: nothing of this one is kept, and it is the busy answer (try again), not a 500.
+        catch (DbUpdateConcurrencyException)
+        {
+            _db.ChangeTracker.Clear();
+            return new ApprovalOutcome(ApprovalStatus.Busy, Errors: new[] { RosterBusyException.Words });
+        }
         // A request that got past the lock and the checks at the same moment as another lost to the unique approval per revision (or to the unique pattern key): the transaction has been rolled back,
         // nothing of this one is kept, and the answer is the winner's approval, as if this had been the second request to arrive.
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
@@ -127,7 +134,39 @@ public sealed class ServiceAgreementApprovalService
                 return await ReadAsync(ApprovalStatus.AlreadyApproved, tenantId, found.Value.Draft, null, ct);
             throw;
         }
+        // A save landed while this approval was being made: it deleted this revision (the participant's earlier unapproved one), and the patterns and the approval row this approval wrote point at a row that
+        // has gone, so a restricting key refused them and the transaction has been rolled back. Nothing of this one is kept; the answer is the one a newer revision always got.
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation })
+        {
+            _db.ChangeTracker.Clear();
+            // Only when the revision really is gone: a key can refuse a write for another reason, and that is not hidden as "superseded".
+            if (await NewestVersionAsync(tenantId, participantId, ct) is { } newest && !await _db.ServiceAgreementDrafts.AsNoTracking().AnyAsync(x => x.Id == draftId && x.TenantId == tenantId, ct))
+                return Superseded(newest);
+            throw;
+        }
     }
+
+    // ── A revision that is not there ──────────────────────────────────────────────
+
+    /// <summary>
+    /// A revision that cannot be found. Usually it never existed (another organisation's, or a made-up id): not found. But a save deletes the participant's earlier unapproved revision, so a page that
+    /// still holds one asks about a revision that was there a moment ago. When the participant is the caller's organisation's and has revisions, the answer is the one that page was given before a save
+    /// could delete anything: superseded, with the newest version (a preview says it cannot be approved; an approval is the 409 <c>draft-superseded</c>). A made-up id of such a participant gets the same
+    /// answer, because it cannot be told from one a save has replaced; it tells nothing the revisions list does not.
+    /// </summary>
+    private async Task<ApprovalOutcome> NotThereAsync(Guid tenantId, Guid participantId, ApprovalCaller caller, bool preview, CancellationToken ct)
+    {
+        if (await NewestVersionAsync(tenantId, participantId, ct) is not { } newest) return new ApprovalOutcome(ApprovalStatus.NotFound, Errors: new[] { "Draft not found." });
+        if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
+        return Superseded(newest, preview);
+    }
+
+    /// <summary>The newest version of the participant's revisions in this organisation; null when it has none (or the participant is not this organisation's).</summary>
+    private async Task<int?> NewestVersionAsync(Guid tenantId, Guid participantId, CancellationToken ct) =>
+        await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == participantId).MaxAsync(x => (int?)x.Version, ct);
+
+    private static ApprovalOutcome Superseded(int newestVersion, bool preview = false) => new(ApprovalStatus.Superseded, Errors: new[] { SupersededMessage }, NewestVersion: newestVersion,
+        Preview: preview ? new DraftApprovalPreviewDto { CanApprove = false, Reasons = [new ApprovalReasonDto { Code = "Superseded", Message = SupersededMessage }] } : null);
 
     private async Task<ApprovalOutcome> ApproveCoreAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, bool acknowledgeOverlaps, ApprovalCaller caller, CancellationToken ct)
     {
@@ -141,7 +180,7 @@ public sealed class ServiceAgreementApprovalService
         if (await _db.ServiceAgreementDraftApprovals.AsNoTracking().AnyAsync(a => a.DraftId == draft.Id, ct))
             return await ReadAsync(ApprovalStatus.AlreadyApproved, tenantId, draft, null, ct);
 
-        var plan = await PlanAsync(tenantId, draft, participant, ct);
+        var plan = await PlanAsync(tenantId, draft, participant, ct, approving: true);
         if (plan.Superseded) return new ApprovalOutcome(ApprovalStatus.Superseded, Errors: new[] { SupersededMessage }, NewestVersion: plan.NewestVersion);
         if (plan.Reasons.Count > 0) return new ApprovalOutcome(ApprovalStatus.Refused, Errors: plan.Reasons.Select(r => r.Message).ToList());
         if (plan.Overlaps.Count > 0 && !acknowledgeOverlaps)
@@ -161,10 +200,16 @@ public sealed class ServiceAgreementApprovalService
             // A revision that starts on or before the old pattern did leaves it ending before it begins: it is switched off as well, so nothing reads it as live.
             if (plan.EndsOn < old.EffectiveFrom) old.IsActive = false;
         }
+        // The revisions before's unfilled Draft shifts from this one's start go in this same save, so the roster does not hold them beside the new ones. Shifts with a worker, published ones and
+        // ones something is recorded against stay; the answer lists them.
+        _db.Shifts.RemoveRange(plan.ToRemove);
+
+        // Carry-over: an unchanged support's shifts move to its new pattern as they are; generation then makes none on their days.
+        foreach (var shift in plan.ToCarry) shift.ShiftPatternId = plan.CarryTo[shift.ShiftPatternId!.Value].Id;
 
         if (plan.Ready && plan.From <= plan.HorizonEnd)
         {
-            var generated = await _generator.AddAsync(_db, plan.NewPatterns, plan.From, plan.HorizonEnd, ct);
+            var generated = await _generator.AddAsync(_db, plan.NewPatterns, plan.From, plan.HorizonEnd, ct, carried: plan.Carried);
             approval.ShiftsCreated = generated.Created;
             approval.FirstShiftDate = generated.FirstDate;
             approval.HorizonEnd = plan.HorizonEnd;
@@ -193,6 +238,18 @@ public sealed class ServiceAgreementApprovalService
         public DateOnly EndsOn { get; set; }
         public List<ShiftPattern> Overlaps { get; set; } = new();
         public OldShiftsRemainingDto OldShifts { get; set; } = new();
+        /// <summary>The unfilled Draft shifts of the revisions before that approval removes (tracked, so its own save deletes them).</summary>
+        public List<Shift> ToRemove { get; set; } = new();
+        /// <summary>The ended patterns whose new pattern is the same support, by the ended pattern's id: their shifts move to it.</summary>
+        public Dictionary<Guid, ShiftPattern> CarryTo { get; set; } = new();
+        /// <summary>The new patterns a renewal's approval matched to a pattern ending the day before it starts (D12): like CarryTo's, they are not changed supports.</summary>
+        public HashSet<ShiftPattern> HandedOn { get; } = new();
+        /// <summary>The shifts that move (tracked: the approval's own save moves them).</summary>
+        public List<Shift> ToCarry { get; set; } = new();
+        /// <summary>The (new pattern, day) pairs the moved shifts cover: generation makes nothing there.</summary>
+        public HashSet<(Guid PatternId, DateOnly Date)> Carried { get; set; } = new();
+        /// <summary>Ended patterns edited by hand that approving puts back to the agreement's times (preview only).</summary>
+        public int HandEdited { get; set; }
         public bool Ready { get; set; }
         public DateOnly From { get; set; }
         public DateOnly HorizonEnd { get; set; }
@@ -209,6 +266,9 @@ public sealed class ServiceAgreementApprovalService
             AlreadyApproved = Existing is not null,
             Reasons = Reasons.ToList(),
             PatternsToCreate = NewPatterns.Count, PatternsToEnd = ToEnd.Count, EndsFromVersion = EndsFromVersion, EndsOn = ToEnd.Count > 0 ? EndsOn : null,
+            // A new pattern no ended one matches, or for a renewal no pattern ending the day before it (D12), is a changed support: it starts with no default staff. A first approval has none to count.
+            ChangedPatterns = ToEnd.Count > 0 || HandedOn.Count > 0 ? NewPatterns.Count - CarryTo.Values.Union(HandedOn).Count() : 0,
+            HandEditedPatterns = HandEdited,
             ShiftsToCreate = ShiftsToCreate, ShiftsNote = ShiftsNote,
             OldShiftsRemaining = OldShifts,
             OverlappingPatterns = Overlaps.OrderBy(p => p.DayOfWeek).ThenBy(p => p.StartTime).Select(p => new OverlappingPatternDto
@@ -221,7 +281,7 @@ public sealed class ServiceAgreementApprovalService
         };
     }
 
-    private async Task<Plan> PlanAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, CancellationToken ct, bool includeBudget = false)
+    private async Task<Plan> PlanAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, CancellationToken ct, bool includeBudget = false, bool approving = false)
     {
         var plan = new Plan { Draft = draft, EndsOn = draft.AgreementStartDate.AddDays(-1) };
 
@@ -238,7 +298,7 @@ public sealed class ServiceAgreementApprovalService
         if (plan.Existing is not null)
         {
             plan.Reasons.Add(new ApprovalReasonDto { Code = "AlreadyApproved", Message = string.Create(CultureInfo.InvariantCulture, $"This revision was approved for rostering by {plan.Existing.ApprovedByName} on {plan.Existing.ApprovedAt:yyyy-MM-dd}.") });
-            plan.OldShifts = await OldShiftsAsync(tenantId, draft, today, ct);
+            plan.OldShifts = (await OldShiftsAsync(tenantId, draft, today, ct)).Remaining;
             return plan;
         }
 
@@ -302,7 +362,7 @@ public sealed class ServiceAgreementApprovalService
                 plan.NewPatterns = AgreementPatternMapper.Map(draft, blocks);
         }
 
-        await ReadRosterAsync(tenantId, draft, plan, ct);
+        await ReadRosterAsync(tenantId, draft, plan, ct, approving);
 
         plan.Ready = await _gate.MayPlaceAsync(_db, draft.ParticipantId, ct);
         if (!plan.Ready)
@@ -317,7 +377,7 @@ public sealed class ServiceAgreementApprovalService
         {
             var skipped = quote.HolidayOccurrences.Where(h => h.Skipped).Select(h => (h.BlockId, h.Date)).ToHashSet();
             var occurrences = plan.NewPatterns
-                .SelectMany(pattern => _expander.Occurrences(pattern, plan.From, plan.HorizonEnd).Where(date => !skipped.Contains((pattern.SourceBlockKey!, date))).Select(date => (Pattern: pattern, Date: date))).ToList();
+                .SelectMany(pattern => _expander.Occurrences(pattern, plan.From, plan.HorizonEnd).Where(date => !skipped.Contains((pattern.SourceBlockKey!, date)) && !plan.Carried.Contains((pattern.Id, date))).Select(date => (Pattern: pattern, Date: date))).ToList();
             plan.ShiftsToCreate = occurrences.Count;
 
             // Budget phase 3: what those shifts do to the participant's budget, as a warning on the preview. Only the preview asks (an approval does not need it), and a failure to work it out
@@ -341,7 +401,7 @@ public sealed class ServiceAgreementApprovalService
     }
 
     /// <summary>The roster as it stands: the patterns this approval would end, the old shifts it leaves, and the hand-made patterns that overlap the new ones.</summary>
-    private async Task ReadRosterAsync(Guid tenantId, ServiceAgreementDraft draft, Plan plan, CancellationToken ct)
+    private async Task ReadRosterAsync(Guid tenantId, ServiceAgreementDraft draft, Plan plan, CancellationToken ct, bool approving)
     {
         var earlier = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
             .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion < draft.Version)
@@ -351,9 +411,17 @@ public sealed class ServiceAgreementApprovalService
             var versionOf = earlier.ToDictionary(a => a.DraftId, a => a.DraftVersion);
             var earlierIds = versionOf.Keys.ToList();
             var old = await _db.ShiftPatterns.Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId != null && earlierIds.Contains(p.SourceDraftId.Value)).ToListAsync(ct);
-            plan.ToEnd = old.Where(p => p.EffectiveTo is null || p.EffectiveTo > plan.EndsOn).ToList();
+            plan.ToEnd = old.Where(p => p.EffectiveTo is null || p.EffectiveTo > plan.EndsOn).OrderBy(p => versionOf[p.SourceDraftId!.Value]).ToList();
             plan.EndsFromVersion = plan.ToEnd.Count > 0 ? plan.ToEnd.Max(p => versionOf[p.SourceDraftId!.Value]) : null;
-            plan.OldShifts = await OldShiftsAsync(tenantId, draft, plan.Today, ct);
+            // An approval locks the old shifts before it reads any of them: the carry-over and the removal then both decide on what is committed.
+            if (approving) await LockOldShiftsAsync(old.Select(p => p.Id).ToArray(), draft.AgreementStartDate > plan.Today ? draft.AgreementStartDate : plan.Today, ct);
+            await CarryOverAsync(draft, plan, ct);
+            // A renewal ends no dated pattern: only the newest revision is approved, each approval ends every earlier pattern past its start, and the roster cannot move an agreement pattern's dates.
+            // So when the carry-over ended nothing, or only open patterns (a legacy pattern with no end, fix round 2), the patterns ending the day before hand on their default workers (D12).
+            if (plan.ToEnd.All(p => p.EffectiveTo is null)) await CarryDefaultsIntoRenewalAsync(plan, old, versionOf, ct);
+            if (!approving) plan.HandEdited = await HandEditedAsync(plan, ct);
+            (plan.OldShifts, plan.ToRemove) = await OldShiftsAsync(tenantId, draft, plan.Today, ct, plan.ToCarry.Select(s => s.Id).ToHashSet());
+            plan.OldShifts = plan.OldShifts with { Carried = plan.ToCarry.Count };
         }
 
         if (plan.NewPatterns.Count > 0)
@@ -365,28 +433,168 @@ public sealed class ServiceAgreementApprovalService
     }
 
     /// <summary>
-    /// The shifts of the participant's earlier approved revisions dated from the day this one starts (or today, when that is later) that a coordinator can still tidy: drafts and published shifts, not one
-    /// that is under way, handed in for review, finished or cancelled. Open when nobody is assigned.
+    /// Locks the rows of the earlier revisions' shifts from <paramref name="from"/> on, inside the approval's transaction and before any of them is read (PostgreSQL; EF InMemory has no row locks). An
+    /// assignment, a publish or a note another request is making waits for this approval, or has committed and is read: a shift is never carried or removed on a stale "nobody is on it". In id order, so two
+    /// lockers of the same rows queue instead of deadlocking, and bounded as the roster lock is: a long wait or a deadlock is the busy answer, never a 500.
     /// </summary>
-    private async Task<OldShiftsRemainingDto> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct)
+    private async Task LockOldShiftsAsync(Guid[] patternIds, DateOnly from, CancellationToken ct)
+    {
+        if (patternIds.Length == 0 || !_db.Database.IsNpgsql()) return;
+        var sql = string.Create(CultureInfo.InvariantCulture,
+            $@"SET LOCAL lock_timeout = {(int)_generator.LockWait.TotalMilliseconds}; SELECT 1 FROM ""Shifts"" WHERE ""ShiftPatternId"" = ANY({{0}}) AND ""ServiceDate"" >= {{1}} ORDER BY ""Id"" FOR UPDATE; SET LOCAL lock_timeout TO DEFAULT");
+        try
+        {
+            await _db.Database.ExecuteSqlRawAsync(sql, new object[] { patternIds, from }, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.LockNotAvailable or PostgresErrorCodes.DeadlockDetected)
+        {
+            throw new RosterBusyException();
+        }
+    }
+
+    /// <summary>
+    /// Carry-over: an ended pattern whose new pattern is the same support hands on its default worker, and its shifts from this revision's start (or today) to its end, in whatever state they are in (a worker stays on, a
+    /// cancelled day stays cancelled), and the new pattern makes none on their days. Only what is left over is removed or listed. Approving a revision ends every pattern of the one before and makes them
+    /// all again, so without this every shift of a support that did not change would get a second, open one beside it.
+    /// </summary>
+    private async Task CarryOverAsync(ServiceAgreementDraft draft, Plan plan, CancellationToken ct)
+    {
+        // A default worker is carried only while that user is active: an archived one leaves the support with no default staff.
+        var active = await ActiveUsersAsync(plan.ToEnd, ct);
+        // plan.ToEnd runs oldest revision first, so when two ended generations are the same support, the newest revision's default worker and switch are the ones kept. Within one generation each new
+        // pattern is matched once: the block ids are not compared (the agreement builder renumbers them on every save), so the day, worker slot, times and asks are what pair them.
+        var taken = new HashSet<(Guid Made, Guid Source)>();
+        foreach (var old in plan.ToEnd)
+        {
+            if (plan.NewPatterns.FirstOrDefault(made => !taken.Contains((made.Id, old.SourceDraftId!.Value)) && SameSupport(old, made)) is not { } same) continue;
+            taken.Add((same.Id, old.SourceDraftId!.Value));
+            plan.CarryTo[old.Id] = same;
+            // The same support keeps its default worker too (a coordinator's own choice, not the agreement's); only a changed support starts with none.
+            same.DefaultUserId = old.DefaultUserId is { } user && active.Contains(user) ? user : null;
+            // And stays switched off when a coordinator switched it off (the delete refusal tells them to). A pattern an approval switched off because it ended before it began is not that choice.
+            if (old.EffectiveTo is not { } to || to >= old.EffectiveFrom) same.IsActive = old.IsActive;
+        }
+        if (plan.CarryTo.Count == 0) return;
+
+        var from = draft.AgreementStartDate > plan.Today ? draft.AgreementStartDate : plan.Today;
+        var carriedFrom = plan.CarryTo.Keys.ToList();
+        // A day the new revision's plan skips for a public holiday is not carried: its new pattern makes no shift that day, so the old one is removed or listed like any other.
+        var skipped = DraftJson.ReadQuote(draft.PricingJson)?.HolidayOccurrences.Where(h => h.Skipped).Select(h => (h.BlockId, h.Date)).ToHashSet() ?? new();
+        plan.ToCarry = (await _db.Shifts
+            .Where(s => s.ShiftPatternId != null && carriedFrom.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && s.ServiceDate <= draft.AgreementEndDate)
+            .ToListAsync(ct))
+            .Where(s => !skipped.Contains((plan.CarryTo[s.ShiftPatternId!.Value].SourceBlockKey!, s.ServiceDate))).ToList();
+        plan.Carried = plan.ToCarry.Select(s => (plan.CarryTo[s.ShiftPatternId!.Value].Id, s.ServiceDate)).ToHashSet();
+    }
+
+    /// <summary>The default workers of these patterns who are active users: a default worker is handed on only while that user is (an archived one leaves the support with none).</summary>
+    private async Task<HashSet<Guid>> ActiveUsersAsync(IEnumerable<ShiftPattern> patterns, CancellationToken ct)
+    {
+        var ids = patterns.Where(p => p.DefaultUserId is not null).Select(p => p.DefaultUserId!.Value).Distinct().ToList();
+        return ids.Count == 0 ? new HashSet<Guid>() : (await _db.Users.Where(u => ids.Contains(u.Id) && u.IsActive).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+    }
+
+    /// <summary>
+    /// Agreement PR 2 (D12): a renewal starts the day after the agreement before it ends, so approving it ends none of that agreement's patterns and the carry-over above never meets them. The same
+    /// support keeps its default worker all the same, while that user is active, and stays switched off when a coordinator switched it off: the patterns that end the day before this revision starts
+    /// hand both on, oldest revision first so the newest wins, each new pattern matched once per revision as the carry-over matches them. The matched ones are recorded, so the preview counts only
+    /// the changed supports as starting with no default staff. No shift moves: theirs all end before this revision starts.
+    /// </summary>
+    private async Task CarryDefaultsIntoRenewalAsync(Plan plan, List<ShiftPattern> old, Dictionary<Guid, int> versionOf, CancellationToken ct)
+    {
+        var endingBefore = old.Where(p => p.EffectiveTo == plan.EndsOn).OrderBy(p => versionOf[p.SourceDraftId!.Value]).ToList();
+        if (endingBefore.Count == 0) return;
+        var active = await ActiveUsersAsync(endingBefore, ct);
+        var taken = new HashSet<(Guid Made, Guid Source)>();
+        foreach (var ended in endingBefore)
+        {
+            // A new pattern the carry-over already gave an open pattern's worker keeps it.
+            if (plan.NewPatterns.FirstOrDefault(made => !taken.Contains((made.Id, ended.SourceDraftId!.Value)) && !plan.CarryTo.ContainsValue(made) && SameSupport(ended, made)) is not { } same) continue;
+            taken.Add((same.Id, ended.SourceDraftId!.Value));
+            plan.HandedOn.Add(same);
+            same.DefaultUserId = ended.DefaultUserId is { } user && active.Contains(user) ? user : null;
+            // The carry-over's own guard: a pattern an approval switched off because it ended before it began is not a coordinator's choice.
+            if (ended.EffectiveTo is not { } to || to >= ended.EffectiveFrom) same.IsActive = ended.IsActive;
+        }
+    }
+
+    /// <summary>
+    /// The ended patterns a coordinator edited by hand before agreement PR 1 (their own times, ratio or night type are not what their block says) whose support the new revision has as the agreement
+    /// says it: approving puts them back to the agreement's times, so the preview says how many. Read against each pattern's own source revision, mapped as its approval mapped it.
+    /// </summary>
+    private async Task<int> HandEditedAsync(Plan plan, CancellationToken ct)
+    {
+        var unmatched = plan.ToEnd.Where(p => !plan.CarryTo.ContainsKey(p.Id)).ToList();
+        if (unmatched.Count == 0) return 0;
+        var sourceIds = unmatched.Select(p => p.SourceDraftId!.Value).Distinct().ToList();
+        var sources = await _db.ServiceAgreementDrafts.AsNoTracking().Include(d => d.Blocks).Where(d => sourceIds.Contains(d.Id)).ToListAsync(ct);
+        var agreed = sources.SelectMany(d => AgreementPatternMapper.Map(d, d.Blocks.OrderBy(b => b.Position).Select(DraftJson.ToDto).Where(b => !b.Unreadable).ToList()))
+            .ToDictionary(p => (p.SourceDraftId!.Value, p.SourceBlockKey!, p.DayOfWeek, p.WorkerSlot));
+        return unmatched.Count(p => agreed.TryGetValue((p.SourceDraftId!.Value, p.SourceBlockKey!, p.DayOfWeek, p.WorkerSlot), out var said)
+            && (p.StartTime, p.EndTime, p.EndsNextDay, p.Ratio, p.NightType) != (said.StartTime, said.EndTime, said.EndsNextDay, said.Ratio, said.NightType)
+            && plan.NewPatterns.Any(made => SameSupport(said, made)));
+    }
+
+    /// <summary>The same weekly support: the same weekday and worker slot, the same times, ratio and kind of night, and the same asks of a worker. A shift of the one is a shift of the other. The block id is not
+    /// compared: the builder renumbers blocks on every save, and two blocks on one day at the same times would overlap, which the engine refuses.</summary>
+    private static bool SameSupport(ShiftPattern a, ShiftPattern b) =>
+        a.DayOfWeek == b.DayOfWeek && a.WorkerSlot == b.WorkerSlot && a.StartTime == b.StartTime && a.EndTime == b.EndTime
+        && a.EndsNextDay == b.EndsNextDay && a.Ratio == b.Ratio && a.NightType == b.NightType && SameAsks(a.RequirementsJson, b.RequirementsJson);
+
+    /// <summary>The same asks of a worker, read as what they mean: PostgreSQL stores them as jsonb, which reads back with its own key order and spacing, so the stored text never equals the mapper's.</summary>
+    private static bool SameAsks(string? a, string? b) =>
+        a == b || (a is not null && b is not null && DraftJson.Write(DraftJson.ReadRequirements(a)) == DraftJson.Write(DraftJson.ReadRequirements(b)));
+
+    /// <summary>
+    /// The shifts of the participant's earlier approved revisions dated from the day this one starts (or today, when that is later) that a coordinator can still tidy: drafts and published shifts, not one
+    /// that is under way, handed in for review, finished or cancelled. The unfilled Draft ones are what approval removes, unless something is recorded against one; the rest are kept, counted (open when
+    /// nobody is assigned) and listed. Tracked: an approval removes the removable ones in its own save, after <see cref="LockOldShiftsAsync"/> has locked them.
+    /// </summary>
+    private async Task<(OldShiftsRemainingDto Remaining, List<Shift> Removable)> OldShiftsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct, IReadOnlySet<Guid>? carried = null)
     {
         var earlier = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
             .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion < draft.Version)
             .Select(a => new { a.DraftId, a.DraftVersion }).ToListAsync(ct);
-        if (earlier.Count == 0) return new OldShiftsRemainingDto();
+        if (earlier.Count == 0) return (new OldShiftsRemainingDto(), new List<Shift>());
 
         var earlierIds = earlier.Select(a => a.DraftId).ToList();
         var patternIds = await _db.ShiftPatterns.AsNoTracking().Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId != null && earlierIds.Contains(p.SourceDraftId.Value)).Select(p => p.Id).ToListAsync(ct);
         // What a coordinator can still tidy by hand: a shift nobody has started, handed in or finished, on a day that is not past. (The new revision may start in the past.)
         var from = draft.AgreementStartDate > today ? draft.AgreementStartDate : today;
-        var shifts = patternIds.Count == 0 ? new() : await _db.Shifts.AsNoTracking()
+        var shifts = patternIds.Count == 0 ? new List<Shift>() : await _db.Shifts.Include(s => s.User)
             .Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published))
-            .Select(s => new { s.UserId, s.ServiceDate }).ToListAsync(ct);
-        return new OldShiftsRemainingDto
+            .ToListAsync(ct);
+        // A shift that moves to the new revision's pattern is neither removed nor listed.
+        if (carried is { Count: > 0 }) shifts = shifts.Where(s => !carried.Contains(s.Id)).ToList();
+        var recorded = await RecordedAgainstAsync(shifts.Where(Unfilled).Select(s => s.Id).ToList(), ct);
+        var removable = shifts.Where(s => Unfilled(s) && !recorded.Contains(s.Id)).ToList();
+        var kept = shifts.Except(removable).OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ThenBy(s => s.Id).ToList();
+        return (new OldShiftsRemainingDto
         {
-            Open = shifts.Count(s => s.UserId is null), Assigned = shifts.Count(s => s.UserId is not null),
+            Open = kept.Count(s => s.UserId is null), Assigned = kept.Count(s => s.UserId is not null), Removed = removable.Count,
             FirstDate = shifts.Count == 0 ? null : shifts.Min(s => s.ServiceDate), FromVersion = earlier.Max(a => a.DraftVersion),
-        };
+            Shifts = kept.Take(OldShiftsRemainingDto.MaxListed).Select(s => new OldShiftDto
+            {
+                Id = s.Id, ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime, EndsNextDay = s.EndsNextDay, Status = s.Status, WorkerName = s.User?.FullName,
+            }).ToList(),
+        }, removable);
+    }
+
+    /// <summary>A Draft nobody is on and nobody wrote on: nobody has been given it or shown it, and a coordinator's own notes on it are not thrown away.</summary>
+    private static bool Unfilled(Shift shift) => shift.Status == ShiftStatus.Draft && shift.UserId is null && string.IsNullOrWhiteSpace(shift.Notes);
+
+    /// <summary>
+    /// The shifts among <paramref name="ids"/> that something is recorded against: a note, a completion, a handover read or a claim line. Each of those keys restricts a delete, and one refused delete rolls
+    /// the whole approval back on PostgreSQL, so such a shift is kept and listed, never removed. Read past the query filters: a row a filter hides still holds its key.
+    /// </summary>
+    private async Task<HashSet<Guid>> RecordedAgainstAsync(List<Guid> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0) return new HashSet<Guid>();
+        var recorded = new HashSet<Guid>(await _db.ShiftNotes.IgnoreQueryFilters().Where(n => ids.Contains(n.ShiftId)).Select(n => n.ShiftId).ToListAsync(ct));
+        recorded.UnionWith(await _db.ShiftCompletions.IgnoreQueryFilters().Where(c => ids.Contains(c.ShiftId)).Select(c => c.ShiftId).ToListAsync(ct));
+        recorded.UnionWith(await _db.HandoverAcknowledgements.IgnoreQueryFilters().Where(a => ids.Contains(a.ShiftId)).Select(a => a.ShiftId).ToListAsync(ct));
+        recorded.UnionWith(await _db.ClaimLineItems.IgnoreQueryFilters().Where(l => l.ShiftId != null && ids.Contains(l.ShiftId.Value)).Select(l => l.ShiftId!.Value).ToListAsync(ct));
+        return recorded;
     }
 
     // ── What stops it: the stored pricing, read as the screen reads it ────────────
@@ -433,11 +641,11 @@ public sealed class ServiceAgreementApprovalService
 
     // ── Who may approve ───────────────────────────────────────────────────────────
 
-    /// <summary>The caller's role is one of the organisation's approver roles (Admin and Coordinator until it says otherwise), or the caller is a SuperAdmin acting for the organisation.</summary>
-    private async Task<bool> MayApproveAsync(Guid tenantId, ApprovalCaller caller, CancellationToken ct)
+    /// <summary>The caller's role is one of the organisation's approver roles (Admin and Coordinator until it says otherwise), or the caller is a SuperAdmin acting for the organisation. Renewing asks the same (agreement PR 2).</summary>
+    internal static async Task<bool> MayApproveAsync(PlanPricingService pricing, Guid tenantId, ApprovalCaller caller, CancellationToken ct)
     {
         if (caller.IsSuperAdmin) return true;
-        var allowed = PlanPricingPolicy.From(await _pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;
+        var allowed = PlanPricingPolicy.From(await pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;
         return caller.Roles.Any(role => allowed.Contains(role, StringComparer.OrdinalIgnoreCase));
     }
 
@@ -459,7 +667,7 @@ public sealed class ServiceAgreementApprovalService
     {
         var fresh = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery().FirstAsync(x => x.Id == draft.Id, ct);
         var approval = await _db.ServiceAgreementDraftApprovals.AsNoTracking().FirstAsync(a => a.DraftId == draft.Id, ct);
-        return new ApprovalOutcome(status, fresh, approval, oldShifts ?? await OldShiftsAsync(tenantId, draft, await ProviderTodayAsync(tenantId, ct), ct));
+        return new ApprovalOutcome(status, fresh, approval, oldShifts ?? (await OldShiftsAsync(tenantId, draft, await ProviderTodayAsync(tenantId, ct), ct)).Remaining);
     }
 
     // ── Small rules ───────────────────────────────────────────────────────────────

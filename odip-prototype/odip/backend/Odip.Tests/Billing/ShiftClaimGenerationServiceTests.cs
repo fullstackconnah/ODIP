@@ -1,14 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
-using Moq;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Migrations;
 using Odip.Infrastructure.Services;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Billing;
 
@@ -23,18 +22,7 @@ public class ShiftClaimGenerationServiceTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static Participant SeedParticipant(OdipDbContext db, bool isIntensive = false, string? addressState = null)
     {
@@ -159,6 +147,25 @@ public class ShiftClaimGenerationServiceTests
         // 8 rostered hours * $40 = $320 per shift
         Assert.All(lines, l => Assert.Equal(320m, l.TotalAmount));
         Assert.Equal(640m, claim.TotalAmount);
+    }
+
+    // Most NDIS supports are GST-free, and the catalogue carries no GST flag, so every new line is P2 whether or not the provider is GST-registered.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GenerateDraftClaimAsync_SetsP2GSTCode_WhateverTheRegistration(bool gstRegistered)
+    {
+        using var db = CreateDb();
+        SeedProviderSettings(db, gstRegistered: gstRegistered);
+        var participant = SeedParticipant(db);
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
+        await db.SaveChangesAsync();
+
+        var claim = await new ShiftClaimGenerationService(db).GenerateDraftClaimAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7));
+
+        var line = await db.ClaimLineItems.SingleAsync(l => l.TripClaimId == claim.Id);
+        Assert.Equal(GSTCode.P2, line.GSTCode);
     }
 
     [Fact]
@@ -323,6 +330,53 @@ public class ShiftClaimGenerationServiceTests
         var service = new ShiftClaimGenerationService(db);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.GenerateDraftClaimAsync(Guid.NewGuid(), new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 8)));
+    }
+
+    // A participant whose services began before their profile was complete may have no NDIS number. Like trip claims, no line is built without one, and the
+    // shifts are not dropped silently: they are left out and the refusal names the participant and the reason (LIFE fix round 1, V10).
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task GenerateAndPreview_WithoutAnNdisNumber_LeaveEveryShiftOut_AndSaySo(string? ndisNumber)
+    {
+        using var db = CreateDb();
+        SeedProviderSettings(db);
+        var participant = SeedParticipant(db);
+        participant.NdisNumber = ndisNumber;
+        participant.FundingSource = ParticipantFundingSource.Ndis;
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
+        await db.SaveChangesAsync();
+        var service = new ShiftClaimGenerationService(db);
+
+        var generate = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+        var preview = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+
+        foreach (var message in new[] { generate.Message, preview.Message })
+        {
+            Assert.Contains("Jane Doe", message);
+            Assert.Contains("NDIS number missing", message);
+        }
+        Assert.Empty(db.TripClaims);
+    }
+
+    // A participant funded another way has no NDIS number by design: their shifts are claimable as before (only an NDIS-funded participant is skipped).
+    [Fact]
+    public async Task Generate_ForAParticipantFundedAnotherWay_WithoutAnNdisNumber_StillBuildsLines()
+    {
+        using var db = CreateDb();
+        SeedProviderSettings(db);
+        var participant = SeedParticipant(db);
+        participant.NdisNumber = null;
+        participant.FundingSource = ParticipantFundingSource.Other;
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
+        await db.SaveChangesAsync();
+
+        var generated = await new ShiftClaimGenerationService(db).GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7));
+
+        Assert.Single(db.ClaimLineItems.Where(l => l.TripClaimId == generated.Claim.Id));
+        Assert.Empty(generated.LeftOut);
     }
 
     // ── PreviewAsync ──────────────────────────────────────────────────

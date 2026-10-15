@@ -82,7 +82,7 @@ async function fillRequiredFields(u: ReturnType<typeof userEvent.setup>) {
   await u.click(await screen.findByRole('option', { name: 'Coordinator' }))
 }
 
-const createButton = () => screen.getByRole('button', { name: 'Create User' })
+const createButton = () => screen.getByRole('button', { name: 'Create user' })
 const disclosure = () => screen.getByRole('button', { name: 'Set a temporary password instead' })
 const doneButton = () => screen.getByRole('button', { name: 'Done' })
 
@@ -463,7 +463,7 @@ describe('UserFormPanel edit', () => {
     expect(screen.queryByText(/We'll email/)).not.toBeInTheDocument()
 
     await u.type(screen.getByLabelText(/first name/i), 'ie')
-    await u.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await u.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
     expect(mockUpdate).toHaveBeenCalledWith({
@@ -481,7 +481,7 @@ describe('UserFormPanel edit', () => {
     render(<UserFormPanel isOpen onClose={onClose} user={existingUser} />)
 
     await u.type(screen.getByLabelText(/first name/i), 'ie')
-    await u.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await u.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('A user with this username already exists')).toBeInTheDocument()
     expect(screen.getByLabelText(/first name/i)).toHaveValue('Annie')

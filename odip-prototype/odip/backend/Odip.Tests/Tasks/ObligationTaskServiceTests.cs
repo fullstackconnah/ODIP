@@ -8,6 +8,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Tasks;
 using Odip.Tests.Medications;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Tasks;
 
@@ -20,17 +21,34 @@ namespace Odip.Tests.Tasks;
 /// </summary>
 public class ObligationTaskServiceTests
 {
-    private static OdipDbContext CreateDb(string dbName)
+    private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
+
+    [Fact]
+    public async Task EnsureAsync_ATaskThatNamesItsTenant_KeepsIt_EvenWhenTheRequestHasNoTenantToStampWith()
     {
+        using var db = CreateDb(Guid.NewGuid().ToString());   // a SuperAdmin context: no tenant, so SaveChanges stamps nothing
+        var tenantId = Guid.NewGuid();
+
+        await new ObligationTaskService(db).EnsureAsync(new ObligationTaskSpec(
+            SourceKey: "budget-emergency:s1", Type: TaskType.BudgetEmergencyReview, Title: "Review", DueDate: null, LinkTo: null, TenantId: tenantId), CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(tenantId, (await db.BookingTasks.SingleAsync()).TenantId);
+    }
+
+    [Fact]
+    public async Task EnsureAsync_ATaskThatNamesNoTenant_TakesTheRequestsOwnWhenTheContextSaves()
+    {
+        var tenantId = Guid.NewGuid();
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
 
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
+        await new ObligationTaskService(db).EnsureAsync(new ObligationTaskSpec("leave-coverage:s1:l1", TaskType.LeaveCoverage, "Re-cover shift", null, null), CancellationToken.None);
+        await db.SaveChangesAsync();
 
-        return new OdipDbContext(options, tenant.Object);
+        Assert.Equal(tenantId, (await db.BookingTasks.SingleAsync()).TenantId);
     }
 
     [Fact]

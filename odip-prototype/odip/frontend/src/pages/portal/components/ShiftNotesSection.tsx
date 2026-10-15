@@ -7,12 +7,11 @@ import { formatNoteTimestamp, formatRatio } from '@/lib/format'
 import type { ShiftNoteDto } from '@/api/types'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
+import { Button } from '@/components/Button'
 
 const BODY_MAX_LENGTH = 1000
 
 const textareaClass = 'w-full px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
-const primaryButtonClass = 'min-h-[44px] inline-flex items-center justify-center px-4 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2'
-const ghostButtonClass = 'min-h-[44px] inline-flex items-center justify-center px-3 rounded-lg text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2'
 
 function CharCount({ length }: { length: number }) {
   const nearCap = length >= BODY_MAX_LENGTH * 0.9
@@ -59,12 +58,12 @@ function FlagBanner({
         <span>This note mentions {formatFlaggedCategoryList(categories)}. Consider filing an incident report.</span>
       </p>
       <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
-        <button type="button" onClick={onDismiss} disabled={dismissing} className={`${ghostButtonClass} px-3`}>
+        <Button variant="ghost" onClick={onDismiss} disabled={dismissing}>
           {dismissing ? 'Dismissing…' : 'Dismiss'}
-        </button>
-        <button type="button" onClick={onFileIncident} className={`${primaryButtonClass} !bg-[var(--color-on-warning-container)]`}>
+        </Button>
+        <Button variant="secondary" onClick={onFileIncident}>
           File incident report
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -191,7 +190,7 @@ export function ShiftNotesSection({
       ) : isError ? (
         <div role="alert" className="flex items-center justify-between gap-3 text-sm text-[var(--color-destructive)]">
           <span className="flex items-center gap-1.5"><AlertCircle className="w-4 h-4 shrink-0" /> Couldn't load shift notes.</span>
-          <button type="button" onClick={() => refetch()} className={ghostButtonClass}>Try again</button>
+          <Button variant="ghost" onClick={() => refetch()}>Try again</Button>
         </div>
       ) : notes && notes.length > 0 ? (
         <ul className="space-y-2">
@@ -212,15 +211,13 @@ export function ShiftNotesSection({
                   <div className="flex items-center justify-between gap-2">
                     <CharCount length={editBody.length} />
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setEditingId(null)} className={ghostButtonClass}>Cancel</button>
-                      <button
-                        type="button"
+                      <Button variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
+                      <Button
                         onClick={() => handleSaveEdit(note.id)}
                         disabled={updateNote.isPending || !editBody.trim()}
-                        className={primaryButtonClass}
                       >
                         {updateNote.isPending ? 'Saving…' : 'Save'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                   {editError && <p id={`edit-note-error-${note.id}`} role="alert" className="text-xs text-[var(--color-destructive)]">{editError}</p>}
@@ -278,9 +275,9 @@ export function ShiftNotesSection({
         />
         <div className="flex items-center justify-between gap-2">
           <CharCount length={body.length} />
-          <button type="submit" disabled={createNote.isPending || !body.trim()} className={primaryButtonClass}>
+          <Button type="submit" disabled={createNote.isPending || !body.trim()}>
             {createNote.isPending ? 'Saving…' : 'Add note'}
-          </button>
+          </Button>
         </div>
         {createError && <p id="new-shift-note-error" role="alert" className="text-sm text-[var(--color-destructive)]">{createError}</p>}
       </form>

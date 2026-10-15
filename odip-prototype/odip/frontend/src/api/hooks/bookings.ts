@@ -40,6 +40,7 @@ export function useCreateBooking() {
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
+      qc.invalidateQueries({ queryKey: ['trip'] })
       qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
     },
   })
@@ -55,6 +56,7 @@ export function useUpdateBooking() {
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
+      qc.invalidateQueries({ queryKey: ['trip'] })
       qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
       qc.invalidateQueries({ queryKey: ['participant-bookings'] })
     },
@@ -85,6 +87,7 @@ export function useDeleteBooking() {
       qc.invalidateQueries({ queryKey: ['bookings'] })
       qc.invalidateQueries({ queryKey: ['trip-bookings'] })
       qc.invalidateQueries({ queryKey: ['trips'] })
+      qc.invalidateQueries({ queryKey: ['trip'] })
       qc.invalidateQueries({ queryKey: ['trip-itinerary'] })
     },
   })

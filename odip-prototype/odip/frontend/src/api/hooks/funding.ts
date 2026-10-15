@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut } from '../client'
-import { refreshBudgetFigures } from './funding-ledger'
+import { refreshBudgetFigures, refreshBudgetWarnings } from './funding-ledger'
 import type {
-  ApplyPlanDatesResult, BillingSourcesHintDto, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
+  ApplyPlanDatesResult, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
 } from '../types'
 
 // A participant's NDIS plan budget (budget feature, phase 1). The plan record is saved through these endpoints and never through the participant's patch groups. Every plan write
-// refreshes ['participant-funding', participantId], which is also the prefix of the Billing hint, so a saved plan updates the tab, the intake card and the hint at once.
+// refreshes ['participant-funding', participantId], so a saved plan updates the tab and the intake card at once.
 
 const SETTINGS_KEY = ['budget-settings'] as const
 export const fundingKey = (participantId: string | undefined) => ['participant-funding', participantId] as const
@@ -39,16 +39,6 @@ export function useFundingPlans(participantId: string | undefined, enabled = tru
   })
 }
 
-/** What the Billing funding sources say, to start a Core (flexible) pool from. Asked for once, when the editor opens. */
-export function useBillingSourcesHint(participantId: string | undefined, enabled = true) {
-  return useQuery({
-    queryKey: [...fundingKey(participantId), 'billing-hint'],
-    queryFn: () => apiGet<BillingSourcesHintDto>(`/participants/${participantId}/funding/billing-sources-hint`),
-    enabled: !!participantId && enabled,
-    staleTime: 60_000,
-  })
-}
-
 export function useCreateFundingPlan(participantId: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -56,6 +46,7 @@ export function useCreateFundingPlan(participantId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
       refreshOnboarding(queryClient, participantId)
+      refreshBudgetWarnings(queryClient)   // a new plan is a new budget to warn about, and ends the NDIA's signal about the old one
     },
   })
 }
@@ -68,6 +59,7 @@ export function useUpdateFundingPlan(participantId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
       refreshOnboarding(queryClient, participantId)
+      refreshBudgetWarnings(queryClient)   // the limits themselves changed
     },
   })
 }
@@ -99,7 +91,8 @@ export function useUpdateBudgetSettings() {
     mutationFn: (data: UpdateBudgetSettingsDto) => apiPut<BudgetSettingsDto>('/funding/settings', data),
     onSuccess: (saved) => {
       queryClient.setQueryData(SETTINGS_KEY, saved)
-      // The "approaching" percentage decides every participant's status, so every ledger held (and the claim pages' budget blocks) is read again.
+      // The "approaching" percentage decides every participant's status, so every ledger held (and the claim pages' budget blocks) is read again, and with them the alerts, the Budgets list and any
+      // agreement check, which are worked out from the same figures (refreshBudgetFigures marks all of them).
       refreshBudgetFigures(queryClient)
     },
   })

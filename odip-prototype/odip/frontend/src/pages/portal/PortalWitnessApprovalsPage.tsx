@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ShieldCheck, ShieldAlert, Check, X } from 'lucide-react'
+import { ShieldCheck, Check, X } from 'lucide-react'
 import {
   usePendingWitnessRequests, useApproveWitnessRequest, useDeclineWitnessRequest,
   useApproveIncidentWitnessRequest, useDeclineIncidentWitnessRequest,
@@ -12,6 +12,8 @@ import type { PortalWitnessRequestDto } from '@/api/types'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enums'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatWallClock } from '@/lib/wallClock'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 /** An INSTANT (a dose given), in the zone it was recorded in. */
 function formatDateTime(value: string | null, timeZone: string | null) {
@@ -143,14 +145,15 @@ export default function PortalWitnessApprovalsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="Witness approvals" subtitle="Medication doses and incident reports waiting for you to confirm you witnessed them">
-        <BackButton to="/portal" label="my shifts" variant="link" history={false} />
-      </PageHeader>
+      <div className="flex items-start gap-2">
+        <BackButton to="/portal" label="my shifts" variant="icon" history={false} />
+        <div className="flex-1 min-w-0">
+          <PageHeader title="Witness approvals" />
+        </div>
+      </div>
 
       {error && (
-        <div className="p-3 rounded-lg bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm border border-[var(--color-destructive)]/20">
-          {error}
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       {isLoading ? (
@@ -160,12 +163,9 @@ export default function PortalWitnessApprovalsPage() {
           <SkeletonCard />
         </div>
       ) : isError ? (
-        <EmptyState
-          icon={ShieldAlert}
-          title="Couldn't load witness requests"
-          description="Check your connection and try again."
-          action={{ label: 'Try again', onClick: () => refetch() }}
-        />
+        <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
+          Couldn't load witness requests. Check your connection and try again.
+        </Callout>
       ) : list.length === 0 ? (
         <EmptyState
           icon={ShieldCheck}
@@ -207,22 +207,12 @@ export default function PortalWitnessApprovalsPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleDeclineClick(request)}
-                    disabled={isBusy}
-                    className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm hover:bg-[var(--color-accent)] transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2"
-                  >
+                  <Button variant="secondary" onClick={() => handleDeclineClick(request)} disabled={isBusy}>
                     <X className="w-4 h-4" /> Decline
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApproveClick(request)}
-                    disabled={isBusy}
-                    className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2"
-                  >
+                  </Button>
+                  <Button onClick={() => handleApproveClick(request)} disabled={isBusy}>
                     <Check className="w-4 h-4" /> {approve.isPending && approve.variables === request.id ? 'Approving…' : 'Approve'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

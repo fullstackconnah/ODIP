@@ -6,19 +6,19 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
 /// <summary>
 /// PF-10.2 — nested CRUD for a participant's structured Community Access Risk Assessment matrix
-/// (<see cref="ParticipantCommunityAccessRiskItem"/>). Mirrors
-/// <see cref="ParticipantChecklistItemsController"/> exactly: a FIXED enumerated set — one row per
+/// (<see cref="ParticipantCommunityAccessRiskItem"/>): a FIXED enumerated set — one row per
 /// <see cref="CommunityAccessRiskItemType"/> (22 values) — so there is no Create/Delete here, only
 /// Get (always all twenty-two, synthesizing an unrated placeholder for any type with no row yet)
 /// and an upsert-by-type endpoint. This is the write path for ongoing edits from the participant
 /// detail page; the wizard's initial/draft submissions instead go through
-/// <see cref="ParticipantsController.UpsertCommunityAccessRiskItemsAsync"/>, sharing the same
-/// upsert semantics via <see cref="ApplyAnswer"/>.
+/// <see cref="ParticipantPatchApplier.UpsertCommunityAccessRiskItemsAsync"/>, sharing the same
+/// upsert semantics via <see cref="ParticipantGridRules"/>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -56,21 +56,13 @@ public class ParticipantCommunityAccessRiskItemsController : ControllerBase
             _db.ParticipantCommunityAccessRiskItems.Add(row);
         }
 
-        ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
+        ParticipantGridRules.ApplyAnswer(row, dto.Rating, dto.StrategyNotes);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ParticipantCommunityAccessRiskItemDto>.Ok(ToDto(row)));
     }
 
     // ── Helpers ────────────────────────────────────────────────────
-
-    /// <summary>Sets a risk-item row's answer — same "no separate audit timestamp" shape as ParticipantChecklistItem.ApplyAnswer.</summary>
-    internal static void ApplyAnswer(ParticipantCommunityAccessRiskItem row, RiskRatingLevel? rating, string? strategyNotes)
-    {
-        row.Rating = rating;
-        row.StrategyNotes = string.IsNullOrWhiteSpace(strategyNotes) ? null : strategyNotes.Trim();
-        row.UpdatedAt = DateTime.UtcNow;
-    }
 
     /// <summary>Every <see cref="CommunityAccessRiskItemType"/>, in declaration order (Road &amp;
     /// Traffic Safety first, then Behaviours of Concern, then Health &amp; Personal Safety — see

@@ -5,6 +5,8 @@ namespace Odip.Domain.Entities;
 /// <summary>
 /// Tenant-owned, immutable service-agreement draft revision. It is deliberately not a contract
 /// or signed agreement: legal template approval and evidence storage are separate prerequisites.
+/// A revision is never edited, but saving again deletes the participant's older revisions that did nothing; one that was approved,
+/// rostered (a <c>ShiftPattern</c> points at it) or signed (a signing snapshot) is kept, and those keys restrict deleting it.
 /// </summary>
 public class ServiceAgreementDraft : ITenantEntity
 {

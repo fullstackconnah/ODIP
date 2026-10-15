@@ -162,6 +162,149 @@ owner decision (collected under Open Flags at the end).
   the approval preview, the daily top-up's log and a confirmed trip booking. A shift the
   estimator cannot price gets no finding, only "Budget not checked: {reason}". Spec:
   `docs/specs/2026-10-04-participant-budgets.md` (Phase 3). Depends on FUND-04.
+  Follow-ups left by the two review rounds, none blocking, each with the reviewers' view
+  (`P3-REVIEW.md`, `P3-DESIGN-REVIEW.md`):
+  - [ ] **Two saves at the same moment (C8).** The roster check reads the ledger and the
+    save commits afterwards, so two one-off shifts saved in the same instant can both pass
+    and leave the forecast one shift over, with no marker and no review. Take the
+    per-participant advisory lock that generation and approval already take
+    (`RosterGenerationLock`) around the check and the save under a hard limit, with a
+    Postgres concurrency test. Accepted limit in the spec until then. The same race can
+    meet the review task's unique key (`budget-emergency:{id}:2`) for one of two
+    simultaneous emergencies on a closed review.
+  - [ ] **Cancel the review when its shift goes (C11a).** Cancelling or deleting an
+    emergency shift leaves its review open in the Admin's list for a shift that costs
+    nothing. It should CANCEL (not complete, which reads Reviewed) the shift's open
+    BudgetEmergencyReview: `IObligationTaskService` has no cancel-by-shift, so it needs an
+    interface method, an implementation and tests.
+  - [ ] **Keep the siren while a review is open (C11b, design view).** An Admin override
+    saved over an emergency shift drops `BUDGET_EMERGENCY`, so the board shows the key and
+    the pending review disappears from it. While a review is open the board keeps the
+    siren, not the key. The gate owns the marker's audit truth, so this is a product call.
+  - [ ] **A notice after an emergency save (L6).** The panel closes silently. Use
+    `useNotices` and `NoticesRegion` (polite, dismissible, stays where the person acted):
+    one region directly under the week toolbar, above the grid, at every width (at 390 it
+    pushes the grid down by one callout, which is the point). Title: the participant's
+    name. Message: "Saved as an emergency. An Admin will review it." (an Admin override:
+    "Saved over budget with your reason."). Subject: the shift id. The panel's `onSaved`
+    passes the kind and the participant.
+  - [ ] **The unpriced sentence on its own line (design N6).** In Settings, Budgets, "Shifts
+    the system cannot price yet ..." is the last sentence of a 13 px muted paragraph headed
+    "In both modes", though it is only about the hard limit. Give it its own line under the
+    hard-limit description, where the choice is made. It goes when the claim engine prices
+    those shifts.
+  - [ ] **Bring a warning into view once on a phone (design N7).** At 390 a Warn-mode
+    warning sits below the fold and "Save anyway" is the only cue. Bring a budget warning
+    into view once, on first appearance, at a coarse pointer only, with `bringIntoView`
+    (block nearest does nothing where it is already in view).
+  - [ ] **One pool label (decision).** The pool reads "Core (flexible)" in the shift
+    panel's findings and "Core" in phase 2's alerts and Budgets list (the plan's own pool
+    name against phase 2's `PoolLabel`). Pick one label across the sentences; it is a
+    product call, and the server's sentences would take `PoolLabel`. The same goes for
+    money: the findings print "$8,000.00" (`ShiftBudgetAssessor.Money`, in Domain) where phase
+    2b's alerts print "$8,000" (`BudgetText.Money`, in Infrastructure). With phase 2b merged
+    the over and approaching findings already say what the alerts say ("{pool} is $X over
+    this period's $Y (to {end})"); only the label and the money format still differ.
+  - Follow-ups left by the phase 2b work (small; none blocks the merge):
+    - [x] **B6, a tenancy gap in two claim writes.** DONE on `fix/safety-tenancy` (see the end of this
+      item). `ClaimsController.UpdateClaim` (`PUT /claims/{id}`)
+      and `UpdateLineItem` (the line-item `PATCH`) read a claim by id with no tenant scope:
+      `TripClaim` is not a tenant entity, and claims are meant to be reached through the
+      tenant-filtered shifts or bookings of their lines. The gap predates phase 2b, which added
+      `rejectionCode` and `rejectedDate` to what these writes can set, so an Admin holding
+      another organisation's claim id could mark it Rejected with V27 and raise that
+      organisation's participant alert. Claim ids are GUIDs, so this is hardening, not an open
+      door. It is the same gap as week-review H8, awaiting the owner's go-ahead. The fix scopes
+      both writes through the tenant-filtered shifts or bookings of the claim's lines (as
+      `BudgetLedgerService.ForClaimAsync` and `NdiaRejectionReader` already do) and answers 404
+      otherwise, with cross-tenant tests.
+      Done: every by-id claim route (the two writes, `GetClaim`, `DeleteClaim`, the BPR CSV and the
+      invoice) starts from `ClaimsController.TenantClaims()`, the claims whose trip (Trip kind) or
+      participant (Shift kind) the caller can see, and answers 404 for another organisation's claim;
+      the trip's claim list starts from a check that the trip is the caller's (404), and `UpdateClaim`
+      refuses an `AuthorisedByStaffId` that is not a user of the organisation (400).
+      `Odip.Tests/Claims/ClaimsTenantScopeTests.cs` holds a cross-tenant test per route and an
+      own-claim control for each write.
+    - **B10, the alerts route depends on the whole-organisation budget ledger.**
+      `GET participants/alerts` feeds the dashboard's Critical tile and the Participants table,
+      which also carry the medication, restrictive-practice, incident and QSC alerts. It now calls
+      the budget ledger for every active participant, uncached and with no isolation, so one row
+      the ledger's in-memory pricing cannot handle would make the endpoint answer 500 and take
+      those safety alerts down with it. The fix catches and logs a failure of the budget block
+      and carries on without budget alerts (the Budgets list still tells the truth), and may add a
+      short per-tenant cache. The trade-off is that a swallowed failure makes the budget rules
+      silently absent, so it needs a loud log and the owner's decision.
+    - **B5, the NDIA alert's two edges.** Both follow the spec's wording and both need an owner
+      call (`NdiaRejectionReader`). (a) The alert is ignored when any plan was recorded after
+      the rejection, so a claim marked V27 before the participant's first plan is recorded loses
+      its alert for good once the plan is recorded (it cannot tell a replacement plan from a
+      first one). (b) V17 and V18 mean the plan is exhausted, yet the alert ends with the
+      funding period, and a V17 rejection of an earlier period's claim never raises one. The fix
+      applies the plan-recorded test only when an earlier plan existed, and for V17 and V18 skips
+      the period test and ends on a new plan only.
+    - **B3, unpriced lines vanish from the agreement check.** `AgreementCheckService` drops lines
+      the engine cannot price and sends no count, so "Within" cannot say it is a floor: a
+      sleepover with no catalogue rate beside a weekday block that fits reads Within while the
+      real cost is unknown. The bar's "Not fully priced" chip, from the other quote, is the only
+      hint and can lag the check. The fix sends the quote's unpriced-line count on
+      `AgreementCheckDto` (through the adapter, the breakdown and the mock) and says "Within, for
+      the priced lines" when it is above 0; the wording is the owner's choice.
+    - **B9, the Critical tile and the Participants table differ by the over-budget participants.**
+      The dashboard's Critical count leaves `budget-over` out (the Budgets at risk tile owns it)
+      while the Participants table still flags those participants with the red Critical badge, so
+      "Review participants" can open a table with more red rows than the tile counts. Either
+      reword the tile's line (DESIGN.md and four tests pin it) or take `budget-over` off the
+      table's badge, which hides an alert there: a product call.
+    - **B11, "never a third quote in flight" is proved only as an argument to mocked hooks.** The
+      design holds (a changed key makes `isFetching` true in the same render, a stale check is
+      cancelled by its signal, and the shared limiter covers any overlap with a 429 that is
+      retried), but no test uses the real hooks. The fix is one test with the real hooks and a
+      counting transport that asserts at most two simultaneous quote and check requests across a
+      typing burst (the harness in `funding-warnings.test.tsx` is enough).
+    - **L3, the bar's sentence is not the Funding tab's.** The bar prints cents ("$39,379.00 left
+      in 1 Jul 2026 - 30 Jun 2027") where the Funding tab prints "$39,379 left of the $40,000 ...
+      (to 30 Jun)". The first half is cosmetic (use `money()` from `lib/budgetLedger`; it pins
+      many strings); the second ("Within, $13,080.04 to spare") needs the server to send the
+      margin, as it sends `overBy`.
+    - **L4, the bar's "left" ignores what is booked ahead.** It is available minus used, so shifts
+      and trips already booked ahead, which the Funding tab's forecast counts, are not taken off,
+      and Within can read rosier than that tab's "to spare". The fix adds one muted clause when
+      booked ahead is above 0 ("Shifts already booked ahead ($276) are not counted"), and needs
+      booked ahead on the check's answer.
+    - **The phone caveat for a rolled-over Available.** The bent-arrow mark has its words only in a
+      legend after the last card and in a tooltip that does not exist on touch. Below `md`, print
+      "incl. $X rolled over, not confirmed" in the card cell, or move both legends above the
+      cards. Do it with the lead-line change below.
+    - **A DataTable lead-line option for the 390 cards (L5).** The Budgets list's five cards take
+      about 1,130px; a fixed first line of participant and status pill, then pool and period,
+      then the four figures in two columns would put each card near 150px.
+    - **The agreement bar's dock trims.** The dock is 185px when a pool is over in several
+      periods: the pool line repeats the agreement figure that sits in the column beside it when
+      there is one pool, and the "warning only" sentence could share a line with the "Each of the
+      N periods" disclosure.
+    - **What a stamped late code means.** `UpdateClaim` stamps `RejectedDate` with the day a code
+      is recorded on a claim that was marked Rejected before the day was kept, so the claim page,
+      the Funding note and the alert print that day as the day the NDIA refused the claim. Only
+      legacy rows can be stamped; if it ever matters, say "recorded on" for a stamped day.
+    - **A running plan with no pools and a later plan recorded.** The Budgets list's tail reads
+      "Plan starts {date}" for it while the Funding tab says the running plan has no pools;
+      decide which sentence a plan that is running but empty should get.
+    - **Two claim generations at the same moment (found and closed in fix PR B).** Generating a
+      claim checks "no active claim for this trip" (or "no line references this shift") and saves
+      afterwards, so two simultaneous requests could both pass and leave two Draft claims over the
+      same trip or shifts. Until each claim reference got a piece of its own id, the same-day
+      reference collided on its unique index and turned the second request into a raw 500 with no
+      second claim; that accidental guard went with the fix to the reference. Closed with option 1:
+      `ClaimGenerationService.GenerateDraftClaimAsync` (keyed by the trip) and
+      `ShiftClaimGenerationService.GenerateAsync` (keyed by the participant) take
+      `RosterGenerationLock` first, with its new `scope` ("claim-generate") so they never wait on
+      a roster generation. The second request waits, reads what the first saved and is refused as
+      before ("An active claim already exists for this trip." / "No completed, unclaimed shifts
+      found in this date range."); a wait past 10 seconds is a 409. PostgreSQL tests:
+      `ClaimGenerationRacePostgresTests`. Option 2 (a partial unique index on
+      `TripClaims(TripInstanceId) WHERE Status <> Rejected` and a unique
+      `ClaimLineItems(ShiftId) WHERE ShiftId IS NOT NULL`, needing a migration and a live-data
+      check) is not needed unless something other than these two services ever writes claims.
 
 ### F. Living Arrangements
 

@@ -7,12 +7,12 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Medications;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Tasks;
 
@@ -32,14 +32,7 @@ public class ProviderTodayRemainingSitesTests
     private static readonly DateOnly Oct2 = new(2026, 10, 2);
     private static readonly DateOnly Oct3 = new(2026, 10, 3);
 
-    private static OdipDbContext CreateDb()
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb() => TestDb.Create();
 
     private static TripInstance SeedTrip(OdipDbContext db, TripStatus status = TripStatus.Planning)
     {

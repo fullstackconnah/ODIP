@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import MedicationFormPage from './MedicationFormPage'
+import { __testHooks } from '@/hooks/useBackNavigation'
 
 const { mockUseMedication, mockUseParticipant, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseCreateMedication } = vi.hoisted(() => ({
   mockUseMedication: vi.fn(),
@@ -192,5 +193,85 @@ describe('MedicationFormPage save-failure banner', () => {
     renderCreatePage()
 
     expect(screen.getByRole('alert')).toHaveTextContent('A medication with this name is already active for this participant.')
+  })
+})
+
+// Q2 fix round: ReadOnly reads a medication's full record only through this form, so it opens as a view: every field disabled, no Save.
+describe('MedicationFormPage — view mode for ReadOnly', () => {
+  const med = {
+    id: 'med-1', participantId: 'participant-1', name: 'Levetiracetam', strength: '500mg',
+    form: 'Tablet', route: 'Oral', doseDescription: '1 tablet', type: 'Regular',
+    timesOfDay: '08:00', frequency: 'Daily', daysOfWeek: [], intervalDays: null,
+    anchorDate: null, status: 'Active', isHighRisk: false, isPsychotropic: false,
+    isChemicalRestraint: false, drugSchedule: 'Unscheduled', supportLevel: 'SelfAdministered',
+    packaging: 'OriginalPackaging', startDate: '2026-01-01', endDate: null, nextReviewDue: null,
+    complianceFlags: [], directions: null, prnIndication: null, prnMaxDosesPer24h: null,
+    prnMinIntervalMinutes: null, purpose: null, bspInPlace: false,
+    restrictivePracticeAuthorisationRef: null, isHighIntensitySupport: false, prescriberName: null,
+    pharmacyName: 'Chemist Warehouse', pharmacyPhone: '03 9123 4567', consentObtained: true,
+    consentGivenBy: null, consentDate: null,
+    storageRequirements: null, notes: null, prnDosesInLast24h: 0,
+    createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+  }
+
+  it.each([['ReadOnly', true], ['Coordinator', false]] as const)('%s: view mode %s', (role, view) => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    mockUseMedication.mockReturnValue({ data: med, isLoading: false })
+    renderEditPage('med-1')
+
+    expect(screen.getByRole('heading', { name: view ? 'View medication' : /Edit/ })).toBeInTheDocument()
+    if (view) expect(screen.getByDisplayValue('Levetiracetam')).toBeDisabled()
+    else expect(screen.getByDisplayValue('Levetiracetam')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /Save/ }) === null).toBe(view)
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+    localStorage.clear()
+  })
+})
+
+// NAV F7: the form is opened from the /medications register as well as from the participant's Medications tab.
+describe('MedicationFormPage — Back, Cancel and Save return to where the form was opened', () => {
+  const medication = {
+    id: 'med-1', participantId: 'participant-1', name: 'Levetiracetam', strength: '500mg',
+    form: 'Tablet', route: 'Oral', doseDescription: '1 tablet', type: 'Regular',
+    timesOfDay: '08:00', frequency: 'Daily', daysOfWeek: [], intervalDays: null,
+    anchorDate: null, status: 'Active', isHighRisk: false, isPsychotropic: false,
+    isChemicalRestraint: false, drugSchedule: 'Unscheduled', supportLevel: 'SelfAdministered',
+    packaging: 'OriginalPackaging', startDate: '2026-01-01', endDate: null, nextReviewDue: null,
+    complianceFlags: [], directions: null, prnIndication: null, prnMaxDosesPer24h: null,
+    prnMinIntervalMinutes: null, purpose: null, bspInPlace: false,
+    restrictivePracticeAuthorisationRef: null, isHighIntensitySupport: false, prescriberName: null,
+    pharmacyName: null, pharmacyPhone: null, consentObtained: false,
+    consentGivenBy: null, consentDate: null,
+    storageRequirements: null, notes: null, prnDosesInLast24h: 0,
+    createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+  }
+  function renderFrom(previous: string | null) {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    mockUseMedication.mockReturnValue({ data: medication, isLoading: false })
+    if (previous) {
+      __testHooks.recordCurrentPath(previous)
+      __testHooks.recordCurrentPath('/medications/med-1/edit')
+    }
+    const router = createMemoryRouter(
+      [{ path: '/medications/:id/edit', element: <MedicationFormPage /> }, { path: '*', element: <p>elsewhere</p> }],
+      { initialEntries: ['/medications/med-1/edit'] },
+    )
+    render(<RouterProvider router={router} />)
+    return router
+  }
+  afterEach(() => { __testHooks.reset(); localStorage.clear() })
+
+  it('from the register: Back and Cancel go to the register, and so does Save', async () => {
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    const router = renderFrom('/medications')
+    expect(screen.getByRole('link', { name: /^Back to / })).toHaveAttribute('href', '/medications')
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/medications')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/medications'))
+  })
+
+  it('with no history (a deep link): the participant Medications tab stays the fallback', () => {
+    renderFrom(null)
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/participants/participant-1?tab=medications')
   })
 })

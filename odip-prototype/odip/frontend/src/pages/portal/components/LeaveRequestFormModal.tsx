@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type Resolver } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Modal } from '@/components/Modal'
@@ -9,6 +9,7 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { LEAVE_TYPES, LEAVE_TYPE_LABELS } from '@/api/types'
 import type { CreateLeaveRequestDto, LeaveType } from '@/api/types'
+import { Button } from '@/components/Button'
 
 export type LeaveFormValues = {
   userId: string
@@ -56,9 +57,7 @@ export type LeaveRequestFormModalProps = {
 /**
  * Date-range leave request form (§2 CreateLeaveRequestDto). Reused unchanged by both
  * PortalLeavePage (self-service, no staffOptions) and LeaveApprovalsPage's "Enter on behalf"
- * (staffOptions supplied) and "Edit" (mode="edit") flows. The zod@4/@hookform/resolvers@3
- * mismatch means rendered validation text can't be reliably asserted in tests — the schema still
- * runs so a user gets inline errors; tests assert submit payloads/disabled states instead.
+ * (staffOptions supplied) and "Edit" (mode="edit") flows.
  */
 export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, errorMessage, staffOptions, mode = 'create', initialValues }: LeaveRequestFormModalProps) {
   const isEdit = mode === 'edit'
@@ -66,7 +65,8 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
   const schema = useMemo(() => buildSchema(requireStaff), [requireStaff])
   const resetValues = useMemo<LeaveFormValues>(() => ({ ...DEFAULT_VALUES, ...initialValues }), [initialValues])
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm<LeaveFormValues>({
-    resolver: zodResolver(schema),
+    // The schema marks some fields optional, but the defaults keep every field a string, so the parsed values match.
+    resolver: zodResolver(schema) as Resolver<LeaveFormValues>,
     defaultValues: resetValues,
   })
   // Wired the same way VehicleCreatePage.tsx (an existing RHF+zod create form) does — see this
@@ -103,17 +103,12 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
         closeOnBackdrop={false}
         footer={
           <>
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)]">
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={submitting}
-              className="px-4 py-2 text-sm rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium hover:opacity-90 disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={submit} disabled={submitting}>
               {submitting ? 'Saving…' : isEdit ? 'Save changes' : requireStaff ? 'Save' : 'Submit request'}
-            </button>
+            </Button>
           </>
         }
       >

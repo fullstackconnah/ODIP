@@ -6,6 +6,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -57,32 +58,13 @@ public class ParticipantConsentsController : ControllerBase
             _db.ParticipantConsents.Add(row);
         }
 
-        ApplyAnswer(row, dto.Granted, dto.SignedByName, dto.SignedDate);
+        ParticipantGridRules.ApplyAnswer(row, dto.Granted, dto.SignedByName, dto.SignedDate);
         await _db.SaveChangesAsync(ct);
 
         return Ok(ApiResponse<ParticipantConsentDto>.Ok(ToDto(row)));
     }
 
     // ── Helpers ────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Sets a consent row's answer, re-stamping <see cref="ParticipantConsent.RecordedAt"/> only
-    /// when <see cref="ParticipantConsent.Granted"/> actually changes — a compliance timestamp
-    /// should track when the decision was (re-)made, not get bumped on every unrelated save of
-    /// the same still-true/still-false answer.
-    /// </summary>
-    internal static void ApplyAnswer(ParticipantConsent row, bool? granted, string? signedByName, DateOnly? signedDate)
-    {
-        if (row.Granted != granted)
-            row.RecordedAt = granted.HasValue ? DateTime.UtcNow : null;
-        row.Granted = granted;
-        // Signed-by/date are only meaningful once granted — see the wizard/detail-page UI, which
-        // only ever shows them in that state — but not hard-enforced here either way (a caller may
-        // record ahead of a formal signature pass, per ParticipantConsent's type doc).
-        row.SignedByName = string.IsNullOrWhiteSpace(signedByName) ? null : signedByName.Trim();
-        row.SignedDate = signedDate;
-        row.UpdatedAt = DateTime.UtcNow;
-    }
 
     /// <summary>Every <see cref="ConsentType"/>, in declaration order, backed by <paramref name="existingRows"/>
     /// where a row exists and a synthesized (Id = null, Granted = null) placeholder otherwise.</summary>

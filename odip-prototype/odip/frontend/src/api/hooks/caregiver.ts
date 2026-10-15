@@ -53,17 +53,23 @@ export function useRevokeCaregiverLink() {
   return useMutation({
     mutationFn: ({ participantId }: { participantId: string }) =>
       apiDeleteRaw(`/participants/${participantId}/caregiver-link`),
-    onSuccess: (_, vars) => {
+    // Settled, not only success: a refusal (another coordinator revoked it first) must still reload the chip and the Revoke button.
+    onSettled: (_, __, vars) => {
       qc.invalidateQueries({ queryKey: ['participant', vars.participantId] })
       qc.invalidateQueries({ queryKey: ['caregiver-submissions'] })
     },
   })
 }
 
-export function useCaregiverSubmissions(status: CaregiverSubmissionStatus = 'Submitted') {
+export function useCaregiverSubmissions(
+  status: CaregiverSubmissionStatus = 'Submitted',
+  { participantId, enabled = true }: { participantId?: string; enabled?: boolean } = {},
+) {
   return useQuery({
-    queryKey: ['caregiver-submissions', status],
-    queryFn: () => apiGetWithDefault<CaregiverSubmissionListItemDto[]>(`/caregiver-submissions?status=${status}`, []),
+    queryKey: ['caregiver-submissions', status, participantId],
+    queryFn: () => apiGetWithDefault<CaregiverSubmissionListItemDto[]>(
+      `/caregiver-submissions?status=${status}${participantId ? `&participantId=${participantId}` : ''}`, []),
+    enabled,
   })
 }
 
@@ -80,10 +86,13 @@ export function useAcceptCaregiverSubmission() {
   return useMutation({
     mutationFn: ({ id }: { id: string; participantId: string }) => apiPostRaw(`/caregiver-submissions/${id}/accept`, {}),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['caregiver-submissions'] })
-      qc.invalidateQueries({ queryKey: ['caregiver-submission', vars.id] })
       qc.invalidateQueries({ queryKey: ['participant', vars.participantId] })
       qc.invalidateQueries({ queryKey: ['participants'] })
+    },
+    // A refused review (409: someone reviewed it first) still reloads the list and the record, so neither stays stale.
+    onSettled: (_, __, vars) => {
+      qc.invalidateQueries({ queryKey: ['caregiver-submissions'] })
+      qc.invalidateQueries({ queryKey: ['caregiver-submission', vars.id] })
     },
   })
 }
@@ -92,7 +101,8 @@ export function useRejectCaregiverSubmission() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, note }: { id: string; note: string }) => apiPostRaw(`/caregiver-submissions/${id}/reject`, { note }),
-    onSuccess: (_, vars) => {
+    // Settled, not only success: see useAcceptCaregiverSubmission.
+    onSettled: (_, __, vars) => {
       qc.invalidateQueries({ queryKey: ['caregiver-submissions'] })
       qc.invalidateQueries({ queryKey: ['caregiver-submission', vars.id] })
     },

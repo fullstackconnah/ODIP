@@ -41,11 +41,11 @@ public static class ShiftCompletionMapper
 
     /// <summary>The inputs <see cref="QueueExtrasAsync"/> needs for one queue row.</summary>
     public sealed record QueueExtrasInput(
-        Guid CompletionId, Guid ParticipantId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay,
+        Guid ShiftId, Guid CompletionId, Guid ParticipantId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay,
         DateTime ActualStart, DateTime? ActualEnd);
 
     /// <summary>The per-completion figures the review queue adds to each row.</summary>
-    public sealed record QueueExtras(int DosesWithoutOutcome, int BreakMinutes);
+    public sealed record QueueExtras(int DosesWithoutOutcome, int BreakMinutes, int IncidentCount);
 
     /// <summary>
     /// For each queue row: how many scheduled doses in the ROSTERED window have no outcome (the same slots, dedupe and active-record rule the
@@ -62,6 +62,13 @@ public static class ShiftCompletionMapper
         var breaksByCompletion = (await db.ShiftBreaks.Where(b => completionIds.Contains(b.ShiftCompletionId)).ToListAsync(ct))
             .GroupBy(b => b.ShiftCompletionId)
             .ToDictionary(g => g.Key, g => g.ToList());
+        // The review detail's own rule (ToDtoAsync, includeIncidents): an active incident linked to the shift. One query for the page.
+        var shiftIds = rows.Select(r => r.ShiftId).ToList();
+        var incidentsByShift = await db.IncidentReports
+            .Where(i => i.ShiftId.HasValue && shiftIds.Contains(i.ShiftId.Value) && i.IsActive)
+            .GroupBy(i => i.ShiftId!.Value)
+            .Select(g => new { ShiftId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ShiftId, x => x.Count, ct);
         var provider = await ProviderTimeZoneResolver.ResolveAsync(db, ct);
         var slots = new MedicationSlotService(db);
         var nowUtc = DateTime.UtcNow;
@@ -77,7 +84,7 @@ public static class ShiftCompletionMapper
             });
             var due = await slots.GetWindowAsync(window.Item1, window.Item2, row.ParticipantId, provider.Zone, includePrn: false, ct);
             var withoutOutcome = due.Slots.DistinctBy(s => (s.Medication.Id, s.ScheduledAt)).Count(s => s.Administration is null);
-            result[row.CompletionId] = new QueueExtras(withoutOutcome, breakMinutes);
+            result[row.CompletionId] = new QueueExtras(withoutOutcome, breakMinutes, incidentsByShift.GetValueOrDefault(row.ShiftId));
         }
         return result;
     }
@@ -111,7 +118,7 @@ public static class ShiftCompletionMapper
             db,
             shiftRows.Where(r => completionsByShiftId.ContainsKey(r.Id))
                 .Select(r => new QueueExtrasInput(
-                    completionsByShiftId[r.Id].Id, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay,
+                    r.Id, completionsByShiftId[r.Id].Id, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay,
                     completionsByShiftId[r.Id].ActualStart, completionsByShiftId[r.Id].ActualEnd))
                 .ToList(),
             ct);
@@ -131,7 +138,9 @@ public static class ShiftCompletionMapper
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, completion.ActualStart, completion.ActualEnd,
                 completion.VarianceMinutesStart, completion.VarianceMinutesEnd, row.Status,
                 completion.TimeZoneId, isOutlier, varianceReviewMinutes, row.ReturnCount,
-                extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes, completion.StartWasManual));
+                extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes, completion.StartWasManual,
+                completion.OriginalActualStart is not null || completion.OriginalActualEnd is not null,
+                extras[completion.Id].IncidentCount));
         }
         return items;
     }
@@ -185,7 +194,9 @@ public static class ShiftCompletionMapper
             IsOutlierVariance(c.VarianceMinutesStart, c.VarianceMinutesEnd, varianceReviewMinutes),
             varianceReviewMinutes, shiftReturnCount, incidents,
             breaks.Select(b => ToBreakDto(b, now, c.ActualEnd)).ToList(), breakMinutes, netMinutes,
-            c.HandoverText, c.NothingToHandOver, c.NothingToNoteConfirmed);
+            c.HandoverText, c.NothingToHandOver, c.NothingToNoteConfirmed,
+            c.OriginalActualStart is not null || c.OriginalActualEnd is not null,
+            c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres, c.AnythingToReport);
     }
 
     /// <summary>

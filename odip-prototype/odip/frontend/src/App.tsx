@@ -12,9 +12,7 @@ const DashboardPage = React.lazy(() => import('./pages/DashboardPage'))
 const TripsPage = React.lazy(() => import('./pages/TripsPage'))
 const TripDetailPage = React.lazy(() => import('./pages/TripDetailPage'))
 const TripCreatePage = React.lazy(() => import('./pages/TripCreatePage'))
-// ParticipantsPage is still imported lazily by its own test file (./pages/ParticipantsPage.test.tsx),
-// but in App routing the list-level /participants route now resolves to ParticipantsHubPage —
-// the three lifecycle stages share one PageHeader.
+// The list-level /participants route resolves to ParticipantsHubPage: the three lifecycle stages share one PageHeader.
 const ParticipantsHubPage = React.lazy(() => import('./pages/ParticipantsHubPage'))
 const OnboardingDetailPage = React.lazy(() => import('./pages/OnboardingDetailPage'))
 const InquiryFormPage = React.lazy(() => import('./pages/InquiryFormPage'))
@@ -37,6 +35,7 @@ const VehiclesPage = React.lazy(() => import('./pages/VehiclesPage'))
 const VehicleCreatePage = React.lazy(() => import('./pages/VehicleCreatePage'))
 const StaffPage = React.lazy(() => import('./pages/StaffPage'))
 const StaffCreatePage = React.lazy(() => import('./pages/StaffCreatePage'))
+const StaffNewRoute = React.lazy(() => import('./pages/StaffNewRoute'))
 const StaffDetailPage = React.lazy(() => import('./pages/StaffDetailPage'))
 const TasksPage = React.lazy(() => import('./pages/TasksPage'))
 const TaskCreatePage = React.lazy(() => import('./pages/TaskCreatePage'))
@@ -46,12 +45,10 @@ const IncidentDetailPage = React.lazy(() => import('./pages/IncidentDetailPage')
 const BookingsPage = React.lazy(() => import('./pages/BookingsPage'))
 const SchedulePage = React.lazy(() => import('./pages/SchedulePage'))
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage'))
+const ImportWizardPage = React.lazy(() => import('@/pages/settings/ImportWizardPage'))
 const QualificationsPage = React.lazy(() => import('./pages/QualificationsPage'))
 const ClaimDetailPage = React.lazy(() => import('./pages/ClaimDetailPage'))
-const BillingPage = React.lazy(() => import('@/pages/BillingPage'))
-const ClaimBatchesPage = React.lazy(() => import('@/pages/ClaimBatchesPage'))
-const ClaimBatchDetailPage = React.lazy(() => import('@/pages/ClaimBatchDetailPage'))
-const ClaimBatchBuilderPage = React.lazy(() => import('@/pages/ClaimBatchBuilderPage'))
+const BudgetsPage = React.lazy(() => import('@/pages/BudgetsPage'))
 const RosterBoardPage = React.lazy(() => import('@/pages/rostering/RosterBoardPage'))
 const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
@@ -64,6 +61,7 @@ const PortalShiftDetailPage = React.lazy(() => import('@/pages/portal/PortalShif
 const PortalWitnessApprovalsPage = React.lazy(() => import('@/pages/portal/PortalWitnessApprovalsPage'))
 const PortalLeavePage = React.lazy(() => import('@/pages/portal/PortalLeavePage'))
 const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage'))
+const AccessibilityPage = React.lazy(() => import('@/pages/AccessibilityPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -90,18 +88,23 @@ export function HomeRoute() {
   return <PrivateRoute page="dashboard"><DashboardPage /></PrivateRoute>
 }
 
-export function PrivateRoute({ children, page, requiresWrite, requiresParticipantLifecycleMutation }: {
+export function PrivateRoute({ children, page, requiresWrite, viewableByReadOnly, requiresParticipantLifecycleMutation, requiresDataImport }: {
   children: React.ReactNode
   page?: PageKey
   requiresWrite?: boolean
+  /** The record's only read view is its edit form: ReadOnly opens it as a view (the form hides its writes when canWrite is false). */
+  viewableByReadOnly?: boolean
   requiresParticipantLifecycleMutation?: boolean
+  /** Settings → Import data: an Admin, or a SuperAdmin viewing as an organisation (canImportData). */
+  requiresDataImport?: boolean
 }) {
   const token = localStorage.getItem('odip_token')
   const permissions = usePermissions()
   if (!token) return <Navigate to="/login" replace />
   if (page && !permissions.canAccessPage(page)) return <Navigate to="/" replace />
-  if (requiresWrite && !permissions.canWrite) return <Navigate to="/" replace />
+  if (requiresWrite && !permissions.canWrite && !(viewableByReadOnly && permissions.isReadOnly)) return <Navigate to="/" replace />
   if (requiresParticipantLifecycleMutation && !permissions.canManageParticipantLifecycle) return <Navigate to="/" replace />
+  if (requiresDataImport && !permissions.canImportData) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -112,11 +115,13 @@ export function PrivateRoute({ children, page, requiresWrite, requiresParticipan
 // createBrowserRouter instead of rendered directly.
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <Route element={<Suspense fallback={<div className="flex items-center justify-center h-screen text-[#43493a]">Loading...</div>}><Outlet /></Suspense>}>
+    <Route element={<Suspense fallback={<div className="flex items-center justify-center h-screen text-[var(--color-muted-foreground)]">Loading...</div>}><Outlet /></Suspense>}>
       <Route path="/login" element={<LoginPage />} />
       {/* Caregiver profile form — public, token-authenticated, deliberately OUTSIDE the
           authenticated shell: no PrivateRoute, no AppLayout, no UiPreferencesProvider. */}
       <Route path="/caregiver/:token" element={<CaregiverWizardPage />} />
+      {/* The accessibility statement: public, outside the shell, so a signed-out reader is never sent to /login. */}
+      <Route path="/accessibility" element={<AccessibilityPage />} />
       <Route element={<UiPreferencesProvider><ErrorBoundary><PrivateRoute><AppLayout /></PrivateRoute></ErrorBoundary></UiPreferencesProvider>}>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/trips" element={<PrivateRoute page="trips"><TripsPage /></PrivateRoute>} />
@@ -144,26 +149,24 @@ const router = createBrowserRouter(
         <Route path="/accommodation/:id/edit" element={<PrivateRoute page="accommodation" requiresWrite><AccommodationCreatePage /></PrivateRoute>} />
         <Route path="/vehicles" element={<PrivateRoute page="vehicles"><VehiclesPage /></PrivateRoute>} />
         <Route path="/vehicles/new" element={<PrivateRoute page="vehicles" requiresWrite><VehicleCreatePage /></PrivateRoute>} />
-        <Route path="/vehicles/:id/edit" element={<PrivateRoute page="vehicles" requiresWrite><VehicleCreatePage /></PrivateRoute>} />
+        <Route path="/vehicles/:id/edit" element={<PrivateRoute page="vehicles" requiresWrite viewableByReadOnly><VehicleCreatePage /></PrivateRoute>} />
         <Route path="/staff" element={<PrivateRoute page="staff"><StaffPage /></PrivateRoute>} />
-        <Route path="/staff/new" element={<PrivateRoute page="staff" requiresWrite><StaffCreatePage /></PrivateRoute>} />
+        <Route path="/staff/new" element={<PrivateRoute page="staff" requiresWrite><StaffNewRoute /></PrivateRoute>} />
         <Route path="/staff/:id/edit" element={<PrivateRoute page="staff" requiresWrite><StaffCreatePage /></PrivateRoute>} />
         <Route path="/staff/:id" element={<PrivateRoute page="staff"><StaffDetailPage /></PrivateRoute>} />
         <Route path="/tasks" element={<PrivateRoute page="tasks"><TasksPage /></PrivateRoute>} />
         <Route path="/tasks/new" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
-        <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite><TaskCreatePage /></PrivateRoute>} />
+        <Route path="/tasks/:id/edit" element={<PrivateRoute page="tasks" requiresWrite viewableByReadOnly><TaskCreatePage /></PrivateRoute>} />
         <Route path="/incidents" element={<PrivateRoute page="incidents"><IncidentsPage /></PrivateRoute>} />
         <Route path="/incidents/new" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
-        <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
+        <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents" requiresWrite><IncidentCreatePage /></PrivateRoute>} />
         <Route path="/incidents/:id" element={<PrivateRoute page="incidents"><IncidentDetailPage /></PrivateRoute>} />
         <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
+        <Route path="/settings/import/:kind" element={<PrivateRoute page="settings" requiresDataImport><ImportWizardPage /></PrivateRoute>} />
         <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
         <Route path="/claims/:id" element={<PrivateRoute page="claims"><ClaimDetailPage /></PrivateRoute>} />
-        <Route path="/billing" element={<PrivateRoute page="billing"><BillingPage /></PrivateRoute>} />
-        <Route path="/billing/claim-batches" element={<PrivateRoute page="billing"><ClaimBatchesPage /></PrivateRoute>} />
-        <Route path="/billing/claim-batches/new" element={<PrivateRoute page="billing" requiresWrite><ClaimBatchBuilderPage /></PrivateRoute>} />
-        <Route path="/billing/claim-batches/:id" element={<PrivateRoute page="billing"><ClaimBatchDetailPage /></PrivateRoute>} />
+        <Route path="/budgets" element={<PrivateRoute page="budgets"><BudgetsPage /></PrivateRoute>} />
         <Route path="/rostering" element={<PrivateRoute page="rostering"><RosterBoardPage /></PrivateRoute>} />
         <Route path="/rostering/patterns" element={<PrivateRoute page="rostering"><PatternsPage /></PrivateRoute>} />
         <Route path="/rostering/compatibility" element={<PrivateRoute page="rostering"><CompatibilityPage /></PrivateRoute>} />
@@ -171,7 +174,7 @@ const router = createBrowserRouter(
         <Route path="/rostering/completions" element={<PrivateRoute page="rostering"><CompletionReviewPage /></PrivateRoute>} />
         <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
         <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
-        <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
+        <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite viewableByReadOnly><MedicationFormPage /></PrivateRoute>} />
         <Route path="/portal" element={<PrivateRoute page="portal"><PortalShiftsPage /></PrivateRoute>} />
         <Route path="/portal/shifts/:id" element={<PrivateRoute page="portal"><PortalShiftDetailPage /></PrivateRoute>} />
         <Route path="/portal/witness-approvals" element={<PrivateRoute page="portal"><PortalWitnessApprovalsPage /></PrivateRoute>} />

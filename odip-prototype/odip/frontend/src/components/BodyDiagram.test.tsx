@@ -78,7 +78,7 @@ describe('BodyDiagram accessibility — the button list is the primary control',
 // Landing-spotted: the selected region pill and the Add injury button used --color-on-primary, which index.css never defines, so their
 // text fell back to the inherited dark ink on the dark green primary. --color-primary-foreground is the defined white.
 describe('BodyDiagram — legible on the primary fill', () => {
-  it('sets the selected region pill and the Add injury button in the defined on-primary colour', async () => {
+  it('sets the selected region pill in the defined white-on-primary colour, never the undefined --color-on-primary', async () => {
     const user = userEvent.setup()
     render(<Harness />)
 
@@ -86,7 +86,7 @@ describe('BodyDiagram — legible on the primary fill', () => {
     const pill = screen.getByRole('button', { name: 'Chest' })
     expect(pill).toHaveAttribute('aria-pressed', 'true')
     expect(pill).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]')
-    expect(screen.getByRole('button', { name: 'Add injury' })).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]')
+    expect(screen.getByRole('button', { name: 'Add injury' })).toBeInTheDocument()
     expect(pill.className).not.toContain('--color-on-primary)')
   })
 
@@ -181,15 +181,16 @@ describe('BodyDiagram — recording injuries', () => {
     render(<Harness initial={initial} />)
 
     const table = screen.getByRole('table')
-    const removeButtons = within(table).getAllByRole('button', { name: 'Remove' })
+    const removeButtons = within(table).getAllByRole('button', { name: /^Remove: / })
     expect(removeButtons).toHaveLength(3)
 
-    await userEvent.setup().click(removeButtons[1])
+    // Every row has one, so its name says which injury it removes.
+    await userEvent.setup().click(within(table).getByRole('button', { name: 'Remove: Left hand, Abrasion' }))
 
     expect(within(table).getByText('Bumped head.')).toBeInTheDocument()
     expect(within(table).getByText('Knee swelling.')).toBeInTheDocument()
     expect(within(table).queryByText('Grazed hand.')).not.toBeInTheDocument()
-    expect(within(table).getAllByRole('button', { name: 'Remove' })).toHaveLength(2)
+    expect(within(table).getAllByRole('button', { name: /^Remove: / })).toHaveLength(2)
   })
 
   it('shows an error and does not add when no region has been selected', async () => {

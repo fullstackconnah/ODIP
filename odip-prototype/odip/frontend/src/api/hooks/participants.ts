@@ -134,23 +134,29 @@ export function useSaveParticipantIntake() {
 }
 
 /**
- * Finalises a participant whose intake is complete (POST /participants/{id}/complete-profile, empty body): the Profile wizard's
- * "Complete Profile". It carries no profile field (each step is saved by its own PATCH), so it cannot wipe one.
+ * The onboarding checklist's two lifecycle actions (owner decision 2026-10-13), each an empty-body POST:
+ * - `begin-services`: the participant can receive services (the roster board, shifts, the portal, medications) while staying on the
+ *   Onboarding tab;
+ * - `make-active`: finalises them onto the Active tab, open checklist items or not (Enforce keeps its activation rule and refuses with a reason).
  */
-export function useCompleteParticipantProfile() {
+function useLifecycleAction(action: 'begin-services' | 'make-active') {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id }: { id: string }) => apiPostRaw<ParticipantDetailDto>(`/participants/${id}/complete-profile`, {}),
+    mutationFn: ({ id }: { id: string }) => apiPostRaw<ParticipantDetailDto>(`/participants/${id}/${action}`, {}),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })
-      // Finalising (and, readiness allowing, activating) ends the onboarding: the participant leaves the Onboarding tab, and the enquiry they
-      // came from now points at a finalised participant.
+      qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
       qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+      // The board lists who can receive services and tags a services-started row.
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
     },
   })
 }
+
+export const useBeginServices = () => useLifecycleAction('begin-services')
+export const useMakeParticipantActive = () => useLifecycleAction('make-active')
 
 /** Discovers immutable intake-completion revisions; never infer a revision client-side. */
 export function useParticipantIntakeSnapshots(id: string | undefined) {
@@ -196,8 +202,9 @@ export function usePatchParticipant() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
       qc.invalidateQueries({ queryKey: ['participant', vars.id] })
-      // Correcting identity/NDIS details on the Profile wizard can invalidate the profile-essentials gate the worklist shows.
+      // The checklist's "Profile details" item and the worklist are derived from these fields.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+      qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
     },
   })
 }
@@ -251,7 +258,6 @@ export function useRestoreParticipant() {
  * the apiGet/ApiResponse JSON envelope entirely (the endpoint returns a raw application/pdf file,
  * not JSON) — fetches as a blob directly through apiClient, and uses the filename from the
  * response's Content-Disposition header when present, falling back to the caller-supplied fileName.
- * Same pattern as useDownloadProdaFile in billing.ts.
  */
 export function useDownloadIntakeFormPdf() {
   return useMutation({

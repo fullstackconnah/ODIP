@@ -4,8 +4,10 @@ import { Modal } from '@/components/Modal'
 import { DataTable } from '@/components/DataTable'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
-import type { AxiosError } from 'axios'
 import { plural } from '@/lib/format'
+import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 interface GenerateClaimModalProps {
   tripId: string
@@ -37,8 +39,8 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
   const previewClaim = usePreviewClaim()
   const generateClaim = useGenerateClaim()
 
-  const startDate = trip.startDate ? new Date(trip.startDate).toLocaleDateString('en-AU') : '—'
-  const endDate = trip.endDate ? new Date(trip.endDate).toLocaleDateString('en-AU') : '—'
+  const startDate = formatDateAu(trip.startDate)
+  const endDate = formatDateAu(trip.endDate)
   const durationDays = trip.startDate && trip.endDate
     ? Math.ceil((new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
     : 0
@@ -52,10 +54,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
           setPreviewData(data)
           setStep('preview')
         },
-        onError: (err: unknown) => {
-          const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-          setError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to generate preview. Check provider settings and confirm the trip has confirmed bookings.')
-        },
+        onError: (err: unknown) => setError(extractErrorMessage(err, 'Failed to generate preview. Check provider settings and confirm the trip has confirmed bookings.')),
       },
     )
   }
@@ -66,10 +65,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
       { tripId, data: { departureTime, returnTime, activeHoursPerDay } },
       {
         onSuccess: () => onSuccess(),
-        onError: (err: unknown) => {
-          const axiosErr = err as AxiosError<{ message?: string; errors?: string[] }>
-          setError(axiosErr?.response?.data?.errors?.[0] || axiosErr?.response?.data?.message || 'Failed to generate claim.')
-        },
+        onError: (err: unknown) => setError(extractErrorMessage(err, 'Failed to generate claim.')),
       },
     )
   }
@@ -86,52 +82,32 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
       footer={
         step === 'input' ? (
           <>
-            <button
-              onClick={onClose}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-            >
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              onClick={handlePreview}
-              disabled={previewClaim.isPending}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white font-medium hover:opacity-90 transition-all disabled:opacity-50"
-            >
+            </Button>
+            <Button onClick={handlePreview} disabled={previewClaim.isPending}>
               {previewClaim.isPending ? 'Loading...' : 'Preview Claim \u2192'}
-            </button>
+            </Button>
           </>
         ) : (
           <div className="flex justify-between w-full">
-            <button
-              onClick={() => { setStep('input'); setError(null) }}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-            >
+            <Button variant="secondary" onClick={() => { setStep('input'); setError(null) }}>
               &larr; Back
-            </button>
+            </Button>
             <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] font-medium hover:bg-[var(--color-accent)] transition-all"
-              >
+              <Button variant="secondary" onClick={onClose}>
                 Cancel
-              </button>
-              <button
-                onClick={handleGenerate}
-                disabled={generateClaim.isPending}
-                className="inline-flex items-center justify-center h-[var(--control-h)] px-4 text-sm rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white font-medium hover:opacity-90 transition-all disabled:opacity-50"
-              >
+              </Button>
+              <Button onClick={handleGenerate} disabled={generateClaim.isPending}>
                 {generateClaim.isPending ? 'Generating...' : 'Confirm & Generate'}
-              </button>
+              </Button>
             </div>
           </div>
         )
       }
     >
         {error && (
-          <div className="bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)] flex items-start gap-2 mb-4">
-            <span className="mt-0.5">&#9888;</span>
-            <span>{error}</span>
-          </div>
+          <Callout tone="error" className="mb-4">{error}</Callout>
         )}
 
         {step === 'input' && (
@@ -205,7 +181,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] p-4 mb-[var(--section-gap)]">
               <div className="flex items-baseline justify-between mb-2">
                 <span className="text-sm text-[var(--color-muted-foreground)]">Total Estimate</span>
-                <span className="text-xl font-semibold">${previewData.totalAmount?.toFixed(2)}</span>
+                <span className="text-xl font-semibold">{formatCurrency(previewData.totalAmount)}</span>
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--color-muted-foreground)]">
                 <span>Participants: {previewData.confirmedParticipantCount ?? '—'}</span>
@@ -234,9 +210,9 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
                     key: 'supportsDeliveredFrom',
                     header: 'Dates',
                     render: (item: ClaimPreviewLineItemDto & { _idx: number }) => {
-                      const from = item.supportsDeliveredFrom ? new Date(item.supportsDeliveredFrom).toLocaleDateString('en-AU') : '—'
+                      const from = formatDateAu(item.supportsDeliveredFrom)
                       const to = item.supportsDeliveredTo && item.supportsDeliveredTo !== item.supportsDeliveredFrom
-                        ? ` – ${new Date(item.supportsDeliveredTo).toLocaleDateString('en-AU')}`
+                        ? ` – ${formatDateAu(item.supportsDeliveredTo)}`
                         : ''
                       return from + to
                     },

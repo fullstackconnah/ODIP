@@ -1,4 +1,5 @@
-import { statusClass } from '@/lib/tone'
+import { TRIP_STATUS_LABELS, statusClass } from '@/lib/tone'
+import type { TripStatus } from '@/api/types/enums'
 
 /**
  * A trip's status pill in the schedule header. Coloured by StatusBadge's tones (lib/tone.ts), the same as the trip detail header, the
@@ -8,7 +9,7 @@ export default function TripStatusBadge({ status }: { status: string }) {
   // 12px, sentence case: the shared badge size (StatusBadge) instead of the old 10px tracked-uppercase pill.
   return (
     <span className={`shrink-0 whitespace-nowrap text-xs px-2 py-0.5 rounded-full font-semibold ${statusClass(status)}`}>
-      {status.replace(/([A-Z])/g, ' $1').trim()}
+      {TRIP_STATUS_LABELS[status as TripStatus] ?? status}
     </span>
   )
 }

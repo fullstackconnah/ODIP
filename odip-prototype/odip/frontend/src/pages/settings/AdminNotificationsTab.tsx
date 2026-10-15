@@ -15,6 +15,7 @@ import {
   type NotificationOutboxStatus,
 } from '@/api/types'
 import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
 
 const STATUS_FILTER_ITEMS: { value: NotificationOutboxStatus | ''; label: string }[] = [
   { value: '', label: 'All statuses' },
@@ -85,14 +86,16 @@ export default function AdminNotificationsTab() {
     {
       key: 'actions', header: '', align: 'right' as const, render: row => (
         row.status === 'Failed' ? (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => handleRetry(row)}
             disabled={retryingId === row.id}
-            className="min-h-[36px] px-3 text-sm rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-accent)] disabled:opacity-50"
+            // Named for its row while idle; while it runs, "Retrying..." is the name, so the state is heard.
+            aria-label={retryingId === row.id ? undefined : `Retry: ${NOTIFICATION_EVENT_TYPE_LABELS[row.eventType] ?? row.eventType} to ${row.recipientName ?? row.recipientUserId}`}
           >
             {retryingId === row.id ? 'Retrying...' : 'Retry'}
-          </button>
+          </Button>
         ) : null
       ),
     },
@@ -102,7 +105,7 @@ export default function AdminNotificationsTab() {
     <div className="flex flex-col gap-[var(--section-gap)]">
       <div className="space-y-3">
         <div>
-          <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Notification Outbox</h2>
+          <h3 className="font-semibold text-[var(--color-foreground)] mb-1">Notification outbox</h3>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Every raised notification and its delivery status.
           </p>
@@ -132,26 +135,20 @@ export default function AdminNotificationsTab() {
           <p role="alert" className="text-xs text-[var(--color-destructive)]">{retryError}</p>
         )}
 
-        {isLoading ? (
-          <p className="text-sm text-[var(--color-muted-foreground)]">Loading...</p>
-        ) : isError ? (
-          <div className="text-sm text-[var(--color-muted-foreground)]">
-            Couldn't load notifications.{' '}
-            <button type="button" onClick={() => refetch()} className="underline">Try again</button>
-          </div>
-        ) : (
-          <DataTable
-            data={rows}
-            columns={columns}
-            keyField="id"
-            emptyMessage="No notifications match these filters."
-          />
-        )}
+        <DataTable
+          data={rows}
+          columns={columns}
+          keyField="id"
+          loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
+          emptyMessage="No notifications match these filters."
+        />
       </div>
 
       <div className="max-w-md space-y-3 border-t border-[var(--color-border)] pt-6">
         <div>
-          <h2 className="font-semibold text-[var(--color-foreground)] mb-1">Send Test Email</h2>
+          <h3 className="font-semibold text-[var(--color-foreground)] mb-1">Send test email</h3>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             Bypasses the outbox — proves the SMTP configuration works right now.
           </p>
@@ -163,16 +160,11 @@ export default function AdminNotificationsTab() {
             onChange={e => setTestEmailTo(e.target.value)}
             placeholder="name@example.com"
             aria-label="Test email address"
-            className="flex-1 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
+            className="flex-1 px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
           />
-          <button
-            type="button"
-            onClick={handleSendTestEmail}
-            disabled={!testEmailTo.trim() || sendTestEmail.isPending}
-            className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
-          >
+          <Button onClick={handleSendTestEmail} disabled={!testEmailTo.trim() || sendTestEmail.isPending}>
             {sendTestEmail.isPending ? 'Sending...' : 'Send test email'}
-          </button>
+          </Button>
         </div>
         {testEmailError && (
           <p role="alert" className="text-xs text-[var(--color-destructive)]">{testEmailError}</p>

@@ -19,14 +19,24 @@ const HOLIDAYS = [
 ]
 const OVERRIDES_THROUGH = '2027-04-25'
 
+// The codes and prices are the 2026-27 catalogue's (the same rows PlanQuoteFrontendFixtureTests prices against); mockMoneyParity.test.ts holds the ones a fixture covers to the engine.
+// `high` is the separate 0104 high intensity item for each band (the engine looks these up, it never scales a standard price).
+// The price list's withdrawals (agreement PR 2, fix round 1): an item and the first day it is no longer in the price list, as the real catalogue ends an item's rows. The mock has one
+// price list, so server.js names the one it withdraws, for the renewal review's captures.
+const WITHDRAWN = new Map()
+function withdraw(itemCode, from) { WITHDRAWN.set(itemCode, from) }
+
 const FAMILY = {
-  CommunityAccess: { day: ['04_104_0125_6_1', 73.58], evening: ['04_103_0125_6_1', 81.07], night: null, Saturday: ['04_105_0125_6_1', 103.54], Sunday: ['04_106_0125_6_1', 133.5], holiday: ['04_102_0125_6_1', 163.46], pace: 4, group: '0125' },
-  GroupActivity: { day: ['04_102_0136_6_1', 70.23], evening: ['04_103_0136_6_1', 77.38], night: null, Saturday: ['04_104_0136_6_1', 103.54], Sunday: ['04_105_0136_6_1', 133.5], holiday: ['04_101_0136_6_1', 163.46], pace: 4, group: '0136' },
-  PersonalCare: { day: ['01_011_0107_1_1', 70.23], evening: ['01_015_0107_1_1', 81.07], night: ['01_002_0107_1_1', 83.57], Saturday: ['01_013_0107_1_1', 98.83], Sunday: ['01_014_0107_1_1', 127.43], holiday: ['01_012_0107_1_1', 156.03], pace: 1, group: '0107' },
-  StaSupport: { day: ['01_021_0115_1_1', 70.23], evening: ['01_022_0115_1_1', 81.07], night: ['01_023_0115_1_1', 83.57], Saturday: ['01_024_0115_1_1', 98.83], Sunday: ['01_025_0115_1_1', 127.43], holiday: ['01_026_0115_1_1', 156.03], pace: 16, group: '0115' },
+  CommunityAccess: { day: ['04_104_0125_6_1', 73.58], evening: ['04_103_0125_6_1', 81.07], night: null, Saturday: ['04_105_0125_6_1', 103.54], Sunday: ['04_106_0125_6_1', 133.5], holiday: ['04_102_0125_6_1', 163.46], pace: 4, group: '0125',
+    high: { day: ['04_400_0104_1_1', 79.6], evening: ['04_401_0104_1_1', 87.7], night: null, Saturday: ['04_402_0104_1_1', 112.01], Sunday: ['04_403_0104_1_1', 144.42], holiday: ['04_404_0104_1_1', 176.84] } },
+  GroupActivity: { day: ['04_102_0136_6_1', 73.58], evening: ['04_103_0136_6_1', 81.07], night: null, Saturday: ['04_104_0136_6_1', 103.54], Sunday: ['04_105_0136_6_1', 133.5], holiday: ['04_106_0136_6_1', 163.46], pace: 4, group: '0136',
+    high: { day: ['04_600_0104_6_1', 79.6], evening: ['04_601_0104_6_1', 87.7], night: null, Saturday: ['04_602_0104_6_1', 112.01], Sunday: ['04_603_0104_6_1', 144.42], holiday: ['04_604_0104_6_1', 176.84] } },
+  PersonalCare: { day: ['01_011_0107_1_1', 73.58], evening: ['01_015_0107_1_1', 81.07], night: ['01_002_0107_1_1', 82.57], Saturday: ['01_013_0107_1_1', 103.54], Sunday: ['01_014_0107_1_1', 133.5], holiday: ['01_012_0107_1_1', 163.46], pace: 1, group: '0107',
+    high: { day: ['01_400_0104_1_1', 79.6], evening: ['01_401_0104_1_1', 87.7], night: ['01_405_0104_1_1', 89.32], Saturday: ['01_402_0104_1_1', 112.01], Sunday: ['01_403_0104_1_1', 144.42], holiday: ['01_404_0104_1_1', 176.84] } },
+  StaSupport: { day: ['01_200_0115_1_1', 73.58], evening: ['01_201_0115_1_1', 81.07], night: ['01_205_0115_1_1', 82.57], Saturday: ['01_202_0115_1_1', 103.54], Sunday: ['01_203_0115_1_1', 133.5], holiday: ['01_204_0115_1_1', 163.46], pace: 16, group: '0115',
+    high: { day: ['01_252_0115_1_1', 79.6], evening: ['01_253_0115_1_1', 87.7], night: ['01_254_0115_1_1', 89.32], Saturday: ['01_255_0115_1_1', 112.01], Sunday: ['01_256_0115_1_1', 144.42], holiday: ['01_257_0115_1_1', 176.84] } },
 }
-const HIGH_INTENSITY_UPLIFT = 1.082
-const SLEEPOVER = { code: '01_010_0107_1_1', price: 281.97, staCode: '01_206_0115_1_1' }
+const SLEEPOVER = { code: '01_010_0107_1_1', price: 311.79, staCode: '01_206_0115_1_1' }
 const TRAVEL_COSTS = ['04_799_0125_6_1', 1]
 const TRANSPORT = ['04_590_0125_6_1', 1]
 const NIGHT_ITEM = ['01_250_0115_1_1', 301.32]
@@ -128,10 +138,8 @@ function spans(block, iso, ignoreHolidays) {
 }
 
 const itemFor = (family, band, intensity) => {
-  const table = FAMILY[family]
-  const entry = band === 'Weekday Daytime' ? table.day : band === 'Weekday Evening' ? table.evening : band === 'Weekday Night' ? table.night : band === 'Saturday' ? table.Saturday : band === 'Sunday' ? table.Sunday : table.holiday
-  if (!entry) return null
-  return [entry[0], intensity === 'HighIntensity' ? floorCents(entry[1] * HIGH_INTENSITY_UPLIFT) : entry[1]]
+  const table = intensity === 'HighIntensity' ? FAMILY[family].high : FAMILY[family]
+  return band === 'Weekday Daytime' ? table.day : band === 'Weekday Evening' ? table.evening : band === 'Weekday Night' ? table.night : band === 'Saturday' ? table.Saturday : band === 'Sunday' ? table.Sunday : table.holiday
 }
 
 function traceOf(block, rules, why, maximum, questions, holidayName, crossing) {
@@ -205,7 +213,8 @@ function quote(request, settings) {
       }
       occurrences += 1
       const crossing = parts.length > 1
-      const sleeper = block.workerMaySleep && durationOf(block) >= 480 && block.supportType !== 'CommunityAccess' && block.supportType !== 'GroupActivity'
+      // The engine's rule (OccurrencePricer.PlanSleepover): the window starts before midnight, ends after it, and is 8 hours or more; any other window the worker may sleep in is priced hourly.
+      const sleeper = block.workerMaySleep && minutesOf(block.start) + durationOf(block) > 1440 && durationOf(block) >= 480 && block.supportType !== 'CommunityAccess' && block.supportType !== 'GroupActivity'
       const occurrenceLines = []
       if (iso < CATALOGUE_FROM || iso > CATALOGUE_TO) {
         addIssue(block.id, 'CatalogueNotFound', `No catalogue row for ${FAMILY_WORDS[block.supportType] || block.supportType} is valid for part of the period. Import the catalogue for that period.`, iso)
@@ -230,6 +239,11 @@ function quote(request, settings) {
           if (!item) {
             addIssue(block.id, 'NoItem', `The catalogue has no item for ${FAMILY_WORDS[block.supportType] || block.supportType} standard ${part.band} (registration group ${group}). A weekday night support has no item in this family, and it is not mapped to another family: a person must decide how it is claimed.`, part.date)
             occurrenceLines.push(finish(lineBase(block, part.date, { itemCode: undefined, unpriced: 'NoItem', qty: part.minutes / 60, band: part.band, review: true, isPriced: false, startTime: clockOf(part.from), endDate: part.date, endTime: clockOf(part.to), trace: traceOf(block, ['unpriced:no-item'], 'No catalogue item exists for this band.', undefined, []) })))
+            continue
+          }
+          if (WITHDRAWN.has(item[0]) && part.date >= WITHDRAWN.get(item[0])) {
+            addIssue(block.id, 'CatalogueNotFound', `The price list withdraws ${item[0]} (${FAMILY_WORDS[block.supportType] || block.supportType} ${part.band}) from ${WITHDRAWN.get(item[0])}: no catalogue row is valid for it after that.`, part.date)
+            occurrenceLines.push(finish(lineBase(block, part.date, { itemCode: undefined, unpriced: 'CatalogueNotFound', qty: part.minutes / 60, band: part.band, review: true, isPriced: false, startTime: clockOf(part.from), endDate: part.date, endTime: clockOf(part.to), trace: traceOf(block, ['unpriced:catalogue-not-found'], 'The price list has withdrawn this item.', undefined, []) })))
             continue
           }
           const holiday = !!part.holiday
@@ -369,4 +383,4 @@ function groupLines(lines, blocks) {
   }))
 }
 
-module.exports = { quote, groupLines, defaultSettings, validate, MAX_BLOCKS, MAX_LINES, FAMILY }
+module.exports = { quote, groupLines, defaultSettings, validate, withdraw, MAX_BLOCKS, MAX_LINES, FAMILY }

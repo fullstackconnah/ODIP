@@ -11,6 +11,7 @@ import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { usePatterns, useUpdatePattern, useParticipants, useStaff } from '@/api/hooks'
+import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftPatternDto, CreateShiftPatternDto } from '@/api/types'
 import { PatternSlideOver, GeneratePatternDialog, type PatternSlideOverTarget } from './components'
 import { PatternSource } from './components/PatternSource'
@@ -115,7 +116,7 @@ export default function PatternsPage() {
   const { canWrite } = usePermissions()
   const { data: patterns = [], isLoading, isError, refetch } = usePatterns()
   // INTAKE-08: the shift pattern participant picker excludes drafts.
-  const { data: participants = [] } = useParticipants({ isDraft: 'false' })
+  const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
   const { data: staff = [] } = useStaff()
   const updatePattern = useUpdatePattern()
 
@@ -128,6 +129,13 @@ export default function PatternsPage() {
 
   const participantOptions = useMemo(() => participants.map(p => ({ value: p.id, label: p.fullName })), [participants])
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
+  // An agreement pattern is one day of one worker of a block: the days of that block (the same revision, block and worker), for "Change every day of this support" in the panel.
+  const blockDays = useMemo(() => {
+    const target = slideOverTarget?.mode === 'edit' ? slideOverTarget.pattern : null
+    if (!target?.sourceDraftId) return undefined
+    return patterns.filter(p => p.sourceDraftId === target.sourceDraftId && p.sourceBlockKey === target.sourceBlockKey && p.workerSlot === target.workerSlot)
+      .sort((a, b) => DAY_OF_WEEK_INDEX[a.dayOfWeek] - DAY_OF_WEEK_INDEX[b.dayOfWeek]).map(p => p.dayOfWeek)
+  }, [patterns, slideOverTarget])
 
   function handleToggleActive(pattern: ShiftPatternDto) {
     setToggleError(null)
@@ -190,7 +198,6 @@ export default function PatternsPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Shift patterns"
-        subtitle="Weekly recurring shifts that generate real shifts onto the roster."
         action={canWrite && (
           <Button onClick={() => setSlideOverTarget({ mode: 'create' })} size="md">
             <Plus className="h-4 w-4" /> New pattern
@@ -227,7 +234,6 @@ export default function PatternsPage() {
           icon={Repeat}
           title="No recurring patterns yet"
           description="A pattern generates a participant's regular shifts automatically, week after week, instead of you adding them to the board one at a time."
-          action={canWrite ? { label: 'Set up a pattern', onClick: () => setSlideOverTarget({ mode: 'create' }) } : undefined}
         />
       )}
 
@@ -249,6 +255,7 @@ export default function PatternsPage() {
         canWrite={canWrite}
         participantOptions={participantOptions}
         staffOptions={staffOptions}
+        blockDays={blockDays}
       />
 
       <GeneratePatternDialog

@@ -13,9 +13,9 @@
  * Participant immediately with `IsDraft = true` and `completeIntake: true` (stamping the new
  * `IntakeCompletedAt` server-side) on final submit; "Save as draft" omits `completeIntake` so a
  * mid-intake abandon doesn't falsely mark intake complete. On success ("Complete Intake" only —
- * "Save as draft" still lands on the detail page), the server has also put the participant on the
+ * "Save as draft" lands on the Enquiries tab, where the draft is listed), the server has also put the participant on the
  * onboarding worklist, so the wizard navigates to the Onboarding table
- * (`/participants?tab=onboarding`) with a one-off "Intake complete" confirmation — see the
+ * (`/participants?tab=onboarding`, or back to `/onboarding/{id}` when the intake was opened from that checklist) with a one-off "Intake complete" confirmation — see the
  * `onSubmit` handler below and intakeComplete.ts.
  *
  * PF-10.5 EDIT MODE — resuming an existing draft whose IntakeCompletedAt is still null (the
@@ -45,6 +45,8 @@ import {
   type WizardStepDef, type WizardValidate, type WizardSecondaryAction, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import { BackButton } from '@/components/BackButton'
+import { usePreviousAppPath } from '@/hooks/useBackNavigation'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
@@ -57,7 +59,7 @@ import {
 } from '@/lib/participantSchema'
 import { formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
-import { ONBOARDING_TABLE_PATH, intakeCompleteState } from './intakeComplete'
+import { ONBOARDING_TABLE_PATH, ENQUIRIES_TABLE_PATH, intakeCompleteState } from './intakeComplete'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
 import type { PlanType, ServiceStream } from '@/api/types/enums'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -88,10 +90,15 @@ export default function IntakeWizardPage() {
   const { id } = useParams<{ id: string }>()
   const isEditMode = !!id
   const navigate = useNavigate()
+  // Complete intake from the onboarding checklist returns to that checklist; from anywhere else it shows the Onboarding tab.
+  const fromChecklist = usePreviousAppPath() === `/onboarding/${id}`
   const createParticipant = useCreateParticipant()
   const saveIntake = useSaveParticipantIntake()
   const saveMutation = isEditMode ? saveIntake : createParticipant
   const { data: participant, isLoading: participantLoading, isError: participantFailed, error: participantError, refetch: refetchParticipant } = useParticipant(id)
+  // Its own h1 shell, not a PageHeader, so it names the tab itself.
+  const heading = isEditMode ? 'Resume intake' : 'Intake'
+  useDocumentTitle(heading)
   // PF-10.5 edit mode: the wizard's own contact and risk field arrays hold only the NEW rows added in this session — existing rows
   // are surfaced read-only from their own nested-CRUD endpoints, same data source ParticipantContactRolesSection/RiskEntriesSection
   // already use on the detail page.
@@ -293,7 +300,7 @@ export default function IntakeWizardPage() {
         if (res.success) {
           flushSync(() => reset(data))
           // Completing Intake puts the participant on the onboarding worklist: show them there.
-          navigate(ONBOARDING_TABLE_PATH, { state: intakeCompleteState(id, res.data?.fullName || typedName) })
+          navigate(fromChecklist ? `/onboarding/${id}` : ONBOARDING_TABLE_PATH, { state: intakeCompleteState(id, res.data?.fullName || typedName) })
         }
         return
       }
@@ -320,14 +327,14 @@ export default function IntakeWizardPage() {
         const res = await saveIntake.mutateAsync({ id, data: payload as never })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(`/participants/${id}`)
+          navigate(ENQUIRIES_TABLE_PATH)
         }
         return
       }
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
         flushSync(() => reset(data))
-        navigate(`/participants/${res.data.id}`)
+        navigate(ENQUIRIES_TABLE_PATH)
       }
     } catch (err) {
       setDraftError(extractErrorMessage(err, 'Failed to save draft. Please try again.'))
@@ -424,7 +431,7 @@ export default function IntakeWizardPage() {
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
         <BackButton to={fallbackBack} label={isEditMode ? 'participant' : 'participants'} variant="icon" data-testid="intake-header-back" />
-        <h1 className="text-xl font-bold">{isEditMode ? 'Resume Intake' : 'Intake'}</h1>
+        <h1 className="text-xl font-bold">{heading}</h1>
       </div>
 
       {saveMutation.isError && (

@@ -84,19 +84,6 @@ describe('navConfig — active state', () => {
     for (const path of ['/participants', '/participants/p-1', '/participants/p-1/profile', '/onboarding/p-1']) expect(isLeafActive(hub, path), path).toBe(true)
     for (const path of ['/participantsx', '/medications', '/onboarding']) expect(isLeafActive(hub, path), path).toBe(false)
   })
-
-  it('keeps /billing exact-only now that Claim batches is nested under it, and lights Claim batches on the batch pages and on a claim', () => {
-    expect(isExactMatchOnly('/billing')).toBe(true)
-    const billing = leaf('/billing')
-    const batches = leaf('/billing/claim-batches')
-    expect(isLeafActive(billing, '/billing')).toBe(true)
-    for (const path of ['/billing/claim-batches', '/billing/claim-batches/new', '/billing/claim-batches/cb-1', '/claims/claim-1']) {
-      expect(isLeafActive(billing, path), `Billing on ${path}`).toBe(false)
-      expect(isLeafActive(batches, path), `Claim batches on ${path}`).toBe(true)
-    }
-    expect(isLeafActive(batches, '/billing')).toBe(false)
-    expect(isLeafActive(batches, '/claimsx/1')).toBe(false)
-  })
 })
 
 describe('navConfig — who sees what', () => {
@@ -109,15 +96,15 @@ describe('navConfig — who sees what', () => {
 
   it('gives a SupportWorker only their pages, no Dashboard, and no group that has lost every child', () => {
     expect(shape(resolveNav(navItems, accessFor('SupportWorker')))).toEqual([
-      'My Shifts', 'Trips: All Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
+      'My shifts', 'Trips: Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
     ])
   })
 
-  it('gives ReadOnly what its API lets it read: no Rostering pages but Staff and Qualifications, no Finance, no Caregiver forms, no Settings', () => {
+  it('gives ReadOnly what its API lets it read: no Rostering pages but Staff and Qualifications, no Budgets, no Caregiver forms, no Settings', () => {
     expect(shape(resolveNav(navItems, accessFor('ReadOnly')))).toEqual([
       'Dashboard',
-      'My Shifts',
-      'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+      'My shifts',
+      'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications',
       'Staff & roster: Staff | Qualifications',
       'Incidents',
@@ -135,11 +122,11 @@ describe('navConfig — who sees what', () => {
   it('shows a role with no restriction everything, in config order', () => {
     expect(shape(resolveNav(navItems, accessFor('Admin')))).toEqual([
       'Dashboard',
-      'My Shifts',
-      'Trips: All Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+      'My shifts',
+      'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
       'Participants: Participants | Medications | Caregiver forms',
-      'Staff & roster: Board | Patterns | Compatibility | Leave | Completions | Staff | Qualifications',
-      'Finance: Billing | Claim batches',
+      'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+      'Budgets',
       'Incidents',
       'Settings',
     ])
@@ -212,12 +199,12 @@ describe('navConfig — the bottom bar', () => {
     for (const role of ['SuperAdmin', 'Admin', 'Coordinator', 'ReadOnly']) expect(labels(role, 'office'), role).toEqual(['Dashboard', 'Trips', 'Roster', 'Participants'])
   })
 
-  it('gives a SupportWorker My Shifts, Trips, Participants, Incidents, in that order', () => {
-    expect(labels('SupportWorker', 'field')).toEqual(['My Shifts', 'Trips', 'Participants', 'Incidents'])
+  it('gives a SupportWorker My shifts, Trips, Participants, Incidents, in that order', () => {
+    expect(labels('SupportWorker', 'field')).toEqual(['My shifts', 'Trips', 'Participants', 'Incidents'])
   })
 
   it('keeps an entry out of a bar its audience excludes, even when the role could see it', () => {
-    expect(labels('Admin', 'field')).toEqual(['My Shifts', 'Trips', 'Participants', 'Incidents'])
+    expect(labels('Admin', 'field')).toEqual(['My shifts', 'Trips', 'Participants', 'Incidents'])
     expect(labels('SupportWorker', 'office')).toEqual(['Trips', 'Participants'])
   })
 
@@ -254,6 +241,6 @@ describe('navConfig — the bottom bar', () => {
     expect(items[0]).toMatchObject({ label: 'Dashboard', active: true, current: 'page', count: 0 })
     expect(items[2]).toMatchObject({ label: 'Roster', count: 7, noun: 'approval', active: false })
     const [myShifts] = bar('SupportWorker', 'field').map(entry => toBarItem(entry, '/portal', { ...NO_COUNTS, pendingWitness: 2 }))
-    expect(myShifts).toMatchObject({ label: 'My Shifts', count: 2, noun: 'witness approval', active: true, current: 'page' })
+    expect(myShifts).toMatchObject({ label: 'My shifts', count: 2, noun: 'witness approval', active: true, current: 'page' })
   })
 })

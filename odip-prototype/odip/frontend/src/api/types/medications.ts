@@ -357,6 +357,13 @@ export interface MarPrnDto {
   outcomePendingAdministrationId: string | null
 }
 
+/** The manager contact and state the missed-medication guidance shows; every role may read it (provider settings stay Admin/Coordinator only). */
+export interface MissedMedicationContactDto {
+  managerName: string | null
+  managerPhone: string | null
+  state: string
+}
+
 export interface MarDayDto {
   date: string
   entries: MarEntryDto[]

@@ -5,11 +5,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
 import type { StaffListDto, AdministrationDto } from '@/api/types'
 
-const { mockRecordMutateAsync, mockAmendMutateAsync, mockUseStaff, mockUseProviderSettings, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
+const { mockRecordMutateAsync, mockAmendMutateAsync, mockUseStaff, mockUseContact, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
   mockRecordMutateAsync: vi.fn(),
   mockAmendMutateAsync: vi.fn(),
   mockUseStaff: vi.fn(),
-  mockUseProviderSettings: vi.fn(),
+  mockUseContact: vi.fn(),
   mockNavigate: vi.fn(),
   // INC-03: null means "use the real usePermissions()" (most tests exercise the genuine
   // localStorage-driven role logic) — a single test overrides just canCreateIncidents to cover
@@ -37,8 +37,8 @@ vi.mock('@/api/hooks', () => ({
   useAmendAdministration: () => ({ mutateAsync: mockAmendMutateAsync, isPending: false }),
   useStaff: mockUseStaff,
   // MissedMedicationGuidance (MED-01, rendered inside the INC-03 "report as incident?" prompt)
-  // reads provider settings for the manager contact and state-aware health advice line.
-  useProviderSettings: mockUseProviderSettings,
+  // reads the manager contact and state (for the health advice line) from its every-role endpoint.
+  useMissedGuidanceContact: mockUseContact,
 }))
 
 // The modal navigates (INC-03) rather than persisting anything server-side, so only the
@@ -87,14 +87,9 @@ beforeEach(() => {
   mockUseStaff.mockReturnValue({
     data: [makeStaff(), makeStaff({ id: 'staff-2', firstName: 'Jordan', lastName: 'Lee', fullName: 'Jordan Lee' })],
   })
-  mockUseProviderSettings.mockReset()
-  mockUseProviderSettings.mockReturnValue({
-    data: {
-      id: 'provider-1', registrationNumber: '123', abn: '456', organisationName: 'Test Org',
-      address: '1 Test St', state: 'VIC', gstRegistered: true, isPaceProvider: false,
-      bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
-      managerName: 'Priya Sharma', managerPhone: '0412 345 007',
-    },
+  mockUseContact.mockReset()
+  mockUseContact.mockReturnValue({
+    data: { managerName: 'Priya Sharma', managerPhone: '0412 345 007', state: 'VIC' },
   })
   localStorage.clear()
 })
@@ -207,6 +202,72 @@ describe('RecordAdministrationModal witness picker', () => {
 
     expect(screen.getByRole('option', { name: 'Rachel Thompson' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Jordan Lee' })).toBeInTheDocument()
+  })
+})
+
+// Amending: a dose witnessed by a staff member keeps that witness (the staff-witness approval
+// workflow is separate); the legacy typed name is only asked for when no staff witness is recorded.
+describe('RecordAdministrationModal amending a high-risk dose', () => {
+  const staffWitnessed = (overrides: Partial<AdministrationDto> = {}) =>
+    makeAdministration({ witnessName: 'Rachel Thompson', witnessStaffId: 'staff-1', witnessStatus: 'Pending', ...overrides })
+
+  it('shows the recorded staff witness instead of asking for a typed witness name', () => {
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={staffWitnessed()} />)
+
+    expect(screen.queryByRole('textbox', { name: /witness name/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Rachel Thompson')).toBeInTheDocument()
+  })
+
+  it('saves a Notes-only amendment of a staff-witnessed dose with no typed witness name', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={staffWitnessed({ witnessName: null })} />)
+
+    await user.type(screen.getByLabelText(/^notes/i), 'Typo fixed')
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(screen.queryByText(/second worker must witness/i)).not.toBeInTheDocument()
+    expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'admin-1',
+      data: expect.objectContaining({ notes: 'Typo fixed', witnessName: '' }),
+    }))
+  })
+
+  it('sends the stored witness name back unchanged', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={staffWitnessed()} />)
+
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ witnessName: 'Rachel Thompson' }),
+    }))
+  })
+
+  it('sends the typed witness name back when the amendment turns the dose into a refusal', async () => {
+    const user = userEvent.setup()
+    mockAmendMutateAsync.mockResolvedValue({ success: true, data: {} })
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={makeAdministration({ witnessName: 'Old Typed Name' })} />)
+
+    await user.click(screen.getByRole('radio', { name: /^refused$/i }))
+    await user.type(screen.getByLabelText(/^reason/i), 'Participant declined')
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'Refused', witnessName: 'Old Typed Name' }),
+    }))
+  })
+
+  it('still asks for the typed witness name when the dose has no staff witness', async () => {
+    const user = userEvent.setup()
+    renderModal(<RecordAdministrationModal {...baseProps} isHighRisk={true} existingAdministration={makeAdministration({ witnessName: null })} />)
+
+    expect(screen.getByRole('textbox', { name: /witness name/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /save amendment/i }))
+
+    expect(screen.getByText(/second worker must witness/i)).toBeInTheDocument()
+    expect(mockAmendMutateAsync).not.toHaveBeenCalled()
   })
 })
 

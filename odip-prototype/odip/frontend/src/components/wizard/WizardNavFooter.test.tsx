@@ -1,9 +1,10 @@
 import type { ComponentProps } from 'react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { WizardNavFooter } from './WizardNavFooter'
+import { __testHooks } from '@/hooks/useBackNavigation'
 
 function renderFooter(overrides: Partial<ComponentProps<typeof WizardNavFooter>> = {}) {
   return render(
@@ -51,11 +52,12 @@ describe('WizardNavFooter', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
-  it('uses a full-width, wrapping mobile layout with safe-area bottom clearance', () => {
+  it('is one wrapping row at every width (so a phone keeps Cancel or Back and Next on one line), with safe-area bottom clearance', () => {
     renderFooter({ showBack: true })
-    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=flex-col]')
+    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=sticky]')
 
-    expect(footer).toHaveClass('w-full', 'min-w-0', 'flex-col', 'sm:flex-row')
+    expect(footer).toHaveClass('w-full', 'min-w-0', 'flex-row', 'flex-wrap', 'justify-between')
+    expect(footer).not.toHaveClass('flex-col')
     expect(footer).toHaveClass('pb-[max(0.75rem,env(safe-area-inset-bottom))]')
   })
 
@@ -64,7 +66,7 @@ describe('WizardNavFooter', () => {
     // Pinned at `bottom-0` the footer sits under the z-50 bottom nav on a phone or portrait tablet, so Next is neither
     // visible nor tappable until the very end of the page. The offset is the nav's own height var, so the two cannot drift.
     renderFooter({ showBack: true })
-    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=flex-col]')
+    const footer = screen.getByRole('button', { name: 'Next' }).closest('div[class*=sticky]')
     expect(footer).toHaveClass('sticky', 'bottom-[var(--mobile-nav-h)]', 'lg:bottom-0')
     expect(footer).not.toHaveClass('bottom-0')
   })
@@ -78,5 +80,65 @@ describe('WizardNavFooter', () => {
     await user.tab()
     await user.keyboard('{Enter}')
     expect(onNext).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a summary between the actions, such as a running total, and leaves the footer alone without one', () => {
+    renderFooter({ showBack: true, summary: <p>A week: 14 h</p> })
+    expect(screen.getByText('A week: 14 h')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument()
+  })
+})
+
+// V2-E: the first step has no Back, so it offers the way out in that slot: Cancel, to the same place as the review step's Cancel.
+describe('WizardNavFooter — the first step', () => {
+  it('offers Cancel where Back would be, and only on a step without Back', () => {
+    const { unmount } = renderFooter({ showBack: false })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/participants')
+    unmount()
+    renderFooter({ showBack: true })
+    expect(screen.queryByRole('link', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+})
+
+// NAV F3: the header Back is history-aware, so Cancel goes to the same place (the house rule: Cancel = Back).
+describe('WizardNavFooter — Cancel goes where Back goes', () => {
+  afterEach(() => __testHooks.reset())
+  function fromChecklist() {
+    __testHooks.recordCurrentPath('/onboarding/p1')
+    __testHooks.recordCurrentPath('/wizard')
+  }
+
+  it('returns to the previous in-app screen, on the first step and on the review step', () => {
+    fromChecklist()
+    const { unmount } = renderFooter({ showBack: false })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/onboarding/p1')
+    unmount()
+    renderFooter({ isReviewStep: true })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/onboarding/p1')
+  })
+
+  it('stays on cancelTo with history={false}, for a wizard whose header Back is pinned', () => {
+    fromChecklist()
+    renderFooter({ showBack: false, history: false })
+    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/participants')
+  })
+
+  it('still trips the unsaved-changes blocker: Cancel is a router link, not a hard navigation', async () => {
+    const { createMemoryRouter, RouterProvider, useBlocker } = await import('react-router-dom')
+    fromChecklist()
+    function Wizard() {
+      const blocker = useBlocker(true)
+      return (
+        <>
+          {blocker.state === 'blocked' && <p>Leave without saving?</p>}
+          <WizardNavFooter showBack={false} onBack={vi.fn()} onNext={vi.fn()} isReviewStep={false} secondaryActions={[]} cancelTo="/participants" submitLabel="Save" isSubmitting={false} />
+        </>
+      )
+    }
+    const router = createMemoryRouter([{ path: '/wizard', element: <Wizard /> }, { path: '*', element: <p>Elsewhere</p> }], { initialEntries: ['/wizard'] })
+    render(<RouterProvider router={router} />)
+    await userEvent.setup().click(screen.getByRole('link', { name: 'Cancel' }))
+    expect(screen.getByText('Leave without saving?')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/wizard')
   })
 })

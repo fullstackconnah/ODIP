@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 import IncidentDetailPage from './IncidentDetailPage'
@@ -152,12 +152,14 @@ describe('IncidentDetailPage — Context panel', () => {
 })
 
 describe('IncidentDetailPage — Back', () => {
-  it('is a real link to the incident list: the text says "Back", the accessible name says where it goes', () => {
+  it('is the icon Back before the title, a real link to the incident list named for where it goes', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
     renderPage()
     const back = screen.getByRole('link', { name: 'Back to incidents' })
     expect(back).toHaveAttribute('href', '/incidents')
-    expect(back).toHaveTextContent(/^Back$/)
+    // The icon Back left of the title (UI survey s.1), not a "Back" button beside Edit.
+    expect(back).toHaveClass('min-w-[var(--tap-min)]')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -190,5 +192,81 @@ describe('IncidentDetailPage — failed request vs. missing record (PageState)',
     mockUseIncident.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
     renderPage()
     expect(screen.getByRole('status')).toHaveTextContent('Loading incident…')
+  })
+})
+
+// PUT /incidents/:id is Admin, Coordinator and SuperAdmin only (IncidentsController.Update): ReadOnly and SupportWorker read the incident without an Edit.
+describe('IncidentDetailPage — Edit by role', () => {
+  it.each([['ReadOnly', false], ['SupportWorker', false], ['Admin', true], ['Coordinator', true]] as const)('%s: Edit offered %s', (role, offered) => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    renderPage()
+
+    expect(screen.getByRole('heading', { name: 'Missed evening medication dose' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Edit' }) !== null).toBe(offered)
+    localStorage.clear()
+  })
+})
+
+// A read-only "Restrictive practice" block: the type, the linked practice or the text of one not on the register, and the stored determination.
+describe('IncidentDetailPage — restrictive practice', () => {
+  function block() {
+    // The Card: its title row, then the card itself.
+    return screen.getByRole('heading', { name: 'Restrictive practice' }).parentElement!.parentElement!
+  }
+
+  it('shows no restrictive practice block for another incident type', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    renderPage()
+    expect(screen.queryByRole('heading', { name: 'Restrictive practice' })).not.toBeInTheDocument()
+  })
+
+  it('shows the type, the linked practice and Not authorised for a use that was not authorised', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({
+      incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'PhysicalRestraint', restrictivePracticeId: 'rp-1',
+      restrictivePracticeDescription: 'Two-person hold during transfers.', isRestrictivePracticeAuthorised: false,
+    }), isLoading: false })
+    renderPage()
+
+    const card = block()
+    expect(within(card).getByText('Physical restraint')).toBeInTheDocument()
+    expect(within(card).getByText('Linked practice')).toBeInTheDocument()
+    expect(within(card).getByText('Two-person hold during transfers.')).toBeInTheDocument()
+    expect(within(card).getByText('Not authorised')).toBeInTheDocument()
+  })
+
+  it('shows the text of a practice not on the register, and Authorised when it was', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({
+      incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Seclusion', restrictivePracticeId: null,
+      unapprovedRestrictivePracticeDetails: 'Locked the back door.', isRestrictivePracticeAuthorised: false,
+    }), isLoading: false })
+    const { unmount } = renderPage()
+    expect(within(block()).getByText('Practice not on the register')).toBeInTheDocument()
+    expect(within(block()).getByText('Locked the back door.')).toBeInTheDocument()
+    unmount()
+
+    mockUseIncident.mockReturnValue({ data: baseIncident({
+      incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Seclusion', restrictivePracticeId: 'rp-2',
+      restrictivePracticeDescription: 'Seclusion room.', isRestrictivePracticeAuthorised: true,
+    }), isLoading: false })
+    renderPage()
+    expect(within(block()).getByText('Authorised')).toBeInTheDocument()
+  })
+})
+
+// Review S1: the API leaves a null flag out of the JSON, so "not determined" arrives as a missing key, not null.
+describe('IncidentDetailPage — restrictive practice not determined', () => {
+  it('shows "Not determined", not a Not authorised badge, when the flag is missing from the payload', () => {
+    const { isRestrictivePracticeAuthorised: _omitted, ...incident } = baseIncident({
+      incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Seclusion', restrictivePracticeId: null,
+      unapprovedRestrictivePracticeDetails: 'Locked the back door.',
+    })
+    void _omitted
+    mockUseIncident.mockReturnValue({ data: incident, isLoading: false })
+    renderPage()
+
+    const card = screen.getByRole('heading', { name: 'Restrictive practice' }).parentElement!.parentElement!
+    expect(within(card).getByText('Not determined')).toBeInTheDocument()
+    expect(within(card).queryByText('Not authorised')).not.toBeInTheDocument()
   })
 })

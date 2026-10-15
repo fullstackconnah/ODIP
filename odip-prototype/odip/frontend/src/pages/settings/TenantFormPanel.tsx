@@ -1,3 +1,4 @@
+import { labelClass } from '@/components/FormField'
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -336,7 +337,6 @@ export default function TenantFormPanel({
   // line. min-h keeps it level with the 32px / 44px inputs; h-auto lets `rows` set the height; resize-y lets the user grow it.
   const textareaClass =
     'w-full px-3 min-h-[var(--control-h)] h-auto py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all resize-y'
-  const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   if (!isOpen) return null
 
@@ -395,21 +395,12 @@ export default function TenantFormPanel({
       footerClassName="px-6 py-4 flex items-center justify-end gap-3"
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSubmit()}
-            disabled={!canSubmit}
-            className="px-5 py-2 bg-[var(--color-primary)] text-white rounded-full text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
-          >
-            {isBusy ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Tenant'}
-          </button>
+          </Button>
+          <Button onClick={() => handleSubmit()} disabled={!canSubmit}>
+            {isBusy ? 'Saving…' : isEdit ? 'Save' : 'Create tenant'}
+          </Button>
         </>
       }
     >
@@ -423,8 +414,9 @@ export default function TenantFormPanel({
         </h3>
 
         <div>
-          <label className={labelClass}>Organisation Name *</label>
+          <label htmlFor="tf-name" className={labelClass}>Organisation Name *</label>
           <input
+            id="tf-name"
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
@@ -434,8 +426,9 @@ export default function TenantFormPanel({
         </div>
 
         <div>
-          <label className={labelClass}>Email Domain *</label>
+          <label htmlFor="tf-email-domain" className={labelClass}>Email Domain *</label>
           <input
+            id="tf-email-domain"
             type="text"
             value={emailDomain}
             onChange={e => setEmailDomain(e.target.value)}
@@ -446,18 +439,21 @@ export default function TenantFormPanel({
 
         {isEdit && (
           <div className="flex items-center gap-3">
-            <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
+            <label id="tenant-active-label" className="text-xs font-medium text-[var(--color-muted-foreground)]">
               Active
             </label>
             <button
               type="button"
+              role="switch"
+              aria-checked={isActive}
+              aria-labelledby="tenant-active-label"
               onClick={() => setIsActive(v => !v)}
               className={`relative w-10 h-5 rounded-full transition-colors ${
                 isActive ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'
               }`}
             >
               <span
-                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-[var(--color-card)] shadow transition-transform ${
                   isActive ? 'translate-x-5' : ''
                 }`}
               />
@@ -486,8 +482,9 @@ export default function TenantFormPanel({
             <div className="mt-3 space-y-3 pl-5 border-l border-[var(--color-border)]">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>Registration Number</label>
+                  <label htmlFor="tf-registration-number" className={labelClass}>Registration Number</label>
                   <input
+                    id="tf-registration-number"
                     type="text"
                     value={registrationNumber}
                     onChange={e => setRegistrationNumber(e.target.value)}
@@ -495,8 +492,9 @@ export default function TenantFormPanel({
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>ABN</label>
+                  <label htmlFor="tf-abn" className={labelClass}>ABN</label>
                   <input
+                    id="tf-abn"
                     type="text"
                     value={abn}
                     onChange={e => setAbn(e.target.value)}
@@ -506,8 +504,9 @@ export default function TenantFormPanel({
               </div>
 
               <div>
-                <label className={labelClass}>Organisation Name</label>
+                <label htmlFor="tf-org-name" className={labelClass}>Organisation Name</label>
                 <input
+                  id="tf-org-name"
                   type="text"
                   value={orgName}
                   onChange={e => setOrgName(e.target.value)}
@@ -517,8 +516,9 @@ export default function TenantFormPanel({
               </div>
 
               <div>
-                <label className={labelClass}>Address</label>
+                <label htmlFor="tf-address" className={labelClass}>Address</label>
                 <input
+                  id="tf-address"
                   type="text"
                   value={address}
                   onChange={e => setAddress(e.target.value)}
@@ -527,9 +527,10 @@ export default function TenantFormPanel({
               </div>
 
               <div>
-                <label className={labelClass}>State</label>
+                <label id="tf-state-label" className={labelClass}>State</label>
                 <Dropdown
                   variant="form"
+                  aria-labelledby="tf-state-label"
                   value={state}
                   onChange={setState}
                   items={AUSTRALIAN_STATES}
@@ -560,8 +561,9 @@ export default function TenantFormPanel({
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className={labelClass}>Bank Account Name</label>
+                  <label htmlFor="tf-bank-account-name" className={labelClass}>Bank Account Name</label>
                   <input
+                    id="tf-bank-account-name"
                     type="text"
                     value={bankAccountName}
                     onChange={e => setBankAccountName(e.target.value)}
@@ -569,8 +571,9 @@ export default function TenantFormPanel({
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>BSB</label>
+                  <label htmlFor="tf-bsb" className={labelClass}>BSB</label>
                   <input
+                    id="tf-bsb"
                     type="text"
                     value={bsb}
                     onChange={e => setBsb(e.target.value)}
@@ -578,8 +581,9 @@ export default function TenantFormPanel({
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Account Number</label>
+                  <label htmlFor="tf-account-number" className={labelClass}>Account Number</label>
                   <input
+                    id="tf-account-number"
                     type="text"
                     value={accountNumber}
                     onChange={e => setAccountNumber(e.target.value)}
@@ -589,8 +593,9 @@ export default function TenantFormPanel({
               </div>
 
               <div>
-                <label className={labelClass}>Invoice Footer Notes</label>
+                <label htmlFor="tf-invoice-footer-notes" className={labelClass}>Invoice Footer Notes</label>
                 <textarea
+                  id="tf-invoice-footer-notes"
                   value={invoiceFooterNotes}
                   onChange={e => setInvoiceFooterNotes(e.target.value)}
                   rows={2}
@@ -678,9 +683,10 @@ export default function TenantFormPanel({
               </div>
 
               <div>
-                <label className={labelClass}>Role</label>
+                <label id="tf-role-label" className={labelClass}>Role</label>
                 <Dropdown
                   variant="form"
+                  aria-labelledby="tf-role-label"
                   value={role}
                   onChange={setRole}
                   items={ROLE_OPTIONS}
@@ -733,9 +739,7 @@ export default function TenantFormPanel({
 
       {/* Error message */}
       {error && (
-        <div className="bg-[var(--color-error-container)] border border-[var(--color-destructive)]/20 rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-          {error}
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       <ConfirmDialog

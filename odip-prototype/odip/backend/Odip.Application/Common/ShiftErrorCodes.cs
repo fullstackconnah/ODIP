@@ -43,4 +43,13 @@ public static class ShiftErrorCodes
 
     /// <summary>404 on ticking or unticking a routine that is not one of the routines matched to this shift's window.</summary>
     public const string ShiftRoutineNotFound = "SHIFT_ROUTINE_NOT_FOUND";
+
+    // My shifts redesign (owner decisions 3 and 4): the worker's times and kilometres at Finish.
+    public const string ShiftTimeAdjustmentTooLarge = "SHIFT_TIME_ADJUSTMENT_TOO_LARGE";
+    public const string ShiftTimeAdjustmentReasonRequired = "SHIFT_TIME_ADJUSTMENT_REASON_REQUIRED";
+    public const string ShiftTimeAdjustmentReasonTooLong = "SHIFT_TIME_ADJUSTMENT_REASON_TOO_LONG";
+    public const string ShiftActualEndInFuture = "SHIFT_ACTUAL_END_IN_FUTURE";
+    public const string ShiftStartNotBeforeEnd = "SHIFT_START_NOT_BEFORE_END";
+    public const string ShiftBreakOutsideTimes = "SHIFT_BREAK_OUTSIDE_TIMES";
+    public const string ShiftKilometresOutOfRange = "SHIFT_KILOMETRES_OUT_OF_RANGE";
 }

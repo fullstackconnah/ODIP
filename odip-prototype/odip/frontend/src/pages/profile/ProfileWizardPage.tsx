@@ -27,22 +27,23 @@
  * Per-step save: each step's "Next" both zod-validates AND PATCHes that step's CORE-02 group(s)
  * (via the wizard shell's async `validate` hook — CORE-01 explicitly anticipates this) before
  * advancing, so a Profile can be completed across multiple sessions without losing earlier steps'
- * work. The final Review step's "Complete Profile" is `POST /participants/{id}/complete-profile`: it carries no
- * profile field, so it cannot wipe one (it used to send the whole form to the full-record PUT with isDraft=false,
- * which replaced every field and brought an archived participant back). Anything typed on a step that was left
- * without saving is saved by the same per-step PATCHes first.
+ * work. The final Review step's "Save profile" saves any step edited since its last save, through the same per-step PATCHes, and nothing
+ * else: completing a profile never makes a participant Active (owner decision 2026-10-13; that is "Make active" on the onboarding checklist).
+ * It used to finalise the participant too. It returns to where the wizard was opened from: the checklist (`?from=onboarding`) or the record.
  */
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParticipant, usePatchParticipant, useCompleteParticipantProfile, useStaff, useUpsertCommunityAccessRiskItem } from '@/api/hooks'
+import { useParticipant, usePatchParticipant, useStaff, useUpsertCommunityAccessRiskItem } from '@/api/hooks'
 import {
   useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, WizardShell,
   REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type ReviewGroup, type ReviewRow,
 } from '@/components/wizard'
 import { BackButton } from '@/components/BackButton'
+import { useBackTarget } from '@/hooks/useBackNavigation'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   type ParticipantFormData, PROFILE_EDITABLE_STEP_SCHEMAS_BY_KEY, PROFILE_STEP_SHARED_FIELDS, PROFILE_CONDITIONAL_SECTIONS,
   PROFILE_STEP_KEY_IDENTIFIERS_FIELDS, PROFILE_STEP_CULTURAL_DEPTH_FIELDS, PROFILE_STEP_MEDICAL_FIELDS,
@@ -55,7 +56,6 @@ import { CONSENT_TYPES, HEALTH_CONDITION_TYPES, ADL_TYPES, CHECKLIST_ITEM_TYPES,
 import { useDeriveFieldValues, type FieldDerivationDef } from '@/lib/conditionalFields'
 import { boolToTriState, focusField, extractErrorMessage } from '../intake/intakeFormat'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import { ACTIVE_TABLE_PATH, participantActivatedState } from './participantActivated'
 import { KeyIdentifiersStep } from './steps/KeyIdentifiersStep'
 import { CulturalDepthConsentsStep } from './steps/CulturalDepthConsentsStep'
 import { MedicalDetailStep } from './steps/MedicalDetailStep'
@@ -67,6 +67,7 @@ import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { queryPhase } from '@/lib/queryPhase'
+import { Callout } from '@/components/Callout'
 
 const CA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'communityAccess')!
 const STA_SECTION = PROFILE_CONDITIONAL_SECTIONS.find((s) => s.key === 'holidaySta')!
@@ -110,9 +111,16 @@ const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
 export default function ProfileWizardPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  // Back to the onboarding checklist when the wizard was opened from it, else the participant's record: the fallback when there is no in-app history.
+  const [searchParams] = useSearchParams()
+  const returnTo = searchParams.get('from') === 'onboarding' ? `/onboarding/${id}` : `/participants/${id}`
+  // Where the header Back goes: Save returns there too, tab included.
+  const back = useBackTarget(returnTo)
   const { data: participant, isLoading, isError, error, refetch } = useParticipant(id)
+  // Its own h1 shell, not a PageHeader, so it names the tab itself.
+  const heading = participant ? `Profile — ${participant.firstName} ${participant.lastName}` : 'Profile'
+  useDocumentTitle(heading)
   const patchParticipant = usePatchParticipant()
-  const completeProfile = useCompleteParticipantProfile()
   const upsertRiskItem = useUpsertCommunityAccessRiskItem()
   const { data: staffList = [] } = useStaff()
   const activeStaff = staffList.filter((s) => s.isActive)
@@ -147,7 +155,7 @@ export default function ProfileWizardPage() {
   const [hydrated, setHydrated] = useState(false)
 
   // What each step's fields held the last time they were known to match the server: the form as first hydrated, then updated each time a step
-  // is saved. Complete Profile saves only the steps whose fields now differ from this (review F-5), not every step whenever the form is dirty:
+  // is saved. Save profile saves only the steps whose fields now differ from this (review F-5), not every step whenever the form is dirty:
   // one edited field used to mean up to seven PATCHes, a refusal in a step nobody touched blocked completion, and untouched sections were
   // rewritten from the form's copy. Compared by value, not by react-hook-form's dirty flags: a refetch reset with keepDirtyValues leaves those
   // flags stale, so a step that WAS saved still read as dirty (and isDirty itself can read false while typed values are kept).
@@ -403,32 +411,19 @@ export default function ProfileWizardPage() {
     setSaveError(null)
     try {
       // A step left with Back or the rail is not saved by that: a step edited since it was last saved goes out through its own per-step
-      // PATCH first, so finishing the wizard never drops it, and a step nobody touched is not sent at all (review F-5). Then the finalise
-      // call itself, which carries no profile field.
+      // PATCH first, so finishing the wizard never drops it, and a step nobody touched is not sent at all (review F-5). That is all it saves.
       const current = getValues()
       const changedSteps = WIZARD_STEPS.filter((step) =>
         snapshotOf(step, current) !== (savedSnapshots.current[step.key] ?? snapshotOf(step, baselineValues.current ?? {})))
       for (const step of changedSteps) await saveStep(step.key)
-      // Read before the call: only a participant still in onboarding (a draft) has an onboarding to finish.
-      const wasInOnboarding = participant.isDraft
-      const res = await completeProfile.mutateAsync({ id })
-      if (res.success) {
-        // Clear the dirty flag synchronously first (the documented useUnsavedChangesWarning idiom, as the Intake
-        // wizard does): the per-step saves never reset the form, so without this a finished wizard that had any
-        // edit in it asks "Leave without saving?" on its way out.
-        flushSync(() => reset(getValues()))
-        // Completing the profile ends the onboarding of a participant who was in it, and activates them (Warn does; under Enforce the server refuses
-        // while there is no signed-agreement evidence, which lands in the catch below with its reason and leaves them in onboarding). They are an active
-        // participant and have left the Onboarding tab, so show them on the Active participants tab. Anyone else (an edit to a participant who was
-        // already finalised) goes back to their own record.
-        if (wasInOnboarding && res.data?.isActive) {
-          navigate(ACTIVE_TABLE_PATH, { state: participantActivatedState(id, res.data.fullName || participant.fullName) })
-        } else {
-          navigate(`/participants/${id}`)
-        }
-      }
+      // Clear the dirty flag synchronously first (the documented useUnsavedChangesWarning idiom, as the Intake
+      // wizard does): the per-step saves never reset the form, so without this a finished wizard that had any
+      // edit in it asks "Leave without saving?" on its way out.
+      flushSync(() => reset(getValues()))
+      // Back where Save was reached from (history first: the checklist, the record and its tab), else the checklist or record by `?from=`.
+      navigate(back.to)
     } catch (err) {
-      setSaveError(extractErrorMessage(err, 'Failed to complete the profile. Please try again.'))
+      setSaveError(extractErrorMessage(err, 'Failed to save the profile. Please try again.'))
     } finally {
       setCompleting(false)
     }
@@ -455,7 +450,7 @@ export default function ProfileWizardPage() {
       return { stepKey: step.key, rows }
     })
 
-  const fallbackBack = `/participants/${id}`
+  const fallbackBack = returnTo
 
   // Three different facts, three different states: still loading, the load failed, and there is no such participant. A failed or
   // missing record used to leave this page on "Loading..." for ever (L2-06 = L5-02).
@@ -473,13 +468,11 @@ export default function ProfileWizardPage() {
       {unsavedChangesDialog}
       <div className="flex items-center gap-3">
         <BackButton to={fallbackBack} label="participant" variant="icon" data-testid="profile-header-back" />
-        <h1 className="text-xl font-bold">Profile — {participant.firstName} {participant.lastName}</h1>
+        <h1 className="text-xl font-bold">{heading}</h1>
       </div>
 
       {saveError && (
-        <div role="alert" className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-destructive)]/10 text-[var(--color-destructive)] text-sm">
-          {saveError}
-        </div>
+        <Callout tone="error">{saveError}</Callout>
       )}
 
       <WizardShell
@@ -543,8 +536,8 @@ export default function ProfileWizardPage() {
           onNext={wizard.handleNext}
           isReviewStep={isReviewStep}
           secondaryActions={[]}
-          cancelTo={`/participants/${id}`}
-          submitLabel={completing ? 'Completing...' : 'Complete Profile'}
+          cancelTo={returnTo}
+          submitLabel={completing ? 'Saving...' : 'Save profile'}
           isSubmitting={completing || wizard.isAdvancing}
         />
         </form>

@@ -1,7 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using Odip.Application.Serialization;
-using Odip.Domain.Billing;
-using Odip.Domain.Billing.Services;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 
@@ -44,6 +42,8 @@ public record ParticipantListDto
     public List<string>? ReadinessIssues { get; init; }
     /// <summary>SPEC-05 PF-10.5. See <see cref="Odip.Domain.Entities.Participant.IntakeCompletedAt"/>.</summary>
     public DateTime? IntakeCompletedAt { get; init; }
+    /// <summary>When "Begin services" was used. See <see cref="Odip.Domain.Entities.Participant.ServicesStartedAt"/>.</summary>
+    public DateTime? ServicesStartedAt { get; init; }
 }
 
 public record ParticipantDetailDto : ParticipantListDto
@@ -186,7 +186,7 @@ public record ParticipantDetailDto : ParticipantListDto
     /// <summary>Always all twenty <see cref="Domain.Enums.AdlType"/> entries — see ParticipantAdlAssessmentsController.GetForParticipant.</summary>
     public List<ParticipantAdlAssessmentDto> AdlAssessments { get; init; } = new();
 
-    /// <summary>INTAKE-03/04, CommunityAccessDailyLiving stream. Always all twenty-one <see cref="Domain.Enums.ChecklistItemType"/> entries — see ParticipantChecklistItemsController.GetForParticipant.</summary>
+    /// <summary>INTAKE-03/04, CommunityAccessDailyLiving stream. Always all twenty-one <see cref="Domain.Enums.ChecklistItemType"/> entries — see ParticipantChecklistItemsController.MaterializeAll.</summary>
     public List<ParticipantChecklistItemDto> ChecklistItems { get; init; } = new();
 
     // ── INTAKE sub-wave C2 — Meals & Diet (Daily Living step). See Participant.cs's field group doc.
@@ -604,7 +604,7 @@ public record CreateParticipantDto
     /// CommunityAccessDailyLiving stream — the structured Community Access Risk Assessment matrix
     /// grid, upserted transactionally with the participant on both create and update (same
     /// read-on-both-paths convention as ChecklistItems above) — see
-    /// ParticipantsController.UpsertCommunityAccessRiskItemsAsync.
+    /// ParticipantPatchApplier.UpsertCommunityAccessRiskItemsAsync.
     /// </summary>
     public List<CreateParticipantCommunityAccessRiskItemDto> CommunityAccessRiskItems { get; init; } = new();
 
@@ -943,6 +943,8 @@ public record TripDetailDto : TripListDto
     public int? RequiredBedrooms { get; init; }
     public int? MinStaffRequired { get; init; }
     public decimal CalculatedStaffRequired { get; init; }
+    /// <summary>Whole staff the trip needs, as <see cref="Odip.Domain.Entities.TripInstance.StaffRequired"/> works it out; null while nothing has set it.</summary>
+    public int? StaffRequired { get; init; }
     public string? Notes { get; init; }
     public int HighSupportCount { get; init; }
     public int WheelchairCount { get; init; }
@@ -958,7 +960,7 @@ public record TripDetailDto : TripListDto
     public DateTime UpdatedAt { get; init; }
 }
 
-public record CreateTripDto
+public record CreateTripDto : IValidatableObject
 {
     [Required, StringLength(200, MinimumLength = 1)]
     public string TripName { get; init; } = string.Empty;
@@ -988,6 +990,12 @@ public record CreateTripDto
     public int? MinStaffRequired { get; init; }
     [StringLength(4000)]
     public string? Notes { get; init; }
+
+    // A body without a start date binds to 0001-01-01, which a DateOnly cannot refuse on its own.
+    public IEnumerable<ValidationResult> Validate(ValidationContext context)
+    {
+        if (StartDate == default) yield return new ValidationResult("Start date is required.", new[] { nameof(StartDate) });
+    }
 }
 
 public record UpdateTripDto : CreateTripDto
@@ -1736,6 +1744,7 @@ public record ActivityDto
 public record CreateActivityDto
 {
     public Guid? EventTemplateId { get; init; }
+    [Required, StringLength(200, MinimumLength = 1)]
     public string ActivityName { get; init; } = string.Empty;
     public ActivityCategory Category { get; init; }
     public string? Location { get; init; }
@@ -1785,24 +1794,6 @@ public record CreateEventTemplateDto
 }
 
 public record UpdateEventTemplateDto : CreateEventTemplateDto { }
-
-// ══════════════════════════════════════════════════════════════
-// DOCUMENT DTOs
-// ══════════════════════════════════════════════════════════════
-
-public record TripDocumentDto
-{
-    public Guid Id { get; init; }
-    public Guid TripInstanceId { get; init; }
-    public Guid? ParticipantBookingId { get; init; }
-    public DocumentType DocumentType { get; init; }
-    public string FileName { get; init; } = string.Empty;
-    public string? FilePath { get; init; }
-    public long? FileSize { get; init; }
-    public DateOnly? DocumentDate { get; init; }
-    public string? Notes { get; init; }
-    public DateTime UploadedAt { get; init; }
-}
 
 // ══════════════════════════════════════════════════════════════
 // DASHBOARD DTOs
@@ -2222,6 +2213,13 @@ public record CreateIncidentDto
     /// </summary>
     [StringLength(2000)]
     public string? UnapprovedRestrictivePracticeDetails { get; init; }
+    /// <summary>
+    /// "This use was not authorised": the linked register entry was used without (or outside) its authorisation. When true the incident is
+    /// stored Unauthorised (<see cref="Entities.IncidentReport.IsRestrictivePracticeAuthorised"/> = false) and keeps its link. Create also
+    /// stores Unauthorised whenever the linked entry is Not authorised, whatever this says. On Update it can only ever lower the frozen
+    /// determination to false, never raise it.
+    /// </summary>
+    public bool UsedWithoutAuthorisation { get; init; }
     public IncidentSeverity Severity { get; init; }
     [Required, StringLength(300, MinimumLength = 1)]
     public string Title { get; init; } = string.Empty;
@@ -2523,289 +2521,4 @@ public record SyncResultDto
     public int HolidaysAdded { get; init; }
     public int HolidaysUpdated { get; init; }
     public string[] Errors { get; init; } = [];
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-// FIELD REGISTRY / FORMS ENGINE DTOs
-// (Odip.Api/Controllers/FieldRegistryController.cs — added at the end of this
-// file, in its own region, to minimise merge conflicts with concurrent DTO work.)
-// ══════════════════════════════════════════════════════════════════════════
-
-/// <summary>A single field definition from the Master Data Dictionary, as exposed over the API.</summary>
-public record FieldDefinitionDto
-{
-    public Guid Id { get; init; }
-    public string FieldId { get; init; } = string.Empty;
-    public string Name { get; init; } = string.Empty;
-    public string Domain { get; init; } = string.Empty;
-    /// <summary>String form of <c>Odip.Domain.Dictionary.FieldDataType</c> (e.g. "SingleSelect").</summary>
-    public string DataType { get; init; } = string.Empty;
-    /// <summary>Parsed picklist options. Only meaningful for SingleSelect/MultiSelect fields.</summary>
-    public List<string> AllowedValues { get; init; } = new();
-    public string? Comments { get; init; }
-    public string? Notes { get; init; }
-    /// <summary>True when this field belongs to a clinical-adjacent domain (see DataDictionarySeeder.SensitiveDomains).</summary>
-    public bool IsSensitive { get; init; }
-    public bool IsActive { get; init; }
-    public List<string> AppearsInForms { get; init; } = new();
-}
-
-/// <summary>One dictionary domain with its field count, for building navigation.</summary>
-public record FieldDomainSummaryDto
-{
-    public string Domain { get; init; } = string.Empty;
-    public int FieldCount { get; init; }
-}
-
-/// <summary>A single field as it should be rendered within a form.</summary>
-public record FormFieldDto
-{
-    public string FieldId { get; init; } = string.Empty;
-    public string Label { get; init; } = string.Empty;
-    public string DataType { get; init; } = string.Empty;
-    public List<string> AllowedValues { get; init; } = new();
-    /// <summary>
-    /// Always false: the current Master Data Dictionary does not carry an explicit
-    /// "required" column, so there is no source data to derive this from yet. Present on
-    /// the DTO so the frontend has a stable contract once the dictionary adds one.
-    /// </summary>
-    public bool IsRequired { get; init; }
-    public bool IsSensitive { get; init; }
-}
-
-/// <summary>One section of a <see cref="FormTemplateDto"/>, with its fields resolved.</summary>
-public record FormSectionDto
-{
-    public string Title { get; init; } = string.Empty;
-    public List<FormFieldDto> Fields { get; init; } = new();
-}
-
-/// <summary>A renderable form skeleton, built from <c>FormTemplate.FromAppearsIn</c> with fields resolved.</summary>
-public record FormTemplateDto
-{
-    public Guid Id { get; init; }
-    public string Name { get; init; } = string.Empty;
-    public string? Description { get; init; }
-    public List<FormSectionDto> Sections { get; init; } = new();
-}
-
-/// <summary>A single stored EAV value, joined to its field definition.</summary>
-public record FieldValueDto
-{
-    public Guid FieldDefinitionId { get; init; }
-    public string FieldId { get; init; } = string.Empty;
-    public string FieldName { get; init; } = string.Empty;
-    public string DataType { get; init; } = string.Empty;
-    public string? Value { get; init; }
-    public bool IsSensitive { get; init; }
-    public DateTime UpdatedAt { get; init; }
-    public string? UpdatedBy { get; init; }
-}
-
-/// <summary>One value to upsert in a batch PUT.</summary>
-public record UpsertFieldValueDto
-{
-    [Required]
-    public Guid FieldDefinitionId { get; init; }
-    public string? Value { get; init; }
-}
-
-/// <summary>Request body for the batch field-value upsert endpoint.</summary>
-public record UpsertFieldValuesDto
-{
-    [Required]
-    public List<UpsertFieldValueDto> Values { get; init; } = new();
-}
-
-// ══════════════════════════════════════════════════════════════
-// BILLING DTOs
-// ══════════════════════════════════════════════════════════════
-
-public record FundingSourceDto
-{
-    public Guid Id { get; init; }
-    public Guid ParticipantId { get; init; }
-    public string? ParticipantName { get; init; }
-    public FundingRouteType RouteType { get; init; }
-    public string? BudgetCategory { get; init; }
-    public string? NdisPlanNumber { get; init; }
-    public DateOnly? PlanStartDate { get; init; }
-    public DateOnly? PlanEndDate { get; init; }
-    public decimal? Budget { get; init; }
-    public string? PayerName { get; init; }
-    public string? PayerEmail { get; init; }
-    public bool IsActive { get; init; }
-}
-
-public record CreateFundingSourceDto
-{
-    [Required]
-    public Guid ParticipantId { get; init; }
-    public FundingRouteType RouteType { get; init; }
-    [StringLength(200)]
-    public string? BudgetCategory { get; init; }
-    [StringLength(50)]
-    public string? NdisPlanNumber { get; init; }
-    public DateOnly? PlanStartDate { get; init; }
-    public DateOnly? PlanEndDate { get; init; }
-    [Range(0, 99999999.99)]
-    public decimal? Budget { get; init; }
-    [StringLength(200)]
-    public string? PayerName { get; init; }
-    [StringLength(200), EmailAddress]
-    public string? PayerEmail { get; init; }
-    public bool IsActive { get; init; } = true;
-}
-
-public record UpdateFundingSourceDto : CreateFundingSourceDto { }
-
-public record ServiceBookingLineDto
-{
-    public Guid Id { get; init; }
-    public string SupportItemNumber { get; init; } = string.Empty;
-    public decimal AllocatedAmount { get; init; }
-    public decimal ClaimedAmount { get; init; }
-    public decimal RemainingAmount { get; init; }
-}
-
-public record CreateServiceBookingLineDto
-{
-    [Required, StringLength(50, MinimumLength = 1)]
-    public string SupportItemNumber { get; init; } = string.Empty;
-    [Range(0, 99999999.99)]
-    public decimal AllocatedAmount { get; init; }
-}
-
-public record ServiceBookingListDto
-{
-    public Guid Id { get; init; }
-    public Guid FundingSourceId { get; init; }
-    public Guid? ParticipantId { get; init; }
-    public string? ParticipantName { get; init; }
-    public string ProdaBookingReference { get; init; } = string.Empty;
-    public DateOnly StartDate { get; init; }
-    public DateOnly EndDate { get; init; }
-    public int ClaimWindowDays { get; init; }
-    public DateOnly ClaimDeadline { get; init; }
-    public decimal TotalAllocated { get; init; }
-    public decimal TotalClaimed { get; init; }
-    public decimal TotalRemaining { get; init; }
-}
-
-public record ServiceBookingDetailDto : ServiceBookingListDto
-{
-    public List<ServiceBookingLineDto> Lines { get; init; } = new();
-}
-
-public record CreateServiceBookingDto
-{
-    [Required]
-    public Guid FundingSourceId { get; init; }
-    [Required, StringLength(50, MinimumLength = 1)]
-    public string ProdaBookingReference { get; init; } = string.Empty;
-    public DateOnly StartDate { get; init; }
-    public DateOnly EndDate { get; init; }
-    [Range(0, 3650)]
-    public int ClaimWindowDays { get; init; } = 60;
-    [MinLength(1)]
-    public List<CreateServiceBookingLineDto> Lines { get; init; } = new();
-}
-
-public record BillableEventDto
-{
-    public Guid Id { get; init; }
-    public Guid ParticipantId { get; init; }
-    public string? ParticipantName { get; init; }
-    public Guid FundingSourceId { get; init; }
-    public Guid? ServiceBookingId { get; init; }
-    public IncomeStream Stream { get; init; }
-    public string? SourceEntityType { get; init; }
-    public Guid? SourceEntityId { get; init; }
-    public string SupportItemNumber { get; init; } = string.Empty;
-    public DateOnly SupportsDeliveredFrom { get; init; }
-    public DateOnly SupportsDeliveredTo { get; init; }
-    public ClaimDayType DayType { get; init; }
-    public decimal? Quantity { get; init; }
-    public TimeSpan? Hours { get; init; }
-    public decimal UnitPrice { get; init; }
-    public decimal TotalAmount { get; init; }
-    public GSTCode GstCode { get; init; }
-    public ClaimType ClaimType { get; init; }
-    public string? CancellationReasonCode { get; init; }
-    public bool ParticipantApproved { get; init; }
-    public string ClaimReference { get; init; } = string.Empty;
-    public BillableEventStatus Status { get; init; }
-    public string? RejectionReason { get; init; }
-    public DateTime CreatedAt { get; init; }
-}
-
-public record CreateBillableEventDto
-{
-    [Required]
-    public Guid ParticipantId { get; init; }
-    [Required]
-    public Guid FundingSourceId { get; init; }
-    public Guid? ServiceBookingId { get; init; }
-    public IncomeStream Stream { get; init; }
-    [StringLength(100)]
-    public string? SourceEntityType { get; init; }
-    public Guid? SourceEntityId { get; init; }
-    [Required, StringLength(50, MinimumLength = 1)]
-    public string SupportItemNumber { get; init; } = string.Empty;
-    public DateOnly SupportsDeliveredFrom { get; init; }
-    public DateOnly SupportsDeliveredTo { get; init; }
-    public ClaimDayType DayType { get; init; }
-    public decimal? Quantity { get; init; }
-    public TimeSpan? Hours { get; init; }
-    [Range(0, 99999999.99)]
-    public decimal UnitPrice { get; init; }
-    [Range(0, 99999999.99)]
-    public decimal TotalAmount { get; init; }
-    public GSTCode GstCode { get; init; } = GSTCode.P2;
-    public ClaimType ClaimType { get; init; } = ClaimType.Standard;
-    [StringLength(50)]
-    public string? CancellationReasonCode { get; init; }
-    public bool ParticipantApproved { get; init; }
-    [Required, StringLength(100, MinimumLength = 1)]
-    public string ClaimReference { get; init; } = string.Empty;
-}
-
-public record UpdateBillableEventDto : CreateBillableEventDto { }
-
-public record ClaimBatchListDto
-{
-    public Guid Id { get; init; }
-    public string FileName { get; init; } = string.Empty;
-    public DateTime CreatedAt { get; init; }
-    public DateTime? SubmittedAt { get; init; }
-    public int EventCount { get; init; }
-    public decimal TotalAmount { get; init; }
-}
-
-public record ClaimBatchDetailDto : ClaimBatchListDto
-{
-    public List<BillableEventDto> Events { get; init; } = new();
-}
-
-public record CreateClaimBatchDto
-{
-    [Required, MinLength(1)]
-    public List<Guid> EventIds { get; init; } = new();
-}
-
-public record ValidateBillingDto
-{
-    [Required, MinLength(1)]
-    public List<Guid> EventIds { get; init; } = new();
-}
-
-public record BillingValidationResultDto
-{
-    public Guid EventId { get; init; }
-    public BillingSeverity Severity { get; init; }
-    public string Code { get; init; } = string.Empty;
-    public string Message { get; init; } = string.Empty;
-
-    public static BillingValidationResultDto From(BillingValidationResult r) =>
-        new() { EventId = r.EventId, Severity = r.Severity, Code = r.Code, Message = r.Message };
 }

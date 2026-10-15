@@ -1,11 +1,9 @@
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
-  useParticipant, useParticipantBookings, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
+  useParticipant, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
   useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
 } from '@/api/hooks'
-import type { BookingListDto } from '@/api/types/bookings'
 import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
-import { DataTable } from '@/components/DataTable'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -18,51 +16,25 @@ import { BackButton } from '@/components/BackButton'
 import { useTabParam } from '@/hooks/useTabParam'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
-import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, FileText, CalendarRange, Wallet } from 'lucide-react'
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, Link2Off, FileText, ClipboardCheck, CalendarRange, Wallet } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
-import { formatDateAu } from '@/lib/utils'
+import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
   ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab, ClaimsTab,
-  RosteringTab, FundingTab,
+  RosteringTab, FundingTab, BookingsTab,
   ParticipantIdentitySection, ParticipantAddressLivingSection, ParticipantNdisFundingSection, ParticipantKeyIdentifiersSection,
   ParticipantCulturalBackgroundSection, ParticipantMedicalSection, ParticipantBehaviourCommunicationSection,
   ParticipantCommunityAccessSection, ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
+  hasAddressLiving, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary,
+  NotRecordedFold,
 } from './participant-detail'
+import { joinList } from '@/lib/format'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-
-/** Tailwind's `md` breakpoint, in the same rem unit its `md:` variants compile to (48rem = 768px at the
- * default font size), so this switch and the header's `md:` classes always flip together. The header
- * shows the full Documents button set from here up and folds it into one menu below (see DocumentsMenu). */
-const MD_QUERY = '(min-width: 48rem)'
-
-function subscribeMdUp(notify: () => void): () => void {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {}
-  const mql = window.matchMedia(MD_QUERY)
-  mql.addEventListener('change', notify)
-  return () => mql.removeEventListener('change', notify)
-}
-
-/** Where matchMedia doesn't exist (jsdom) assume a wide viewport, i.e. the full button set. */
-function getMdUp(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia(MD_QUERY).matches
-    : true
-}
-
-/** Deliberately a JS switch and not `hidden md:flex` twins: the desktop buttons and the mobile menu
- * both own download state and a `role="alert"` error line, and rendering both would duplicate them. */
-function useIsMdUp(): boolean {
-  return useSyncExternalStore(subscribeMdUp, getMdUp, () => true)
-}
-
-/** A table-cell link is the row's tap target: no height change on a mouse (--tap-min is 0 there), a
- * 44px floor under a coarse pointer (fits the 48px coarse row). */
-const ROW_LINK = 'inline-flex min-h-[var(--tap-min)] items-center font-medium hover:text-[var(--color-primary)]'
 
 /**
  * A zero-row (or still-loading) DataTable's only body row is one `td[colspan]` message cell — a table
@@ -80,9 +52,8 @@ const TAB_KEYS = ['details', 'contacts', 'bookings', 'support', 'medications', '
 export default function ParticipantDetailPage() {
   const { canWrite, canViewAlerts, canWriteParticipantDetails, canManageFunding, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
-  const isMdUp = useIsMdUp()
   const canAccessClaims = canAccessPage('claims')
-  // The agreement draft carries money: only the roles the API admits to its GETs are offered it (ReadOnly satisfies canWrite, and would only meet a 403).
+  // The agreement draft carries money: only the roles the API admits to its GETs are offered it (ReadOnly would only meet a 403).
   const canOpenAgreementDraft = canAccessPage('agreement-drafts')
   // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
@@ -96,7 +67,6 @@ export default function ParticipantDetailPage() {
   )
   const [tab, setTab] = useTabParam(tabKeys, 'details')
   const { data: p, isLoading, isError, error, refetch } = useParticipant(id)
-  const { data: bookings = [] } = useParticipantBookings(id)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
   // early returns below, per the rules of hooks.
@@ -107,6 +77,7 @@ export default function ParticipantDetailPage() {
   // it as the safer default (more availability, not less) — same document, blank TRIP/DATE/GROUP
   // header. See this branch's report for the reversible product call.
   const downloadClientOverview = useDownloadClientOverviewPdf()
+  const caregiverLink = useCaregiverLink(id!)
 
   if (isLoading) return <PageState kind="loading" noun="participant" />
   if (!p) {
@@ -115,12 +86,35 @@ export default function ParticipantDetailPage() {
       : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
   }
 
+  // The Details tab's short cards in wizard order; `has` is false for a card with nothing recorded yet (Identity, NDIS & Funding and
+  // Community Access always have something: a name, a funding source, and a card that only shows for that stream).
+  const edit = { p, participantId: id!, canEdit: canWriteParticipantDetails }
+  const shortCards = [
+    { title: 'Identity', has: true, card: <ParticipantIdentitySection key="identity" {...edit} /> },
+    { title: 'Address & Living Arrangements', has: hasAddressLiving(p), card: <ParticipantAddressLivingSection key="address" {...edit} /> },
+    { title: 'NDIS & Funding', has: true, card: <ParticipantNdisFundingSection key="ndis" {...edit} /> },
+    { title: 'Key Identifiers', has: hasKeyIdentifiers(p), card: <ParticipantKeyIdentifiersSection key="identifiers" {...edit} /> },
+    { title: 'Cultural Background', has: hasCulturalBackground(p), card: <ParticipantCulturalBackgroundSection key="cultural" {...edit} /> },
+    { title: 'Medical', has: hasMedical(p), card: <ParticipantMedicalSection key="medical" {...edit} /> },
+    { title: 'Behaviour & Communication', has: hasBehaviourCommunication(p), card: <ParticipantBehaviourCommunicationSection key="behaviour" {...edit} /> },
+    { title: 'Community Access', has: true, card: <ParticipantCommunityAccessSection key="community" {...edit} /> },
+    { title: 'Meals & Diet', has: hasMealsDiet(p), card: <ParticipantMealsDietSection key="meals" {...edit} /> },
+    { title: 'About Me', has: hasAboutMe(p), card: <ParticipantAboutMeSection key="about" {...edit} /> },
+    { title: 'Risks & Hazards Summary', has: hasRisksHazardsSummary(p), card: <ParticipantRisksHazardsSummarySection key="risks" {...edit} /> },
+  ]
+  // Back goes where the user came from; with no history (a deep link) it falls back to the list this participant is on. A draft is never on
+  // Active participants: before intake is complete it is a Draft intake row on Enquiries, after it a row on Onboarding.
+  const [backTo, backLabel] = !p.isDraft ? ['/participants', 'participants']
+    : p.intakeCompletedAt ? ['/participants?tab=onboarding', 'onboarding'] : ['/participants?tab=enquiries', 'enquiries']
+  const recordedCards = shortCards.filter(c => c.has)
+  const emptyCards = shortCards.filter(c => !c.has)
+
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-2">
         {/* The icon variant is a --control-h-sm square (36px on a coarse pointer); its --tap-min floor lifts it to
             44 there and is 0 — no change — on a mouse. */}
-        <BackButton to="/participants" label="participants" variant="icon" history={false} className="mt-1" />
+        <BackButton to={backTo} label={backLabel} variant="icon" className="mt-1" />
         <div className="flex-1 min-w-0">
           <PageHeader
             title={p.fullName}
@@ -134,89 +128,21 @@ export default function ParticipantDetailPage() {
               </div>
             }
             action={
-              // justify-start below md (the cluster sits under the title, left-aligned); justify-end
-              // from md up, unchanged.
+              // One menu and one primary at every width (VISUAL-1 V2): the documents, the agreement draft and the caregiver link fold into
+              // the menu, and Edit is the visible action. justify-start below md (the cluster sits under the title); justify-end from md up.
               <div className="flex flex-wrap items-start justify-start gap-2 md:justify-end">
-                {isMdUp ? (
-                  <>
-                    {/* DOC-01 — secondary Documents actions; ungated, unlike the primary Edit action below:
-                        downloading/printing documents is a read action, and this page has no more specific
-                        canView... flag of its own to gate read-level content on (see usePermissions — the
-                        closest candidates, canViewAlerts/canViewAdministrationReport, are for unrelated
-                        features), so these follow the rest of the page's ungated read-only content. */}
-                    <div className="flex flex-col items-start gap-1">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="md"
-                        onClick={() => downloadIntakeForm.mutate({ id: id!, fileName: `${p.fullName} - Intake Form.pdf` })}
-                        disabled={downloadIntakeForm.isPending}
-                      >
-                        {downloadIntakeForm.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                        {downloadIntakeForm.isPending ? 'Preparing…' : 'Intake Form PDF'}
-                      </Button>
-                      {downloadIntakeForm.isError && (
-                        <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                          Couldn't download the file. Try again, or contact support if this keeps happening.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-start gap-1">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="md"
-                        onClick={() => downloadParticipantProfile.mutate({ id: id!, fileName: `${p.fullName} - Participant Profile.pdf` })}
-                        disabled={downloadParticipantProfile.isPending}
-                      >
-                        {downloadParticipantProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                        {downloadParticipantProfile.isPending ? 'Preparing…' : 'Participant Profile PDF'}
-                      </Button>
-                      {downloadParticipantProfile.isError && (
-                        <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                          Couldn't download the file. Try again, or contact support if this keeps happening.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-start gap-1">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="md"
-                        onClick={() => downloadClientOverview.mutate({ id: id!, fileName: `${p.fullName} - Client Overview.pdf` })}
-                        disabled={downloadClientOverview.isPending}
-                      >
-                        {downloadClientOverview.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                        {downloadClientOverview.isPending ? 'Preparing…' : 'Client Overview PDF'}
-                      </Button>
-                      {downloadClientOverview.isError && (
-                        <p role="alert" className="text-xs text-[var(--color-destructive)]">
-                          Couldn't download the file. Try again, or contact support if this keeps happening.
-                        </p>
-                      )}
-                    </div>
-                    {canOpenAgreementDraft && (
-                      <Button to={`/participants/${id}/agreement-draft`} variant="secondary" size="md">
-                        <FileText className="w-4 h-4" /> Agreement draft
-                      </Button>
-                    )}
-                  </>
-                ) : (
-                  // Below md: five stacked 44px rows would bury the name, so the three PDFs and
-                  // "Agreement draft" fold into one Documents menu. Edit stays a visible button.
-                  <DocumentsMenu
-                    participantId={id!}
-                    fullName={p.fullName}
-                    canOpenAgreementDraft={canOpenAgreementDraft}
-                    intake={downloadIntakeForm}
-                    profile={downloadParticipantProfile}
-                    overview={downloadClientOverview}
-                  />
-                )}
-                {/* cg04 Task 9 (design §5) — the caregiver-link header control. Gated on
-                    canWriteParticipantDetails (a write action), unlike the ungated Documents
-                    downloads above — see B15 in the discovery fact sheet. */}
-                <CaregiverLinkControl participantId={id!} />
+                {/* DOC-01 — the downloads are ungated, unlike Edit: downloading/printing documents is a read action, and this page has no
+                    more specific canView... flag of its own to gate read-level content on. The caregiver-link items inside are gated on
+                    canWriteParticipantDetails (a write action) — see B15 in the discovery fact sheet. */}
+                <DocumentsMenu
+                  participantId={id!}
+                  fullName={p.fullName}
+                  canOpenAgreementDraft={canOpenAgreementDraft}
+                  intake={downloadIntakeForm}
+                  profile={downloadParticipantProfile}
+                  overview={downloadClientOverview}
+                  caregiverLink={caregiverLink}
+                />
                 {canWrite && (
                   // PF-10.7 (SPEC-05): the old single-step wizard is retired — this now
                   // points straight at the Profile-wizard edit entry point (PF-10.4) rather than the
@@ -235,17 +161,18 @@ export default function ParticipantDetailPage() {
             <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
               <span className="flex items-center gap-2">
                 <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
-                {p.intakeCompletedAt
+                {p.servicesStartedAt && p.isActive
+                  ? 'Services have started, and onboarding is still open. They can be rostered and supported; the checklist shows what is left before they are made active.'
+                  : p.intakeCompletedAt
                   ? "Intake is complete, but this participant's profile isn't finished yet. Excluded from rosters, claims, and other operational lists until finalised."
                   : "This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised."}
               </span>
-              {canWrite && (
-                <Link
-                  to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}
-                  className="inline-flex items-center gap-1.5 h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] bg-[var(--color-on-warning-container)] text-white text-sm font-medium hover:bg-[var(--color-on-warning-container)]/90 transition-colors shrink-0"
-                >
+              {p.servicesStartedAt && p.isActive ? (
+                <Button variant="secondary" size="sm" className="shrink-0" to={`/onboarding/${id}`}>Open checklist</Button>
+              ) : canWrite && (
+                <Button variant="secondary" size="sm" className="shrink-0" to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}>
                   <Pencil className="w-4 h-4" /> {p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'}
-                </Link>
+                </Button>
               )}
             </div>
           )}
@@ -294,22 +221,21 @@ export default function ParticipantDetailPage() {
           section avoids nulling fields it doesn't render. */}
       {tab === 'details' && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
-          <ParticipantIdentitySection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantAddressLivingSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantNdisFundingSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantKeyIdentifiersSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantCulturalBackgroundSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          {/* PD-6 — the "Support Needs & Mobility" card that used to live here has moved to the
+          {/* PD-6 — the "Support Needs & Mobility" card that used to live after Cultural Background has moved to the
               Support Profile tab (SupportProfileTab.tsx), merged with the `/support-profile`
               sub-resource fields and made editable there. See SPEC-03's PD-6: having the same
               fields editable/displayed in two places would repeat the dual-write-path
               inconsistency discovery already flagged for consents/health/ADL. */}
-          <ParticipantMedicalSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantBehaviourCommunicationSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantCommunityAccessSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantMealsDietSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantAboutMeSection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
-          <ParticipantRisksHazardsSummarySection p={p} participantId={id!} canEdit={canWriteParticipantDetails} />
+          {recordedCards.map(c => c.card)}
+          {/* VISUAL-1 V2: the cards with nothing recorded fold into one line naming them. Only an editor has empty cards to fold:
+              each one returns null without canEdit. */}
+          {canWriteParticipantDetails && emptyCards.length > 0 && (
+            <NotRecordedFold className="col-span-full" summary={joinList(emptyCards.map(c => c.title))}>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
+                {emptyCards.map(c => c.card)}
+              </div>
+            </NotRecordedFold>
+          )}
 
           {/* ── Full-width sections ── */}
           <Card className="col-span-full">
@@ -347,24 +273,7 @@ export default function ParticipantDetailPage() {
       )}
 
       {tab === 'bookings' && (
-        <DataTable
-          data={bookings}
-          keyField="id"
-          columns={[
-            {
-              key: 'tripName',
-              header: 'Trip',
-              render: (b: BookingListDto) => (
-                <Link to={`/trips/${b.tripInstanceId}`} className={ROW_LINK}>
-                  {b.tripName || 'Trip'}
-                </Link>
-              ),
-            },
-            { key: 'bookingStatus', header: 'Status', type: 'badge' },
-            { key: 'bookingDate', header: 'Date', type: 'date' },
-          ]}
-          emptyMessage="No bookings"
-        />
+        <BookingsTab participantId={id} />
       )}
 
       {tab === 'support' && (
@@ -407,21 +316,6 @@ export default function ParticipantDetailPage() {
 }
 
 /**
- * The shared Dropdown "menu" trigger is a primary-CTA pill (gradient fill, rounded-full, bold, 40px
- * tall). In this header Edit is the primary action, so the trigger is restyled from out here to read
- * as a secondary Button: --control-h tall (32px, 44px under a coarse pointer, the same token Button
- * md uses), radius-sm, bordered card fill. Dropdown takes no className/appearance prop, so this is a
- * descendant-selector skin scoped to the one trigger button its wrapper contains (the option panel is
- * portalled to <body> and unaffected).
- */
-const DOCUMENTS_TRIGGER_SKIN = [
-  '[&_button]:h-[var(--control-h)]', '[&_button]:px-4', '[&_button]:py-0',
-  '[&_button]:rounded-[var(--radius-sm)]', '[&_button]:border', '[&_button]:border-[var(--color-border)]',
-  '[&_button]:bg-none', '[&_button]:bg-[var(--color-card)]', '[&_button:hover]:bg-[var(--color-accent)]',
-  '[&_button]:font-medium', '[&_button]:text-[var(--color-foreground)]', '[&_button]:shadow-none',
-].join(' ')
-
-/**
  * Dropdown option rows are `py-1.5` around a 20px line = 32px, and take no height prop. The row is a
  * flex box that sizes to its tallest child, so each item's icon slot carries a coarse-pointer floor:
  * (--tap-min - the row's 12px of vertical padding) of content lifts the row to 44px under a touch
@@ -438,13 +332,13 @@ type PdfDownload = {
 }
 
 /**
- * The header's document actions below md, folded into one menu (the shared Dropdown "menu" variant,
- * as ItineraryTab's export uses): the three PDF downloads plus "Agreement draft" (canWrite only, same
- * gate as the desktop button). Each download keeps its desktop file name and pending state; the
- * per-button error lines collapse into one shared `role="alert"` under the trigger.
+ * The header's one menu, at every width (VISUAL-1 V2: seven header controls at 1440 became one menu and Edit). A secondary-look
+ * trigger, so Edit stays the page's one filled primary. It holds the three PDF downloads, "Agreement draft" (same gate as before) and
+ * the caregiver-link actions. Each download keeps its file name and pending state; their error lines collapse into one shared
+ * `role="alert"` under the trigger, and the caregiver link's own panel (the issued URL, its error, the Revoke confirm) sits there too.
  */
 function DocumentsMenu({
-  participantId, fullName, canOpenAgreementDraft, intake, profile, overview,
+  participantId, fullName, canOpenAgreementDraft, intake, profile, overview, caregiverLink,
 }: {
   participantId: string
   fullName: string
@@ -452,6 +346,7 @@ function DocumentsMenu({
   intake: PdfDownload
   profile: PdfDownload
   overview: PdfDownload
+  caregiverLink: CaregiverLink
 }) {
   const navigate = useNavigate()
   const downloads = [
@@ -470,6 +365,7 @@ function DocumentsMenu({
       disabled: d.mutation.isPending,
     })),
     ...(canOpenAgreementDraft ? [{ value: 'agreement', label: 'Agreement draft', icon: <span className={MENU_ITEM_ICON}><FileText className="w-4 h-4" /></span> }] : []),
+    ...caregiverLink.items,
   ]
 
   const onSelect = (value: string) => {
@@ -479,79 +375,87 @@ function DocumentsMenu({
       return
     }
     if (value === 'agreement') navigate(`/participants/${participantId}/agreement-draft`)
+    else caregiverLink.onSelect(value)
   }
 
   return (
     <div className="flex flex-col items-start gap-1">
-      <div className={DOCUMENTS_TRIGGER_SKIN}>
-        <Dropdown
-          variant="menu"
-          align="left"
-          label={busy ? 'Preparing…' : 'Documents'}
-          icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          items={items}
-          onSelect={onSelect}
-        />
-      </div>
+      <Dropdown
+        variant="menu"
+        triggerVariant="secondary"
+        label={busy ? 'Preparing…' : 'Documents'}
+        icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        items={items}
+        onSelect={onSelect}
+      />
       {failed && (
         <p role="alert" className="text-xs text-[var(--color-destructive)]">
           Couldn't download the file. Try again, or contact support if this keeps happening.
         </p>
       )}
+      {caregiverLink.panel}
     </div>
   )
 }
 
+type CaregiverLink = { items: DropdownItem[]; onSelect: (value: string) => void; panel: ReactNode }
+
 /**
- * cg04 Task 9 (design §5) — status chip + Generate/Regenerate/Revoke for this participant's
- * caregiver form link. Gated on canWriteParticipantDetails, per B14 in the discovery fact
- * sheet (never canWrite — this is a write action on a sensitive, unauthenticated-facing link,
- * not a general edit permission). `ParticipantDetailDto` does not carry the active submission
- * status itself, so the "active link" state is derived from two small Draft/Submitted queries
- * filtered by participantId (per the plan) rather than widening the participant DTO.
+ * cg04 Task 9 (design §5) — Generate/Regenerate/Revoke for this participant's caregiver form link, as items of the header's menu.
+ * Gated on canWriteParticipantDetails, per B14 in the discovery fact sheet (never canWrite — this is a write action on a sensitive,
+ * unauthenticated-facing link, not a general edit permission): without it there are no items and no panel. `ParticipantDetailDto`
+ * does not carry the active submission status itself, so the "active link" state is derived from two small Draft/Submitted queries
+ * filtered by participantId (per the plan) rather than widening the participant DTO; the Regenerate item names it.
  *
- * The freshly generated URL is held in local component state only — it is shown once, with a
- * Copy button, and is never persisted anywhere the UI could recover it after navigating away
- * (not in the query cache, not on the participant DTO): re-mounting this control loses it for
- * good, exactly like the raw token itself is never re-derivable from the backend after issue.
+ * The freshly generated URL is held in local component state only — it is shown once, with a Copy button, and is never persisted
+ * anywhere the UI could recover it after navigating away (not in the query cache, not on the participant DTO): re-mounting the page
+ * loses it for good, exactly like the raw token itself is never re-derivable from the backend after issue.
  */
-function CaregiverLinkControl({ participantId }: { participantId: string }) {
+function useCaregiverLink(participantId: string): CaregiverLink {
   const { canWriteParticipantDetails } = usePermissions()
+  const navigate = useNavigate()
   const generate = useGenerateCaregiverLink()
   const revoke = useRevokeCaregiverLink()
   const [issued, setIssued] = useState<{ url: string; expiresAt: string } | null>(null)
   const [confirmingRevoke, setConfirmingRevoke] = useState(false)
-  const drafts = useCaregiverSubmissions('Draft')
-  const submitted = useCaregiverSubmissions('Submitted')
+  // The latest refusal, Generate's or Revoke's: each attempt clears it, so an older failure never stands in for a newer one.
+  const [linkError, setLinkError] = useState<string | null>(null)
+  // The list route is Admin/Coordinator/SuperAdmin only: other roles would get a 403 for each call.
+  const drafts = useCaregiverSubmissions('Draft', { participantId, enabled: canWriteParticipantDetails })
+  const submitted = useCaregiverSubmissions('Submitted', { participantId, enabled: canWriteParticipantDetails })
 
-  if (!canWriteParticipantDetails) return null
+  if (!canWriteParticipantDetails) return { items: [], onSelect: () => {}, panel: null }
 
   const active = [...(submitted.data ?? []), ...(drafts.data ?? [])].find((s) => s.participantId === participantId)
+  const toReview = submitted.data?.find((s) => s.participantId === participantId)
 
-  return (
-    <div data-testid="caregiver-link-control" className="flex flex-col items-start gap-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={active?.status ?? 'None'} />
-        <Button
-          type="button"
-          variant="secondary"
-          size="md"
-          onClick={async () => {
-            const res = await generate.mutateAsync({ participantId })
-            const token = res.data!.token
-            setIssued({ url: `${window.location.origin}/caregiver/${token}`, expiresAt: res.data!.expiresAt })
-          }}
-          disabled={generate.isPending}
-        >
-          {generate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-          {active ? 'Regenerate caregiver link' : 'Generate caregiver link'}
-        </Button>
-        {active && (
-          <Button type="button" variant="ghost-danger" size="md" onClick={() => setConfirmingRevoke(true)} disabled={revoke.isPending}>
-            Revoke
-          </Button>
-        )}
-      </div>
+  const items: DropdownItem[] = [
+    // A submitted form waits for review; this is its one door from the participant (the list is the other).
+    ...(toReview ? [{ value: 'caregiver-review', label: 'Review caregiver form', icon: <span className={MENU_ITEM_ICON}><ClipboardCheck className="w-4 h-4" /></span> }] : []),
+    {
+      value: 'caregiver-generate',
+      label: active ? 'Regenerate caregiver link' : 'Generate caregiver link',
+      description: active ? `Current link: ${active.status.toLowerCase()}` : undefined,
+      icon: <span className={MENU_ITEM_ICON}>{generate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}</span>,
+      disabled: generate.isPending,
+    },
+    ...(active ? [{ value: 'caregiver-revoke', label: 'Revoke caregiver link', icon: <span className={MENU_ITEM_ICON}><Link2Off className="w-4 h-4" /></span>, disabled: revoke.isPending }] : []),
+  ]
+
+  const generateLink = async () => {
+    setLinkError(null)
+    const res = await generate.mutateAsync({ participantId }).catch((err: unknown) => { setLinkError(extractErrorMessage(err, 'Something went wrong. Try again.')); return null })
+    if (!res) return
+    setIssued({ url: `${window.location.origin}/caregiver/${res.data!.token}`, expiresAt: res.data!.expiresAt })
+  }
+  const onSelect = (value: string) => {
+    if (value === 'caregiver-review' && toReview) navigate(`/caregiver-submissions/${toReview.id}`)
+    else if (value === 'caregiver-revoke') setConfirmingRevoke(true)
+    else if (value === 'caregiver-generate') void generateLink()
+  }
+
+  const panel = (
+    <div data-testid="caregiver-link-control" className="contents">
       {issued && (
         <div role="status" className="text-xs p-2 rounded bg-[var(--color-accent)] break-all">
           <span>Copy this link now — it won't be shown again. Expires {formatDateAu(issued.expiresAt)}.</span>
@@ -561,14 +465,14 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
           </button>
         </div>
       )}
-      {(generate.isError || revoke.isError) && (
-        <p role="alert" className="text-xs text-[var(--color-destructive)]">Something went wrong. Try again.</p>
-      )}
+      {linkError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{linkError}</p>}
       <ConfirmDialog
         open={confirmingRevoke}
         onCancel={() => setConfirmingRevoke(false)}
         onConfirm={async () => {
-          await revoke.mutateAsync({ participantId })
+          // A refusal closes the dialog too, so the message above is not left behind it.
+          setLinkError(null)
+          await revoke.mutateAsync({ participantId }).catch((err: unknown) => setLinkError(extractErrorMessage(err, 'Something went wrong. Try again.')))
           setConfirmingRevoke(false)
         }}
         title="Revoke caregiver link?"
@@ -579,4 +483,6 @@ function CaregiverLinkControl({ participantId }: { participantId: string }) {
       />
     </div>
   )
+
+  return { items, onSelect, panel }
 }

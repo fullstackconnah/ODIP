@@ -6,8 +6,12 @@
 // finish it over) and one APPROACHING, so both states can be seen without editing
 // anything. Every name and figure here is fictional.
 
+const { cents, approachingAt } = require('./mock-money.js')
+
 const round2 = (n) => Math.round(n * 100) / 100
 const sum = (rows) => round2(rows.reduce((total, r) => total + r.amount, 0))
+/** The sum of plain money figures (one of each period): `sum` is over rows with an `amount`, and given numbers it answered NaN, which the JSON carried as null. */
+const add = (values) => round2(values.reduce((total, value) => total + value, 0))
 /** A plain total of counts (the rows of `sum` carry an amount; a count does not). */
 const count = (numbers) => numbers.reduce((total, n) => total + n, 0)
 /** Trips that have started and have no claim yet: the server counts such a booking once, however many categories its price is split across. */
@@ -16,11 +20,12 @@ const startedTrips = (rows) => new Set(rows.filter((r) => r.kind === 'TripBookin
 const unpricedShifts = (rows) => rows.filter((r) => (r.notPricedKinds || []).length > 0)
 const unpricedReasons = (rows) => [...new Set(unpricedShifts(rows).flatMap((r) => r.notPricedKinds))].sort()
 
-/** The worst status that applies, in the server's own words and arithmetic (decimals, no rounding deciding it). */
+/** The worst status that applies, in the server's own words and arithmetic (whole cents, mock-money.js). */
 function statusOf(available, used, forecast, approachingPercent) {
-  if (used > available) return 'Over'
-  if (forecast > available) return 'ForecastOver'
-  if (available > 0 && used * 100 >= approachingPercent * available) return 'Approaching'
+  const [a, u, f] = [cents(available), cents(used), cents(forecast)]
+  if (u > a) return 'Over'
+  if (f > a) return 'ForecastOver'
+  if (approachingAt(used, available, approachingPercent) !== null) return 'Approaching'
   return 'OnTrack'
 }
 
@@ -56,8 +61,11 @@ const order = (rows) => [...rows].sort((a, b) => (
   a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.description).localeCompare(String(b.description))
 ))
 
-/** A participant's ledger for the plan: every pool, every period, with the carry chained and the plan total. */
-function computeLedger(plan, today, approachingPercent, items) {
+/**
+ * A participant's ledger for the plan: every pool, every period, with the carry chained and the plan total. `rejections` are the claims the NDIA has refused for want of funds (V17, V18, V27, V28;
+ * budget phase 2b): each speaks on the pool its lines belong to for as long as the funding period those lines fall in is the one running, and says nothing of money.
+ */
+function computeLedger(plan, today, approachingPercent, items, rejections = []) {
   const held = new Map()
   const notInAPool = []
   const outsideThePlan = []
@@ -96,10 +104,18 @@ function computeLedger(plan, today, approachingPercent, items) {
         rowCount: rows.length, rows: rows.slice(0, 200), ...f,
       }
     })
-    const limit = sum(periods.map((p) => p.limit))
-    const claimed = sum(periods.map((p) => p.claimed))
-    const pending = sum(periods.map((p) => p.pending))
-    const bookedAhead = sum(periods.map((p) => p.bookedAhead))
+    const limit = add(periods.map((p) => p.limit))
+    const claimed = add(periods.map((p) => p.claimed))
+    const pending = add(periods.map((p) => p.pending))
+    const bookedAhead = add(periods.map((p) => p.bookedAhead))
+    // The latest refusal of a claim whose lines belong to this pool and fall in the period that is running now.
+    const rejection = rejections
+      .filter((r) => {
+        const home = poolFor(plan, r.paceCategory, r.managementType)
+        const period = periods.find((p) => p.periodStart <= r.lineDate && r.lineDate <= p.periodEnd)
+        return home && home.id === pool.id && period && period.isCurrent
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0]
     return {
       id: pool.id, name: pool.name, kind: pool.kind, paceCategory: pool.paceCategory, managementType: pool.managementType, hasSetAside, periods,
       pastUnresolvedCount: count(periods.map((p) => p.pastUnresolvedCount)),
@@ -107,6 +123,7 @@ function computeLedger(plan, today, approachingPercent, items) {
       unpricedShiftCount: count(periods.map((p) => p.unpricedShiftCount)),
       // The plan total is the same sums against the sum of the limits.
       planTotal: figures(limit, 0, claimed, pending, bookedAhead, approachingPercent, count(periods.map((p) => p.unpricedTripDayCount))),
+      ...(rejection ? { ndiaRejection: { date: rejection.date, code: rejection.code, claimId: rejection.claimId, claimReference: rejection.claimReference } } : {}),
     }
   })
 
@@ -192,24 +209,26 @@ const demoItems = {
   ],
 }
 
-/** What the ledger endpoint answers for this participant. No plan that has started: 200, with no plan and no pools. */
+// The claims the NDIA has refused for want of funds in the demo (budget phase 2b), by plan. p-0004's Core (flexible) is ON TRACK by ODIP's own figures, and the NDIA has refused one of its
+// claims with V27 (not enough in the funding period): the Funding tab and the alerts say so, because the NDIA's portal shows a provider no budget and this is the only direct sign. The claim is
+// claim-0003 in server.js (its line was delivered on `lineDate`, in the period that is running).
+const demoRejections = {
+  'fplan-0002': [{ paceCategory: 4, managementType: 'PlanManaged', lineDate: '2026-10-02', date: '2026-10-08', code: 'V27', claimId: 'claim-0003', claimReference: 'TC-43000412-20261008' }],
+}
+
+/**
+ * What the ledger endpoint answers for this participant. No plan that has started: 200, with no plan and no pools. It also carries `nextPlanStart`, the first day of the soonest plan recorded for later
+ * whatever else the participant has (the server's ParticipantLedger.NextPlanStart): the mock's own list, alerts and agreement check read it to say "Plan starts {date}", and the screens ignore it.
+ */
 function ledgerFor(plansOf, participantId, today, approachingPercent) {
-  const plan = currentPlanOf(plansOf(participantId), today)
+  const plans = plansOf(participantId)
+  const plan = currentPlanOf(plans, today)
+  const later = plans.map((p) => p.planStart).filter((start) => start > today).sort()[0]
+  const next = later ? { nextPlanStart: later } : {}
   if (!plan) {
-    return { planIsCurrent: false, asOf: today, timeBasis: 'Australia/Sydney', approachingPercent, pools: [], notInARecordedPool: bucket([]), outsideThePlanDates: bucket([]) }
+    return { planIsCurrent: false, asOf: today, timeBasis: 'Australia/Sydney', approachingPercent, pools: [], notInARecordedPool: bucket([]), outsideThePlanDates: bucket([]), ...next }
   }
-  return computeLedger(plan, today, approachingPercent, demoItems[plan.id] || [])
+  return { ...computeLedger(plan, today, approachingPercent, demoItems[plan.id] || [], demoRejections[plan.id] || []), ...next }
 }
 
-/** One more page of one period's rows, for "show more" once the first 200 are on screen. */
-function rowsPage(ledger, poolId, periodId, skip, take) {
-  const pool = ledger.pools.find((p) => p.id === poolId)
-  if (!pool) return null
-  const period = pool.periods.find((p) => p.id === periodId)
-  if (!period) return null
-  const from = Math.max(0, skip || 0)
-  const count = Math.min(Math.max(1, take || 200), 500)
-  return { total: period.rowCount, skip: from, rows: period.rows.slice(from, from + count) }
-}
-
-module.exports = { ledgerFor, rowsPage, computeLedger, statusOf, figures, currentPlanOf, poolFor }
+module.exports = { ledgerFor, computeLedger, statusOf, figures, currentPlanOf, poolFor }

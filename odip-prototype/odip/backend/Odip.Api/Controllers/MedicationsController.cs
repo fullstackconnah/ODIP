@@ -73,9 +73,9 @@ public class MedicationsController : ControllerBase
     public async Task<ActionResult<ApiResponse<MedicationDetailDto>>> Create(
         Guid participantId, [FromBody] CreateMedicationDto dto, CancellationToken ct)
     {
-        // INTAKE-08: a draft participant can't have a medication record created against them —
+        // INTAKE-08: a draft whose services have not begun ("Begin services") can't have a medication record created against them —
         // reads the same as "not found" from the caller's side (mirrors the Rostering pattern).
-        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId && !p.IsDraft, ct);
+        var participant = await _db.Participants.Where(Participant.ServicesBegunRule).FirstOrDefaultAsync(p => p.Id == participantId, ct);
         if (participant == null) return NotFound(ApiResponse<MedicationDetailDto>.Fail("Participant not found"));
 
         var validationError = ValidateMedicationDto(
@@ -213,9 +213,11 @@ public class MedicationsController : ControllerBase
         if (status.HasValue) query = query.Where(m => m.Status == status.Value);
         if (!string.IsNullOrWhiteSpace(search))
         {
-            query = query.Where(m => m.Name.Contains(search)
-                || (m.Participant!.FirstName + " " + m.Participant.LastName).Contains(search)
-                || (m.Participant!.PreferredName != null && m.Participant.PreferredName.Contains(search)));
+            // Lower-cased both sides: Contains alone is a case-sensitive LIKE on Npgsql (as ParticipantQueries.SearchByName).
+            var term = search.Trim().ToLower();
+            query = query.Where(m => m.Name.ToLower().Contains(term)
+                || (m.Participant!.FirstName + " " + m.Participant.LastName).ToLower().Contains(term)
+                || (m.Participant!.PreferredName != null && m.Participant.PreferredName.ToLower().Contains(term)));
         }
 
         // Correctness fix: (Participant.LastName, Name) ties trivially — two different
@@ -243,6 +245,21 @@ public class MedicationsController : ControllerBase
             PageSize = pageSize,
         };
         return Ok(ApiResponse<PagedResult<MedicationListDto>>.Ok(result));
+    }
+
+    /// <summary>
+    /// The manager contact and state for the missed-medication guidance. Open to every role, because the support worker giving the dose is the one
+    /// who must call the manager; provider settings themselves stay Admin/Coordinator only, so this carries those two fields and nothing else.
+    /// </summary>
+    [HttpGet("medications/missed-guidance-contact")]
+    public async Task<ActionResult<ApiResponse<MissedMedicationContactDto>>> GetMissedGuidanceContact(CancellationToken ct)
+    {
+        var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        if (s == null) return Ok(ApiResponse<MissedMedicationContactDto?>.Ok(null));
+        return Ok(ApiResponse<MissedMedicationContactDto>.Ok(new MissedMedicationContactDto
+        {
+            ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone, State = s.State,
+        }));
     }
 
     // ── MAR (Medication Administration Record) ──────────────────────
@@ -385,7 +402,8 @@ public class MedicationsController : ControllerBase
         // buildAmendFields) shouldn't wipe out how that original instant should be displayed.
         admin.AdministeredAtTimeZone = dto.AdministeredAtTimeZone ?? admin.AdministeredAtTimeZone;
         admin.DoseGiven = dto.DoseGiven;
-        admin.WitnessName = dto.WitnessName;
+        // WitnessName mirrors the staff witness's name; only the legacy free-text witness is editable here, and a request that sends none leaves it alone.
+        if (admin.WitnessUserId is null && !string.IsNullOrWhiteSpace(dto.WitnessName)) admin.WitnessName = dto.WitnessName;
         admin.Reason = dto.Reason;
         admin.PrnReason = dto.PrnReason;
         admin.PrnOutcome = dto.PrnOutcome;

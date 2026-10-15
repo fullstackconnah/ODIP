@@ -53,14 +53,6 @@ export function useAvailableStaff(startDate: string | undefined, endDate: string
   })
 }
 
-export function useStaffAvailability(id: string | undefined) {
-  return useQuery({
-    queryKey: ['staff-availability', id],
-    queryFn: () => apiGet<StaffAvailabilityDto[]>(`/staff/${id}/availability`),
-    enabled: !!id,
-  })
-}
-
 export function useTripStaff(tripId: string | undefined) {
   return useQuery({
     queryKey: ['trip-staff', tripId],
@@ -85,6 +77,7 @@ export function useUpdateStaff() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['staff'] })
       qc.invalidateQueries({ queryKey: ['staff-detail', vars.id] })
+      qc.invalidateQueries({ queryKey: ['staff-overview', vars.id] })
     },
   })
 }
@@ -93,7 +86,10 @@ export function useDeleteStaff() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/staff/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['staff'] })
+      qc.invalidateQueries({ queryKey: ['staff-overview', id] })
+    },
   })
 }
 
@@ -160,8 +156,8 @@ export type StaffAvailabilityListFilters = { userId?: string; from?: string; to?
 
 /** GET /staff-availability?userId=&from=&to= — legacy StaffAvailability rows (LeaveApprovalsPage's
  * 'legacy' row kind), newest first. Shares the ['staff-availability', ...] query-key prefix with
- * useStaffAvailability(id) and the create/update/delete mutations below, so any of those
- * invalidating ['staff-availability'] also refreshes this list. */
+ * the create/update/delete mutations below, so any of those invalidating ['staff-availability']
+ * also refreshes this list. */
 export function useStaffAvailabilityRecords(filters: StaffAvailabilityListFilters = {}, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['staff-availability', filters],

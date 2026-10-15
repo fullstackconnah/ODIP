@@ -95,6 +95,8 @@
     --control-h: 44px;
     --control-h-sm: 36px;
     --row-h: 48px;
+    /* Roster day columns: wide enough for "Needs staff" and a name beside the grip's 44px hit area and the menu (roster board, finish review fix 4; +26px for the grip, post-merge N6). */
+    --roster-day-col-min: 194px;
     --table-head-h: 40px;
     --cell-px: 12px;
     --card-pad: 16px;
@@ -198,6 +200,33 @@
     display: block;
     margin-bottom: 2px;
   }
+  /*
+   * A card whose columns opt in with DataTable `mobile` (title, status, meta): those cells carry no caps label, and two zero-height
+   * breaks (the row's own ::before and ::after, ordered around the meta cells) put the title line first, then the meta values as their
+   * own wrapping line, then the labelled fields. The meta values are told apart by a wider gap, not a dot: a dot starts the next line
+   * wherever a value wraps. Row gaps become top margins, so the meta line sits close under the title while the fields keep their spacing.
+   */
+  .mobile-card-table tbody td[data-card]::before {
+    content: none;
+  }
+  .mobile-card-table tbody td[data-card='meta'] {
+    margin-right: 0.25rem;
+  }
+  .mobile-card-table tbody tr:has(> td[data-card]) {
+    row-gap: 0;
+  }
+  .mobile-card-table tbody tr:has(> td[data-card])::before,
+  .mobile-card-table tbody tr:has(> td[data-card])::after {
+    content: '';
+    order: -1;
+    flex-basis: 100%;
+  }
+  .mobile-card-table tbody tr:has(> td[data-card]) > td:not([data-card='primary'], [data-card='status']) {
+    margin-top: 0.5rem;
+  }
+  .mobile-card-table tbody tr:has(> td[data-card]) > td[data-card='meta'] {
+    margin-top: 0.25rem;
+  }
   .mobile-card-table .divide-y > * + * {
     border-top: none;
   }
@@ -211,6 +240,9 @@
 @media screen and (max-width: 767px) and (pointer: coarse) {
   .mobile-card-table tbody tr {
     gap: 0.75rem;
+  }
+  .mobile-card-table tbody tr:has(> td[data-card]) > td:not([data-card='primary'], [data-card='status'], [data-card='meta']) {
+    margin-top: 0.75rem;
   }
 }
 

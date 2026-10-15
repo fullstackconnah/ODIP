@@ -1,3 +1,4 @@
+import { labelClass } from '@/components/FormField'
 import { modalGrid, modalSpan } from '@/lib/formGrid'
 import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
@@ -13,6 +14,9 @@ import {
 import type { EventTemplateDto, TripListDto } from '@/api/types'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { SlideOver } from '@/components/SlideOver'
+import { extractErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 // ---------------------------------------------------------------------------
 // Schema & types
@@ -91,7 +95,7 @@ export default function TemplateFormPanel({
     reset,
     getValues,
     formState: { errors, isSubmitting, isDirty },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  } = useForm({ resolver: zodResolver(schema) })
 
   // Populate form when panel opens
   useEffect(() => {
@@ -162,11 +166,7 @@ export default function TemplateFormPanel({
         onClose()
       }, 1500)
     } catch (err: any) {
-      setError(
-        err?.response?.data?.errors?.[0] ||
-          err?.response?.data?.message ||
-          'Failed to save template.',
-      )
+      setError(extractErrorMessage(err, 'Failed to save template.'))
     }
   }
 
@@ -183,7 +183,6 @@ export default function TemplateFormPanel({
 
   const inputClass =
     'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
-  const labelClass = 'block text-xs font-medium text-[var(--color-muted-foreground)] mb-1'
 
   const isBusy =
     isSubmitting || createMutation.isPending || updateMutation.isPending || deactivateMutation.isPending
@@ -199,7 +198,7 @@ export default function TemplateFormPanel({
     <SlideOver
       open
       onClose={onClose}
-      title={isEdit ? 'Edit Template' : 'New Template'}
+      title={isEdit ? 'Edit template' : 'New template'}
       dirty={dirty}
       footerClassName="py-3 space-y-3"
       footer={
@@ -242,21 +241,12 @@ export default function TemplateFormPanel({
 
           {/* Save / Cancel */}
           <div className="flex items-center gap-3 justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-            >
+            <Button variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit(onSubmit)}
-              disabled={isBusy}
-              className="inline-flex items-center justify-center h-[var(--control-h)] px-5 bg-[var(--color-primary)] text-white rounded-[var(--radius-md)] text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-all"
-            >
-              {isBusy ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Template'}
-            </button>
+            </Button>
+            <Button onClick={handleSubmit(onSubmit)} disabled={isBusy}>
+              {isBusy ? 'Saving…' : isEdit ? 'Save' : 'Create template'}
+            </Button>
           </div>
         </>
       }
@@ -280,9 +270,9 @@ export default function TemplateFormPanel({
           </div>
         )}
 
-        {/* Event Name */}
+        {/* Event name */}
         <div className={modalSpan.full}>
-          <label htmlFor="eventName" className={labelClass}>Event Name *</label>
+          <label htmlFor="eventName" className={labelClass}>Event name *</label>
           <input
             id="eventName"
             {...register('eventName')}
@@ -296,7 +286,7 @@ export default function TemplateFormPanel({
 
         {/* Event Code */}
         <div className={modalSpan.half}>
-          <label htmlFor="eventCode" className={labelClass}>Event Code *</label>
+          <label htmlFor="eventCode" className={labelClass}>Event code *</label>
           <input
             id="eventCode"
             {...register('eventCode')}
@@ -311,7 +301,7 @@ export default function TemplateFormPanel({
         {/* Destination + Region */}
         <div className="contents">
           <div>
-            <label htmlFor="defaultDestination" className={labelClass}>Default Destination</label>
+            <label htmlFor="defaultDestination" className={labelClass}>Default destination</label>
             <input
               id="defaultDestination"
               {...register('defaultDestination')}
@@ -320,7 +310,7 @@ export default function TemplateFormPanel({
             />
           </div>
           <div>
-            <label htmlFor="defaultRegion" className={labelClass}>Default Region</label>
+            <label htmlFor="defaultRegion" className={labelClass}>Default region</label>
             <input
               id="defaultRegion"
               {...register('defaultRegion')}
@@ -344,7 +334,7 @@ export default function TemplateFormPanel({
             />
           </div>
           <div>
-            <label htmlFor="preferredTimeOfYear" className={labelClass}>Preferred Time of Year</label>
+            <label htmlFor="preferredTimeOfYear" className={labelClass}>Preferred time of year</label>
             <input
               id="preferredTimeOfYear"
               {...register('preferredTimeOfYear')}
@@ -356,7 +346,7 @@ export default function TemplateFormPanel({
 
         {/* Typical Activities */}
         <div className={modalSpan.full}>
-          <label htmlFor="typicalActivities" className={labelClass}>Typical Activities</label>
+          <label htmlFor="typicalActivities" className={labelClass}>Typical activities</label>
           <textarea
             id="typicalActivities"
             {...register('typicalActivities')}
@@ -368,7 +358,7 @@ export default function TemplateFormPanel({
 
         {/* Accessibility Notes */}
         <div className={modalSpan.full}>
-          <label htmlFor="accessibilityNotes" className={labelClass}>Accessibility Notes</label>
+          <label htmlFor="accessibilityNotes" className={labelClass}>Accessibility notes</label>
           <textarea
             id="accessibilityNotes"
             {...register('accessibilityNotes')}
@@ -390,13 +380,13 @@ export default function TemplateFormPanel({
             ) : (
               <ChevronRight className="w-4 h-4" />
             )}
-            Accommodation Notes
+            Accommodation notes
           </button>
 
           {accessibilityExpanded && (
             <div className="mt-3 flex flex-col gap-[var(--field-gap-y)] pl-5 border-l border-[var(--color-border)]">
               <div>
-                <label htmlFor="fullyModifiedAccommodationNotes" className={labelClass}>Fully Modified Accommodation</label>
+                <label htmlFor="fullyModifiedAccommodationNotes" className={labelClass}>Fully modified accommodation</label>
                 <textarea
                   id="fullyModifiedAccommodationNotes"
                   {...register('fullyModifiedAccommodationNotes')}
@@ -405,7 +395,7 @@ export default function TemplateFormPanel({
                 />
               </div>
               <div>
-                <label htmlFor="semiModifiedAccommodationNotes" className={labelClass}>Semi Modified Accommodation</label>
+                <label htmlFor="semiModifiedAccommodationNotes" className={labelClass}>Semi-modified accommodation</label>
                 <textarea
                   id="semiModifiedAccommodationNotes"
                   {...register('semiModifiedAccommodationNotes')}
@@ -414,7 +404,7 @@ export default function TemplateFormPanel({
                 />
               </div>
               <div>
-                <label htmlFor="wheelchairAccessNotes" className={labelClass}>Wheelchair Access Notes</label>
+                <label htmlFor="wheelchairAccessNotes" className={labelClass}>Wheelchair access notes</label>
                 <textarea
                   id="wheelchairAccessNotes"
                   {...register('wheelchairAccessNotes')}
@@ -435,9 +425,7 @@ export default function TemplateFormPanel({
 
         {/* Error message */}
         {error && (
-          <div className="sm:col-span-2 bg-[var(--color-error-container)] border border-[var(--color-error-container)] rounded-[var(--radius-md)] px-4 py-3 text-sm text-[var(--color-on-error-container)]">
-            {error}
-          </div>
+          <Callout tone="error" className="sm:col-span-2">{error}</Callout>
         )}
       </form>
     </SlideOver>

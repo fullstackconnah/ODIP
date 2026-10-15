@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { NoticesRegion } from './NoticesRegion'
 import type { Notice } from '@/hooks/useNotices'
 
@@ -152,5 +153,28 @@ describe('NoticesRegion: where focus goes when a notice is dismissed', () => {
     await u.click(dismissOf('Cat Three'))
 
     expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+})
+
+const withLink = (o: Partial<Notice> = {}): Notice => ({ id: 1, tone: 'success', title: 'Sam Lee', message: 'Leave approved. It overlaps 2 shifts, and each one has a cover task.', ...o })
+const renderInRouter = (list: Notice[]) =>
+  render(<MemoryRouter><NoticesRegion notices={list} onDismiss={vi.fn()} /></MemoryRouter>)
+
+describe('NoticesRegion — a notice with a next step', () => {
+  it('draws the link after the message as a secondary button, before Dismiss', () => {
+    renderInRouter([withLink({ link: { label: 'Open roster', to: '/rostering' } })])
+
+    const region = screen.getByRole('status')
+    const link = within(region).getByRole('link', { name: 'Open roster' })
+    expect(link).toHaveAttribute('href', '/rostering')
+    const dismiss = within(region).getByRole('button', { name: 'Dismiss notice about Sam Lee' })
+    expect(link.compareDocumentPosition(dismiss) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('draws no link for a notice without one, as before', () => {
+    renderInRouter([withLink()])
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText('Leave approved. It overlaps 2 shifts, and each one has a cover task.')).toBeInTheDocument()
   })
 })

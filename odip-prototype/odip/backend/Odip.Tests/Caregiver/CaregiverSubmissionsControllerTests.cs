@@ -137,6 +137,23 @@ public class CaregiverSubmissionsControllerTests
     }
 
     [Fact]
+    public async Task List_WithParticipantId_ReturnsOnlyThatParticipantsRows_StillTenantScoped()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var mine = SeedParticipant(db, tenantId);
+        SeedSubmission(db, tenantId, mine.Id, CaregiverSubmissionStatus.Draft);
+        SeedSubmission(db, tenantId, SeedParticipant(db, tenantId).Id, CaregiverSubmissionStatus.Draft);
+        // Another organisation's row for the same participant id must not appear either.
+        SeedSubmission(db, Guid.NewGuid(), mine.Id, CaregiverSubmissionStatus.Draft);
+
+        var result = await MakeController(db, tenantId, Guid.NewGuid()).List(CaregiverSubmissionStatus.Draft, CancellationToken.None, mine.Id);
+
+        var body = Assert.IsType<ApiResponse<List<CaregiverSubmissionListItemDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var row = Assert.Single(body.Data!);
+        Assert.Equal(mine.Id, row.ParticipantId);
+    }
+
+    [Fact]
     public async Task Accept_AppliesPayloadViaPatchAndMarksAccepted()
     {
         var (db, tenantId) = CreateTenantDb();

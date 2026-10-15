@@ -12,6 +12,7 @@ import type { IncidentWitnessDto } from '@/api/types/incidents'
 import type { IncidentFormData } from '../incidentFormSchema'
 import type { Tone } from '@/lib/tone'
 import { X } from 'lucide-react'
+import { Button } from '@/components/Button'
 
 export type WitnessesStepProps = {
   control: Control<IncidentFormData>
@@ -165,14 +166,9 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
             </FormField>
           )}
 
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={mode === 'staff' ? !staffId : !externalName.trim()}
-            className="h-[var(--control-h)] px-4 rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-white text-sm font-medium disabled:opacity-50"
-          >
+          <Button onClick={handleAdd} disabled={mode === 'staff' ? !staffId : !externalName.trim()}>
             Add
-          </button>
+          </Button>
         </div>
 
         <DataTable

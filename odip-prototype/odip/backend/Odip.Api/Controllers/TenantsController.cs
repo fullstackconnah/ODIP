@@ -119,6 +119,8 @@ public class TenantsController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
         _db.Tenants.Add(tenant);
+        // The activity library is per organisation and nothing in the app writes one, so the new organisation starts with the generic activities instead of an empty picker.
+        _db.Activities.AddRange(StarterActivities.For(tenant.Id));
         await _db.SaveChangesAsync();
 
         if (dto.ProviderSettings is { } ps)

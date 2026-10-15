@@ -27,7 +27,10 @@ public record FinishShiftDto
     [Range(-180.0, 180.0)]
     public decimal? Longitude { get; init; }
     public bool GeolocationDeclined { get; init; }
-    /// <summary>Supplied only on the manual-start path — Start was skipped, so Finish supplies the real ActualStart.</summary>
+    /// <summary>
+    /// On the manual-start path (a Published shift), the real ActualStart. While the shift is in progress, the worker's corrected start:
+    /// within 15 minutes of the stamped start (compared to the minute), with a reason. Null keeps the stamp.
+    /// </summary>
     public DateTime? ActualStart { get; init; }
 
     /// <summary>
@@ -45,6 +48,20 @@ public record FinishShiftDto
     /// 409 SHIFT_NOTE_REQUIRED, unchanged). Stored on the completion only when there really are no notes.
     /// </summary>
     public bool NothingToNote { get; init; }
+
+    /// <summary>The worker's corrected end, a UTC instant: at most 15 minutes before the Finish instant (compared to the minute), and no more than
+    /// the 5-minute clock-skew allowance after it. Null keeps the Finish instant.</summary>
+    public DateTime? ActualEnd { get; init; }
+
+    /// <summary>Why either time moved: required when one did; at most 500 characters (checked by the action, with a code).</summary>
+    public string? TimeAdjustmentReason { get; init; }
+
+    /// <summary>Kilometres driven with the participant, 0 to 2,000; stored to one decimal place. Null when not given. A double, not a decimal,
+    /// so any number in the body binds and an out-of-range one gets the action's coded refusal, never an uncoded model-binding 400.</summary>
+    public double? Kilometres { get; init; }
+
+    /// <summary>"Anything to report?": true, false, or null when skipped. Informational only.</summary>
+    public bool? AnythingToReport { get; init; }
 }
 
 /// <summary>
@@ -111,7 +128,20 @@ public record ShiftCompletionDto(
     /// <summary>The worker confirmed "nothing to hand over".</summary>
     bool NothingToHandOver,
     /// <summary>The worker confirmed "nothing to note" instead of writing a shift note.</summary>
-    bool NothingToNoteConfirmed);
+    bool NothingToNoteConfirmed,
+    // My shifts redesign: what the worker confirmed at Finish (owner decisions 2 to 4).
+    /// <summary>True when the worker moved either actual time at Finish; the originals below then hold the stamps.</summary>
+    bool TimesAdjusted,
+    /// <summary>The server's start stamp when the worker moved the start; null otherwise.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? OriginalActualStart,
+    /// <summary>The Finish instant when the worker moved the end; null otherwise.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? OriginalActualEnd,
+    /// <summary>Why the worker moved a time; null when nothing moved.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? TimeAdjustmentReason,
+    /// <summary>Kilometres driven with the participant, one decimal place; null when not given.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] decimal? Kilometres,
+    /// <summary>"Anything to report?" at Finish: true, false, or null when skipped.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? AnythingToReport);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
@@ -172,7 +202,12 @@ public record CompletionQueueItemDto(
     /// <summary>True when the worker never pressed Start and supplied the start time when finishing (the manual-start path). That path skips the
     /// dose checklist (a Published shift has no route to record a dose), so the queue can flag such a row for a closer look without opening it;
     /// the same flag is on <c>ShiftCompletionDto.startWasManual</c>.</summary>
-    bool StartWasManual);
+    bool StartWasManual,
+    /// <summary>True when the worker moved the start or end at Finish, so the queue can say "Times adjusted by the worker" without opening the row.</summary>
+    bool TimesAdjusted,
+    /// <summary>How many active incidents are linked to the shift: the rows the completion review's <c>incidents</c> list shows (ShiftId and IsActive), so a row the
+    /// queue calls clean is one whose review lists no incident. No default value: an unknown count must never read as "no incident".</summary>
+    int IncidentCount);
 
 public record ReturnCompletionDto
 {

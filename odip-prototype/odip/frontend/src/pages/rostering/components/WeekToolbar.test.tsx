@@ -130,3 +130,53 @@ describe('WeekToolbar week navigation', () => {
     expect(screen.getByRole('button', { name: 'New shift' })).toHaveClass('h-[var(--control-h)]')
   })
 })
+
+describe('WeekToolbar — the exceptions button', () => {
+  it('is not drawn while there are no exceptions, and is drawn with its count when there are', () => {
+    const { unmount } = renderToolbar({ exceptionsCount: 0 })
+    expect(screen.queryByRole('button', { name: /exception/ })).not.toBeInTheDocument()
+    unmount()
+    renderToolbar({ exceptionsCount: 1 })
+    expect(screen.getByRole('button', { name: '1 exception' })).toBeInTheDocument()
+  })
+})
+
+describe('WeekToolbar drafts badge and Publish week', () => {
+  it('counts the week’s drafts, and offers Publish week as the one primary button', async () => {
+    const user = userEvent.setup()
+    const onPublishWeek = vi.fn()
+    renderToolbar({ draftCount: 14, onPublishWeek })
+
+    expect(screen.getByText('14 drafts')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Publish week' }))
+    expect(onPublishWeek).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /New shift/ })).not.toHaveClass('bg-[var(--color-primary)]')
+  })
+
+  it('says "All published" when nothing is left in draft, with no Publish week and New shift primary again', () => {
+    renderToolbar({ draftCount: 0, onPublishWeek: vi.fn() })
+    expect(screen.getByText('All published')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /New shift/ })).toHaveClass('bg-[var(--color-primary)]')
+  })
+
+  it('shows no badge for an empty week, and no Publish week to a reader', () => {
+    const { unmount } = renderToolbar({ draftCount: null, onPublishWeek: vi.fn() })
+    expect(screen.queryByText(/drafts|All published/)).not.toBeInTheDocument()
+    unmount()
+    renderToolbar({ draftCount: 3, onPublishWeek: vi.fn(), canWrite: false })
+    expect(screen.getByText('3 drafts')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+  })
+})
+
+describe('WeekToolbar at phone width (finish review)', () => {
+  it('keeps the drafts badge, the week range and "This week" each on one line, and wraps the row between them instead', () => {
+    renderToolbar({ draftCount: 4, onPublishWeek: vi.fn() })
+    const badge = screen.getByText('4 drafts')
+    expect(badge).toHaveClass('whitespace-nowrap', 'shrink-0')
+    expect(screen.getByRole('heading', { name: /Aug/ })).toHaveClass('whitespace-nowrap')
+    expect(screen.getByRole('button', { name: 'This week' })).toHaveClass('whitespace-nowrap')
+    expect(badge.parentElement).toHaveClass('flex-wrap')
+  })
+})

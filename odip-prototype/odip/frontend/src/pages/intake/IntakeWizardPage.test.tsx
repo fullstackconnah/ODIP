@@ -122,6 +122,13 @@ afterEach(() => {
 })
 
 describe('IntakeWizardPage', () => {
+  // Its own h1 shell, not a PageHeader, so it names the tab itself (UI standard 6).
+  it('names the browser tab after its heading', () => {
+    renderPage()
+    expect(screen.getByRole('heading', { level: 1, name: 'Intake' })).toBeInTheDocument()
+    expect(document.title).toBe('Intake — Odip')
+  })
+
   it('renders the create wizard with no profile-only identity fields and enough focus clearance for every fixed and true-mobile narrow viewport', () => {
     renderPage()
     expect(screen.getByText('Step 1 of 9')).toBeVisible()
@@ -283,9 +290,47 @@ describe('IntakeWizardPage', () => {
     await user.click(screen.getByRole('button', { name: /save as draft/i }))
     expect(mockCreate).toHaveBeenCalledTimes(1)
     expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({ isDraft: true, completeIntake: false }))
-    // "Save as draft" is unchanged: it lands on the participant's detail page, not the Onboarding table.
-    expect(await screen.findByText(/participant detail/i)).toBeInTheDocument()
-    expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
+    // NAV F2: a saved draft is listed on the Enquiries tab (as a Draft intake row), so that is where Save as draft goes.
+    expect(await screen.findByText('Participants list')).toBeInTheDocument()
+    expect(screen.getByTestId('arrival-search')).toHaveTextContent('?tab=enquiries')
+  })
+
+  it('saves a resumed draft (edit mode) and lands on the Enquiries tab too', async () => {
+    const user = userEvent.setup()
+    mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
+    mockSave.mockResolvedValue({ success: true, data: { id: 'draft-1', fullName: 'Jamie Rivers' } })
+    renderPage('/participants/draft-1/intake')
+    await user.click(screen.getByRole('button', { name: /save as draft/i }))
+    expect(await screen.findByText('Participants list')).toBeInTheDocument()
+    expect(screen.getByTestId('arrival-search')).toHaveTextContent('?tab=enquiries')
+  })
+
+  it('NAV F5: completing an intake opened from the onboarding checklist returns to that checklist, with the arrival notice', async () => {
+    const user = userEvent.setup()
+    mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
+    mockSave.mockResolvedValue({ success: true, data: { id: 'draft-1', fullName: 'Jamie Rivers' } })
+    __testHooks.reset()
+    __testHooks.recordCurrentPath('/onboarding/draft-1')
+    __testHooks.recordCurrentPath('/participants/draft-1/intake')
+    function Checklist() {
+      const { pathname, state } = useLocation()
+      return <div>Checklist<span data-testid="checklist-at">{pathname}</span><span data-testid="checklist-state">{JSON.stringify(state)}</span></div>
+    }
+    const router = createMemoryRouter([
+      { path: '/participants/:id/intake', element: <><Tracker /><IntakeWizardPage /></> },
+      { path: '/onboarding/:id', element: <Checklist /> },
+      { path: '/participants', element: <ParticipantsArrival /> },
+    ], { initialEntries: ['/participants/draft-1/intake'] })
+    render(<RouterProvider router={router} />)
+    for (let i = 0; i < 8; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/review/i)
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+
+    expect(await screen.findByTestId('checklist-at')).toHaveTextContent('/onboarding/draft-1')
+    expect(JSON.parse(screen.getByTestId('checklist-state').textContent!)).toEqual({
+      intakeComplete: { participantId: 'draft-1', name: 'Jamie Rivers' },
+    })
+    __testHooks.reset()
   })
 
   it('keeps Intake field ownership exact: every Intake field belongs to one step and no Profile field does', () => {

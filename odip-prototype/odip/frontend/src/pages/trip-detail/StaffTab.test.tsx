@@ -20,7 +20,6 @@ const { mockCreateMutate, mockUpdateMutate, mockCheckMutate, mockGetRosterFindin
 // StaffAssignModal.test.tsx makes for its own live-check tests).
 vi.mock('@/api/hooks', () => ({
   useUpdateStaffAssignment: () => ({ mutate: mockUpdateMutate, isPending: false, isError: false }),
-  useDeleteStaffAssignment: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCreateStaffAssignment: () => ({ mutate: mockCreateMutate, isPending: false, isError: false }),
   useCheckStaffAssignment: () => ({ mutate: mockCheckMutate }),
   getRosterFindings: mockGetRosterFindings,
@@ -31,7 +30,7 @@ vi.mock('@/api/hooks', () => ({
   useAvailableStaff: mockUseAvailableStaff,
 }))
 
-const trip = { id: 'trip-1', startDate: '2026-09-01T00:00:00Z', endDate: '2026-09-05T00:00:00Z' } as TripDetailDto
+const trip = { id: 'trip-1', startDate: '2026-09-01T00:00:00Z', endDate: '2026-09-05T00:00:00Z', staffRequired: null, calculatedStaffRequired: 0 } as TripDetailDto
 
 beforeEach(() => {
   mockCreateMutate.mockReset()
@@ -47,7 +46,7 @@ beforeEach(() => {
 })
 
 function openAddStaffModal() {
-  render(<StaffTab tripId="trip-1" trip={trip} staff={[]} bookings={[]} canWrite />)
+  render(<StaffTab tripId="trip-1" trip={trip} staff={[]} canWrite />)
   return userEvent.setup()
 }
 
@@ -98,7 +97,7 @@ describe('StaffTab — acknowledged-conflict marker (trip-side parity)', () => {
       hasConflict: true, overrideReason: 'Covering a last-minute shortfall.', acknowledgedFindingCodes: 'STAFF_ON_LEAVE',
     } as StaffAssignmentDto
 
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRow]} canWrite />)
 
     expect(screen.getByTitle('Overridden: Covering a last-minute shortfall.')).toBeInTheDocument()
   })
@@ -112,7 +111,7 @@ describe('StaffTab — acknowledged-conflict marker (trip-side parity)', () => {
       hasConflict: true, overrideReason: null, acknowledgedFindingCodes: null,
     } as StaffAssignmentDto
 
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRow]} canWrite />)
 
     expect(screen.getByTitle('Conflict acknowledged')).toBeInTheDocument()
   })
@@ -132,7 +131,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
       onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: "Alex Rivera's approved leave covers this window — cannot roster without a reason.", requiresReason: true }])
     })
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
 
@@ -148,11 +147,11 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
       .mockImplementationOnce((_vars, { onSuccess }) => {
         onSuccess([])
       })
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByText('Worker screening expired.')
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 
     fireEvent.change(screen.getByDisplayValue('2026-09-10'), { target: { value: '2026-09-15' } })
 
@@ -161,7 +160,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
       expect.objectContaining({ assignmentStart: '2026-09-15' }),
       expect.anything(),
     )
-    await waitFor(() => expect(screen.getByRole('button', { name: /save changes/i })).not.toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled())
   })
 
   it('requires a non-empty override reason before submitting when a finding requires one', async () => {
@@ -169,7 +168,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
       onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap', requiresReason: true }])
     })
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByText('Leave overlap')
@@ -185,7 +184,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     mockCheckMutate.mockImplementation((_vars, { onSuccess }) => {
       onSuccess([{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap', requiresReason: true }])
     })
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByText('Leave overlap')
@@ -213,7 +212,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
       ...editableStaffRow,
       overrideReason: 'Covering a last-minute shortfall.',
     } as StaffAssignmentDto
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
 
@@ -229,11 +228,11 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
       ...editableStaffRow,
       overrideReason: 'Covering a last-minute shortfall.',
     } as StaffAssignmentDto
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[staffRowWithReason]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     await screen.findByDisplayValue('Covering a last-minute shortfall.')
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(mockUpdateMutate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -250,7 +249,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     const serverFindings = [{ code: 'STAFF_ON_LEAVE', severity: 'Warning', message: 'Leave overlap (server)', requiresReason: true }]
     mockGetRosterFindings.mockReturnValue(serverFindings)
     mockUpdateMutate.mockImplementation((_vars, { onError }) => onError(new Error('422')))
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[editableStaffRow]} canWrite />)
 
     await user.click(screen.getByTitle('Edit assignment'))
     // Wait for the 400ms-debounced live dry-run to fire before saving — same guard the add-modal
@@ -258,7 +257,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     // (setEditFindings([])) can land AFTER the save's onError sets the server findings, wiping
     // them right back out — a real race that only showed up in a slower (deploy-image) container.
     await waitFor(() => expect(mockCheckMutate).toHaveBeenCalled())
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
     expect(screen.queryByText(/Failed to update assignment/)).toBeNull()
@@ -359,9 +358,8 @@ describe('StaffTab — add modal live conflict gate (trip-side parity)', () => {
   })
 })
 
-// Density polish (touch): the Edit assignment / Remove from trip icon buttons were 22px on touch. They take the shared
-// TAP_ICON_SQUARE (22px on a mouse as before; the 36px --control-h-sm square with a 44px hit area on touch), spaced by the
-// row's 8px gap so the pads touch and never overlap.
+// Density polish (touch): the Edit assignment / Remove from trip icon buttons are the house Button iconOnly (the 24px --control-h-sm
+// square on a mouse, 36px with a 44px TAP_AREA pad on touch), spaced by the row's 8px gap so the pads touch and never overlap.
 describe('StaffTab — touch targets in the row actions', () => {
   const row = {
     id: 'assign-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
@@ -371,22 +369,100 @@ describe('StaffTab — touch targets in the row actions', () => {
     hasConflict: false, overrideReason: null, acknowledgedFindingCodes: null,
   } as StaffAssignmentDto
 
-  it('gives Edit assignment and Remove from trip the 44px touch shape without changing the mouse look', () => {
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} bookings={[]} canWrite />)
+  it('makes Edit assignment and Remove from trip the house icon button, named for the row', () => {
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
 
     for (const title of ['Edit assignment', 'Remove from trip']) {
       const button = screen.getByTitle(title)
       expect(button, title).toHaveClass(...TAP_AREA.split(' '))
-      expect(button, title).toHaveClass('pointer-coarse:inline-flex', 'pointer-coarse:size-[var(--control-h-sm)]', 'pointer-coarse:items-center', 'pointer-coarse:justify-center', 'pointer-coarse:p-0')
-      expect(button, title).toHaveClass('p-1', 'rounded', 'transition-colors')
+      expect(button, title).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0', 'shrink-0')
+      // Every row has the same two, so each name says whose assignment it is.
+      expect(button, title).toHaveAccessibleName(`${title}: Alex Rivera`)
     }
   })
 
   it('keeps the two buttons 8px apart in one centred row', () => {
-    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} bookings={[]} canWrite />)
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
 
     const cluster = screen.getByTitle('Edit assignment').parentElement as HTMLElement
     expect(cluster).toHaveClass('flex', 'items-center', 'justify-center', 'gap-2')
     expect(cluster).toContainElement(screen.getByTitle('Remove from trip'))
+  })
+})
+
+// The staffing summary shows the figure the server sends as staffRequired (TripInstance.StaffRequired, the one the schedule screen uses). The tab used to sum the
+// bookings' override ratios itself: a booking with no override counted 0 (the server uses the participant's ratio, else 1:1) and ratio Other counted 0 (the
+// server counts 1), so a trip that needed 3 staff read a green "0/0 staff".
+describe('StaffTab — the staffing summary shows what the server says the trip needs', () => {
+  const tripNeeding = (calculatedStaffRequired: number, staffRequired: number | null) => ({ ...trip, calculatedStaffRequired, staffRequired }) as TripDetailDto
+
+  it('shows 0 / 3 and "need 3 more" for a trip the server says needs 3, not a green 0/0', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(3, 3)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0 / 3 staff')).toBeInTheDocument()
+    expect(screen.getByText(/need 3 more/i)).toBeInTheDocument()
+  })
+
+  it('shows the whole-staff figure the server sends, with the exact figure beside it, and does not work the whole figure out again', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(2.5, 4)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0 / 4 staff')).toBeInTheDocument()
+    expect(screen.getByText(/2\.50 required from ratios/)).toBeInTheDocument()
+  })
+
+  it('shows the figure the server sends while no booking has set one (the trip\'s own minimum)', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(0, 2)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0 / 2 staff')).toBeInTheDocument()
+  })
+
+  it('shows ? when the server has no figure yet (nothing booked and no minimum), as the schedule screen does, not a 0 that reads as fully staffed', () => {
+    render(<StaffTab tripId="trip-1" trip={tripNeeding(0, null)} staff={[]} canWrite />)
+
+    expect(screen.getByText('0 / ? staff')).toBeInTheDocument()
+  })
+})
+
+describe('StaffTab — dialogs', () => {
+  const row = {
+    id: 'assign-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
+    staffId: 'staff-1', staffName: 'Alex Rivera', assignmentRole: 'Support Worker',
+    assignmentStart: '2026-09-10', assignmentEnd: '2026-09-12', status: 'Confirmed',
+    isDriver: false, sleepoverType: 'None', shiftNotes: null,
+    hasConflict: false, overrideReason: null, acknowledgedFindingCodes: null,
+  } as StaffAssignmentDto
+
+  // Each dialog is named, Escape closes it, and focus goes back to the control that opened it.
+  it.each([
+    ['Add Staff to Trip', () => screen.getByRole('button', { name: /add staff/i }), 'Add Staff to Trip'],
+    ['Edit Assignment', () => screen.getByTitle('Edit assignment'), 'Edit Assignment — Alex Rivera'],
+  ])('%s: Escape closes it and focus returns to the opener', async (_label, opener, name) => {
+    const user = userEvent.setup()
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
+    const control = opener()
+    await user.click(control)
+    expect(screen.getByRole('dialog', { name })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(control).toHaveFocus()
+  })
+})
+
+describe('StaffTab — Remove Staff offers only what the server does', () => {
+  it('has Cancel assignment (keeps the record) and no "Delete permanently", which the server turns into the same cancellation', async () => {
+    const user = userEvent.setup()
+    const row = {
+      id: 'assign-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break',
+      staffId: 'staff-1', staffName: 'Alex Rivera', assignmentRole: 'Support Worker',
+      assignmentStart: '2026-09-10', assignmentEnd: '2026-09-12', status: 'Confirmed',
+      isDriver: false, sleepoverType: 'None', shiftNotes: null,
+      hasConflict: false, overrideReason: null, acknowledgedFindingCodes: null,
+    } as StaffAssignmentDto
+    render(<StaffTab tripId="trip-1" trip={trip} staff={[row]} canWrite />)
+    await user.click(screen.getByTitle('Remove from trip'))
+    expect(screen.getByRole('button', { name: /Cancel assignment/ })).toBeInTheDocument()
+    expect(screen.queryByText(/Delete permanently/)).not.toBeInTheDocument()
   })
 })

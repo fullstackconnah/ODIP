@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react'
 import { Button } from '@/components/Button'
+import { useBackTarget } from '@/hooks/useBackNavigation'
 import type { WizardSecondaryAction } from './types'
 
 export type WizardNavFooterProps = {
@@ -10,10 +12,17 @@ export type WizardNavFooterProps = {
    * ("Save as draft" and PF-1's "Save changes" are exact complements), but the shell doesn't
    * enforce that; it just maps over whatever it's given. */
   secondaryActions: WizardSecondaryAction[]
-  /** Destination for the Review step's "Cancel" link. */
+  /** Where "Cancel" goes (the Review step's, and the first step's, where Back would be) when there is no in-app history. */
   cancelTo: string
+  /**
+   * Default `true`, like `BackButton`: Cancel returns to the previous in-app screen, the same place as the page's header Back, and
+   * `cancelTo` is the fallback. `false` pins Cancel to `cancelTo`, for a wizard whose header Back is pinned.
+   */
+  history?: boolean
   submitLabel: string
   isSubmitting: boolean
+  /** Shown between the actions (above them on a phone): the agreement wizard's running total. */
+  summary?: ReactNode
 }
 
 /**
@@ -33,14 +42,23 @@ export function WizardNavFooter({
   isReviewStep,
   secondaryActions,
   cancelTo,
+  history = true,
   submitLabel,
   isSubmitting,
+  summary,
 }: WizardNavFooterProps) {
+  const back = useBackTarget(cancelTo)
+  // A router link either way, so the unsaved-changes blocker still asks before leaving.
+  const cancelHref = history ? back.to : cancelTo
+  // z-[4]: above a DataTable's pinned columns (z-[2], z-[3]) scrolling under it, below every menu and dialog (z-50 and up).
   return (
-    <div className="sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-col gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+    <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-[4] md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-row flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]`}>
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        {showBack && (
+        {/* The first step has no Back, so the way out takes its place (the review step has its own Cancel). */}
+        {showBack ? (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
+        ) : !isReviewStep && (
+          <Button variant="secondary" to={cancelHref}>Cancel</Button>
         )}
         {secondaryActions.map((action) => (
           <Button
@@ -54,13 +72,14 @@ export function WizardNavFooter({
           </Button>
         ))}
       </div>
+      {summary && <div className="order-first basis-full min-w-0 sm:order-none sm:basis-auto sm:flex-1 sm:px-3">{summary}</div>}
       <div className="flex min-w-0 flex-wrap justify-end gap-3">
         {!isReviewStep && (
           <Button type="button" onClick={onNext}>Next</Button>
         )}
         {isReviewStep && (
           <>
-            <Button variant="secondary" to={cancelTo}>Cancel</Button>
+            <Button variant="secondary" to={cancelHref}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>{submitLabel}</Button>
           </>
         )}

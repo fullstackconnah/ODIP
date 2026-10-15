@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SearchableSelect } from './SearchableSelect'
 import type { SearchableSelectItem } from './SearchableSelect'
@@ -42,6 +42,22 @@ describe('SearchableSelect — combobox contract', () => {
     render(<SearchableSelect items={items} value="nonexistent" onChange={vi.fn()} />)
 
     expect(screen.getByRole('combobox')).toHaveValue('')
+  })
+})
+
+describe('SearchableSelect — openOnFocus={false}', () => {
+  // A form that moves focus to a refused field must show the chosen value, not an empty search box over an open list.
+  it('keeps the list closed and the chosen label shown when focused by script, and still opens from the keyboard', async () => {
+    const user = userEvent.setup()
+    render(<SearchableSelect items={items} value="b" onChange={vi.fn()} openOnFocus={false} />)
+    const combobox = screen.getByRole('combobox')
+
+    act(() => combobox.focus())
+
+    expect(combobox).toHaveAttribute('aria-expanded', 'false')
+    expect(combobox).toHaveValue('Bianca Novak')
+    await user.keyboard('{ArrowDown}')
+    expect(combobox).toHaveAttribute('aria-expanded', 'true')
   })
 })
 

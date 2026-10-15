@@ -24,7 +24,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # GitHub can start a run for an older main commit after a newer one has
+  # merged, and the concurrency group only orders the runs. This job stops the
+  # stale one so it cannot redeploy old images over the newer deploy.
+  freshness:
+    runs-on: [self-hosted, odip]
+    timeout-minutes: 5
+
+    outputs:
+      stale: ${{ steps.check.outputs.stale }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if main has moved past this commit
+        id: check
+        run: |
+          set -euo pipefail
+          stale=false
+          # Only main is deployed from a moving tip; a manual run on another branch deploys what it was asked to.
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            git fetch --no-tags origin main
+            tip=$(git rev-parse FETCH_HEAD)
+            # Skip only when a newer commit changed something this deploy would ship.
+            # A newer doc-only commit has no run of its own, so skipping for it would leave this commit undeployed.
+            if [ "$tip" != "$GITHUB_SHA" ] && ! git diff --quiet "$GITHUB_SHA" "$tip" -- \
+                 odip-prototype/odip/backend odip-prototype/odip/frontend odip-prototype/odip/nginx \
+                 deploy/compose.yaml .github/workflows/deploy.yml; then
+              stale=true
+              echo "::notice::main has moved to $tip; the newer run deploys it"
+            fi
+          fi
+          echo "stale=$stale" >> "$GITHUB_OUTPUT"
+
   deploy:
+    needs: freshness
+    if: needs.freshness.outputs.stale != 'true'
     runs-on: [self-hosted, odip]
     timeout-minutes: 45
 
@@ -42,6 +80,20 @@ jobs:
           set -euo pipefail
           test -d "$STACK_DIR" || { echo "::error::$STACK_DIR not found — run the one-time server setup first"; exit 1; }
           test -f "$STACK_DIR/.env" || { echo "::error::$STACK_DIR/.env missing — secrets live on the server and are never committed"; exit 1; }
+
+      - name: Wait for free memory
+        # The deploy host also runs the test runner's jobs, and the image's test run needs headroom (frontend/Dockerfile).
+        run: |
+          set -uo pipefail
+          need_kb=$((4 * 1024 * 1024))
+          for i in $(seq 1 30); do
+            avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+            if [ $((i % 2)) -eq 1 ]; then echo "MemAvailable ${avail} kB (need ${need_kb} kB)"; fi
+            if [ "$avail" -ge "$need_kb" ]; then echo "Enough free memory."; exit 0; fi
+            sleep 30
+          done
+          echo "::error::Deploy host still has under 4 GiB available after 15 minutes; not building. Re-run the deploy when the test runner is quiet."
+          exit 1
 
       - name: Tag rollback images
         run: |
@@ -73,6 +125,8 @@ jobs:
       - name: Build images
         # This is the gate. If either image fails to compile the job stops here
         # and the currently running containers are left untouched.
+        env:
+          GIT_SHA: ${{ github.sha }} # the platform footer's build number (deploy/compose.yaml, frontend/Dockerfile)
         run: |
           set -euo pipefail
           cd "$STACK_DIR"

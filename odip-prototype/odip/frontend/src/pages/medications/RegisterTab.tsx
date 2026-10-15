@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, PillBottle } from 'lucide-react'
+import { PillBottle } from 'lucide-react'
 import { useMedicationRegister } from '@/api/hooks'
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
-import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateAu } from '@/lib/utils'
 import { usePermissions } from '@/lib/permissions'
@@ -29,7 +28,7 @@ const STATUS_ITEMS = [
 ]
 
 export default function RegisterTab() {
-  const { canManageMedications } = usePermissions()
+  const { canManageMedications, isReadOnly } = usePermissions()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -39,7 +38,7 @@ export default function RegisterTab() {
   if (search) queryParams.search = search
   if (status) queryParams.status = status
 
-  const { data: medications = [], isLoading } = useMedicationRegister(queryParams)
+  const { data: medications = [], isLoading, isError, refetch } = useMedicationRegister(queryParams)
   // `medications` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as IncidentsPage/ParticipantPicker.
@@ -66,11 +65,10 @@ export default function RegisterTab() {
   // stay, and the table scrolls in its box with the first column and the actions pinned (DataTable's column rule). The compliance flags
   // wrap in their own cell, so they never widen the table.
   const columns: Column<MedicationListDto>[] = useMemo(() => [
-    { key: 'participantName', header: 'Participant', sortable: true, className: 'font-medium', maxWidth: '9rem' },
+    { key: 'participantName', header: 'Participant', className: 'font-medium', maxWidth: '9rem' },
     {
       key: 'name',
       header: 'Medication',
-      sortable: true,
       render: m => (
         <CellText className="md:max-w-[12rem]" title={m.strength ? `${m.name} ${m.strength}` : m.name}>
           {m.name}
@@ -111,14 +109,13 @@ export default function RegisterTab() {
     {
       key: 'nextReviewDue',
       header: 'Next review',
-      sortable: true,
       render: m => (
         <span className={isReviewOverdue(m.nextReviewDue) ? 'text-[var(--color-destructive)] font-medium' : ''}>
           {formatDateAu(m.nextReviewDue)}
         </span>
       ),
     },
-    { key: 'status', header: 'Status', sortable: true, render: m => <StatusBadge status={m.status} /> },
+    { key: 'status', header: 'Status', render: m => <StatusBadge status={m.status} /> },
   ], [])
 
   return (
@@ -136,14 +133,9 @@ export default function RegisterTab() {
             />
           </div>
         </div>
-        {canManageMedications && (
-          <Button to="/medications/new" size="md">
-            <Plus className="w-4 h-4" /> New medication
-          </Button>
-        )}
       </div>
 
-      {!isLoading && medications.length === 0 ? (
+      {!isLoading && !isError && medications.length === 0 ? (
         <EmptyState
           icon={PillBottle}
           title={search || status ? 'No medications match your filters' : 'No medications in the register yet'}
@@ -155,9 +147,10 @@ export default function RegisterTab() {
           data={medications}
           columns={columns}
           keyField="id"
-          sortable
           loading={isLoading}
-          onRowClick={m => navigate(`/medications/${m.id}/edit`)}
+          error={isError}
+          onRetry={() => refetch()}
+          onRowClick={canManageMedications || isReadOnly ? m => navigate(`/medications/${m.id}/edit`) : undefined}
           emptyMessage="No medications found"
           pagination={{
             page,

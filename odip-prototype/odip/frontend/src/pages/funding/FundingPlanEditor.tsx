@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Trash2 } from 'lucide-react'
-import { useBillingSourcesHint, useCreateFundingPlan, useFundingPlans, usePaceCategories, useUpdateFundingPlan } from '@/api/hooks'
+import { useCreateFundingPlan, useFundingPlans, usePaceCategories, useUpdateFundingPlan } from '@/api/hooks'
 import type { BudgetEvidenceSource, FundingPlanDto } from '@/api/types'
 import { BUDGET_EVIDENCE_LABELS, BUDGET_EVIDENCE_SOURCES } from '@/api/types'
 import { PLAN_TYPES, PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
@@ -18,7 +18,7 @@ import { categoriesLabel, managementLabel, paceNumber, writtenSpan } from '@/lib
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { cn, formatCurrency } from '@/lib/utils'
 import {
-  addCorePool, addStatedPool, applySetAside, editorStateFromPlan, hasPool, isZeroSetAside, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, startFromBilling, toSaveBody, updatePool, validate,
+  addCorePool, addStatedPool, applySetAside, editorStateFromPlan, hasPool, isZeroSetAside, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, toSaveBody, updatePool, validate,
   withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorPool, type EditorState, type PoolProblems, type Problems,
 } from './fundingEditorState'
 
@@ -108,8 +108,6 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   const update = useUpdateFundingPlan(participantId)
   const categoriesQuery = usePaceCategories()
   const latest = useFundingPlans(participantId)
-  // The Billing hint is for starting a NEW plan only, and it is asked for once, while the editor is open.
-  const hintQuery = useBillingSourcesHint(participantId, !plan)
 
   // A first plan starts from the plan dates the profile already holds (typed once at intake, not twice); a later one follows the plan before it.
   const profileDates = latest.data?.profilePlanDates
@@ -132,7 +130,6 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   const problems = useMemo(() => validate(state), [state])
   const dirty = useMemo(() => contentOf(state) !== contentOf(baseline), [state, baseline])
   const saving = create.isPending || update.isPending
-  const hint = hintQuery.data
   const categories = categoriesQuery.data ?? []
   const statedChoices = categories.filter(c => c.offeredAsStatedPool)
   const chosen = statedChoices.find(c => String(c.number) === category)
@@ -276,13 +273,6 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
         <section className="flex flex-col gap-3" aria-labelledby="funding-pools-heading">
           <h3 id="funding-pools-heading" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Pools</h3>
           {attempted && problems.general.map(message => <p key={message} data-problem="" tabIndex={-1} className="text-sm text-[var(--color-destructive)] focus:outline-none">{message}</p>)}
-
-          {!plan && hint && hint.rows.length > 0 && state.pools.length === 0 && (
-            <Callout tone="info">
-              <p>The Billing page records {formatCurrency(hint.total)} across {hint.rows.length === 1 ? 'one funding source' : `${hint.rows.length} funding sources`} for this participant. You can start from that and check it against the plan.</p>
-              <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => setState(startFromBilling(state, hint, defaultManagement))}>Start from Billing funding sources</Button></div>
-            </Callout>
-          )}
 
           {state.pools.map(pool => (
             <PoolCard

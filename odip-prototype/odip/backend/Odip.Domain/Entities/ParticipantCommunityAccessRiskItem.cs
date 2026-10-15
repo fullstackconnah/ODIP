@@ -14,7 +14,7 @@ namespace Odip.Domain.Entities;
 /// twenty-two with an unanswered placeholder for any type with no row yet (see
 /// ParticipantCommunityAccessRiskItemsController.GetForParticipant), created/updated
 /// transactionally with the participant
-/// (ParticipantsController.UpsertCommunityAccessRiskItemsAsync, copying
+/// (ParticipantPatchApplier.UpsertCommunityAccessRiskItemsAsync, copying
 /// UpsertChecklistItemsAsync's documented load-bearing empty/null guard again).
 ///
 /// GENUINELY A DIFFERENT SHAPE FROM <see cref="ParticipantChecklistItem"/>: that entity's

@@ -3,6 +3,7 @@ import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { TAP_AREA } from './tapArea'
+import { buttonClasses, type ButtonVariant } from './buttonClasses'
 
 export type DropdownItem = {
   value: string
@@ -13,7 +14,7 @@ export type DropdownItem = {
 }
 
 type DropdownProps = {
-  /** 'icon' is a compact icon-only trigger (e.g. a kebab action menu on a card/chip) — same portal/keyboard machinery as 'menu', just a small icon button instead of the pill CTA. */
+  /** 'icon' is a compact icon-only trigger (e.g. a kebab action menu on a card/chip) — same portal/keyboard machinery as 'menu', just a small icon button instead of the Button-look trigger. */
   variant: 'pill' | 'form' | 'menu' | 'icon'
   items: DropdownItem[]
 
@@ -28,6 +29,8 @@ type DropdownProps = {
   // Trigger appearance
   label?: string            // button text (menu), placeholder text (form)
   icon?: ReactNode          // leading icon on trigger (menu variant)
+  /** Menu variant: the Button look of the trigger. Primary for a header action; secondary for an in-page menu, so a page keeps one filled primary. */
+  triggerVariant?: Extract<ButtonVariant, 'primary' | 'secondary'>
   colorClass?: string       // Tailwind color classes for pill trigger background
   disabled?: boolean        // caller controls — not auto-applied on empty items
   loading?: boolean
@@ -55,6 +58,7 @@ export function Dropdown({
   onBlur,
   label,
   icon,
+  triggerVariant = 'primary',
   colorClass = '',
   disabled = false,
   loading = false,
@@ -293,7 +297,7 @@ export function Dropdown({
       id={panelId}
       role="listbox"
       style={panelStyle}
-      className={`bg-white rounded-md shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
+      className={`bg-[var(--color-card)] rounded-md shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] ${panelWidthClass}`}
     >
       {searchable && (
         <div className="p-2">
@@ -317,7 +321,7 @@ export function Dropdown({
         visibleItems.map((item, idx) => (
           <div key={item.value}>
             {variant === 'menu' && idx > 0 && item.description && (
-              <div className="h-px bg-[rgba(195,201,181,0.25)] mx-4" />
+              <div className="h-px bg-[var(--color-border)]/25 mx-4" />
             )}
             <div
               role="option"
@@ -331,7 +335,8 @@ export function Dropdown({
               onMouseDown={e => e.preventDefault()}
               onClick={() => handleSelect(item)}
               onMouseEnter={() => !item.disabled && setFocusedIndex(idx)}
-              className={`w-full flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors ${
+              // min-h --tap-min: 44px rows under a coarse pointer (a phone's row actions live here), 0px and so unchanged on a mouse.
+              className={`w-full min-h-[var(--tap-min)] flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors ${
                 item.disabled
                   ? 'opacity-40 cursor-not-allowed'
                   : focusedIndex === idx
@@ -462,7 +467,8 @@ export function Dropdown({
         disabled={disabled || loading}
         onClick={() => setOpen(v => !v)}
         onKeyDown={handleKeyDown}
-        className={`${TAP_AREA} flex items-center gap-2 px-5 py-2.5 text-sm bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white rounded-full font-bold shadow-lg shadow-[var(--color-primary)]/20 hover:opacity-90 disabled:opacity-50 transition-all`}
+        // An md Button (primary is the header-action standard), 44px on a touch screen like any md Button, so no pad.
+        className={buttonClasses(triggerVariant, 'md')}
       >
         {icon}
         {label}

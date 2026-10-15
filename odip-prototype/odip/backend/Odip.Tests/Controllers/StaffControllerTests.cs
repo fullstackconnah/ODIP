@@ -1,14 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
-using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Tests.Support;
 
 namespace Odip.Tests.Controllers;
 
@@ -19,18 +18,7 @@ namespace Odip.Tests.Controllers;
 /// </summary>
 public class StaffControllerTests
 {
-    private static OdipDbContext CreateDb(string dbName, Guid tenantId)
-    {
-        var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
-
-        var options = new DbContextOptionsBuilder<OdipDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options;
-
-        return new OdipDbContext(options, tenant.Object);
-    }
+    private static OdipDbContext CreateDb(string dbName, Guid tenantId) => TestDb.ForTenant(dbName, tenantId);
 
     [Fact]
     public async Task Create_WithWorkerScreeningFields_PersistsAndReturnsThem()
@@ -132,5 +120,31 @@ public class StaffControllerTests
         var body = Assert.IsType<ApiResponse<List<StaffListDto>>>(ok.Value);
         var staff = Assert.Single(body.Data!, s => s.LastName == "Worker");
         Assert.True(staff.HasExpiredQualifications);
+    }
+
+    [Fact]
+    public async Task Create_WithAnEmailUsedInAnotherTenant_ReturnsConflict()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
+        db.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            Username = "sam.lee",
+            Email = "sam.lee@gmail.com",
+            FirstName = "Sam",
+            LastName = "Lee",
+        });
+        await db.SaveChangesAsync();
+        var controller = new StaffController(db);
+
+        var result = await controller.Create(
+            new CreateStaffDto { FirstName = "Sam", LastName = "Lee", Email = "Sam.Lee@gmail.com", Position = Position.SupportWorker },
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<StaffDetailDto>>(conflict.Value);
+        Assert.Equal("A user with this email already exists.", body.Errors![0]);
     }
 }

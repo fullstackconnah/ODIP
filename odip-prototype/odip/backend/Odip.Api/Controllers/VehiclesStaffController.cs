@@ -12,6 +12,7 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
@@ -123,20 +124,16 @@ public class VehiclesController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Vehicle archived"));
     }
 
-    [HttpGet("{id:guid}/assignments")]
-    public async Task<ActionResult<ApiResponse<List<VehicleAssignmentDto>>>> GetAssignments(Guid id, CancellationToken ct)
+    /// <summary>Restore an archived vehicle. Only IsActive changes: the list row the Archived view holds lacks the notes and access details, so a PUT of it wiped them (TRIPS-2).</summary>
+    [HttpPost("{id:guid}/restore")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<bool>>> Restore(Guid id, CancellationToken ct)
     {
-        var items = await _db.VehicleAssignments.Include(a => a.TripInstance).Include(a => a.DriverUser)
-            .Where(a => a.VehicleId == id)
-            .Select(a => new VehicleAssignmentDto
-            {
-                Id = a.Id, TripInstanceId = a.TripInstanceId, VehicleId = a.VehicleId,
-                Status = a.Status, DriverStaffId = a.DriverUserId,
-                DriverName = a.DriverUser != null ? a.DriverUser.FirstName + " " + a.DriverUser.LastName : null,
-                HasOverlapConflict = a.HasOverlapConflict, HasConflict = a.HasConflict,
-                OverrideReason = a.OverrideReason, AcknowledgedFindingCodes = a.AcknowledgedFindingCodes
-            }).ToListAsync(ct);
-        return Ok(ApiResponse<List<VehicleAssignmentDto>>.Ok(items));
+        var v = await _db.Vehicles.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (v == null) return NotFound(ApiResponse<bool>.Fail("Vehicle not found"));
+        v.IsActive = true; v.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Vehicle restored"));
     }
 }
 
@@ -153,6 +150,10 @@ public class VehicleAssignmentsController : ControllerBase
         _db = db;
         _clock = clock ?? TimeProvider.System;
     }
+
+    /// <summary>VehicleAssignment has no organisation column or query filter: an assignment is the caller's only if its trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<VehicleAssignment> TenantAssignments() =>
+        _db.VehicleAssignments.Where(a => _db.TripInstances.Any(t => t.Id == a.TripInstanceId));
 
     /// <summary>
     /// §4.4 same-tenant validation for the driver picker: null is always fine (no driver
@@ -205,6 +206,9 @@ public class VehicleAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<List<RosterFindingDto>>>> Check([FromBody] CheckVehicleAssignmentDto dto, CancellationToken ct)
     {
+        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+            return BadRequest(ApiResponse<List<RosterFindingDto>>.Fail("Vehicle not found."));
+
         var findings = await CheckAsync(dto.VehicleId, dto.TripInstanceId, dto.ExcludeAssignmentId ?? Guid.Empty, ct);
         return Ok(ApiResponse<List<RosterFindingDto>>.Ok(findings.Select(RosterGate.ToFindingDto).ToList()));
     }
@@ -216,6 +220,8 @@ public class VehicleAssignmentsController : ControllerBase
         var trip = await _db.TripInstances.FirstOrDefaultAsync(t => t.Id == dto.TripInstanceId, ct);
         if (trip == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Trip not found"));
 
+        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+            return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));
         if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
@@ -263,9 +269,11 @@ public class VehicleAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<VehicleAssignmentDto>>> Update(Guid id, [FromBody] UpdateVehicleAssignmentDto dto, CancellationToken ct)
     {
-        var a = await _db.VehicleAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<VehicleAssignmentDto>.Fail("Assignment not found"));
 
+        if (!await _db.Vehicles.AnyAsync(v => v.Id == dto.VehicleId, ct))
+            return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Vehicle not found."));
         if (!await IsValidDriverRefAsync(dto.DriverStaffId, ct))
             return BadRequest(ApiResponse<VehicleAssignmentDto>.Fail("Driver not found."));
 
@@ -314,7 +322,7 @@ public class VehicleAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var a = await _db.VehicleAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Assignment not found"));
         a.Status = VehicleAssignmentStatus.Cancelled; a.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -348,36 +356,14 @@ public class StaffController : ControllerBase
     // The tenant this request writes to (the caller's own, or the one a SuperAdmin is viewing as). Null when there is none: a SuperAdmin
     // with no tenant selected, and a test that does not care.
     private readonly ICurrentTenant? _currentTenant;
+    private readonly StaffCreateService _staffCreator;
 
-    private const string OtherOrganisationMessage = "That address belongs to another organisation on ODIP.";
+    /// <summary>See StaffCreateService.OtherOrganisationAddressErrorAsync.</summary>
+    private Task<string?> OtherOrganisationAddressErrorAsync(string normalisedEmail, Guid? ownTenantId, CancellationToken ct) =>
+        _staffCreator.OtherOrganisationAddressErrorAsync(User, normalisedEmail, ownTenantId, ct);
 
-    /// <summary>
-    /// Global uniqueness of an address makes a squat permanent (the first tenant to type an address owns it, and an archived row keeps it), so a
-    /// caller who is not a SuperAdmin may not give staff an address at ANOTHER tenant's own email domain: it would block that tenant from ever adding
-    /// the person, and send the person into this tenant's workspace. Returns the refusal, or null. It is a refusal, not a question: it cannot be
-    /// confirmed away. The match is on the whole domain, so a subdomain is only unusual (AddressConfirmation), not another organisation's. A shared
-    /// provider (gmail.com) is nobody's own, even if a tenant was given it as its domain, so it is never another organisation's either.
-    /// </summary>
-    private async Task<string?> OtherOrganisationAddressErrorAsync(string normalisedEmail, Guid? ownTenantId, CancellationToken ct)
-    {
-        if (User?.IsInRole("SuperAdmin") ?? false) return null;
-        var at = normalisedEmail.LastIndexOf('@');
-        if (at < 0) return null;
-
-        var domain = normalisedEmail[(at + 1)..];
-        if (CommonEmailProviders.Covers(domain)) return null;
-        var own = ownTenantId ?? Guid.Empty;
-        // Tenants are written with their domain tidied (EmailIdentity.NormaliseDomain), but a row from before that rule may hold " Acme.com" or "@acme.com"
-        // and must keep protecting its tenant, so the stored side is tidied the same way here. There are few tenants, so they are compared in memory
-        // rather than by an expression the database has to translate.
-        var otherDomains = await _db.Tenants.Where(t => t.Id != own).Select(t => t.EmailDomain).ToListAsync(ct);
-        var belongsToAnother = otherDomains.Any(other => EmailIdentity.NormaliseDomain(other) == domain);
-        return belongsToAnother ? OtherOrganisationMessage : null;
-    }
-
-    /// <summary>The email domain of a tenant, or null when none is given or it cannot be found. Tenants have no query filter, so any tenant is readable.</summary>
-    private async Task<string?> TenantEmailDomainAsync(Guid? tenantId, CancellationToken ct) =>
-        tenantId is null ? null : await _db.Tenants.Where(t => t.Id == tenantId).Select(t => t.EmailDomain).FirstOrDefaultAsync(ct);
+    /// <summary>See StaffCreateService.TenantEmailDomainAsync.</summary>
+    private Task<string?> TenantEmailDomainAsync(Guid? tenantId, CancellationToken ct) => _staffCreator.TenantEmailDomainAsync(tenantId, ct);
 
     // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to the
     // parameter's default, so production needs no DI change while a unit test injects a mock.
@@ -393,6 +379,7 @@ public class StaffController : ControllerBase
         _firebaseUserService = firebaseUserService ?? new FirebaseUserService();
         _logger = logger;
         _currentTenant = currentTenant;
+        _staffCreator = new StaffCreateService(db, config);
     }
 
     /// <summary>Same default as RosteringController's own VarianceReviewMinutes — kept independent
@@ -417,39 +404,12 @@ public class StaffController : ControllerBase
         HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
     };
 
-    /// <summary>
-    /// §4.1 role-change guardrails. SuperAdmin actors are unrestricted. Anyone else: cannot touch
-    /// (grant or edit) a SuperAdmin account, and cannot assign the Admin role unless they are
-    /// themselves an Admin. <paramref name="existingRole"/> is null on create (there is no prior
-    /// row to protect yet). Returns the rejection message, or null when the change is allowed.
-    /// </summary>
-    private string? ValidateRoleGuardrails(UserRole targetRole, UserRole? existingRole = null)
-    {
-        // User?.IsInRole(...) (not User.IsInRole(...)): ControllerBase.User is null when no
-        // ControllerContext/HttpContext has been set (e.g. a unit test constructing this
-        // controller directly with no simulated request) — defensive null-conditional, same idiom
-        // MedicationsController/PortalController already use for the same reason. Treating an
-        // absent context as "no elevated role" is the conservative default and never wrongly
-        // allows a restricted write, since every real request IS authenticated ([Authorize]).
-        bool IsInRole(string role) => User?.IsInRole(role) ?? false;
+    /// <summary>See StaffCreateService.RoleGuardrailError.</summary>
+    private string? ValidateRoleGuardrails(UserRole targetRole, UserRole? existingRole = null) =>
+        StaffCreateService.RoleGuardrailError(User, targetRole, existingRole);
 
-        if (IsInRole("SuperAdmin")) return null;
-        if (existingRole == UserRole.SuperAdmin) return "Cannot edit a SuperAdmin account.";
-        if (targetRole == UserRole.SuperAdmin) return "Cannot grant the SuperAdmin role.";
-        if (targetRole == UserRole.Admin && !IsInRole("Admin")) return "Only an Admin can assign the Admin role.";
-        return null;
-    }
-
-    /// <summary>
-    /// An address on <c>Auth:SuperAdminDomain</c> signs in as SuperAdmin whatever the user's Role (AuthController.Exchange), so only a
-    /// SuperAdmin may enter one. Returns the refusal, or null when <paramref name="normalisedEmail"/> is allowed for this caller.
-    /// </summary>
-    private string? ReservedDomainError(string normalisedEmail)
-    {
-        if (User?.IsInRole("SuperAdmin") ?? false) return null;
-        var domain = SuperAdminDomain.From(_config);
-        return SuperAdminDomain.Covers(normalisedEmail, domain) ? SuperAdminDomain.ReservedMessage(domain) : null;
-    }
+    /// <summary>See StaffCreateService.ReservedDomainError.</summary>
+    private string? ReservedDomainError(string normalisedEmail) => _staffCreator.ReservedDomainError(User, normalisedEmail);
 
     /// <summary>
     /// A row that already holds an address on <c>Auth:SuperAdminDomain</c> is a SuperAdmin session whatever its Role, whenever it is active
@@ -533,55 +493,14 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffDetailDto>>> Create([FromBody] CreateStaffDto dto, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(dto.Email))
-            return BadRequest(ApiResponse<StaffDetailDto>.Fail("Email is required."));
-
-        var guardError = ValidateRoleGuardrails(dto.Role);
-        if (guardError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(guardError));
-
-        // Username/Email uniqueness is GLOBAL across tenants (design spec §2/§7) — IgnoreQueryFilters
-        // so the check sees every tenant's users, not just the caller's own (matches AdminUsersController).
-        var emailLower = EmailIdentity.Normalise(dto.Email);
-        var reservedError = ReservedDomainError(emailLower);
-        if (reservedError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(reservedError));
-
-        var otherOrganisationError = await OtherOrganisationAddressErrorAsync(emailLower, _currentTenant?.TenantId, ct);
-        if (otherOrganisationError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(otherOrganisationError));
-
-        var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
-        if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
-
-        // Any address can sign in, so one at neither the tenant's own domain nor a common provider (a typo, another organisation's) is a live
-        // login for whoever owns it: ask for a confirmation first (see AddressConfirmation).
-        var tenantDomain = await TenantEmailDomainAsync(_currentTenant?.TenantId, ct);
-        if (tenantDomain is not null && !dto.AddressConfirmed && AddressConfirmation.Needed(emailLower, tenantDomain))
-            return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, tenantDomain), AddressConfirmation.Code));
-
-        // Collision-safe username handling: reuses the migration's own algorithm (Task 1's
-        // StaffUserUnificationMapping.ResolveUsername) rather than duplicating a second,
-        // divergent suffixing implementation here.
-        var existingUsernamesList = await _db.Users.IgnoreQueryFilters()
-            .Select(u => u.Username.ToLower()).ToListAsync(ct);
-        var existingUsernames = existingUsernamesList.ToHashSet();
-        var username = StaffUserUnificationMapping.ResolveUsername(dto.FirstName, dto.LastName, existingUsernames);
-
-        var s = new User
-        {
-            Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName,
-            Username = username, Email = emailLower,
-            Role = dto.Role, Position = dto.Position,
-            Mobile = dto.Mobile, Region = dto.Region,
-            IsDriverEligible = dto.IsDriverEligible, IsFirstAidQualified = dto.IsFirstAidQualified,
-            IsMedicationCompetent = dto.IsMedicationCompetent, IsManualHandlingCompetent = dto.IsManualHandlingCompetent,
-            IsOvernightEligible = dto.IsOvernightEligible, IsActive = dto.IsActive, Notes = dto.Notes,
-            FirstAidExpiryDate = dto.FirstAidExpiryDate,
-            DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate,
-            ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate,
-            MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate,
-            WorkerScreeningNumber = dto.WorkerScreeningNumber,
-            WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate
-        };
-        _db.Users.Add(s);
+        // A connected organisation's staff come from Employment Hero, the master list (EmploymentHeroStaffSync). The frontend hides the button; this is the rule.
+        if (await EmploymentHeroStaffSync.IsConnectedAsync(_db, _currentTenant?.TenantId, ct))
+            return Conflict(ApiResponse<StaffDetailDto>.Fail(EmploymentHeroStaffSync.StaffFromEmploymentHeroMessage));
+        var staged = await _staffCreator.StageAsync(dto, User, _currentTenant?.TenantId, ct);
+        if (staged.IsConflict) return Conflict(ApiResponse<StaffDetailDto>.Fail(staged.Error!));
+        if (staged.ErrorCode is { } code) return BadRequest(ApiResponse<StaffDetailDto>.Fail(staged.Error!, code));
+        if (staged.Error != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(staged.Error));
+        var s = staged.User!;
         await _db.SaveChangesAsync(ct);
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
@@ -720,49 +639,10 @@ public class StaffController : ControllerBase
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<SignInAccountDto>.Fail("Staff not found"));
 
-        // The same §4.1 guardrail as every other staff write: only a SuperAdmin touches a SuperAdmin account.
-        if (s.Role == UserRole.SuperAdmin && !(User?.IsInRole("SuperAdmin") ?? false))
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail("Cannot edit a SuperAdmin account."));
-
-        if (!s.IsActive)
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member is inactive, so they cannot be given a sign-in account."));
-
-        if (string.IsNullOrWhiteSpace(s.Email))
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail("This staff member has no email address."));
-
-        var email = EmailIdentity.Normalise(s.Email);
-
-        // An address the app invented for a row that had none (see PlaceholderEmail) can never receive the link, so no account is made for it.
-        if (PlaceholderEmail.Covers(email))
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail(PlaceholderEmail.Message(s.FullName)));
-
-        var reservedError = ReservedDomainError(email);
-        if (reservedError != null) return BadRequest(ApiResponse<SignInAccountDto>.Fail(reservedError));
-
-        try
-        {
-            var result = await _firebaseUserService.EnsureSignInAccountAsync(email, s.FullName, ct);
-            var account = result == SignInAccountResult.Created ? FirebaseAccountStatus.Created : FirebaseAccountStatus.Existing;
-            // No audit record exists yet (the email itself goes from the browser to Firebase), so this line is the only trace of who asked for it.
-            _logger?.LogInformation("Sign-in account for user {TargetUserId} was {Account}, as asked by {ActorUserId}", s.Id, account, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
-            return Ok(ApiResponse<SignInAccountDto>.Ok(new SignInAccountDto(account)));
-        }
-        catch (Exception ex) when (FirebaseFailures.IsInvalidEmail(ex))
-        {
-            // Firebase refused the address itself (a legacy row with a typo). Retrying cannot fix that and correcting the address can, so it is the
-            // admin's to act on (400), not a fault on our side (502).
-            _logger?.LogWarning("Firebase refused the address of staff member {UserId} as invalid", s.Id);
-            return BadRequest(ApiResponse<SignInAccountDto>.Fail("That doesn't look like a valid email address. Correct it first."));
-        }
-        catch (Exception ex)
-        {
-            // Deliberately broad, as in AdminUsersController.Create: an unusable service account is not a FirebaseAuthException, and the
-            // same call with no Firebase app configured fails the same way, so it is the same 502. The line says where to turn rather than
-            // promising a retry will help: an unusable service account stays unusable.
-            _logger?.LogError(ex, "Failed to ensure a Firebase sign-in account for {Email}", email);
-            return StatusCode(StatusCodes.Status502BadGateway,
-                ApiResponse<SignInAccountDto>.Fail("Unable to set up the staff member's sign-in account. If it keeps happening, ask whoever runs the Firebase project."));
-        }
+        var outcome = await SignInAccounts.EnsureAsync(s, User, _config, _firebaseUserService, _logger, ct);
+        if (outcome.Account is { } account) return Ok(ApiResponse<SignInAccountDto>.Ok(account));
+        if (outcome.BadGateway) return StatusCode(StatusCodes.Status502BadGateway, ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
+        return BadRequest(ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
     }
 
     /// <summary>
@@ -815,36 +695,10 @@ public class StaffController : ControllerBase
         // Newest 10 active incidents where this staff member is the INVOLVED user, not the
         // reporter — same projection shape as IncidentsController.GetAll.
         var recentIncidents = await _db.IncidentReports
-            .Include(i => i.TripInstance).Include(i => i.ReportedByUser).Include(i => i.InvolvedParticipant)
             .Where(i => i.InvolvedUserId == id && i.IsActive)
             .OrderByDescending(i => i.IncidentDateTime)
             .Take(10)
-            .Select(i => new IncidentListDto
-            {
-                Id = i.Id,
-                ServiceType = i.ServiceType,
-                TripInstanceId = i.TripInstanceId,
-                TripName = i.TripInstance != null ? i.TripInstance.TripName : null,
-                IncidentType = i.IncidentType,
-                OtherTypeSpecify = i.OtherTypeSpecify,
-                Severity = i.Severity,
-                Status = i.Status,
-                Title = i.Title,
-                IncidentDateTime = i.IncidentDateTime,
-                Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
-                InvolvedParticipantId = i.InvolvedParticipantId,
-                InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
-                QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = i.QscReportingStatus == QscReportingStatus.Required
-                    && i.QscReportedAt == null
-                    && (DateTime.UtcNow - i.CreatedAt).TotalHours > 24,
-                CreatedAt = i.CreatedAt,
-                MedicationAdministrationId = i.MedicationAdministrationId,
-                ShiftId = i.ShiftId,
-                ShiftNoteId = i.ShiftNoteId
-            })
+            .Select(IncidentProjections.ToListDto(DateTime.UtcNow))
             .ToListAsync(ct);
 
         // Last 10 completions this staff member SUBMITTED (Shift.UserId at Start/manual-Finish
@@ -882,6 +736,8 @@ public class StaffController : ControllerBase
     [HttpGet("{id:guid}/availability")]
     public async Task<ActionResult<ApiResponse<List<StaffAvailabilityDto>>>> GetAvailability(Guid id, CancellationToken ct)
     {
+        if (!await _db.Users.AnyAsync(u => u.Id == id, ct)) return NotFound(ApiResponse<List<StaffAvailabilityDto>>.Fail("Staff not found"));
+
         var items = await _db.StaffAvailabilities.Where(a => a.UserId == id)
             .OrderBy(a => a.StartDateTime)
             .Select(a => new StaffAvailabilityDto
@@ -896,6 +752,8 @@ public class StaffController : ControllerBase
     [HttpGet("{id:guid}/assignments")]
     public async Task<ActionResult<ApiResponse<List<StaffAssignmentDto>>>> GetAssignments(Guid id, CancellationToken ct)
     {
+        if (!await _db.Users.AnyAsync(u => u.Id == id, ct)) return NotFound(ApiResponse<List<StaffAssignmentDto>>.Fail("Staff not found"));
+
         var items = await _db.StaffAssignments.Include(a => a.TripInstance)
             .Where(a => a.UserId == id)
             .Select(a => new StaffAssignmentDto
@@ -945,6 +803,10 @@ public class StaffAvailabilityController : ControllerBase
 {
     private readonly OdipDbContext _db;
     public StaffAvailabilityController(OdipDbContext db) => _db = db;
+
+    /// <summary>StaffAvailability has no organisation column or query filter: a row is the caller's only if its user is (Users is tenant-filtered).</summary>
+    private IQueryable<StaffAvailability> TenantAvailabilities() =>
+        _db.StaffAvailabilities.Where(a => _db.Users.Any(u => u.Id == a.UserId));
 
     /// <summary>
     /// §4.4 same-tenant validation for the availability record's staff/user ref (required, not
@@ -1008,7 +870,7 @@ public class StaffAvailabilityController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAvailabilityDto>>> Update(Guid id, [FromBody] UpdateStaffAvailabilityDto dto, CancellationToken ct)
     {
-        var a = await _db.StaffAvailabilities.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAvailabilities().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<StaffAvailabilityDto>.Fail("Availability not found"));
 
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
@@ -1031,7 +893,7 @@ public class StaffAvailabilityController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var a = await _db.StaffAvailabilities.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAvailabilities().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Availability not found"));
         _db.StaffAvailabilities.Remove(a);
         await _db.SaveChangesAsync(ct);
@@ -1053,6 +915,10 @@ public class StaffAssignmentsController : ControllerBase
         _db = db;
         _unavailabilityQuery = unavailabilityQuery;
     }
+
+    /// <summary>StaffAssignment has no organisation column or query filter: an assignment is the caller's only if its trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<StaffAssignment> TenantAssignments() =>
+        _db.StaffAssignments.Where(a => _db.TripInstances.Any(t => t.Id == a.TripInstanceId));
 
     /// <summary>
     /// §4.4 same-tenant validation for the trip staffing assignment's staff/user ref (required,
@@ -1118,6 +984,8 @@ public class StaffAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAssignmentDto>>> Create([FromBody] CreateStaffAssignmentDto dto, CancellationToken ct)
     {
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct))
+            return NotFound(ApiResponse<StaffAssignmentDto>.Fail("Trip not found"));
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
             return BadRequest(ApiResponse<StaffAssignmentDto>.Fail("Staff member not found."));
 
@@ -1158,7 +1026,7 @@ public class StaffAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<StaffAssignmentDto>>> Update(Guid id, [FromBody] UpdateStaffAssignmentDto dto, CancellationToken ct)
     {
-        var a = await _db.StaffAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<StaffAssignmentDto>.Fail("Assignment not found"));
 
         if (!await IsValidStaffRefAsync(dto.StaffId, ct))
@@ -1205,7 +1073,7 @@ public class StaffAssignmentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var a = await _db.StaffAssignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantAssignments().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Assignment not found"));
         a.Status = AssignmentStatus.Cancelled;
         a.UpdatedAt = DateTime.UtcNow;

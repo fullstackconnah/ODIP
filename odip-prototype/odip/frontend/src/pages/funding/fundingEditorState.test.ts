@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FundingPlanDto } from '@/api/types'
 import {
   addCorePool, addStatedPool, applySetAside, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, setAsideOf,
-  startFromBilling, toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorState,
+  toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorState,
 } from './fundingEditorState'
 
 // The editor's form as plain data: what the person typed, how the periods follow the dates and the totals, what is wrong in plain words, and the body that is saved.
@@ -123,26 +123,6 @@ describe('the periods follow the plan until a person edits them', () => {
     const state = addCorePool({ ...yearPlan(), periodLengthMonths: null }, 'PlanManaged', { totalText: '8000', setAsideText: '6000' })
 
     expect(state.pools[0].periods).toEqual([{ periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: '8000.00', setAside: '6000.00' }])
-  })
-})
-
-describe('start from Billing funding sources', () => {
-  it('takes the sources dates and adds one Core (flexible) pool holding their total, for review', () => {
-    const state = startFromBilling(emptyEditorState(), { total: 25100.5, planStart: '2026-07-01', planEnd: '2027-06-30', managementType: 'PlanManaged', rows: [] }, 'SelfManaged')
-
-    expect(state).toMatchObject({ planStart: '2026-07-01', planEnd: '2027-06-30' })
-    expect(state.pools).toHaveLength(1)
-    expect(state.pools[0]).toMatchObject({ kind: 'CoreFlexible', managementType: 'PlanManaged', totalText: '25100.50' })
-    expect(state.pools[0].periods).toHaveLength(4)
-  })
-
-  it('keeps the dates already typed when the sources carry none, and falls back to the participant’s plan type', () => {
-    const start = { ...emptyEditorState(), planStart: '2026-08-01', planEnd: '2027-07-31' }
-
-    const state = startFromBilling(start, { total: 1000, rows: [] }, 'SelfManaged')
-
-    expect(state).toMatchObject({ planStart: '2026-08-01', planEnd: '2027-07-31' })
-    expect(state.pools[0].managementType).toBe('SelfManaged')
   })
 })
 

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { FundingSourceDto, PlannedLine, PlanBlock, PlanFailureReason, PlanIssue, PlanQuote } from '@/api/types'
+import type { PlanBlock, PlanFailureReason, PlanIssue, PlanQuote } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 
 // The backend does not always sit beside the frontend (an image build has only the frontend). A test that reads the C# is skipped THEN, where the run says so, and is never a pass that checked nothing.
@@ -9,14 +9,9 @@ const BACKEND = resolve(__dirname, '../../../backend')
 const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
 const hasBackend = existsSync(PRICING)
 import {
-  CATEGORY_SHORT, NO_FIGURE, REASON_COPY, addDays, asSentence, bandLabel, categoryLabel, compareBudget, conflictVersionOf, describeQuoteError, describeSaveError, formatServiceDate, friendlyMessage, groupLines,
-  groupByReason, groupIssues, isPricingDate, isRefusal, issueWhere, parseFlags, periodProblem, periodPrompt, planBudgetFor, pricedNothing, quantityLabel, questionShort, referenceWeek, refusalSentence, refusals, ruleWords, shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
+  CATEGORY_SHORT, REASON_COPY, addDays, asSentence,  categoryLabel, conflictVersionOf, describeQuoteError, describeRenewError, describeSaveError, formatServiceDate, friendlyMessage, 
+   groupIssues, isPricingDate, isRefusal, issueWhere,  periodProblem,  planNeededMessageOf, pricedNothing,   referenceWeek,  refusals,  shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
 } from './planQuote'
-
-const line = (changes: Partial<PlannedLine>): PlannedLine => ({
-  blockId: 'b1', kind: 'Support', itemCode: '04_104_0125_6_1', unit: 'H', qty: 4, unitPrice: 73.58, total: 294.32, serviceDate: '2026-10-12', band: 'Weekday Daytime', flags: 'None',
-  shortNoticeCancellationAllowed: false, trace: { rules: ['bands:weekday-daytime'], why: 'why', catalogueVersion: '2026-27', priceBasisFrom: '2026-07-01', zone: 'National', workers: 1, participantsPresent: 1, openQuestions: [] }, ...changes,
-})
 
 const axiosError = (status: number, data: unknown = {}) => ({ response: { status, data } })
 
@@ -64,33 +59,6 @@ describe('the agreement period', () => {
     expect(periodProblem('2027-06-30', '2026-10-01')).toBe('reversed')
     expect(periodProblem('2026-10-02', '2026-10-01')).toBe('reversed')
   })
-
-  it('says what is missing in the words of the thing being priced, and an agreement that ends before it starts in its own', () => {
-    expect(periodPrompt('blank', 'the plan')).toBe('Enter the agreement dates to price the plan')
-    expect(periodPrompt('invalid', 'this block')).toBe('Enter the agreement dates to price this block')
-    expect(periodPrompt('reversed', 'the plan')).toBe('The agreement ends before it starts, so the plan cannot be priced')
-    expect(periodPrompt('reversed', 'this block')).toBe('The agreement ends before it starts, so this block cannot be priced')
-  })
-})
-
-// Round 3, L1: the one sentence for a refusal, named by the places of the blocks in the plan as it is being priced.
-describe('why a plan cannot be saved', () => {
-  const refusal = (blockId: string, reason: PlanFailureReason = 'RegistrationGroupNotHeld'): PlanIssue => ({ blockId, reason, message: `${reason} ${blockId}`, count: 1 })
-  const blocks = ['b1', 'b2', 'b3', 'b4'].map(id => emptyBlock(id, 'NSW'))
-
-  it('names one block by its place', () => {
-    expect(refusalSentence([refusal('b2')], blocks)).toBe('Block 2 cannot be priced yet, so the plan cannot be saved.')
-  })
-
-  it('names several blocks once each, in order, whatever order or how many times they were refused', () => {
-    expect(refusalSentence([refusal('b3'), refusal('b1'), refusal('b3', 'InvalidInput')], blocks)).toBe('Blocks 1 and 3 cannot be priced yet, so the plan cannot be saved.')
-    expect(refusalSentence([refusal('b4'), refusal('b1'), refusal('b2')], blocks)).toBe('Blocks 1, 2 and 4 cannot be priced yet, so the plan cannot be saved.')
-  })
-
-  it('names the plan when the refusal names no block, or one that is not in the plan', () => {
-    expect(refusalSentence([refusal('', 'InvalidInput')], blocks)).toBe('This plan cannot be priced yet, so it cannot be saved.')
-    expect(refusalSentence([refusal('gone')], blocks)).toBe('This plan cannot be priced yet, so it cannot be saved.')
-  })
 })
 
 describe('an ordinary week', () => {
@@ -106,107 +74,6 @@ describe('an ordinary week', () => {
     expect(referenceWeek('2026-10-01', '2026-10-06', [])).toBeNull()
     expect(referenceWeek('2026-10-01', '2026-10-07', [])).toEqual({ from: '2026-10-01', to: '2026-10-07' })
     expect(referenceWeek('', '2026-10-07', [])).toBeNull()
-  })
-})
-
-describe('flags', () => {
-  it('reads the engine\'s comma-joined names', () => {
-    expect(parseFlags('None')).toEqual({ review: false, holidayExposure: false, provisional: false })
-    expect(parseFlags('Review, HolidayExposure')).toEqual({ review: true, holidayExposure: true, provisional: false })
-    expect(parseFlags('Provisional')).toEqual({ review: false, holidayExposure: false, provisional: true })
-    expect(parseFlags(undefined)).toEqual({ review: false, holidayExposure: false, provisional: false })
-  })
-})
-
-describe('the lines of an agreement', () => {
-  const lines = [
-    line({ serviceDate: '2026-10-12', total: 294.32 }), line({ serviceDate: '2026-10-14', total: 294.32 }),
-    line({ serviceDate: '2026-10-19', total: 294.32 }), line({ serviceDate: '2026-10-21', total: 294.32 }),
-    line({ serviceDate: '2026-10-05', itemCode: '04_102_0125_6_1', unitPrice: 163.46, total: 653.84, band: 'Public Holiday', flags: 'Review, HolidayExposure', trace: { ...line({}).trace, openQuestions: [8] } }),
-  ]
-
-  it('sums an item\'s occurrences into one row, with what it is in the ordinary week beside what it is over the agreement', () => {
-    const groups = groupLines(lines, { from: '2026-10-12', to: '2026-10-18' })
-
-    expect(groups.map(group => [group.itemCode, group.band, group.occurrences, group.periodQty, group.periodTotal, group.weeklyQty, group.weeklyTotal])).toEqual([
-      ['04_102_0125_6_1', 'Public Holiday', 1, 4, 653.84, 0, 0],
-      ['04_104_0125_6_1', 'Weekday Daytime', 4, 16, 1177.28, 8, 588.64],
-    ])
-    expect(groups[0].flags).toEqual({ review: true, holidayExposure: true, provisional: false })
-    expect(groups[0].openQuestions).toEqual([8])
-    expect(groups[1].sample.serviceDate).toBe('2026-10-12')
-  })
-
-  it('has no weekly figure at all when the agreement has no ordinary week', () => {
-    const groups = groupLines(lines, null)
-    expect(groups.every(group => group.weeklyQty === null && group.weeklyTotal === null)).toBe(true)
-  })
-
-  it('adds the occurrences\' own totals and never multiplies quantity by price (40 minutes at 73.58 is 49.05, not 49.06)', () => {
-    const forty = [line({ qty: 0.6667, total: 49.05, serviceDate: '2026-10-12' }), line({ qty: 0.6667, total: 49.05, serviceDate: '2026-10-14' }), line({ qty: 0.6667, total: 49.05, serviceDate: '2026-10-19' })]
-    const [group] = groupLines(forty, { from: '2026-10-12', to: '2026-10-18' })
-    expect(group.periodTotal).toBe(147.15)
-    expect(group.weeklyTotal).toBe(98.1)
-    expect(group.periodQty).toBeCloseTo(2.0001, 4)
-  })
-
-  it('keeps lines at different prices or from different catalogue rows apart, so a price change is its own row', () => {
-    const december = line({ serviceDate: '2026-12-07', unitPrice: 74.58, total: 298.32, trace: { ...line({}).trace, priceBasisFrom: '2026-12-01', catalogueVersion: '2026-27 (2026-12-01)' } })
-    expect(groupLines([line({}), december], null).map(group => group.unitPrice)).toEqual([73.58, 74.58])
-  })
-
-  it('lists a line the engine could not price as its own row, with the reason', () => {
-    const night = line({ itemCode: undefined, unpriced: 'NoItem', unitPrice: 0, total: 0, band: 'Weekday Night', qty: 6 })
-    const [group] = groupLines([night, night], null)
-    expect(group).toMatchObject({ itemCode: undefined, unpriced: 'NoItem', occurrences: 2, periodTotal: 0 })
-  })
-
-  it('puts the support first, then its companions in the order a coordinator reads them', () => {
-    const rows = [
-      line({ kind: 'ActivityTransport', band: 'Activity-based transport', itemCode: '04_590_0125_6_1', unit: 'E' }), line({ kind: 'Sleepover', band: 'Sleepover', itemCode: '01_010_0107_1_1', unit: 'E' }),
-      line({}), line({ kind: 'ProviderTravelTime', band: 'Provider travel' }),
-    ]
-    expect(groupLines(rows, null).map(group => group.kind)).toEqual(['Support', 'Sleepover', 'ProviderTravelTime', 'ActivityTransport'])
-  })
-
-  it('says a quantity in words: hours, sleepovers, nights, each, and nothing for a dollar line', () => {
-    expect(quantityLabel('Support', 'H', 8)).toBe('8 h')
-    expect(quantityLabel('Support', 'H', 0.6667)).toBe('0.67 h')
-    expect(quantityLabel('Sleepover', 'E', 2)).toBe('2 sleepovers')
-    expect(quantityLabel('Sleepover', 'E', 1)).toBe('1 sleepover')
-    expect(quantityLabel('ParticipantAccommodation', 'D', 1)).toBe('1 night')
-    expect(quantityLabel('CentreCapital', 'E', 3)).toBe('3 each')
-    expect(quantityLabel('ActivityTransport', 'E', 12.4)).toBe(NO_FIGURE)
-    expect(NO_FIGURE).toBe('–')    // an en dash, as the dashboard's tiles use for a figure that is not known (DESIGN.md, The Quiet Zero Rule)
-    expect(bandLabel('Weekday Daytime')).toBe('Weekday daytime')
-    expect(bandLabel('Saturday')).toBe('Saturday')
-  })
-})
-
-describe('why, in plain words', () => {
-  it('writes each rule the engine records as a sentence', () => {
-    expect(ruleWords('price:catalogue-by-service-date')).toBe('Priced from the catalogue row valid on the date of the service')
-    expect(ruleWords('bands:weekday-evening')).toBe('Weekday evening price (Mon–Fri 20:00–24:00)')
-    expect(ruleWords('bands:public-holiday')).toBe('Public holiday price, the whole day')
-    expect(ruleWords('travel:time-cap-30')).toBe('Provider travel time capped at 30 minutes each way for this zone')
-    expect(ruleWords('crossing:A')).toContain('crossing policy A')
-    expect(ruleWords('group:floor(price*workers/participants)')).toContain('rounded down to the cent')
-    expect(ruleWords('unpriced:no-item')).toBe('Not priced: no item')
-    expect(ruleWords('bands:something-new')).toBe('Something new price')
-    expect(ruleWords('totally:unknown')).toBe('totally:unknown')
-  })
-
-  it.skipIf(!hasBackend)('has words for every rule id the pricing engine can write', () => {
-    const source = PRICING
-    const text = ['OccurrencePricer.cs', 'PlanPricingEngine.cs'].map(file => readFileSync(resolve(source, file), 'utf-8')).join('\n')
-    const ids = [...new Set([...text.matchAll(/"([a-z][a-z0-9-]*:[a-z][^"{}\s]*)"/g)].map(match => match[1]))].filter(id => !/^(bands|unpriced):$/.test(id))
-    expect(ids.length).toBeGreaterThan(15)
-    expect(ids.filter(id => ruleWords(id) === id), 'a rule id with no words').toEqual([])
-  })
-
-  it('says the open questions a line rests on', () => {
-    expect(questionShort(6)).toBe('travel time caps and per-kilometre rates are 2025-26 values')
-    expect(questionShort(99)).toBe('open question 99')
   })
 })
 
@@ -411,17 +278,7 @@ describe('issues read as one thing, not one per item', () => {
     const copy = JSON.parse(JSON.stringify(given))
 
     groupIssues(given)
-    groupByReason(given)
     expect(given).toEqual(copy)
-  })
-
-  it('has a way to say only the reason once for a block, whatever the messages said', () => {
-    const grouped = groupByReason([
-      gap('b1', 'Community access', 5), gap('b1', 'Group activities', 3),
-      { blockId: 'b1', reason: 'BlocksOverlap', message: 'with b2', count: 2 }, { blockId: 'b1', reason: 'BlocksOverlap', message: 'with b3', count: 1 },
-    ])
-
-    expect(grouped.map(issue => [issue.reason, issue.count])).toEqual([['CatalogueNotFound', 5], ['BlocksOverlap', 2]])
   })
 
   it('says where an issue was met in words: how many shifts and the first day, or only the day', () => {
@@ -432,25 +289,7 @@ describe('issues read as one thing, not one per item', () => {
   })
 })
 
-describe('the plan budget', () => {
-  it('compares a plan with its budget: within, over by how much, or unknown when none is recorded', () => {
-    expect(compareBudget(30000, 40000)).toEqual({ status: 'within', budget: 40000, used: 30000, remaining: 10000, percent: 75 })
-    expect(compareBudget(41234.56, 40000)).toEqual({ status: 'over', budget: 40000, used: 41234.56, remaining: -1234.56, percent: 103 })
-    expect(compareBudget(40000, 40000).status).toBe('within')   // exactly the budget is not over it
-    for (const none of [null, undefined, 0]) expect(compareBudget(100, none)).toEqual({ status: 'unknown', budget: null, used: 100, remaining: null, percent: null })
-  })
-
-  it('reads the plan budget off the participant\'s active NDIS funding sources that meet the agreement, and says nothing when none records one', () => {
-    const source = (changes: Partial<FundingSourceDto>): FundingSourceDto => ({
-      id: 'f', participantId: 'p', participantName: null, routeType: 'PlanManaged', budgetCategory: 'Core - Social & Community Participation', ndisPlanNumber: null, planStartDate: '2026-07-01', planEndDate: '2027-06-30',
-      budget: 20000, payerName: null, payerEmail: null, isActive: true, ...changes,
-    })
-    expect(planBudgetFor([source({}), source({ id: 'g', routeType: 'AgencyManaged', budget: 5000.5 })], '2026-10-01', '2027-03-31')).toEqual({ total: 25000.5, count: 2 })
-    expect(planBudgetFor([source({ isActive: false }), source({ routeType: 'Private' }), source({ budget: null }), source({ planEndDate: '2026-09-30' }), source({ planStartDate: '2027-04-01' })], '2026-10-01', '2027-03-31')).toBeNull()
-    expect(planBudgetFor([source({ planStartDate: null, planEndDate: null })], '2026-10-01', '2027-03-31')).toEqual({ total: 20000, count: 1 })
-    expect(planBudgetFor(undefined, '2026-10-01', '2027-03-31')).toBeNull()
-  })
-
+describe('the budget categories', () => {
   it('names the budget categories short enough for a bar and keeps the engine\'s name for one it does not know', () => {
     expect(Object.values(CATEGORY_SHORT).length).toBe(4)
     expect(categoryLabel({ paceCategory: 4, name: 'Assistance with Social, Economic and Community Participation' })).toBe('Community participation')
@@ -520,5 +359,31 @@ describe('when a request fails', () => {
     expect(describeQuoteError(axiosError(400, '<html>Bad gateway</html>')).title).toBe('This plan cannot be priced yet')
     expect(describeSaveError({ response: { status: 400 } }).messages).toEqual(['The server refused the draft.'])
     expect(describeSaveError(undefined).title).toBe('The draft was not saved')
+  })
+})
+
+describe('the renewal refusals (agreement PR 2)', () => {
+  const words = "Record the new plan first: no plan of the participant's covers 2026-11-23, the day the renewal starts."
+
+  it('reads the plan-needed words, and nothing else as plan-needed', () => {
+    expect(planNeededMessageOf(axiosError(409, { success: false, code: 'plan-needed', errors: [words] }))).toBe("Record the new plan first: no plan of the participant's covers Mon 23 Nov 2026, the day the renewal starts.")   // the house's dates (fix round 2)
+    expect(planNeededMessageOf(axiosError(409, { success: false, code: 'draft-version-conflict', data: { currentVersion: 2 }, errors: ['x'] }))).toBeNull()
+    expect(planNeededMessageOf(axiosError(400, { success: false, code: 'plan-needed', errors: [words] }))).toBeNull()
+    expect(planNeededMessageOf(new Error('offline'))).toBeNull()
+  })
+
+  it('says every reason the server gave, and a busy server or a dropped connection in its own words', () => {
+    expect(describeRenewError(axiosError(400, { success: false, errors: ['Renew the agreement from its newest approved revision, v2.'] })))
+      .toEqual({ title: 'The agreement was not renewed', messages: ['Renew the agreement from its newest approved revision, v2.'] })
+    expect(describeRenewError(axiosError(403, { success: false, errors: ['Your role cannot renew agreements in your organisation. An Admin can change who may approve in Settings, Plan pricing.'] })).messages)
+      .toEqual(['Your role cannot renew agreements in your organisation. An Admin can change who may approve in Settings, Plan pricing.'])
+    expect(describeRenewError(axiosError(429)).title).toBe('The server is busy')
+    expect(describeRenewError(new Error('offline'))).toEqual({ title: 'The agreement was not renewed', messages: ['It could not be renewed just now. Check your connection and try again.'] })
+  })
+})
+
+describe('the catalogue-not-found advice (agreement PR 2, fix round 2)', () => {
+  it('leads with the withdrawn item, the cause a renewal meets, and keeps the price list not imported yet', () => {
+    expect(REASON_COPY.CatalogueNotFound.advice).toBe('No price list row covers this support on some of these dates. If the item was withdrawn from the price list, choose a current support on the Week step; if the price list for those dates is not imported yet, a SuperAdmin can import it in Settings.')
   })
 })
