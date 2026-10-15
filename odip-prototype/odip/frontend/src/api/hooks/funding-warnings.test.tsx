@@ -228,6 +228,9 @@ describe('the writes that move a participant’s money', () => {
     ['an assign', (client: QueryClient) => run(client, useAssignShift, { id: 's-1', data: { staffId: 'st-1' } as never })],
     ['a move', (client: QueryClient) => run(client, useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Move', staffId: 'st-1', expectedToStaffId: null, overrideReason: null, acknowledgedFindingCodes: [] })],
     ['a publish', (client: QueryClient) => run(client, usePublishWeek, '2026-08-17')],
+    // Post-merge review S1: the empty-day move rides the create, and the slide-over saves through the PUT; their refusals refetch too.
+    ['a create (the empty-day move)', (client: QueryClient) => run(client, useCreateShift, { participantId: 'p-1', staffId: 'st-1', serviceDate: '2026-08-18', moveFromShiftId: 's-1' } as never)],
+    ['a PUT', (client: QueryClient) => run(client, useUpdateShift, { id: 's-1', data: { participantId: 'p-1', staffId: 'st-1' } as never })],
   ])('refetches the board after the server refuses %s', async (_name, write) => {
     const client = newClient()
     const invalidate = vi.spyOn(client, 'invalidateQueries')

@@ -256,6 +256,72 @@ public class RosterBoardDragDropTests
         Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
     }
 
+    // ── The slide-over's PUT keeps a started, finished or cancelled shift's worker, as /assign and a drop do (post-merge review S2) ──
+
+    [Theory]
+    [InlineData(ShiftStatus.InProgress)]
+    [InlineData(ShiftStatus.PendingReview)]
+    [InlineData(ShiftStatus.Completed)]
+    [InlineData(ShiftStatus.Cancelled)]
+    public async Task UpdateShift_ChangingTheWorkerOfALockedShift_Is409AndChangesNothing(ShiftStatus status)
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, status);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, status) with { Notes = "changed too" }, default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value);
+        Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, body.Code);
+        Assert.Equal("This shift has started, finished or been cancelled, so its worker can't be changed here.", Assert.Single(body.Errors!));
+        var after = await Reload(db, shift.Id);
+        Assert.Equal(alex.Id, after.UserId);
+        Assert.Null(after.Notes);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_ReopeningACancelledShiftWithANewWorker_Saves()   // deep review S2: a reopen is not a worker change on a finished shift
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Cancelled);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Published), default));
+
+        var after = await Reload(db, shift.Id);
+        Assert.Equal(sam.Id, after.UserId);
+        Assert.Equal(ShiftStatus.Published, after.Status);
+    }
+
+    [Fact]
+    public async Task UpdateShift_OtherEditsOnALockedShift_StillSave()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Completed);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Completed) with { Notes = "Handover read" }, default));
+
+        Assert.Equal("Handover read", (await Reload(db, shift.Id)).Notes);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingTheWorkerOfADraft_StillChangesIt()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Draft);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Draft), default));
+
+        Assert.Equal(sam.Id, (await Reload(db, shift.Id)).UserId);
+    }
+
     [Theory]
     [InlineData(ShiftStatus.Draft)]
     [InlineData(ShiftStatus.Cancelled)]
@@ -318,6 +384,46 @@ public class RosterBoardDragDropTests
         Assert.DoesNotContain(RosterConflictService.DoubleBookedShift, (await Reload(db, to.Id)).AcknowledgedFindingCodes ?? "");
     }
 
+    // Overnight shifts across the week edge (picker review S1): the check loads the day either side of the week.
+    [Fact]
+    public async Task CheckShift_OvernightShiftFromTheWeekBefore_RaisesDoubleBooking()
+    {
+        using var db = TestDb.Create();
+        var jo = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var sundayBefore = SeedShift(db, mia.Id, jo.Id, day: Monday.AddDays(-1), startHour: 22, endHour: 6);
+        sundayBefore.EndsNextDay = true;
+        await db.SaveChangesAsync();
+        var target = SeedShift(db, mia.Id, null, startHour: 5, endHour: 9);
+
+        var findings = Body(await Controller(db).CheckShift(new CheckShiftDto
+        {
+            Id = target.Id, ParticipantId = mia.Id, StaffId = jo.Id, ServiceDate = target.ServiceDate,
+            StartTime = target.StartTime, EndTime = target.EndTime, Ratio = target.Ratio, NightType = target.NightType,
+        }, default));
+
+        Assert.Contains(findings, f => f.Code == RosterConflictService.DoubleBookedShift);
+    }
+
+    [Fact]
+    public async Task CheckShift_OvernightTargetOnSunday_RaisesDoubleBookingAgainstNextWeeksMonday()
+    {
+        using var db = TestDb.Create();
+        var jo = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        SeedShift(db, mia.Id, jo.Id, day: Monday.AddDays(7), startHour: 5, endHour: 9);
+        var sunday = Monday.AddDays(6);
+        var target = SeedShift(db, mia.Id, null, day: sunday, startHour: 22, endHour: 6);
+
+        var findings = Body(await Controller(db).CheckShift(new CheckShiftDto
+        {
+            Id = target.Id, ParticipantId = mia.Id, StaffId = jo.Id, ServiceDate = sunday,
+            StartTime = target.StartTime, EndTime = target.EndTime, EndsNextDay = true, Ratio = target.Ratio, NightType = target.NightType,
+        }, default));
+
+        Assert.Contains(findings, f => f.Code == RosterConflictService.DoubleBookedShift);
+    }
+
     [Fact]
     public async Task MoveStaff_ReplaceOnPublishedShifts_TellsEachChange()
     {
@@ -349,6 +455,30 @@ public class RosterBoardDragDropTests
 
         Assert.Equal(sam.Id, (await Reload(db, to.Id)).UserId);
         Assert.Equal(alex.Id, (await Reload(db, from.Id)).UserId);
+        Assert.Empty(await Notices(db));   // deep review N1: Draft shifts tell nobody
+    }
+
+    [Fact]
+    public async Task MoveStaff_SwapOfTwoPublishedShifts_TellsEachPersonOnAndOff()   // post-merge review N4
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Published, day: Monday);
+        var to = SeedShift(db, mia.Id, alex.Id, ShiftStatus.Published, day: Monday.AddDays(1));
+
+        Body(await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Swap), default));
+
+        // Sam: on Tuesday, off Monday. Alex: on Monday, off Tuesday. Four notices, one per change.
+        Assert.Equal(Sorted(
+            (NotificationEventType.ShiftAssigned, sam.Id), (NotificationEventType.ShiftAssigned, alex.Id),
+            (NotificationEventType.ShiftUnassigned, sam.Id), (NotificationEventType.ShiftUnassigned, alex.Id)), await Notices(db));
+        var rows = await db.NotificationOutbox.AsNoTracking().ToListAsync();
+        Assert.Contains(rows, r => r.RecipientUserId == sam.Id && r.EventType == NotificationEventType.ShiftAssigned && r.EntityId == to.Id);
+        Assert.Contains(rows, r => r.RecipientUserId == sam.Id && r.EventType == NotificationEventType.ShiftUnassigned && r.EntityId == from.Id);
+        Assert.Contains(rows, r => r.RecipientUserId == alex.Id && r.EventType == NotificationEventType.ShiftAssigned && r.EntityId == from.Id);
+        Assert.Contains(rows, r => r.RecipientUserId == alex.Id && r.EventType == NotificationEventType.ShiftUnassigned && r.EntityId == to.Id);
     }
 
     [Fact]
@@ -529,6 +659,78 @@ public class RosterBoardDragDropTests
         Assert.IsType<ConflictObjectResult>(result.Result);
         Assert.Equal(jo.Id, (await Reload(db, source.Id)).UserId);
         Assert.Equal(1, await db.Shifts.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateShift_MovingFromALockedShift_Is409AndCreatesNothing()   // post-merge review N3 (RC:538)
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var source = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Completed);
+
+        var result = await Controller(db).CreateShift(NewShiftFor(mia.Id, sam.Id, Monday.AddDays(1), 9, 15, source.Id), default);
+
+        Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
+        Assert.Equal(sam.Id, (await Reload(db, source.Id)).UserId);
+        Assert.Equal(1, await db.Shifts.CountAsync());
+    }
+
+    // ── Another organisation's shift id gets 404 and nothing changes (post-merge review N3) ──
+
+    [Fact]
+    public async Task AssignShift_OnAShiftOfAnotherOrganisation_Is404AndChangesNothing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift theirs;
+        Guid sam;
+        using (var mine = TestDb.ForTenant(dbName, ours)) sam = SeedStaff(mine).Id;
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) theirs = SeedShift(other, SeedParticipant(other).Id, null);
+        using var db = TestDb.ForTenant(dbName, ours);
+
+        var result = await Controller(db, ours).AssignShift(theirs.Id, new AssignShiftDto { StaffId = sam, ExpectedStaffId = null }, default);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        using var all = TestDb.Create(dbName);
+        Assert.Null((await all.Shifts.SingleAsync(s => s.Id == theirs.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task UpdateShift_OnAShiftOfAnotherOrganisation_Is404AndChangesNothing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift theirs;
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) theirs = SeedShift(other, SeedParticipant(other).Id, SeedStaff(other).Id);
+        using var db = TestDb.ForTenant(dbName, ours);
+
+        var result = await Controller(db, ours).UpdateShift(theirs.Id, Put(theirs, theirs.UserId, ShiftStatus.Cancelled) with { Notes = "not ours" }, default);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        using var all = TestDb.Create(dbName);
+        var after = await all.Shifts.SingleAsync(s => s.Id == theirs.Id);
+        Assert.Equal(ShiftStatus.Draft, after.Status);
+        Assert.Null(after.Notes);
+    }
+
+    [Fact]
+    public async Task CreateShift_MovingFromAShiftOfAnotherOrganisation_Is404AndCreatesNothing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var ours = Guid.NewGuid();
+        Shift theirs;
+        Guid mia;
+        using (var mine = TestDb.ForTenant(dbName, ours)) mia = SeedParticipant(mine).Id;
+        using (var other = TestDb.ForTenant(dbName, Guid.NewGuid())) theirs = SeedShift(other, SeedParticipant(other).Id, SeedStaff(other).Id);
+        using var db = TestDb.ForTenant(dbName, ours);
+
+        var result = await Controller(db, ours).CreateShift(NewShiftFor(mia, theirs.UserId!.Value, Monday.AddDays(1), 9, 15, theirs.Id), default);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        using var all = TestDb.Create(dbName);
+        Assert.Equal(1, await all.Shifts.CountAsync());
+        Assert.Equal(theirs.UserId, (await all.Shifts.SingleAsync(s => s.Id == theirs.Id)).UserId);
     }
 
     // ── Publish week ──

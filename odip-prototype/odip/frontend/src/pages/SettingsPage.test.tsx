@@ -1,18 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSettings, mockUpsertMutate, mockSyncMutate, holidayRows } = vi.hoisted(() => ({
+const { mockUsePermissions, mockUseEventTemplates, settingsData, mockSyncMutate, holidayRows, screenSize } = vi.hoisted(() => ({
   mockUsePermissions: vi.fn(),
+  screenSize: { belowMd: false },
   // The Public Holidays tab: the rows usePublicHolidays returns (a stable reference, like a cached query).
   holidayRows: { current: [] as unknown[] },
-  // The Provider Settings tab: what useProviderSettings returns (a stable reference, like a cached query) and the captured save mutation.
-  providerSettings: { current: {} as Record<string, unknown> },
-  mockUpsertMutate: vi.fn(),
   // The Public Holidays tab's sync mutation.
   mockSyncMutate: vi.fn(),
   // Event Templates tab data; defaults to "no templates" (see beforeEach).
@@ -25,29 +24,24 @@ const { mockUsePermissions, mockUseEventTemplates, settingsData, providerSetting
   settingsData: { qualificationWarningDays: 30 },
 }))
 
-// SettingsPage's Qualification Warnings and Provider Settings tabs now call
+// Settings sections with a Save call
 // useUnsavedChangesWarning (PP-77), which uses react-router 7's useBlocker — that throws under
 // a plain declarative <MemoryRouter>/<Routes>, so this needs a data router (same pattern
 // StaffCreatePage.test.tsx documents).
-function renderSettingsPage() {
+function renderSettingsPage(url = '/settings') {
   const router = createMemoryRouter(
     [
       { path: '/settings', element: <SettingsPage /> },
       { path: '/elsewhere', element: <div>Elsewhere page</div> },
     ],
-    { initialEntries: ['/settings'] },
+    { initialEntries: [url] },
   )
   return { router, ...render(<RouterProvider router={router} />) }
 }
 
-function renderSettingsPageAt(url: string) {
-  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: [url] })
-  return { router, ...render(<RouterProvider router={router} />) }
-}
-
 // The Support Catalogue tab invalidates queries after an import, so it needs a QueryClient the other tabs don't.
-function renderSettingsPageWithQueryClient() {
-  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings'] })
+function renderSettingsPageWithQueryClient(url = '/settings') {
+  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: [url] })
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <RouterProvider router={router} />
@@ -60,8 +54,6 @@ vi.mock('@/api/hooks', () => ({
   useActivities: () => ({ data: [] }),
   useSettings: () => ({ data: settingsData }),
   useUpdateSettings: () => ({ mutate: vi.fn((_vars, opts) => opts?.onSuccess?.()), isPending: false }),
-  useProviderSettings: () => ({ data: providerSettings.current }),
-  useUpsertProviderSettings: () => ({ mutate: mockUpsertMutate, isPending: false }),
   useSupportCatalogue: () => ({ data: [] }),
   usePublicHolidays: () => ({ data: holidayRows.current }),
   useCreatePublicHoliday: () => ({ mutate: vi.fn(), isPending: false }),
@@ -103,6 +95,8 @@ vi.mock('@/api/hooks/admin', () => ({
 vi.mock('@/lib/permissions', () => ({
   usePermissions: mockUsePermissions,
 }))
+// jsdom has no matchMedia, so useIsBelowMd would read as a phone: each test says which it is.
+vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => screenSize.belowMd }))
 
 // The catalogue import posts straight through apiClient (preview upload, then confirm with every row), so that is the seam these tests drive.
 const { mockImportPost } = vi.hoisted(() => ({ mockImportPost: vi.fn() }))
@@ -113,18 +107,17 @@ vi.mock('@/api/client', async () => {
 
 beforeEach(() => {
   mockImportPost.mockReset()
-  mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+  mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
+  screenSize.belowMd = false
   mockUseEventTemplates.mockReturnValue({ data: [] })
-  providerSettings.current = {}
   holidayRows.current = []
-  mockUpsertMutate.mockReset()
   mockSyncMutate.mockReset()
 })
 
 describe('SettingsPage — Event Templates tab', () => {
-  it('shows an empty state and a single "New template" action, in the header, when there are no templates', async () => {
+  it('shows an empty state and a single "New template" action, at the top of its section, when there are no templates', async () => {
     const user = userEvent.setup()
-    renderSettingsPage()
+    renderSettingsPage('/settings?section=templates')
 
     expect(screen.getByText('No event templates yet')).toBeInTheDocument()
     // The action is the header's, not repeated in the empty state.
@@ -139,17 +132,17 @@ describe('SettingsPage — Event Templates tab', () => {
     mockUseEventTemplates.mockReturnValue({
       data: [{ id: 't1', eventName: 'Old Escape', eventCode: 'OE', isActive: false }],
     })
-    renderSettingsPage()
+    renderSettingsPage('/settings?section=templates')
 
     expect(screen.getByText('No event templates yet')).toBeInTheDocument()
     expect(screen.queryByText('Old Escape')).not.toBeInTheDocument()
   })
 
-  it('lists active templates with the header action and no empty state', () => {
+  it('lists active templates with the one New template action and no empty state', () => {
     mockUseEventTemplates.mockReturnValue({
       data: [{ id: 't1', eventName: 'Beach Escape', eventCode: 'BE', isActive: true }],
     })
-    renderSettingsPage()
+    renderSettingsPage('/settings?section=templates')
 
     expect(screen.getByText('Beach Escape')).toBeInTheDocument()
     expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
@@ -158,13 +151,13 @@ describe('SettingsPage — Event Templates tab', () => {
 
   it('does not claim there are no templates while they are still loading', () => {
     mockUseEventTemplates.mockReturnValue({ data: undefined, isLoading: true })
-    renderSettingsPage()
+    renderSettingsPage('/settings?section=templates')
 
     expect(screen.queryByText('No event templates yet')).not.toBeInTheDocument()
   })
 
   it('draws "New template" as a Button at --control-h (32px, 44px on a coarse pointer), not a hand-rolled 44px link', () => {
-    const { container } = renderSettingsPage()
+    const { container } = renderSettingsPage('/settings?section=templates')
 
     const action = screen.getByRole('button', { name: 'New template' })
     expect(action).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
@@ -180,34 +173,31 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
   const labourDay = { id: 'h1', date: '2026-10-05', name: 'Labour Day', state: 'NSW' }
 
   it('shows a non-SuperAdmin the calendar read-only: the rows, no Add, Sync or Delete control, and the reason', async () => {
-    const user = userEvent.setup()
     holidayRows.current = [labourDay]
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    renderSettingsPage()
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
+    renderSettingsPage('/settings?section=holidays')
 
-    await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
-    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', /^delete/i]) {
+    for (const name of ['Add holiday', 'Sync holidays', 'Advanced', /^delete/i]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
-    expect(screen.getByText(/only a super admin can add, delete or sync public holidays/i)).toBeInTheDocument()
+    expect(screen.getByText(/only a super admin can change this calendar/i)).toBeInTheDocument()
   })
 
   it('gives a SuperAdmin the Add, Sync and Delete controls and no read-only note', async () => {
     const user = userEvent.setup()
     holidayRows.current = [labourDay]
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    renderSettingsPage()
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
+    renderSettingsPage('/settings?section=holidays')
 
-    await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
     // Every row has a Delete, so its name says which holiday it deletes.
-    for (const name of ['+ Add Holiday', 'Sync Holidays', 'Advanced', 'Delete: Labour Day, 05/10/2026 (NSW)']) {
+    for (const name of ['Add holiday', 'Sync holidays', 'Advanced', 'Delete: Labour Day, 05/10/2026 (NSW)']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
-    expect(screen.queryByText(/only a super admin can add, delete or sync public holidays/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/only a super admin can change this calendar/i)).not.toBeInTheDocument()
 
     // Q5 review: the sync year fields are named by their labels.
     await user.click(screen.getByRole('button', { name: 'Advanced' }))
@@ -217,30 +207,19 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
 })
 
 describe('SettingsPage — buttons are the Button primitive', () => {
-  it('draws Save Settings as a Button at --control-h, not a hand-rolled rounded-full pill', async () => {
-    const user = userEvent.setup()
-    renderSettingsPage()
-
-    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
-
-    const save = screen.getByRole('button', { name: 'Save Settings' })
-    expect(save).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
-    expect(save.className).not.toMatch(/rounded-full|py-2\.5/)
-  })
 
   it('draws the Public Holidays actions as Buttons: + Add Holiday and Sync Holidays at --control-h, the add-row Save and Cancel at --control-h-sm', async () => {
     const user = userEvent.setup()
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    renderSettingsPage()
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
+    renderSettingsPage('/settings?section=holidays')
 
-    await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
-    for (const name of ['+ Add Holiday', 'Sync Holidays']) {
+    for (const name of ['Add holiday', 'Sync holidays']) {
       const button = screen.getByRole('button', { name })
       expect(button).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
       expect(button.className).not.toMatch(/rounded-full/)
     }
 
-    await user.click(screen.getByRole('button', { name: '+ Add Holiday' }))
+    await user.click(screen.getByRole('button', { name: 'Add holiday' }))
     for (const name of ['Save', 'Cancel']) {
       const button = screen.getByRole('button', { name })
       expect(button).toHaveClass('h-[var(--control-h-sm)]', 'rounded-[var(--radius-sm)]')
@@ -254,11 +233,10 @@ describe('SettingsPage — buttons are the Button primitive', () => {
 
   it('opens the catalogue import from a Button, and closes it from a labelled iconOnly Close button (the bare ✕ glyph had no name)', async () => {
     const user = userEvent.setup()
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    renderSettingsPageWithQueryClient()
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
+    renderSettingsPageWithQueryClient('/settings?section=catalogue')
 
-    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    const open = screen.getByRole('button', { name: 'Import Catalogue' })
+    const open = screen.getByRole('button', { name: 'Import catalogue' })
     expect(open).toHaveClass('h-[var(--control-h)]', 'rounded-[var(--radius-sm)]')
 
     await user.click(open)
@@ -270,11 +248,10 @@ describe('SettingsPage — buttons are the Button primitive', () => {
 
   it('closes the catalogue import on Escape and returns focus to the button that opened it', async () => {
     const user = userEvent.setup()
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    renderSettingsPageWithQueryClient()
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
+    renderSettingsPageWithQueryClient('/settings?section=catalogue')
 
-    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    const open = screen.getByRole('button', { name: 'Import Catalogue' })
+    const open = screen.getByRole('button', { name: 'Import catalogue' })
     await user.click(open)
     expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
 
@@ -286,11 +263,10 @@ describe('SettingsPage — buttons are the Button primitive', () => {
 
   it('keeps the catalogue import open when the backdrop is clicked (a stray click must not throw away the upload)', async () => {
     const user = userEvent.setup()
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    renderSettingsPageWithQueryClient()
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
+    renderSettingsPageWithQueryClient('/settings?section=catalogue')
 
-    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import catalogue' }))
     await user.click(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' }).parentElement!)
 
     expect(screen.getByRole('dialog', { name: 'Import NDIS Support Catalogue' })).toBeInTheDocument()
@@ -298,12 +274,11 @@ describe('SettingsPage — buttons are the Button primitive', () => {
 })
 
 describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
-  it('warns before navigating away from an edited Qualification Warning window', async () => {
+  it('warns before navigating away from an edited alert window', async () => {
     const user = userEvent.setup()
-    const { router } = renderSettingsPage()
+    const { router } = renderSettingsPage('/settings?section=alerts')
 
-    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
-    await user.click(screen.getByRole('button', { name: /30 days/i }))
+    await user.click(screen.getByRole('button', { name: /Staff qualifications/ }))
     await user.click(await screen.findByRole('option', { name: /60 days/i }))
 
     await act(async () => { router.navigate('/elsewhere') })
@@ -311,221 +286,33 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     expect(await screen.findByText(/leave without saving\?/i)).toBeInTheDocument()
   })
 
-  it('does not warn when the Qualification Warning window is untouched', async () => {
-    const user = userEvent.setup()
-    const { router } = renderSettingsPage()
+  it('does not warn when the alert window is untouched', async () => {
+    const { router } = renderSettingsPage('/settings?section=alerts')
 
-    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
     await act(async () => { router.navigate('/elsewhere') })
 
     expect(await screen.findByText(/elsewhere page/i)).toBeInTheDocument()
     expect(screen.queryByText(/leave without saving\?/i)).not.toBeInTheDocument()
   })
 
-  it('warns before navigating away from an edited Provider Settings form', async () => {
+
+
+  it('asks before switching to another section with an edited alert window, and stays on it after "Keep editing"', async () => {
     const user = userEvent.setup()
-    const { router } = renderSettingsPage()
+    screenSize.belowMd = false
+    const { router } = renderSettingsPage('/settings?section=alerts')
 
-    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
-    // ProviderSettingsTab's labels aren't associated via htmlFor/id, so select the input
-    // relative to its label text instead of by accessible label.
-    const abnInput = screen.getByLabelText('ABN') as HTMLInputElement
-    await user.type(abnInput, '12345678901')
+    await user.click(screen.getByRole('button', { name: /Staff qualifications/ }))
+    await user.click(await screen.findByRole('option', { name: /60 days/i }))
+    await user.click(within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('link', { name: 'Budgets' }))
 
-    await act(async () => { router.navigate('/elsewhere') })
-
-    expect(await screen.findByText(/leave without saving\?/i)).toBeInTheDocument()
-  })
-
-  // The single-line inputs take a fixed `--control-h` height. A textarea that reuses that class ignores `rows` (an explicit
-  // height beats it) and, with `resize-none`, could not be enlarged either: Invoice Footer Notes was stuck at one line.
-  it('Invoice Footer Notes keeps its 3 rows and can be resized vertically', async () => {
-    const user = userEvent.setup()
-    renderSettingsPage()
-
-    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
-    const notes = screen.getByPlaceholderText(/NDIS Code of Conduct/i)
-
-    expect(notes).toHaveAttribute('rows', '3')
-    expect(notes.className).not.toMatch(/(^|\s)h-\[var\(--control-h\)\]/)
-    expect(notes).toHaveClass('h-auto', 'min-h-[var(--control-h)]', 'resize-y')
-    expect(notes).not.toHaveClass('resize-none')
+    expect(screen.getByRole('alertdialog', { name: 'Leave Alert windows without saving?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(router.state.location.search).toBe('?section=alerts')
+    expect(screen.getByRole('button', { name: /Staff qualifications/ })).toHaveTextContent('60 days')
   })
 })
 
-describe('SettingsPage — Provider Settings: medication competency check', () => {
-  const saved = {
-    id: 'ps-1', registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW',
-    gstRegistered: false, isPaceProvider: false, bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
-    managerName: null, managerPhone: null, medicationCompetencyMode: 'Warn',
-  }
-
-  async function openProviderSettings() {
-    const user = userEvent.setup()
-    renderSettingsPage()
-    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
-    return user
-  }
-
-  it('shows the saved mode, and saves a change to Enforce together with the rest of the form', async () => {
-    providerSettings.current = saved
-    const user = await openProviderSettings()
-
-    const control = screen.getByRole('button', { name: /medication competency check/i })
-    expect(control).toHaveTextContent('Warn only')
-    await user.click(control)
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
-    expect(mockUpsertMutate.mock.calls[0][0]).toEqual(expect.objectContaining({
-      registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW', medicationCompetencyMode: 'Enforce',
-    }))
-  })
-
-  it('shows an Enforce setting as Enforce', async () => {
-    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }
-    await openProviderSettings()
-
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
-  })
-
-  it('reads as Warn only when the server does not send the setting, and then does not send one back', async () => {
-    const older: Record<string, unknown> = { ...saved }
-    delete older.medicationCompetencyMode
-    providerSettings.current = older
-    const user = await openProviderSettings()
-
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Warn only')
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
-  })
-
-  // ── the mode is sent only when the user changed it (review 3 finding M1) ──
-
-  it('does not send the mode when only Manager Phone was edited: an Enforce setting stays Enforce', async () => {
-    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }
-    const user = await openProviderSettings()
-
-    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
-    const body = mockUpsertMutate.mock.calls[0][0]
-    expect(body).toEqual(expect.objectContaining({
-      registrationNumber: 'REG1', abn: '12345678901', organisationName: 'Test Org', address: '1 Test St', state: 'NSW', managerPhone: '0412000111',
-    }))
-    expect(body).not.toHaveProperty('medicationCompetencyMode')
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
-  })
-
-  it('does not undo another admin: the form loaded Warn, the server has since become Enforce, and an unrelated edit leaves it alone', async () => {
-    providerSettings.current = saved   // this form loads Warn only
-    const user = await openProviderSettings()
-    providerSettings.current = { ...saved, medicationCompetencyMode: 'Enforce' }   // another admin sets Enforce; the query refetches, the open form does not reset
-
-    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
-  })
-
-  it('does not send the mode when it was changed and changed back to the value that loaded', async () => {
-    providerSettings.current = saved
-    const user = await openProviderSettings()
-
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Warn only' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate.mock.calls[0][0]).not.toHaveProperty('medicationCompetencyMode')
-  })
-
-  it('sends a change once: after it saved, a later save of something else does not send the mode again', async () => {
-    providerSettings.current = saved
-    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onSuccess?.())
-    const user = await openProviderSettings()
-
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-    await user.type(screen.getByLabelText('Manager Phone') as HTMLInputElement, '0412000111')
-    await user.click(screen.getByRole('button', { name: /^save/i }))   // the label reads Saved! for two seconds after a save
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(2)
-    expect(mockUpsertMutate.mock.calls[0][0]).toHaveProperty('medicationCompetencyMode', 'Enforce')
-    expect(mockUpsertMutate.mock.calls[1][0]).not.toHaveProperty('medicationCompetencyMode')
-  })
-
-  it('still sends the change after a rejected save, so a retry is not silently dropped', async () => {
-    providerSettings.current = saved
-    mockUpsertMutate.mockImplementationOnce((_body, opts) => opts?.onError?.({ response: { status: 500, data: {} } }))
-    const user = await openProviderSettings()
-
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(2)
-    expect(mockUpsertMutate.mock.calls[1][0]).toHaveProperty('medicationCompetencyMode', 'Enforce')
-  })
-
-  it('is read-only for a role that cannot edit provider settings', async () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
-    providerSettings.current = saved
-    await openProviderSettings()
-
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument()
-  })
-
-  it('keeps the chosen mode and shows the error when the save is rejected', async () => {
-    providerSettings.current = saved
-    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onError?.({ response: { status: 403, data: {} } }))
-    const user = await openProviderSettings()
-
-    await user.click(screen.getByRole('button', { name: /medication competency check/i }))
-    await user.click(screen.getByRole('option', { name: 'Enforce' }))
-    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
-
-    expect(await screen.findByText(/admin role is required/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /medication competency check/i })).toHaveTextContent('Enforce')
-  })
-})
-
-describe('SettingsPage — Notifications tabs', () => {
-  it('shows the Notifications tab to every signed-in user, and hides Failed Sends without canManageNotifications', () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    renderSettingsPage()
-
-    expect(screen.getByRole('tab', { name: /^notifications$/i })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /failed sends/i })).not.toBeInTheDocument()
-  })
-
-  it('shows the Failed Sends tab when canManageNotifications is true', async () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: true })
-    const user = userEvent.setup()
-    renderSettingsPage()
-
-    const failedSendsTab = screen.getByRole('tab', { name: /failed sends/i })
-    expect(failedSendsTab).toBeInTheDocument()
-
-    await user.click(failedSendsTab)
-    expect(screen.getByText(/notification outbox/i)).toBeInTheDocument()
-  })
-
-  it('renders the notification preference grid on the Notifications tab', async () => {
-    const user = userEvent.setup()
-    renderSettingsPage()
-
-    await user.click(screen.getByRole('tab', { name: /^notifications$/i }))
-    expect(screen.getByText(/notification preferences/i)).toBeInTheDocument()
-  })
-})
 
 describe('SettingsPage — catalogue import preview', () => {
   // Rows exactly as the API sends them: defaults (false, 0) and nulls are left out of the JSON.
@@ -553,12 +340,11 @@ describe('SettingsPage — catalogue import preview', () => {
 
   async function openPreview(detectedFormat = 'NationalRemote') {
     const user = userEvent.setup()
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
     mockImportPost.mockResolvedValueOnce({ data: { data: preview(detectedFormat) } })
-    renderSettingsPageWithQueryClient()
+    renderSettingsPageWithQueryClient('/settings?section=catalogue')
 
-    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import catalogue' }))
     const file = new File(['xlsx'], 'support-catalogue-2026-27.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file)
     await screen.findByLabelText('Catalogue version')
@@ -606,12 +392,11 @@ describe('SettingsPage — catalogue import preview', () => {
 
   it('shows why the server refused an upload that is not a catalogue, instead of a generic failure', async () => {
     const user = userEvent.setup()
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
     mockImportPost.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).'] } } })
-    renderSettingsPageWithQueryClient()
+    renderSettingsPageWithQueryClient('/settings?section=catalogue')
 
-    await user.click(screen.getByRole('tab', { name: 'Support catalogue' }))
-    await user.click(screen.getByRole('button', { name: 'Import Catalogue' }))
+    await user.click(screen.getByRole('button', { name: 'Import catalogue' }))
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'notes.xlsx'))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No support items found. Upload the NDIS Support Catalogue .xlsx (the 2026-27 or 2025-26 file).')
@@ -654,218 +439,154 @@ describe('SettingsPage — the timer that puts a confirmation away dies with its
     return { afterSecond, afterUnmount: vi.getTimerCount() }
   }
 
-  it('Qualification Warnings: the "Saved!" reset', async () => {
-    const user = userEvent.setup()
-    const { unmount } = renderSettingsPage()
-    await user.click(screen.getByRole('tab', { name: /qualification warnings/i }))
-    await user.click(screen.getByRole('button', { name: /30 days/i }))
-    await user.click(await screen.findByRole('option', { name: /60 days/i }))
 
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ }), unmount)
-
-    expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
-  })
-
-  it('Provider Settings: the "Saved!" reset', async () => {
-    mockUpsertMutate.mockImplementation((_body, opts) => opts?.onSuccess?.())
-    const user = userEvent.setup()
-    const { unmount } = renderSettingsPage()
-    await user.click(screen.getByRole('tab', { name: /provider settings/i }))
-    await user.type(screen.getByLabelText('ABN') as HTMLInputElement, '1')
-
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: /^(Save Settings|Saved!)$/ }), unmount)
-
-    expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
-  })
 
   it('Public Holidays: the sync result line', async () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdmin)
     mockSyncMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.({ holidaysAdded: 3, holidaysUpdated: 1, errors: [] }))
-    const user = userEvent.setup()
-    const { unmount } = renderSettingsPage()
-    await user.click(screen.getByRole('tab', { name: 'Public holidays' }))
+    const { unmount } = renderSettingsPage('/settings?section=holidays')
 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: 'Sync Holidays' }), unmount)
+    const pending = actTwiceThenLeave(() => screen.getByRole('button', { name: 'Sync holidays' }), unmount)
 
     expect(mockSyncMutate).toHaveBeenCalledTimes(2)
     expect(pending).toEqual({ afterSecond: 1, afterUnmount: 0 })
   })
 })
 
-describe('SettingsPage — Plan Pricing tab and the tab in the URL', () => {
-  const asAdmin = () => mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
+describe('SettingsPage — the shell from md: the rail, the open section and the URL', () => {
+  const rail = () => screen.getByRole('navigation', { name: 'Settings' })
 
-  it('gives an Admin and a SuperAdmin the Plan Pricing tab, and a Coordinator none', () => {
-    asAdmin()
-    const admin = renderSettingsPage()
-    expect(screen.getByRole('tab', { name: 'Plan pricing' })).toBeInTheDocument()
-    admin.unmount()
-
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: true, isAdmin: false, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    const superAdmin = renderSettingsPage()
-    expect(screen.getByRole('tab', { name: 'Plan pricing' })).toBeInTheDocument()
-    superAdmin.unmount()
-
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
+  it('opens on Profile, lit in the rail, with one h1 and the section in the tab title', () => {
     renderSettingsPage()
-    expect(screen.queryByRole('tab', { name: 'Plan pricing' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Profile' })).toBeInTheDocument()
+    expect(rail().querySelector('[aria-current="page"]')).toHaveTextContent('Profile')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(document.title).toMatch(/^Profile · Settings/)
   })
 
-  it('opens on the tab the URL names, so "Confirm in Settings" in the plan builder lands on the registration groups', () => {
-    asAdmin()
-    renderSettingsPageAt('/settings?tab=pricing')
-
-    expect(screen.getByRole('tab', { name: 'Plan pricing', selected: true })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Registration groups you hold' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Confirm these groups' })).toBeInTheDocument()
-  })
-
-  it('writes the tab it switches to into the URL, and keeps the URL of the default tab clean', async () => {
-    const user = userEvent.setup()
-    asAdmin()
-    const { router } = renderSettingsPage()
-
-    await user.click(screen.getByRole('tab', { name: 'Plan pricing' }))
-    expect(router.state.location.search).toBe('?tab=pricing')
-    await user.click(screen.getByRole('tab', { name: 'Event templates' }))
-    expect(router.state.location.search).toBe('')
-  })
-
-  it('reads a tab the person cannot see as the first tab, instead of opening it', () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
-    renderSettingsPageAt('/settings?tab=pricing')
-
-    expect(screen.getByRole('tab', { name: 'Event templates', selected: true })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Registration groups you hold' })).not.toBeInTheDocument()
-  })
-})
-
-describe('SettingsPage — Budgets tab and the one-row tab strip', () => {
-  const asRole = (role: 'admin' | 'superAdmin' | 'coordinator') => mockUsePermissions.mockReturnValue({
-    isSuperAdmin: role === 'superAdmin', isAdmin: role === 'admin', canEditProviderSettings: role !== 'coordinator', showBankDetails: role !== 'coordinator', canManageNotifications: false,
-  })
-
-  it('gives an Admin and a SuperAdmin the Budgets tab, right after Plan Pricing, and a Coordinator none', () => {
-    asRole('admin')
-    const admin = renderSettingsPage()
-    const names = screen.getAllByRole('tab').map(tab => tab.textContent)
-    expect(names.indexOf('Budgets')).toBe(names.indexOf('Plan pricing') + 1)
-    admin.unmount()
-
-    asRole('superAdmin')
-    const superAdmin = renderSettingsPage()
-    expect(screen.getByRole('tab', { name: 'Budgets' })).toBeInTheDocument()
-    superAdmin.unmount()
-
-    asRole('coordinator')
+  it('says on Profile who you are signed in as', () => {
     renderSettingsPage()
-    expect(screen.queryByRole('tab', { name: 'Budgets' })).not.toBeInTheDocument()
+    const profile = screen.getByRole('region', { name: 'Profile' })
+    for (const fact of ['Dana Whitlock', 'dana.whitlock', 'Admin', 'Sunrise Support']) expect(within(profile).getByText(fact)).toBeInTheDocument()
   })
 
-  it('opens on Budgets from ?tab=budgets, and writes the tab into the URL when it is picked', async () => {
-    const user = userEvent.setup()
-    asRole('admin')
-    const { router } = renderSettingsPageAt('/settings?tab=budgets')
-
-    expect(screen.getByRole('tab', { name: 'Budgets', selected: true })).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Warn only' })).toBeChecked()
-
-    await user.click(screen.getByRole('tab', { name: 'Plan pricing' }))
-    expect(router.state.location.search).toBe('?tab=pricing')
-    await user.click(screen.getByRole('tab', { name: 'Budgets' }))
-    expect(router.state.location.search).toBe('?tab=budgets')
-  })
-
-  it('reads ?tab=budgets as the first tab for a Coordinator, who has no such tab', () => {
-    asRole('coordinator')
-    renderSettingsPageAt('/settings?tab=budgets')
-
-    expect(screen.getByRole('tab', { name: 'Event templates', selected: true })).toBeInTheDocument()
-    expect(screen.queryByRole('radio', { name: 'Warn only' })).not.toBeInTheDocument()
-  })
-
-  it('keeps the tab strip to one row that scrolls, not a second row with a tab alone on it', () => {
-    asRole('superAdmin')
+  it.each([['SuperAdmin'], ['SuperAdminNoOrg']] as const)('names no organisation on Profile for a %s: the one in their sign-in is not the one in view', role => {
+    mockUsePermissions.mockReturnValue({ ...SETTINGS_PERMS[role], tenantName: 'ODIP Platform' })
     renderSettingsPage()
-
-    // The one-row mode is what Settings asks of Tabs (overflow="scroll"): its strip carries the thin scrollbar from md up and never the wrap that put the tenth tab alone on a second row.
-    // flex-nowrap and overflow-x-auto are in BOTH modes, so they prove nothing; these two are what tell the modes apart (Tabs.test.tsx pins the same pair on Tabs itself).
-    const strip = screen.getByRole('tablist', { name: 'Settings sections' })
-    expect(strip).toHaveClass('flex-nowrap', 'overflow-x-auto', 'md:[scrollbar-width:thin]')
-    expect(strip).not.toHaveClass('md:flex-wrap')
+    const profile = screen.getByRole('region', { name: 'Profile' })
+    expect(within(profile).queryByText('Organisation')).not.toBeInTheDocument()
+    expect(within(profile).queryByText('ODIP Platform')).not.toBeInTheDocument()
+    expect(within(profile).getByText('Super admin')).toBeInTheDocument()
   })
 
-  it('scrolls the tab named by ?tab= into view when the strip is wider than its box', () => {
-    asRole('admin')
-    // jsdom has no layout: a 600px window on a strip of 1900px, the Budgets tab at 700 to 820.
-    const proto = HTMLElement.prototype
-    const saved = { scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'), clientWidth: Object.getOwnPropertyDescriptor(proto, 'clientWidth'), rect: proto.getBoundingClientRect, scrollTo: proto.scrollTo }
-    const isStrip = (el: HTMLElement) => el.getAttribute('role') === 'tablist'
-    Object.defineProperty(proto, 'scrollWidth', { configurable: true, get() { return isStrip(this as HTMLElement) ? 1900 : 0 } })
-    Object.defineProperty(proto, 'clientWidth', { configurable: true, get() { return isStrip(this as HTMLElement) ? 600 : 0 } })
-    proto.getBoundingClientRect = function (this: HTMLElement) {
-      const box = (left: number, width: number) => ({ left, right: left + width, width, top: 0, bottom: 44, height: 44, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
-      if (isStrip(this)) return box(0, 600)
-      return this.getAttribute('role') === 'tab' && this.textContent === 'Budgets' ? box(700, 120) : box(0, 100)
-    }
-    const scrollTo = vi.fn()
-    proto.scrollTo = scrollTo as unknown as typeof proto.scrollTo
+  it('shows a SuperAdmin viewing as someone only that person: no sign-in name or organisation of their own', () => {
+    localStorage.setItem('odip_viewing_user', 'user-2')
     try {
-      renderSettingsPageAt('/settings?tab=budgets')
-
-      // 0 + (700 - 0) - (600 - 120) / 2 = 460, within the scroll range 0 to 1300.
-      expect(scrollTo).toHaveBeenCalledWith({ left: 460 })
+      renderSettingsPage()
+      const profile = screen.getByRole('region', { name: 'Profile' })
+      expect(within(profile).getByText('Dana Whitlock')).toBeInTheDocument()
+      expect(within(profile).queryByText('Signed in as')).not.toBeInTheDocument()
+      expect(within(profile).queryByText('Organisation')).not.toBeInTheDocument()
     } finally {
-      if (saved.scrollWidth) Object.defineProperty(proto, 'scrollWidth', saved.scrollWidth); else delete (proto as unknown as Record<string, unknown>).scrollWidth
-      if (saved.clientWidth) Object.defineProperty(proto, 'clientWidth', saved.clientWidth); else delete (proto as unknown as Record<string, unknown>).clientWidth
-      proto.getBoundingClientRect = saved.rect
-      if (saved.scrollTo) proto.scrollTo = saved.scrollTo; else delete (proto as unknown as Record<string, unknown>).scrollTo
+      localStorage.removeItem('odip_viewing_user')
     }
   })
+
+  it.each([['Admin', 16], ['Coordinator', 10], ['SuperAdmin', 19], ['SuperAdminNoOrg', 8]] as const)('gives %s a rail of %i sections', (role, count) => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS[role])
+    renderSettingsPage()
+    expect(within(rail()).getAllByRole('link')).toHaveLength(count)
+  })
+
+  it('tells a SuperAdmin with no organisation why there are no organisation groups', () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.SuperAdminNoOrg)
+    renderSettingsPage()
+    expect(within(rail()).getByText('Choose an organisation to see its settings.')).toBeInTheDocument()
+    expect(within(rail()).queryByRole('link', { name: 'Plan pricing' })).not.toBeInTheDocument()
+  })
+
+  it('opens a section from the rail as a new history entry, and moves focus to its heading', async () => {
+    const user = userEvent.setup()
+    const { router } = renderSettingsPage()
+    await user.click(within(rail()).getByRole('link', { name: 'Budgets' }))
+    expect(router.state.location.search).toBe('?section=budgets')
+    expect(router.state.historyAction).toBe('PUSH')
+    expect(screen.getByRole('heading', { level: 2, name: 'Budgets' })).toHaveFocus()
+  })
+
+  it('leaves focus alone when a link opens Settings straight on a section', () => {
+    renderSettingsPage('/settings?section=budgets')
+    expect(screen.getByRole('heading', { level: 2, name: 'Budgets' })).not.toHaveFocus()
+  })
+
+  it('rewrites a legacy ?tab= in place as ?section=, keeping the other params', async () => {
+    const { router } = renderSettingsPage('/settings?tab=qualifications&from=email')
+    expect(screen.getByRole('heading', { level: 2, name: 'Alert windows' })).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.search).toBe('?from=email&section=alerts'))
+    expect(router.state.historyAction).toBe('REPLACE')
+  })
+
+  it('still lands "Confirm in Settings" (?tab=pricing) on Plan pricing and its registration groups', () => {
+    renderSettingsPage('/settings?tab=pricing')
+    expect(screen.getByRole('heading', { level: 2, name: 'Plan pricing' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Registration groups you hold' })).toBeInTheDocument()
+  })
+
+  it('drops a section the person cannot see, and lands on Profile', async () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    const { router } = renderSettingsPage('/settings?section=pricing')
+    expect(screen.getByRole('heading', { level: 2, name: 'Profile' })).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.search).toBe(''))
+  })
+
+  it('keeps Appearance without a Save, and says the change was kept on this device', async () => {
+    const user = userEvent.setup()
+    renderSettingsPage('/settings?section=appearance')
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/^$/)
+    await user.click(screen.getByRole('checkbox', { name: /Show lines between table columns/ }))
+    expect(screen.getByRole('status')).toHaveTextContent('Saved on this device')
+  })
+
+  it('frames a hosted section: Event templates, with its one New template action inside it', () => {
+    renderSettingsPage('/settings?section=templates')
+    expect(within(screen.getByRole('region', { name: 'Event templates' })).getAllByRole('button', { name: 'New template' })).toHaveLength(1)
+  })
 })
 
-describe('SettingsPage — Import data tab', () => {
-  it('shows the Import data tab only to someone who can import (an Admin, or a SuperAdmin viewing as an organisation)', () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: true, canImportData: true })
+describe('SettingsPage — below md: the list, one section per screen, and Back', () => {
+  beforeEach(() => { screenSize.belowMd = true })
+
+  it('is the grouped list at /settings: nothing lit, no section open, "Settings" in the tab title', () => {
     renderSettingsPage()
-    expect(screen.getByRole('tab', { name: 'Import data' })).toBeInTheDocument()
+    const list = screen.getByRole('navigation', { name: 'Settings' })
+    expect(list.querySelectorAll('[aria-current]')).toHaveLength(0)
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
+    expect(document.title).toMatch(/^Settings/)
   })
 
-  it('hides the Import data tab from a Coordinator', () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isCoordinator: true, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false, canImportData: false })
-    renderSettingsPage()
-    expect(screen.queryByRole('tab', { name: 'Import data' })).toBeNull()
+  it('opens a section as its own screen with a Back link, keeps the h1 for screen readers, and Back returns focus to its row', async () => {
+    const user = userEvent.setup()
+    const { router } = renderSettingsPage()
+    await user.click(screen.getByRole('link', { name: 'Budgets' }))
+
+    expect(screen.queryByRole('navigation', { name: 'Settings' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' }).closest('.sr-only')).not.toBeNull()
+    expect(screen.getByRole('heading', { level: 2, name: 'Budgets' })).toHaveFocus()
+    const back = screen.getByRole('link', { name: 'Back to settings' })
+    expect(back).toHaveAttribute('href', '/settings')
+
+    await user.click(back)
+    expect(router.state.location.search).toBe('')
+    expect(screen.getByRole('link', { name: 'Budgets' })).toHaveFocus()
   })
-})
 
-describe('SettingsPage — Integrations tab', () => {
-  it('shows the Integrations tab to someone who can manage integrations', () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: true, canImportData: true, canManageIntegrations: true })
-    renderSettingsPage()
-    expect(screen.getByRole('tab', { name: 'Integrations' })).toBeInTheDocument()
-  })
-
-  it('hides the Integrations tab from a Coordinator', () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isCoordinator: true, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false, canImportData: false, canManageIntegrations: false })
-    renderSettingsPage()
-    expect(screen.queryByRole('tab', { name: 'Integrations' })).toBeNull()
-  })
-})
-
-describe('Settings tabs — Data export', () => {
-  it('sits right after Import data for someone who can import data, and is hidden from everyone else', () => {
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: true, canImportData: true, canEditProviderSettings: true, showBankDetails: true, canManageNotifications: false })
-    const { unmount } = renderSettingsPage()
-    const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.trim())
-    expect(tabs).toContain('Import data')
-    expect(tabs.indexOf('Data export')).toBe(tabs.indexOf('Import data') + 1)
-    unmount()
-
-    mockUsePermissions.mockReturnValue({ isSuperAdmin: false, isAdmin: false, canImportData: false, canEditProviderSettings: false, showBankDetails: false, canManageNotifications: false })
-    renderSettingsPage()
-    expect(screen.queryByRole('tab', { name: 'Data export' })).toBeNull()
+  it('shows the list, not Profile, for a key the role cannot see', async () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    const { router } = renderSettingsPage('/settings?section=budgets')
+    expect(screen.getByRole('navigation', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.search).toBe(''))
   })
 })

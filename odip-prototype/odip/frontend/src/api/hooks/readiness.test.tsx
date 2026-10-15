@@ -20,7 +20,7 @@ const { mockApiGet, mockApiPost, mockApiPut, mockApiPostRaw } = vi.hoisted(() =>
 
 vi.mock('../client', async () => {
   const actual = await vi.importActual<typeof import('../client')>('../client')
-  return { ...actual, apiGet: mockApiGet, apiPost: mockApiPost, apiPut: mockApiPut, apiPostRaw: mockApiPostRaw }
+  return { ...actual, apiGet: mockApiGet, apiGetWithDefault: async (url: string, fallback: unknown) => (await mockApiGet(url)) ?? fallback, apiPost: mockApiPost, apiPut: mockApiPut, apiPostRaw: mockApiPostRaw }
 })
 
 function wrapper(queryClient: QueryClient) {

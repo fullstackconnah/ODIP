@@ -43,6 +43,7 @@ public class ImportsController : ControllerBase
     {
         "participants" => ImportKind.Participants,
         "staff" => ImportKind.Staff,
+        "funding-plans" => ImportKind.FundingPlans,
         _ => null,
     };
 

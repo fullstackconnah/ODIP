@@ -205,6 +205,35 @@ public record RosterParticipantRowDto
     /// participant has a row either way: in Warn mode this is the quiet warning on it.
     /// </summary>
     public List<string>? ReadinessIssues { get; init; }
+    /// <summary>The organisation enforces readiness and this participant fails it: new shifts and assignments are refused, and agreement patterns generate nothing (ParticipantReadiness.CheckAsync).</summary>
+    public bool NotReadyForRostering { get; init; }
+}
+
+/// <summary>
+/// A participant whose newest service agreement revision waits for an approval for rostering (spec 2026-10-15). Its shifts are not on the board until it is approved, and the
+/// board's notice says so. The participant may have no row: a participant still in onboarding cannot be rostered yet (<see cref="CanReceiveServices"/> false), and the notice
+/// says that too.
+/// </summary>
+public record PendingAgreementDto
+{
+    public Guid ParticipantId { get; init; }
+    public string DisplayName { get; init; } = string.Empty;
+    public Guid DraftId { get; init; }
+    public int Version { get; init; }
+    /// <summary>Participant.CanReceiveServicesRule: active, and finalised or a draft whose services have begun. False: no board row, and no shifts until services start.</summary>
+    public bool CanReceiveServices { get; init; }
+}
+
+/// <summary>
+/// One leave request that touches the board's week, approved or pending (participant mode; the staff view has its rows' leave bars): the staff picker's "On leave" and
+/// "Leave pending". Whole days, both ends inclusive, not clipped to the week.
+/// </summary>
+public record StaffLeaveDto
+{
+    public Guid StaffId { get; init; }
+    public DateOnly From { get; init; }
+    public DateOnly To { get; init; }
+    public LeaveStatus Status { get; init; }
 }
 
 public record RosterExceptionDto
@@ -278,6 +307,10 @@ public record RosterBoardDto
     public List<RosterParticipantRowDto>? ParticipantRows { get; init; }
     public List<RosterStaffRowDto>? StaffRows { get; init; }
     public List<ShiftDto>? Unfilled { get; init; }
+    /// <summary>Participant mode only: every participant whose newest agreement waits for an approval for rostering, with or without a row (the notice). Null in staff mode.</summary>
+    public List<PendingAgreementDto>? PendingAgreements { get; init; }
+    /// <summary>Participant mode only: the week's approved and pending leave of every active staff member, for the staff picker. Null in staff mode.</summary>
+    public List<StaffLeaveDto>? StaffLeave { get; init; }
     public List<RosterExceptionDto> Exceptions { get; init; } = new();
 }
 

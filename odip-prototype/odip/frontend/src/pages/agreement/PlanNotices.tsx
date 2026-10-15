@@ -34,7 +34,7 @@ export function PlanNotices({ notices }: PlanNoticesProps) {
         <p className="text-sm text-[var(--color-muted-foreground)]" title={registration.message}>
           Registration groups are not confirmed.{' '}
           {isAdmin || isSuperAdmin
-            ? <Link to="/settings?tab=pricing" className="whitespace-nowrap font-medium text-[var(--color-primary)] underline underline-offset-2">Confirm in Settings</Link>
+            ? <Link to="/settings?section=pricing" className="whitespace-nowrap font-medium text-[var(--color-primary)] underline underline-offset-2">Confirm in Settings</Link>
             : 'Ask an Admin to confirm them.'}
         </p>
       )}

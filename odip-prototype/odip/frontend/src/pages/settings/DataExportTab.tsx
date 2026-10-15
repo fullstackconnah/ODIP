@@ -57,11 +57,11 @@ export default function DataExportTab() {
       <AnnouncementRegion message={announcement} />
       <section aria-labelledby="data-export-heading" className="flex max-w-2xl flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <h2 id="data-export-heading" className="text-base font-semibold">Export all your data</h2>
+          <h3 id="data-export-heading" className="text-base font-semibold">Export all your data</h3>
           <p className={`text-sm ${muted}`}>Download everything your organisation holds in ODIP as one ZIP file, at any time.</p>
         </div>
         <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold">What's in the ZIP</h3>
+          <h4 className="text-sm font-semibold">What's in the ZIP</h4>
           <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
             <li>A CSV file for each kind of record: participants and their plans, staff, shifts, medication, notes, incidents, trips, bookings, claims and your settings.</li>
             <li>Intake PDFs, in a documents folder.</li>
@@ -70,7 +70,7 @@ export default function DataExportTab() {
           </ul>
         </div>
         <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold">Before you download</h3>
+          <h4 className="text-sm font-semibold">Before you download</h4>
           <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
             <li>Times that record when something happened are in UTC and end in Z. Times typed in as a local time, such as a dose slot, are your local time.</li>
             <li>It holds participants' health information and staff details such as worker screening and licence numbers. Store it securely and share it only with people who need it.</li>

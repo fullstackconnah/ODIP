@@ -65,3 +65,17 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
     expect(chevronWrap.previousElementSibling).toBe(screen.getByRole('button', { name: 'Alpha' }))
   })
 })
+
+// Fix round 1 (intake booking): the menu's rows are a phone's actions too. Under `pointer: coarse` each option is at least --tap-min (44px)
+// tall; on a mouse --tap-min is 0px, so the desktop rows keep their size. jsdom has no media queries, so this pins the class contract.
+describe('Dropdown — 44px option rows under a coarse pointer', () => {
+  it('gives every option the --tap-min floor', async () => {
+    render(<Dropdown variant="icon" label="More actions" icon={<span>i</span>} items={ITEMS} onSelect={() => {}} />)
+
+    screen.getByRole('button', { name: 'More actions' }).click()
+
+    const options = await screen.findAllByRole('option')
+    expect(options).toHaveLength(2)
+    for (const option of options) expect(option).toHaveClass('min-h-[var(--tap-min)]')
+  })
+})

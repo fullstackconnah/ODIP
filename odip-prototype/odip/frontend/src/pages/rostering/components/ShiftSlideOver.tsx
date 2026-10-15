@@ -27,7 +27,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
 import { getRosterGate } from '../lib/rosterGate'
-import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange } from '../lib/roster'
+import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange, shiftSource } from '../lib/roster'
 import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
 import { getRelevantRoutines } from '../lib/routines'
 
@@ -423,7 +423,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         <div data-shift-field="staff" ref={staffFieldRef}>
           <FormField
             label="Staff"
-            hint={groupBy === 'staff' ? 'Leave unassigned to add this shift to the Unfilled lane.' : 'Leave unassigned — the shift shows as unfilled on the participant’s row.'}
+            hint={statusLocked ? "This shift has started or finished, so its worker can’t be changed here." : groupBy === 'staff' ? 'Leave unassigned to add this shift to the Unfilled lane.' : 'Leave unassigned — the shift shows as unfilled on the participant’s row.'}
             // Links the Preferred/Excluded compatibility notice below (rendered outside this
             // FormField so it can carry its own role/styling) into the Staff control's
             // aria-describedby, so AT users focused on the field hear it — not just sighted
@@ -439,7 +439,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             <SearchableSelect
               value={staffId ?? ''}
               onChange={v => setStaffId(v || null)}
-              disabled={!canWrite}
+              disabled={!canWrite || statusLocked}
               placeholder="Unassigned"
               items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}
             />
@@ -516,10 +516,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           </FormField>
         )}
 
-        {/* Plan builder phase D: a shift made from an agreement's pattern says which agreement, read only (the shifts of one revision and the next sit on the board on the same days). The shift itself says so (the server puts the pattern's source on it): no read of the pattern. */}
-        {existing?.fromAgreement && (
-          <p className="text-sm text-[var(--color-muted-foreground)]">{existing.sourceDraftVersion !== undefined ? `From agreement v${existing.sourceDraftVersion}` : 'From an agreement'}</p>
-        )}
+        {/* Where the shift came from, read only: all three kinds, because a chip's mark has no hover title on a touch screen (the brief, section 5). The shift says so itself: no read of the pattern. */}
+        {existing && <p className="text-sm text-[var(--color-muted-foreground)]">{shiftSource(existing).title}</p>}
 
         {/* Plan builder phase D: what the agreement asked of a worker for this shift (copied from its pattern). Information: nothing checks it against the worker yet. */}
         {existing?.requirements && requirementLabels(existing.requirements).length > 0 && (

@@ -202,7 +202,7 @@ const findRow = async (text: string) => (await screen.findByText(text)).closest(
 
 /** Enquiries tab -> Start intake -> the Intake wizard, to the end: lands on the Onboarding tab. */
 async function startAndCompleteIntake(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(await findRow('Ada Lovelace')).getByRole('button', { name: 'Start intake' }))
+  await user.click(within(await findRow('Ada Lovelace')).getByRole('button', { name: /^Start intake/ }))
   await screen.findByDisplayValue('Ada')
   for (let i = 0; i < 8; i++) await next(user)
   await user.click(await screen.findByRole('button', { name: /complete intake/i }))
@@ -239,7 +239,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
     expect(within(await findRow('Ada Lovelace')).getByText('New')).toBeInTheDocument()
     expect(within(await findRow('Dana Direct')).getByText('Draft intake')).toBeInTheDocument()
-    expect(within(await findRow('Dana Direct')).getByRole('button', { name: 'Resume intake' })).toBeInTheDocument()
+    expect(within(await findRow('Dana Direct')).getByRole('button', { name: /^Resume intake/ })).toBeInTheDocument()
     expect(screen.queryByText('Alex Active')).not.toBeInTheDocument()
 
     // 2. Start intake, then complete it in the wizard: the participant is on the Onboarding tab, with a one-off confirmation.
@@ -286,7 +286,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     renderApp('/participants?tab=enquiries')
 
     await screen.findByText('Dana Direct')
-    await user.click(within(await findRow('Dana Direct')).getByRole('button', { name: 'Resume intake' }))
+    await user.click(within(await findRow('Dana Direct')).getByRole('button', { name: /^Resume intake/ }))
     await screen.findByDisplayValue('Dana')
     for (let i = 0; i < 8; i++) await next(user)
     await user.click(await screen.findByRole('button', { name: /complete intake/i }))
@@ -307,7 +307,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     renderApp('/participants?tab=enquiries')
 
     expect(within(await findRow('Priya Preseed')).getByText('Draft intake')).toBeInTheDocument()
-    await user.click(within(await findRow('Priya Preseed')).getByRole('button', { name: 'Resume intake' }))
+    await user.click(within(await findRow('Priya Preseed')).getByRole('button', { name: /^Resume intake/ }))
     await screen.findByDisplayValue('Priya')
     for (let i = 0; i < 8; i++) await next(user)
     await user.click(await screen.findByRole('button', { name: /complete intake/i }))

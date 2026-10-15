@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Check, ShieldAlert } from 'lucide-react'
-import type { RosterParticipantRowDto, ShiftDto } from '@/api/types'
+import { AlertTriangle, Check, Hourglass, ShieldAlert } from 'lucide-react'
+import type { PendingAgreementDto, RosterParticipantRowDto, ShiftDto } from '@/api/types'
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
@@ -20,6 +20,8 @@ export type ParticipantRowProps = {
   hideCoverageBadge: boolean
   /** Roster drag and drop (the Participant view, md up, writers): grips, locks and drop targets on this row's pucks, and its empty days as drop targets. */
   draggable?: boolean
+  /** This participant's newest agreement waits for an approval for rostering (the board's pendingAgreements): the row says so with its Hourglass. */
+  pendingAgreement?: PendingAgreementDto
 }
 
 /**
@@ -28,7 +30,7 @@ export type ParticipantRowProps = {
  * live inline on the day they fall on, rendered dashed by RosterDayCell/ShiftChip — there is no
  * separate Unfilled lane here, that stays a staff-view concept.
  */
-export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift, hideCoverageBadge, draggable }: ParticipantRowProps) {
+export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift, hideCoverageBadge, draggable, pendingAgreement }: ParticipantRowProps) {
   const visibleTripBars = row.tripBars.filter(t => barOverlapsWeek(t.startDate, t.endDate, days))
   const covered = row.daysWithoutCover === 0
   const ratioLabel = RATIO_LABELS[row.supportRatio] ?? row.supportRatio
@@ -77,7 +79,19 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
               <ShieldAlert className="h-3 w-3" aria-hidden="true" />
             </span>
           )}
-          <ReadinessNote issues={row.readinessIssues} variant="chip" className="h-5 min-w-6 max-w-max flex-1 rounded-sm px-1.5" />
+          {pendingAgreement && (
+            // Its shifts are not on the board yet (spec 2026-10-15). A glyph only: at 195px the words would cost the name its room, so they are its title and accessible name, as the coverage
+            // badge does. The notice above prints them, with the same Hourglass. Neutral: an unapproved revision is a Draft.
+            <span
+              className="shrink-0 text-muted-foreground"
+              role="img"
+              aria-label={`Agreement v${pendingAgreement.version} not approved: its shifts appear once it's approved for rostering`}
+              title={`Agreement v${pendingAgreement.version} not approved: its shifts appear once it's approved for rostering`}
+            >
+              <Hourglass className="h-3 w-3" aria-hidden="true" />
+            </span>
+          )}
+          <ReadinessNote issues={row.readinessIssues} blocked={row.notReadyForRostering} variant="chip" className="h-5 min-w-6 max-w-max flex-1 rounded-sm px-1.5" />
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">

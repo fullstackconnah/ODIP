@@ -22,6 +22,13 @@ public static class ProviderTimeZoneResolver
     }
 
     /// <summary>
+    /// The zone of ONE named organisation. <see cref="ResolveAsync(OdipDbContext, CancellationToken)"/> reads whichever settings row the tenant
+    /// filter lets through, and a SuperAdmin's context has no filter.
+    /// </summary>
+    public static async Task<ProviderTimeZone> ResolveAsync(OdipDbContext db, Guid tenantId, CancellationToken ct) =>
+        FromState(await db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct));
+
+    /// <summary>
     /// The provider's calendar date now (see <see cref="ProviderLocalTime.TodayIn"/>): the "today" every calendar rule uses. Pass the
     /// request's <see cref="TimeProvider"/> so a test can fix the clock.
     /// </summary>

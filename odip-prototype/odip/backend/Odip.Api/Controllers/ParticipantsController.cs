@@ -527,7 +527,28 @@ public class ParticipantsController : ControllerBase
             await EnsureOnboardingAsync(p, ct);
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.All(e => e.Entity is ParticipantInquiry))
+        {
+            // A booking wrote the linked enquiry meanwhile (its IntakeIcsSequence/IntakeUid are concurrency tokens). This save only copies the
+            // name and contact onto it, never the booking, so take the enquiry's current tokens and save once more rather than lose the intake.
+            foreach (var entry in ex.Entries)
+            {
+                var stored = await entry.GetDatabaseValuesAsync(ct);
+                if (stored is null) { entry.State = EntityState.Detached; continue; } // the enquiry is gone: nothing of it to keep in step
+                foreach (var property in entry.Properties)
+                {
+                    var mine = property.IsModified;
+                    property.OriginalValue = stored[property.Metadata];
+                    if (!mine) property.CurrentValue = stored[property.Metadata]; // keep what the booking wrote
+                    property.IsModified = mine;
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+        }
         var warning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto
         {

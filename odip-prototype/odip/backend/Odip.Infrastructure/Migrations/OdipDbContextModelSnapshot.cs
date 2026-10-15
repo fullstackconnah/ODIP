@@ -2345,6 +2345,45 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<Guid?>("IntakeBookedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("IntakeConfirmedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("IntakeDurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IntakeIcsSequence")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IntakeInviteError")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("IntakeInviteSentAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("IntakeLocation")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("IntakeNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("IntakeStaffUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("IntakeStartsAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("IntakeUid")
+                        .IsConcurrencyToken()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -2374,9 +2413,15 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("IntakeBookedByUserId");
+
+                    b.HasIndex("IntakeStaffUserId");
+
                     b.HasIndex("ParticipantId");
 
                     b.HasIndex("TenantId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "IntakeStartsAt");
 
                     b.HasIndex("TenantId", "ParticipantId");
 
@@ -6188,6 +6233,16 @@ namespace Odip.Infrastructure.Migrations
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantInquiry", b =>
                 {
+                    b.HasOne("Odip.Domain.Entities.User", "IntakeBookedByUser")
+                        .WithMany()
+                        .HasForeignKey("IntakeBookedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Odip.Domain.Entities.User", "IntakeStaffUser")
+                        .WithMany()
+                        .HasForeignKey("IntakeStaffUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
                         .WithMany()
                         .HasForeignKey("ParticipantId")
@@ -6198,6 +6253,10 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("IntakeBookedByUser");
+
+                    b.Navigation("IntakeStaffUser");
 
                     b.Navigation("Participant");
 

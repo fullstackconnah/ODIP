@@ -38,8 +38,17 @@ public static class InAppNotificationText
                 ($"{Who(p.CaregiverName)} sent a profile update for {Whom(p.ParticipantName)}.", $"/caregiver-submissions/{entityId}"),
             (NotificationEventType.IncidentReported, IncidentReportedPayload p) =>
                 ($"{Who(p.ReportedByName)} reported an incident: {Words(p.IncidentType)}, {Words(p.Severity)} severity.", $"/incidents/{entityId}"),
+            // The entity id is a fresh one per revision, so this links to My shifts, where the visit and Start intake are; same words as the email's subject.
+            (NotificationEventType.IntakeBooked, IntakeVisitStaffPayload p) => (IntakeVisit(p), "/portal"),
             _ => (GenericTitle, null),
         };
+
+    private static string IntakeVisit(IntakeVisitStaffPayload p)
+    {
+        var local = IntakeWording.Local(p.StartsAtUtc, p.TimeZoneId);
+        var verb = p.Kind switch { IntakeWording.Cancelled => "cancelled", IntakeWording.Changed => "changed", _ => "booked" };
+        return $"Intake visit {verb}: {p.PersonFullName}, {IntakeWording.ShortDay(local)} at {IntakeWording.Time(local)}.";
+    }
 
     /// <summary>A missing name reads as a neutral word, never as a gap in the sentence.</summary>
     private static string Who(string? name) => string.IsNullOrWhiteSpace(name) ? "Someone" : name;

@@ -22,6 +22,9 @@ export type SearchableSelectProps = {
    * instead of the empty message. The input itself stays editable so a query can be typed while
    * the list is still arriving. */
   loading?: boolean
+  /** false: focus alone leaves the list closed and the chosen label shown (a form moving focus to a refused field); a click, typing or
+   * ArrowDown still opens it. Defaults to true, the house behaviour. */
+  openOnFocus?: boolean
   /** Message shown when `items` is empty (and not loading). Defaults to 'No options available'. */
   emptyMessage?: string
   /** Message shown when a query is typed and nothing matches. Defaults to 'No results found'. */
@@ -62,6 +65,7 @@ export function SearchableSelect({
   placeholder = 'Search…',
   disabled = false,
   loading = false,
+  openOnFocus = true,
   emptyMessage = 'No options available',
   noMatchMessage = 'No results found',
   className,
@@ -167,7 +171,7 @@ export function SearchableSelect({
   }
 
   function handleFocus() {
-    openPopup()
+    if (openOnFocus) openPopup()
   }
 
   function handleClick() {

@@ -31,7 +31,18 @@ public class InAppNotificationTextTests
             "Ann Hughes sent a profile update for Grace Palmer-Hughes.", $"/caregiver-submissions/{Id}" },
         { NotificationEventType.IncidentReported, new IncidentReportedPayload("a@x.au", "Sam Lee", "BehaviourOfConcern", "High"),
             "Sam Lee reported an incident: behaviour of concern, high severity.", $"/incidents/{Id}" },
+        { NotificationEventType.IntakeBooked, IntakeVisit(IntakeWording.Booked),
+            "Intake visit booked: Noah Fitzgerald, Fri 16 Oct at 10:00 am.", "/portal" },
+        { NotificationEventType.IntakeBooked, IntakeVisit(IntakeWording.Changed),
+            "Intake visit changed: Noah Fitzgerald, Fri 16 Oct at 10:00 am.", "/portal" },
+        { NotificationEventType.IntakeBooked, IntakeVisit(IntakeWording.Cancelled),
+            "Intake visit cancelled: Noah Fitzgerald, Fri 16 Oct at 10:00 am.", "/portal" },
     };
+
+    // Fri 16 Oct 2026 10:00 in Sydney (AEDT, +11).
+    private static IntakeVisitStaffPayload IntakeVisit(string kind) => new(kind, "sam.lee@provider.example", "Sam Lee", "Noah Fitzgerald",
+        new DateTime(2026, 10, 15, 23, 0, 0, DateTimeKind.Utc), 90, "Australia/Sydney", "12 Smith St", "0412 555 010", "priya@example.com", "Notes",
+        "Dana Smith", "dana@provider.example", "Sample Support Co", null, null, "abc@odip", 0, DateTime.UtcNow);
 
     [Theory]
     [MemberData(nameof(EveryWiredEvent))]

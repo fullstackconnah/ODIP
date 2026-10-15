@@ -38,7 +38,7 @@ export default function IntegrationsTab() {
     <section aria-labelledby="eh-heading" className="flex max-w-[56rem] flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id="eh-heading" className="text-sm font-semibold">Employment Hero</h2>
+          <h3 id="eh-heading" className="text-sm font-semibold">Employment Hero</h3>
           <StatusBadge tone={badge.tone} label={badge.label} />
         </div>
         <p className={MUTED}>Staff come from Employment Hero Payroll, the master list. ODIP checks it for changes every 30 minutes.</p>
@@ -190,7 +190,7 @@ function Attention({ items }: { items: EmploymentHeroAttentionDto[] }) {
 
   return (
     <section aria-labelledby="eh-attention" className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-[var(--section-gap)]">
-      <h3 id="eh-attention" className="text-sm font-semibold">{`Needs attention (${items.length})`}</h3>
+      <h4 id="eh-attention" className="text-sm font-semibold">{`Needs attention (${items.length})`}</h4>
       {items.length === 0 && (
         <p className={`${MUTED} rounded-[var(--radius-md)] border border-[var(--color-border)] py-5 text-center`}>Nothing needs attention.</p>
       )}
@@ -207,7 +207,7 @@ function Attention({ items }: { items: EmploymentHeroAttentionDto[] }) {
         if (rows.length === 0) return null
         return (
           <section key={group.kind} aria-labelledby={`eh-group-${group.kind}`} className="flex flex-col gap-1">
-            <h4 id={`eh-group-${group.kind}`} className="text-sm font-semibold">{`${group.title} (${rows.length})`}</h4>
+            <h5 id={`eh-group-${group.kind}`} className="text-sm font-semibold">{`${group.title} (${rows.length})`}</h5>
             <p className={MUTED}>{group.intro}</p>
             <ul className="flex flex-col divide-y divide-[var(--color-border)]">
               {rows.map(item => {

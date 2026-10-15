@@ -16,7 +16,7 @@ export type RosterDayCellProps = {
   chipContext?: ShiftChipContext
   /** Roster drag and drop: forwarded to each chip (grip, lock, drop target). */
   draggable?: boolean
-  /** Set by a participant row while drag and drop is on: an EMPTY writable cell is then a drop target, and a drop on it opens the create form for this participant and day. */
+  /** Set by a participant row while drag and drop is on: an empty writable cell is a drop target, and an occupied one shows a new-shift slot while a person is carried; a drop on either opens the create form for this participant and day. */
   dayTarget?: DayTarget
   onAdd: () => void
   onOpen: (shift: ShiftDto) => void
@@ -39,8 +39,13 @@ export type RosterDayCellProps = {
  */
 export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipContext, draggable, dayTarget, onAdd, onOpen, onAssignTo, onUnassign, onDelete }: RosterDayCellProps) {
   const style = { gridColumn: dayIndex + 1, gridRow: 1 }
-  // Only an empty cell is a target (the brief, section 5): a day that has pucks is reached through its pucks.
-  const { setNodeRef, isOver } = useDroppable({ id: `drop-day:${dayTarget?.participantId ?? ''}:${day}`, data: dayTarget, disabled: !dayTarget || shifts.length > 0 || !canWrite })
+  // One target per day (the brief, section 7): the whole of an empty cell, as before; on a day that has pucks, the new-shift slot below, which exists only while a person is carried.
+  // The chips stay targets of their own, so a drop on a chip keeps its outcome.
+  const { setNodeRef, isOver, active } = useDroppable({
+    id: `drop-day:${dayTarget?.participantId ?? ''}:${day}`,
+    data: dayTarget && shifts.length > 0 ? { ...dayTarget, beside: shifts.length } : dayTarget,
+    disabled: !dayTarget || !canWrite,
+  })
   const base = `flex min-h-[calc(var(--row-h)_-_1px)] flex-col justify-center gap-1 rounded-sm px-0.5 py-0.5 ${isToday(day) ? 'bg-primary/5' : ''}`
 
   if (shifts.length === 0 && canWrite) {
@@ -61,8 +66,11 @@ export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipC
     )
   }
 
+  // While a person is carried, every chip here drops its menu column (ShiftChip) and the day takes exactly that room at its trailing edge, so no chip's text moves and no row grows.
+  // The room is the menu's 2px pad plus a --control-h-sm button.
+  const carrying = Boolean(dayTarget) && canWrite && Boolean(active)
   return (
-    <div style={style} className={base}>
+    <div style={style} className={`${base} relative ${carrying ? 'pr-[calc(var(--control-h-sm)_+_4px)]' : ''}`}>
       {shifts.map(shift => (
         <ShiftChip
           key={shift.id}
@@ -77,6 +85,19 @@ export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipC
           onDelete={onDelete}
         />
       ))}
+      {carrying && (
+        // At rest a muted Plus, the empty cell's own glyph, with no box: a week of dashed boxes would shout. Over it, the empty day's over look: a dashed outline, not a chip's solid ring.
+        <div
+          ref={setNodeRef}
+          data-day-slot={day}
+          aria-hidden="true"
+          className={`absolute inset-y-0.5 right-0.5 flex w-[calc(var(--control-h-sm)_+_2px)] items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 ${
+            isOver ? 'bg-accent/60 outline-2 -outline-offset-2 outline-dashed outline-ring' : ''
+          }`}
+        >
+          <Plus className="h-3 w-3" />
+        </div>
+      )}
     </div>
   )
 }

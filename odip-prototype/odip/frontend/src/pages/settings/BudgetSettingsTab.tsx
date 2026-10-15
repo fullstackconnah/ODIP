@@ -1,15 +1,15 @@
 import { useId, useState } from 'react'
 import { useBudgetSettings, useUpdateBudgetSettings } from '@/api/hooks'
 import type { BudgetLimitMode, UpdateBudgetSettingsDto } from '@/api/types'
-import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { PageState } from '@/components/PageState'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { extractErrorMessage } from '@/lib/utils'
+import { SettingsSection, type SaveResult, type SectionFrame } from './SettingsSection'
+import { notSavedText } from './settingsSections'
 
 const MODE_OPTIONS: { key: BudgetLimitMode; label: string }[] = [
   { key: 'Warn', label: 'Warn only' },
@@ -44,15 +44,17 @@ type Pick<T> = { value: T; base: T }
  * It copies Provider Settings' stale-form protection. The mode and the percentage are kept out of any form state: only a value the person deliberately picked that differs from the server's is ever
  * sent, so a stale tab can never push an old choice back over a newer one (the settings change only for a field that is sent). A pick is good only while the server still holds the value it was
  * made against: once that moves (our own save landed, or another admin changed it) the pick is dropped for good, not even revived when the server later returns to the value it was made against.
+ *
+ * It saves from the section foot, the one Settings save model.
  */
-export default function BudgetSettingsTab() {
+export default function BudgetSettingsTab(frame: SectionFrame) {
   const query = useBudgetSettings()
   const update = useUpdateBudgetSettings()
   const modeWordsId = useId()
   const settings = query.data
   const [modePick, setModePick] = useState<Pick<BudgetLimitMode> | null>(null)
   const [percentPick, setPercentPick] = useState<Pick<number> | null>(null)
-  const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
+  const [result, setResult] = useState<SaveResult>(null)
 
   const serverMode: BudgetLimitMode = settings?.mode ?? 'Warn'
   const serverPercent = settings?.approachingPercent ?? 80
@@ -65,67 +67,62 @@ export default function BudgetSettingsTab() {
   if (shownMode !== serverMode) changes.mode = shownMode
   if (shownPercent !== serverPercent) changes.approachingPercent = shownPercent
   const dirty = Object.keys(changes).length > 0
-  const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
 
-  if (query.isLoading) return <PageState kind="loading" noun="budget settings" />
-  if (!settings) {
-    // A SuperAdmin who has not chosen an organisation to view as is told so by the server (a 400): that is an instruction, not a failure, and Try again cannot fix it.
-    const told = apiErrorStatus(query.error) === 400 ? extractErrorMessage(query.error, '') : ''
-    return told ? <Callout tone="info" className="max-w-2xl">{told}</Callout> : <PageState kind="error" noun="budget settings" onRetry={() => { void query.refetch() }} />
+  const save = () => {
+    setResult(null)
+    update.mutate(changes, {
+      onSuccess: () => { setModePick(null); setPercentPick(null); setResult('saved') },
+      onError: (error: unknown) => setResult({ error: notSavedText(error) }),
+    })
   }
-
-  const save = () => update.mutate(changes, {
-    onSuccess: () => { setModePick(null); setPercentPick(null); setMessage({ tone: 'success', text: 'Budget settings saved.' }) },
-    onError: (error: unknown) => setMessage({ tone: 'error', text: extractErrorMessage(error, 'The settings were not saved. Check your connection and try again.') }),
-  })
+  // A SuperAdmin who has not chosen an organisation to view as is told so by the server (a 400): that is an instruction, not a failure, and Try again cannot fix it.
+  const told = !settings && apiErrorStatus(query.error) === 400 ? extractErrorMessage(query.error, '') : ''
 
   return (
-    <div className="flex max-w-2xl flex-col gap-[var(--section-gap)]">
-      {unsavedChangesDialog}
-      {settings.isDefault && <Callout tone="info">Nothing has been saved yet: these are the defaults (Warn only, and approaching at 80%).</Callout>}
+    <SettingsSection {...frame} save={settings ? { dirty, pending: update.isPending, result, onSave: save } : undefined}>
+      {query.isLoading ? <PageState kind="loading" noun="budgets section" />
+        : !settings ? (told ? <Callout tone="info" className="max-w-prose">{told}</Callout> : <PageState kind="error" noun="budgets section" onRetry={() => { void query.refetch() }} />)
+        : (
+          <>
+            {settings.isDefault && <Callout tone="info" className="max-w-prose">Nothing has been saved yet: these are the defaults (Warn only, and approaching at 80%).</Callout>}
+            <section className="flex flex-col gap-[var(--field-gap-y)]" aria-labelledby="budget-mode-heading">
+              <h3 id="budget-mode-heading" className="font-semibold">When a one-off shift would put a participant over budget</h3>
+              <ToggleGroup
+                className="flex-wrap"
+                ariaLabel="Budget check mode"
+                ariaDescribedby={modeWordsId}
+                options={MODE_OPTIONS}
+                value={shownMode}
+                onChange={key => { setModePick({ value: key as BudgetLimitMode, base: serverMode }) }}
+              />
+              <ul id={modeWordsId} className="flex max-w-prose flex-col gap-1 text-sm">
+                {MODE_OPTIONS.map(option => (
+                  <li key={option.key} className={option.key === shownMode ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}>
+                    <span className="font-medium">{option.label}.</span> {MODE_WORDS[option.key]}
+                  </li>
+                ))}
+              </ul>
+              <p className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">{BOTH_MODES_WORDS}</p>
+              <div className="flex max-w-prose flex-col gap-0.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-container)] p-3">
+                <p className="text-sm font-medium">{EMERGENCY_LINE}</p>
+                <p className="text-[13px] text-[var(--color-muted-foreground)]">{EMERGENCY_WORDS}</p>
+              </div>
+            </section>
 
-      <section className="flex flex-col gap-[var(--field-gap-y)]" aria-labelledby="budget-mode-heading">
-        <h2 id="budget-mode-heading" className="font-semibold">When a one-off shift would put a participant over budget</h2>
-        <ToggleGroup
-          className="flex-wrap"
-          ariaLabel="Budget check mode"
-          ariaDescribedby={modeWordsId}
-          options={MODE_OPTIONS}
-          value={shownMode}
-          onChange={key => { setModePick({ value: key as BudgetLimitMode, base: serverMode }); setMessage(null) }}
-        />
-        <ul id={modeWordsId} className="flex flex-col gap-1 text-sm">
-          {MODE_OPTIONS.map(option => (
-            <li key={option.key} className={option.key === shownMode ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}>
-              <span className="font-medium">{option.label}.</span> {MODE_WORDS[option.key]}
-            </li>
-          ))}
-        </ul>
-        <p className="text-[13px] text-[var(--color-muted-foreground)]">{BOTH_MODES_WORDS}</p>
-        <div className="flex flex-col gap-0.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-container)] p-3">
-          <p className="text-sm font-medium">{EMERGENCY_LINE}</p>
-          <p className="text-[13px] text-[var(--color-muted-foreground)]">{EMERGENCY_WORDS}</p>
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="budget-percent-heading">
-        <h2 id="budget-percent-heading" className="font-semibold">When a participant is approaching their budget</h2>
-        <FormField label="Warn when used reaches" className="max-w-xs">
-          <Dropdown
-            variant="form"
-            value={String(shownPercent)}
-            onChange={value => { setPercentPick({ value: Number(value), base: serverPercent }); setMessage(null) }}
-            items={PERCENT_ITEMS}
-          />
-        </FormField>
-        <p className="text-[13px] text-[var(--color-muted-foreground)]">The share of a participant&rsquo;s budget for the funding period that has been used. From 50% to 95%, in steps of 5.</p>
-      </section>
-
-      {message && <Callout tone={message.tone === 'success' ? 'success' : 'danger'}>{message.text}</Callout>}
-      <div className="flex items-center gap-3">
-        <Button onClick={save} disabled={!dirty || update.isPending}>{update.isPending ? 'Saving…' : 'Save settings'}</Button>
-        {dirty && <span className="text-[13px] text-[var(--color-muted-foreground)]">Unsaved changes</span>}
-      </div>
-    </div>
+            <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="budget-percent-heading">
+              <h3 id="budget-percent-heading" className="font-semibold">When a participant is approaching their budget</h3>
+              <FormField label="Warn when used reaches" className="max-w-xs">
+                <Dropdown
+                  variant="form"
+                  value={String(shownPercent)}
+                  onChange={value => { setPercentPick({ value: Number(value), base: serverPercent }) }}
+                  items={PERCENT_ITEMS}
+                />
+              </FormField>
+              <p className="text-[13px] text-[var(--color-muted-foreground)]">The share of a participant&rsquo;s budget for the funding period that has been used. From 50% to 95%, in steps of 5.</p>
+            </section>
+          </>
+        )}
+    </SettingsSection>
   )
 }

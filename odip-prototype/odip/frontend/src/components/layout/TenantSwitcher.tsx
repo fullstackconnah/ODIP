@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAdminTenantsSummary } from '@/api/hooks'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { switchViewAndReload } from '@/lib/viewAsSwitch'
 import { TONE } from '@/lib/tone'
 
 export default function TenantSwitcher() {
@@ -66,7 +67,7 @@ export default function TenantSwitcher() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open])
 
-  const switchTenant = (tenantId: string) => {
+  const switchTenant = (tenantId: string) => switchViewAndReload(() => {
     // Restore original SuperAdmin user if we were impersonating
     const savedAdmin = localStorage.getItem('odip_superadmin_user')
     if (savedAdmin) {
@@ -76,8 +77,7 @@ export default function TenantSwitcher() {
     localStorage.removeItem('odip_viewing_user')
     localStorage.setItem('odip_viewing_tenant', tenantId)
     localStorage.setItem('odip_last_tenant', tenantId)
-    window.location.reload()
-  }
+  })
 
   return (
     <div ref={ref} className="relative">

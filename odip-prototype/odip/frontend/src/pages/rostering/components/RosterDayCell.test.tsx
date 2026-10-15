@@ -1,9 +1,17 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { RosterDayCell } from './RosterDayCell'
+import { RosterDayCell, type RosterDayCellProps } from './RosterDayCell'
 import { makeShift } from '../test-fixtures'
+
+// What dnd-kit says is carried. Null (nothing) for every test that does not set it.
+const dnd = vi.hoisted(() => ({ active: null as null | { id: string } }))
+vi.mock('@dnd-kit/core', async importOriginal => {
+  const actual = await importOriginal<typeof import('@dnd-kit/core')>()
+  return { ...actual, useDroppable: (args: Parameters<typeof actual.useDroppable>[0]) => ({ ...actual.useDroppable(args), active: dnd.active as never }) }
+})
+afterEach(() => { dnd.active = null })
 
 function noop() {}
 
@@ -128,5 +136,40 @@ describe('RosterDayCell — chip context and height', () => {
 
     const filled = render(<MemoryRouter><RosterDayCell {...baseProps} shifts={[makeShift()]} /></MemoryRouter>)
     expect(filled.container.firstElementChild).toHaveClass('min-h-[calc(var(--row-h)_-_1px)]')
+  })
+})
+
+describe('RosterDayCell — the new-shift slot while a person is carried (the brief, section 7)', () => {
+  const dayTarget = { kind: 'day' as const, participantId: 'p-1', participantName: 'Mia Chen', day: '2026-08-19' }
+  const cell = (props: Partial<RosterDayCellProps> = {}) => render(
+    <MemoryRouter>
+      <RosterDayCell day="2026-08-19" dayIndex={2} canWrite addLabel={ADD_LABEL} shifts={[makeShift({ id: 'a', staffName: 'Sam Wilson' })]} chipContext="participant" draggable dayTarget={dayTarget}
+        onAdd={noop} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} {...props} />
+    </MemoryRouter>,
+  )
+
+  it('has no slot at rest, and every chip keeps its menu', () => {
+    const { container } = cell()
+    expect(container.querySelector('[data-day-slot]')).toBeNull()
+    expect(screen.getByRole('button', { name: /^Actions for/ })).toBeInTheDocument()
+  })
+
+  it('drops every chip menu while a person is carried, and gives the day a slot of exactly that room, so no chip text moves and no row grows', () => {
+    dnd.active = { id: 'staff:s-1' }
+    const { container } = cell()
+    expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument()
+    const day = container.firstElementChild as HTMLElement
+    // The menu column was the menu's 2px pad plus a --control-h-sm button: the day's padding grows by exactly that, and the slot fills it.
+    expect(day).toHaveClass('relative', 'pr-[calc(var(--control-h-sm)_+_4px)]')
+    const slot = container.querySelector('[data-day-slot="2026-08-19"]') as HTMLElement
+    expect(slot).toHaveClass('absolute', 'right-0.5', 'w-[calc(var(--control-h-sm)_+_2px)]')
+    expect(slot).toHaveAttribute('aria-hidden', 'true')
+    expect(slot.querySelector('svg')).not.toBeNull()
+  })
+
+  it('gives a reader no slot', () => {
+    dnd.active = { id: 'staff:s-1' }
+    const { container } = cell({ canWrite: false })
+    expect(container.querySelector('[data-day-slot]')).toBeNull()
   })
 })
