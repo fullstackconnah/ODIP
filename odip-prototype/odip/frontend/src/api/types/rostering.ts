@@ -5,7 +5,7 @@ import type {
   PortalShiftRoutineDto,
 } from './shift-package'
 import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
-import type { UnavailabilityKind } from './leave'
+import type { LeaveStatus, UnavailabilityKind } from './leave'
 import type { PlanBlockRequirements } from './plan-pricing'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
@@ -223,6 +223,19 @@ export interface ShiftCompletionDto {
   nothingToHandOver: boolean
   /** The worker confirmed "nothing to note" instead of writing a shift note. */
   nothingToNoteConfirmed: boolean
+  // ── My shifts redesign: what the worker confirmed at Finish ──
+  /** True when the worker moved either actual time at Finish; the originals below then hold the server's stamps. */
+  timesAdjusted: boolean
+  /** The server's start stamp when the worker moved `actualStart`; null otherwise. An instant. */
+  originalActualStart: string | null
+  /** The Finish instant when the worker moved `actualEnd`; null otherwise. */
+  originalActualEnd: string | null
+  /** Why the worker moved a time; null when nothing moved. */
+  timeAdjustmentReason: string | null
+  /** Kilometres driven with the participant, one decimal place; null when not given. */
+  kilometres: number | null
+  /** "Anything to report?" at Finish: true, false, or null when skipped. */
+  anythingToReport: boolean | null
 }
 
 /**
@@ -284,6 +297,10 @@ export interface CompletionQueueItemDto {
   /** True when the worker never pressed Start and supplied the start time at Finish (the manual-start path). That path skips the dose checklist,
    * so the queue can flag the row next to `dosesWithoutOutcome` without opening the shift. Same flag as `ShiftCompletionDto.startWasManual`. */
   startWasManual: boolean
+  /** True when the worker moved the start or end at Finish. */
+  timesAdjusted: boolean
+  /** Active incidents linked to the shift: the ones the review lists. A row is one-tap only when this is exactly 0 (dashboard). */
+  incidentCount: number
 }
 
 /** POST rostering/shifts/{id}/completion/return body — reason is required server-side (400
@@ -330,6 +347,23 @@ export interface LeaveBarDto {
   endTime: string | null
 }
 
+/** A participant whose newest agreement revision waits for an approval for rostering (spec 2026-10-15; L10): its shifts are not on the board until it is approved. They may have no row: `canReceiveServices` false means their services have not started. */
+export interface PendingAgreementDto {
+  participantId: string
+  displayName: string
+  draftId: string
+  version: number
+  canReceiveServices: boolean
+}
+
+/** One approved or pending leave request touching the board's week (participant board only; the Staff view has its rows' leave bars). Whole days, both ends inclusive, not clipped to the week. */
+export interface StaffLeaveDto {
+  staffId: string
+  from: string
+  to: string
+  status: Extract<LeaveStatus, 'Approved' | 'Pending'>
+}
+
 // ── Roster Board ──────────────────────────────────────────
 export interface RosterStaffRowDto {
   staffId: string
@@ -347,6 +381,8 @@ export interface RosterStaffRowDto {
 export interface RosterParticipantRowDto {
   participantId: string
   fullName: string
+  /** Services have begun but the participant is still onboarding (not yet made active): the board tags the row. */
+  inOnboarding?: boolean
   supportRatio: SupportRatio
   overnightSupport: SleepoverType
   hasRestrictivePractice: boolean
@@ -357,6 +393,8 @@ export interface RosterParticipantRowDto {
   /** What is still missing for this participant (e.g. "No signed service agreement"), shown verbatim as a
    * quiet warning. Omitted by the server when there is nothing missing. */
   readinessIssues?: string[]
+  /** The organisation enforces readiness and this participant fails it: new shifts and assignments are refused (the row says so). */
+  notReadyForRostering?: boolean
 }
 
 export interface RosterExceptionDto {
@@ -378,6 +416,10 @@ export type RosterBoardDto =
       weekStart: string
       days: string[]
       participantRows: RosterParticipantRowDto[]
+      /** Every participant whose newest agreement waits for an approval for rostering, with or without a row (the notice). */
+      pendingAgreements?: PendingAgreementDto[]
+      /** The week's approved and pending leave of every active staff member, for the staff picker. */
+      staffLeave?: StaffLeaveDto[]
       exceptions: RosterExceptionDto[]
     }
   | {
@@ -415,6 +457,8 @@ export interface CreateShiftDto {
    * means something when the check found the shift past the budget; the server refuses a description that is too short.
    */
   emergency?: boolean
+  /** Create only. Roster drag and drop: the shift the person on `staffId` was carried off onto this empty day; the server clears it in the same save, or answers 409 if they are no longer on it. */
+  moveFromShiftId?: string
 }
 
 export type UpdateShiftDto = CreateShiftDto
@@ -423,6 +467,32 @@ export interface AssignShiftDto {
   staffId: string | null
   overrideReason: string | null
   acknowledgedFindingCodes: string[]
+  /** Roster drag and drop: who the board showed on the shift when the drop was made (null for nobody). Sent by the board's drops only; the server refuses with 409 when the shift changed since. */
+  expectedStaffId?: string | null
+}
+
+/** How POST /rostering/shifts/move-staff carries a person (roster drag and drop): onto an unfilled shift, replacing the worker there, or swapping the two. */
+export type MoveStaffMode = 'Move' | 'Swap' | 'Replace'
+
+/** One all-or-nothing carry of the person on `fromShiftId` to `toShiftId`. The server judges each person where they land, ignoring the shift they leave. */
+export interface MoveStaffDto {
+  fromShiftId: string
+  toShiftId: string
+  mode: MoveStaffMode
+  /** The person carried: the server refuses with 409 when someone else is on the source now. */
+  staffId: string
+  /** Who the board showed on the target (null for nobody): for Replace and Swap the server refuses with 409 when someone else is on it now. */
+  expectedToStaffId: string | null
+  overrideReason: string | null
+  acknowledgedFindingCodes: string[]
+}
+
+/** What Publish week did: Draft shifts now Published (unfilled ones too), how many different workers were told, how many went out needing staff, and how many stayed Draft because their worker now has a blocking problem. */
+export interface PublishWeekResultDto {
+  published: number
+  notified: number
+  unfilled: number
+  skipped: number
 }
 
 /** Dry-run candidate for POST /shifts/check — no writes, no override fields. */
