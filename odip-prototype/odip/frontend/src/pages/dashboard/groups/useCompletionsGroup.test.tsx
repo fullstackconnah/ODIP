@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { renderGroup, announcement } from './groupHarness'
+import { renderGroup, announcement, facts, headers } from './groupHarness'
 import { isClean, useCompletionsGroup } from './useCompletionsGroup'
 
 vi.mock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: true }))
@@ -28,9 +28,19 @@ describe('Shift completions group — what it reads', () => {
 
     await screen.findByText('Sam Lee')
     expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', page: 1, pageSize: 5 })
-    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Completions (12)' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See all shift completions' })).toHaveAttribute('href', '/rostering/completions')
-    expect(screen.getByText(/^Grace Palmer-Hughes · 14 Oct · .+ – .+$/)).toBeInTheDocument()
+  })
+
+  it("heads its columns Staff, Participant, Shift and Variance, and reads the variance as the Completions page does", async () => {
+    apiGet.mockResolvedValue(page([item(), item({ shiftId: 's2', staffName: 'Ana Ruiz', varianceMinutesStart: 0, varianceMinutesEnd: -12, actualEnd: null })]))
+    renderGroup(() => useCompletionsGroup(true))
+
+    await screen.findByText('Sam Lee')
+    expect(headers()).toEqual(['Staff', 'Participant', 'Shift', 'Variance', ''])
+    expect(facts('Sam Lee')).toEqual(['Grace Palmer-Hughes', expect.stringMatching(/^14 Oct, 9:02.+ – 3:04.+$/), '+2 min / +4 min'])
+    // A shift still open ends in an ellipsis.
+    expect(facts('Ana Ruiz')).toEqual(['Grace Palmer-Hughes', expect.stringMatching(/^14 Oct, 9:02.+ – …$/), 'On time / -12 min'])
   })
 })
 

@@ -9,27 +9,33 @@ import { TextField } from '@/components/TextField'
 import { ROW_ACTIONS_CARD, TAP_FLOOR } from '@/components/tapArea'
 import { formatRatio } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
-import { SHOWN_ROWS, rowKey, shownCount, visibleRows, type ActionOutcome, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
+import { SHOWN_ROWS, isPresent, rowKey, shownCount, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 
 // A busy control is aria-disabled, not disabled: a disabled button drops focus in some browsers, and a refused tap must leave focus where it was (SHAPE §4).
 const HELD = 'opacity-50 cursor-not-allowed'
+// DataTable's cell: --cell-px across, no padding down, centred in the row. Below xl a row is a card and its cells are plain flex items.
+const CELL = 'px-[var(--cell-px)] align-middle max-xl:p-0'
 
 /**
- * Where focus goes when the row that holds it leaves (SHAPE §10), read BEFORE it leaves: the next row's first control, else this group's link, else
- * the next group's link. Null when focus is not in the row, so nothing is moved for somebody working elsewhere on the page.
+ * Where focus goes when the row that holds it leaves (SHAPE §5), read BEFORE it leaves: the next row's first control, else this tab's link while the tab
+ * stays. Null when focus is not in the row, so nothing is moved for somebody working elsewhere (a tap that finishes in a tab the viewer has left).
  */
 function focusTargets(rowEl: HTMLElement): Array<HTMLElement | null | undefined> | null {
   if (!rowEl.contains(document.activeElement)) return null
-  const group = rowEl.closest('[data-quick-group]')
   return [
     rowEl.nextElementSibling?.querySelector<HTMLElement>('a, button'),
-    group?.querySelector<HTMLElement>('[data-group-link]'),
-    group?.nextElementSibling?.querySelector<HTMLElement>('[data-group-link]'),
+    rowEl.closest('[data-quick-group]')?.querySelector<HTMLElement>('[data-group-link]'),
   ]
 }
 
-/** A row's inline form (SHAPE §4, "An action that needs input"): under the row's line, inside the row. Its checks mirror the server's, never exceed them. */
+/** When the tab itself has gone, looked up after it went: the newly opened tab, else the section's heading, else the All clear field. Never the top of the page. */
+const afterTabLeft = () =>
+  document.querySelector<HTMLElement>('[role="tab"][id^="decisions-tab-"][aria-selected="true"]')
+  ?? document.getElementById('dashboard-decisions')
+  ?? document.getElementById('dashboard-alerts')
+
+/** A row's inline form (SHAPE §4, "An action that needs input"): in the detail row under its row. Its checks mirror the server's, never exceed them. */
 function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
   id: string
   form: QuickForm
@@ -97,21 +103,33 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
   )
 }
 
-/** One decision row (SHAPE §4, "A row"): the subject, its flags and its facts, then at most two buttons at the right edge, and its form under it when open. */
-function QuickRowView({ row, onDone, onRefused }: {
+/** A fact cell: one plain value; a dash in the table and nothing on the card when empty. Only free text is cut (in the table) or wrapped (on a card). */
+function FactCell({ column, value }: { column: FactColumn; value: string | null | undefined | false }) {
+  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', !column.long && 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
+  return (
+    <td className={classes.filter(Boolean).join(' ')}>
+      {!value ? '—' : column.long ? <span className="block break-words xl:max-w-[14rem] xl:truncate" title={value}>{value}</span> : value}
+    </td>
+  )
+}
+
+/**
+ * One decision row (SHAPE §4, §6): its own row group, so its error line and form (the detail row) stay with it. From xl a table row of --row-h with the
+ * buttons at the right edge; below xl the same elements reflow into the house phone card: the subject and its flags, the facts line, the buttons under them.
+ */
+function QuickRowView({ row, columns, onDone, onRefused }: {
   row: QuickRow
+  columns: FactColumn[]
   onDone: (outcome: ActionOutcome, rowEl: HTMLElement) => void
   onRefused: (err: unknown, message: string) => void
 }) {
-  const rowRef = useRef<HTMLLIElement>(null)
+  const rowRef = useRef<HTMLTableSectionElement>(null)
   const formId = useId()
   const [tapping, setTapping] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string>()
   const [formOpen, setFormOpen] = useState(false)
   const busy = tapping || submitting
-  const meta = row.meta.filter(Boolean).join(' · ')
-  const wide = (row.wideMeta ?? []).filter(Boolean).join(' · ')
   const formAction = row.actions.find((a): a is Extract<RowAction, { kind: 'form' }> => a.kind === 'form')
   const opener = () => rowRef.current?.querySelector<HTMLElement>(`[aria-controls="${formId}"]`)
 
@@ -145,74 +163,73 @@ function QuickRowView({ row, onDone, onRefused }: {
   }
 
   const held = busy ? HELD : undefined
+  const form = formOpen && formAction
   return (
-    <li ref={rowRef} className="rounded-[var(--radius-sm)] px-2 transition-colors hover:bg-[var(--color-surface-container-low)]">
-      <div className="flex min-h-[var(--row-h)] flex-wrap items-center gap-x-3 gap-y-1 py-1.5 md:flex-nowrap md:py-0">
-        <div className="min-w-48 flex-1 md:min-w-0">
-          <div className="flex min-w-0 flex-col md:flex-row md:items-center md:gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 md:flex-nowrap">
-              <span className="truncate text-sm font-medium text-[var(--color-foreground)]" title={row.subject}>{row.subject}</span>
-              {row.flags.slice(0, 2).map((flag) => (
-                <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
-              ))}
+    <tbody ref={rowRef} className="max-xl:block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4">
+      <tr className="max-xl:flex max-xl:flex-wrap max-xl:items-center max-xl:gap-x-3 max-xl:gap-y-1 xl:h-[var(--row-h)] xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)]">
+        <td className={`${CELL} max-xl:basis-full`}>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 xl:flex-nowrap">
+            <span className="min-w-0 text-sm font-medium text-[var(--color-foreground)] xl:max-w-[16rem] xl:truncate" title={row.subject}>{row.subject}</span>
+            {row.flags.slice(0, 2).map((flag) => (
+              <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
+            ))}
+          </div>
+        </td>
+        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} />)}
+        <td className={`${CELL} whitespace-nowrap max-xl:mt-2 max-xl:basis-full xl:w-px ${row.actions.length === 0 ? 'max-xl:hidden' : ''}`}>
+          {row.actions.length > 0 && (
+            <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
+              {row.actions.map((action) =>
+                action.kind === 'link' ? (
+                  <Button key={action.label} variant="secondary" size="sm" to={action.to} aria-label={action.name}>{action.label}</Button>
+                ) : action.kind === 'form' ? (
+                  <Button
+                    key={action.label}
+                    variant="secondary"
+                    size="sm"
+                    aria-label={action.name}
+                    aria-expanded={formOpen}
+                    aria-controls={formId}
+                    aria-disabled={busy || undefined}
+                    className={held}
+                    onClick={() => { if (!busy) { if (formOpen) closeForm(); else setFormOpen(true) } }}
+                  >
+                    {action.label}
+                  </Button>
+                ) : (
+                  <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined} className={held} onClick={() => tap(action)}>
+                    {tapping ? action.busyLabel : action.label}
+                  </Button>
+                ),
+              )}
             </div>
-            {/* From md the meta takes only the room the subject leaves, so it is cut first; below md it wraps, so a deciding fact ("An admin signs this off", a
-                due or expiry date) is never cut on a phone, where `title` shows nothing. */}
-            {meta && (
-              <p className="min-w-0 break-words text-[13px] text-[var(--color-muted-foreground)] md:min-w-24 md:flex-[1_1_0%] md:truncate" title={wide ? `${meta} · ${wide}` : meta}>
-                {meta}{wide && <span className="hidden lg:inline"> · {wide}</span>}
-              </p>
-            )}
-          </div>
-          {error && <p role="alert" className="text-xs text-[var(--color-destructive)]">{error}</p>}
-        </div>
-
-        {row.actions.length > 0 && (
-          <div className={`ml-auto flex shrink-0 items-center gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
-            {row.actions.map((action) =>
-              action.kind === 'link' ? (
-                <Button key={action.label} variant="secondary" size="sm" to={action.to} aria-label={action.name}>{action.label}</Button>
-              ) : action.kind === 'form' ? (
-                <Button
-                  key={action.label}
-                  variant="secondary"
-                  size="sm"
-                  aria-label={action.name}
-                  aria-expanded={formOpen}
-                  aria-controls={formId}
-                  aria-disabled={busy || undefined}
-                  className={held}
-                  onClick={() => { if (!busy) { if (formOpen) closeForm(); else setFormOpen(true) } }}
-                >
-                  {action.label}
-                </Button>
-              ) : (
-                <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined} className={held} onClick={() => tap(action)}>
-                  {tapping ? action.busyLabel : action.label}
-                </Button>
-              ),
-            )}
-          </div>
-        )}
-      </div>
-      {formOpen && formAction && <RowForm id={formId} form={formAction.form} onClose={closeForm} onBusy={setSubmitting} onDone={done} onRefused={onRefused} />}
-    </li>
+          )}
+        </td>
+      </tr>
+      {(error || form) && (
+        <tr data-detail className="max-xl:block">
+          <td colSpan={columns.length + 2} className="px-[var(--cell-px)] pb-2 max-xl:block max-xl:p-0 max-xl:pt-3">
+            {error && <p role="alert" className="pb-1 text-xs text-[var(--color-destructive)]">{error}</p>}
+            {form && <RowForm id={formId} form={form.form} onClose={closeForm} onBusy={setSubmitting} onDone={done} onRefused={onRefused} />}
+          </td>
+        </tr>
+      )}
+    </tbody>
   )
 }
 
 /**
- * One decision group (SHAPE §4, "A group"): the h3 and its count, the link to the full page, up to five rows, and the group's notices UNDER the rows (a
- * notice inserted above would push every row down under a moving finger). A waiting or failed group says so and is never clear (`awaitsData`).
+ * One decision tab's panel (SHAPE §4, §5): its table of up to five rows (DataTable's look from xl, house phone cards below it), the link to the full page
+ * under it, and the group's notices under that (a notice inserted above would push every row down under a moving finger). A waiting or failed group says
+ * so in place of the table and is never clear (`awaitsData`).
  */
 export function QuickGroup({ model, state }: { model: GroupModel; state: DecisionState }) {
-  const headingId = useId()
   const linkRef = useRef<HTMLAnchorElement>(null)
   const rows = visibleRows(model, state.gone)
   // Rows only once every request has answered: a group whose other list is still waiting or failed shows its one line, not half its rows (SHAPE §6).
   const ready = model.phase === 'ready'
   const shown = ready ? rows.slice(0, SHOWN_ROWS) : []
-  const count = shownCount(model, state.gone)
-  const cut = ready && count > shown.length
+  const cut = ready && shownCount(model, state.gone) > shown.length
   const notices = state.notices.filter((notice) => notice.subject === model.key)
 
   // Decided or removed elsewhere (409, 404): say so, since the refetch may take the row and its alert line away, and refetch so the row resolves.
@@ -228,26 +245,45 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     else if (outcome.announce) state.announce(outcome.announce)
     if (outcome.keep) return
     const targets = focusTargets(rowEl)
-    // Commit the row's leaving now (finish runs after an await, outside React's batching), so focus lands on what is on the page after it.
+    // Commit the row's leaving now (finish runs after an await, outside React's batching), so focus lands on what is on the page after it, the newly
+    // opened tab included (NeedsYourDecision picks it in the same render).
     flushSync(() => state.markGone(rowKey(model.key, row.id)))
-    // The first target still on the page, else whatever now carries #dashboard-alerts: the Alerts heading, or the All clear field when the page turned clear.
-    if (targets) (targets.find((el) => el?.isConnected) ?? document.getElementById('dashboard-alerts'))?.focus()
+    if (targets) (targets.find((el) => el?.isConnected) ?? afterTabLeft())?.focus()
+  }
+
+  // Dismissing the last thing a tab holds takes the tab, and its NoticesRegion (which would place focus) with it: place focus once that has committed.
+  function dismiss(id: number) {
+    if (isPresent(model, state.gone, notices.length - 1)) return state.dismiss(id)
+    flushSync(() => state.dismiss(id))
+    afterTabLeft()?.focus()
   }
 
   return (
     <div data-quick-group={model.key}>
-      <div className="flex min-h-[var(--row-h)] items-center justify-between gap-2 px-2">
-        <div className="flex items-center gap-2">
-          <h3 id={headingId} className="text-sm font-semibold">{model.title}</h3>
-          {model.phase !== 'ready' ? (
-            <span aria-busy={model.phase === 'loading' || undefined} className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
-              <span aria-hidden="true">–</span>
-              <span className="sr-only">{model.phase === 'loading' ? 'Loading' : "Couldn't load"}</span>
-            </span>
-          ) : count > 0 && (
-            <StatusBadge tone="neutral" label={String(count)} className="tabular-nums" />
-          )}
+      {model.phase === 'loading' && <p className="text-[13px] text-[var(--color-muted-foreground)]">Loading {model.noun}…</p>}
+      {model.phase === 'error' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[13px] text-[var(--color-destructive)]">Couldn't load {model.noun}.</p>
+          <Button variant="secondary" size="sm" onClick={() => model.refetch()} aria-label={`Try again: ${model.noun}`}>Try again</Button>
         </div>
+      )}
+      {shown.length > 0 && (
+        <div className="xl:overflow-x-auto xl:rounded-md xl:border xl:border-[var(--color-border)] xl:bg-[var(--color-card)]">
+          <table className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:divide-y xl:divide-[var(--color-border)]">
+            <thead className="max-xl:hidden">
+              <tr className="h-[var(--table-head-h)]">
+                {[model.subjectHeader, ...model.columns.map((column) => column.header), ''].map((header, i) => (
+                  <th key={i} className={`${CELL} whitespace-nowrap text-left text-xs font-medium text-[var(--color-muted-foreground)]`}>{header}</th>
+                ))}
+              </tr>
+            </thead>
+            {shown.map((row) => (
+              <QuickRowView key={row.id} row={row} columns={model.columns} onDone={(outcome, rowEl) => finish(row, outcome, rowEl)} onRefused={refused} />
+            ))}
+          </table>
+        </div>
+      )}
+      <div className="mt-2 flex justify-end first:mt-0">
         <Link
           ref={linkRef}
           data-group-link
@@ -258,19 +294,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
           {cut ? 'See all' : model.link.openLabel}
         </Link>
       </div>
-      {model.phase === 'loading' && <p className="px-2 pb-1 text-[13px] text-[var(--color-muted-foreground)]">Loading {model.noun}…</p>}
-      {model.phase === 'error' && (
-        <div className="flex flex-wrap items-center gap-2 px-2 pb-1">
-          <p className="text-[13px] text-[var(--color-destructive)]">Couldn't load {model.noun}.</p>
-          <Button variant="secondary" size="sm" onClick={() => model.refetch()} aria-label={`Try again: ${model.noun}`}>Try again</Button>
-        </div>
-      )}
-      {shown.length > 0 && (
-        <ul aria-labelledby={headingId} className="divide-y divide-[var(--color-border)]">
-          {shown.map((row) => <QuickRowView key={row.id} row={row} onDone={(outcome, rowEl) => finish(row, outcome, rowEl)} onRefused={refused} />)}
-        </ul>
-      )}
-      <NoticesRegion notices={notices} onDismiss={state.dismiss} focusAfterDismiss={() => linkRef.current} className="mt-2 empty:mt-0" />
+      <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={() => linkRef.current} className="mt-2 empty:mt-0" />
     </div>
   )
 }

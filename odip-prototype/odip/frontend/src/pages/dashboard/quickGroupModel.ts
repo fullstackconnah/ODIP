@@ -4,7 +4,7 @@ import type { Tone } from '@/lib/tone'
 // The dashboard's decision groups (SHAPE §4, §5): one model per kind, drawn by QuickGroup. A group hook (pages/dashboard/groups) maps its queries and the
 // REAL mutation hooks to this; QuickGroup only draws it and keeps each row's in-flight and error state.
 
-/** The groups, in the page's fixed order. PR C adds 'unfilled' after 'incidents' and 'agreements' after 'tasks'. */
+/** The groups; their tab order is useDecisionGroups'. PR C adds 'unfilled' and 'agreements'. */
 export type GroupKey = 'completions' | 'leave' | 'incidents' | 'tasks' | 'compliance'
 
 /** What a decision did besides leaving the list. */
@@ -40,14 +40,21 @@ export type RowAction =
   | { kind: 'tap'; label: string; busyLabel: string; name: string; failText: string; run: () => Promise<ActionOutcome> }
   | { kind: 'form'; label: string; name: string; form: QuickForm }
 
+/** One fact column of a group's table (SHAPE §4): after the subject column, before the actions. */
+export interface FactColumn {
+  header: string
+  /** Free text (a participant, a note, a trip): cut in the table with its full text in the tooltip, wrapped on a card. Every other fact stays on one line. */
+  long?: boolean
+  /** On a card only from lg (a task's trip): one tap away, and the longest wrap on a phone. The table always has it. */
+  fromLg?: boolean
+}
+
 export interface QuickRow {
   id: string
   /** Who or what the decision is about. */
   subject: string
-  /** The facts, joined by middots. An empty one is dropped before the dots are placed (PageHeaderMeta's rule). */
-  meta: Array<string | null | undefined | false>
-  /** Context drawn after the meta only from lg (a task's trip): one tap away, and the longest wrap on a phone. */
-  wideMeta?: Array<string | null | undefined | false>
+  /** One plain value per column of the group's `columns`, in order. An empty one is a dash in the table and left out of the card. */
+  facts: Array<string | null | undefined | false>
   /** Only the true ones; the first two are drawn. Colour always comes with its word. */
   flags: Array<{ label: string; tone: Tone }>
   /** At most two, secondary first: a `tap` action (the one-tap decision, primary) is always last, at the right edge. */
@@ -56,8 +63,11 @@ export interface QuickRow {
 
 export interface GroupModel {
   key: GroupKey
-  /** The h3: "Leave". */
+  /** The tab's name: "Leave". */
   title: string
+  /** The subject column's header: "Staff". */
+  subjectHeader: string
+  columns: FactColumn[]
   /** How the All clear row and the loading and failed lines name it: "leave requests". */
   noun: string
   phase: QueryPhase
@@ -71,9 +81,6 @@ export interface GroupModel {
 }
 
 export const SHOWN_ROWS = 5
-
-/** A short fact kept on one line when a phone row wraps its meta ("expired 10 Sep", never "expired 10" then "Sep"). */
-export const noBreak = (fact: string) => fact.replace(/ /g, '\u00a0')
 
 export const rowKey = (group: GroupKey, rowId: string) => `${group}:${rowId}`
 

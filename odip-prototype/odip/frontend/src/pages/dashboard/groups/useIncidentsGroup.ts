@@ -21,7 +21,7 @@ export function useIncidentsGroup(enabled: boolean): GroupModel {
       id: i.id,
       subject: i.title,
       // When it happened is a provider wall-clock value: printed as written (lib/wallClock).
-      meta: [i.involvedParticipantName, INCIDENT_TYPE_LABELS[i.incidentType], formatWallClock(i.incidentDateTime, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })],
+      facts: [i.involvedParticipantName, INCIDENT_TYPE_LABELS[i.incidentType], formatWallClock(i.incidentDateTime, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })],
       flags,
       // PR C adds one action here (Mark QSC reported, or Start review), after Open.
       actions: [{ kind: 'link', label: 'Open', name: `Open incident: ${i.title}`, to: `/incidents/${i.id}` }],
@@ -32,6 +32,8 @@ export function useIncidentsGroup(enabled: boolean): GroupModel {
     key: 'incidents',
     title: 'Incidents',
     noun: 'open incidents',
+    subjectHeader: 'Incident',
+    columns: [{ header: 'Participant', long: true }, { header: 'Type' }, { header: 'When' }],
     phase: groupPhase(overdueQsc, needsAttention),
     refetch: () => { void overdueQsc.refetch(); void needsAttention.refetch() },
     count: needsAttention.data?.totalCount ?? 0,
