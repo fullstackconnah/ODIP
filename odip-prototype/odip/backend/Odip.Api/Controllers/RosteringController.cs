@@ -1862,8 +1862,9 @@ public class RosteringController : ControllerBase
 
         // A person being moved or swapped off leavingShiftId is judged without it: no DOUBLE_BOOKED_SHIFT or OVER_HOURS against the shift they are leaving (roster drag and drop, 2026-10-14).
         // shortcut: participantShiftsOnDate still counts them on the shift they leave, so a swap inside one 2:1 pair can warn RATIO_SHORTFALL falsely; filter it there too if pairs get swapped often.
+        // The day either side of the week too, so an overnight shift crossing the week edge is double-booking checked; OVER_HOURS still counts only the candidate's own Monday to Sunday.
         var staffShiftsInWeek = await _db.Shifts
-            .Where(s => s.UserId == candidate.UserId.Value && s.ServiceDate >= weekStart && s.ServiceDate <= weekEnd
+            .Where(s => s.UserId == candidate.UserId.Value && s.ServiceDate >= weekStart.AddDays(-1) && s.ServiceDate <= weekEnd.AddDays(1)
                         && s.Id != excludeShiftId && s.Id != leavingShiftId)
             .ToListAsync(ct);
 
