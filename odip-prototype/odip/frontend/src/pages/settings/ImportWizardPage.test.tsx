@@ -27,10 +27,10 @@ const previewOf = (fields: (string | null)[]): ImportPreviewDto => ({
   fields: FIELDS,
   columns: [{ index: 0, header: 'Given', field: fields[0], note: null }, { index: 1, header: 'Surname', field: fields[1], note: null }],
   rows: [
-    { rowNumber: 2, name: 'Ava Stone', status: 'Ready', reasons: [], warnings: [], skipReason: null },
-    { rowNumber: 3, name: 'Ben', status: 'Invalid', reasons: ['Last name is required.'], warnings: [], skipReason: null },
+    { rowNumber: 2, name: 'Ava Stone', status: 'Ready', reasons: [], warnings: [], notes: [], skipReason: null, detail: null },
+    { rowNumber: 3, name: 'Ben', status: 'Invalid', reasons: ['Last name is required.'], warnings: [], notes: [], skipReason: null, detail: null },
   ],
-  readyCount: 1, skippedCount: 0, invalidCount: 1, previouslyImportedAt: null,
+  readyCount: 1, skippedCount: 0, invalidCount: 1, previouslyImportedAt: null, createCount: 1,
 })
 
 function renderWizard() {
@@ -185,6 +185,69 @@ describe('ImportWizardPage', () => {
     expect(screen.getByRole('button', { name: 'Send sign-in invites (1)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
     expect(within(screen.getByRole('alertdialog')).getByText('The 1 staff member it created is removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
+  })
+
+  it('imports funding plans: no landing, counts plans not rows, and says undo deletes them', async () => {
+    preview.mockResolvedValue({ ...previewOf(['firstName', 'lastName']), rows: [], readyCount: 3, skippedCount: 1, invalidCount: 2, createCount: 1 })
+    commit.mockResolvedValue({ batchId: 'b1', createdCount: 1, skippedCount: 1, failedCount: 2, rows: [], replayed: false })
+    const router = createMemoryRouter([{ path: '/settings/import/:kind', element: <ImportWizardPage /> }], { initialEntries: ['/settings/import/funding-plans'] })
+    render(<RouterProvider router={router} />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Import funding plans' })).toBeInTheDocument()
+    expect(screen.getByText(/^Import participants first\./)).toBeInTheDocument()
+
+    const file = await upload('budgets.csv')
+    expect(preview).toHaveBeenCalledWith({ kind: 'funding-plans', file, mapping: undefined })
+    await screen.findByRole('heading', { name: 'Match columns' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { name: 'Preview' })
+    expect(screen.queryByLabelText(/Already receiving services/)).toBeNull()
+    expect(screen.getByText(/make one plan: 1 plan from 3 ready rows\./)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('1 funding plan will be created.')).toBeInTheDocument()
+    expect(screen.getByText('Rows skipped: 1.')).toBeInTheDocument()
+    expect(screen.getByText("Rows that can't be imported: 2. Their plans are left out whole. Fix those rows in the file and import it again: plans already in ODIP are refused, never added twice.")).toBeInTheDocument()
+    expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of its plans has been changed, or used by a shift or a service agreement, since the import.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Import 1 funding plan' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+
+    expect(commit).toHaveBeenCalledWith({ kind: 'funding-plans', file, mapping: ['firstName', 'lastName'], landing: undefined, idempotencyKey: expect.any(String) })
+    expect(await screen.findByText('Imported 1 funding plan')).toBeInTheDocument()
+    // The participants list shows no plans; Budgets lists every participant's plan in force.
+    expect(screen.getByRole('link', { name: 'View budgets' })).toHaveAttribute('href', '/budgets')
+    // Plans were created, but rows were skipped or refused: each count names its unit.
+    expect(screen.getByText("1 row skipped, 2 rows couldn't be imported.")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
+    expect(within(screen.getByRole('alertdialog')).getByText('The 1 funding plan it created is deleted. This only works while none of its plans has been changed, or used by a shift or a service agreement, since the import.')).toBeInTheDocument()
+  })
+
+  it('sets the rows to check apart from notes, filters them, and counts them before the import', async () => {
+    const check = 'The file names Ben Lee for this NDIS number, which is Ava Stone in ODIP. Check the number.'
+    const note = "Categories 01 to 04 are one Core (flexible) pool in ODIP: this plan's plan-managed Core comes to $1,250.50."
+    preview.mockResolvedValue({
+      ...previewOf(['firstName', 'lastName']), readyCount: 2, invalidCount: 0, createCount: 2,
+      rows: [
+        { rowNumber: 2, name: 'Ava Stone', status: 'Ready', reasons: [], warnings: [check], notes: [], skipReason: null, detail: null },
+        { rowNumber: 3, name: 'Cal Wu', status: 'Ready', reasons: [], warnings: [], notes: [note], skipReason: null, detail: '01 Assistance with Daily Life, plan-managed, $1,000.00, 1 Jul 2026 to 30 Jun 2027' },
+      ],
+    })
+    renderWizard()
+    await upload()
+    await screen.findByRole('heading', { name: 'Match columns' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { name: 'Preview' })
+
+    // The warning is named in words, not only by its colour; the note is not.
+    expect(screen.getByText(check).closest('li')).toHaveTextContent(/^Check: /)
+    expect(screen.getByText(note).closest('li')).not.toHaveTextContent(/Check:/)
+    // What each row will create, so a misread amount or category is seen before the import.
+    expect(screen.getByText('01 Assistance with Daily Life, plan-managed, $1,000.00, 1 Jul 2026 to 30 Jun 2027')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'To check (1)' }))
+    expect(screen.queryByText('Cal Wu')).toBeNull()
+    expect(screen.getByText('Ava Stone')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByLabelText(/Already receiving services/))
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Rows to check first: 1. Each one says why in the preview.')).toBeInTheDocument()
   })
 
   it('sends /settings/import/staff back to Settings when staff come from Employment Hero', () => {

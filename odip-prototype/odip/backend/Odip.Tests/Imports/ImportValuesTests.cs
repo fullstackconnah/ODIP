@@ -1,4 +1,5 @@
 using Odip.Application.DTOs;
+using Odip.Domain.Enums;
 using Odip.Infrastructure.Services;
 using Xunit;
 
@@ -58,5 +59,22 @@ public class ImportValuesTests
         var labels = new Dictionary<string, string> { ["FirstName"] = "First name", ["LastName"] = "Last name", ["NdisNumber"] = "NDIS number" };
         Assert.Equal(new[] { "First name is longer than 100 characters.", "NDIS number is longer than 20 characters." },
             ImportValues.AnnotationErrors(dto, labels).OrderBy(e => e));
+    }
+
+    [Theory]
+    [InlineData("Self managed", PlanType.SelfManaged)]
+    [InlineData("self-managed", PlanType.SelfManaged)]
+    [InlineData("PLAN MANAGED", PlanType.PlanManaged)]
+    [InlineData("Plan-managed", PlanType.PlanManaged)]
+    [InlineData("NDIA managed", PlanType.AgencyManaged)]
+    [InlineData("Agency", PlanType.AgencyManaged)]
+    public void Plan_management_reads_the_words_other_platforms_use(string text, PlanType expected) =>
+        Assert.Equal(((PlanType?)expected, (string?)null), ImportValues.PlanManagement(text, "Plan type"));
+
+    [Fact]
+    public void Plan_management_is_null_when_blank_and_named_when_unknown()
+    {
+        Assert.Equal(((PlanType?)null, (string?)null), ImportValues.PlanManagement("", "Plan type"));
+        Assert.Equal("Managed by must be Self managed, Plan managed or NDIA managed.", ImportValues.PlanManagement("Family", "Managed by").Error);
     }
 }

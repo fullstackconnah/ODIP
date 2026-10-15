@@ -17,7 +17,7 @@ import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import ImportInvites from './ImportInvites'
-import { undoBlockers } from './importUndoBlockers'
+import { undoBlockers, undoFirst } from './importUndoBlockers'
 
 const MAX_BYTES = 5 * 1024 * 1024
 const BACK_TO = '/settings?tab=import'
@@ -31,7 +31,7 @@ const STEPS: WizardStepDef<Record<string, never>>[] = [
 ]
 const ORDER = STEPS.map(s => s.key as StepKey)
 
-/** What each kind imports, as the page words it. Staff is "Import staff", as the nav says, never "staff members"; an undone staff import deletes its accounts. */
+/** What each kind imports, as the page words it. Staff is "Import staff", as the nav says, never "staff members"; an undone staff import deletes its accounts, an undone funding plans import its plans. */
 const KIND: Record<ImportKind, { noun: string; title: string; listNoun: string; listTo: (landing: ImportLanding | null) => string; undone: string; undoRule: string; undoNote: string }> = {
   participants: {
     noun: 'participant', title: 'Import participants', listNoun: 'participants',
@@ -42,6 +42,11 @@ const KIND: Record<ImportKind, { noun: string; title: string; listNoun: string; 
     noun: 'staff member', title: 'Import staff', listNoun: 'staff', listTo: () => '/staff',
     undone: 'removed', undoRule: 'none of them has signed in or been rostered',
     undoNote: ' Anyone already sent a sign-in invite will find it no longer works until they are imported again.',
+  },
+  'funding-plans': {
+    // The participants list shows no plans; Budgets lists every participant's plan in force.
+    noun: 'funding plan', title: 'Import funding plans', listNoun: 'budgets', listTo: () => '/budgets',
+    undone: 'deleted', undoRule: 'none of its plans has been changed, or used by a shift or a service agreement, since the import', undoNote: '',
   },
 }
 
@@ -68,8 +73,15 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
       // meta on a phone card: one muted line, and a Ready row with nothing to say shows no empty Details label.
       key: 'details', header: 'Details', wrap: true, mobile: 'meta',
       render: r => {
-        const lines = [...(r.skipReason ? [r.skipReason] : []), ...r.reasons, ...r.warnings]
-        return lines.length > 0 && <ul className="text-sm">{lines.map(text => <li key={text}>{text}</li>)}</ul>
+        const plain = [...(r.detail ? [r.detail] : []), ...(r.skipReason ? [r.skipReason] : []), ...r.reasons]
+        return plain.length + r.warnings.length + r.notes.length > 0 && (
+          <ul className="text-sm">
+            {plain.map(text => <li key={text}>{text}</li>)}
+            {/* A warning may mean money on the wrong person: named in words and toned apart from the notes, which need no check. */}
+            {r.warnings.map(text => <li key={text} className="text-[var(--color-on-warning-container)]"><span className="font-semibold">Check: </span>{text}</li>)}
+            {r.notes.map(text => <li key={text} className="text-[var(--color-muted-foreground)]">{text}</li>)}
+          </ul>
+        )
       },
     },
   ]
@@ -79,7 +91,7 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
 export default function ImportWizardPage() {
   const staffFromPayroll = useProviderSettings().data?.employmentHeroConnected === true
   const { kind: param } = useParams()
-  const kind: ImportKind | null = param === 'participants' || param === 'staff' ? param : null
+  const kind: ImportKind | null = param === 'participants' || param === 'staff' || param === 'funding-plans' ? param : null
   const preview = usePreviewImport()
   const commit = useCommitImport()
   const undo = useUndoImport()
@@ -90,7 +102,7 @@ export default function ImportWizardPage() {
   const [data, setData] = useState<ImportPreviewDto | null>(null)
   const [mapping, setMapping] = useState<(string | null)[]>([])
   const [landing, setLanding] = useState<ImportLanding | null>(null)
-  const [filter, setFilter] = useState<'all' | ImportRowStatus>('all')
+  const [filter, setFilter] = useState<'all' | ImportRowStatus | 'Check'>('all')
   const [problem, setProblem] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [result, setResult] = useState<ImportResultDto | null>(null)
@@ -190,7 +202,9 @@ export default function ImportWizardPage() {
               <Button variant="secondary" size="sm" onClick={() => setConfirmUndo(true)}>Undo import</Button>
             </>}
           >
-            {`${result.skippedCount} skipped (already in ODIP), ${result.failedCount} couldn't be imported.`}
+            {kind === 'funding-plans'
+              ? `${plural(result.skippedCount, 'row')} skipped, ${plural(result.failedCount, 'row')} couldn't be imported.`
+              : `${result.skippedCount} skipped (already in ODIP), ${result.failedCount} couldn't be imported.`}
           </Callout>
         )}
         {kind === 'staff' && !undone && <ImportInvites batchId={result.batchId} count={result.createdCount} />}
@@ -201,6 +215,7 @@ export default function ImportWizardPage() {
                 {blockers.map(b => <li key={b.entityId}>{b.name} {b.reason}</li>)}
               </ul>
             )}
+            {undoFirst(blockers) && <p>{undoFirst(blockers)}</p>}
           </Callout>
         )}
         {failed.length > 0 && (
@@ -224,7 +239,9 @@ export default function ImportWizardPage() {
     )
   }
 
-  const rows = data ? data.rows.filter(r => filter === 'all' || r.status === filter) : []
+  const toCheck = (r: ImportRowDto) => r.status === 'Ready' && r.warnings.length > 0
+  const checkCount = data ? data.rows.filter(toCheck).length : 0
+  const rows = data ? data.rows.filter(r => filter === 'all' || (filter === 'Check' ? toCheck(r) : r.status === filter)) : []
   const onSubmit = (e: FormEvent) => { e.preventDefault(); setConfirming(true) }
 
   return (
@@ -241,6 +258,9 @@ export default function ImportWizardPage() {
 
             {step === 'upload' && (
               <div className="flex max-w-xl flex-col gap-3">
+                {kind === 'funding-plans' && (
+                  <p className="text-sm">Import participants first. Each row is one support category of one participant's plan, and finds its participant by NDIS number, or by name and date of birth when it has none.</p>
+                )}
                 <div>
                   <label className={labelClass} htmlFor="import-file">File (.csv or .xlsx)</label>
                   <input
@@ -294,7 +314,7 @@ export default function ImportWizardPage() {
             {step === 'preview' && data && (
               <div className="flex flex-col gap-4">
                 {data.previouslyImportedAt && (
-                  <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt)}. Rows already in ODIP are skipped, but check before importing it again.`}</Callout>
+                  <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt)}. ${kind === 'funding-plans' ? "Plans already in ODIP can't be imported again" : 'Rows already in ODIP are skipped'}, but check before importing it again.`}</Callout>
                 )}
                 {kind === 'participants' && (
                   <fieldset className="grid gap-2 md:grid-cols-2">
@@ -310,6 +330,9 @@ export default function ImportWizardPage() {
                     ))}
                   </fieldset>
                 )}
+                {kind === 'funding-plans' && (
+                  <p className="text-sm">{`Rows for the same participant and plan dates make one plan: ${plural(data.createCount, 'plan')} from ${plural(data.readyCount, 'ready row')}. A plan with any row that can't be imported is left out whole.`}</p>
+                )}
                 <ToggleGroup
                   className="flex-wrap [&>button]:whitespace-nowrap"
                   ariaLabel="Show rows"
@@ -320,6 +343,7 @@ export default function ImportWizardPage() {
                     { key: 'Ready', label: `Ready (${data.readyCount})` },
                     { key: 'Skipped', label: `Skipped (${data.skippedCount})` },
                     { key: 'Invalid', label: `Can't import (${data.invalidCount})` },
+                    ...(checkCount > 0 ? [{ key: 'Check', label: `To check (${checkCount})` }] : []),
                   ]}
                 />
                 <RowsTable rows={rows} />
@@ -328,11 +352,14 @@ export default function ImportWizardPage() {
 
             {step === 'review' && data && (
               <div className="flex max-w-xl flex-col gap-2 text-sm">
-                <p>{`${plural(data.readyCount, noun)} will be created${landing ? `, ${LANDINGS.find(l => l.value === landing)!.label.toLowerCase()}` : ''}.`}</p>
-                {data.skippedCount > 0 && <p>{`Skipped, already in ODIP: ${data.skippedCount}.`}</p>}
-                {data.invalidCount > 0 && <p>{`Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import it again afterwards.`}</p>}
+                <p>{`${plural(data.createCount, noun)} will be created${landing ? `, ${LANDINGS.find(l => l.value === landing)!.label.toLowerCase()}` : ''}.`}</p>
+                {data.skippedCount > 0 && <p>{kind === 'funding-plans' ? `Rows skipped: ${data.skippedCount}.` : `Skipped, already in ODIP: ${data.skippedCount}.`}</p>}
+                {data.invalidCount > 0 && <p>{kind === 'funding-plans'
+                  ? `Rows that can't be imported: ${data.invalidCount}. Their plans are left out whole. Fix ${data.invalidCount === 1 ? 'that row' : 'those rows'} in the file and import it again: plans already in ODIP are refused, never added twice.`
+                  : `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import it again afterwards.`}</p>}
+                {checkCount > 0 && <p>{`Rows to check first: ${checkCount}. Each one says why in the preview.`}</p>}
                 {kind === 'staff' && <p>Nobody is emailed yet: send sign-in invites after the import, now or later from Import history.</p>}
-                <p>{`Every row is checked again as it is imported. You can undo the whole import while ${kind === 'staff' ? KIND.staff.undoRule : 'nothing has been added to its records'}.`}</p>
+                <p>{`Every row is checked again as it is imported. You can undo the whole import while ${kind === 'participants' ? 'nothing has been added to its records' : KIND[kind].undoRule}.`}</p>
               </div>
             )}
 
@@ -344,7 +371,7 @@ export default function ImportWizardPage() {
               secondaryActions={[]}
               cancelTo={BACK_TO}
               history={false}
-              submitLabel={`Import ${plural(data?.readyCount ?? 0, noun)}`}
+              submitLabel={`Import ${plural(data?.createCount ?? 0, noun)}`}
               isSubmitting={commit.isPending}
               summary={commit.isPending ? <p className="text-sm text-[var(--color-muted-foreground)]">Large files can take up to a minute.</p> : undefined}
             />
@@ -353,8 +380,8 @@ export default function ImportWizardPage() {
       </form>
       <ConfirmDialog
         open={confirming}
-        title={`Import ${plural(data?.readyCount ?? 0, noun)}?`}
-        message={`${plural(data?.readyCount ?? 0, noun)} will be created. Rows skipped or that can't be imported are left out.`}
+        title={`Import ${plural(data?.createCount ?? 0, noun)}?`}
+        message={`${plural(data?.createCount ?? 0, noun)} will be created. Rows skipped or that can't be imported are left out.`}
         confirmLabel="Import"
         loading={commit.isPending}
         onCancel={() => setConfirming(false)}

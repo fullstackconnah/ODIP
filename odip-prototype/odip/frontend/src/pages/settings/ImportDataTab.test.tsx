@@ -67,6 +67,17 @@ describe('ImportDataTab', () => {
     renderTab()
     expect(screen.getByText('Nothing was undone: 1 record has changed since the import.')).toBeInTheDocument()
     expect(screen.getByText('Ava Stone has shifts')).toBeInTheDocument()
+    expect(screen.queryByText(/Undo the funding plans import first/)).toBeNull()
+  })
+
+  it('says which undo goes first when funding plans hold the participants', () => {
+    undoState.current = {
+      isPending: false,
+      error: { response: { status: 409, data: { success: false, errors: ['Nothing was undone: 1 record has changed since the import.'], data: [{ entityId: 'p1', name: 'Ava Stone', reason: 'has a funding plan' }] } } },
+    }
+    renderTab()
+    expect(screen.getByText('Ava Stone has a funding plan')).toBeInTheDocument()
+    expect(screen.getByText('Undo the funding plans import first, then undo this one.')).toBeInTheDocument()
   })
 
   it('offers a staff import, and invites for a staff batch with the results above the history', async () => {
@@ -99,6 +110,27 @@ describe('ImportDataTab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
 
     expect(screen.queryByText(/no invites were sent/)).toBeNull()
+  })
+
+  it('offers a funding plans import, names its batches and says what undoing one does', async () => {
+    history.current = [batch({ id: 'b3', kind: 'FundingPlans', fileName: 'budgets.csv', createdCount: 3 })]
+    renderTab()
+    expect(screen.getByRole('link', { name: 'Import funding plans' })).toHaveAttribute('href', '/settings/import/funding-plans')
+    await userEvent.click(within(screen.getByRole('region', { name: 'Funding plans' })).getByRole('button', { name: 'Download template' }))
+    expect(templateMutate).toHaveBeenCalledWith('funding-plans')
+
+    const row = screen.getByRole('row', { name: /budgets\.csv/ })
+    expect(within(row).getByText('Funding plans')).toBeInTheDocument()
+    // A plan is several rows, so the counts say which they are.
+    expect([within(row).getByText('3 plans'), within(row).getByText('1 row')]).toHaveLength(2)
+    await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
+    expect(screen.getByText('The 3 funding plans that budgets.csv created are deleted. This only works while none of them has been changed, or used by a shift or a service agreement, since the import.')).toBeInTheDocument()
+  })
+
+  it('tells the Admin to undo a funding plans import before the participants it used', async () => {
+    renderTab()
+    await userEvent.click(within(screen.getByRole('row', { name: /people\.csv/ })).getByRole('button', { name: 'Undo' }))
+    expect(screen.getByText(/If a funding plans import added plans for them, undo that first\.$/)).toBeInTheDocument()
   })
 
   it('drops the staff card and says why when staff come from Employment Hero', () => {

@@ -9,7 +9,8 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class ImportTemplate
 {
-    public static string FileName(ImportKind kind) => $"odip-{kind.ToString().ToLowerInvariant()}-template.xlsx";
+    // The URL's word for the kind, so this name and the browser's download name agree.
+    public static string FileName(ImportKind kind) => $"odip-{(kind == ImportKind.FundingPlans ? "funding-plans" : kind.ToString().ToLowerInvariant())}-template.xlsx";
 
     public static byte[] Build(ImportKind kind)
     {
@@ -52,6 +53,7 @@ public static class ImportTemplate
         {
             ["firstName"] = ImportParticipantRows.ExampleFirstName, ["lastName"] = ImportParticipantRows.ExampleLastName,
             ["preferredName"] = "", ["dateOfBirth"] = "03/04/1990", ["gender"] = "Female", ["ndisNumber"] = "430000000",
+            ["planType"] = "Self managed", ["planStartDate"] = "01/07/2026", ["planEndDate"] = "30/06/2027",
             ["phone"] = "0400 000 000", ["email"] = "example@example.com", ["addressStreet"] = "1 Example Street", ["addressSuburb"] = "Sydney",
             ["addressState"] = "NSW", ["addressPostcode"] = "2000", ["contact1Name"] = "Sam Example", ["contact1Relationship"] = "Next of kin",
             ["contact1Phone"] = "0400 000 001",
@@ -63,6 +65,12 @@ public static class ImportTemplate
             ["region"] = "Sydney", ["driversLicence"] = "Yes", ["driversLicenceExpiry"] = "30/06/2027", ["firstAid"] = "Yes",
             ["firstAidExpiry"] = "30/06/2027", ["medication"] = "No", ["manualHandling"] = "Yes", ["manualHandlingExpiry"] = "30/06/2027",
             ["overnight"] = "No", ["workerScreeningNumber"] = "1234567A", ["workerScreeningExpiry"] = "30/06/2030",
+        },
+        ImportKind.FundingPlans => new()
+        {
+            ["ndisNumber"] = "430000000", ["firstName"] = ImportParticipantRows.ExampleFirstName, ["lastName"] = ImportParticipantRows.ExampleLastName,
+            ["dateOfBirth"] = "03/04/1990", ["planStart"] = "01/07/2026", ["planEnd"] = "30/06/2027", ["category"] = "Core",
+            ["management"] = "Plan managed", ["amount"] = "45000.00",
         },
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };

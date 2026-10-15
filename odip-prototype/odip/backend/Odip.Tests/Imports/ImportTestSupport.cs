@@ -26,6 +26,7 @@ internal static class ImportTestSupport
         new(db, tenant,
             new ParticipantCreateService(db, new StaffCompatibilityLinkService(db), new SafetyNoteSyncService(db), new ParticipantIntakeSnapshotService(db), TimeProvider.System),
             new StaffCreateService(db, null),
+            new FundingPlanService(db, TimeProvider.System),
             TimeProvider.System);
 
     public static byte[] Csv(params string[] lines) => Encoding.UTF8.GetBytes(string.Join("\r\n", lines) + "\r\n");

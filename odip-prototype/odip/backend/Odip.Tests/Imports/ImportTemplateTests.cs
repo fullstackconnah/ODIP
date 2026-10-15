@@ -50,4 +50,25 @@ public class ImportTemplateTests
         Assert.Equal(ImportFields.For(ImportKind.Staff).Select(f => f.Key), ImportFields.AutoMatch(ImportKind.Staff, table.Headers));
         Assert.Equal("odip-staff-template.xlsx", ImportTemplate.FileName(ImportKind.Staff));
     }
+    [Fact]
+    public void The_funding_template_round_trips_its_example_row_is_skipped_and_its_name_is_the_url_word()
+    {
+        var table = ImportFileReader.Read(ImportTemplate.Build(ImportKind.FundingPlans), ImportTemplate.FileName(ImportKind.FundingPlans));
+        var mapping = ImportFields.AutoMatch(ImportKind.FundingPlans, table.Headers);
+
+        Assert.Equal(ImportFields.For(ImportKind.FundingPlans).Select(f => f.Key), mapping);
+        Assert.Equal(ImportRowStatus.Skipped, ImportFundingRows.Build(table, mapping).Single().Status);
+        Assert.Equal("odip-funding-plans-template.xlsx", ImportTemplate.FileName(ImportKind.FundingPlans));
+    }
+
+    [Fact]
+    public void The_funding_example_values_are_all_valid_once_the_names_are_real()
+    {
+        var table = ImportFileReader.Read(ImportTemplate.Build(ImportKind.FundingPlans), "t.xlsx");
+        var cells = table.Rows.Single().Cells.ToArray();
+        cells[1] = "Ava";
+        cells[2] = "Stone";
+        var plan = ImportFundingRows.Build(new ImportTable(table.Headers, [new ImportRow(2, cells)]), ImportFields.AutoMatch(ImportKind.FundingPlans, table.Headers)).Single();
+        Assert.Equal(ImportRowStatus.Ready, plan.Status);
+    }
 }

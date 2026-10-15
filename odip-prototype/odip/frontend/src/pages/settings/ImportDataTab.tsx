@@ -9,19 +9,33 @@ import type { ImportBatchDto, ImportKind } from '@/api/types'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import ImportInvites, { InviteResults, type InviteResult } from './ImportInvites'
-import { undoBlockers } from './importUndoBlockers'
+import { undoBlockers, undoFirst } from './importUndoBlockers'
 
 /** What the tab offers to import, in order. Each opens the wizard at /settings/import/{kind}. */
 const KINDS: { kind: ImportKind; title: string; text: string; noun: string }[] = [
   {
     kind: 'participants', title: 'Participants', noun: 'participant',
-    text: 'Core profile, contacts and caregivers. Plans, budgets, medications and goals are added in ODIP afterwards.',
+    text: 'Core profile, plan type and dates, contacts and caregivers. Budgets come in with Funding plans; medications and goals are added in ODIP afterwards.',
   },
   {
     kind: 'staff', title: 'Staff', noun: 'staff member',
     text: 'Core profile and the checks ODIP tracks. Pay and employment details stay in your payroll system. Sign-in invites are sent afterwards, when you choose.',
   },
+  {
+    kind: 'funding-plans', title: 'Funding plans', noun: 'funding plan',
+    text: "Each participant's plan dates and budget, one row per support category. Import participants first: each row finds its participant by NDIS number, or by name and date of birth.",
+  },
 ]
+
+/** The history's words for each kind. */
+const KIND_LABEL: Record<ImportBatchDto['kind'], string> = { Participants: 'Participants', Staff: 'Staff', FundingPlans: 'Funding plans' }
+
+/** What undoing a batch does, as the confirm says it. Plans block their participants' undo, so the participant message says which goes first. */
+const UNDO_MESSAGE: Record<ImportBatchDto['kind'], (b: ImportBatchDto) => string> = {
+  Participants: b => `The ${plural(b.createdCount, 'participant')} that ${b.fileName} created ${b.createdCount === 1 ? 'is' : 'are'} archived. This only works while none of them has changed since the import. If a funding plans import added plans for them, undo that first.`,
+  Staff: b => `The ${plural(b.createdCount, 'staff member')} it created ${b.createdCount === 1 ? 'is' : 'are'} removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.`,
+  FundingPlans: b => `The ${plural(b.createdCount, 'funding plan')} that ${b.fileName} created ${b.createdCount === 1 ? 'is' : 'are'} deleted. This only works while none of them has been changed, or used by a shift or a service agreement, since the import.`,
+}
 
 export default function ImportDataTab() {
   const history = useImportHistory()
@@ -33,12 +47,13 @@ export default function ImportDataTab() {
 
   const columns: Column<ImportBatchDto>[] = [
     { key: 'fileName', header: 'File', mobile: 'primary' },
-    { key: 'kind', header: 'Type', mobile: 'meta' },
+    { key: 'kind', header: 'Type', mobile: 'meta', render: b => KIND_LABEL[b.kind] },
     { key: 'createdByName', header: 'Run by', mobile: 'meta' },
     { key: 'createdAt', header: 'When', mobile: 'meta', render: b => formatDateTimeAu(b.createdAt) },
-    { key: 'createdCount', header: 'Created', align: 'right' },
-    { key: 'skippedCount', header: 'Skipped', align: 'right' },
-    { key: 'failedCount', header: "Couldn't import", align: 'right' },
+    // A funding plans batch creates plans from several rows each, so its counts name their unit.
+    { key: 'createdCount', header: 'Created', align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.createdCount, 'plan') : b.createdCount },
+    { key: 'skippedCount', header: 'Skipped', align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.skippedCount, 'row') : b.skippedCount },
+    { key: 'failedCount', header: "Couldn't import", align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.failedCount, 'row') : b.failedCount },
     {
       key: 'status', header: 'Status', mobile: 'status',
       render: b => b.undoneAt ? <StatusBadge tone="neutral" label="Undone" /> : <StatusBadge tone="success" label="Imported" />,
@@ -98,6 +113,7 @@ export default function ImportDataTab() {
                 {blockers.map(b => <li key={b.entityId}>{b.name} {b.reason}</li>)}
               </ul>
             )}
+            {undoFirst(blockers) && <p>{undoFirst(blockers)}</p>}
           </Callout>
         )}
         <DataTable
@@ -114,9 +130,7 @@ export default function ImportDataTab() {
       <ConfirmDialog
         open={undoing != null}
         title="Undo this import?"
-        message={undoing && (undoing.kind === 'Participants'
-          ? `The ${plural(undoing.createdCount, 'participant')} that ${undoing.fileName} created ${undoing.createdCount === 1 ? 'is' : 'are'} archived. This only works while none of them has changed since the import.`
-          : `The ${plural(undoing.createdCount, 'staff member')} it created ${undoing.createdCount === 1 ? 'is' : 'are'} removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.`)}
+        message={undoing && UNDO_MESSAGE[undoing.kind](undoing)}
         confirmLabel="Undo import"
         variant="danger"
         loading={undo.isPending}
