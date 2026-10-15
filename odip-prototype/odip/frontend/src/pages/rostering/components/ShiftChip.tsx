@@ -129,7 +129,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     // The owner's words (the brief, section 5): Replace and Remove name the person, which keeps Remove apart from Delete and says who is meant in the Staff view.
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
     // Swap (the lead's decision 1): an assigned, unlocked chip, wherever the page can open the swap picker. It waits while a write is out, as every drag and plus does.
-    ...(swap && isFilled && !locked ? [{ value: 'swap', label: 'Swap with…', disabled: dragsOff }] : []),
+    ...(swap && isFilled && !locked ? [{ value: 'swap', label: `Swap ${firstName(shift.staffName)} with…`, disabled: dragsOff }] : []),
     ...(shift.staffId ? [{ value: 'unassign', label: `Remove ${firstName(shift.staffName)}` }] : []),
     { value: 'delete', label: 'Delete' },
   ]
@@ -220,7 +220,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       // the menu, siblings of the open control, sit in the box's own cells. A 2px pad and a 2px row gap make 56px with a mouse and 68px under a coarse pointer.
       className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_var(--control-h)] gap-y-0.5 rounded-sm border border-border bg-surface-container-low p-0.5 text-[13px] transition-opacity duration-150 ${
         isDragging || fading ? 'opacity-50' : ''
-      } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings ? 'mt-2' : ''} ${budgetMarker ? 'mb-2' : ''}`}
+      } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings || budgetMarker ? 'my-2' : ''}`}
     >
       {/* Drag activation lives on its own handle, separate from the open button below. Both used
           to share one element with dnd-kit's listeners spread onto the same button that opens the
@@ -362,7 +362,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
       {/*
         The severity marker hangs off the tray's top-right corner (the chip brief, section 2.2): a 12px box from 9px above the tray to 3px into it (offsets count from inside its 1px border), clear of the header line, and 2px clear of the next
-        day's chip. The chip takes mt-2 for it, so the board's sticky day header never cuts it. pointer-events-none so it never intercepts the click. It's a safety signal, not decoration, so it keeps
+        day's chip. The chip takes my-2 for it (symmetric, so it stays centred in its row), so the board's sticky day header never cuts it. pointer-events-none so it never intercepts the click. It's a safety signal, not decoration, so it keeps
         its own role="img" label (and hover title), and the same severity text leads the open control's aria-label (openName) so it is announced before time/person.
       */}
       {hasFindings && (

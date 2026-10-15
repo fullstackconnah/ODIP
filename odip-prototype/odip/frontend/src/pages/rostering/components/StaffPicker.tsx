@@ -285,7 +285,7 @@ function SwapBody({ source, shifts, onPick, inputRef }: { source: ShiftDto; shif
             className={`${OPTION} items-center gap-1 ${optionFill(i === active)}`}
           >
             <span className="min-w-0 truncate text-sm font-medium text-foreground" title={shift.staffName ?? undefined}>{shift.staffName}</span>
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">· {format(parseISO(shift.serviceDate), 'EEE')} {formatShiftTimeRange(shift.startTime, shift.endTime)}</span>
+            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">· {format(parseISO(shift.serviceDate), 'EEE')} {formatShiftTimeRange(shift.startTime, shift.endTime)} · {firstName(shift.participantName)}</span>
           </div>
         ))}
       </div>

@@ -377,6 +377,6 @@ describe('swapCandidates', () => {
   })
 
   it('names each row as the person, then the day and time, in spoken words', () => {
-    expect(swapOptionName(on('t', '2026-08-18', 'staff-3', 'Sam Wilson'))).toBe('Sam Wilson, Tuesday 9am to 3pm')
+    expect(swapOptionName(on('t', '2026-08-18', 'staff-3', 'Sam Wilson'))).toBe('Sam Wilson, Tuesday 9am to 3pm, for Mia')
   })
 })

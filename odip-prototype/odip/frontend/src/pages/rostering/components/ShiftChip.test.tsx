@@ -58,7 +58,7 @@ describe('ShiftChip severity marker', () => {
     expect(marker.parentElement).toBe(container.querySelector('[data-shift-chip]'))
     // A 12px box 10px above the padding edge (the tray's 1px border included), so it ends 3px into the tray, where the header line starts.
     expect(marker).toHaveClass('absolute', 'pointer-events-none', '-top-[10px]', '-right-1.5', 'h-3', 'w-3')
-    expect(marker.parentElement).toHaveClass('mt-2')
+    expect(marker.parentElement).toHaveClass('my-2')
   })
 
   it('renders no marker at all when there are no findings', () => {
@@ -558,14 +558,11 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
 
     it('makes room for the part of the disc that hangs off the chip, so the board’s sticky day header never cuts it (the first row sits right under it)', () => {
       const plain = markerOf(emergency())
-      expect(plain.parentElement).toHaveClass('mb-2')
-      expect(plain.parentElement).not.toHaveClass('mt-2')
+      expect(plain.parentElement).toHaveClass('my-2')
       cleanup()
 
       const bottom = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
-      expect(bottom.parentElement).toHaveClass('mb-2')
-      // The severity marker hangs off the top corner (the chip brief, section 2.2), so it keeps its own room there.
-      expect(bottom.parentElement).toHaveClass('mt-2')
+      expect(bottom.parentElement).toHaveClass('my-2')
     })
 
     // Design review round 1 N1, code review N4: the disc is pointer-events-none (it must never take a click), so hit testing skips it and its own title never shows. The words are on the chip root, which is
@@ -620,8 +617,7 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       renderChip(<ShiftChip shift={makeShift()} canWrite draggable onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
       const chip = screen.getByRole('button', { name: /^Drag to move/ }).parentElement as HTMLElement
-      expect(chip).not.toHaveClass('mt-2')
-      expect(chip).not.toHaveClass('mb-2')
+      expect(chip).not.toHaveClass('my-2')
     })
 
     it('keeps the words as a bonus on a wide chip: in the name row, and display:none below 18rem, never clipped', () => {
@@ -878,8 +874,8 @@ describe('ShiftChip menu: Swap with… (the lead decision 1, 2026-10-15)', () =>
     const shift = makeShift({ id: 'kim', staffName: 'Kim Lee' })
     const swap = chipIn(shift)
     await openMenu(user)
-    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Edit', 'Replace Kim…', 'Swap with…', 'Remove Kim', 'Delete'])
-    await user.click(screen.getByRole('option', { name: 'Swap with…' }))
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Edit', 'Replace Kim…', 'Swap Kim with…', 'Remove Kim', 'Delete'])
+    await user.click(screen.getByRole('option', { name: 'Swap Kim with…' }))
     expect(swap).toHaveBeenCalledWith(shift)
   })
 
@@ -887,23 +883,23 @@ describe('ShiftChip menu: Swap with… (the lead decision 1, 2026-10-15)', () =>
     const user = userEvent.setup()
     chipIn(makeUnfilledShift({ id: 'open' }))
     await openMenu(user)
-    expect(screen.queryByRole('option', { name: 'Swap with…' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Swap Kim with…' })).not.toBeInTheDocument()
     cleanup()
     chipIn(makeShift({ id: 'done', status: 'Completed' }))
     await openMenu(user)
-    expect(screen.queryByRole('option', { name: 'Swap with…' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Swap Kim with…' })).not.toBeInTheDocument()
     cleanup()
     renderChip(<ShiftChip shift={makeShift()} canWrite context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     await openMenu(user)
-    expect(screen.queryByRole('option', { name: 'Swap with…' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Swap Kim with…' })).not.toBeInTheDocument()
   })
 
   it('waits while a write is out, as every drag and plus does (#253)', async () => {
     const user = userEvent.setup()
     const swap = chipIn(makeShift({ id: 'kim', staffName: 'Kim Lee' }), { disabled: true })
     await openMenu(user)
-    expect(screen.getByRole('option', { name: 'Swap with…' })).toHaveAttribute('aria-disabled', 'true')
-    await user.click(screen.getByRole('option', { name: 'Swap with…' }))
+    expect(screen.getByRole('option', { name: 'Swap Kim with…' })).toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByRole('option', { name: 'Swap Kim with…' }))
     expect(swap).not.toHaveBeenCalled()
   })
 })
