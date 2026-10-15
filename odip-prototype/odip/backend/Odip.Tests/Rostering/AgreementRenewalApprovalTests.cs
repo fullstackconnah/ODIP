@@ -135,4 +135,41 @@ public class AgreementRenewalApprovalTests
         var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == renewal.Id).ToDictionaryAsync(p => p.DayOfWeek, p => p.DefaultUserId);
         Assert.All(made.Values, user => Assert.Equal((Guid?)ben, user));
     }
+
+    /// <summary>
+    /// Follow-ups (deep N13): two approvals with the same start, the newer one's patterns open (legacy). A third revision from the same day ends only the open generation, so D12 runs, and
+    /// the first generation also ends the day before it starts. That superseded generation must hand on nothing: Monday, which the newest generation changed, starts with no default staff, and
+    /// its new Draft shifts with no worker, rather than with the superseded generation's Ben.
+    /// </summary>
+    [Fact]
+    public async Task A_superseded_generation_ending_the_day_before_hands_on_no_default_worker()
+    {
+        await using var f = await SetUpAsync();
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
+        await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        var (ben, ann) = (await UserAsync(f, "Ben", active: true), await UserAsync(f, "Ann", active: true));
+        foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
+        await f.Db.SaveChangesAsync();
+        // The same start, Monday changed to 14:00: v1's patterns all end the day before it starts.
+        var v2 = await AddRevisionAsync(f, 2, new[]
+        {
+            WeekdayBlock(change: b => b with { Days = ApprovalTestSupport.Weekdays.Skip(1).ToArray() }), WeekdayBlock("weekdays-mon", b => b with { Days = new[] { DayOfWeek.Monday }, End = T(14) }),
+        }, end: Nov22);
+        Assert.Equal(5, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, v2.Id, false, Admin, CancellationToken.None)).Approval!.PatternsEnded);
+        foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).ToListAsync()) (pattern.EffectiveTo, pattern.DefaultUserId) = (null, ann);
+        await f.Db.SaveChangesAsync();
+        // The same start again, Monday back to v1's 09:00 to 13:00.
+        var v3 = await AddRevisionAsync(f, 3, new[] { WeekdayBlock() }, end: Nov22);
+        var preview = (await f.Service.PreviewAsync(TenantA, f.ParticipantId, v3.Id, Admin, CancellationToken.None)).Preview!;
+
+        var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, v3.Id, false, Admin, CancellationToken.None);
+
+        Assert.Equal((ApprovalStatus.Approved, 5, 1), (outcome.Status, outcome.Approval!.PatternsEnded, preview.ChangedPatterns));
+        var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == v3.Id).ToDictionaryAsync(p => p.DayOfWeek, p => (p.Id, p.DefaultUserId));
+        Assert.Equal((Guid?)null, made[DayOfWeek.Monday].DefaultUserId);
+        Assert.All(made.Where(entry => entry.Key != DayOfWeek.Monday), entry => Assert.Equal((Guid?)ann, entry.Value.DefaultUserId));   // the open generation's, carried
+        var mondays = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId == made[DayOfWeek.Monday].Id).ToListAsync();
+        Assert.NotEmpty(mondays);
+        Assert.All(mondays, s => Assert.Null(s.UserId));
+    }
 }

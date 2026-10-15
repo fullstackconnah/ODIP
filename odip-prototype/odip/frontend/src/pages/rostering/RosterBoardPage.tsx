@@ -20,7 +20,7 @@ import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useDelete
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode } from '@/api/types'
 import {
-  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, PendingAgreementNotice,
+  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementNotice,
   type ShiftSlideOverTarget,
 } from './components'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan } from './lib/roster'
@@ -96,6 +96,8 @@ export default function RosterBoardPage() {
   const [createMoveSource, setCreateMoveSource] = useState<ShiftDto | null>(null)
   // The staff picker (spec 2026-10-15, decision C): one at a time, for a Needs staff shift. Stored as the shift that opened it; read back from the CURRENT board below.
   const [pickerTarget, setPickerTarget] = useState<ShiftDto | null>(null)
+  // The menu's Swap with… (the lead's decision 1, 2026-10-15): one picker at a time, for an assigned shift. Read back from the CURRENT board like the staff picker.
+  const [swapTarget, setSwapTarget] = useState<ShiftDto | null>(null)
   const [announcement, setAnnouncement] = useState('')
   // How much taller than one row of controls the toolbar is: it wraps to two rows at 1280, which the board frame's fixed allowance does not know (finish review).
   // Re-measured whenever the toolbar resizes, since the wrap follows the window's width.
@@ -198,6 +200,9 @@ export default function RosterBoardPage() {
   // The picker's shift as the board has it now: a refetch that filled, removed or locked it closes the picker (Review Focus 2). React's adjust-state-in-render pattern, as for `?date=` above.
   const pickerShift = pickerTarget ? boardShifts.find(s => s.id === pickerTarget.id && isUnfilledShift(s) && !isLockedShift(s)) ?? null : null
   if (pickerTarget && !pickerShift) setPickerTarget(null)
+  // A refetch that emptied, removed or locked the shift closes the swap picker the same way.
+  const swapShift = swapTarget ? boardShifts.find(s => s.id === swapTarget.id && s.staffId && !isLockedShift(s)) ?? null : null
+  if (swapTarget && !swapShift) setSwapTarget(null)
   // Leave for the picker: the participant board sends the week's leave; the Staff view has it on its rows' leave bars (lead decision L3).
   const boardLeave = useMemo(() => (!board ? [] : board.groupBy === 'Participant' ? board.staffLeave ?? [] : leaveFromStaffRows(board.staffRows)), [board])
   const publishWeek = usePublishWeek()
@@ -314,7 +319,8 @@ export default function RosterBoardPage() {
   }
 
   /** The plus, and an unfilled chip's "Assign to…": opens the picker, or closes it when it is already open for that shift. */
-  const togglePicker = (shift: ShiftDto) => setPickerTarget(current => (current?.id === shift.id ? null : shift))
+  const togglePicker = (shift: ShiftDto) => { setSwapTarget(null); setPickerTarget(current => (current?.id === shift.id ? null : shift)) }
+  const openSwap = (shift: ShiftDto) => { setPickerTarget(null); setSwapTarget(shift) }
 
   /** Closed without a pick: focus goes back to the plus (below md the SlideOver does that itself). */
   function closePicker() {
@@ -337,6 +343,23 @@ export default function RosterBoardPage() {
     if (belowMd) requestAnimationFrame(() => { if (!document.querySelector('[role="alertdialog"]')) focusShift(target.id) })
     if (row.source) void dropMove({ ...person, fromShift: row.source }, row.source, target, 'Move')
     else void dropAssign(person, target)
+  }
+
+  /** Closed without a pick: focus goes back to the shift's menu, where Swap with… was chosen. */
+  function closeSwap() {
+    const id = swapTarget?.id
+    setSwapTarget(null)
+    if (id) document.querySelector<HTMLElement>(`[data-shift-chip="${id}"] button[aria-label^="Actions for"]`)?.focus({ preventScroll: true })
+  }
+
+  /** A swap pick is a drag swap without the drag: the same move-staff request, sentence, dialogs and pending look (choosePrompt('Swap')). Focus goes to the shift it was chosen on, as a pick's does. */
+  function handleSwap(to: ShiftDto) {
+    const from = swapShift
+    setSwapTarget(null)
+    if (!from) return
+    focusShift(from.id)
+    if (belowMd) requestAnimationFrame(() => { if (!document.querySelector('[role="alertdialog"]')) focusShift(from.id) })
+    void dropMove({ staffId: from.staffId ?? '', staffName: from.staffName ?? '', fromShift: from }, from, to, 'Swap')
   }
 
   // Decision 6: a person carried off a puck onto an empty day moves. The panel saves the new shift and clears the old one in one guarded request (deep review S6).
@@ -505,7 +528,7 @@ export default function RosterBoardPage() {
 
       {!isLoading && !isError && grid && (
         // In every mode, not only while drag is on: the plus, and a pick's pending look, reach phones and the Staff view too (SHAPE departure 15). The DndContext stays drag-only.
-        <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending, pick: canWrite ? togglePicker : undefined, pickingId: pickerShift?.id ?? null }}>
+        <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
           {dragOn ? (
             <DndContext
               sensors={sensors}
@@ -556,6 +579,8 @@ export default function RosterBoardPage() {
         onPick={handlePick}
         onClose={closePicker}
       />
+
+      <SwapPicker key={swapShift?.id ?? 'swap-closed'} source={swapShift} shifts={boardShifts} sheet={belowMd} onPick={handleSwap} onClose={closeSwap} />
 
       <ExceptionsDrawer
         open={exceptionsOpen}

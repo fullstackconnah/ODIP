@@ -334,7 +334,7 @@ describe('RosterBoardPage drag and drop: pending, focus, the strip, and where dr
     expect(screen.queryByRole('region', { name: 'Staff' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /drag to move/i })).not.toBeInTheDocument()
     expect(h.dnd.props).toBeNull()
-    expect(screen.getAllByText('Needs staff').length).toBeGreaterThan(0)   // the menus still assign
+    expect(screen.getAllByRole('button', { name: /Needs staff/ }).length).toBeGreaterThan(0)   // the menus still assign
   })
 
   it('offers no strip and no grip in the Staff view', () => {

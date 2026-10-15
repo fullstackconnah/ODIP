@@ -59,7 +59,7 @@ test('agreed shifts wait for approval, then fill from the plus, and a person dro
   await expect(notice).toHaveCount(0);
   const wedChip = page.locator(`[data-shift-open="${wedId}"]`);
   const thuChip = page.locator(`[data-shift-open="${thuId}"]`);
-  await expect(wedChip).toContainText('Needs staff');
+  await expect(wedChip).toHaveAttribute('aria-label', /Needs staff/);
   await expect(wedChip).toHaveAttribute('aria-label', /From agreement v1/);
 
   // 3. Wednesday's plus, then a free person: assigned.

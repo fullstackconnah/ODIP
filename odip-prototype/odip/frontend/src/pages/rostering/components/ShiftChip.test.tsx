@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, cleanup, type RenderResult } from '@testing-library/react'
+import { render, screen, cleanup, within, type RenderResult } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { ShiftChip, type ShiftChipProps } from './ShiftChip'
@@ -51,6 +51,16 @@ describe('ShiftChip severity marker', () => {
     expect(screen.getByRole('img', { name: '1 blocking issue, 2 warnings' })).toBeInTheDocument()
   })
 
+  it('hangs off the tray\'s top-right corner, clear of the header, and the chip makes room for it above', () => {
+    const shift = makeShift({ findings: [makeFinding({ severity: 'Warning' })] })
+    const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    const marker = screen.getByRole('img', { name: '1 warning' })
+    expect(marker.parentElement).toBe(container.querySelector('[data-shift-chip]'))
+    // A 12px box 10px above the padding edge (the tray's 1px border included), so it ends 3px into the tray, where the header line starts.
+    expect(marker).toHaveClass('absolute', 'pointer-events-none', '-top-[10px]', '-right-1.5', 'h-3', 'w-3')
+    expect(marker.parentElement).toHaveClass('my-2')
+  })
+
   it('renders no marker at all when there are no findings', () => {
     const shift = makeShift({ findings: [] })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
@@ -96,19 +106,19 @@ describe('ShiftChip open button vs drag handle', () => {
 })
 
 describe('ShiftChip menu', () => {
-  it('offers Edit, Assign to…, Unassign and Delete when the shift has an assigned staff member', async () => {
+  it('offers Edit, Replace {first name}…, Remove {first name} and Delete when the shift has an assigned staff member', async () => {
     const user = userEvent.setup()
     const shift = makeShift({ staffId: 'staff-1' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     await user.click(screen.getByRole('button', { name: /actions for/i }))
     expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Reassign to…' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Unassign' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Replace Alex…' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Remove Alex' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Delete' })).toBeInTheDocument()
   })
 
-  it('omits Unassign for an unfilled (dashed) chip with no staff, but keeps Edit/Assign/Delete', async () => {
+  it('omits Remove for an unfilled (dashed) chip with no staff, but keeps Edit/Assign/Delete', async () => {
     const user = userEvent.setup()
     const shift = makeShift({ staffId: null, staffName: null })
     renderChip(<ShiftChip shift={shift} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
@@ -116,7 +126,7 @@ describe('ShiftChip menu', () => {
     await user.click(screen.getByRole('button', { name: /actions for/i }))
     expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Assign to…' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Unassign' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^Remove/ })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Delete' })).toBeInTheDocument()
   })
 })
@@ -146,11 +156,19 @@ describe('ShiftChip on-leave state', () => {
     expect(label).toHaveAttribute('title', expect.stringContaining('approved leave'))
   })
 
-  it('renders a dashed border for a filled shift whose assignee has approved leave, same as an unfilled chip', () => {
+  it('dashes the person box, never the tray, for a filled shift whose assignee has approved leave, same as an unfilled chip', () => {
     const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera', assigneeOnApprovedLeave: true })
     const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(container.querySelector('.border-dashed')).not.toBeNull()
+    // The shift exists, so the tray is solid; the hole is in the box (the chip brief, section 1).
+    expect(container.querySelector('[data-shift-box]')).toHaveClass('border-dashed')
+    expect(container.querySelectorAll('.border-dashed')).toHaveLength(1)
+  })
+
+  it('dashes the box of a Needs staff chip too, and never the tray', () => {
+    const { container } = renderChip(<ShiftChip shift={makeUnfilledShift()} canWrite dashed context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    expect(container.querySelector('[data-shift-box]')).toHaveClass('border-dashed')
+    expect(container.querySelector('[data-shift-chip]')).not.toHaveClass('border-dashed')
   })
 
   it('does not render the "On leave" label or a dashed border for a normal filled shift', () => {
@@ -213,15 +231,15 @@ describe('ShiftChip cross-domain links', () => {
   })
 })
 
-describe('ShiftChip one-line label', () => {
-  it('reads time, then a separator, then the participant name in a staff row — and repeats no staff name', () => {
+describe('ShiftChip tray and box', () => {
+  it('reads time, then the participant name in a staff row — and repeats no staff name', () => {
     const shift = makeShift({ participantName: 'Grace Palmer', staffId: 'staff-9', staffName: 'Alex Rivera', startTime: '19:00:00', endTime: '07:00:00', endsNextDay: true })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
     const openButton = getOpenButton(shift)
-    // Visible text is "7pm–7am · Grace Palmer": time, then the separator, then the name.
-    expect(openButton).toHaveTextContent(/7pm–7am.*·.*Grace Palmer/)
-    // The separator is decorative (aria-hidden), so the accessible name uses a comma instead of "middle dot".
+    // The time heads the tray and the name sits in the box under it: no separator between them.
+    expect(openButton).toHaveTextContent(/7pm–7am.*Grace Palmer/)
+    expect(openButton).not.toHaveTextContent('·')
     expect(openButton).toHaveAccessibleName(/^7pm–7am \(ends the next day\)\s*, Grace Palmer, Ad hoc: not from an agreement or a pattern, Published$/)
     // The row header already names the staff member, so the chip carries no second line for them.
     expect(screen.queryByText('Alex Rivera')).not.toBeInTheDocument()
@@ -232,7 +250,7 @@ describe('ShiftChip one-line label', () => {
     const shift = makeShift({ participantName: 'Grace Palmer', staffId: 'staff-9', staffName: 'Alex Rivera', startTime: '19:00:00', endTime: '07:00:00' })
     renderChip(<ShiftChip shift={shift} canWrite context="participant" draggable onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(getOpenButton(shift)).toHaveTextContent(/7pm–7am.*·.*Alex Rivera/)
+    expect(getOpenButton(shift)).toHaveTextContent(/7pm–7am.*Alex Rivera/)
     expect(screen.queryByText('Grace Palmer')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Grace Palmer' })).not.toBeInTheDocument()
     // The grip carries the PERSON (roster drag and drop); the actions menu still names the participant's shift.
@@ -248,13 +266,19 @@ describe('ShiftChip one-line label', () => {
     expect(screen.queryAllByRole('link')).toHaveLength(0)
   })
 
-  it('is at least row-h minus 6px tall, so it grows with the density token under a coarse pointer', () => {
+  it('is a tray of two rows, the header over a --control-h box: 32px with a mouse, 44px under a coarse pointer', () => {
     const shift = makeShift()
     const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(container.firstElementChild).toHaveClass('min-h-[calc(var(--row-h)_-_6px)]')
-    // A fixed height would clip the name stacked under the time (below).
-    expect(container.firstElementChild).not.toHaveClass('h-[calc(var(--row-h)_-_6px)]')
+    const tray = container.firstElementChild as HTMLElement
+    expect(tray).toHaveAttribute('data-shift-chip', shift.id)
+    expect(tray).toHaveClass('grid', 'grid-rows-[auto_var(--control-h)]', 'gap-y-0.5', 'p-0.5', 'border-border', 'bg-surface-container-low')
+    // jsdom has no layout, so the classes are the evidence; the captures measure 56px and 68px.
+    const box = tray.querySelector('[data-shift-box]') as HTMLElement
+    expect(box).toHaveClass('border', 'rounded-[calc(var(--radius-sm)_-_2px)]')
+    // The open control spans both rows, so it holds the header and the box (the brief, section 2.1).
+    expect(getOpenButton(shift)).toContainElement(box)
+    expect(getOpenButton(shift)).toHaveClass('col-span-full', 'row-[1/span_2]', 'grid-cols-subgrid', 'grid-rows-subgrid')
   })
 
   it('gives the grip a 44px hit area under a coarse pointer, kept inside the chip and off the open control (post-merge review N6)', () => {
@@ -266,11 +290,25 @@ describe('ShiftChip one-line label', () => {
     expect(grip).toHaveClass('pointer-coarse:mx-[13px]')
   })
 
-  it('is at least 44px under a coarse pointer, where row-h less 6px would leave it at 42px', () => {
-    const { container } = renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+  it('keeps the grip and the menu out of the open control: siblings layered over the box row, in the order lead, open, menu', () => {
+    const shift = makeShift()
+    renderChip(<ShiftChip shift={shift} canWrite draggable context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    const open = getOpenButton(shift)
+    const grip = screen.getByRole('button', { name: /^Drag to move/ })
+    const menu = screen.getByRole('button', { name: /^Actions for/ })
+    expect(open).not.toContainElement(grip)
+    expect(open).not.toContainElement(menu)
+    expect(grip.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(open.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(grip).toHaveClass('row-start-2', 'col-start-1')
+  })
 
-    // jsdom has no layout, so the class is the evidence here; the 820px tablet capture measures it on a real coarse pointer.
-    expect(container.firstElementChild).toHaveClass('pointer-coarse:min-h-11')
+  it('puts the name in the box, in foreground ink', () => {
+    const shift = makeShift({ staffName: 'Kim Lee' })
+    const { container } = renderChip(<ShiftChip shift={shift} canWrite context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    const link = screen.getByRole('link', { name: 'Kim Lee' })
+    expect(container.querySelector('[data-shift-box]')).toContainElement(link)
+    expect(link).toHaveClass('text-foreground', 'truncate')
   })
 })
 
@@ -291,11 +329,11 @@ describe('ShiftChip keeps the name readable in a narrow day column', () => {
     expect(time.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('keeps the "·" separator out of the accessibility tree, and the open control announces time and name with a comma', () => {
+  it('draws no separator, since the name has a line of its own, and the open control announces time and name with a comma', () => {
     const shift = makeShift({ participantName: 'Grace Palmer' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(screen.getByText('·')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.queryByText('·')).not.toBeInTheDocument()
     expect(getOpenButton(shift)).toHaveAccessibleName('9am–5pm, Grace Palmer, Ad hoc: not from an agreement or a pattern, Published')
   })
 
@@ -506,9 +544,11 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       expect(screen.getByRole('img', { name: /Assigned with an override/ }).querySelector('svg')!.getAttribute('class')).toContain('shield')
     })
 
-    it('takes the top corner, and the bottom one when the chip already carries a severity marker at the top', () => {
+    // The chip brief's tray (2026-10-15): the header line runs the tray's whole width and its time never clips, so the disc takes the bottom corner on every chip, beside the box's menu.
+    it('takes the bottom corner, with or without a severity marker, so it never sits on the header line', () => {
       const plain = markerOf(emergency())
-      expect(plain.className).toContain('-top-')
+      expect(plain.className).toContain('-bottom-')
+      expect(plain.className).not.toContain('-top-')
       cleanup()
 
       const withFindings = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
@@ -517,14 +557,12 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
     })
 
     it('makes room for the part of the disc that hangs off the chip, so the board’s sticky day header never cuts it (the first row sits right under it)', () => {
-      const top = markerOf(emergency())
-      expect(top.parentElement).toHaveClass('mt-2')
-      expect(top.parentElement).not.toHaveClass('mb-2')
+      const plain = markerOf(emergency())
+      expect(plain.parentElement).toHaveClass('my-2')
       cleanup()
 
       const bottom = markerOf(makeShift({ ...emergency(), findings: [makeFinding({ severity: 'Warning' })] }))
-      expect(bottom.parentElement).toHaveClass('mb-2')
-      expect(bottom.parentElement).not.toHaveClass('mt-2')
+      expect(bottom.parentElement).toHaveClass('my-2')
     })
 
     // Design review round 1 N1, code review N4: the disc is pointer-events-none (it must never take a click), so hit testing skips it and its own title never shows. The words are on the chip root, which is
@@ -570,12 +608,16 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       })
     })
 
+    it('leaves the header its whole width: no pad for the disc', () => {
+      const disc = markerOf(emergency())
+      expect(disc.parentElement!.querySelector('[data-shift-source]')!.parentElement).toHaveClass('px-0.5')
+    })
+
     it('adds no room to a chip with no marker', () => {
       renderChip(<ShiftChip shift={makeShift()} canWrite draggable onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
       const chip = screen.getByRole('button', { name: /^Drag to move/ }).parentElement as HTMLElement
-      expect(chip).not.toHaveClass('mt-2')
-      expect(chip).not.toHaveClass('mb-2')
+      expect(chip).not.toHaveClass('my-2')
     })
 
     it('keeps the words as a bonus on a wide chip: in the name row, and display:none below 18rem, never clipped', () => {
@@ -618,17 +660,20 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
     expect(screen.getByText('9am–5pm')).toHaveClass('line-through')
   })
 
-  it('marks every shift with where it came from: Agreed, Pattern or Ad hoc, titled and named by it', () => {
+  it('marks every shift with where it came from: Scheduled (an agreement or a pattern) or Ad hoc, titled and named by it', () => {
     const fromAgreement = makeShift({ id: 'a', shiftPatternId: 'pat-1', fromAgreement: true, sourceDraftVersion: 3, status: 'Draft' })
     const agreed = chip(fromAgreement)
     expect(agreed.container.querySelector('[data-shift-source="agreed"]')).toHaveAttribute('title', 'From agreement v3')
-    expect(screen.getByText('Agreed')).toBeInTheDocument()
-    expect(getOpenButton(fromAgreement)).toHaveAccessibleName('9am–5pm, Alex Rivera, From agreement v3, Draft')
+    expect(within(agreed.container.querySelector('[data-shift-source="agreed"]') as HTMLElement).getByText('Scheduled')).toBeInTheDocument()
+    expect(getOpenButton(fromAgreement)).toHaveAccessibleName('9am–5pm, Alex Rivera, Scheduled, From agreement v3, Draft')
     agreed.unmount()
 
-    const handMade = chip(makeShift({ id: 'b', shiftPatternId: 'pat-2', status: 'Draft' }))
+    const fromPattern = makeShift({ id: 'b', shiftPatternId: 'pat-2', status: 'Draft' })
+    const handMade = chip(fromPattern)
     expect(handMade.container.querySelector('[data-shift-source="pattern"]')).toHaveAttribute('title', 'From a pattern')
-    expect(screen.getByText('Pattern')).toBeInTheDocument()
+    expect(within(handMade.container.querySelector('[data-shift-source="pattern"]') as HTMLElement).getByText('Scheduled')).toBeInTheDocument()
+    // The visible word is in the name too (WCAG 2.5.3), just before the title that tells an agreement from a pattern. Ad hoc's title already starts with its word.
+    expect(getOpenButton(fromPattern)).toHaveAccessibleName('9am–5pm, Alex Rivera, Scheduled, From a pattern, Draft')
     handMade.unmount()
 
     const oneOff = makeShift({ id: 'c', status: 'Draft' })
@@ -643,10 +688,12 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
     // A clipped one-line box that wraps: the zero-width first item holds the line, so a glyph or word that does not fit wraps out of sight instead of showing a sliver.
     expect(mark).toHaveClass('h-4', 'flex-wrap', 'gap-y-4', 'overflow-hidden')
     expect(mark.firstElementChild).toHaveClass('w-0')
-    expect(screen.getByText('9am–5pm')).toHaveClass('shrink-0')
-    // 6px recovered for the glyph at 1280: a 2px gap after the time, and no side padding on the content wrapper.
-    expect(screen.getByText('9am–5pm').parentElement).toHaveClass('gap-0.5')
-    expect(mark.closest('.overflow-hidden.flex-col')).not.toHaveClass('px-0.5')
+    expect(screen.getByText('9am–5pm')).toHaveClass('shrink-0', 'font-medium', 'tabular-nums', 'text-foreground')
+    // The header: one 16px line of 12px text, 4px in from the tray's inner edge, the label right-aligned after the time (the chip brief, section 2.2).
+    const header = screen.getByText('9am–5pm').parentElement as HTMLElement
+    expect(header).toHaveClass('h-4', 'text-xs', 'px-0.5', 'col-span-full')
+    expect(header).toContainElement(mark)
+    expect(mark).toHaveClass('justify-end', 'flex-1', 'min-w-0')
   })
 
   it("ends the accessible name and the hover title with the shift's state", () => {
@@ -705,10 +752,26 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     expect(pick).toHaveBeenCalledWith(open)
   })
 
-  it('is 18px wide on a fine pointer and a 44px square under a coarse one (the chip is 44px tall there)', () => {
-    withPick(chipOf(open))
-    // The chip's 1px border leaves 42px inside a 44px chip: the stretched plus takes the border back with a -1px margin above and below (capture: 44x42 before).
-    expect(screen.getByRole('button', { name: plusName })).toHaveClass('w-[18px]', 'pointer-coarse:w-11', 'pointer-coarse:-my-px')
+  it('in the Participant view, spans the box but for the menu, with its glyph at the box centre, and prints no words beside it (the chip brief, section 4)', () => {
+    const { container } = withPick(chipOf(open))
+    const plus = screen.getByRole('button', { name: plusName })
+    // The lead and name cells: the whole empty box is the target. Its leading pad is the menu's width, so the glyph sits at the box's centre.
+    expect(plus).toHaveClass('row-start-2', 'col-[1/span_2]', 'pl-[calc(var(--control-h-sm)_+_4px)]')
+    expect(plus).not.toHaveClass('w-[18px]')
+    expect(plus.querySelector('svg')).toHaveClass('h-4', 'w-4', 'pointer-coarse:h-6', 'pointer-coarse:w-6')
+    // Words inside the target would be a visible label missing from its name (WCAG 2.5.3); the open control still says it.
+    expect(screen.queryByText('Needs staff')).not.toBeInTheDocument()
+    expect(getOpenButton(open)).toHaveAccessibleName(/Needs staff/)
+    expect(container.querySelector('[data-shift-box]')).not.toContainElement(plus)
+  })
+
+  it("on the Staff view's Unfilled lane, stays in the lead cell beside the participant's name: 18px wide with a mouse, a 44px square under a coarse pointer", () => {
+    withPick(chipOf(open, { context: 'staff' }))
+    const plus = screen.getByRole('button', { name: plusName })
+    expect(plus).toHaveClass('col-start-1', 'w-[18px]', 'pointer-coarse:w-11')
+    expect(plus).not.toHaveClass('col-[1/span_2]')
+    expect(plus.querySelector('svg')).toHaveClass('h-3.5', 'w-3.5')
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toBeInTheDocument()
   })
 
   it('gives no plus to a filled, an on-leave or a locked chip, or to a reader', () => {
@@ -733,10 +796,11 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     expect(screen.queryByRole('button', { name: plusName })).not.toBeInTheDocument()
   })
 
-  it("rings the chip and keeps the plus's hover look while its picker is open", () => {
+  it("rings the box, not the tray, and keeps the plus's hover look while its picker is open", () => {
     const { container } = withPick(chipOf(open), { pickingId: 'open' })
     expect(screen.getByRole('button', { name: plusName })).toHaveAttribute('aria-expanded', 'true')
-    expect(container.querySelector('[data-shift-chip="open"]')).toHaveClass('ring-2', 'ring-ring')
+    expect(container.querySelector('[data-shift-chip="open"] [data-shift-box]')).toHaveClass('ring-2', 'ring-ring')
+    expect(container.querySelector('[data-shift-chip="open"]')).not.toHaveClass('ring-2')
   })
 
   it('waits while a write is out: every other plus is aria-disabled and faded, and the target shows "Assigning Kim…" with no plus', async () => {
@@ -761,13 +825,13 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     }
   })
 
-  it('pads the text only where no leading column does', () => {
-    const wrapper = (container: HTMLElement) => container.querySelector('[data-shift-open] > .overflow-hidden.flex-col')!
-    const withPlus = withPick(chipOf(open))
-    expect(wrapper(withPlus.container)).not.toHaveClass('px-0.5')
-    withPlus.unmount()
-    const bare = withPick(chipOf(makeShift({ id: 'f', staffName: 'Sam Wilson' }), { draggable: false }))
-    expect(wrapper(bare.container)).toHaveClass('px-0.5')
+  it('pads the name off the box edge only where no leading column does', () => {
+    const nameCell = () => screen.getByRole('link', { name: 'Sam Wilson' }).parentElement!
+    const withGrip = withPick(chipOf(makeShift({ id: 'f', staffName: 'Sam Wilson' }), { draggable: true }))
+    expect(nameCell()).toHaveClass('pl-0.5')
+    withGrip.unmount()
+    withPick(chipOf(makeShift({ id: 'f', staffName: 'Sam Wilson' }), { draggable: false }))
+    expect(nameCell()).toHaveClass('pl-1.5')
   })
 
   it('disables Assign to… on an unfilled chip under the same condition as its plus', async () => {
@@ -779,7 +843,7 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     expect(pick).not.toHaveBeenCalled()
   })
 
-  it("opens the picker from an unfilled chip's Assign to…, and keeps the panel for a filled chip's Reassign to… (SHAPE departure 13)", async () => {
+  it("opens the picker from an unfilled chip's Assign to…, and keeps the panel for a filled chip's Replace {first name}… (SHAPE departure 13)", async () => {
     const user = userEvent.setup()
     const onAssignTo = vi.fn()
     const { pick } = withPick(<>{chipOf(open, { onAssignTo })}{chipOf(makeShift({ id: 'filled', participantName: 'Jo Park' }), { onAssignTo })}</>)
@@ -788,7 +852,54 @@ describe('ShiftChip plus: the staff picker (spec 2026-10-15, decision C; the bri
     expect(pick).toHaveBeenCalledWith(open)
     expect(onAssignTo).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: "Actions for Jo Park's shift" }))
-    await user.click(screen.getByRole('option', { name: 'Reassign to…' }))
+    await user.click(screen.getByRole('option', { name: 'Replace Alex…' }))
     expect(onAssignTo).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('ShiftChip menu: Swap with… (the lead decision 1, 2026-10-15)', () => {
+  const chipIn = (shift: ShiftDto, state: Partial<DropState> = {}, extra: Partial<ShiftChipProps> = {}) => {
+    const swap = vi.fn()
+    renderChip(
+      <DropStateContext.Provider value={{ disabled: false, pending: null, swap, ...state }}>
+        <ShiftChip shift={shift} canWrite dashed={!shift.staffId} context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} {...extra} />
+      </DropStateContext.Provider>,
+    )
+    return swap
+  }
+  const openMenu = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /^Actions for/ }))
+
+  it('reads Edit, Replace {first}…, Swap with…, Remove {first}, Delete on an assigned chip, and Swap opens the swap picker for it', async () => {
+    const user = userEvent.setup()
+    const shift = makeShift({ id: 'kim', staffName: 'Kim Lee' })
+    const swap = chipIn(shift)
+    await openMenu(user)
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Edit', 'Replace Kim…', 'Swap Kim with…', 'Remove Kim', 'Delete'])
+    await user.click(screen.getByRole('option', { name: 'Swap Kim with…' }))
+    expect(swap).toHaveBeenCalledWith(shift)
+  })
+
+  it('offers no Swap on an unfilled or a locked chip, or where nothing can open the picker', async () => {
+    const user = userEvent.setup()
+    chipIn(makeUnfilledShift({ id: 'open' }))
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Swap Kim with…' })).not.toBeInTheDocument()
+    cleanup()
+    chipIn(makeShift({ id: 'done', status: 'Completed' }))
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Swap Kim with…' })).not.toBeInTheDocument()
+    cleanup()
+    renderChip(<ShiftChip shift={makeShift()} canWrite context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Swap Kim with…' })).not.toBeInTheDocument()
+  })
+
+  it('waits while a write is out, as every drag and plus does (#253)', async () => {
+    const user = userEvent.setup()
+    const swap = chipIn(makeShift({ id: 'kim', staffName: 'Kim Lee' }), { disabled: true })
+    await openMenu(user)
+    expect(screen.getByRole('option', { name: 'Swap Kim with…' })).toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByRole('option', { name: 'Swap Kim with…' }))
+    expect(swap).not.toHaveBeenCalled()
   })
 })

@@ -159,13 +159,13 @@ describe('rosterDayColumnsTemplate', () => {
 })
 
 describe('shiftSource (spec 2026-10-15, decision B)', () => {
-  it('is Agreed for a shift from an agreement, with the version when it is known', () => {
-    expect(shiftSource({ shiftPatternId: 'pat-1', fromAgreement: true, sourceDraftVersion: 2 })).toEqual({ kind: 'agreed', word: 'Agreed', title: 'From agreement v2' })
+  it('reads Scheduled for a shift from an agreement, with the version in its title when it is known', () => {
+    expect(shiftSource({ shiftPatternId: 'pat-1', fromAgreement: true, sourceDraftVersion: 2 })).toEqual({ kind: 'agreed', word: 'Scheduled', title: 'From agreement v2' })
     expect(shiftSource({ shiftPatternId: 'pat-1', fromAgreement: true }).title).toBe('From an agreement')
   })
 
-  it('is Pattern for a hand-made pattern', () => {
-    expect(shiftSource({ shiftPatternId: 'pat-2' })).toEqual({ kind: 'pattern', word: 'Pattern', title: 'From a pattern' })
+  it('reads Scheduled for a hand-made pattern too: the glyph and the title tell the two apart', () => {
+    expect(shiftSource({ shiftPatternId: 'pat-2' })).toEqual({ kind: 'pattern', word: 'Scheduled', title: 'From a pattern' })
   })
 
   it('is Ad hoc with no pattern, which covers hand-made one-offs and the demo shifts too', () => {

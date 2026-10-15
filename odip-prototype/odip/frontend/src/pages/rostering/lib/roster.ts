@@ -244,7 +244,7 @@ export type ShiftSourceKind = 'agreed' | 'pattern' | 'adhoc'
 
 /** The kind, its word on the chip, and the words of its title, the chip's accessible name and the shift panel. */
 export function shiftSource(shift: Pick<ShiftDto, 'shiftPatternId' | 'fromAgreement' | 'sourceDraftVersion'>): { kind: ShiftSourceKind; word: string; title: string } {
-  if (shift.fromAgreement) return { kind: 'agreed', word: 'Agreed', title: shift.sourceDraftVersion !== undefined ? `From agreement v${shift.sourceDraftVersion}` : 'From an agreement' }
-  if (shift.shiftPatternId) return { kind: 'pattern', word: 'Pattern', title: 'From a pattern' }
+  if (shift.fromAgreement) return { kind: 'agreed', word: 'Scheduled', title: shift.sourceDraftVersion !== undefined ? `From agreement v${shift.sourceDraftVersion}` : 'From an agreement' }
+  if (shift.shiftPatternId) return { kind: 'pattern', word: 'Scheduled', title: 'From a pattern' }
   return { kind: 'adhoc', word: 'Ad hoc', title: 'Ad hoc: not from an agreement or a pattern' }
 }

@@ -81,7 +81,7 @@ function DraftPage() {
   const drafts = useServiceAgreementDrafts(participantId)
   const create = useCreateServiceAgreementDraft()
   const download = useDownloadServiceAgreementDraftPdf()
-  const { canManageParticipantLifecycle: canEdit, canManageFunding, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
+  const { canManageParticipantLifecycle: canEdit, canManageFunding, isSuperAdmin, isAdmin, isCoordinator, hasOrganisation } = usePermissions()
   const plans = useFundingPlans(participantId, canEdit)
   const today = useMemo(() => localIsoDate(), [])
 
@@ -173,7 +173,8 @@ function DraftPage() {
   const locked = canEdit && !!newest?.approval && revisingFrom !== newest.id
   // An approved agreement within 60 days of its end, or past it, says so on its callout, and an approver may renew it there (D1). The days are the server's, counted from the provider's today
   // as the alert counts them, never from the browser's date (fix round 1, CR-B S1).
-  const endingList = useAgreementsEnding(locked)
+  // The list is an organisation's: a SuperAdmin with none would get a 400 every time, so it is not asked for and the page says to choose one (follow-ups, N14).
+  const endingList = useAgreementsEnding(locked && hasOrganisation)
   const daysLeft = locked && newest ? endingList.data?.find(row => row.draftId === newest.id)?.daysLeft ?? null : null
   const ending = newest && daysLeft !== null && daysLeft <= 60 ? `${endingWords(daysLeft, newest.agreementEndDate)}.` : null
   const readOnly = !canEdit || locked
@@ -398,7 +399,8 @@ function DraftPage() {
       </Callout>
     )}
     {/* Fix round 2: without the ending list the page cannot say when the agreement ends or offer Renew, so it says it could not check rather than going quiet. */}
-    {locked && endingList.isError && (
+    {locked && !hasOrganisation && <p className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">Choose an organisation to see whether this agreement is ending.</p>}
+    {locked && hasOrganisation && endingList.isError && (
       <Callout tone="warning" className="max-w-prose" actions={<Button size="sm" variant="secondary" onClick={() => { void endingList.refetch() }}>Try again</Button>}>
         Couldn&apos;t check whether this agreement is ending.
       </Callout>
