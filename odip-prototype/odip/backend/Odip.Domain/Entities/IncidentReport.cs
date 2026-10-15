@@ -1,4 +1,5 @@
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 
 namespace Odip.Domain.Entities;
@@ -7,9 +8,12 @@ namespace Odip.Domain.Entities;
 /// NDIS reportable incident — tracks incidents during trips,
 /// including mandatory QSC escalation within 24 hours for critical incidents.
 /// </summary>
-public class IncidentReport
+public class IncidentReport : ITenantEntity
 {
     public Guid Id { get; set; }
+
+    /// <summary>The organisation the incident belongs to: always its reporter's (Create and Update set it from the reporter; the migration backfilled it the same way).</summary>
+    public Guid TenantId { get; set; }
 
     /// <summary>
     /// Business-stream the incident occurred under (INC-01) — same value set as

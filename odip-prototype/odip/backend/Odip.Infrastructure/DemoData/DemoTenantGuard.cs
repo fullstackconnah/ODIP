@@ -75,6 +75,7 @@ public sealed class DemoTenantGuard
         typeof(ShiftRoutineCheck),
         typeof(HandoverAcknowledgement),
         typeof(MedicationAdministration),
+        typeof(IncidentReport),
 
         // What the incident form, the portal and the dose recorder would have sent, written as the terminal rows they end as (PR 2); never Pending.
         typeof(NotificationOutbox),
@@ -87,9 +88,7 @@ public sealed class DemoTenantGuard
         {
             [typeof(StaffAvailability)] = row => (DemoParentKind.User, ((StaffAvailability)row).UserId),
 
-            // Incidents have no tenant column: an incident belongs to the Demo tenant through the user who reported it, its injuries and witnesses
-            // through the incident (which must be one this save adds or a tracked one of a Demo reporter).
-            [typeof(IncidentReport)] = row => (DemoParentKind.User, ((IncidentReport)row).ReportedByUserId),
+            // An incident's injuries and witnesses have no tenant column: they belong to the Demo tenant through the incident, which must be one this save adds or a tracked Demo one.
             [typeof(IncidentInjury)] = row => (DemoParentKind.Incident, ((IncidentInjury)row).IncidentReportId),
             [typeof(IncidentWitness)] = row => (DemoParentKind.Incident, ((IncidentWitness)row).IncidentReportId),
         };
@@ -243,7 +242,7 @@ public sealed class DemoTenantGuard
             }
 
             // A table with no tenant column: only a listed child table, and only under a parent the Demo tenant owns. An existing row of such a
-            // table may change only if it is on the modifiable list too (an incident ages), and then in those columns only.
+            // table may change only if it is on the modifiable list too, and then in those columns only.
             if (NonTenantParents.TryGetValue(type, out var childOf) && (entry.State == EntityState.Added || ModifiableProperties.ContainsKey(type)))
             {
                 var (kind, parentId) = childOf(entry.Entity);
@@ -319,7 +318,7 @@ public sealed class DemoTenantGuard
         {
             DemoParentKind.User => _owned.Users,
             DemoParentKind.Participant => _owned.Participants,
-            _ => new HashSet<Guid>(),                                   // an incident is owned only by being in this save, through its reporter
+            _ => new HashSet<Guid>(),                                   // an incident is owned only by being in this save as a Demo tenant row
         };
         if (owned.Contains(parentId)) return true;
 

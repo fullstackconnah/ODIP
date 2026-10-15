@@ -120,7 +120,7 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
 
     // ══════════════════════ deploy safety ══════════════════════
 
-    private static async Task InsertMinimalRowAsync(NpgsqlConnection conn, string table, Dictionary<string, object?> values)
+    internal static async Task InsertMinimalRowAsync(NpgsqlConnection conn, string table, Dictionary<string, object?> values)
     {
         // Fills every NOT NULL column without a default with a type-appropriate filler, so a row can be inserted into a schema as it
         // was at an OLD migration without knowing every column (the current EF model no longer matches that schema).

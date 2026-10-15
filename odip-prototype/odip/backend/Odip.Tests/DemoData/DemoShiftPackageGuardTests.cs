@@ -113,11 +113,11 @@ public class DemoShiftPackageGuardTests
         Assert.Contains(nameof(MedicationAdministration.ParticipantId), ex.Message);
     }
 
-    // ── incidents: no tenant column, so the reporter is what makes one the Demo tenant's ──
+    // ── incidents: an incident is its reporter's organisation's, so one of a reporter the Demo tenant does not own carries another tenant ──
 
     private static IncidentReport Incident(Guid reporter, Guid? participant = null) => new()
     {
-        Id = Guid.NewGuid(), ReportedByUserId = reporter, InvolvedParticipantId = participant, IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low, Status = IncidentStatus.Submitted,
+        Id = Guid.NewGuid(), TenantId = reporter == OwnedUser ? DemoTenant : Guid.NewGuid(), ReportedByUserId = reporter, InvolvedParticipantId = participant, IncidentType = IncidentType.Injury, Severity = IncidentSeverity.Low, Status = IncidentStatus.Submitted,
         Title = "A graze", Description = "A graze on the knee.", IncidentDateTime = new DateTime(2026, 10, 1, 10, 0, 0), CreatedAt = new DateTime(2026, 10, 1, 0, 30, 0, DateTimeKind.Utc),
         UpdatedAt = new DateTime(2026, 10, 1, 0, 30, 0, DateTimeKind.Utc),
     };
@@ -292,7 +292,8 @@ public class DemoShiftPackageGuardTests
     {
         var foreign = Incident(Guid.NewGuid());
         await using var db = await DbWithAsync(NewOptions(), foreign);
-        (await db.IncidentReports.SingleAsync(i => i.Id == foreign.Id)).Status = IncidentStatus.Closed;
+        // The query filter already hides it from the Demo context; a pack that went round the filter is still refused by the guard.
+        (await db.IncidentReports.IgnoreQueryFilters().SingleAsync(i => i.Id == foreign.Id)).Status = IncidentStatus.Closed;
 
         var ex = Assert.Throws<DemoGuardViolationException>(() => NewGuard().Verify(db.ChangeTracker));
         Assert.Contains(nameof(IncidentReport), ex.Message);

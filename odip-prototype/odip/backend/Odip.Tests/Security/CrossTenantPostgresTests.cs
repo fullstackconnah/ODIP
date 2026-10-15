@@ -61,7 +61,7 @@ public class CrossTenantPostgresTests : IClassFixture<PostgresFixture>
         var activity = new ScheduledActivity { Id = Guid.NewGuid(), TripDayId = day.Id, Title = "Original" };
         var incident = new IncidentReport
         {
-            Id = Guid.NewGuid(), ReportedByUserId = user.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.Low, Title = "Original", Description = "Original",
+            Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = user.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.Low, Title = "Original", Description = "Original",
             IncidentDateTime = new DateTime(2026, 8, 30, 9, 0, 0, DateTimeKind.Utc),
         };
         var profile = new SupportProfile { Id = Guid.NewGuid(), ParticipantId = participant.Id, BehaviourSupportNotes = "private" };

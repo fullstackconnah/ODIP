@@ -1116,6 +1116,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("SupportCoordinatorNotifiedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -1166,6 +1169,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ShiftNoteId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TripInstanceId");
 

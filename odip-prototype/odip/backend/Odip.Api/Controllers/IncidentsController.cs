@@ -71,12 +71,9 @@ public class IncidentsController : ControllerBase
             ? _db.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
-    /// <summary>
-    /// IncidentReport has no organisation column or query filter, so the reads that join its reporting user are scoped by that join and a write that loads the row by its id alone
-    /// must be too: an incident is the caller's only if the user who reported it is (Users is tenant-filtered).
-    /// </summary>
-    private IQueryable<IncidentReport> TenantIncidents() =>
-        _db.IncidentReports.Where(i => _db.Users.Any(u => u.Id == i.ReportedByUserId));
+    /// <summary>An incident belongs to its reporter's organisation. The reporter is already validated against the tenant-filtered Users, so this is the caller's organisation, or for a SuperAdmin with none chosen, the reporter's own.</summary>
+    private Task<Guid> ReporterTenantAsync(Guid reporterId, CancellationToken ct) =>
+        _db.Users.Where(u => u.Id == reporterId).Select(u => u.TenantId).SingleAsync(ct);
 
     /// <summary>Null is always fine, otherwise the id must resolve to a Participant of the caller's organisation (Participants is tenant-filtered).</summary>
     private Task<bool> IsValidParticipantRefAsync(Guid? participantId, CancellationToken ct) =>
@@ -281,13 +278,11 @@ public class IncidentsController : ControllerBase
             query = query.Where(QscReporting.IsOverdueExpr(DateTime.UtcNow));
 
         // The dashboard's Incidents group: what still needs somebody. Open (the summary's rule: not Resolved or Closed), or a QSC report overdue, which a
-        // resolved or closed incident can still owe (QscReporting, the one definition). Scoped like the summary's count (Users is tenant-filtered), so the
-        // group's total is the summary's set.
+        // resolved or closed incident can still owe (QscReporting, the one definition). The same set as the summary's count.
         if (needsAttention == true)
         {
             var qscOverdue = _db.IncidentReports.Where(QscReporting.IsOverdueExpr(DateTime.UtcNow)).Select(o => o.Id);
-            query = query.Where(i => _db.Users.Any(u => u.Id == i.ReportedByUserId)
-                && ((i.Status != IncidentStatus.Resolved && i.Status != IncidentStatus.Closed) || qscOverdue.Contains(i.Id)));
+            query = query.Where(i => (i.Status != IncidentStatus.Resolved && i.Status != IncidentStatus.Closed) || qscOverdue.Contains(i.Id));
         }
 
         // Correctness fix: IncidentDateTime is user-entered (picked in the report form) and
@@ -472,6 +467,7 @@ public class IncidentsController : ControllerBase
             InvolvedParticipantId = dto.InvolvedParticipantId,
             InvolvedUserId = dto.InvolvedStaffId,
             ReportedByUserId = dto.ReportedByStaffId,
+            TenantId = await ReporterTenantAsync(dto.ReportedByStaffId, ct),
             IncidentType = dto.IncidentType,
             OtherTypeSpecify = dto.OtherTypeSpecify,
             RestrictivePracticeType = dto.RestrictivePracticeType,
@@ -598,7 +594,7 @@ public class IncidentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<IncidentListDto>>> Update(Guid id, [FromBody] UpdateIncidentDto dto, CancellationToken ct)
     {
-        var i = await TenantIncidents().FirstOrDefaultAsync(x => x.Id == id, ct);
+        var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (i == null) return NotFound(ApiResponse<IncidentListDto>.Fail("Incident not found"));
 
         var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
@@ -635,6 +631,7 @@ public class IncidentsController : ControllerBase
         i.InvolvedParticipantId = dto.InvolvedParticipantId;
         i.InvolvedUserId = dto.InvolvedStaffId;
         i.ReportedByUserId = dto.ReportedByStaffId;
+        i.TenantId = await ReporterTenantAsync(dto.ReportedByStaffId, ct);
         i.IncidentType = dto.IncidentType;
         i.OtherTypeSpecify = dto.OtherTypeSpecify;
         // INC-04: RestrictivePracticeType/Id may still be corrected here like any other field, but
@@ -764,7 +761,7 @@ public class IncidentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
-        var i = await TenantIncidents().FirstOrDefaultAsync(x => x.Id == id, ct);
+        var i = await _db.IncidentReports.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (i == null) return NotFound(ApiResponse<bool>.Fail("Incident not found"));
         // PP-2: status-only lifecycle, matching TasksDashboardController's archive pattern —
         // IsActive is left untouched so GetAll's default `isActive == true` filter doesn't hide

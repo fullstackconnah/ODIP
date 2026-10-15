@@ -28,7 +28,6 @@ public class TenantFilterCoverageTests
         ["TripDocument"] = "through its trip",
         ["StaffAvailability"] = "through its user",
         ["SupportProfile"] = "through its participant",
-        ["IncidentReport"] = "by its id: through its reporting user (a required join on reads, TenantIncidents on writes); by a shift, note, participant or medication record: through that filtered record",
         ["IncidentInjury"] = "through its incident",
         ["IncidentWitness"] = "through its incident, and own-row for the witness",
         ["TripClaim"] = "through its trip (Trip claims) or participant (Shift claims): ClaimsController.TenantClaims",

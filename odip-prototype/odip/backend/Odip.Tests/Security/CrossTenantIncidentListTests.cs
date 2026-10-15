@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
@@ -34,7 +37,7 @@ public class CrossTenantIncidentListTests
         db.Shifts.Add(shift);
         var incident = new IncidentReport
         {
-            Id = Guid.NewGuid(), ReportedByUserId = reporter.Id, TripInstanceId = trip.Id, ShiftId = shift.Id, IncidentType = IncidentType.PropertyDamage,
+            Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = reporter.Id, TripInstanceId = trip.Id, ShiftId = shift.Id, IncidentType = IncidentType.PropertyDamage,
             Severity = IncidentSeverity.High, Status = IncidentStatus.Submitted, Title = "Incident", Description = "What happened.",
             IncidentDateTime = DateTime.UtcNow.AddHours(-31), CreatedAt = DateTime.UtcNow.AddHours(-30), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
         };
@@ -94,6 +97,35 @@ public class CrossTenantIncidentListTests
         Assert.Empty(List(await controller.GetByShift(foreign.Shift.Id, Ct)));
         Assert.Equal(own.Incident.Id, Assert.Single(List(await controller.GetByTrip(own.Trip.Id, Ct))).Id);
         Assert.Equal(own.Incident.Id, Assert.Single(List(await controller.GetOverdueQsc(Ct))).Id);
+    }
+
+    [Fact]
+    public void TheIncidentTable_IsFilteredToTheCallersOrganisation_SoEveryQueryOverItIs()
+    {
+        using var db = Db();
+        var own = Plant(db, A);
+        Plant(db, B);
+
+        Assert.Equal(own.Incident.Id, Assert.Single(db.IncidentReports.ToList()).Id);
+    }
+
+    [Fact]
+    public async Task Create_FilesTheIncidentUnderItsReportersOrganisation_EvenForASuperAdminWithNoneChosen()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(A); // the SuperAdmin's own organisation, from the token
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        var reporter = User(db, B);
+
+        var result = await new IncidentsController(db).Create(new CreateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.Low, Title = "Incident", Description = "What happened.",
+            IncidentDateTime = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc),
+        }, Ct);
+
+        var created = Assert.IsType<ApiResponse<IncidentListDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal(B, db.IncidentReports.Single(i => i.Id == created.Id).TenantId);
     }
 
     [Fact]

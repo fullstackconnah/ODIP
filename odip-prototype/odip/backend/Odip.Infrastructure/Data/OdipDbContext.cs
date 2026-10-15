@@ -2012,6 +2012,11 @@ public class OdipDbContext : DbContext
 
         modelBuilder.Entity<ImportBatch>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+
+        modelBuilder.Entity<IncidentReport>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<IncidentReport>()
+            .HasIndex(e => e.TenantId);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

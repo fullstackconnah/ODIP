@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -63,5 +66,49 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(mine.Incident.Id, Assert.Single(overdue).Id);
         Assert.Empty(Assert.IsType<ApiResponse<List<IncidentListDto>>>(Assert.IsType<OkObjectResult>((await controller.GetByTrip(theirs.Trip.Id, Ct)).Result).Value).Data!);
         Assert.IsType<NotFoundObjectResult>((await controller.GetById(theirs.Incident.Id, Ct)).Result);
+    }
+
+    [SkippableFact]
+    public async Task TheTenantMigration_GivesEveryExistingIncidentItsReportersOrganisation_AndMakesTheColumnRequired()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var cs = await _pg.CreateDatabaseAsync();
+        await using var db = PostgresFixture.NewContext(cs);
+        var migrator = db.GetService<IMigrator>();
+
+        // The schema just before the migration, with incidents of two organisations: two reported by A's user, one by B's.
+        await migrator.MigrateAsync("20261014071657_AddInAppNotifications");
+        var (a, b, userA, userB) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var reporterOf = new Dictionary<Guid, Guid> { [Guid.NewGuid()] = userA, [Guid.NewGuid()] = userA, [Guid.NewGuid()] = userB };
+        await using (var conn = new NpgsqlConnection(cs))
+        {
+            await conn.OpenAsync();
+            foreach (var (tenant, user) in new[] { (a, userA), (b, userB) })
+            {
+                await ShiftPackagePostgresTests.InsertMinimalRowAsync(conn, "Tenants", new() { ["Id"] = tenant, ["Name"] = "Provider", ["EmailDomain"] = $"{tenant:N}.example.com" });
+                await ShiftPackagePostgresTests.InsertMinimalRowAsync(conn, "Users", new() { ["Id"] = user, ["TenantId"] = tenant, ["Email"] = $"{user:N}@example.com", ["Username"] = user.ToString("N") });
+            }
+            foreach (var (incident, reporter) in reporterOf)
+                await ShiftPackagePostgresTests.InsertMinimalRowAsync(conn, "IncidentReports", new() { ["Id"] = incident, ["ReportedByUserId"] = reporter, ["Title"] = "Incident" });
+        }
+
+        await migrator.MigrateAsync();
+
+        await using var after = new NpgsqlConnection(cs);
+        await after.OpenAsync();
+        var tenantOf = new Dictionary<Guid, Guid> { [userA] = a, [userB] = b };
+        await using (var rows = new NpgsqlCommand("SELECT \"Id\", \"TenantId\" FROM \"IncidentReports\"", after))
+        await using (var reader = await rows.ExecuteReaderAsync())
+        {
+            var seen = 0;
+            while (await reader.ReadAsync())
+            {
+                Assert.Equal(tenantOf[reporterOf[reader.GetGuid(0)]], reader.GetGuid(1));
+                seen++;
+            }
+            Assert.Equal(3, seen);
+        }
+        await using var nullable = new NpgsqlCommand("SELECT is_nullable FROM information_schema.columns WHERE table_name = 'IncidentReports' AND column_name = 'TenantId'", after);
+        Assert.Equal("NO", await nullable.ExecuteScalarAsync());
     }
 }
