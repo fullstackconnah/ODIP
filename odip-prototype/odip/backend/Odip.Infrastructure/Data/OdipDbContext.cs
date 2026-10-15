@@ -1184,6 +1184,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.TimeZoneId).HasMaxLength(100);
             entity.Property(e => e.ReturnReason).HasMaxLength(2000);
             entity.Property(e => e.HandoverText).HasMaxLength(2000);
+            entity.Property(e => e.TimeAdjustmentReason).HasMaxLength(500);
+            entity.Property(e => e.Kilometres).HasPrecision(6, 1);
 
             // Restrict: same idiom as ShiftNote -> Shift — a shift's completion history must
             // not be silently cascade-deleted out from under it.
@@ -2071,6 +2073,12 @@ public class OdipDbContext : DbContext
 
         modelBuilder.Entity<ImportBatch>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+
+        modelBuilder.Entity<IncidentReport>()
+            // Fail closed: a caller with no tenant must not match NULL-tenant rows (EF null semantics).
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || (e.TenantId != null && e.TenantId == _tenant.TenantId));
+        modelBuilder.Entity<IncidentReport>()
+            .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<EmploymentHeroConnection>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

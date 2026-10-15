@@ -14,7 +14,7 @@ using static Odip.Tests.Security.CrossTenant;
 namespace Odip.Tests.Security;
 
 /// <summary>
-/// SupportProfile, ParticipantBooking, IncidentReport and AuditLog have no organisation column and no query filter. A participant's support profile and bookings, an incident's
+/// SupportProfile, ParticipantBooking and AuditLog have no organisation column and no query filter (IncidentReport has had both since 2026-10-15). A participant's support profile and bookings, an incident's
 /// update and delete, and an entity's audit history are read or written by a bare id; each now starts from a tenant-filtered parent, and another organisation's row is "not found".
 /// </summary>
 public class CrossTenantParticipantIncidentTests
@@ -45,7 +45,7 @@ public class CrossTenantParticipantIncidentTests
         reporter = User(db, tenantId);
         var incident = new IncidentReport
         {
-            Id = Guid.NewGuid(), ReportedByUserId = reporter.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.Low,
+            Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = reporter.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.Low,
             Status = IncidentStatus.Draft, Title = "Original", Description = "Original", IncidentDateTime = new DateTime(2026, 8, 30, 9, 0, 0, DateTimeKind.Utc),
         };
         db.IncidentReports.Add(incident);
@@ -138,7 +138,7 @@ public class CrossTenantParticipantIncidentTests
         var result = await new IncidentsController(db).Update(foreign.Id, IncidentUpdate(ownReporter.Id), CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
-        Assert.Equal(("Original", foreignReporter.Id), ((await db.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == foreign.Id)) is var s ? (s.Title, s.ReportedByUserId) : default));
+        Assert.Equal(("Original", foreignReporter.Id), ((await db.IncidentReports.IgnoreQueryFilters().AsNoTracking().SingleAsync(i => i.Id == foreign.Id)) is var s ? (s.Title, s.ReportedByUserId) : default));
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class CrossTenantParticipantIncidentTests
         var result = await new IncidentsController(db).Delete(foreign.Id, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
-        Assert.Equal(IncidentStatus.Draft, (await db.IncidentReports.AsNoTracking().SingleAsync(i => i.Id == foreign.Id)).Status);
+        Assert.Equal(IncidentStatus.Draft, (await db.IncidentReports.IgnoreQueryFilters().AsNoTracking().SingleAsync(i => i.Id == foreign.Id)).Status);
     }
 
     [Fact]

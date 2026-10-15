@@ -13,25 +13,26 @@ export const myShiftsWeek = {
     {
       id: 'shift-0001', participantId: 'p-0001', participantName: 'Liam Okafor', serviceDate: '2026-09-08',
       startTime: '08:00:00', endTime: '17:00:00', endsNextDay: false, durationHours: 8,
-      ratio: 'OneToOne', nightType: 'None', status: 'Completed', notes: null,
+      ratio: 'OneToOne', nightType: 'None', status: 'Completed', notes: null, returnCount: 0,
     },
     {
       id: 'shift-0002', participantId: 'p-0004', participantName: 'Grace Palmer-Hughes', serviceDate: '2026-09-10',
       startTime: '19:00:00', endTime: '07:00:00', endsNextDay: true, durationHours: 12,
-      ratio: 'OneToOne', nightType: 'ActiveNight', status: 'Completed', notes: null,
+      ratio: 'OneToOne', nightType: 'ActiveNight', status: 'Completed', notes: null, returnCount: 0,
     },
     {
       id: 'shift-0004', participantId: 'p-0006', participantName: 'Aisha Rahimi', serviceDate: '2026-09-11',
       startTime: '10:00:00', endTime: '15:00:00', endsNextDay: false, durationHours: 5,
-      ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null,
+      ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null, returnCount: 0,
     },
     {
       id: 'shift-0003', participantId: 'p-0002', participantName: 'Sienna Whitfield', serviceDate: '2026-09-13',
       startTime: '09:00:00', endTime: '15:00:00', endsNextDay: false, durationHours: 6,
-      ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null,
+      ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null, returnCount: 0,
     },
   ],
   tripAssignments: [],
+  timeZoneId: 'Australia/Sydney',
 }
 
 export const pendingWitnessRequests = [

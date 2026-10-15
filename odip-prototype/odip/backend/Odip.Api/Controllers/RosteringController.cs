@@ -1096,6 +1096,7 @@ public class RosteringController : ControllerBase
                 StaffName = x.Shift.User != null ? x.Shift.User.FullName : string.Empty,
                 CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
                 x.Completion.VarianceMinutesStart, x.Completion.VarianceMinutesEnd, x.Completion.StartWasManual,
+                TimesAdjusted = x.Completion.OriginalActualStart != null || x.Completion.OriginalActualEnd != null,
             })
             .ToListAsync(ct);
 
@@ -1119,7 +1120,7 @@ public class RosteringController : ControllerBase
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, row.ActualStart, row.ActualEnd,
                 row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Status,
                 row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount,
-                extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual,
+                extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual, row.TimesAdjusted,
                 extras[row.CompletionId].IncidentCount);
         }).ToList();
 

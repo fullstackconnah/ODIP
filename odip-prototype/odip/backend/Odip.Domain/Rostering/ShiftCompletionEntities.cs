@@ -75,6 +75,21 @@ public class ShiftCompletion : ITenantEntity
     /// <summary>The worker explicitly confirmed "nothing to note" at Finish instead of writing a shift note.</summary>
     public bool NothingToNoteConfirmed { get; set; }
 
+    /// <summary>UTC. The server's start stamp, kept when the worker moved <see cref="ActualStart"/> at Finish (owner decision 3); null when not moved.</summary>
+    public DateTime? OriginalActualStart { get; set; }
+
+    /// <summary>UTC. The Finish instant, kept when the worker moved <see cref="ActualEnd"/> earlier; null when not moved.</summary>
+    public DateTime? OriginalActualEnd { get; set; }
+
+    /// <summary>Why the worker moved either time (max 500); null when nothing was moved.</summary>
+    public string? TimeAdjustmentReason { get; set; }
+
+    /// <summary>Kilometres driven with the participant during the shift, 0 to 2,000 to one decimal place (owner decision 4); null when not given.</summary>
+    public decimal? Kilometres { get; set; }
+
+    /// <summary>The worker's answer to "Anything to report?" at Finish: true, false, or null when skipped. Informational; it blocks nothing.</summary>
+    public bool? AnythingToReport { get; set; }
+
     /// <summary>
     /// True for the one "current" row per Shift. Return sets this false in the same
     /// transaction that flips Shift.Status back to Published, excluding it from the active 1:1

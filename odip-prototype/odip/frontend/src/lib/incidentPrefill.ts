@@ -234,6 +234,8 @@ export interface ShiftNoteIncidentPrefillState {
    * CreateIncidentDto.shiftId. Populated by the portal producer (ShiftNotesSection); this side
    * only carries it through to the create payload. */
   shiftId: string
+  /** Where the form goes after the report is filed (the shift's finish flow reopens at its report step); see incidentReturnPath. */
+  returnTo?: string
 }
 
 /** Narrows an unknown value (react-router location.state) down to a shift-note incident prefill. */
@@ -268,4 +270,43 @@ export function buildShiftNoteIncidentDescriptionSkeleton(p: ShiftNoteIncidentPr
 /** Best-effort incidentDateTime for the datetime-local field — the shift's own start time, in the same "no timezone context to correct for" shape as a portal-authored note. */
 export function buildShiftNoteIncidentDateTime(p: ShiftNoteIncidentPrefillState): string {
   return `${p.serviceDate}T${p.startTime.slice(0, 5)}`
+}
+
+// ── My shifts redesign: "Anything to report?" from the finish flow ──────────
+// The same router-state idiom with no note behind it: the worker said yes on the shift's report step. Nothing is filed until they submit.
+
+export interface ShiftIncidentPrefillState {
+  source: 'shift'
+  shiftId: string
+  participantId: string
+  participantName: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  /** The signed-in worker (the reportedByStaffId default). */
+  reportedByUserId?: string | null
+  /** Where the form goes after the report is filed: back to the shift, whose finish flow reopens at its report step. */
+  returnTo?: string
+  /** The shift's actual start, provider-local "yyyy-MM-ddTHH:mm": the incident's default time. Without it, the rostered start. */
+  incidentAt?: string
+}
+
+export function isShiftIncidentPrefillState(state: unknown): state is ShiftIncidentPrefillState {
+  return !!state && typeof state === 'object' && (state as { source?: unknown }).source === 'shift'
+}
+
+export function buildShiftIncidentTitleSkeleton(p: ShiftIncidentPrefillState): string {
+  return `Incident during shift — ${p.participantName}`
+}
+
+export function buildShiftIncidentDescriptionSkeleton(p: ShiftIncidentPrefillState): string {
+  const when = `${formatDayAccessibleName(p.serviceDate)}, ${formatShiftRange(p.startTime, p.endTime, p.endsNextDay)}`
+  return [`During ${p.participantName}'s shift on ${when}:`, '', '[Describe what happened, the immediate response and any follow-up.]'].join('\n')
+}
+
+/** Where the form goes after filing: a shift prefill's `returnTo` when it is a portal shift path (router state is ours, but never trust a path blindly), else the incidents list. */
+export function incidentReturnPath(state: unknown): string {
+  const to = (state as { returnTo?: unknown } | null | undefined)?.returnTo
+  return typeof to === 'string' && to.startsWith('/portal/shifts/') ? to : '/incidents'
 }

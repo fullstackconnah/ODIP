@@ -33,6 +33,10 @@ import {
   suggestedIncidentTypeForShiftNote,
   previewRpAuthorisation,
   editedRpAuthorisation,
+  isShiftIncidentPrefillState,
+  buildShiftIncidentTitleSkeleton,
+  buildShiftIncidentDescriptionSkeleton,
+  incidentReturnPath,
 } from '@/lib/incidentPrefill'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
@@ -220,6 +224,9 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   // — only one producer ever sets location.state per navigation.
   const shiftNotePrefill = !isEdit && isShiftNoteIncidentPrefillState(location.state) ? location.state : null
   const appliedShiftNotePrefillRef = useRef(false)
+  // My shifts: "Anything to report?" on the finish flow. A shift with no note behind it; the worker picks the type.
+  const shiftPrefill = !isEdit && isShiftIncidentPrefillState(location.state) ? location.state : null
+  const appliedShiftPrefillRef = useRef(false)
 
   // Evaluated once, synchronously, from the (already-loaded, in edit mode) existingIncident —
   // see buildDefaultValues' own doc comment for why this must be correct on the very first
@@ -328,6 +335,19 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     })
   }, [shiftNotePrefill, reset])
 
+  useEffect(() => {
+    if (!shiftPrefill || appliedShiftPrefillRef.current) return
+    appliedShiftPrefillRef.current = true
+    reset({
+      ...buildDefaultValues(false, undefined, currentUserId),
+      title: buildShiftIncidentTitleSkeleton(shiftPrefill),
+      description: buildShiftIncidentDescriptionSkeleton(shiftPrefill),
+      involvedParticipantId: shiftPrefill.participantId,
+      reportedByStaffId: shiftPrefill.reportedByUserId ?? currentUserId ?? '',
+      incidentDateTime: shiftPrefill.incidentAt ?? `${shiftPrefill.serviceDate}T${shiftPrefill.startTime.slice(0, 5)}`,
+    })
+  }, [shiftPrefill, reset, currentUserId])
+
   // IN-1: the computed, not fixed, step list — wrapped in useMemo so its identity is stable
   // across renders that don't actually change incidentType/isEdit (useWizard's reshuffle
   // detection compares the `steps` array by identity, not deep-equality).
@@ -400,7 +420,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       // (marPrefill/shiftNotePrefill are both hard-gated on !isEdit). UpdateIncident sets all three from the body,
       // so an edit sends the stored links back, or saving any change would clear them.
       medicationAdministrationId: isEdit ? existingIncident?.medicationAdministrationId ?? undefined : marPrefill?.medicationAdministrationId,
-      shiftId: isEdit ? existingIncident?.shiftId ?? undefined : shiftNotePrefill?.shiftId,
+      shiftId: isEdit ? existingIncident?.shiftId ?? undefined : shiftNotePrefill?.shiftId ?? shiftPrefill?.shiftId,
       shiftNoteId: isEdit ? existingIncident?.shiftNoteId ?? undefined : shiftNotePrefill?.shiftNoteId,
     }
 
@@ -436,7 +456,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             })
           }
           flushSync(() => reset(data))
-          navigate('/incidents')
+          navigate(incidentReturnPath(location.state))
         }
       }
     } catch {
@@ -563,6 +583,17 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         </Card>
       )}
 
+      {shiftPrefill && (
+        <Card className="bg-[var(--color-secondary-container)]/40 border-[var(--color-secondary-container)]">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-[var(--color-secondary)] shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm text-[var(--color-foreground)]">
+              <strong className="font-medium">Pre-filled from your shift:</strong> {shiftPrefill.participantName}, {formatDateAu(shiftPrefill.serviceDate)}. Review and complete the details below — nothing is filed until you submit this report.
+            </p>
+          </div>
+        </Card>
+      )}
+
       {/* Connection map: a compact, always-visible reminder of what this incident is linked to —
           the banners above explain the hand-off once; this line stays visible as the reporter
           works through the wizard's later steps. No new inputs — this is purely informational. */}
@@ -575,6 +606,9 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         <p className="text-sm text-[var(--color-muted-foreground)]">
           Linked to: Shift note from {formatDateAu(shiftNotePrefill.serviceDate)}
         </p>
+      )}
+      {shiftPrefill && (
+        <p className="text-sm text-[var(--color-muted-foreground)]">Linked to: Shift on {formatDateAu(shiftPrefill.serviceDate)}</p>
       )}
 
       {mutation.isError && (

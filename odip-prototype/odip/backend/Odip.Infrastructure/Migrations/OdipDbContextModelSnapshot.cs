@@ -1116,6 +1116,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("SupportCoordinatorNotifiedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -1166,6 +1169,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ShiftNoteId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TripInstanceId");
 
@@ -5355,6 +5360,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("ActualStart")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<bool?>("AnythingToReport")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -5374,11 +5382,21 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("Kilometres")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
                     b.Property<bool>("NothingToHandOver")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("NothingToNoteConfirmed")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("OriginalActualEnd")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("OriginalActualStart")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("ReturnReason")
                         .HasMaxLength(2000)
@@ -5416,6 +5434,10 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("TimeAdjustmentReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
