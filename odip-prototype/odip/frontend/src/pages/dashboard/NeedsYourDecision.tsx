@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Tabs } from '@/components/Tabs'
 import { AllClearRow } from './AttentionBand'
 import { QuickGroup } from './QuickGroup'
-import { isPresent, shownCount, visibleRows, type GroupKey, type GroupModel } from './quickGroupModel'
+import { isPresent, rowKey, shownCount, visibleRows, type GroupKey, type GroupModel } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 
 /** The open tab. `settled` once the viewer picked it, it had rows, or the one before it emptied: from then on only a pick or an emptying moves it. */
@@ -35,6 +35,15 @@ function tabLabel(group: GroupModel, count: number, open: boolean) {
  * group at zero, the heading and that row alone.
  */
 export function NeedsYourDecision({ groups, state }: { groups: GroupModel[]; state: DecisionState }) {
+  // A fresh read that lists a row marked decided here again says it was not decided after all: show it, and let the next read settle it. Here, not in
+  // QuickGroup: a group with every row marked is absent from the page, so it could never see its own rows come back.
+  const readStamp = groups.map((group) => group.readAt ?? 0).join()
+  useEffect(() => {
+    const back = groups.flatMap((group) => group.rows.map((row) => rowKey(group.key, row.id))).filter((key) => state.gone.has(key))
+    if (back.length) state.unmarkGone(back)
+    // Only a new read decides: `gone` itself changing (a row just marked) must not undo the mark.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readStamp])
   const notices = (group: GroupModel) => state.notices.filter((notice) => notice.subject === group.key).length
   const present = groups.filter((group) => isPresent(group, state.gone, notices(group), state.running.has(group.key)))
   const clear = groups.filter((group) => !present.includes(group)).map((group) => group.noun)

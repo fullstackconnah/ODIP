@@ -172,13 +172,18 @@ describe('Leave group — unavailability', () => {
 
 describe('Leave group — Complete all (decision-bulk)', () => {
   it("approves every request but the viewer's own, one at a time through each row's own endpoint, and rolls the overlaps into one notice", async () => {
-    answer(
-      [leave(), leave({ id: 'l-own', userId: 'u-viewer', userFullName: 'Dev Admin', startDate: '2026-10-19' })],
-      [rule()],
-    )
-    apiPost.mockImplementation((url: string) => Promise.resolve(url === '/leave/l1/approve'
-      ? { leave: leave({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP'), finding('TRIP_OVERLAP')], overlapShifts: [shift('2026-10-22')] }
-      : { unavailability: rule({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP')], overlapShifts: [shift('2026-10-27')] }))
+    // The server drops a request from the pending lists once it is approved, so a read after the approval does not list it.
+    const leaves = [leave(), leave({ id: 'l-own', userId: 'u-viewer', userFullName: 'Dev Admin', startDate: '2026-10-19' })]
+    const rules = [rule()]
+    answer(leaves, rules)
+    apiPost.mockImplementation((url: string) => {
+      if (url === '/leave/l1/approve') {
+        leaves.splice(0, 1)
+        return Promise.resolve({ leave: leave({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP'), finding('TRIP_OVERLAP')], overlapShifts: [shift('2026-10-22')] })
+      }
+      rules.splice(0, 1)
+      return Promise.resolve({ unavailability: rule({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP')], overlapShifts: [shift('2026-10-27')] })
+    })
     renderGroup(() => useLeaveGroup(true, 'u-viewer'))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 leave requests' }))

@@ -476,7 +476,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     // Unknown is never reported as approved or as failed: a fresh read says which rows have left the list and which still wait.
     if (unanswered.length) {
       try {
-        const pending = new Set(await model.reread!())
+        const pending = new Set(await model.reread!(unanswered.map((row) => row.id)))
         for (const row of unanswered) {
           if (pending.has(row.id)) result.waiting = (result.waiting ?? 0) + 1
           else { result.left = (result.left ?? 0) + 1; leaving.push(row.id) }

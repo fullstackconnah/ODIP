@@ -13,7 +13,7 @@ const item = (o: Record<string, unknown> = {}) => ({
   varianceMinutesStart: 2, varianceMinutesEnd: 4, status: 'PendingReview', timeZoneId: 'Australia/Sydney', isOutlierVariance: false, varianceReviewMinutes: 15,
   returnCount: 0, dosesWithoutOutcome: 0, breakMinutes: 0, startWasManual: false, timesAdjusted: false, incidentCount: 0, ...o,
 })
-const page = (items: unknown[], totalCount = items.length) => ({ items, totalCount, page: 1, pageSize: 5, totalPages: 1, hasNext: false, hasPrevious: false })
+const page = (items: unknown[], totalCount = items.length) => ({ items, totalCount, page: 1, pageSize: 5, totalPages: 1, hasNext: false, hasPrevious: false, nextCursor: items.length ? `after-${(items[items.length - 1] as { shiftId: string }).shiftId}` : null })
 const APPROVE = 'Approve shift: Sam Lee with Grace Palmer-Hughes, 14 Oct'
 
 beforeEach(() => {
@@ -47,7 +47,7 @@ describe('Shift completions group — what it reads', () => {
 
 describe('Shift completions group — clean rows approve in one tap', () => {
   it('approves through useApproveCompletion (the budget and badge caches with it), takes the row away and announces it', async () => {
-    apiGet.mockResolvedValue(page([item()]))
+    apiGet.mockResolvedValueOnce(page([item()])).mockResolvedValue(page([]))   // decided: the read after it no longer lists the row
     apiPost.mockResolvedValue({})
     const { client } = renderGroup(() => useCompletionsGroup(true))
     const invalidate = vi.spyOn(client, 'invalidateQueries')
@@ -91,7 +91,7 @@ describe('Shift completions group — clean rows approve in one tap', () => {
 
 describe('Shift completions group — Return needs a reason', () => {
   const openReturn = async () => {
-    apiGet.mockResolvedValue(page([item()]))
+    apiGet.mockResolvedValueOnce(page([item()])).mockResolvedValue(page([]))
     apiPost.mockResolvedValue({})
     renderGroup(() => useCompletionsGroup(true))
     fireEvent.click(await screen.findByRole('button', { name: 'Return shift: Sam Lee with Grace Palmer-Hughes, 14 Oct' }))
@@ -236,7 +236,10 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
   }
 
   it('re-reads the queue when the reply is lost, and lets the rows that left go without crediting them or offering a retry', async () => {
-    apiGet.mockResolvedValueOnce(page(two())).mockResolvedValue(page([]))
+    // Both are gone from the list, and the status read confirms they were decided.
+    apiGet.mockImplementation(async (url: string) => (url.startsWith('/rostering/completions/statuses')
+      ? [{ shiftId: 's1', status: 'Completed' }, { shiftId: 's2', status: 'Returned' }]
+      : apiGet.mock.calls.filter(([u]) => u === '/rostering/completions').length === 1 ? page(two()) : page([])))
     apiPost.mockRejectedValue(networkError())
     renderGroup(() => useCompletionsGroup(true))
     await runAll()
@@ -244,7 +247,7 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
     await waitFor(() => expect(notice()).toHaveTextContent('No answer for 2 completions'))
     expect(notice()).toHaveTextContent('2 have left the list: approved here, or decided by someone else.')
     expect(notice()).not.toHaveTextContent('Nothing was approved')
-    expect(apiGet).toHaveBeenCalledTimes(2)
+    expect(apiGet).toHaveBeenCalledTimes(3)   // the queue, its re-read, and the status read of the two missing rows
     expect(screen.queryByText('Sam Lee')).toBeNull()
     expect(screen.queryByRole('button', { name: APPROVE })).toBeNull()
   })
@@ -372,12 +375,12 @@ describe('Shift completions group — the whole queue past one page (review #266
   it('pages the whole pending queue: 200 flagged first, 50 clean after them, counted and sent', async () => {
     const flagged = Array.from({ length: 200 }, (_, i) => item({ shiftId: `f${i}`, staffName: `Flagged ${i}`, isOutlierVariance: true }))
     const clean = Array.from({ length: 50 }, (_, i) => item({ shiftId: `c${i}`, staffName: `Clean ${i}` }))
-    apiGet.mockImplementation(async (_url: string, params: { page: number }) => (params.page === 1 ? page(flagged, 250) : page(clean, 250)))
+    apiGet.mockImplementation(async (_url: string, params: { after?: string }) => (params.after ? page(clean, 250) : page(flagged, 250)))
     apiPost.mockImplementation(async (_url: string, body: { shiftIds: string[] }) => body.shiftIds.map((shiftId) => ({ shiftId, approved: true, code: null, message: null })))
     renderGroup(() => useCompletionsGroup(true))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve all 50 clean shift completions' }))
-    expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', page: 2, pageSize: 200 })
+    expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', pageSize: 200, after: 'after-f199' })
     expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 50 clean completions?')
     expect(screen.getByRole('alertdialog')).toHaveTextContent('The 200 that need review stay here.')
     fireEvent.click(screen.getByRole('button', { name: 'Approve 50' }))
@@ -388,7 +391,7 @@ describe('Shift completions group — the whole queue past one page (review #266
 
   it('shows no count until every page has answered', async () => {
     let second!: (v: unknown) => void
-    apiGet.mockImplementation((_url: string, params: { page: number }) => (params.page === 1
+    apiGet.mockImplementation((_url: string, params: { after?: string }) => (!params.after
       ? Promise.resolve(page(Array.from({ length: 200 }, (_, i) => item({ shiftId: `f${i}`, isOutlierVariance: true })), 201))
       : new Promise((resolve) => { second = resolve })))
     renderGroup(() => useCompletionsGroup(true))
@@ -398,5 +401,85 @@ describe('Shift completions group — the whole queue past one page (review #266
     expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull()
     second(page([item({ shiftId: 'c1' })], 201))
     expect(await screen.findByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
+  })
+})
+
+describe('Shift completions group — the queue changes while it is read (lil dude, PR #275)', () => {
+  const networkError = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', request: {} })
+  const notice = () => document.querySelector('[data-quick-group] [role="status"] [data-tone]')
+
+  /** A server that pages by keyset (after = the cursor of the last row, as the real endpoint does) over rows the test can change between requests. */
+  const keysetServer = (rows: () => Array<{ shiftId: string }>, afterRequest?: (n: number) => void) => {
+    let requests = 0
+    apiGet.mockImplementation(async (url: string, params: { after?: string; pageSize: number }) => {
+      if (url !== '/rostering/completions') throw new Error('unexpected ' + url)
+      const all = rows()
+      const from = params.after ? all.findIndex((r) => `after-${r.shiftId}` === params.after) + 1 : 0
+      const slice = all.slice(from, from + params.pageSize)
+      afterRequest?.(++requests)
+      return page(slice, all.length)
+    })
+  }
+
+  it('keeps a clean row visible and actionable when a page-one row is decided between page requests', async () => {
+    let rows: Array<Record<string, unknown>> = [
+      ...Array.from({ length: 200 }, (_, i) => item({ shiftId: `f${i}`, staffName: `Flagged ${i}`, isOutlierVariance: true })),
+      item({ shiftId: 'x', staffName: 'Xavier Reed' }),
+    ]
+    // Another reviewer decides flagged row f0 right after page one is read: with OFFSET paging X slid up to offset 199 and page two came back without it.
+    keysetServer(() => rows, (n) => { if (n === 1) rows = rows.filter((r) => r.shiftId !== 'f0') })
+    const { client } = renderGroup(() => useCompletionsGroup(true))
+
+    // Complete all counts the clean rows of the whole queue: the one clean row after the 200 flagged ones must be in it, after the poll too.
+    expect(await screen.findByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
+    await client.refetchQueries({ queryKey: ['rostering-completions'] })
+    expect(await screen.findByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
+  })
+
+  it('does not call a sent row "left" because the paged list lacks it: it asks the server what became of it', async () => {
+    // s2 is still pending, but this read of the list happens not to carry it.
+    apiGet.mockImplementation(async (url: string) => {
+      if (url.startsWith('/rostering/completions/statuses')) return [{ shiftId: 's2', status: 'PendingReview' }, { shiftId: 's1', status: 'Completed' }]
+      return apiGet.mock.calls.filter(([u]) => u === '/rostering/completions').length === 1 ? page([item(), item({ shiftId: 's2', staffName: 'Ana Ruiz' })]) : page([])
+    })
+    apiPost.mockRejectedValue(networkError())
+    renderGroup(() => useCompletionsGroup(true))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
+
+    await waitFor(() => expect(notice()).toHaveTextContent('No answer for 2 completions'))
+    expect(notice()).toHaveTextContent('1 has left the list: approved here, or decided by someone else.')
+    expect(notice()).toHaveTextContent("1 wasn't approved: it's still here to try again.")
+    const ids = apiGet.mock.calls.map(([u]) => u).find((u) => String(u).startsWith('/rostering/completions/statuses'))
+    expect(ids).toBe('/rostering/completions/statuses?shiftIds=s1&shiftIds=s2')
+  })
+
+  it('holds the rows when the status read fails too', async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url.startsWith('/rostering/completions/statuses')) throw networkError()
+      return apiGet.mock.calls.filter(([u]) => u === '/rostering/completions').length === 1 ? page([item(), item({ shiftId: 's2', staffName: 'Ana Ruiz' })]) : page([])
+    })
+    apiPost.mockRejectedValue(networkError())
+    renderGroup(() => useCompletionsGroup(true))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
+
+    await waitFor(() => expect(notice()).toHaveTextContent("2 couldn't be checked"))
+  })
+
+  it('shows a row again when a fresh read lists it, even after it was marked decided here', async () => {
+    // The first read lists the row, the read after the approve does not, a later one lists it again (the approval did not stick).
+    apiGet.mockResolvedValueOnce(page([item()])).mockResolvedValueOnce(page([])).mockResolvedValue(page([item()]))
+    apiPost.mockResolvedValue({})
+    const { client } = renderGroup(() => useCompletionsGroup(true))
+
+    fireEvent.click(await screen.findByRole('button', { name: APPROVE }))
+    await waitFor(() => expect(screen.queryByText('Sam Lee')).toBeNull())   // decided here, and the next read agrees
+
+    await client.refetchQueries({ queryKey: ['rostering-completions'] })   // the server still lists it as pending
+
+    expect(await screen.findByText('Sam Lee')).toBeInTheDocument()
   })
 })

@@ -14,6 +14,12 @@ export function useDecisionState() {
   const [gone, setGone] = useState<ReadonlySet<string>>(() => new Set())
   const [announcement, announce] = useState('')
   const markGone = useCallback((key: string) => setGone((prev) => new Set(prev).add(key)), [])
+  // A fresh read that lists a row again says it is not decided after all: the mark must not hide it for good.
+  const unmarkGone = useCallback((keys: string[]) => setGone((prev) => {
+    const next = new Set(prev)
+    for (const key of keys) next.delete(key)
+    return next
+  }), [])
   // The groups with a bulk run in flight: each keeps its tab until its run's notice lands (isPresent).
   const [running, setRunningSet] = useState<ReadonlySet<GroupKey>>(() => new Set())
   const setRunning = useCallback((key: GroupKey, on: boolean) => setRunningSet((prev) => {
@@ -22,7 +28,7 @@ export function useDecisionState() {
     else next.delete(key)
     return next
   }), [])
-  return { notices, notify, dismiss, gone, markGone, announcement, announce, running, setRunning }
+  return { notices, notify, dismiss, gone, markGone, unmarkGone, announcement, announce, running, setRunning }
 }
 
 export type DecisionState = ReturnType<typeof useDecisionState>

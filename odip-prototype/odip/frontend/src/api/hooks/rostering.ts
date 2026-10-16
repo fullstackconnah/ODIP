@@ -201,10 +201,14 @@ export function useAllCompletions(filters: CompletionFilters, options?: { enable
     queryFn: async () => {
       // Keyed by shift: a row decided mid-read moves the page edges, and must not come back twice.
       const items = new Map<string, CompletionQueueItemDto>()
-      for (let page = 1; ; page++) {
-        const result = await apiGet<PagedResult<CompletionQueueItemDto>>('/rostering/completions', { ...filters, page, pageSize: MAX_PAGE_SIZE })
+      // By keyset, not OFFSET: another reviewer deciding a row mid-read would slide the rows after it across a page edge and skip one.
+      let after: string | undefined
+      for (;;) {
+        const result = await apiGet<PagedResult<CompletionQueueItemDto>>('/rostering/completions',
+          after ? { ...filters, pageSize: MAX_PAGE_SIZE, after } : { ...filters, page: 1, pageSize: MAX_PAGE_SIZE })
         for (const item of result.items) items.set(item.shiftId, item)
-        if (result.items.length < MAX_PAGE_SIZE || items.size >= result.totalCount) return { items: [...items.values()], totalCount: result.totalCount }
+        if (result.items.length < MAX_PAGE_SIZE || !result.nextCursor || result.nextCursor === after) return { items: [...items.values()], totalCount: result.totalCount }
+        after = result.nextCursor
       }
     },
     refetchInterval: 60_000,

@@ -77,8 +77,8 @@ export interface GroupModel {
   noun: string
   phase: QueryPhase
   refetch: () => void
-  /** A bulk tab's fresh read, for a run that got no answer: the ids of the rows still pending. Rejects when the read fails. */
-  reread?: () => Promise<string[]>
+  /** A bulk tab's fresh read, for a run that got no answer for `sent`: the ids of the rows still pending. Rejects when the read, or the check of a sent row missing from it, fails. */
+  reread?: (sent: string[]) => Promise<string[]>
   /** When the group was last read in full (the oldest of its queries' dataUpdatedAt): a row held since an earlier read is released when it passes it. */
   readAt?: number
   /** The server's total. */

@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { apiGet } from '@/api/client'
 import { refreshBudgetFigures, useAllCompletions, useApproveCompletion, useApproveCompletionsBatch, useReturnCompletion, type CompletionQueueItemDto } from '@/api/hooks'
 import { formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
@@ -76,9 +77,15 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
     phase: groupPhase(queue),
     refetch: () => { void queue.refetch() },
     readAt: queue.dataUpdatedAt,
-    reread: async () => {
+    reread: async (sent) => {
       try {
-        return (await queue.refetch({ throwOnError: true })).data!.items.map((item) => item.shiftId)
+        const listed = (await queue.refetch({ throwOnError: true })).data!.items.map((item) => item.shiftId)
+        // Absent from the list is no proof a row left: it is read page by page while others decide rows. Ask the server what became of each one missing.
+        const missing = sent.filter((id) => !listed.includes(id))
+        if (!missing.length) return listed
+        const query = missing.map((id) => `shiftIds=${encodeURIComponent(id)}`).join('&')
+        const statuses = await apiGet<Array<{ shiftId: string; status: string }>>(`/rostering/completions/statuses?${query}`)
+        return [...listed, ...statuses.filter((s) => s.status === 'PendingReview').map((s) => s.shiftId)]
       } finally {
         // A batch with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveCompletionsBatch).
         void qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
