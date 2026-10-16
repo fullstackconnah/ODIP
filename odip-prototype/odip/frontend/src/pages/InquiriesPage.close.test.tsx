@@ -168,3 +168,16 @@ describe('the Open and Closed views', () => {
     expect(screen.getByText('Enquiries you close show here, with why and when. You can reopen one.')).toBeInTheDocument()
   })
 })
+
+describe('the Closed view for a role without lifecycle rights', () => {
+  it('has no Note column (SHAPE section 11: outcome and date only) and no Reopen', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker', id: 'sw' }))
+    const user = userEvent.setup()
+    page()
+    await user.click(screen.getByRole('radio', { name: 'Closed' }))
+
+    expect(screen.getByRole('columnheader', { name: /Outcome/ })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: /^Note/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Reopen/ })).not.toBeInTheDocument()
+  })
+})

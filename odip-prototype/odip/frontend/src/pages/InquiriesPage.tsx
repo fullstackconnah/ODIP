@@ -277,16 +277,18 @@ function useInquiriesScreen() {
   ]
   const zoneOf = (row: ParticipantInquiryDto) => row.timeZoneId || FALLBACK_ZONE
   // The Closed view (SHAPE section 11): why and when, and Reopen. No "closed by" on the row (lead decision 7); the audit trail keeps who.
+  // The server withholds the note from roles without lifecycle rights, so they get no Note column at all: "—" would read as "no note" (SHAPE 11).
+  const noteColumn: Column<ParticipantInquiryDto> = {
+    key: 'closeNote', header: 'Note',
+    render: row => (row.closeNote
+      ? <span className="block max-w-[9.5rem] max-md:max-w-none truncate max-md:whitespace-normal text-sm text-[var(--color-muted-foreground)]" title={row.closeNote}>{row.closeNote}</span>
+      : <span>—</span>),
+  }
   const closedColumns: Column<ParticipantInquiryDto>[] = [
     { key: 'firstName', header: 'Name', sortable: true, mobile: 'primary', render: row => nameOf(row) },
     { key: 'phone', header: 'Contact', render: row => row.phone || row.email || 'No contact details' },
     { key: 'closeOutcome', header: 'Outcome', mobile: 'meta', render: row => (row.closeOutcome ? CLOSE_OUTCOME_LABELS[row.closeOutcome] : '') },
-    {
-      key: 'closeNote', header: 'Note',
-      render: row => (row.closeNote
-        ? <span className="block max-w-[9.5rem] max-md:max-w-none truncate max-md:whitespace-normal text-sm text-[var(--color-muted-foreground)]" title={row.closeNote}>{row.closeNote}</span>
-        : <span>—</span>),
-    },
+    ...(canManageParticipantLifecycle ? [noteColumn] : []),
     {
       key: 'closedAt', header: 'Closed', sortable: true, mobile: 'meta',
       sortFn: (a, b) => (a.closedAt ?? '').localeCompare(b.closedAt ?? ''),
@@ -333,7 +335,7 @@ function useInquiriesScreen() {
           Could not load enquiries. Please try again.
         </Callout>
       )}
-      {!canManageParticipantLifecycle && <p role="status" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
+      {!canManageParticipantLifecycle && <p role="status" className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
       {error && <Callout tone="error">{error}</Callout>}
       {showEmptyState && view === 'closed' && <EmptyState icon={ClipboardPlus} title="No closed enquiries" description="Enquiries you close show here, with why and when. You can reopen one." />}
       {showEmptyState && view === 'open' && <EmptyState icon={ClipboardPlus} title="No open enquiries" description="Capture an enquiry when someone first contacts the service, then start their intake. Once an intake is complete, the participant moves to the Onboarding tab." />}
