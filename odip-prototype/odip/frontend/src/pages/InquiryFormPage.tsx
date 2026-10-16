@@ -11,53 +11,97 @@ import { SelectField } from '@/components/SelectField'
 import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
 import { useCreateParticipantInquiry, useParticipantInquiries, useParticipantInquiry, useResendIntakeInvite, useSetIntakeBooking, useUpdateParticipantInquiry } from '@/api/hooks'
+import type { ContactRoleType, PlanType } from '@/api/types/enums'
 import type { CreateParticipantInquiryDto, InquiryContactDto, InquirySource, ParticipantInquiryDetailDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { fieldErrors } from '@/lib/fieldErrors'
 import { formGrid, span } from '@/lib/formGrid'
 import { isNotFoundError } from '@/lib/httpStatus'
-import { contactRowErrors, contactRowOf, contactsPayload, serverContactErrors, type ContactFieldErrors, type ContactRow } from '@/lib/inquiryContacts'
+import { contactRowErrors, contactRowOf, contactsPayload, pendingRoleOptions, serverContactErrors, type ContactFieldErrors, type ContactRow } from '@/lib/inquiryContacts'
+import { DETAIL_FIELDS, inquiryErrors, INQUIRY_MESSAGES, ndisDigits, serverInquiryErrors, type InquiryErrors, type InquiryField } from '@/lib/inquiryDetails'
 import {
-  DEFAULT_DURATION, FALLBACK_ZONE, FIELD_ORDER, bookingBody, bookingFormOf, cancelNotice, enquirySavedNotice, isPastVisit, refusalOf, sendsInvite,
+  DEFAULT_DURATION, FALLBACK_ZONE, FIELD_ORDER, bookingBody, bookingFormOf, cancelNotice, enquirySavedNotice, invitee, isPastVisit, refusalOf, sendsInvite,
   serverBookingErrors, validateBooking, type BookingErrors, type BookingField, type BookingForm, type EnquiryNotice,
 } from '@/lib/intakeBooking'
 import { extractErrorMessage } from '@/lib/utils'
+import { utcInstantToProviderLocal } from '@/pages/portal/shift/shiftTime'
 import { BookingFields } from './inquiries/BookingFields'
 import { closedNotice } from '@/lib/inquiryClose'
 import { ClosedEnquiry } from './inquiries/ClosedEnquiry'
 import { CloseInquiryDialog } from './inquiries/CloseInquiryDialog'
+import { ConvertedDetailsCard } from './inquiries/ConvertedDetailsCard'
 import { InquiryContactsCard } from './inquiries/InquiryContactsCard'
 import { IntakeCancelDialog } from './inquiries/IntakeCancelDialog'
 import { IntakeVisitCard, type VisitRefusal } from './inquiries/IntakeVisitCard'
+import { MainContactCard } from './inquiries/MainContactCard'
+import { ParticipantDetailsFold } from './inquiries/ParticipantDetailsFold'
 import { useBookingStaff } from './inquiries/useBookingStaff'
 
-/** The form's own state: every field is text while it is being typed. */
-type FormState = { firstName: string; lastName: string; phone: string; email: string; source: InquirySource; provenance: string }
+/**
+ * The form's own state: every field is text while it is being typed ('' for blank), and one box. The name is the PARTICIPANT's; the phone and email
+ * are the MAIN CONTACT's, or the participant's own when `contactIsParticipant` (spec 2026-10-16 redesign).
+ */
+type FormState = {
+  firstName: string; lastName: string; phone: string; email: string; source: InquirySource; provenance: string
+  contactIsParticipant: boolean; contactFirstName: string; contactLastName: string; contactRelationship: string; contactRole: ContactRoleType | ''
+  dateOfBirth: string; ndisNumber: string; addressStreet: string; addressSuburb: string; addressState: string; addressPostcode: string
+  planType: PlanType | ''; planStartDate: string; planEndDate: string
+}
 
-const blank = (): FormState => ({ firstName: '', lastName: '', phone: '', email: '', source: 'Phone', provenance: '' })
+const blank = (): FormState => ({
+  firstName: '', lastName: '', phone: '', email: '', source: 'Phone', provenance: '',
+  contactIsParticipant: false, contactFirstName: '', contactLastName: '', contactRelationship: '', contactRole: '',
+  dateOfBirth: '', ndisNumber: '', addressStreet: '', addressSuburb: '', addressState: '', addressPostcode: '', planType: '', planStartDate: '', planEndDate: '',
+})
 
-const fromInquiry = (row: ParticipantInquiryDto): FormState => ({
+const fromInquiry = (row: ParticipantInquiryDetailDto): FormState => ({
   // A real enquiry always has a source; only a direct intake (never edited here) has none.
   firstName: row.firstName, lastName: row.lastName, phone: row.phone ?? '', email: row.email ?? '', source: row.source || 'Phone', provenance: row.provenance ?? '',
+  contactIsParticipant: !!row.contactIsParticipant, contactFirstName: row.contactFirstName ?? '', contactLastName: row.contactLastName ?? '',
+  contactRelationship: row.contactRelationship ?? '', contactRole: row.contactRole ?? '',
+  dateOfBirth: row.dateOfBirth ?? '', ndisNumber: row.ndisNumber ?? '', addressStreet: row.addressStreet ?? '', addressSuburb: row.addressSuburb ?? '',
+  addressState: row.addressState ?? '', addressPostcode: row.addressPostcode ?? '', planType: row.planType ?? '', planStartDate: row.planStartDate ?? '', planEndDate: row.planEndDate ?? '',
 })
 
 const orNull = (value: string) => value.trim() || null
 
-/** What goes on the wire. A field left blank is sent as null, never "": the API rejects "" as a bad email address. `contacts` only when given. */
-const toPayload = (form: FormState, contacts?: InquiryContactDto[]): CreateParticipantInquiryDto => ({
-  firstName: form.firstName.trim(),
-  lastName: form.lastName.trim(),
-  phone: orNull(form.phone),
-  email: orNull(form.email),
-  source: form.source,
-  provenance: orNull(form.provenance),
-  ...(contacts ? { contacts } : {}),
-})
+/**
+ * What goes on the wire. A field left blank is sent as null, never "": the API rejects "" as a bad email address, and as a date. `contacts` only when
+ * given. A converted enquiry sends its names, source and provenance only (D7): its contact and details are the participant's record now.
+ * With "their own contact" ticked the contact's names, relationship and role go as null, though what was typed stays in the form.
+ */
+const toPayload = (form: FormState, contacts?: InquiryContactDto[], converted = false): CreateParticipantInquiryDto => {
+  const own = { firstName: form.firstName.trim(), lastName: orNull(form.lastName), source: form.source, provenance: orNull(form.provenance) }
+  if (converted) return own
+  const self = form.contactIsParticipant
+  return {
+    ...own,
+    phone: orNull(form.phone),
+    email: orNull(form.email),
+    contactIsParticipant: self,
+    contactFirstName: self ? null : orNull(form.contactFirstName),
+    contactLastName: self ? null : orNull(form.contactLastName),
+    contactRelationship: self ? null : orNull(form.contactRelationship),
+    contactRole: self ? null : form.contactRole || null,
+    dateOfBirth: form.dateOfBirth || null,
+    ndisNumber: orNull(ndisDigits(form.ndisNumber)),
+    addressStreet: orNull(form.addressStreet),
+    addressSuburb: orNull(form.addressSuburb),
+    addressState: orNull(form.addressState),
+    addressPostcode: orNull(form.addressPostcode),
+    planType: form.planType || null,
+    planStartDate: form.planStartDate || null,
+    planEndDate: form.planEndDate || null,
+    ...(contacts ? { contacts } : {}),
+  }
+}
 
 const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
+const FIELDS_REFUSED = 'Nothing was saved. Fix the marked fields, then save again.'
 
 /**
  * Routed enquiry form. Lives at /participants/new-inquiry. With no ?id= it creates a new enquiry; with ?id=<enquiry-id> it loads that enquiry
- * (GET /inquiries/{id}, with its pending contacts) and submits an update. Either way it navigates back to /participants?tab=enquiries on save.
+ * (GET /inquiries/{id}, with its pending contacts and details) and submits an update. Either way it navigates back to /participants?tab=enquiries on save.
+ * ?focus=address opens the details and focuses Street, ?focus=contact the main contact's First name: Start intake's reasons link here (G2).
  *
  * Editing waits for the stored enquiry, fetched fresh for this visit, before it shows a form: a form built from nothing, or from a cached copy, then
  * saves over what is stored (L2-08; the contacts are a full replace, plan check S2). After its own create the page moves to ?id= without remounting
@@ -66,6 +110,7 @@ const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed
 export default function InquiryFormPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const editId = searchParams.get('id')
+  const focus = searchParams.get('focus')
   const navigate = useNavigate()
   // The enquiry this page created itself: the URL moves to it (replace), so a reload edits it, while the mounted form stays exactly as it is.
   // Only an enquiry opened by URL is loaded.
@@ -105,6 +150,7 @@ export default function InquiryFormPage() {
       <InquiryFormBody
         key={loadId ?? 'new'}
         initial={loadId ? existing! : null}
+        focus={focus}
         onCreated={id => { setCreatedHere(id); setSearchParams({ id }, { replace: true }) }}
         onCancel={() => navigate('/participants?tab=enquiries')}
         onReopened={() => setReopenedHere(true)}
@@ -121,8 +167,11 @@ export default function InquiryFormPage() {
   )
 }
 
-function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
+
+function InquiryFormBody({ initial, focus, onCreated, onCancel, onReopened, onDone }: {
   initial: ParticipantInquiryDetailDto | null
+  /** ?focus=: 'address' opens the details and focuses Street; 'contact' focuses the main contact's First name. */
+  focus: string | null
   onCreated: (id: string) => void
   onCancel: () => void
   onReopened: () => void
@@ -134,7 +183,9 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
   const [contacts, setContacts] = useState<ContactRow[]>(() => (initial?.contacts ?? []).map(contactRowOf))
   const [contactErrors, setContactErrors] = useState<ContactFieldErrors>({})
   const [listError, setListError] = useState<string | undefined>()
-  const [emailError, setEmailError] = useState<string | undefined>()
+  const [errors, setErrors] = useState<InquiryErrors>({})
+  // The details fold (lead decision D3): closed on a new enquiry, open on edit, and open whenever something inside it needs the coordinator.
+  const [detailsOpen, setDetailsOpen] = useState(() => !!initial || focus === 'address')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'saving' | 'booking' | 'resending' | null>(null)
   // The visit (SHAPE.md section 3). `savedBooking` is the stored visit as the fields show it.
@@ -149,7 +200,8 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
   const [closing, setClosing] = useState(false)
   const [reopened, setReopened] = useState(false)
   // What the form held when it was loaded or last saved: Close warns that anything since will be discarded (check N2: reset on every save).
-  const [baseline, setBaseline] = useState(() => JSON.stringify(toPayload(initial ? fromInquiry(initial) : blank(), contactsPayload((initial?.contacts ?? []).map(contactRowOf)))))
+  const [baseline, setBaseline] = useState(() =>
+    JSON.stringify(toPayload(initial ? fromInquiry(initial) : blank(), contactsPayload((initial?.contacts ?? []).map(contactRowOf)), !!initial?.participantId)))
   const create = useCreateParticipantInquiry()
   const update = useUpdateParticipantInquiry()
   const setVisit = useSetIntakeBooking()
@@ -162,8 +214,10 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
   const refusalRef = useRef<HTMLDivElement>(null)
   const cancelledRef = useRef<HTMLDivElement>(null)
   const reopenedRef = useRef<HTMLDivElement>(null)
-  // Where focus goes once the next render is on screen: the errors and notices are not in the DOM yet when they are found.
-  const focusNext = useRef<'first-invalid' | 'error' | 'visit-refusal' | 'cancelled' | 'reopened' | BookingField | null>(null)
+  // Where focus goes once the next render is on screen: the errors and notices are not in the DOM yet when they are found, and the details fold
+  // opens in the same render. A string starting with "#" is an element's id.
+  const focusNext = useRef<'first-invalid' | 'error' | 'visit-refusal' | 'cancelled' | 'reopened' | BookingField | `#${string}` | null>(
+    focus === 'address' ? '#inquiry-address-street' : focus === 'contact' ? '#inquiry-contact-first-name' : null)
   useEffect(() => {
     const target = focusNext.current
     if (!target) return
@@ -173,7 +227,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
     else if (target === 'cancelled') cancelledRef.current?.focus()
     else if (target === 'reopened') reopenedRef.current?.focus()
     else if (target === 'first-invalid') formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
-    else if (target === 'email') formRef.current?.querySelector<HTMLElement>('#inquiry-email')?.focus()
+    else if (target.startsWith('#')) formRef.current?.querySelector<HTMLElement>(target)?.focus()
     else formRef.current?.querySelector<HTMLElement>(`[data-field="${target}"] :is(input, select, textarea, button)`)?.focus()
   })
 
@@ -184,18 +238,31 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
   const listQuery = useParticipantInquiries()
   const knownZone = row?.timeZoneId || listQuery.data?.find(r => r.timeZoneId)?.timeZoneId || null
   const zone = knownZone || FALLBACK_ZONE
+  const today = utcInstantToProviderLocal(new Date().toISOString(), zone).slice(0, 10)
   const booked = !!row?.intakeStartsAt
   const past = booked && isPastVisit(row!.intakeStartsAt!, row!.intakeDurationMinutes ?? DEFAULT_DURATION)
   const effective: BookingForm = { ...booking, staffUserId: booking.staffUserId || staff.defaultStaff }
   // What this Save does about the visit: book it (box ticked), change it (a field differs; notes alone email nobody), or nothing.
   const sends = booked ? sendsInvite(effective, savedBooking, true) : bookingOn
   const wantsVisit = booked ? sends || effective.notes.trim() !== savedBooking.notes.trim() : bookingOn
-  // Send again (D2, SHAPE 3c): only when this save won't email anyway, and the invite went to another address or its last send failed.
+  // Send again (D2, SHAPE 3c): only when this save won't email anyway, and the invite went to another address or its last send failed, or (L7) the
+  // visit was booked with no email and one has been typed since.
   const typedEmail = form.email.trim()
+  const neverSent = booked && !row!.email && !row!.intakeInviteSentAt && !row!.intakeInviteError
   const offerResend = booked && !past && !sends && !!typedEmail
-    && (!!row!.intakeInviteError || (!!row!.intakeInviteSentAt && typedEmail !== (row!.email ?? '')))
-  const needsEmail = sends || (offerResend && resendOn)
-  const dirty = wantsVisit || JSON.stringify(toPayload(form, contactsPayload(contacts))) !== baseline
+    && (neverSent || !!row!.intakeInviteError || (!!row!.intakeInviteSentAt && typedEmail !== (row!.email ?? '')))
+  const dirty = wantsVisit || JSON.stringify(toPayload(form, contactsPayload(contacts), !!converted)) !== baseline
+  // Who the visit's sentences name: what this Save will store, so a contact typed just now is named.
+  const inviteeName = invitee({ firstName: form.firstName, contactIsParticipant: form.contactIsParticipant, contactFirstName: form.contactFirstName })
+  const gate = { planType: form.planType || null, dateOfBirth: form.dateOfBirth || null }
+  const hasAnyContact = [form.contactRelationship, form.phone, form.email].some(v => v.trim()) || !!form.contactRole
+  const needsName = !form.contactIsParticipant && hasAnyContact && !form.contactFirstName.trim() && !form.contactLastName.trim()
+
+  /** One field typed: its value, and its error cleared (SHAPE section 10: errors show at Save, never while typing). */
+  function setField<F extends keyof FormState>(field: F, value: FormState[F]) {
+    setForm(f => ({ ...f, [field]: value }))
+    setErrors(e => (e[field as InquiryField] ? { ...e, [field]: undefined } : e))
+  }
 
   function changeContacts(next: ContactRow[], changed?: { key: string; field: string }) {
     setContacts(next)
@@ -207,35 +274,49 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
     setVisitErrors(e => ({ ...e, [field]: undefined }))
   }
 
-  /** The enquiry was refused: nothing was saved. The reason on its fields, else the Callout; every value kept. */
+  /** Field errors found: the details fold opens first when one is inside it, then focus goes to the first marked field. */
+  function markFields(found: InquiryErrors) {
+    setErrors(found)
+    if (DETAIL_FIELDS.some(f => found[f])) setDetailsOpen(true)
+    focusNext.current = 'first-invalid'
+  }
+
+  /** The enquiry was refused: nothing was saved. The reasons on their fields, else the Callout; every value kept. */
   function refuseEnquiry(err: unknown) {
-    setError(extractErrorMessage(err, row ? 'Could not update this enquiry. Check the details and try again.' : 'Could not capture this enquiry. Check the details and try again.'))
     const mapped = serverContactErrors(err, contacts)
+    const own = serverInquiryErrors(err)
     setContactErrors(mapped)
     setListError(fieldErrors(err).contacts)
-    focusNext.current = Object.keys(mapped).length > 0 ? 'first-invalid' : 'error'
+    if (Object.keys(mapped).length > 0 || Object.keys(own).length > 0) {
+      setError(FIELDS_REFUSED)
+      markFields(own)
+      return
+    }
+    setError(extractErrorMessage(err, row ? 'Could not update this enquiry. Check the details and try again.' : 'Could not capture this enquiry. Check the details and try again.'))
+    focusNext.current = 'error'
   }
 
   /** The visit, or its resend, was refused after the enquiry saved (SHAPE section 4): the reason on its field, else the card's Callout. */
   function refuseVisit(kind: VisitRefusal['kind'], err: unknown) {
     const mapped = kind === 'resend' ? {} : serverBookingErrors(err)
-    setEmailError(mapped.email)   // the server's contactEmail ("can't be used") belongs to the enquiry's Email field here
+    if (mapped.email) setErrors(e => ({ ...e, email: mapped.email }))   // the server's contactEmail belongs to the main contact's Email field here
     setVisitErrors({ ...mapped, email: undefined })
     setVisitRefusal({ kind, message: refusalOf(err, kind === 'resend' ? "The invite wasn't sent again. Try again." : "The visit wasn't saved. Try again.") })
-    focusNext.current = FIELD_ORDER.find(f => mapped[f]) ?? 'visit-refusal'   // Who's going for staff busy
+    focusNext.current = mapped.email ? 'first-invalid' : FIELD_ORDER.find(f => mapped[f]) ?? 'visit-refusal'   // Who's going for staff busy
   }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     if (inFlight.current) return
-    // 1. The whole form, here: nothing is sent while anything is wrong (SHAPE 6). The invite goes to the Email above (D2).
-    const missingEmail = needsEmail && !typedEmail ? 'Add an email to send the invite to.' : undefined
-    const rowErrors = contactRowErrors(contacts)
+    // 1. The whole form, here: nothing is sent while anything is wrong (SHAPE 10). A converted enquiry sends its names only, so only they are checked.
+    const stored = row ? { phone: row.phone ?? '', email: row.email ?? '', contactIsParticipant: !!row.contactIsParticipant } : null
+    const own = converted ? (form.firstName.trim() ? {} : { firstName: INQUIRY_MESSAGES.firstName }) : inquiryErrors(form, stored, today)
+    const rowErrors = converted ? {} : contactRowErrors(contacts, gate)
     const timeChanged = !booked || booking.date !== savedBooking.date || booking.time !== savedBooking.time
-    const found = wantsVisit ? validateBooking(effective, { askEmail: false, firstName: form.firstName, timeChanged: timeChanged && !!knownZone, zone, pastVisitChange: past && sends }) : {}
-    setEmailError(missingEmail); setContactErrors(rowErrors); setVisitErrors(found); setVisitRefusal(null); setError(null); setListError(undefined); setCancelled(null)
-    if (missingEmail || Object.keys(rowErrors).length > 0 || Object.keys(found).length > 0) {
-      focusNext.current = 'first-invalid'
+    const found = wantsVisit ? validateBooking(effective, { askEmail: false, timeChanged: timeChanged && !!knownZone, zone, pastVisitChange: past && sends }) : {}
+    setErrors({}); setContactErrors(rowErrors); setVisitErrors(found); setVisitRefusal(null); setError(null); setListError(undefined); setCancelled(null)
+    if (Object.keys(own).length > 0 || Object.keys(rowErrors).length > 0 || Object.keys(found).length > 0) {
+      markFields(own)
       return
     }
     inFlight.current = true
@@ -244,7 +325,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
       setBusy('saving')
       let saved: ParticipantInquiryDto
       try {
-        const body = toPayload(form, converted ? undefined : contactsPayload(contacts))
+        const body = toPayload(form, converted ? undefined : contactsPayload(contacts), !!converted)
         // The version this form holds goes back with the edit, so a save since then makes this one a 409 rather than overwrite it (deep review S2).
         saved = row ? await update.mutateAsync({ id: row.id, data: row.updatedAt ? { ...body, expectedUpdatedAt: row.updatedAt } : body }) : await create.mutateAsync(body)
       } catch (err) {
@@ -253,7 +334,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
       }
       if (!row) onCreated(saved.id)   // D1: from here a retry is a PUT, never a second POST
       setRow(saved)
-      setBaseline(JSON.stringify(toPayload(form, contactsPayload(contacts))))
+      setBaseline(JSON.stringify(toPayload(form, contactsPayload(contacts), !!saved.participantId)))
       // 3. The visit: a request of its own. Refused, the enquiry stays saved and the page stays, in edit mode, to retry (owner decision 3).
       let visit: ParticipantInquiryDto | null = null
       if (wantsVisit) {
@@ -290,10 +371,11 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
   }
 
   const title = row ? 'Edit enquiry' : 'New enquiry'
-  if (row?.closedAt) {
+  if (row?.closedAt && initial) {
+    // Only on load: a close made here navigates away. `initial` is the detail, with the main contact and the details the facts read.
     return (
       <ClosedEnquiry
-        row={row}
+        row={initial}
         onBack={onCancel}
         onReopened={answer => {
           setRow(answer); setReopened(true); onReopened()
@@ -302,61 +384,40 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
       />
     )
   }
-  const resendHint = row?.intakeInviteError ? "The last invite wasn't sent." : `The invite went to ${row?.email ?? ''}. Saving won't resend it unless you tick this.`
+  const resendHint = neverSent ? 'No invite went out when it was booked.'
+    : row?.intakeInviteError ? "The last invite wasn't sent." : `The invite went to ${row?.email ?? ''}. Saving won't resend it unless you tick this.`
 
   return (
     <>
-      <form ref={formRef} className="flex flex-col gap-[var(--section-gap)]" onSubmit={submit} aria-label={title}>
+      {/* noValidate: the form's own checks give every message (SHAPE section 10). A native max, or type=email, would otherwise block Save with the
+          browser's bubble before them; the date picker still honours max. */}
+      <form ref={formRef} noValidate className="flex flex-col gap-[var(--section-gap)]" onSubmit={submit} aria-label={title}>
         {reopened && (
           <div ref={reopenedRef} tabIndex={-1} className="focus:outline-none">
-            <Callout tone="success">Reopened. Add the contacts again below.</Callout>
+            <Callout tone="success">Reopened. Add the other contacts again below.</Callout>
           </div>
         )}
-        <Card title={title}>
+        <Card title="Participant">
           <div className={formGrid}>
-            <TextField
-              id="inquiry-first-name"
-              className={span.medium}
-              label="First name"
-              required
-              autoComplete="given-name"
-              value={form.firstName}
-              onChange={e => setForm({ ...form, firstName: e.target.value })}
-            />
+            {/* FormField, not TextField: a native required would let the browser's bubble block Save before the form's own check shows (SHAPE section 3). */}
+            <FormField label="First name" required error={errors.firstName} className={span.medium}>
+              <input id="inquiry-first-name" autoComplete="off" maxLength={100} value={form.firstName} onChange={e => setField('firstName', e.target.value)} />
+            </FormField>
             <TextField
               id="inquiry-last-name"
               className={span.medium}
               label="Last name"
-              required
-              autoComplete="family-name"
+              autoComplete="off"
+              maxLength={100}
               value={form.lastName}
-              onChange={e => setForm({ ...form, lastName: e.target.value })}
+              onChange={e => setField('lastName', e.target.value)}
             />
-            <TextField
-              id="inquiry-phone"
-              className={span.medium}
-              label="Phone"
-              type="tel"
-              autoComplete="tel"
-              value={form.phone}
-              onChange={e => setForm({ ...form, phone: e.target.value })}
-            />
-            {/* FormField, not TextField: a native required would let the browser block Save before "Add an email to send the invite to." shows. */}
-            <FormField label="Email" required={needsEmail} error={emailError} className={span.medium}>
-              <input
-                id="inquiry-email"
-                type="email"
-                autoComplete="email"
-                value={form.email}
-                onChange={e => { setForm({ ...form, email: e.target.value }); setEmailError(undefined) }}
-              />
-            </FormField>
             <SelectField
               id="inquiry-source"
               className={span.short}
               label="Source"
               value={form.source}
-              onChange={e => setForm({ ...form, source: e.target.value as InquirySource })}
+              onChange={e => setField('source', e.target.value as InquirySource)}
               options={[{ value: 'Web', label: 'Web' }, { value: 'Email', label: 'Email' }, { value: 'Phone', label: 'Phone' }]}
             />
             <TextAreaField
@@ -367,19 +428,26 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
               rows={3}
               maxLength={2000}
               value={form.provenance}
-              onChange={e => setForm({ ...form, provenance: e.target.value })}
+              onChange={e => setField('provenance', e.target.value)}
             />
           </div>
         </Card>
 
-        <InquiryContactsCard
-          rows={contacts}
-          errors={contactErrors}
-          listError={listError}
-          enquirer={{ phone: form.phone, email: form.email }}
-          converted={converted}
-          onChange={changeContacts}
-        />
+        {converted ? (
+          <ConvertedDetailsCard participantId={converted.participantId} firstName={converted.firstName} contact={{ ...form, contactRole: form.contactRole || null }} />
+        ) : (
+          <>
+            <MainContactCard
+              form={form}
+              errors={errors}
+              roleOptions={pendingRoleOptions(gate.planType, gate.dateOfBirth, form.contactRole || undefined)}
+              needsName={needsName}
+              onChange={(field, value) => setField(field, value as never)}
+            />
+            <ParticipantDetailsFold form={form} errors={errors} open={detailsOpen} today={today} onToggle={setDetailsOpen} onChange={(field, value) => setField(field, value as never)} />
+            <InquiryContactsCard rows={contacts} errors={contactErrors} listError={listError} gate={gate} onChange={changeContacts} />
+          </>
+        )}
 
         <IntakeVisitCard
           row={row}
@@ -389,9 +457,10 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
           bookingOn={bookingOn}
           onBookingOn={setBookingOn}
           email={typedEmail}
+          invitee={inviteeName}
           sends={sends}
           fields={<BookingFields form={effective} errors={visitErrors} zone={zone} staff={staff} onChange={setBookingField} />}
-          resend={offerResend ? { on: resendOn, onChange: setResendOn, hint: resendHint } : null}
+          resend={offerResend ? { on: resendOn, onChange: setResendOn, hint: resendHint, again: !neverSent } : null}
           refusal={visitRefusal}
           refusalRef={refusalRef}
           cancelled={cancelled}
@@ -433,7 +502,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
           setRow(cleared)
           setBooking(bookingFormOf({}, '')); setSavedBooking(bookingFormOf({}, ''))
           setBookingOn(false); setVisitErrors({}); setVisitRefusal(null); setResendOn(false)
-          setCancelled(cancelNotice(email, `${cancelledRow.firstName} ${cancelledRow.lastName}`))
+          setCancelled(cancelNotice(email, invitee(cancelledRow)))
           focusNext.current = 'cancelled'
         }}
       />

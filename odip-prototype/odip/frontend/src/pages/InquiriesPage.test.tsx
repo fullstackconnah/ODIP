@@ -19,7 +19,7 @@ vi.mock('@/api/hooks', () => ({
   useConvertParticipantInquiry: () => ({ mutate: mocks.convert, isPending: false }),
 }))
 
-const inquiry = (overrides: Record<string, unknown> = {}) => ({ id: 'inquiry-1', firstName: 'Ava', lastName: 'Ng', phone: '0400000000', email: null, source: 'Phone', provenance: 'Referral', participantId: null, ...overrides })
+const inquiry = (overrides: Record<string, unknown> = {}) => ({ id: 'inquiry-1', firstName: 'Ava', lastName: 'Ng', phone: '0400000000', email: null, source: 'Phone', provenance: 'Referral', participantId: null, hasAddress: true, ...overrides })
 function page() {
   return render(
     <MemoryRouter initialEntries={['/inquiries']}>
@@ -155,5 +155,80 @@ describe('InquiriesPage lifecycle handoff', () => {
     // provenance is truncated and carries the full text for hover; capped at 8rem (since the row menu joined Actions) so the table, Intake on two lines and one-row Actions included, fits at 1440
     const prov = screen.getByTitle(LONG_PROVENANCE)
     expect(prov).toHaveClass('truncate', 'max-w-[8rem]')
+  })
+})
+
+describe('InquiriesPage: the participant and the main contact (spec 2026-10-16 redesign)', () => {
+  const addressRefusal = Object.assign(new Error('Request failed with status code 400'), {
+    isAxiosError: true, response: { status: 400, data: { status: 400, errors: { addressStreet: ['Add the street to start intake.'] } } },
+  })
+
+  it('heads the name column "Participant" (D6)', () => {
+    mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
+    page()
+    expect(screen.getByRole('columnheader', { name: /^Participant/ })).toBeInTheDocument()
+  })
+
+  it('the Contact cell: a named contact, a self contact, a legacy row and an empty one', () => {
+    mocks.inquiries.mockReturnValue({ data: [
+      inquiry({ id: 'a', firstName: 'Ari', contactFirstName: 'Sarah', contactLastName: 'Walsh', phone: '0412 555 061' }),
+      inquiry({ id: 'b', firstName: 'Grace', contactIsParticipant: true, phone: null, email: 'grace@example.com' }),
+      inquiry({ id: 'c', firstName: 'Noah', phone: '0412 555 010' }),
+      inquiry({ id: 'd', firstName: 'Jo', lastName: '', phone: null, email: null }),
+    ], isLoading: false })
+    page()
+    expect(screen.getByTitle('Sarah Walsh')).toBeInTheDocument()
+    expect(screen.getByTitle('0412 555 061')).toHaveClass('truncate')
+    expect(screen.getByTitle('Their own contact')).toBeInTheDocument()
+    expect(screen.getByTitle('grace@example.com')).toBeInTheDocument()
+    expect(screen.getByTitle('0412 555 010')).toBeInTheDocument()
+    expect(screen.getByTitle('No contact details')).toBeInTheDocument()
+    expect(screen.getByText('Jo')).toBeInTheDocument()   // Review Focus 5: no trailing space
+  })
+
+  it("search finds a row by the contact's last name", async () => {
+    mocks.inquiries.mockReturnValue({ data: [
+      inquiry({ id: 'a', firstName: 'Ari', lastName: 'Walsh', contactFirstName: 'Sarah', contactLastName: 'Montgomery' }),
+      inquiry({ id: 'b', firstName: 'Dana', lastName: 'Reyes' }),
+    ], isLoading: false })
+    const user = userEvent.setup()
+    page()
+    await user.type(screen.getByRole('textbox', { name: /search enquiries/i }), 'montgomery')
+    expect(screen.getByText('Ari Walsh')).toBeInTheDocument()
+    expect(screen.queryByText('Dana Reyes')).not.toBeInTheDocument()
+  })
+
+  it('Start intake without the address is aria-disabled, described by a reason link to the address, and does nothing; with it, it is enabled', async () => {
+    mocks.inquiries.mockReturnValue({ data: [inquiry({ hasAddress: false })], isLoading: false })
+    const user = userEvent.setup()
+    const { unmount } = page()
+    const start = screen.getByRole('button', { name: /^Start intake/ })
+    expect(start).toHaveAttribute('aria-disabled', 'true')
+    const reason = screen.getByRole('link', { name: 'Add an address to start intake' })
+    expect(reason).toHaveAttribute('href', '/participants/new-inquiry?id=inquiry-1&focus=address')
+    expect(start).toHaveAttribute('aria-describedby', reason.id)
+    await user.click(start)
+    expect(mocks.convert).not.toHaveBeenCalled()
+    unmount()
+
+    mocks.inquiries.mockReturnValue({ data: [inquiry({ hasAddress: true })], isLoading: false })
+    page()
+    expect(screen.getByRole('button', { name: /^Start intake/ })).not.toHaveAttribute('aria-disabled')
+    expect(screen.queryByRole('link', { name: /to start intake/ })).not.toBeInTheDocument()
+  })
+
+  it("contactNeedsName gives the name reason, to the contact's fields", () => {
+    mocks.inquiries.mockReturnValue({ data: [inquiry({ contactNeedsName: true })], isLoading: false })
+    page()
+    expect(screen.getByRole('link', { name: "Add the main contact's name to start intake" })).toHaveAttribute('href', '/participants/new-inquiry?id=inquiry-1&focus=contact')
+  })
+
+  it("a 400 for the address says what Start intake needs, in the participant's name", async () => {
+    mocks.inquiries.mockReturnValue({ data: [inquiry({ firstName: 'Ari', lastName: 'Walsh' })], isLoading: false })
+    mocks.convert.mockImplementation((_data: unknown, options: { onError: (e: unknown) => void }) => options.onError(addressRefusal))
+    const user = userEvent.setup()
+    page()
+    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent("Add Ari Walsh's full address before starting intake: street, suburb, state and postcode.")
   })
 })

@@ -1,14 +1,25 @@
-import type { ContactRoleType } from './enums'
+import type { ContactRoleType, PlanType } from './enums'
 
 export type InquirySource = 'Web' | 'Email' | 'Phone'
 
 export interface ParticipantInquiryDto {
   id: string
   participantId?: string | null
+  /** The PARTICIPANT's name (spec 2026-10-16 redesign). `lastName` is "" when none: join names with `fullName`, never by hand. */
   firstName: string
   lastName: string
+  /** The MAIN CONTACT's phone and email, or the participant's own when `contactIsParticipant`. */
   phone?: string | null
   email?: string | null
+  /** The participant is their own contact: no contact name, and the phone and email are theirs. Missing counts as false. */
+  contactIsParticipant?: boolean
+  /** Start intake's gates. A missing one counts as false (`hasAddress`: blocked). */
+  hasAddress?: boolean
+  contactNeedsName?: boolean
+  /** The main contact's names and relationship: null for roles without lifecycle rights. */
+  contactFirstName?: string | null
+  contactLastName?: string | null
+  contactRelationship?: string | null
   /** Empty for a direct intake (see `isDirectIntake`): no enquiry was captured, so there is no source. */
   source: InquirySource | ''
   provenance?: string | null
@@ -99,16 +110,40 @@ export interface IntakeVisitDto {
   staffName: string
   confirmedAt: string | null
   timeZoneId: string
+  /** Start intake's gates: the full address is in; the main contact still needs a name. */
+  hasAddress: boolean
+  contactNeedsName: boolean
 }
 
-export interface CreateParticipantInquiryDto {
+/** The participant details an enquiry may hold (owner decision 3), all optional. Dates are yyyy-MM-dd. */
+export interface InquiryDetails {
+  dateOfBirth?: string | null
+  /** 9 digits, sent and stored without spaces. */
+  ndisNumber?: string | null
+  addressStreet?: string | null
+  addressSuburb?: string | null
+  addressState?: string | null
+  addressPostcode?: string | null
+  planType?: PlanType | null
+  planStartDate?: string | null
+  planEndDate?: string | null
+}
+
+/** A converted enquiry's PUT omits every field after `provenance` (D7): the server ignores them once intake has started. */
+export interface CreateParticipantInquiryDto extends InquiryDetails {
   firstName: string
-  lastName: string
-  /** A field left blank is sent as null, never "": the API rejects an empty string as a bad email address. */
+  lastName: string | null
+  /** A field left blank is sent as null, never "": the API rejects an empty string as a bad email address (and a date as `""`). */
   phone?: string | null
   email?: string | null
   source: InquirySource
   provenance?: string | null
+  contactFirstName?: string | null
+  contactLastName?: string | null
+  contactRelationship?: string | null
+  contactRole?: ContactRoleType | null
+  /** Ticked: the four contact fields are sent null, and the phone and email are the participant's own. */
+  contactIsParticipant?: boolean
   /** Pending contacts, saved in the enquiry's own save. On PUT a list replaces the stored ones; left out means unchanged. */
   contacts?: InquiryContactDto[]
 }
@@ -128,8 +163,10 @@ export interface InquiryContactDto {
 }
 
 /** GET /inquiries/{id}: the enquiry with its pending contacts, for the enquiry form. The list (GET /inquiries) never carries them. */
-export interface ParticipantInquiryDetailDto extends ParticipantInquiryDto {
+export interface ParticipantInquiryDetailDto extends ParticipantInquiryDto, InquiryDetails {
   contacts: InquiryContactDto[]
+  /** The main contact's role (L2: the detail only, never the list). */
+  contactRole?: ContactRoleType | null
 }
 
 /** One onboarding checklist item. `key` names the item and its fix: profile (Edit profile), serviceNeeds (the agreement draft), agreement (Record it), funding (the Funding tab). */

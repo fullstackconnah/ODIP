@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntakeBookingPanel } from './IntakeBookingPanel'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
@@ -22,7 +22,7 @@ vi.mock('@/api/hooks', () => ({
 const START = '2030-10-15T23:00:00Z'
 const newRow = (overrides: Partial<ParticipantInquiryDto> = {}): ParticipantInquiryDto => ({
   id: 'inq-1', firstName: 'Noah', lastName: 'Fitzgerald', source: 'Phone', createdAt: '2026-09-28T01:10:00Z',
-  email: 'priya.nair@example.com.au', timeZoneId: 'Australia/Sydney', ...overrides,
+  email: 'priya.nair@example.com.au', contactFirstName: 'Sarah', contactLastName: 'Walsh', timeZoneId: 'Australia/Sydney', ...overrides,
 })
 const bookedRow = (overrides: Partial<ParticipantInquiryDto> = {}) => newRow({
   intakeStartsAt: START, intakeDurationMinutes: 90, intakeLocation: '12 Smith St', intakeStaffUserId: 'sam', intakeStaffFirstName: 'Sam',
@@ -66,7 +66,7 @@ describe('IntakeBookingPanel: a new booking', () => {
       id: 'inq-1',
       data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null },
     })
-    expect(await screen.findByText("Invite not sent: email isn't set up yet. The visit is still booked, so let Noah know another way.")).toBeInTheDocument()
+    expect(await screen.findByText("Invite not sent: email isn't set up yet. The visit is still booked, so let Sarah know another way.")).toBeInTheDocument()
     expect(screen.getByText("Intake visit booked. Invite not sent: email isn't set up yet.")).toBeInTheDocument() // the live region
     expect(screen.queryByRole('button', { name: 'Send invite' })).not.toBeInTheDocument()
   })
@@ -108,23 +108,53 @@ describe('IntakeBookingPanel: a new booking', () => {
     expect(screen.getByLabelText(/^Where/)).toHaveValue('Library')
   })
 
-  it('asks for the email when the enquiry has none, and sends it with the booking', async () => {
+  // L7: the email is optional. Without one the visit is booked and nobody is emailed.
+  it('with no email the field is optional, the button is Book visit, and the body has no contactEmail', async () => {
     const user = userEvent.setup()
-    mocks.save.mockResolvedValue(bookedRow({ email: 'noah@example.com' }))
+    mocks.save.mockResolvedValue(bookedRow({ email: null, intakeInviteSentAt: null }))
     panel(newRow({ email: null }))
-    await waitFor(() => expect(screen.getByLabelText(/^Noah's email/)).toHaveFocus())
+    const email = screen.getByLabelText(/^Sarah's email/)
+    await waitFor(() => expect(email).toHaveFocus())
+    expect(email).not.toHaveAttribute('required')
+    expect(screen.getByText('Optional. With it, we send the invite and save the address to the enquiry.')).toBeInTheDocument()
+    expect(screen.getByText('Pick a time. With no email, the visit is booked without an invite.')).toBeInTheDocument()
     await fillNewBooking(user)
 
-    await user.click(screen.getByRole('button', { name: 'Send invite' }))
-    expect(screen.getByText("Add Noah's email to send the invite.")).toBeInTheDocument()
-    expect(mocks.save).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Book visit' }))
+    expect(mocks.save).toHaveBeenCalledWith({ id: 'inq-1', data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null } })
+    expect(await screen.findByText('Intake visit booked. No invite sent: Sarah has no email.')).toBeInTheDocument() // the live region
+  })
 
-    await user.type(screen.getByLabelText(/^Noah's email/), 'noah@example.com')
+  it('with an email typed the button is Send invite, and it is sent with the booking', async () => {
+    const user = userEvent.setup()
+    mocks.save.mockResolvedValue(bookedRow({ email: 'sarah@example.com' }))
+    panel(newRow({ email: null }))
+    await fillNewBooking(user)
+    await user.type(screen.getByLabelText(/^Sarah's email/), 'sarah@example.com')
     await user.click(screen.getByRole('button', { name: 'Send invite' }))
     expect(mocks.save).toHaveBeenCalledWith({
       id: 'inq-1',
-      data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, contactEmail: 'noah@example.com' },
+      data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, contactEmail: 'sarah@example.com' },
     })
+  })
+
+  it('labels the email by who it is for, or "Main contact\'s email" with no name; a converted row has no email field', () => {
+    panel(newRow({ email: null, contactFirstName: null, contactLastName: null }))
+    expect(screen.getByLabelText(/^Main contact's email/)).toBeInTheDocument()
+    cleanup()
+    panel(newRow({ email: null, participantId: 'p-1' }))
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
+  })
+
+  it('a stored email that cannot take the invite: the server\'s sentence in the refusal', async () => {
+    const user = userEvent.setup()
+    const sentence = "This email can't take the invite. Check it on the enquiry, or clear it there to book without one."
+    mocks.save.mockRejectedValue({ isAxiosError: true, response: { status: 400, data: { errors: { contactEmail: [sentence] } } } })
+    panel(newRow({ email: 'a b@c.d' }))
+    await fillNewBooking(user)
+    await user.click(screen.getByRole('button', { name: 'Send invite' }))
+    expect(await screen.findByText("Couldn't book the visit")).toBeInTheDocument()
+    expect(screen.getAllByText(sentence).length).toBeGreaterThan(0)
   })
 
   // A double click, or a second press while the first is still sending, must not send a second invite.
@@ -148,7 +178,7 @@ describe('IntakeBookingPanel: the booked view', () => {
     panel(bookedRow())
 
     expect(screen.getByText(/^Invite sent to priya.nair@example.com.au on Wed 14 Oct( 2026)?, 2:05 pm\.$/)).toBeInTheDocument()
-    expect(screen.getByText('Not confirmed yet. Mark it when Noah replies or calls.')).toBeInTheDocument()
+    expect(screen.getByText('Not confirmed yet. Mark it when Sarah replies or calls.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Save notes|Send updated invite/ })).not.toBeInTheDocument() // nothing changed yet
     await user.clear(screen.getByLabelText(/^Notes for your team/))
     await user.type(screen.getByLabelText(/^Notes for your team/), 'Gate code 4321')
@@ -159,6 +189,16 @@ describe('IntakeBookingPanel: the booked view', () => {
       data: { startsAt: START, durationMinutes: 90, location: '12 Smith St', staffUserId: 'sam', notes: 'Gate code 4321' },
     })
     expect(await screen.findByText('Notes saved.')).toBeInTheDocument()
+  })
+
+  it('booked with no email: the result line says so, there is no Send again, and a change is Save changes', async () => {
+    const user = userEvent.setup()
+    panel(bookedRow({ email: null, intakeInviteSentAt: null }))
+    expect(screen.getByText('No invite sent: Sarah has no email. Let them know another way.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Send again' })).not.toBeInTheDocument()
+    await user.clear(screen.getByLabelText(/^Where/))
+    await user.type(screen.getByLabelText(/^Where/), 'Library')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
   })
 
   it('offers Send updated invite once something the invite says has changed', async () => {
@@ -178,7 +218,7 @@ describe('IntakeBookingPanel: the booked view', () => {
 
     expect(screen.queryByRole('button', { name: 'Send again' })).not.toBeInTheDocument() // nowhere to send it yet
     expect(screen.queryByRole('button', { name: /Send updated invite|Save notes/ })).not.toBeInTheDocument()
-    await user.type(screen.getByLabelText(/^Noah's email/), 'noah@example.com')
+    await user.type(screen.getByLabelText(/^Sarah's email/), 'noah@example.com')
     await user.click(screen.getByRole('button', { name: 'Send updated invite' }))
 
     expect(mocks.save).toHaveBeenCalledWith({

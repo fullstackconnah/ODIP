@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useId, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useConvertParticipantInquiry } from '@/api/hooks'
 import type { IntakeVisitDto } from '@/api/types/inquiries'
 import { Button } from '@/components/Button'
+import { convertRefusal, fullName, startIntakeReason } from '@/lib/inquiryDetails'
 import { visitStage } from '@/lib/intakeBooking'
 import { usePermissions } from '@/lib/permissions'
 
@@ -10,33 +11,49 @@ import { usePermissions } from '@/lib/permissions'
  * Start intake (or Resume intake) from a schedule entry, with today's behaviour: convert the enquiry, then open the intake form prefilled. It shows
  * nothing once the intake is complete, and nothing to a role that cannot convert an enquiry or fill the intake (a staff member moved to support
  * worker keeps the visit on My shifts). "Starting…" while busy, aria-disabled so focus stays; a failure is an alert line under the button.
+ * Until the enquiry has its full address and a named main contact (L5, D1) the button stays, aria-disabled and described by why, with a link to fix it.
  */
 export function StartIntakeButton({ visit, size = 'md' }: { visit: IntakeVisitDto; size?: 'sm' | 'md' }) {
   const navigate = useNavigate()
   const convert = useConvertParticipantInquiry()
   const { canManageParticipantLifecycle } = usePermissions()
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+  const reasonId = useId()
   const stage = visitStage(visit)
   if (stage === 'complete' || !canManageParticipantLifecycle) return null
-  const name = `${visit.firstName} ${visit.lastName}`
+  const name = fullName(visit.firstName, visit.lastName)
+  const reason = stage === 'new' ? startIntakeReason({ id: visit.inquiryId, hasAddress: visit.hasAddress, contactNeedsName: visit.contactNeedsName }) : null
   const start = () => {
-    if (convert.isPending) return
-    setFailed(false)
+    if (convert.isPending || reason) return
+    setFailed(null)
     if (stage === 'draftintake') {
       navigate(`/participants/${visit.participantId}/intake`)
       return
     }
     convert.mutate({ id: visit.inquiryId }, {
       onSuccess: inquiry => { if (inquiry.participantId) navigate(`/participants/${inquiry.participantId}/intake`) },
-      onError: () => setFailed(true),
+      onError: err => setFailed(convertRefusal(err, name) ?? "Couldn't start the intake. Try again."),
     })
   }
   return (
     <div>
-      <Button variant="secondary" size={size} onClick={start} aria-disabled={convert.isPending || undefined} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
+      <Button
+        variant="secondary"
+        size={size}
+        onClick={start}
+        aria-disabled={convert.isPending || !!reason || undefined}
+        aria-describedby={reason ? reasonId : undefined}
+        className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+      >
         {convert.isPending ? 'Starting…' : stage === 'draftintake' ? 'Resume intake' : 'Start intake'}<span className="sr-only"> for {name}</span>
       </Button>
-      {failed && <p role="alert" className="mt-1.5 text-sm text-[var(--color-destructive)]">Couldn't start the intake. Try again.</p>}
+      {reason && (
+        <p id={reasonId} className="mt-1.5 text-sm text-[var(--color-muted-foreground)]">
+          {reason.address ? `Start intake needs ${visit.firstName}'s full address.` : "Start intake needs the main contact's name."}{' '}
+          <Link to={reason.to} className="underline underline-offset-2 hover:text-[var(--color-primary)]">{reason.text}</Link>
+        </p>
+      )}
+      {failed && <p role="alert" className="mt-1.5 text-sm text-[var(--color-destructive)]">{failed}</p>}
     </div>
   )
 }

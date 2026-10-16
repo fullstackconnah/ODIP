@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ClipboardPlus, MoreVertical, Search } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -17,9 +17,11 @@ import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase } from '@/lib/queryPhase'
-import { cancelNotice, DEFAULT_DURATION, FALLBACK_ZONE, isPastVisit, visitDay, type EnquiryNotice } from '@/lib/intakeBooking'
+import { cancelNotice, DEFAULT_DURATION, FALLBACK_ZONE, invitee, isPastVisit, visitDay, type EnquiryNotice } from '@/lib/intakeBooking'
+import { convertRefusal, fullName, startIntakeReason } from '@/lib/inquiryDetails'
 import { CLOSE_OUTCOME_LABELS, closedNotice, reopenedNotice } from '@/lib/inquiryClose'
 import { CloseInquiryDialog } from './inquiries/CloseInquiryDialog'
+import { ContactCell } from './inquiries/ContactCell'
 import { ReopenInquiryDialog } from './inquiries/ReopenInquiryDialog'
 import { IntakeBookingPanel } from './inquiries/IntakeBookingPanel'
 import { IntakeCell } from './inquiries/IntakeCell'
@@ -43,6 +45,9 @@ const isOpen = (stage: Stage) => stage === 'new' || stage === 'draftintake'
 
 /** A direct intake has no enquiry behind it, so no source: the cell says how it started instead of showing nothing. */
 const sourceLabel = (row: ParticipantInquiryDto) => (row.isDirectIntake ? 'Direct intake' : row.source)
+
+const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
+const REASON_LINK = 'self-start text-xs text-[var(--color-muted-foreground)] underline underline-offset-2 hover:text-[var(--color-primary)]'
 
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
@@ -112,7 +117,7 @@ function useInquiriesScreen() {
     focusIntake.current = null
     intakeControl(id)?.focus()
   })
-  const nameOf = (row: ParticipantInquiryDto) => `${row.firstName} ${row.lastName}`
+  const nameOf = (row: ParticipantInquiryDto) => fullName(row.firstName, row.lastName)
   const bookingRow = booking ? inquiries.find(r => r.id === booking.id) ?? null : null
   const openBooking = (row: ParticipantInquiryDto, focusDate = false) => setBooking({ id: row.id, focusDate })
   const closeBooking = () => {
@@ -130,7 +135,7 @@ function useInquiriesScreen() {
     }
   }
   const onCancelled = (row: ParticipantInquiryDto, email: CancelIntakeBookingResultDto['cancellationEmail']) => {
-    const notice = cancelNotice(email, nameOf(row))
+    const notice = cancelNotice(email, invitee(row))
     setCancelling(null)
     setBooking(null)
     notify(notice.tone, notice.title, notice.message, row.id)
@@ -186,15 +191,16 @@ function useInquiriesScreen() {
     </div>
   )
   const editExisting = (row: ParticipantInquiryDto) => navigate(`/participants/new-inquiry?id=${encodeURIComponent(row.id)}`)
-  const startIntake = (id: string) => {
+  const startIntake = (row: ParticipantInquiryDto) => {
     setError(null)
     convert.mutate(
-      { id },
+      { id: row.id },
       {
         onSuccess: (inquiry: ParticipantInquiryDto) => {
           if (inquiry.participantId) navigate(`/participants/${inquiry.participantId}/intake`)
         },
-        onError: err => setError(extractErrorMessage(err, 'Could not start intake. Please try again.')),
+        // The address or the contact's name went after the list loaded (L5, D1): say which, not "could not start".
+        onError: err => setError(convertRefusal(err, nameOf(row)) ?? extractErrorMessage(err, 'Could not start intake. Please try again.')),
       },
     )
   }
@@ -210,8 +216,8 @@ function useInquiriesScreen() {
     const term = search.trim().toLowerCase()
     const fields = view === 'closed'
       // The note only where it shows: the server withholds it from roles without lifecycle rights.
-      ? [row.firstName, row.lastName, row.phone, row.email, row.closeOutcome && CLOSE_OUTCOME_LABELS[row.closeOutcome], row.closeNote]
-      : [row.firstName, row.lastName, row.phone, row.email, sourceLabel(row), row.provenance]
+      ? [row.firstName, row.lastName, row.contactFirstName, row.contactLastName, row.phone, row.email, row.closeOutcome && CLOSE_OUTCOME_LABELS[row.closeOutcome], row.closeNote]
+      : [row.firstName, row.lastName, row.contactFirstName, row.contactLastName, row.phone, row.email, sourceLabel(row), row.provenance]
     return fields.filter(Boolean).some(field => String(field).toLowerCase().includes(term))
   })
 
@@ -222,13 +228,24 @@ function useInquiriesScreen() {
   // The one next step that is real for each stage. Resuming an intake that is complete led to the L2-03 data loss, which is why such a row is not listed.
   // A row opens where its own buttons lead: a New enquiry's form, or a Draft intake's intake (starting an intake converts, so the row never does that).
   const openRow = (row: ParticipantInquiryDto) => stageOf(row) === 'new' ? editExisting(row) : navigate(`/participants/${row.participantId}/intake`)
-  const primaryAction = (row: ParticipantInquiryDto) => stageOf(row) === 'new'
-    ? <Button size="sm" disabled={convert.isPending} onClick={() => startIntake(row.id)}>Start intake<span className="sr-only"> for {nameOf(row)}</span></Button>
-    : <Button size="sm" onClick={() => navigate(`/participants/${row.participantId}/intake`)}>Resume intake<span className="sr-only"> for {nameOf(row)}</span></Button>
+  // Start intake waits for the full address and a named main contact (L5, D1): the button stays, focusable and described by its reason, and does nothing.
+  const reasonOf = (row: ParticipantInquiryDto) => (stageOf(row) === 'new' && !row.isDirectIntake ? startIntakeReason(row) : null)
+  const primaryAction = (row: ParticipantInquiryDto) => {
+    if (stageOf(row) !== 'new') return <Button size="sm" onClick={() => navigate(`/participants/${row.participantId}/intake`)}>Resume intake<span className="sr-only"> for {nameOf(row)}</span></Button>
+    const reason = reasonOf(row)
+    return reason
+      ? <Button size="sm" aria-disabled="true" aria-describedby={`start-reason-${row.id}`} className={DISABLED_LOOK} onClick={() => {}}>Start intake<span className="sr-only"> for {nameOf(row)}</span></Button>
+      : <Button size="sm" disabled={convert.isPending} onClick={() => startIntake(row)}>Start intake<span className="sr-only"> for {nameOf(row)}</span></Button>
+  }
+  // The reason is a link to the field that fixes it, on its own line under the buttons (SHAPE section 12). DataTable ignores clicks on links.
+  const reasonLink = (row: ParticipantInquiryDto) => {
+    const reason = reasonOf(row)
+    return reason && <Link id={`start-reason-${row.id}`} to={reason.to} className={REASON_LINK}>{reason.text}</Link>
+  }
 
   const columns: Column<ParticipantInquiryDto>[] = [
-    { key: 'firstName', header: 'Name', sortable: true, render: row => `${row.firstName} ${row.lastName}` },
-    { key: 'phone', header: 'Contact', render: row => row.phone || row.email || 'No contact details' },
+    { key: 'firstName', header: 'Participant', sortable: true, render: row => nameOf(row) },
+    { key: 'phone', header: 'Contact', render: row => <ContactCell row={row} /> },
     { key: 'source', header: 'Source', sortable: true, render: sourceLabel },
     {
       key: 'provenance',
@@ -260,17 +277,20 @@ function useInquiriesScreen() {
     {
       key: 'id', header: 'Actions', type: 'custom', pin: 'end',
       render: row => canManageParticipantLifecycle ? (
-        <div className={`flex flex-wrap md:flex-nowrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
-          {primaryAction(row)}
-          {/* A direct intake has no enquiry record, so there is nothing to edit as one. On a booked row's phone card, Edit enquiry moves into More. */}
-          {!row.isDirectIntake && (
-            <Button size="sm" variant="secondary" className={row.intakeStartsAt ? 'max-md:hidden' : undefined} onClick={() => editExisting(row)}>
-              Edit enquiry<span className="sr-only"> for {nameOf(row)}</span>
-            </Button>
-          )}
-          {/* A booked row's phone menu holds its visit actions too; elsewhere the menu holds Close enquiry alone. */}
-          {!row.isDirectIntake && row.intakeStartsAt && moreMenu(row, menuItems(row), 'md:hidden')}
-          {canClose(row) && moreMenu(row, closeItem(row), row.intakeStartsAt ? 'max-md:hidden' : undefined)}
+        <div className="flex flex-col gap-1">
+          <div className={`flex flex-wrap md:flex-nowrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
+            {primaryAction(row)}
+            {/* A direct intake has no enquiry record, so there is nothing to edit as one. On a booked row's phone card, Edit enquiry moves into More. */}
+            {!row.isDirectIntake && (
+              <Button size="sm" variant="secondary" className={row.intakeStartsAt ? 'max-md:hidden' : undefined} onClick={() => editExisting(row)}>
+                Edit enquiry<span className="sr-only"> for {nameOf(row)}</span>
+              </Button>
+            )}
+            {/* A booked row's phone menu holds its visit actions too; elsewhere the menu holds Close enquiry alone. */}
+            {!row.isDirectIntake && row.intakeStartsAt && moreMenu(row, menuItems(row), 'md:hidden')}
+            {canClose(row) && moreMenu(row, closeItem(row), row.intakeStartsAt ? 'max-md:hidden' : undefined)}
+          </div>
+          {reasonLink(row)}
         </div>
       ) : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span>,
     },
@@ -285,8 +305,8 @@ function useInquiriesScreen() {
       : <span>—</span>),
   }
   const closedColumns: Column<ParticipantInquiryDto>[] = [
-    { key: 'firstName', header: 'Name', sortable: true, mobile: 'primary', render: row => nameOf(row) },
-    { key: 'phone', header: 'Contact', render: row => row.phone || row.email || 'No contact details' },
+    { key: 'firstName', header: 'Participant', sortable: true, mobile: 'primary', render: row => nameOf(row) },
+    { key: 'phone', header: 'Contact', render: row => <ContactCell row={row} /> },
     { key: 'closeOutcome', header: 'Outcome', mobile: 'meta', render: row => (row.closeOutcome ? CLOSE_OUTCOME_LABELS[row.closeOutcome] : '') },
     ...(canManageParticipantLifecycle ? [noteColumn] : []),
     {

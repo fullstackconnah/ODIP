@@ -1,6 +1,6 @@
 // The enquiry form's pending contacts (spec 2026-10-16, D3): rows as typed, what goes on the wire, and the refusals by row. Pure and JSX-free.
-import { CONTACT_ROLE_TYPES, type ContactRoleType } from '@/api/types/enums'
-import { availableContactRoleTypes } from '@/api/types/contacts'
+import { CONTACT_ROLE_TYPES, type ContactRoleType, type PlanType } from '@/api/types/enums'
+import { availableContactRoleTypes, contactRoleGateError } from '@/api/types/contacts'
 import type { InquiryContactDto } from '@/api/types/inquiries'
 import { fieldErrors } from '@/lib/fieldErrors'
 
@@ -24,8 +24,14 @@ export const contactRowOf = (dto: InquiryContactDto): ContactRow => ({
   email: dto.email ?? '', notes: dto.notes ?? '',
 })
 
-/** "Add the enquirer as a contact" (lead decision 1): the enquiry's phone and email only, because its name is usually the participant's. */
-export const enquirerContact = ({ phone, email }: { phone: string; email: string }): ContactRow => ({ ...blankContact(), phone, email })
+/**
+ * A Role select's options, live from the enquiry's details (L4): the pending roles the participant's contact rules allow for this plan type and date of
+ * birth. A role already chosen that the rules now refuse stays listed, in its place, so it is never swapped silently; Save then refuses it (SHAPE section 4).
+ */
+export function pendingRoleOptions(planType: PlanType | null, dateOfBirth: string | null, selected?: ContactRoleType): ContactRoleType[] {
+  const allowed = availableContactRoleTypes(PENDING_ROLES, planType, dateOfBirth)
+  return selected && !allowed.includes(selected) ? PENDING_ROLES.filter(r => r === selected || allowed.includes(r)) : allowed
+}
 
 /** Nothing typed in the six visible fields. The default role alone does not make a row worth sending, as the wizard's draft rule. */
 export const isBlankContact = (row: ContactRow) =>
@@ -40,12 +46,17 @@ export const contactsPayload = (rows: ContactRow[]): InquiryContactDto[] =>
     email: orNull(r.email), notes: orNull(r.notes),
   }))
 
-/** The client's own check, before anything is sent: a row with anything in it needs both names (a Person has both). */
-export function contactRowErrors(rows: ContactRow[]): ContactFieldErrors {
+/**
+ * The client's own check, before anything is sent: a row with anything in it needs both names (a Person has both), and a role the contact rules allow
+ * for the enquiry's plan type and date of birth (`gate`), as the server checks it at save.
+ */
+export function contactRowErrors(rows: ContactRow[], gate?: { planType?: PlanType | null; dateOfBirth?: string | null }): ContactFieldErrors {
   const errors: ContactFieldErrors = {}
   for (const r of rows) {
     if (isBlankContact(r)) continue
     const own: Partial<Record<ContactField, string>> = {}
+    const refused = gate && contactRoleGateError(r.role, gate.planType || null, gate.dateOfBirth || null)
+    if (refused) own.role = refused
     if (!r.firstName.trim()) own.firstName = 'Add their first name.'
     if (!r.lastName.trim()) own.lastName = 'Add their last name.'
     if (Object.keys(own).length > 0) errors[r.key] = own
