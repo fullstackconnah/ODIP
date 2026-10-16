@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Odip.Api.Controllers;
@@ -10,6 +12,7 @@ using Odip.Application.DTOs;
 using Odip.Application.EarlyAccess;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.EarlyAccess;
 using Xunit;
@@ -365,6 +368,74 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             var row = await check.EarlyAccessRequests.SingleAsync(e => e.Email == email);
             Assert.Equal(contenders, row.RequestCount);
         }
+    }
+
+    // ── The 12-month purge (EarlyAccessPurgeBackgroundService) ──
+
+    private EarlyAccessPurgeBackgroundService Purger(CapturingLogger<EarlyAccessPurgeBackgroundService>? log = null)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<OdipDbContext>(o => o.UseNpgsql(_pg.ConnectionString));
+        return new EarlyAccessPurgeBackgroundService(
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), log ?? new CapturingLogger<EarlyAccessPurgeBackgroundService>());
+    }
+
+    private async Task<EarlyAccessRequest> SeedRowAsync(string tag, DateTime createdUtc, DateTime lastSentUtc, int count = 1)
+    {
+        var row = Row(NewEmail(tag), name: "Purge " + tag);
+        row.CreatedAtUtc = createdUtc;
+        row.LastRequestedAtUtc = lastSentUtc;
+        row.RequestCount = count;
+        await using var db = _pg.CreateContext();
+        db.EarlyAccessRequests.Add(row);
+        await db.SaveChangesAsync();
+        return row;
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_DeletesSignupsLastSentMoreThan12MonthsAgo_AndKeepsTheRest()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var now = DateTime.UtcNow;
+        var expired = await SeedRowAsync("expired", now.AddMonths(-12).AddMinutes(-1), now.AddMonths(-12).AddMinutes(-1));
+        var justInside = await SeedRowAsync("inside", now.AddMonths(-12).AddMinutes(1), now.AddMonths(-12).AddMinutes(1));
+        var refreshed = await SeedRowAsync("refreshed", now.AddMonths(-24), now.AddDays(-7), count: 2);
+        var log = new CapturingLogger<EarlyAccessPurgeBackgroundService>();
+
+        var deleted = await Purger(log).PurgeExpiredAsync(now, CancellationToken.None);
+
+        Assert.True(deleted >= 1); // the class shares one database
+        await using var check = _pg.CreateContext();
+        var ids = new[] { expired.Id, justInside.Id, refreshed.Id };
+        var remaining = await check.EarlyAccessRequests.Where(e => ids.Contains(e.Id)).Select(e => e.Id).ToListAsync();
+        Assert.Equal(new[] { justInside.Id, refreshed.Id }.OrderBy(i => i), remaining.OrderBy(i => i));
+
+        var entry = Assert.Single(log.Entries, e => e.Level == LogLevel.Information);
+        Assert.Contains(deleted.ToString(System.Globalization.CultureInfo.InvariantCulture), entry.Message);
+        Assert.DoesNotContain("@", entry.Message);
+        Assert.DoesNotContain(expired.Name, entry.Message);
+        Assert.DoesNotContain(expired.Email, entry.Message);
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_RunsWhenTheServiceStarts()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var old = DateTime.UtcNow.AddMonths(-13);
+        var expired = await SeedRowAsync("at-start", old, old);
+        var purger = Purger();
+
+        await purger.StartAsync(CancellationToken.None);
+        var gone = false;
+        for (var waited = 0; waited < 10_000 && !gone; waited += 100)
+        {
+            await using var check = _pg.CreateContext();
+            gone = !await check.EarlyAccessRequests.AnyAsync(e => e.Id == expired.Id);
+            if (!gone) await Task.Delay(100);
+        }
+        await purger.StopAsync(CancellationToken.None);
+
+        Assert.True(gone, "the first purge should run at start, not a day later");
     }
 
     // ── SuperAdmin Delete (AdminEarlyAccessController) against the RequestCount concurrency token ──
