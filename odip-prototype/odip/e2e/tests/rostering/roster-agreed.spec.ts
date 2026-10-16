@@ -45,7 +45,7 @@ test('agreed shifts wait for approval, then fill from the plus, and a person dro
 
   // 1. Not approved yet: the notice names the participant and links to the agreement; none of its shifts are on the board.
   await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
-  const notice = page.getByText(/^Shifts from a service agreement appear here once it's approved for rostering\./);
+  const notice = page.getByText(/^Shifts from a service agreement appear here once it's approved for rostering and the week is started\./);
   await expect(notice).toContainText(`Pw ${participant.token} v1`);
   await expect(page.getByRole('link', { name: `Pw ${participant.token} v1: open the service agreement` })).toHaveAttribute('href', `/participants/${participant.id}/agreement-draft`);
   expect(await shiftsOf(participant.id)).toEqual([]);
