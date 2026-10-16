@@ -47,7 +47,8 @@ export function IntakeVisitCard({
 }) {
   const result = booked && row ? resultLine(row, zone) : null
   const inviteTo = email
-    ? <p className="text-sm">{booked ? 'Saving emails an updated invite to ' : 'Saving books the visit and emails an invite with a calendar file to '}<span className="font-medium [overflow-wrap:anywhere]">{email}</span>.</p>
+    // SHAPE 3c: on a booked visit the update line is muted; a new booking's line is the card's main statement.
+    ? <p className={booked ? MUTED : 'text-sm'}>{booked ? 'Saving emails an updated invite to ' : 'Saving books the visit and emails an invite with a calendar file to '}<span className="font-medium [overflow-wrap:anywhere]">{email}</span>.</p>
     : <p className={MUTED}>Add an email above. The invite goes there.</p>
 
   return (
