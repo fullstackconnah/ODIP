@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -105,8 +106,13 @@ public class ParticipantInquiriesController : ControllerBase
     {
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
+        var errors = ContactErrors(dto.Contacts);
+        if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
         var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = dto.FirstName.Trim(), LastName = dto.LastName.Trim(), Phone = Blank(dto.Phone), Email = Blank(dto.Email), Source = dto.Source, Provenance = Blank(dto.Provenance) };
-        _db.ParticipantInquiries.Add(inquiry); await _db.SaveChangesAsync(ct); return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
+        _db.ParticipantInquiries.Add(inquiry);
+        if (dto.Contacts is { } contacts) AddContacts(inquiry, contacts);
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<ParticipantInquiryDto>.Ok(await FullDtoAsync(inquiry, ct)));
     }
 
     [HttpPut("{id:guid}")]
@@ -116,9 +122,20 @@ public class ParticipantInquiriesController : ControllerBase
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && (_tenant.TenantId == null || x.TenantId == _tenant.TenantId), ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
+        var errors = ContactErrors(dto.Contacts);
+        // Once intake has started the contacts are the participant's (Convert moved them): adding pending ones now would strand them.
+        if (dto.Contacts is { Count: > 0 } && inquiry.ParticipantId is not null) errors["contacts"] = ["Intake has started, so add contacts on the participant's record."];
+        if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
         inquiry.FirstName = dto.FirstName.Trim(); inquiry.LastName = dto.LastName.Trim(); inquiry.Phone = Blank(dto.Phone); inquiry.Email = Blank(dto.Email); inquiry.Source = dto.Source; inquiry.Provenance = Blank(dto.Provenance); inquiry.UpdatedAt = DateTime.UtcNow;
+        if (dto.Contacts is { } contacts)
+        {
+            // A full replace: what the form shows is what is stored, and a retry can never add a second copy. Null leaves them alone, so a caller that never
+            // loaded them (an older open tab) can't wipe them.
+            _db.InquiryContacts.RemoveRange(await _db.InquiryContacts.Where(c => c.InquiryId == inquiry.Id && c.TenantId == inquiry.TenantId).ToListAsync(ct));
+            AddContacts(inquiry, contacts);
+        }
         if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
-        return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
+        return Ok(ApiResponse<ParticipantInquiryDto>.Ok(await FullDtoAsync(inquiry, ct)));
     }
 
     [HttpPost("{id:guid}/convert")]
@@ -265,6 +282,48 @@ public class ParticipantInquiriesController : ControllerBase
         if (p.DateOfBirth == null) missing.Add("date of birth");
         if (p.FundingSource == ParticipantFundingSource.Ndis && string.IsNullOrWhiteSpace(p.NdisNumber)) missing.Add("NDIS number");
         return missing;
+    }
+
+    private const int MaxContacts = 20;
+    // ParticipantPatchApplier.ValidatePhone's pattern: the participant's own phone is held to it, and a contact's now is too.
+    private static readonly Regex PhonePattern = new(@"^\+?[\d\s\-()]{6,20}$", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The pending contacts' refusals, keyed as the form's rows are. Any role but PlanManager (it needs a plan type an enquiry hasn't got); both names, as a Person
+    /// has; a phone and an email that are one, which no contact endpoint checks today (D3). The email check is the invite's own (IntakeBookingsController.IsSendable).
+    /// </summary>
+    private static Dictionary<string, string[]> ContactErrors(List<InquiryContactDto>? contacts)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (contacts is null) return errors;
+        if (contacts.Count > MaxContacts) errors["contacts"] = [$"Add at most {MaxContacts} contacts."];
+        for (var i = 0; i < contacts.Count; i++)
+        {
+            var (c, key) = (contacts[i], $"contacts[{i}].");
+            if (c.Role is not { } role || !Enum.IsDefined(role)) errors[key + "role"] = ["Choose a role."];
+            else if (role == ContactRoleType.PlanManager) errors[key + "role"] = ["Add a plan manager on the participant's Contacts tab once intake starts."];
+            if (Blank(c.FirstName) is null) errors[key + "firstName"] = ["Add their first name."];
+            if (Blank(c.LastName) is null) errors[key + "lastName"] = ["Add their last name."];
+            if (Blank(c.Phone) is { } phone && !PhonePattern.IsMatch(phone)) errors[key + "phone"] = ["Enter a phone number, like 0412 345 678."];
+            if (Blank(c.Email) is { } email && !IntakeBookingsController.IsSendable(email)) errors[key + "email"] = ["Enter a full email address, like name@example.com."];
+        }
+        return errors;
+    }
+
+    /// <summary>One pending row per contact, in the form's order, in the enquiry's organisation. Only called after <see cref="ContactErrors"/> found none.</summary>
+    private void AddContacts(ParticipantInquiry inquiry, List<InquiryContactDto> contacts) =>
+        _db.InquiryContacts.AddRange(contacts.Select((c, i) => new InquiryContact
+        {
+            Id = Guid.NewGuid(), TenantId = inquiry.TenantId, InquiryId = inquiry.Id, SortOrder = i, Role = c.Role!.Value,
+            FirstName = c.FirstName!.Trim(), LastName = c.LastName!.Trim(), Phone = Blank(c.Phone), Email = Blank(c.Email), Relationship = Blank(c.Relationship), Notes = Blank(c.Notes),
+        }));
+
+    /// <summary>The enquiry as the form needs it after a save or a load: the booked staff member's names, and the provider's zone a visit is entered in.</summary>
+    private async Task<ParticipantInquiryDto> FullDtoAsync(ParticipantInquiry x, CancellationToken ct)
+    {
+        // Keyed on the enquiry's organisation: a SuperAdmin's context has no query filter.
+        var staff = x.IntakeStaffUserId is Guid staffId ? await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == staffId && u.TenantId == x.TenantId, ct) : null;
+        return ToDto(x, staff, (await ProviderTimeZoneResolver.ResolveAsync(_db, x.TenantId, ct)).Id);
     }
 
     /// <summary>A form's "left blank" arrives as "" or spaces: store nothing, trimmed otherwise, never an empty string.</summary>

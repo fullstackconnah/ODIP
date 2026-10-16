@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Odip.Domain.Enums;
 
 namespace Odip.Application.DTOs;
 
@@ -61,6 +62,30 @@ public record CreateParticipantInquiryDto
     [OptionalEmailAddress, StringLength(200)] public string? Email { get; init; }
     [Required, RegularExpression("^(Web|Email|Phone)$")] public string Source { get; init; } = string.Empty;
     [StringLength(2000)] public string? Provenance { get; init; }
+    /// <summary>Saved in the enquiry's own save. On update a list replaces the stored ones; null (or left out) leaves them as they are.</summary>
+    public List<InquiryContactDto>? Contacts { get; init; }
+}
+
+/// <summary>
+/// A pending contact on an enquiry (spec 2026-10-16, D3). The role, names, phone and email are checked by hand in the controller, so its refusals are
+/// keyed by the form's rows (contacts[i].field); the lengths are the columns'. Role is nullable so a missing one is refused, not read as NextOfKin.
+/// </summary>
+public record InquiryContactDto
+{
+    public ContactRoleType? Role { get; init; }
+    [StringLength(100)] public string? FirstName { get; init; }
+    [StringLength(100)] public string? LastName { get; init; }
+    [StringLength(30)] public string? Phone { get; init; }
+    [StringLength(200)] public string? Email { get; init; }
+    [StringLength(100)] public string? Relationship { get; init; }
+    [StringLength(2000)] public string? Notes { get; init; }
+}
+
+/// <summary>GET /inquiries/{id}: the enquiry and its pending contacts, for the enquiry form. Its own type, so the list's rows (open to every role) can't hold contacts.</summary>
+public record ParticipantInquiryDetailDto : ParticipantInquiryDto
+{
+    public ParticipantInquiryDetailDto(ParticipantInquiryDto inquiry) : base(inquiry) { }
+    public List<InquiryContactDto> Contacts { get; init; } = [];
 }
 
 public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto;

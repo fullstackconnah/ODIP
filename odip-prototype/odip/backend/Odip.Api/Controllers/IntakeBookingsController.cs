@@ -350,7 +350,7 @@ public class IntakeBookingsController : ControllerBase
     }
 
     // An address the SMTP channel takes as written: MailAddress reads "Ann <a@b.c>" or "a b@c.d" as a display name plus an address, which is not what was typed.
-    private static bool IsSendable(string email) => email.Length <= 200 && MailAddress.TryCreate(email, out var parsed) && parsed.Address == email;
+    internal static bool IsSendable(string email) => email.Length <= 200 && MailAddress.TryCreate(email, out var parsed) && parsed.Address == email;
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
