@@ -246,6 +246,7 @@ describe('Start rostering', () => {
     await user.click(screen.getByRole('button', { name: START }))
     expect(await screen.findByText('Started 17–23 Aug')).toBeInTheDocument()
     expect(screen.getByText('No approved agreement has a shift in this week.')).toBeInTheDocument()
+    expect(screen.queryByText('Over budget')).not.toBeInTheDocument()
   })
 
   it('already started by someone else: the info notice, never the error, and focus on it', async () => {
@@ -302,6 +303,10 @@ describe('Start rostering', () => {
     const { unmount } = renderPage()
     await user.click(screen.getByRole('button', { name: START }))
     await screen.findByText('Started 17–23 Aug: 5 shifts added')
+    // The warnings' own Dismiss takes only them; the result stays.
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByText('Over budget')).not.toBeInTheDocument()
+    expect(screen.getByText('Started 17–23 Aug: 5 shifts added')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Dismiss notice' }))
     expect(screen.queryByText('Started 17–23 Aug: 5 shifts added')).not.toBeInTheDocument()
     expect(screen.queryByText(W.message)).not.toBeInTheDocument()
