@@ -13,6 +13,8 @@ vi.mock('@/api/hooks', () => ({
   useSetIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useResendIntakeInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useStaff: () => ({ data: [], isLoading: false }),
+  useCloseInquiry: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useReopenInquiry: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 const UPCOMING = '2030-10-15T23:00:00Z'
@@ -104,13 +106,16 @@ describe('the Intake column', () => {
 })
 
 describe('the phone menu', () => {
-  it('appears only on a booked row, and marks a visit confirmed with a notice', async () => {
+  it('holds the visit actions only on a booked row (elsewhere just Close enquiry), and marks a visit confirmed with a notice', async () => {
     const user = userEvent.setup()
     mocks.confirmVisit.mockResolvedValue({})
     page()
 
-    expect(screen.queryByRole('button', { name: 'More actions for Noah Fitzgerald' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'More actions for Priya Nair' }))
+    // A row with no booking has one menu, with Close enquiry alone (spec addendum E1); a booked row's phone menu comes first.
+    await user.click(screen.getByRole('button', { name: 'More actions for Noah Fitzgerald' }))
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Close enquiry'])
+    await user.keyboard('{Escape}')
+    await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
     await user.click(screen.getByRole('option', { name: 'Mark confirmed' }))
 
     expect(mocks.confirmVisit).toHaveBeenCalledWith({ id: 'sent', confirmed: true })
@@ -122,9 +127,9 @@ describe('the phone menu', () => {
     const user = userEvent.setup()
     page()
 
-    await user.click(screen.getByRole('button', { name: 'More actions for Ava Ng' }))
+    await user.click(screen.getAllByRole('button', { name: 'More actions for Ava Ng' })[0])
 
-    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Reschedule', 'Edit enquiry'])
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Reschedule', 'Edit enquiry', 'Close enquiry'])
   })
 
   it('cancels behind a confirm dialog and says when the cancellation email could not go', async () => {
@@ -132,7 +137,7 @@ describe('the phone menu', () => {
     mocks.cancelVisit.mockResolvedValue({ inquiry: { ...rows[1], intakeStartsAt: null }, cancellationEmail: 'NotConfigured' })
     page()
 
-    await user.click(screen.getByRole('button', { name: 'More actions for Priya Nair' }))
+    await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
     await user.click(screen.getByRole('option', { name: 'Cancel visit' }))
     const dialog = screen.getByRole('alertdialog', { name: "Cancel Priya Nair's intake visit?" })
     expect(dialog).toHaveTextContent(/We'll email Priya a cancellation for Wed 16 Oct( 2030)?, 10:00 am, and the visit comes off Sam's schedule\./)

@@ -10,7 +10,7 @@ import { TextAreaField } from '@/components/TextAreaField'
 import { SelectField } from '@/components/SelectField'
 import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
-import { useCreateParticipantInquiry, useParticipantInquiry, useResendIntakeInvite, useSetIntakeBooking, useUpdateParticipantInquiry } from '@/api/hooks'
+import { useCreateParticipantInquiry, useParticipantInquiries, useParticipantInquiry, useResendIntakeInvite, useSetIntakeBooking, useUpdateParticipantInquiry } from '@/api/hooks'
 import type { CreateParticipantInquiryDto, InquiryContactDto, InquirySource, ParticipantInquiryDetailDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { fieldErrors } from '@/lib/fieldErrors'
 import { formGrid, span } from '@/lib/formGrid'
@@ -22,6 +22,9 @@ import {
 } from '@/lib/intakeBooking'
 import { extractErrorMessage } from '@/lib/utils'
 import { BookingFields } from './inquiries/BookingFields'
+import { closedNotice } from '@/lib/inquiryClose'
+import { ClosedEnquiry } from './inquiries/ClosedEnquiry'
+import { CloseInquiryDialog } from './inquiries/CloseInquiryDialog'
 import { InquiryContactsCard } from './inquiries/InquiryContactsCard'
 import { IntakeCancelDialog } from './inquiries/IntakeCancelDialog'
 import { IntakeVisitCard, type VisitRefusal } from './inquiries/IntakeVisitCard'
@@ -76,12 +79,14 @@ export default function InquiryFormPage() {
   // Remembered during render (React's "adjusting state when a prop changes"), so the form never flickers back to loading.
   if (fresh && loadId && opened !== loadId) setOpened(loadId)
   const ready = fresh || (!!existing && opened === loadId)
+  // A closed enquiry opens read-only; Reopen turns it into the edit form in place (SHAPE.md section 11).
+  const [reopenedHere, setReopenedHere] = useState(false)
 
   const header = (
     <div className="flex items-start gap-4">
       <BackButton to="/participants?tab=enquiries" label="enquiries" variant="icon" history={false} />
       <div className="flex-1">
-        <PageHeader title={editId ? 'Edit enquiry' : 'New enquiry'} />
+        <PageHeader title={existing?.closedAt && !reopenedHere ? 'Closed enquiry' : editId ? 'Edit enquiry' : 'New enquiry'} />
       </div>
     </div>
   )
@@ -102,6 +107,7 @@ export default function InquiryFormPage() {
         initial={loadId ? existing! : null}
         onCreated={id => { setCreatedHere(id); setSearchParams({ id }, { replace: true }) }}
         onCancel={() => navigate('/participants?tab=enquiries')}
+        onReopened={() => setReopenedHere(true)}
         onDone={enquiryNotice => navigate('/participants?tab=enquiries', { state: { enquiryNotice } })}
       />
     )
@@ -115,10 +121,11 @@ export default function InquiryFormPage() {
   )
 }
 
-function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
+function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
   initial: ParticipantInquiryDetailDto | null
   onCreated: (id: string) => void
   onCancel: () => void
+  onReopened: () => void
   onDone: (notice: EnquiryNotice) => void
 }) {
   // The stored copy (null until the first save), apart from what is being typed.
@@ -139,6 +146,10 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
   const [resendOn, setResendOn] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelled, setCancelled] = useState<ReturnType<typeof cancelNotice> | null>(null)
+  const [closing, setClosing] = useState(false)
+  const [reopened, setReopened] = useState(false)
+  // What the form held when it was loaded or last saved: Close warns that anything since will be discarded (check N2: reset on every save).
+  const [baseline, setBaseline] = useState(() => JSON.stringify(toPayload(initial ? fromInquiry(initial) : blank(), contactsPayload((initial?.contacts ?? []).map(contactRowOf)))))
   const create = useCreateParticipantInquiry()
   const update = useUpdateParticipantInquiry()
   const setVisit = useSetIntakeBooking()
@@ -150,8 +161,9 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
   const errorRef = useRef<HTMLDivElement>(null)
   const refusalRef = useRef<HTMLDivElement>(null)
   const cancelledRef = useRef<HTMLDivElement>(null)
+  const reopenedRef = useRef<HTMLDivElement>(null)
   // Where focus goes once the next render is on screen: the errors and notices are not in the DOM yet when they are found.
-  const focusNext = useRef<'first-invalid' | 'error' | 'visit-refusal' | 'cancelled' | BookingField | null>(null)
+  const focusNext = useRef<'first-invalid' | 'error' | 'visit-refusal' | 'cancelled' | 'reopened' | BookingField | null>(null)
   useEffect(() => {
     const target = focusNext.current
     if (!target) return
@@ -159,6 +171,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
     if (target === 'error') errorRef.current?.focus()
     else if (target === 'visit-refusal') refusalRef.current?.focus()
     else if (target === 'cancelled') cancelledRef.current?.focus()
+    else if (target === 'reopened') reopenedRef.current?.focus()
     else if (target === 'first-invalid') formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
     else if (target === 'email') formRef.current?.querySelector<HTMLElement>('#inquiry-email')?.focus()
     else formRef.current?.querySelector<HTMLElement>(`[data-field="${target}"] :is(input, select, textarea, button)`)?.focus()
@@ -166,7 +179,11 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
 
   const converted = row?.participantId ? { participantId: row.participantId, firstName: row.firstName } : null
   // Before the first save the zone is only for checking: the booking is sent in the zone the save answered with (lead decision 6).
-  const zone = row?.timeZoneId || FALLBACK_ZONE
+  // The provider's zone (ODIP-REVIEW-268): the stored row's, else the Enquiries list's (every row carries the server's own). Until one is known a new
+  // enquiry's visit is not checked for "has passed" here: Sydney's clock would refuse a Perth visit that is still ahead. The server stays the authority.
+  const listQuery = useParticipantInquiries()
+  const knownZone = row?.timeZoneId || listQuery.data?.find(r => r.timeZoneId)?.timeZoneId || null
+  const zone = knownZone || FALLBACK_ZONE
   const booked = !!row?.intakeStartsAt
   const past = booked && isPastVisit(row!.intakeStartsAt!, row!.intakeDurationMinutes ?? DEFAULT_DURATION)
   const effective: BookingForm = { ...booking, staffUserId: booking.staffUserId || staff.defaultStaff }
@@ -178,6 +195,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
   const offerResend = booked && !past && !sends && !!typedEmail
     && (!!row!.intakeInviteError || (!!row!.intakeInviteSentAt && typedEmail !== (row!.email ?? '')))
   const needsEmail = sends || (offerResend && resendOn)
+  const dirty = wantsVisit || JSON.stringify(toPayload(form, contactsPayload(contacts))) !== baseline
 
   function changeContacts(next: ContactRow[], changed?: { key: string; field: string }) {
     setContacts(next)
@@ -214,7 +232,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
     const missingEmail = needsEmail && !typedEmail ? 'Add an email to send the invite to.' : undefined
     const rowErrors = contactRowErrors(contacts)
     const timeChanged = !booked || booking.date !== savedBooking.date || booking.time !== savedBooking.time
-    const found = wantsVisit ? validateBooking(effective, { askEmail: false, firstName: form.firstName, timeChanged, zone, pastVisitChange: past && sends }) : {}
+    const found = wantsVisit ? validateBooking(effective, { askEmail: false, firstName: form.firstName, timeChanged: timeChanged && !!knownZone, zone, pastVisitChange: past && sends }) : {}
     setEmailError(missingEmail); setContactErrors(rowErrors); setVisitErrors(found); setVisitRefusal(null); setError(null); setListError(undefined); setCancelled(null)
     if (missingEmail || Object.keys(rowErrors).length > 0 || Object.keys(found).length > 0) {
       focusNext.current = 'first-invalid'
@@ -235,12 +253,14 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
       }
       if (!row) onCreated(saved.id)   // D1: from here a retry is a PUT, never a second POST
       setRow(saved)
+      setBaseline(JSON.stringify(toPayload(form, contactsPayload(contacts))))
       // 3. The visit: a request of its own. Refused, the enquiry stays saved and the page stays, in edit mode, to retry (owner decision 3).
       let visit: ParticipantInquiryDto | null = null
       if (wantsVisit) {
         setBusy('booking')
         try {
-          visit = await setVisit.mutateAsync({ id: saved.id, data: bookingBody(effective, saved.timeZoneId || FALLBACK_ZONE, false) })
+          // Each step sends the version the step before it returned (ODIP-REVIEW-268): the enquiry PUT was checked, so its answer is this form's base.
+          visit = await setVisit.mutateAsync({ id: saved.id, data: { ...bookingBody(effective, saved.timeZoneId || FALLBACK_ZONE, false), expectedUpdatedAt: saved.updatedAt } })
         } catch (err) {
           refuseVisit(booked ? 'changed' : 'new', err)
           return
@@ -253,7 +273,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
       if (offerResend && resendOn) {
         setBusy('resending')
         try {
-          resent = await resend.mutateAsync(saved.id)
+          resent = await resend.mutateAsync({ id: saved.id, expectedUpdatedAt: (visit ?? saved).updatedAt })
         } catch (err) {
           refuseVisit('resend', err)
           return
@@ -270,11 +290,28 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
   }
 
   const title = row ? 'Edit enquiry' : 'New enquiry'
+  if (row?.closedAt) {
+    return (
+      <ClosedEnquiry
+        row={row}
+        onBack={onCancel}
+        onReopened={answer => {
+          setRow(answer); setReopened(true); onReopened()
+          focusNext.current = 'reopened'
+        }}
+      />
+    )
+  }
   const resendHint = row?.intakeInviteError ? "The last invite wasn't sent." : `The invite went to ${row?.email ?? ''}. Saving won't resend it unless you tick this.`
 
   return (
     <>
       <form ref={formRef} className="flex flex-col gap-[var(--section-gap)]" onSubmit={submit} aria-label={title}>
+        {reopened && (
+          <div ref={reopenedRef} tabIndex={-1} className="focus:outline-none">
+            <Callout tone="success">Reopened. Add the contacts again below.</Callout>
+          </div>
+        )}
         <Card title={title}>
           <div className={formGrid}>
             <TextField
@@ -372,10 +409,22 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
             {busy === 'saving' ? 'Saving…' : busy === 'booking' ? 'Booking the visit…' : busy === 'resending' ? 'Sending the invite…' : row ? 'Save enquiry' : 'Capture enquiry'}
           </Button>
           <Button variant="secondary" onClick={onCancel}>{!initial && row ? 'Back to enquiries' : 'Cancel'}</Button>
+          {/* Only an enquiry that hasn't started intake can close; never a new one (SHAPE section 11). */}
+          {row && !row.participantId && <Button variant="ghost-danger" className="ml-auto" onClick={() => setClosing(true)}>Close enquiry</Button>}
         </div>
       </form>
 
+      {closing && row && (
+        <CloseInquiryDialog
+          row={row}
+          unsaved={dirty}
+          onCancel={() => setClosing(false)}
+          onDone={(closedRow, result) => onDone({ ...closedNotice(result), subject: closedRow.id })}
+        />
+      )}
       <IntakeCancelDialog
+        // Checked against this form's version, so adopting the cleared row's version below is safe (ODIP-REVIEW-268).
+        checkVersion
         row={cancelling ? row : null}
         onCancel={() => setCancelling(false)}
         onDone={(cancelledRow, email, cleared) => {
