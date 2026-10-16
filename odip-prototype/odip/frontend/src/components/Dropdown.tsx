@@ -90,13 +90,18 @@ export function Dropdown({
     if (!triggerRef.current) return
     const rect = triggerRef.current.getBoundingClientRect()
     const maxPanelHeight = 320
-    const spaceBelow = window.innerHeight - rect.bottom - 8
+    // A fixed bottom bar (the phone nav) is not room: a panel opened over it loses its last options.
+    const nav = document.querySelector('nav[aria-label="Mobile"]')?.getBoundingClientRect()
+    const floor = nav && nav.height > 0 && nav.top < window.innerHeight ? nav.top : window.innerHeight
+    const spaceBelow = floor - rect.bottom - 8
     const spaceAbove = rect.top - 8
+    // The panel's whole height (scrollHeight ignores the max-height cap): open on the side that holds all of it, below first; the cap only bites when neither does.
+    const needed = Math.min(maxPanelHeight, panelRef.current?.scrollHeight ?? 0)
     const style: CSSProperties = {
       position: 'fixed',
       zIndex: 9999,
     }
-    if (spaceBelow >= spaceAbove || spaceBelow >= 120) {
+    if (needed <= spaceBelow || (needed > spaceAbove && spaceBelow >= spaceAbove)) {
       style.top = rect.bottom + 8
       style.maxHeight = Math.min(maxPanelHeight, spaceBelow)
     } else {
