@@ -18,11 +18,26 @@ const muted = 'text-[var(--color-muted-foreground)]'
 const detailLabel = `text-xs ${muted} max-md:font-semibold max-md:uppercase max-md:tracking-[0.05em]`
 const detailId = (row: EarlyAccessSignupDto) => `alpha-signup-${row.id}-detail`
 
+// The answers a repeat can change, in the order the original row shows them after Name and Organisation. The API keeps the first 10 per sign-up.
+const LATER_FIELDS = [
+  { key: 'name', label: 'Name' },
+  { key: 'organisation', label: 'Organisation' },
+  { key: 'role', label: 'Role' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'organisationSize', label: 'Size' },
+  { key: 'message', label: 'Message' },
+] as const
+const LATER_SUBMISSIONS_KEPT = 10
+const displayAnswer = (key: (typeof LATER_FIELDS)[number]['key'], value: string | undefined) =>
+  key === 'organisationSize' && value ? ORGANISATION_SIZE_LABELS[value] ?? value : value
+
 /**
  * Settings › Platform › Alpha sign-ups (SuperAdmin): who asked to join the alpha on the landing page, latest sent first (the server's
  * order, so a repeat carrying a "remove my details" request is on top), with Delete. Six columns from md up, so the table never scrolls
  * sideways; role, phone and the message open under the row from its name (a row disclosure), and a phone card shows them all. The
  * message is shown whole, line breaks kept, because removal requests arrive in it.
+ * A repeat sign-up never overwrites the stored answers; one whose answers differ is listed under the opened row as a later submission, with its date
+ * and only the answers that differ (the server keeps the first 10).
  */
 export default function AlphaSignupsTab() {
   const [page, setPage] = useState(1)
@@ -144,6 +159,36 @@ export default function AlphaSignupsTab() {
         <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
       </div>
     </dl>
+    {row.laterSubmissions.length > 0 && (
+      <section aria-label="Later submissions" className="mt-3 md:pl-[1.125rem]">
+        <h4 className={detailLabel}>Later submissions</h4>
+        <ol className="mt-1 space-y-2">
+          {row.laterSubmissions.map(later => (
+            <li key={later.id} className="border-t border-[var(--color-border)] pt-2">
+              <p className={`text-xs ${muted}`}>Sent {formatInstantDateAu(later.receivedAtUtc)}</p>
+              <dl className="mt-1 grid grid-cols-2 gap-x-8 gap-y-2 md:flex md:flex-wrap md:gap-x-10">
+                {LATER_FIELDS.filter(({ key }) => later[key] !== row[key]).map(({ key, label }) => (
+                  <div key={key} className={key === 'message' ? 'col-span-2 min-w-0 md:basis-full' : 'min-w-0 break-words md:w-48'}>
+                    <dt className={detailLabel}>{label}</dt>
+                    <dd>
+                      {!later[key] ? '—' : key === 'message'
+                        ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{later[key]}</p>
+                        : displayAnswer(key, later[key])}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ol>
+        {/* The server keeps the first 10. RequestCount also counts identical repeats, so say this only once the 10 are full. */}
+        {row.laterSubmissions.length >= LATER_SUBMISSIONS_KEPT && row.requestCount - 1 > LATER_SUBMISSIONS_KEPT && (
+          <p className={`mt-2 text-xs ${muted}`}>
+            Only the first {LATER_SUBMISSIONS_KEPT} later submissions are kept. The form was sent {row.requestCount} times in all.
+          </p>
+        )}
+      </section>
+    )}
     {isBelowMd && <div className={`mt-2 flex justify-end ${ROW_ACTIONS_CARD}`}>{deleteButton(row)}</div>}
     </>
   ) : null

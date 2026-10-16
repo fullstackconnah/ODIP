@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AlphaSignupsTab from './AlphaSignupsTab'
-import type { EarlyAccessSignupDto, PagedResult } from '@/api/types'
+import type { EarlyAccessLaterSubmissionDto, EarlyAccessSignupDto, PagedResult } from '@/api/types'
 
 const { mockUseEarlyAccessSignups, mockUseDeleteEarlyAccessSignup, mockMutateAsync, mockRefetch } = vi.hoisted(() => ({
   mockUseEarlyAccessSignups: vi.fn(),
@@ -30,6 +30,21 @@ function makeRow(overrides: Partial<EarlyAccessSignupDto> = {}): EarlyAccessSign
     createdAtUtc: '2026-10-02T01:15:00Z',
     lastRequestedAtUtc: '2026-10-15T22:40:00Z',
     requestCount: 1,
+    laterSubmissions: [],
+    ...overrides,
+  }
+}
+
+function makeLater(overrides: Partial<EarlyAccessLaterSubmissionDto> = {}): EarlyAccessLaterSubmissionDto {
+  return {
+    id: 'l-1',
+    receivedAtUtc: '2026-10-15T02:00:00Z',
+    name: 'Amara Okafor',
+    organisation: 'Riverbend Community Care',
+    role: 'Operations manager',
+    phone: '0491 570 156',
+    organisationSize: '10-49',
+    message: 'Please remove my details.',
     ...overrides,
   }
 }
@@ -227,6 +242,90 @@ describe('AlphaSignupsTab', () => {
       expect(toggle).toHaveAttribute('aria-expanded', 'false')
       expect(container.querySelectorAll('tr[data-row-detail]')).toHaveLength(0)
     })
+
+    it('shows no later-submissions section when there are none', async () => {
+      returns(page([makeRow({ requestCount: 3 })])) // sent again twice with the same answers
+      render(<AlphaSignupsTab />)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+
+      expect(screen.queryByText('Later submissions')).not.toBeInTheDocument()
+    })
+
+    it('lists a later submission below the original answers, with its date and only the answers that differ', async () => {
+      const later = makeLater({ phone: '0400 000 000', message: 'Please remove my details now.\nThanks.' })
+      returns(page([makeRow({ requestCount: 2, laterSubmissions: [later] })]))
+      render(<AlphaSignupsTab />)
+
+      const toggle = screen.getByRole('button', { name: 'Amara Okafor, has a message' })
+      await userEvent.click(toggle)
+
+      const detail = document.getElementById(toggle.getAttribute('aria-controls')!)!
+      const section = screen.getByRole('region', { name: 'Later submissions' })
+      expect(within(section).getByText('Sent 15/10/2026')).toBeInTheDocument()
+      expect(within(section).getByText('0400 000 000')).toBeInTheDocument()
+      const message = [...section.querySelectorAll('p')].find(p => p.textContent === 'Please remove my details now.\nThanks.')
+      expect(message).toHaveClass('whitespace-pre-wrap')
+      // Role, size, name and organisation are what the original says, so they are not repeated.
+      expect(within(section).queryByText('Role')).not.toBeInTheDocument()
+      expect(within(section).queryByText('Size')).not.toBeInTheDocument()
+      expect(within(section).queryByText('Name')).not.toBeInTheDocument()
+      expect(within(section).queryByText('Organisation')).not.toBeInTheDocument()
+      // The original answers stay as they were, above the section.
+      expect(within(detail).getByText('0491 570 156')).toBeInTheDocument()
+      expect(detail.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('shows several later submissions in the order the server sends them, newest last, and a blanked answer as a dash', async () => {
+      returns(page([makeRow({
+        requestCount: 3,
+        laterSubmissions: [
+          makeLater({ id: 'l-1', receivedAtUtc: '2026-10-10T02:00:00Z', message: 'First follow-up' }),
+          makeLater({ id: 'l-2', receivedAtUtc: '2026-10-15T02:00:00Z', role: undefined, message: 'Second follow-up' }),
+        ],
+      })]))
+      render(<AlphaSignupsTab />)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+
+      const section = screen.getByRole('region', { name: 'Later submissions' })
+      const blocks = within(section).getAllByRole('listitem')
+      expect(blocks).toHaveLength(2)
+      expect(within(blocks[0]).getByText('Sent 10/10/2026')).toBeInTheDocument()
+      expect(within(blocks[0]).getByText('First follow-up')).toBeInTheDocument()
+      expect(within(blocks[1]).getByText('Sent 15/10/2026')).toBeInTheDocument()
+      expect(within(blocks[1]).getByText('Role').nextElementSibling).toHaveTextContent('—')
+    })
+
+    it('says only the first 10 are kept when the sign-up was sent past that', async () => {
+      const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
+      returns(page([makeRow({ requestCount: 14, laterSubmissions: ten })]))
+      render(<AlphaSignupsTab />)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+
+      expect(screen.getAllByRole('listitem')).toHaveLength(10)
+      expect(screen.getByText('Only the first 10 later submissions are kept. The form was sent 14 times in all.')).toBeInTheDocument()
+    })
+
+    it('does not show the cap line while fewer than 10 are stored, however often the form was sent', async () => {
+      returns(page([makeRow({ requestCount: 14, laterSubmissions: [makeLater()] })]))
+      render(<AlphaSignupsTab />)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+
+      expect(screen.queryByText(/Only the first 10/)).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows later submissions on a phone card, before Delete', () => {
+    returns(page([makeRow({ requestCount: 2, laterSubmissions: [makeLater({ message: 'Second note' })] })]))
+    render(<AlphaSignupsTab />)
+
+    const section = screen.getByRole('region', { name: 'Later submissions' })
+    expect(within(section).getByText('Second note')).toBeInTheDocument()
+    const remove = screen.getByRole('button', { name: 'Delete sign-up from Amara Okafor' })
+    expect(section.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('puts Delete at the foot of each phone card, after the message, and only once', () => {
