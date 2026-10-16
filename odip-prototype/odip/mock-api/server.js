@@ -2984,8 +2984,19 @@ const putRoutes = [
       && shown.startTime === pattern.startTime && shown.endTime === pattern.endTime && !!shown.endsNextDay === !!pattern.endsNextDay
     if (!slotMatches || (body.staffId && shown.staffId !== body.staffId)) return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
     if (!pattern.isActive || (pattern.effectiveTo && pattern.effectiveTo < providerToday())) return respond(409, failEnvelope(null, ["This shift's agreement pattern has ended, so it has no regular to change."], 'pattern-ended'))
+    // REV281B: the regular the coordinator was shown must still be the live one (null/absent: an old tab, no check; the all-zero Guid: none shown).
+    if (body && typeof body.expectedRegularId === 'string' && (/^0{8}(-0{4}){3}-0{12}$/.test(body.expectedRegularId) ? null : body.expectedRegularId) !== (pattern.defaultStaffId || null))
+      return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
     const regular = body && body.staffId ? staff.find((s) => s.id === body.staffId) : null
     if (body && body.staffId && !regular) return respond(400, failEnvelope(null, ['Staff member not found.']))
+    // REV281B: a renewal's later same-support patterns take it too, as the server does.
+    const slot = (p) => [p.participantId, p.dayOfWeek, p.startTime, p.endTime, !!p.endsNextDay, p.workerSlot, p.ratio, p.nightType].join('|')
+    for (const next of rosterPatterns) {
+      if (next.id !== pattern.id && next.isActive && pattern.effectiveTo && next.effectiveFrom > pattern.effectiveTo && slot(next) === slot(pattern)) {
+        next.defaultStaffId = regular ? regular.id : null
+        next.defaultStaffName = regular ? regular.fullName : null
+      }
+    }
     pattern.defaultStaffId = regular ? regular.id : null
     pattern.defaultStaffName = regular ? regular.fullName : null
     return pattern

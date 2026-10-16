@@ -466,7 +466,7 @@ describe('Make or Stop the regular', () => {
     expect(dialog).toHaveTextContent("Sam goes on Mia Chen's Wednesday 9am–3pm shift in every week you start from now on, unless they're away. Weeks already started don't change, this one included.")
     await user.click(within(dialog).getByRole('button', { name: 'Make Sam the regular' }))
 
-    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', shiftId: 'sam-wed', staffId: 'staff-2' })
+    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', shiftId: 'sam-wed', staffId: 'staff-2', expectedRegularId: '00000000-0000-0000-0000-000000000000' })
     expect((await screen.findByText("Sam is now the regular for Mia Chen's Wednesday shift.")).closest('[role="status"]')).not.toBeNull()
     await waitFor(() => expect(samMenu()).toHaveFocus())
   })
@@ -493,7 +493,7 @@ describe('Make or Stop the regular', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Stop Sam being the regular?' })
     expect(dialog).toHaveTextContent("From the next week you start, Mia Chen's Wednesday 9am–3pm shift is made open, with nobody on it. Weeks already started keep Sam.")
     await user.click(within(dialog).getByRole('button', { name: 'Stop being the regular' }))
-    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', shiftId: 'sam-wed', staffId: null })
+    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', shiftId: 'sam-wed', staffId: null, expectedRegularId: 'staff-2' })
     expect(await screen.findByText("Mia Chen's Wednesday shift has no regular now.")).toBeInTheDocument()
   })
 

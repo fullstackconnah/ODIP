@@ -58,6 +58,8 @@ function focusShift(id: string) {
   document.querySelector<HTMLElement>(`[data-shift-open="${id}"]`)?.focus()
 }
 
+/** What the server reads as "no regular was shown" in a Make or Stop (REV281B). */
+const NO_REGULAR = '00000000-0000-0000-0000-000000000000'
 const HINT_DISMISSED_KEY = 'odip.roster.hintDismissed'
 
 /** Every shift currently on the board, across whichever grouping is loaded — used to resolve an exception's shiftId back to a full ShiftDto. */
@@ -270,7 +272,7 @@ export default function RosterBoardPage() {
     const shift = regularTarget
     if (!shift?.shiftPatternId) return
     try {
-      await setRegular.mutateAsync({ patternId: shift.shiftPatternId, shiftId: shift.id, staffId: shift.isRegular ? null : shift.staffId ?? null })
+      await setRegular.mutateAsync({ patternId: shift.shiftPatternId, shiftId: shift.id, staffId: shift.isRegular ? null : shift.staffId ?? null, expectedRegularId: shift.regularUserId ?? NO_REGULAR })
       setRegularNotice(regularDone(shift))
     } catch (err: unknown) {
       setAssignError(extractErrorMessage(err, 'Something went wrong changing the regular. Please try again.'))
