@@ -1,4 +1,7 @@
+using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -172,6 +175,65 @@ public class InquiryContactsTests
         _db.ChangeTracker.Clear();
         Data<ParticipantInquiryDto>((await Controller().Update(inquiry.Id, UpdateBody([]), CancellationToken.None)).Result);
         Assert.Empty(Stored());
+    }
+
+    [Fact]
+    public async Task Get_returns_the_enquiry_with_its_contacts_in_order_with_the_zone_and_staff()
+    {
+        var inquiry = SeedInquiry();
+        SeedContacts(inquiry,
+            new InquiryContact { Role = ContactRoleType.Guardian, FirstName = "Maria", LastName = "Lopez", Phone = "0412 345 678", Email = "maria@example.com", Relationship = "Mother", Notes = "Works nights" },
+            new InquiryContact { Role = ContactRoleType.EmergencyContact, FirstName = "Tom", LastName = "Ng" });
+
+        var dto = Data<ParticipantInquiryDetailDto>((await Controller().Get(inquiry.Id, CancellationToken.None)).Result);
+
+        Assert.Equal((inquiry.Id, "Ana", "Australia/Sydney"), (dto.Id, dto.FirstName, dto.TimeZoneId));
+        Assert.Equal(2, dto.Contacts.Count);
+        Assert.Equal(new InquiryContactDto { Role = ContactRoleType.Guardian, FirstName = "Maria", LastName = "Lopez", Phone = "0412 345 678", Email = "maria@example.com", Relationship = "Mother", Notes = "Works nights" }, dto.Contacts[0]);
+        Assert.Equal(new InquiryContactDto { Role = ContactRoleType.EmergencyContact, FirstName = "Tom", LastName = "Ng" }, dto.Contacts[1]);
+    }
+
+    [Fact]
+    public async Task Get_another_organisations_enquiry_is_not_found()
+    {
+        var other = Guid.NewGuid();
+        var theirs = SeedInquiry(tenantId: other);
+        SeedContacts(theirs, new InquiryContact { Role = ContactRoleType.Guardian, FirstName = "Zelda", LastName = "Quill", Phone = "0499 111 222" });
+
+        var result = (await Controller().Get(theirs.Id, CancellationToken.None)).Result;
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        var json = JsonSerializer.Serialize(notFound.Value);
+        Assert.DoesNotContain("Zelda", json);
+        Assert.DoesNotContain("0499", json);
+    }
+
+    [Fact]
+    public async Task Get_a_direct_intakes_id_is_not_found()
+    {
+        var draft = new Participant { Id = Guid.NewGuid(), TenantId = _tenantId, FirstName = "Dee", LastName = "Rect", IsDraft = true };
+        _db.Participants.Add(draft);
+        _db.SaveChanges();
+
+        Assert.IsType<NotFoundObjectResult>((await Controller().Get(draft.Id, CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public void GET_inquiries_by_id_is_for_the_roles_that_edit_enquiries() =>
+        Assert.Equal("Admin,Coordinator,SuperAdmin",
+            typeof(ParticipantInquiriesController).GetMethod(nameof(ParticipantInquiriesController.Get))!.GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+
+    [Fact]
+    public async Task The_list_never_carries_contacts()
+    {
+        var inquiry = SeedInquiry();
+        SeedContacts(inquiry, new InquiryContact { Role = ContactRoleType.Guardian, FirstName = "Zelda", LastName = "Quill", Phone = "0499 111 222", Email = "zelda@example.com" });
+
+        var result = (await Controller("SupportWorker").GetAll(CancellationToken.None)).Result;
+
+        var json = JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(result).Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Contains("\"Ana\"", json);
+        foreach (var leaked in new[] { "Zelda", "0499 111 222", "zelda@example.com", "\"contacts\"" }) Assert.DoesNotContain(leaked, json);
     }
 
     [Fact]

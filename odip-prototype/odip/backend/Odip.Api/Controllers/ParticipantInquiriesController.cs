@@ -100,6 +100,22 @@ public class ParticipantInquiriesController : ControllerBase
         return Ok(ApiResponse<List<ParticipantOnboardingWorklistDto>>.Ok(result));
     }
 
+    /// <summary>
+    /// One enquiry with its pending contacts, for the enquiry form (new and edit). The contacts are third parties' details held before any relationship, so only
+    /// the roles that edit enquiries read them; GET /inquiries, open to every role, never carries them (spec 2026-10-16, D3).
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantInquiryDetailDto>>> Get(Guid id, CancellationToken ct)
+    {
+        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && (_tenant.TenantId == null || x.TenantId == _tenant.TenantId), ct);
+        if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDetailDto>.Fail("Inquiry not found"));
+        var contacts = await _db.InquiryContacts.Where(c => c.InquiryId == inquiry.Id && c.TenantId == inquiry.TenantId).OrderBy(c => c.SortOrder)
+            .Select(c => new InquiryContactDto { Role = c.Role, FirstName = c.FirstName, LastName = c.LastName, Phone = c.Phone, Email = c.Email, Relationship = c.Relationship, Notes = c.Notes })
+            .ToListAsync(ct);
+        return Ok(ApiResponse<ParticipantInquiryDetailDto>.Ok(new ParticipantInquiryDetailDto(await FullDtoAsync(inquiry, ct)) { Contacts = contacts }));
+    }
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Create(CreateParticipantInquiryDto dto, CancellationToken ct)
