@@ -59,7 +59,7 @@ public class InquiryContactsTests
 
     private ParticipantInquiry SeedInquiry(Guid? participantId = null, Guid? tenantId = null)
     {
-        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId ?? _tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone", ParticipantId = participantId };
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId ?? _tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone", ParticipantId = participantId }.WithFullAddress();
         _db.ParticipantInquiries.Add(inquiry);
         _db.SaveChanges();
         return inquiry;

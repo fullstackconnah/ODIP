@@ -177,9 +177,35 @@ public class ParticipantInquiriesController : ControllerBase
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(IntakeBookingsController.ClosedRefusal, IntakeBookingsController.ClosedCode));
         if (inquiry.ParticipantId is null)
         {
+            // Start intake's gates (owner decision 4, D1): the full address for a new participant (an existing one has its own, G4), and a name for a
+            // main contact who will become a Person. Nothing is created until both pass.
+            var errors = new Dictionary<string, string[]>();
+            if (dto.ParticipantId is null)
+                foreach (var (key, value, part) in new[] { ("addressStreet", inquiry.AddressStreet, "street"), ("addressSuburb", inquiry.AddressSuburb, "suburb"), ("addressState", inquiry.AddressState, "state"), ("addressPostcode", inquiry.AddressPostcode, "postcode") })
+                    if (string.IsNullOrWhiteSpace(value)) errors[key] = [$"Add the {part} to start intake."];
+            if (inquiry.ContactNeedsName)
+            {
+                if (string.IsNullOrWhiteSpace(inquiry.ContactFirstName)) errors["contactFirstName"] = ["Add the main contact's name to start intake."];
+                if (string.IsNullOrWhiteSpace(inquiry.ContactLastName)) errors["contactLastName"] = ["Add the main contact's name to start intake."];
+            }
+            if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
             Participant? participant = null;
             if (dto.ParticipantId is Guid participantId) { participant = await _db.Participants.FirstOrDefaultAsync(x => x.Id == participantId, ct); if (participant == null || participant.TenantId != inquiry.TenantId) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Participant not found")); }
-            else { participant = new Participant { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = inquiry.FirstName, LastName = inquiry.LastName, Phone = inquiry.Phone, Email = inquiry.Email, IsActive = false, IsDraft = true }; _db.Participants.Add(participant); }
+            else
+            {
+                participant = new Participant
+                {
+                    Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = inquiry.FirstName, LastName = inquiry.LastName ?? string.Empty,
+                    DateOfBirth = inquiry.DateOfBirth, NdisNumber = inquiry.NdisNumber,
+                    AddressStreet = inquiry.AddressStreet, AddressSuburb = inquiry.AddressSuburb, AddressState = inquiry.AddressState, AddressPostcode = inquiry.AddressPostcode,
+                    PlanType = inquiry.PlanType ?? default, PlanStartDate = inquiry.PlanStartDate, PlanEndDate = inquiry.PlanEndDate,
+                    // L5: the phone and email are the main contact's; the participant's own only when they are their own contact. A legacy value that isn't a phone stays on the enquiry (G3).
+                    Phone = inquiry.ContactIsParticipant && IsPhone(inquiry.Phone) ? inquiry.Phone : null,
+                    Email = inquiry.ContactIsParticipant ? inquiry.Email : null,
+                    IsActive = false, IsDraft = true,
+                };
+                _db.Participants.Add(participant);
+            }
             inquiry.ParticipantId = participant.Id; inquiry.UpdatedAt = DateTime.UtcNow;
             if (!await _db.ParticipantOnboardings.AnyAsync(x => x.ParticipantId == participant.Id, ct)) _db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, ParticipantId = participant.Id });
             if (await MovePendingContactsAsync(inquiry, participant, ct) is string refused) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(refused));
@@ -190,38 +216,50 @@ public class ParticipantInquiriesController : ControllerBase
     }
 
     /// <summary>
-    /// D3: the enquiry's pending contacts become the participant's in Convert's one save (one transaction), each a Person and an Active, non-primary
-    /// contact role, and stop being pending. The participant's own contact rules apply (plan check S1): a new draft is SelfManaged with no date of birth,
-    /// which every pending role passes (PlanManager is never pending), but an existing participant's plan type or age can refuse one, and then nothing is
-    /// saved and the reason comes back. A contact the participant already has (same role and name, as the intake save's IsSameContact) is not added twice.
+    /// D3 and owner decision 5: the enquiry's main contact, then its pending contacts, become the participant's in Convert's one save (one transaction), each a
+    /// Person and an Active contact role, and the pending rows stop being pending. The main contact is moved FIRST, with the role picked on the form (Next of
+    /// Kin when none was, D2), and is primary unless the participant already has a primary of that kind (the uniqueness rule refuses it); pending rows are
+    /// never primary. The participant's Contacts tab orders by role, so "first" holds on the enquiry and in this move, not there (G1). A legacy phone that isn't
+    /// one goes into the role's notes, never into Person.Phone (G3). The participant's own contact rules apply (plan check S1): the copied date of birth and
+    /// plan type, or an existing participant's, can refuse one, and then nothing is saved and the reason comes back. A contact the participant already has
+    /// (same role and name, as the intake save's IsSameContact) is not added twice, so a pending row that repeats the main contact is the one skipped.
     /// The tenant is set explicitly: a context with no tenant (a SuperAdmin) stamps none. Returns the refusal, or null.
     /// </summary>
     private async Task<string?> MovePendingContactsAsync(ParticipantInquiry inquiry, Participant participant, CancellationToken ct)
     {
         var pending = await _db.InquiryContacts.Where(c => c.InquiryId == inquiry.Id && c.TenantId == inquiry.TenantId).OrderBy(c => c.SortOrder).ToListAsync(ct);
-        if (pending.Count == 0) return null;
+        var moving = new List<(ContactRoleType Role, string First, string Last, string? Phone, string? Email, string? Relationship, string? Notes, InquiryContact? Pending)>();
+        if (inquiry.HasMainContact)
+            moving.Add((inquiry.ContactRole ?? ContactRoleType.NextOfKin, inquiry.ContactFirstName!.Trim(), inquiry.ContactLastName!.Trim(), IsPhone(inquiry.Phone) ? inquiry.Phone : null,
+                inquiry.Email, inquiry.ContactRelationship, inquiry.Phone is null || IsPhone(inquiry.Phone) ? null : $"Phone on the enquiry: {inquiry.Phone}", null));
+        moving.AddRange(pending.Select(c => (c.Role, c.FirstName, c.LastName, c.Phone, c.Email, c.Relationship, c.Notes, (InquiryContact?)c)));
+        if (moving.Count == 0) return null;
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, inquiry.TenantId, _clock, ct);
-        var recorded = await _db.ParticipantContactRoles.Where(r => r.ParticipantId == participant.Id && r.TenantId == inquiry.TenantId && r.Status == ContactRoleStatus.Active)
-            .Select(r => new { r.RoleType, r.Person!.FirstName, r.Person.LastName }).ToListAsync(ct);
+        var recorded = (await _db.ParticipantContactRoles.Where(r => r.ParticipantId == participant.Id && r.TenantId == inquiry.TenantId && r.Status == ContactRoleStatus.Active)
+            .Select(r => new { r.RoleType, r.Person!.FirstName, r.Person.LastName, r.IsPrimary, r.Status }).ToListAsync(ct))
+            .Select(r => (r.RoleType, r.FirstName, r.LastName, r.IsPrimary, r.Status)).ToList();
         static bool Same(string a, string b) => string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
-        foreach (var c in pending)
+        foreach (var c in moving)
         {
             if (ContactRoleRules.Validate(c.Role, participant.PlanType, participant.DateOfBirth, null, today) is string gate)
-                return $"{c.FirstName} {c.LastName} can't be added as this participant's contact: {gate}";
-            _db.InquiryContacts.Remove(c);
+                return $"{ParticipantInquiry.JoinName(c.First, c.Last)} can't be added as this participant's contact: {gate}";
+            if (c.Pending is not null) _db.InquiryContacts.Remove(c.Pending);
             // Already on the participant, or the same contact twice on the enquiry (plan check B-S1): one copy.
-            if (recorded.Any(r => r.RoleType == c.Role && Same(r.FirstName, c.FirstName) && Same(r.LastName, c.LastName))) continue;
-            recorded.Add(new { RoleType = c.Role, c.FirstName, c.LastName });
-            var person = new Person { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = c.FirstName, LastName = c.LastName, Phone = c.Phone, Email = c.Email };
+            if (recorded.Any(r => r.RoleType == c.Role && Same(r.FirstName, c.First) && Same(r.LastName, c.Last))) continue;
+            var primary = c.Pending is null && ContactRoleRules.ValidateUniqueness(c.Role, true, ContactRoleStatus.Active, recorded.Select(r => (r.RoleType, r.IsPrimary, r.Status))) is null;
+            recorded.Add((c.Role, c.First, c.Last, primary, ContactRoleStatus.Active));
+            var person = new Person { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = c.First, LastName = c.Last, Phone = c.Phone, Email = c.Email };
             _db.People.Add(person);
             _db.ParticipantContactRoles.Add(new ParticipantContactRole
             {
                 Id = Guid.NewGuid(), TenantId = inquiry.TenantId, ParticipantId = participant.Id, PersonId = person.Id,
-                RoleType = c.Role, RelationshipToParticipant = c.Relationship, Notes = c.Notes,
+                RoleType = c.Role, RelationshipToParticipant = c.Relationship, Notes = c.Notes, IsPrimary = primary,
             });
         }
         return null;
     }
+
+    private static bool IsPhone(string? v) => v is not null && PhonePattern.IsMatch(v);
 
     [HttpGet("{id:guid}/onboarding")]
     public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> GetOnboarding(Guid id, CancellationToken ct)

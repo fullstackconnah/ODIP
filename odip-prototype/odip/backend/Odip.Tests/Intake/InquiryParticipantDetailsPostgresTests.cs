@@ -86,6 +86,28 @@ public class InquiryParticipantDetailsPostgresTests : IClassFixture<PostgresFixt
         return Assert.IsType<ApiResponse<ParticipantInquiryDetailDto>>(Assert.IsType<OkObjectResult>((await c.Get(id, CancellationToken.None)).Result).Value).Data!.UpdatedAt;
     }
 
+    // L4 on PostgreSQL: the DateOnly binds and stores, the provider's today reads, and Start intake's own role gate reads the date of birth it copied.
+    [SkippableFact]
+    public async Task The_role_rules_use_the_stored_DOB_at_save_and_at_Start_intake()
+    {
+        RequirePostgres();
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        await seed.DisposeAsync();
+        var form = new CreateParticipantInquiryDto { FirstName = "Ari", Source = "Phone", DateOfBirth = new DateOnly(2014, 3, 12), ContactFirstName = "Sarah", ContactLastName = "Walsh", ContactRole = ContactRoleType.PlanNominee };
+
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.Contains("contactRole", Assert.IsType<ValidationProblemDetails>(Assert.IsAssignableFrom<ObjectResult>((await c.Create(form, CancellationToken.None)).Result).Value).Errors.Keys); }
+        Guid id;
+        { var (db, c) = Request(tenantId); await using var _ = db; id = Assert.IsType<ApiResponse<ParticipantInquiryDto>>(Assert.IsType<OkObjectResult>((await c.Create((form with { ContactRole = ContactRoleType.Guardian }).WithFullAddress(),CancellationToken.None)).Result).Value).Data!.Id; }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Convert(id, new(), CancellationToken.None)).Result); }
+
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            var role = await check.ParticipantContactRoles.Include(r => r.Participant).SingleAsync(r => r.TenantId == tenantId);
+            Assert.Equal((ContactRoleType.Guardian, new DateOnly(2014, 3, 12)), (role.RoleType, role.Participant!.DateOfBirth));
+        }
+    }
+
     // Two coordinators have the enquiry open: the second save, loaded before the first, must not wipe the address the first one added.
     [SkippableFact]
     public async Task Two_editors_the_second_save_of_the_details_is_a_409_and_the_first_editors_address_stays()
