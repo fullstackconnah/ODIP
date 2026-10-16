@@ -1,3 +1,4 @@
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 
 namespace Odip.Domain.Entities;
@@ -17,7 +18,13 @@ public class ParticipantInquiry : ITenantEntity
     public string Source { get; set; } = "Phone";
     public string? Provenance { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>
+    /// The enquiry's version as well as its last change: a concurrency token (OdipDbContext). Held in whole microseconds, as PostgreSQL stores it, so the
+    /// value an answer carries, sent back by the form, still matches the stored one.
+    /// </summary>
+    public DateTime UpdatedAt { get => _updatedAt; set => _updatedAt = Micro(value); }
+    private DateTime _updatedAt = Micro(DateTime.UtcNow);
+    private static DateTime Micro(DateTime value) => new(value.Ticks - value.Ticks % 10, value.Kind);
     // The intake visit booked for this enquiry (owner decisions 2026-10-14): one current booking, every column empty when there is none.
     // IntakeStartsAt is a UTC instant; the visit is entered and shown in the provider's zone. IntakeInviteSentAt is when an invite last went out
     // for this UID; IntakeInviteError is the latest send's failure ("NotConfigured", "Failed"), cleared by a send that works. IntakeUid and
@@ -43,6 +50,27 @@ public class ParticipantInquiry : ITenantEntity
         IntakeStartsAt = null; IntakeDurationMinutes = null; IntakeLocation = null; IntakeStaffUserId = null; IntakeBookedByUserId = null; IntakeNotes = null;
         IntakeInviteSentAt = null; IntakeInviteError = null; IntakeConfirmedAt = null; IntakeIcsSequence = 0; IntakeUid = null;
     }
+}
+
+/// <summary>
+/// A contact noted on an enquiry before any participant exists (spec 2026-10-16, D3): family, guardians and others to keep in touch with. Only
+/// GET /inquiries/{id} reads it, for the roles that edit enquiries. Start intake (Convert) moves it onto the participant as a Person and a contact role,
+/// and deletes it; deleting the enquiry deletes it (cascade). Any role but PlanManager, which needs a plan type an enquiry hasn't got.
+/// </summary>
+public class InquiryContact : ITenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid InquiryId { get; set; }
+    public int SortOrder { get; set; }
+    public ContactRoleType Role { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? Relationship { get; set; }
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>Server-owned onboarding evidence. Readiness is derived, never supplied by a UI checkbox.</summary>
