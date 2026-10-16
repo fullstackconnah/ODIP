@@ -338,7 +338,7 @@ function useInquiriesScreen() {
       {showEmptyState && view === 'closed' && <EmptyState icon={ClipboardPlus} title="No closed enquiries" description="Enquiries you close show here, with why and when. You can reopen one." />}
       {showEmptyState && view === 'open' && <EmptyState icon={ClipboardPlus} title="No open enquiries" description="Capture an enquiry when someone first contacts the service, then start their intake. Once an intake is complete, the participant moves to the Onboarding tab." />}
       {showTable && !isLoading && filtered.length === 0
-        ? <EmptyState icon={Search} title="No enquiries match your search" description="Try a different search term, or clear the search to see every open enquiry." action={{ label: 'Clear search', onClick: () => setSearch('') }} />
+        ? <EmptyState icon={Search} title="No enquiries match your search" description={`Try a different search term, or clear the search to see every ${view} enquiry.`} action={{ label: 'Clear search', onClick: () => setSearch('') }} />
         : showTable && (view === 'closed'
           ? <DataTable data={filtered} columns={closedColumns} keyField="id" loading={isLoading} sortable emptyMessage="No closed enquiries." onRowClick={canManageParticipantLifecycle ? editExisting : undefined} />
           : <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={canManageParticipantLifecycle ? openRow : undefined} />)}
