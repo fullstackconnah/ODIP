@@ -213,6 +213,21 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task ShiftNotes_OfADraft_AreNotFound_ToReadOrWrite()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var draft = SeedShift(db, SeedParticipant(db).Id, me.Id);
+        draft.Status = ShiftStatus.Draft;
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        Assert.IsType<NotFoundObjectResult>((await controller.GetShiftNotes(draft.Id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await controller.CreateShiftNote(draft.Id, new CreateShiftNoteDto { Body = "Hello" }, CancellationToken.None)).Result);
+        Assert.Empty(db.ShiftNotes);
+    }
+
+    [Fact]
     public async Task GetMyShifts_ValidUserWithNoShifts_ReturnsEmptyListNotSpecialPayload()
     {
         // Post staff/user unification there is no "not linked" concept any more — a real,
