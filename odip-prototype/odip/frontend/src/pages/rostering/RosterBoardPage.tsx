@@ -20,7 +20,7 @@ import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { plural } from '@/lib/format'
-import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
+import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useSetRegular, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode, StartWeekResultDto } from '@/api/types'
 import {
@@ -34,7 +34,7 @@ import {
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
 } from './lib/rosterDrag'
 import {
-  ALREADY_STARTED, LEAVE_TITLE, START_FAILED, alreadyInWeekLine, leaveMessage, bannerBlockedLine, bannerTitle, isBlocked, startBudgetWarnings, startResultBody, startResultTitle,
+  ALREADY_STARTED, LEAVE_TITLE, START_FAILED, alreadyInWeekLine, leaveMessage, regularConfirm, regularDone, bannerBlockedLine, bannerTitle, isBlocked, startBudgetWarnings, startResultBody, startResultTitle,
 } from './lib/rosterWeek'
 
 /** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
@@ -47,6 +47,11 @@ type StartNotice = { kind: 'started'; result: StartWeekResultDto } | { kind: 'al
 
 /** The carried puck rides one coarse row (48px, --row-h under pointer: coarse) above a finger, so its outcome line is not under the thumb. A mouse or keyboard drag is left alone. */
 const liftAboveFinger: Modifier = ({ transform, activatorEvent }) => (activatorEvent?.type === 'touchstart' ? { ...transform, y: transform.y - 48 } : transform)
+
+/** Focus on a shift's menu button (the ⋮): where a menu item that opened a picker or dialog gives focus back to. */
+function focusChipMenu(id: string) {
+  document.querySelector<HTMLElement>(`[data-shift-chip="${id}"] button[aria-label^="Actions for"]`)?.focus({ preventScroll: true })
+}
 
 /** Focus on a shift's open control (ShiftChip's data-shift-open): the thing a keyboard drop changed. */
 function focusShift(id: string) {
@@ -71,11 +76,12 @@ export default function RosterBoardPage() {
   const [weekStart, setWeekStart] = useState(() => weekStartFromDateParam(dateParam))
   // Declared above the ?date= block, which clears it: a week's notices belong to that week (the brief, 2.3).
   const [startNotice, setStartNotice] = useState<StartNotice | null>(null)
+  const [regularNotice, setRegularNotice] = useState<string | null>(null)
   // React's "adjust state when a prop changes" pattern: compare the param during render, no effect. A missing param never resets the week.
   const [seenDateParam, setSeenDateParam] = useState(dateParam)
   if (seenDateParam !== dateParam) {
     setSeenDateParam(dateParam)
-    if (dateParam !== null) { setWeekStart(weekStartFromDateParam(dateParam)); setStartNotice(null) }
+    if (dateParam !== null) { setWeekStart(weekStartFromDateParam(dateParam)); setStartNotice(null); setRegularNotice(null) }
   }
   const [groupBy, setGroupBy] = useBoardViewMode()
   // `?participant=<id>` and `?unfilled=1` (plan builder phase D: the links an approval and its confirm dialog give) open the board already filtered to that participant, and to open shifts, through the same
@@ -221,12 +227,12 @@ export default function RosterBoardPage() {
   const publishable = useMemo(() => drafts.filter(s => !isBlocked(s)), [drafts])
   // The banner (the brief, 3.1): a started week with drafts, for writers and readers.
   const showBanner = !unstarted && drafts.length > 0
-  const noticesShown = showBanner || hasNotice || !!assignError || !!startNotice
+  const noticesShown = showBanner || hasNotice || !!assignError || !!startNotice || !!regularNotice
   // The height of what stands above the board (the banner, the notices and the error, in one wrapper), for the board frame (finish review fix 5): with them above it, strip and grid still share one screen.
   // shortcut: measured when any of them changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
   const noticeRef = useRef<HTMLDivElement>(null)
   const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
-  useLayoutEffect(() => { setNoticeHeight(noticesShown ? noticeRef.current?.offsetHeight ?? 0 : null) }, [noticesShown, assignError, waiting, drafts.length, blocked.length, startNotice])
+  useLayoutEffect(() => { setNoticeHeight(noticesShown ? noticeRef.current?.offsetHeight ?? 0 : null) }, [noticesShown, assignError, waiting, drafts.length, blocked.length, startNotice, regularNotice])
 
   const startWeek = useStartWeek()
   // Keyed to its week: a Start still out for a week no longer shown never says "Starting…" on this week's card.
@@ -243,6 +249,33 @@ export default function RosterBoardPage() {
   function showWeek(target: string) {
     setWeekStart(target)
     setStartNotice(null)
+    setRegularNotice(null)
+  }
+
+  const setRegular = useSetRegular()
+  const [regularTarget, setRegularTarget] = useState<ShiftDto | null>(null)
+  // Lead decision 1: the board's regularUserId is the slot's live regular, so a Make over someone else names them (from the staff list).
+  const replacing = (shift: ShiftDto) => (shift.regularUserId && shift.regularUserId !== shift.staffId ? staff.find(s => s.id === shift.regularUserId)?.fullName : undefined)
+  const regularCopy = regularTarget ? regularConfirm(regularTarget, replacing(regularTarget)) : null
+
+  /** The menu item that opened the dialog went with the menu, so focus goes back to the chip's ⋮ by hand (as closeSwap does). */
+  function closeRegular() {
+    const id = regularTarget?.id
+    setRegularTarget(null)
+    if (id) requestAnimationFrame(() => focusChipMenu(id))
+  }
+
+  async function handleSetRegular() {
+    const shift = regularTarget
+    if (!shift?.shiftPatternId) return
+    try {
+      await setRegular.mutateAsync({ patternId: shift.shiftPatternId, staffId: shift.isRegular ? null : shift.staffId ?? null })
+      setRegularNotice(regularDone(shift))
+    } catch (err: unknown) {
+      setAssignError(extractErrorMessage(err, 'Something went wrong changing the regular. Please try again.'))
+    } finally {
+      closeRegular()
+    }
   }
 
   // The leave guard (the brief, section 4): a writer, a started week, and a draft Publish could send. Drafts only a rule blocks never ask: publishing can't fix them.
@@ -427,7 +460,7 @@ export default function RosterBoardPage() {
   function closeSwap() {
     const id = swapTarget?.id
     setSwapTarget(null)
-    if (id) document.querySelector<HTMLElement>(`[data-shift-chip="${id}"] button[aria-label^="Actions for"]`)?.focus({ preventScroll: true })
+    if (id) focusChipMenu(id)
   }
 
   /** A swap pick is a drag swap without the drag: the same move-staff request, sentence, dialogs and pending look (choosePrompt('Swap')). Focus goes to the shift it was chosen on, as a pick's does. */
@@ -501,6 +534,7 @@ export default function RosterBoardPage() {
       onAssignTo={shift => setSlideOverTarget({ mode: 'edit', shift })}
       onUnassign={shift => performAssign(shift, null)}
       onDeleteShift={shift => setConfirmDeleteTarget(shift)}
+      onSetRegular={canWrite ? setRegularTarget : undefined}
       onAddParticipantShift={handleAddParticipantShift}
       onAddStaffShift={handleAddStaffShift}
     />
@@ -583,6 +617,8 @@ export default function RosterBoardPage() {
               )}
             </div>
           )}
+          {/* Its own polite status is the announcement: nothing on the chip changes at rest (the brief, 5.2). */}
+          {regularNotice && <Callout tone="success" actions={dismissNotice(() => setRegularNotice(null))}>{regularNotice}</Callout>}
           {assignError && (
             <Callout
               tone="error"
@@ -746,6 +782,15 @@ export default function RosterBoardPage() {
       />
 
       {leaveDialog}
+      <ConfirmDialog
+        open={regularCopy !== null}
+        onCancel={closeRegular}
+        onConfirm={handleSetRegular}
+        title={regularCopy?.title ?? ''}
+        message={regularCopy?.lines.map(line => <p key={line}>{line}</p>)}
+        confirmLabel={regularCopy?.confirmLabel}
+        loading={setRegular.isPending}
+      />
       <ConfirmDialog
         open={pendingWeek !== null}
         onCancel={() => setPendingWeek(null)}

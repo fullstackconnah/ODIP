@@ -393,3 +393,88 @@ describe('leaving a week with publishable drafts', () => {
     expect(screen.getByRole('alertdialog', { name: LEAVE })).toBeInTheDocument()
   })
 })
+
+describe('Make or Stop the regular', () => {
+  // All published, so the leave guard stays out of these tests. Sam's Wednesday comes from pattern pat-wed.
+  const withSam = (o: Partial<ShiftDto> = {}) => board(published(DRAFTS).map(s => (s.id === 'sam-wed' ? { ...s, ...o } : s)))
+  const samChip = () => document.querySelector('[data-shift-chip="sam-wed"]') as HTMLElement
+  const samMenu = () => within(samChip()).getByRole('button', { name: /^Actions for/ })
+  async function choose(user: ReturnType<typeof userEvent.setup>, option: string) {
+    await user.click(samMenu())
+    await user.click(screen.getByRole('option', { name: option }))
+  }
+
+  beforeEach(() => {
+    showBoard(withSam())
+    h.setRegular.mockResolvedValue({ id: 'pat-wed' })
+  })
+
+  it("Make Sam the regular: the brief's confirm, the pattern PUT, the notice, and focus back on the chip's ⋮", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await choose(user, 'Make Sam the regular')
+    const dialog = screen.getByRole('alertdialog', { name: 'Make Sam the regular?' })
+    expect(dialog).toHaveTextContent("Sam goes on Mia Chen's Wednesday 9am–3pm shift in every week you start from now on, unless they're away. Weeks already started don't change, this one included.")
+    await user.click(within(dialog).getByRole('button', { name: 'Make Sam the regular' }))
+
+    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', staffId: 'staff-2' })
+    expect((await screen.findByText("Sam is now the regular for Mia Chen's Wednesday shift.")).closest('[role="status"]')).not.toBeNull()
+    await waitFor(() => expect(samMenu()).toHaveFocus())
+  })
+
+  it('names the regular a Make replaces, from the staff list', async () => {
+    const user = userEvent.setup()
+    showBoard(withSam({ regularUserId: 'staff-9' }))
+    const { unmount } = renderPage()
+    await choose(user, 'Make Sam the regular')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Alex stops being the regular.')
+    unmount()
+
+    showBoard(withSam({ regularUserId: 'staff-404' }))
+    renderPage()
+    await choose(user, 'Make Sam the regular')
+    expect(screen.getByRole('alertdialog')).not.toHaveTextContent('stops being the regular')
+  })
+
+  it('Stop being the regular: its own words, staffId null, and the notice', async () => {
+    const user = userEvent.setup()
+    showBoard(withSam({ isRegular: true, regularUserId: 'staff-2' }))
+    renderPage()
+    await choose(user, 'Stop being the regular')
+    const dialog = screen.getByRole('alertdialog', { name: 'Stop Sam being the regular?' })
+    expect(dialog).toHaveTextContent("From the next week you start, Mia Chen's Wednesday 9am–3pm shift is made open, with nobody on it. Weeks already started keep Sam.")
+    await user.click(within(dialog).getByRole('button', { name: 'Stop being the regular' }))
+    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', staffId: null })
+    expect(await screen.findByText("Mia Chen's Wednesday shift has no regular now.")).toBeInTheDocument()
+  })
+
+  it("Cancel changes nothing and gives focus back to the ⋮", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await choose(user, 'Make Sam the regular')
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+    expect(h.setRegular).not.toHaveBeenCalled()
+    await waitFor(() => expect(samMenu()).toHaveFocus())
+  })
+
+  it("a refusal shows the server's words, and no notice", async () => {
+    const user = userEvent.setup()
+    h.setRegular.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['Staff member not found.'] } } })
+    renderPage()
+    await choose(user, 'Make Sam the regular')
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Make Sam the regular' }))
+    expect((await screen.findByText('Staff member not found.')).closest('[role="alert"]')).not.toBeNull()
+    expect(screen.queryByText(/is now the regular/)).not.toBeInTheDocument()
+  })
+
+  it('the notice belongs to its week', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await choose(user, 'Make Sam the regular')
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Make Sam the regular' }))
+    await screen.findByText("Sam is now the regular for Mia Chen's Wednesday shift.")
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    await user.click(screen.getByRole('button', { name: 'Previous week' }))
+    expect(screen.queryByText(/is now the regular/)).not.toBeInTheDocument()
+  })
+})
