@@ -552,7 +552,7 @@ describe('LoginPage: landmarks and the platform footer', () => {
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
     const main = screen.getByRole('main')
     const footer = screen.getByRole('contentinfo')
-    expect(main).toContainElement(screen.getByRole('heading', { level: 1, name: 'Odip' }))
+    expect(main).toContainElement(screen.getByRole('heading', { level: 1, name: 'Bunya Support' }))
     expect(footer.closest('main')).toBeNull()
     expect(main.nextElementSibling).toBe(footer)
     expect(within(footer).getByText(ACKNOWLEDGEMENT_OF_COUNTRY)).toBeInTheDocument()

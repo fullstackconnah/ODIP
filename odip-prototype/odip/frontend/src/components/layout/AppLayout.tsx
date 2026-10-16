@@ -20,6 +20,7 @@ import { readStoredOpenGroups, storeGroupOpen } from '@/components/layout/navOpe
 import { usePermissions } from '@/lib/permissions'
 import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount } from '@/api/hooks'
 import { endSession } from '@/api/client'
+import { Wordmark } from '@/components/Wordmark'
 
 /**
  * Mobile bottom-nav cell: icon over label, 42px tall. The cells share the row in equal widths (`flex-1`), so however many pages the
@@ -279,14 +280,8 @@ export default function AppLayout() {
         }`}
       >
         {/* Brand — ~48px tall total */}
-        <div className="flex items-center gap-2.5 h-12 px-2 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-container)] flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-[var(--color-primary-fixed)]" aria-hidden="true" style={{ fontSize: '16px' }}>travel_explore</span>
-          </div>
-          <div className="min-w-0">
-            <span className="font-extrabold text-[var(--color-primary)] tracking-tight text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</span>
-            <p className="text-xs text-[var(--color-muted-foreground)] opacity-70 leading-none mt-0.5">NDIS Management</p>
-          </div>
+        <div className="flex items-center h-12 px-2.5 shrink-0">
+          <Wordmark size={21} />
         </div>
 
         {/* Nav. Every item (group toggles, top-level links, group children, and "Sign Out" below) carries a

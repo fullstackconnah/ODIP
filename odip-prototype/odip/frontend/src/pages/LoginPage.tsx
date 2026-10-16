@@ -9,7 +9,8 @@ import { Button } from '@/components/Button'
 import PlatformFooter from '@/components/layout/PlatformFooter'
 import { SignInRefused, describeSignInRefusal, type RefusalWords } from '@/lib/signInRefusal'
 import { VERIFICATION_HOLD_MS, holdLeftMs, readVerificationSend, writeVerificationSend, type VerificationSendRecord } from '@/lib/verificationSend'
-import { Map, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
+import { Wordmark } from '@/components/Wordmark'
 
 /** What the person is told: one plain sentence, and what to do next when the sentence does not already say. */
 type Problem = RefusalWords
@@ -196,11 +197,8 @@ export default function LoginPage() {
       <main className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-md animate-fade-in">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[var(--color-primary)]/20">
-              <Map className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Odip</h1>
-            <p className="text-[var(--color-muted-foreground)] mt-2">NDIS Trip Management Platform</p>
+            <h1><Wordmark size={32} /></h1>
+            <p className="text-[var(--color-muted-foreground)] mt-3">NDIS Trip Management Platform</p>
           </div>
 
           <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
