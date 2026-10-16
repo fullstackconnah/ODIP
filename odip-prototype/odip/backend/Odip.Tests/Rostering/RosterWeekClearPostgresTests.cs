@@ -43,8 +43,10 @@ public class RosterWeekClearPostgresTests : IClassFixture<PostgresFixture>
                 Role = UserRole.Coordinator, Position = Position.SupportWorker, IsActive = true,
             }).Entity;
             var mia = db.Participants.Add(new Participant { Id = Guid.NewGuid(), FirstName = "Mia", LastName = "Test", IsActive = true }).Entity;
+            var revision = db.ServiceAgreementDrafts.Add(ApprovalTestSupport.BuildRevision(tenantId, mia.Id, 1, new[] { ApprovalTestSupport.WeekdayBlock() })).Entity;
             var pattern = db.ShiftPatterns.Add(new ShiftPattern
             {
+                SourceDraftId = revision.Id, SourceBlockKey = "weekdays", WorkerSlot = 1,   // an agreement pattern: only its shifts are ever cleared
                 Id = Guid.NewGuid(), ParticipantId = mia.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
                 Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true,
             }).Entity;
@@ -96,9 +98,30 @@ public class RosterWeekClearPostgresTests : IClassFixture<PostgresFixture>
         Assert.True(await read.ShiftNotes.AnyAsync(n => n.Id == noteId));
         Assert.Equal(w3, (await read.BookingTasks.SingleAsync(t => t.Id == taskId)).ShiftId);
         Assert.Equal(w4, (await read.IncidentReports.SingleAsync(i => i.Id == incidentId)).ShiftId);
-        Assert.Equal(new[] { Current, W2, W3, W4 }, await read.RosterWeeks.Where(w => w.TenantId == org.TenantId).Select(w => w.WeekStart).OrderBy(d => d).ToListAsync());
+        Assert.Equal(new[] { W2, W3, W4 }, await read.RosterWeeks.Where(w => w.TenantId == org.TenantId).Select(w => w.WeekStart).OrderBy(d => d).ToListAsync());
         var deleted = await read.AuditLogs.Where(a => a.Action == AuditAction.Deleted && a.ChangedByName == RosterWeekClear.ActorName).Select(a => a.EntityId).ToListAsync();
         Assert.Equal(new[] { w1a, w1b }.OrderBy(id => id), deleted.OrderBy(id => id));
+    }
+
+    [SkippableFact]
+    public async Task OnPostgres_ADraftACoordinatorEdited_IsKept()   // B-M2: a changed time or ratio leaves no other mark than UpdatedAt
+    {
+        RequirePostgres();
+        var org = await NewDatabaseAsync();
+        Guid edited;
+        await using (var db = PostgresFixture.NewContext(org.Cs))
+        {
+            var shift = Untouched(db, org, W1);
+            shift.UpdatedAt = shift.CreatedAt.AddMinutes(5);
+            edited = shift.Id;
+            await db.SaveChangesAsync();
+        }
+
+        var run = await RosterWeekClear.RunAsync(Options(org.Cs), Clock, NullLogger.Instance, default);
+
+        Assert.Equal(0, run.ShiftsRemoved);
+        await using var read = PostgresFixture.NewContext(org.Cs);
+        Assert.True(await read.Shifts.AnyAsync(s => s.Id == edited));
     }
 
     [SkippableFact]

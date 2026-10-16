@@ -240,7 +240,7 @@ public class RosteringController : ControllerBase
                 FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
                 Findings = findings.Select(ToFindingDto).ToList(),
                 AssigneeOnApprovedLeave = IsAssigneeOnApprovedLeave(shift),
-                RegularUserId = LiveRegular(shift, regulars), RegularAwayReason = shift.RegularAwayReason, IsRegular = IsRegular(shift, regulars),
+                RegularUserId = LiveRegular(shift, regulars), RegularAwayReason = AwayReason(shift, regulars), IsRegular = IsRegular(shift, regulars),
                 ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssuesById, shift.ParticipantId)
             };
         }
@@ -1847,6 +1847,10 @@ public class RosteringController : ControllerBase
     private static Guid? LiveRegular(Shift shift, Dictionary<Guid, Guid> regulars) =>
         shift.ShiftPatternId is { } patternId && regulars.TryGetValue(patternId, out var regular) ? regular : null;
 
+    /// <summary>DEEP-S3: the stored reason only while it still describes the slot's live regular; once someone else is the regular, or nobody, it is stale.</summary>
+    private static string? AwayReason(Shift shift, Dictionary<Guid, Guid> regulars) =>
+        shift.RegularUserId is { } was && was == LiveRegular(shift, regulars) ? shift.RegularAwayReason : null;
+
     private static bool? IsRegular(Shift shift, Dictionary<Guid, Guid> regulars) =>
         shift.UserId is { } worker && LiveRegular(shift, regulars) == worker ? true : null;
 
@@ -1878,7 +1882,7 @@ public class RosteringController : ControllerBase
             AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),
             FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
             Findings = findings.Select(ToFindingDto).ToList(),
-            RegularUserId = LiveRegular(shift, regulars), RegularAwayReason = shift.RegularAwayReason, IsRegular = IsRegular(shift, regulars),
+            RegularUserId = LiveRegular(shift, regulars), RegularAwayReason = AwayReason(shift, regulars), IsRegular = IsRegular(shift, regulars),
             ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, shift.ParticipantId)
         };
     }

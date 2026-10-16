@@ -152,6 +152,14 @@ public class RosterAvailabilityTests
     }
 
     [Fact]
+    public void EveryBlockingFinding_IsAway_WithAGenericReasonWhenItHasNoShortOne()   // B-S1: any Blocking finding, not only the mapped codes
+    {
+        Assert.Equal("can't work this shift", RosterAvailability.Snapshot.ReasonOf(new RosterFinding("SOME_NEW_BLOCK", RosterFindingSeverity.Blocking, "Blocked.")));
+        Assert.Equal("screening expired", RosterAvailability.Snapshot.ReasonOf(new RosterFinding(RosterConflictService.WscExpired, RosterFindingSeverity.Blocking, "Expired.")));
+        Assert.Null(RosterAvailability.Snapshot.ReasonOf(new RosterFinding(RosterConflictService.StaffLeavePending, RosterFindingSeverity.Warning, "Pending.")));
+    }
+
+    [Fact]
     public async Task MarkRegularsAway_KeepsTheEarliest_AndOpensTheLater()
     {
         await using var s = await SetUpAsync();

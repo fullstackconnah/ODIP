@@ -148,10 +148,8 @@ public class PortalController : ControllerBase
     {
         var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
         if (error is not null) return error;
-        // L1: a Draft answers as "not yours" does (the class remarks: never tell the two apart).
-        if (shift!.Status == ShiftStatus.Draft) return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
 
-        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift!, ct)));
     }
 
     /// <summary>
@@ -281,7 +279,8 @@ public class PortalController : ControllerBase
 
         var shift = await _db.Shifts
             .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+            // L1 (2026-10-16): a Draft is invisible to its worker until it is published, on every path, and answers as "not yours" does.
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);
         if (shift?.Participant is null || !Participant.ServicesBegun(shift.Participant))
             return (null, NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found.")));
 
@@ -439,10 +438,6 @@ public class PortalController : ControllerBase
         if (shift.Status == ShiftStatus.Cancelled)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                 "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled));
-
-        if (shift.Status == ShiftStatus.Draft)
-            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
 
         // A shift note is required - or, since the shift package, an explicit "nothing to note" confirmation.
         var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
@@ -655,7 +650,7 @@ public class PortalController : ControllerBase
             return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
 
         var shift = await _db.Shifts.Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
         if (shift?.Participant is null || !Participant.ServicesBegun(shift.Participant))
             return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
 
@@ -1002,7 +997,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
 
-        var ownsShift = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        var ownsShift = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
         if (!ownsShift)
             return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
 
@@ -1025,7 +1020,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 
-        var owns = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        var owns = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
         if (!owns)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 

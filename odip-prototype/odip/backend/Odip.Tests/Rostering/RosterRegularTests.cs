@@ -228,6 +228,33 @@ public class RosterRegularTests
     }
 
     [Fact]
+    public async Task TheBoard_DropsTheAwayReason_OnceTheSlotHasAnotherRegular_OrNone()   // DEEP-S3: the reason describes who was away, not whoever is the regular now
+    {
+        Guid leeId = default, patternId = default, flaggedId = default;
+        var dbName = NewDatabase(db =>
+        {
+            var kim = Worker(db, "Kim");
+            leeId = Worker(db, "Lee").Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday, kim.Id).Id;
+            var flagged = ShiftOf(db, mia.Id, null, Monday, patternId);
+            flagged.RegularUserId = kim.Id;
+            flagged.RegularAwayReason = "on approved leave";
+            flaggedId = flagged.Id;
+        });
+        string Chip(RosterBoardDto board) => JsonSerializer.Serialize(board.ParticipantRows!.SelectMany(r => r.Shifts).Single(s => s.Id == flaggedId), ApiJson);
+
+        await SetRegularAsync(dbName, patternId, leeId);
+        var afterChange = Chip(await BoardAsync(dbName));
+        await SetRegularAsync(dbName, patternId, null);
+        var afterClear = Chip(await BoardAsync(dbName));
+
+        Assert.Contains($"\"regularUserId\":\"{leeId}\"", afterChange);
+        Assert.DoesNotContain("regularAwayReason", afterChange);
+        Assert.DoesNotContain("regularAwayReason", afterClear);
+    }
+
+    [Fact]
     public async Task ToShiftDtoAsync_CarriesTheRegularFieldsToo()
     {
         Guid kimId = default, shiftId = default;

@@ -2754,7 +2754,7 @@ const postRoutes = [
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
     return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
   }],
-  // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers. matchRoute only reads a literal :id.
+  // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers. matchRoute reads only `:id` as a parameter: it is the week start.
   ['rostering/weeks/:id/start', (weekStart) => {
     const monday = planApproval.mondayOf(weekStart)
     if (startedWeeks.has(monday)) return respond(409, failEnvelope(null, ['This week has already been started.'], 'roster-week-started'))

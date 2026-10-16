@@ -37,11 +37,18 @@ public class RosterWeekClearTests
         db.SaveChanges();
     }
 
-    private static Shift Untouched(OdipDbContext db, DateOnly day, Guid? tenantId = null) => db.Shifts.Add(new Shift
+    /// <summary>An open Draft an agreement pattern made (DEEP-S1: only those are cleared, as Start makes them again).</summary>
+    private static Shift Untouched(OdipDbContext db, DateOnly day, Guid? tenantId = null, bool fromAgreement = true) => db.Shifts.Add(new Shift
     {
-        Id = Guid.NewGuid(), TenantId = tenantId ?? TenantA, ParticipantId = Guid.NewGuid(), ShiftPatternId = Guid.NewGuid(), ServiceDate = day,
+        Id = Guid.NewGuid(), TenantId = tenantId ?? TenantA, ParticipantId = Guid.NewGuid(), ShiftPatternId = PatternOf(db, tenantId ?? TenantA, fromAgreement), ServiceDate = day,
         StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft,
     }).Entity;
+
+    private static Guid PatternOf(OdipDbContext db, Guid tenantId, bool fromAgreement) => db.ShiftPatterns.Add(new ShiftPattern
+    {
+        Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = Guid.NewGuid(), DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+        Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 1, 1), SourceDraftId = fromAgreement ? Guid.NewGuid() : null,
+    }).Entity.Id;
 
     private static DbContextOptions<OdipDbContext> NewSet(Action<OdipDbContext> seed)
     {
@@ -87,7 +94,9 @@ public class RosterWeekClearTests
     [InlineData("override")]
     [InlineData("codes")]
     [InlineData("returned")]
+    [InlineData("edited")]
     [InlineData("one-off")]
+    [InlineData("hand-made-pattern")]
     [InlineData("note-row")]
     [InlineData("completion-row")]
     [InlineData("handover-row")]
@@ -109,7 +118,9 @@ public class RosterWeekClearTests
                 case "override": touched.OverrideReason = "Agreed with family"; break;
                 case "codes": touched.AcknowledgedFindingCodes = "OVER_HOURS"; break;
                 case "returned": touched.ReturnCount = 1; break;
+                case "edited": touched.UpdatedAt = touched.CreatedAt.AddMinutes(5); break;   // a coordinator changed its times or ratio, nothing else
                 case "one-off": touched.ShiftPatternId = null; break;
+                case "hand-made-pattern": touched.ShiftPatternId = PatternOf(db, TenantA, fromAgreement: false); break;   // DEEP-S1: Start never makes these again
                 case "note-row": db.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), TenantId = TenantA, ShiftId = touched.Id, AuthorUserId = Guid.NewGuid(), AuthorName = "Sam Hill", Body = "Note" }); break;
                 case "completion-row":
                     db.ShiftCompletions.Add(new ShiftCompletion { Id = Guid.NewGuid(), TenantId = TenantA, ShiftId = touched.Id, ActualStart = DateTime.UtcNow, TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(), StartedAt = DateTime.UtcNow, IsActive = true });
@@ -175,26 +186,34 @@ public class RosterWeekClearTests
     }
 
     [Fact]
-    public async Task AnOrganisationWithOnlyUntouchedFutureWeeks_IsMarkedDone_SoASecondRunSkipsIt()
+    public async Task AnOrganisationWithOnlyUntouchedFutureWeeks_IsCleared_AndGetsNoRow_SoItsCurrentWeekCanStillBeStarted()   // DEEP-S2: no forced current-week row
     {
         var options = NewSet(db => Untouched(db, Next));
 
-        var first = await RunAsync(options);
-        Assert.Equal((1, 1), (first.ShiftsRemoved, first.WeeksCleared));
-        Assert.Equal(new[] { Current }, Rows(options));
+        var run = await RunAsync(options);
 
-        Guid generated = default;
-        Seed(options, db =>
+        Assert.Equal((1, 1, 0), (run.ShiftsRemoved, run.WeeksCleared, run.WeeksMarked));
+        Assert.Empty(Rows(options));
+    }
+
+    [Theory]
+    [InlineData("one-off")]
+    [InlineData("cancelled-pattern-shift")]
+    public async Task AWeekHoldingNoLivePatternShift_IsKept_ButNotMarkedStarted(string holds)   // DEEP-S2: the backfill follows the StartedWeeks rule
+    {
+        var week = new DateOnly(2026, 10, 26);
+        var options = NewSet(db =>
         {
-            Untouched(db, new DateOnly(2026, 10, 27)).ShiftPatternId = null;   // a one-off typed later
-            generated = Untouched(db, new DateOnly(2026, 11, 2)).Id;            // a Generate whose row was lost
+            var shift = Untouched(db, week);
+            if (holds == "one-off") { shift.ShiftPatternId = null; shift.Status = ShiftStatus.Published; }
+            else shift.Status = ShiftStatus.Cancelled;
         });
 
-        var second = await RunAsync(options);
+        var run = await RunAsync(options);
 
-        Assert.Equal(1, second.AlreadyDone);
-        Assert.Equal(new[] { Current }, Rows(options));
-        Assert.Contains(generated, ShiftIds(options));
+        Assert.Equal(0, run.ShiftsRemoved);
+        Assert.Single(ShiftIds(options));
+        Assert.Empty(Rows(options));
     }
 
     [Fact]
