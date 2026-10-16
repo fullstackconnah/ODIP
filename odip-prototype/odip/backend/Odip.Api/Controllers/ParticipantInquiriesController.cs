@@ -55,9 +55,13 @@ public class ParticipantInquiriesController : ControllerBase
                 ? ToDto(x, StaffOf(x), zoneId) with { ParticipantIsDraft = state.IsDraft, ParticipantIsActive = state.IsActive, ParticipantIntakeCompletedAt = state.IntakeCompletedAt }
                 : ToDto(x, StaffOf(x), zoneId)).ToList();
         // A visit's address (often a home), its internal notes and the staff member's full name are for the lifecycle roles, as on /intake-visits.
-        // Everyone else who can open the Enquiries tab still sees when it is, the staff member's first name and what the invite did.
+        // Everyone else who can open the Enquiries tab still sees when it is, the staff member's first name and what the invite did. The main contact's
+        // name and relationship are a third party's details, so they are withheld the same way (L2); the phone and email stay, as before the redesign.
         var seesVisitDetails = User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true;
-        if (!seesVisitDetails) rows = rows.Select(r => r with { IntakeLocation = null, IntakeNotes = null, IntakeStaffName = null, CloseNote = null }).ToList();
+        if (!seesVisitDetails) rows = rows.Select(r => r with
+        {
+            IntakeLocation = null, IntakeNotes = null, IntakeStaffName = null, CloseNote = null, ContactFirstName = null, ContactLastName = null, ContactRelationship = null,
+        }).ToList();
         if (closed) return Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok(rows));
 
         // A draft intake started in the Intake wizard (/participants/new) has no enquiry. It used to be reachable only through the register's

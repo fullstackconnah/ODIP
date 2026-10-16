@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.Serialization;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -198,6 +200,85 @@ public class InquiryDetailsTests
         }, CancellationToken.None);
 
         Assert.Equal(["Plan Nominee is not available for a participant under 18 — use Child Representative instead."], Problems(result.Result)["contacts[0].role"]);
+    }
+
+    // ── What each role reads (L2, G2) ──────────────────────────────────────────────────────────────
+
+    private static readonly JsonSerializerOptions Wire = WireOptions();
+    private static JsonSerializerOptions WireOptions() { var o = new JsonSerializerOptions(JsonSerializerDefaults.Web); ApiJsonOptions.Configure(o); return o; }
+
+    private async Task<JsonElement> ListAsync(string role)
+    {
+        var result = await Controller(role).GetAll(CancellationToken.None);
+        return JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(result.Result).Value, Wire).GetProperty("data");
+    }
+
+    private void SeedWalsh() => Seed(x =>
+    {
+        x.FirstName = "Ari"; x.LastName = "Walsh"; x.WithFullAddress(); x.DateOfBirth = new DateOnly(2014, 3, 12); x.NdisNumber = "430123456";
+        x.PlanType = PlanType.PlanManaged; x.PlanStartDate = new DateOnly(2026, 7, 1); x.PlanEndDate = new DateOnly(2027, 6, 30);
+        x.ContactFirstName = "Sarah"; x.ContactLastName = "Walsh"; x.ContactRelationship = "Mother"; x.ContactRole = ContactRoleType.Guardian; x.Phone = "0412 555 061";
+    });
+
+    [Fact]
+    public async Task The_list_never_carries_the_participant_details_or_the_contacts_role()
+    {
+        SeedWalsh();
+
+        var row = Assert.Single((await ListAsync("Coordinator")).EnumerateArray());
+
+        foreach (var key in new[] { "dateOfBirth", "ndisNumber", "addressStreet", "addressSuburb", "addressState", "addressPostcode", "planType", "planStartDate", "planEndDate", "contactRole" })
+            Assert.False(row.TryGetProperty(key, out _), key);
+        Assert.True(row.GetProperty("hasAddress").GetBoolean());
+        Assert.False(row.GetProperty("contactNeedsName").GetBoolean());
+        Assert.False(row.GetProperty("contactIsParticipant").GetBoolean());
+    }
+
+    [Fact]
+    public async Task The_contact_name_is_withheld_from_roles_without_lifecycle_rights()
+    {
+        SeedWalsh();
+
+        var worker = Assert.Single((await ListAsync("SupportWorker")).EnumerateArray());
+        foreach (var key in new[] { "contactFirstName", "contactLastName", "contactRelationship" }) Assert.False(worker.TryGetProperty(key, out _), key);
+        Assert.Equal("0412 555 061", worker.GetProperty("phone").GetString());
+        Assert.True(worker.GetProperty("hasAddress").GetBoolean());
+
+        var coordinator = Assert.Single((await ListAsync("Coordinator")).EnumerateArray());
+        Assert.Equal(("Sarah", "Walsh", "Mother"), (coordinator.GetProperty("contactFirstName").GetString(), coordinator.GetProperty("contactLastName").GetString(), coordinator.GetProperty("contactRelationship").GetString()));
+    }
+
+    [Fact]
+    public async Task The_list_says_whether_intake_can_start()
+    {
+        Seed(x => { x.FirstName = "Ready"; x.WithFullAddress(); x.ContactFirstName = "Sarah"; x.ContactLastName = "Walsh"; });
+        Seed(x => { x.FirstName = "NoAddress"; x.ContactFirstName = "Sarah"; x.ContactLastName = "Walsh"; });
+        Seed(x => { x.FirstName = "Unnamed"; x.WithFullAddress(); x.Phone = "0412 555 010"; });
+        Seed(x => { x.FirstName = "Self"; x.WithFullAddress(); x.ContactIsParticipant = true; x.Phone = "0412 555 010"; });
+
+        var rows = (await ListAsync("Coordinator")).EnumerateArray().ToDictionary(r => r.GetProperty("firstName").GetString()!, r => (r.GetProperty("hasAddress").GetBoolean(), r.GetProperty("contactNeedsName").GetBoolean()));
+
+        Assert.Equal((true, false), rows["Ready"]);
+        Assert.Equal((false, false), rows["NoAddress"]);
+        Assert.Equal((true, true), rows["Unnamed"]);
+        Assert.Equal((true, false), rows["Self"]);
+    }
+
+    [Fact]
+    public async Task Get_carries_the_details_for_the_form()
+    {
+        var created = Data<ParticipantInquiryDto>((await Controller().Create(new CreateParticipantInquiryDto
+        {
+            FirstName = "Ari", Source = "Phone", ContactRole = ContactRoleType.Guardian, DateOfBirth = new DateOnly(2014, 3, 12), NdisNumber = "430 123 456",
+            PlanType = PlanType.AgencyManaged, PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30),
+        }.WithFullAddress(), CancellationToken.None)).Result);
+
+        var d = Data<ParticipantInquiryDetailDto>((await Controller().Get(created.Id, CancellationToken.None)).Result);
+
+        Assert.Equal((ContactRoleType.Guardian, new DateOnly(2014, 3, 12), "430123456"), (d.ContactRole!.Value, d.DateOfBirth!.Value, d.NdisNumber));
+        Assert.Equal(("12 Smith St", "Parramatta", "NSW", "2150"), (d.AddressStreet, d.AddressSuburb, d.AddressState, d.AddressPostcode));
+        Assert.Equal((PlanType.AgencyManaged, new DateOnly(2026, 7, 1), new DateOnly(2027, 6, 30)), (d.PlanType!.Value, d.PlanStartDate!.Value, d.PlanEndDate!.Value));
+        Assert.True(d.HasAddress);
     }
 
     [Fact]

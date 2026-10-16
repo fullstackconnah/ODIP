@@ -432,6 +432,10 @@ public class ParticipantHubFlowTests
         Assert.Equal("Phone", newRow.GetProperty("source").GetString());
         Assert.False(newRow.TryGetProperty("participantId", out _));
         Assert.False(newRow.TryGetProperty("participantIsDraft", out _));
+        // The redesign's list keys (spec 2026-10-16): the gates and the self flag, for every role.
+        Assert.True(newRow.GetProperty("hasAddress").GetBoolean());
+        Assert.False(newRow.GetProperty("contactNeedsName").GetBoolean());
+        Assert.True(newRow.GetProperty("contactIsParticipant").GetBoolean());
 
         // An enquiry whose intake is complete: the participant's state is there, and the completion time is a UTC instant the screens treat as "done".
         var doneRow = rows["Intake"];
