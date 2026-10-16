@@ -49,6 +49,8 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     { id: 'inq-0107', participantId: null, firstName: 'Jo', lastName: null, phone: null, email: null, source: 'Phone', provenance: null, createdAt: '2026-10-05T01:00:00Z', contactIsParticipant: true },
     // A legacy phone that is not a phone, and no contact name.
     { id: 'inq-0108', participantId: null, firstName: 'Theo', lastName: 'Hart', phone: '0412 555 010 after 3pm', email: null, source: 'Phone', provenance: null, createdAt: '2026-10-06T01:00:00Z' },
+    // The name-only gate: the full address and a phone, but a main contact with no name (only Start intake's name gate holds it).
+    { id: 'inq-0109', participantId: null, firstName: 'Mina', lastName: 'Okafor', phone: '0412 555 070', email: null, source: 'Phone', provenance: 'GP referral', createdAt: '2026-10-07T01:00:00Z', ...FULL_ADDRESS },
   ]
   const bookings = {
     'inq-0002': booked(1, '10:00', { intakeInviteSentAt: sentAt }),
@@ -56,6 +58,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     'inq-0102': booked(3, '09:30', { intakeInviteSentAt: sentAt, intakeConfirmedAt: sentAt }),
     'inq-0103': booked(-3, '11:00', { intakeInviteSentAt: sydneyInstant(-6, '15:00') }),
     'inq-0104': booked(4, '10:00'),
+    'inq-0109': booked(5, '13:00'),
   }
   const rows = () => [...enquiryFeed, ...extraEnquiries]
   // Close and reopen (spec addendum): why and when, by enquiry id. withBooking spreads it, so every answer and the feed carry it.
