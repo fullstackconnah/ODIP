@@ -27,9 +27,9 @@ const rows = [
   { ...base, id: 'p-direct', participantId: 'p-direct', firstName: 'Tomas', lastName: 'Becker', source: '', participantIsDraft: true, isDirectIntake: true },
 ]
 
-function page() {
+function page(entry: string | { pathname: string; state: unknown } = '/inquiries') {
   return render(
-    <MemoryRouter initialEntries={['/inquiries']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/inquiries" element={<InquiriesTable />} />
         <Route path="/participants/new-inquiry" element={<p>Enquiry form</p>} />
@@ -144,5 +144,15 @@ describe('the phone menu', () => {
     expect(mocks.cancelVisit).toHaveBeenCalledWith('sent')
     expect(await screen.findByText('Intake visit cancelled, email not sent')).toBeInTheDocument()
     expect(screen.getByText("Email isn't set up yet, so Priya Nair wasn't told. Let them know another way.")).toBeInTheDocument()
+  })
+})
+
+describe("the enquiry form's summary", () => {
+  it("shows the enquiry form's summary once, as a notice about that row", async () => {
+    const enquiryNotice = { tone: 'success', title: 'Enquiry captured', message: 'Ana Lopez is on the Enquiries list.', subject: 'new' }
+    page({ pathname: '/inquiries', state: { enquiryNotice } })
+
+    expect(await screen.findByText('Enquiry captured')).toBeInTheDocument()
+    expect(screen.getAllByText('Ana Lopez is on the Enquiries list.')).toHaveLength(1)
   })
 })

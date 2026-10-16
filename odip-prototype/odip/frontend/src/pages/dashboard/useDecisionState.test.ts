@@ -21,4 +21,13 @@ describe('useDecisionState', () => {
 
     expect(result.current.gone.has('leave:leave:l1')).toBe(true)
   })
+
+  it('knows which groups have a bulk run in flight', () => {
+    const { result } = renderHook(() => useDecisionState())
+
+    act(() => result.current.setRunning('leave', true))
+    expect(result.current.running.has('leave')).toBe(true)
+    act(() => result.current.setRunning('leave', false))
+    expect(result.current.running.has('leave')).toBe(false)
+  })
 })

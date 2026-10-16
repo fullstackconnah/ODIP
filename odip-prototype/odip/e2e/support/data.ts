@@ -1,5 +1,5 @@
 import { call, expectStatus, login, type ApiResult, Session } from './api';
-import { addDays } from './dates';
+import { addDays, ZONE } from './dates';
 import { DEMO_EMAIL_DOMAIN, SEEDED } from './env';
 
 let counter = 0;
@@ -139,4 +139,36 @@ export async function approveDraft(coord: Session, participantId: string, draftI
   const preview = await expectStatus('approval preview', 200, await call(coord, 'GET', `/participants/${participantId}/service-agreement-drafts/${draftId}/approval-preview`));
   if (!preview.data.canApprove) throw new Error(`the draft cannot be approved: ${JSON.stringify(preview.data.reasons)}`);
   return expectStatus('approve draft', 200, await call(coord, 'POST', `/participants/${participantId}/service-agreement-drafts/${draftId}/approve`, {}));
+}
+
+/**
+ * The first 90-minute start on `day`, at or after `earliest` ("10:00"), when the signed-in coordinator has no shift (an overnight one from the day
+ * before included) and no other intake visit. Booking refuses a busy staff member (409 intake-staff-busy), and the seeded coordinator may have a
+ * shift then (plan check S5). Returns "HH:mm" in the provider's zone.
+ */
+export async function freeIntakeStart(coord: Session, day: string, earliest: string): Promise<string> {
+  const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+  const busy: [number, number][] = [];
+  const mine = await expectStatus('my shifts', 200, await call(coord, 'GET', `/portal/my-shifts?from=${addDays(day, -1)}&to=${day}`));
+  for (const s of mine.data.shifts) {
+    if (s.status === 'Cancelled') continue;
+    const shift = s.serviceDate === day ? 0 : -1440;
+    busy.push([shift + minutes(s.startTime), shift + minutes(s.endTime) + (s.endsNextDay ? 1440 : 0)]);
+  }
+  const visits = await expectStatus('intake visits', 200, await call(coord, 'GET', `/intake-visits?from=${day}&to=${day}&staffUserId=${coord.user.id}`));
+  const local = new Intl.DateTimeFormat('en-GB', { timeZone: ZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  for (const v of visits.data) {
+    const start = minutes(local.format(new Date(v.startsAt)));
+    busy.push([start, start + v.durationMinutes]);
+  }
+  for (let start = minutes(earliest); start + 90 <= 24 * 60; start += 30) {
+    if (busy.every(([from, to]) => start + 90 <= from || to <= start)) return `${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`;
+  }
+  throw new Error(`No free 90-minute intake slot on ${day} from ${earliest}`);
+}
+
+/** "2:00 pm", as the screens write a visit's start. */
+export function clockLabel(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
 }

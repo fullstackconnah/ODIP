@@ -14,7 +14,8 @@ namespace Odip.Infrastructure.Integrations;
 /// </summary>
 public sealed class IntegrationKeyProtector
 {
-    public const string NotConfiguredMessage = "Integrations aren't set up on this server yet. Ask whoever runs your ODIP server to set INTEGRATIONS_MASTER_KEY.";
+    // What an Admin is told; the variable to set is named only in the server's log (below).
+    public const string NotConfiguredMessage = "Integrations aren't set up on this server yet. Contact ODIP support.";
     private const int TagBytes = 16;
     private readonly byte[]? _key;
 
@@ -23,7 +24,11 @@ public sealed class IntegrationKeyProtector
     {
         var raw = config["Integrations:MasterKey"];
         if (string.IsNullOrWhiteSpace(raw)) raw = environment is null ? Environment.GetEnvironmentVariable("INTEGRATIONS_MASTER_KEY") : environment("INTEGRATIONS_MASTER_KEY");
-        if (string.IsNullOrWhiteSpace(raw)) return;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            logger?.LogWarning("Neither Integrations:MasterKey nor INTEGRATIONS_MASTER_KEY is set (32 bytes, base64); integrations stay off until one is");
+            return;
+        }
         try
         {
             var key = Convert.FromBase64String(raw.Trim());

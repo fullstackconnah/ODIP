@@ -6,7 +6,7 @@ import { staffCredentials, type StaffCredential } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, deadlineState, isDeadlineIssue } from '@/lib/deadline'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
-import { groupPhase, noBreak, type GroupModel, type QuickRow } from '../quickGroupModel'
+import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
 
 const ORDER = { overdue: 0, today: 1, soon: 2, none: 3, ok: 4 } as const
 
@@ -40,12 +40,7 @@ export function useComplianceGroup(enabled: boolean, { staff, today, warningDays
     return {
       id: `${member.id}:${credential.field}`,
       subject: member.fullName,
-      // The date first, so a narrow row cuts the credential name and never the date (finish re-score 1).
-      meta: [
-        status === 'overdue' && noBreak(`expired ${formatDayMonth(credential.expiryDate)}`),
-        status === 'soon' && noBreak(`expires ${formatDayMonth(credential.expiryDate)}`),
-        credential.label,
-      ],
+      facts: [credential.label, formatDayMonth(credential.expiryDate)],
       // Why the row has no editor is a flag, which never truncates.
       flags: [{ label: deadlineLabel(credential.state, 'compact'), tone: DEADLINE_TONE[status] }, ...(adminOnly ? [{ label: 'An admin updates this', tone: 'neutral' as const }] : [])],
       actions: adminOnly ? [{ kind: 'link', label: 'Open', name: `Open staff member: ${member.fullName}`, to: `/staff/${member.id}` }] : [{ kind: 'form', label: `${verb} expiry`, name: `${verb} expiry: ${member.fullName}, ${name}`, form: {
@@ -67,8 +62,10 @@ export function useComplianceGroup(enabled: boolean, { staff, today, warningDays
 
   return {
     key: 'compliance',
-    title: 'Staff compliance',
+    title: 'Credentials',
     noun: 'staff credentials to update',
+    subjectHeader: 'Staff',
+    columns: [{ header: 'Credential', long: true }, { header: 'Expiry' }],
     phase: groupPhase(staff),
     refetch: () => { void staff.refetch() },
     count: rows.length,

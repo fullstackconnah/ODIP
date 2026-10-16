@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { useStaff } from '@/api/hooks'
-import { renderGroup, announcement } from './groupHarness'
+import { renderGroup, announcement, facts, headers, subjects } from './groupHarness'
 import { useComplianceGroup } from './useComplianceGroup'
 
 vi.mock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: true }))
@@ -38,12 +38,14 @@ describe('Staff compliance group — what it lists', () => {
 
     await screen.findByText('Sam Lee')
     expect(apiGet).toHaveBeenCalledWith('/staff', { isActive: 'true' })
-    expect(screen.getAllByRole('listitem').map((li) => li.querySelector('span')!.textContent)).toEqual(['Sam Lee', 'Ana Ruiz', 'Ben Ito', 'Cy Moss'])
-    // The date first, so a narrow row cuts the credential name, never the date (finish re-score 1).
-    expect(screen.getByText('expired 3 Oct · First Aid')).toBeInTheDocument()
-    expect(screen.getByText('expires 30 Oct · First Aid')).toBeInTheDocument()
+    expect(subjects()).toEqual(['Sam Lee', 'Ana Ruiz', 'Ben Ito', 'Cy Moss'])
+    expect(headers()).toEqual(['Staff', 'Credential', 'Expiry', ''])
+    expect(facts('Sam Lee')).toEqual(['First Aid', '3 Oct'])
+    expect(facts('Ben Ito')).toEqual(['First Aid', '30 Oct'])
+    // Undated: a dash in the table (and nothing on the card).
+    expect(facts('Cy Moss')).toEqual(['Driver Licence', '—'])
     for (const flag of ['Expired', 'Expires today', '16 days', 'No date set']) expect(screen.getByText(flag)).toBeInTheDocument()
-    expect(screen.getByText('4')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Credentials (4)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add expiry: Cy Moss, driver licence' })).toBeInTheDocument()
   })
 })

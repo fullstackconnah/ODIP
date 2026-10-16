@@ -1926,6 +1926,10 @@ const leaveRequests = [
   },
 ]
 
+const refuseOwn = (rows, id) => (rows.find((r) => r.id === id)?.userId === CAPTURE_VIEWER_ID
+  ? respond(403, failEnvelope(null, ["You can't decide your own request: someone else decides it."], 'LEAVE_OWN_REQUEST'))
+  : null)
+
 const recurringUnavailabilities = [
   {
     id: 'rule-0001', userId: 's-0003', userFullName: "Jack O'Sullivan",
@@ -2440,6 +2444,7 @@ const routes = [
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
   ['inquiries', () => intake.feed()],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
+  ...intake.detail,
   ['inquiries/:id/onboarding', (id) => {
     const budget = funding.budgetStatus(id)
     // Mei is the fresh case; everyone else on a checklist (Daniel, and p-0004 opened by URL) has everything but, perhaps, the plan budget.
@@ -2759,24 +2764,25 @@ const postRoutes = [
   // A pattern made on the Patterns page: refused with no length, as the server refuses it (the code and sentence of the shift's own 400); otherwise the same echo with an id the generic fallback gives any write.
   ['rostering/patterns', (body) => rosterBudget.refusePatternNoLength(null, body || {}) || { id: (body && body.id) || `mock-${Date.now()}`, ...body }],
 
-  ['leave/:id/approve', (id) => ({
+  // LeaveController refuses deciding your own request, either way (403 LEAVE_OWN_REQUEST): the capture viewer's own fixture rows.
+  ['leave/:id/approve', (id) => refuseOwn(leaveRequests, id) || ({
     leave: withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Approved', null),
     overlaps: [sampleOverlapFinding],
     overlapShifts: [sampleOverlapShift],
   })],
-  ['leave/:id/decline', (id, body) =>
+  ['leave/:id/decline', (id, body) => refuseOwn(leaveRequests, id) ||
     withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Declined', body?.decisionNote ?? null)],
   ['leave/:id/cancel', (id) =>
     withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Cancelled', null)],
   ['portal/leave/:id/cancel', (id) =>
     withDecision(leaveRequests.find((r) => r.id === id) || leaveRequests[0], 'Cancelled', null)],
 
-  ['leave/unavailability/:id/approve', (id) => ({
+  ['leave/unavailability/:id/approve', (id) => refuseOwn(recurringUnavailabilities, id) || ({
     unavailability: withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Approved', null),
     overlaps: [sampleOverlapFinding],
     overlapShifts: [sampleOverlapShift],
   })],
-  ['leave/unavailability/:id/decline', (id, body) =>
+  ['leave/unavailability/:id/decline', (id, body) => refuseOwn(recurringUnavailabilities, id) ||
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Declined', body?.decisionNote ?? null)],
   ['leave/unavailability/:id/cancel', (id) =>
     withDecision(recurringUnavailabilities.find((r) => r.id === id) || recurringUnavailabilities[0], 'Cancelled', null)],
@@ -2868,7 +2874,11 @@ const postRoutes = [
   }],
   ['rostering/completions/approve-batch', (body) => {
     const ids = Array.isArray(body?.shiftIds) ? body.shiftIds : []
-    return ids.map((shiftId) => ({ shiftId, approved: true, code: null, message: null }))
+    if (ids.length < 1 || ids.length > 100) return respond(400, failEnvelope(null, ['Select between 1 and 100 shifts.'], 'SHIFT_BATCH_SIZE_INVALID'))
+    // The dashboard's row the server refuses (as its single approve does): a bulk run reports it, the rest are approved.
+    return ids.map((shiftId) => (shiftId === 'shift-dash-409'
+      ? { shiftId, approved: false, code: 'SHIFT_NOT_PENDING_REVIEW', message: 'This shift has already been reviewed.' }
+      : { shiftId, approved: true, code: null, message: null }))
   }],
 
   // Claim-from-shifts (shift-completion design spec §2/§3, PR 3) — see shiftClaimPreview's own

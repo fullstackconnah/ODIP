@@ -60,12 +60,18 @@ public class IntegrationKeyProtectorTests
     [Fact]
     public void A_missing_master_key_turns_integrations_off()
     {
-        var keys = Protector(null);
+        var logger = new CapturingLogger<IntegrationKeyProtector>();
+        var keys = Protector(null, logger);
 
         Assert.False(keys.IsConfigured);
         var refusal = Assert.Throws<InvalidOperationException>(() => keys.Protect(Secret, TenantA));
         Assert.Equal(IntegrationKeyProtector.NotConfiguredMessage, refusal.Message);
         Assert.Null(keys.Unprotect(new byte[40], new byte[12], TenantA));
+        // Follow-ups: an Admin is told to contact support; the variable to set is named only in the server's log.
+        Assert.Equal("Integrations aren't set up on this server yet. Contact ODIP support.", IntegrationKeyProtector.NotConfiguredMessage);
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Contains("INTEGRATIONS_MASTER_KEY", warning.Message);
     }
 
     [Fact]

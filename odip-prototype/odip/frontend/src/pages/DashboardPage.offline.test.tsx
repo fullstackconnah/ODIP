@@ -132,7 +132,7 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
     })
 
     expect(await screen.findByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
-    expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', page: 1, pageSize: 5 })
+    expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', page: 1, pageSize: 200 })
     expect(apiGet).toHaveBeenCalledWith('/incidents', { needsAttention: 'true', page: '1', pageSize: '5' })
     expect(screen.queryByText('–')).not.toBeInTheDocument()
   })

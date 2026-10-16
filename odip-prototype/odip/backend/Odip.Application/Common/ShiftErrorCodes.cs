@@ -18,6 +18,8 @@ public static class ShiftErrorCodes
     public const string ShiftStartTooEarly = "SHIFT_START_TOO_EARLY";
     public const string ShiftActualStartTooEarly = "SHIFT_ACTUAL_START_TOO_EARLY";
     public const string ShiftNotPendingReview = "SHIFT_NOT_PENDING_REVIEW";
+    /// <summary>A clean-only approve (the dashboard's) found a review flag on the shift now: an incident, a dose without outcome, outlier time, manual start or adjusted times.</summary>
+    public const string ShiftNeedsReview = "SHIFT_NEEDS_REVIEW";
     public const string ShiftReturnReasonRequired = "SHIFT_RETURN_REASON_REQUIRED";
     public const string ShiftReturnReasonTooLong = "SHIFT_RETURN_REASON_TOO_LONG";
     public const string ShiftStatusLocked = "SHIFT_STATUS_LOCKED";

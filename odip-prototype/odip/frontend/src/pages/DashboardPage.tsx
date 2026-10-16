@@ -252,13 +252,13 @@ export default function DashboardPage() {
   // Every item has data and is at zero: the band is clear.
   const bandClear = !!d && attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
   // "Nothing needs you" only when it is true: every group and every alert has data and is at zero, and no consequence notice is waiting (SHAPE §6).
-  const groupsClear = groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length))
+  const groupsClear = groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
   const pageClear = bandClear && groupsClear
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      {/* The greeting and today's date at the display step, the everyday counts as one quiet line in the meta row; then what only this viewer can decide
-          ("Needs your decision"), then what someone must fix elsewhere (Alerts: the band and the Critical Participant Alerts cards), then what is coming
+      {/* The greeting and today's date at the display step, the everyday counts as one quiet line in the meta row; then what someone must fix (Alerts: the band and
+          the Critical Participant Alerts cards), then what only this viewer can decide ("Needs your decision", one tab per kind), then what is coming
           (Upcoming trips). When the whole page is clear, one Pale Sprout field stands in place of both sections (SHAPE §3, §6). */}
       <DashboardHeader
         now={now}
@@ -275,16 +275,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {gates.needsOrganisation && (
-            <div className="flex flex-col gap-2">
-              <h2 className="text-sm font-semibold">Needs your decision</h2>
-              <p className="text-[13px] text-[var(--color-muted-foreground)]">Choose an organisation to see its approvals.</p>
-            </div>
-          )}
-          {groups.length > 0 && <NeedsYourDecision groups={groups} state={decision} />}
-
           <div className="flex flex-col gap-2">
-            {/* tabIndex -1: where focus goes when the last decision group leaves the page (QuickGroup's focus fallback in finish). */}
             <h2 id="dashboard-alerts" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Alerts</h2>
             {summary.isError ? (
               <PageState kind="error" noun="dashboard summary" onRetry={() => summary.refetch()} />
@@ -348,6 +339,15 @@ export default function DashboardPage() {
               </>
             )}
           </div>
+
+          {/* The worklist under the Alerts (the owner's order): one tab per kind of decision. */}
+          {gates.needsOrganisation && (
+            <div className="flex flex-col gap-2">
+              <h2 className="text-sm font-semibold">Needs your decision</h2>
+              <p className="text-[13px] text-[var(--color-muted-foreground)]">Choose an organisation to see its approvals.</p>
+            </div>
+          )}
+          {groups.length > 0 && <NeedsYourDecision groups={groups} state={decision} />}
         </>
       )}
 

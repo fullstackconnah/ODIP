@@ -94,7 +94,7 @@ describe('RosterBoardPage: the plus opens the staff picker', () => {
     expect(option(/^Alex Ng/)).toHaveAccessibleName('Alex Ng, 9 of 38 hours this week, move from Tuesday 8am to 5pm with Jo')
     expect(option(/^Sam Wilson/)).toHaveAccessibleName('Sam Wilson, 6 of 38 hours this week, on leave')
     expect(screen.getByRole('button', { name: TUE_PLUS })).toHaveAttribute('aria-expanded', 'true')
-    expect(document.querySelector('[data-shift-chip="open"]')).toHaveClass('ring-2')
+    expect(document.querySelector('[data-shift-chip="open"] [data-shift-box]')).toHaveClass('ring-2')
   })
 
   it('gives a 2:1 day two pluses, and no plus to a filled or a locked shift', () => {
@@ -173,7 +173,7 @@ describe('RosterBoardPage: a pick is a drop without the drag', () => {
     const dialog = await screen.findByRole('alertdialog', { name: 'Assign with warnings' })
     expect(screen.queryByRole('dialog', { name: TUE_PLUS })).not.toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(document.querySelector('[data-shift-open="open"]')).toHaveTextContent('Needs staff')
+    expect(document.querySelector('[data-shift-open="open"]')).toHaveAccessibleName(/Needs staff/)   // a writer's plus box prints no words (the chip brief, section 4)
     await waitFor(() => expect(document.querySelector('[data-shift-open="open"]')).toHaveFocus())
   })
 
@@ -221,5 +221,47 @@ describe('RosterBoardPage: the picker on a phone and in the Staff view', () => {
     await user.click(screen.getByRole('button', { name: TUE_PLUS }))
     expect(groupLabels(picker())).toEqual(['Free at this time', 'On leave that day'])
     expect(option(/^Kim Lee/)).toHaveAccessibleName('Kim Lee, 0 of 38 hours this week, leave pending')
+  })
+})
+
+// The ⋮ menu's Swap (the lead's decision 1, 2026-10-15): the same request, sentence and focus as a drag swap, through the picker shell.
+describe('RosterBoardPage: Swap with… from the menu', () => {
+  const SWAP_NAME = 'Swap Sam with…'
+  const openSwap = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(within(document.querySelector('[data-shift-chip="sam-wed"]') as HTMLElement).getByRole('button', { name: /^Actions for/ }))
+    await user.click(screen.getByRole('option', { name: 'Swap Sam with…' }))
+    return screen.getByRole('dialog', { name: SWAP_NAME })
+  }
+
+  it('lists the other assigned, unlocked shifts of the week, person then day and time, and rings the chip', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const dialog = await openSwap(user)
+    expect(within(dialog).getByRole('combobox', { name: 'Find staff' })).toHaveFocus()
+    expect(within(dialog).getAllByRole('option').map(o => o.getAttribute('aria-label'))).toEqual(['Alex Ng, Tuesday 8am to 5pm, for Jo'])
+    expect(within(dialog).getByRole('option').textContent).toBe('Alex Ng· Tue 8am–5pm · Jo')   // two spans, drawn apart by a gap
+    expect(document.querySelector('[data-shift-chip="sam-wed"] [data-shift-box]')).toHaveClass('ring-2')
+  })
+
+  it('sends exactly what a drag swap sends, says it as a drag swap does, and leaves focus on the shift', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const dialog = await openSwap(user)
+    await user.click(within(dialog).getByRole('option', { name: /^Alex Ng/ }))
+    expect(h.move).toHaveBeenCalledWith({ fromShiftId: 'sam-wed', toShiftId: 'jo-tue', mode: 'Swap', staffId: 'staff-2', expectedToStaffId: 'staff-9', overrideReason: null, acknowledgedFindingCodes: [] })
+    expect(screen.queryByRole('dialog', { name: SWAP_NAME })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Swapped: Sam is on Jo Park, Tuesday 8am to 5pm and Alex on Mia Chen, Wednesday 9am to 3pm.')).toBeInTheDocument())
+    expect(document.querySelector('[data-shift-open="sam-wed"]')).toHaveFocus()
+  })
+
+  it('says so when nobody else is rostered this week, and Escape gives focus back to the menu', async () => {
+    const user = userEvent.setup()
+    h.board.mockReturnValue({ data: makeParticipantBoard({ participantRows: [makeParticipantRow({ participantId: 'p-1', fullName: 'Mia Chen', shifts: [SAM_WED, DONE] })] }), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    const dialog = await openSwap(user)
+    expect(within(dialog).getByText('No one else is rostered this week to swap with.')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: SWAP_NAME })).not.toBeInTheDocument()
+    expect(within(document.querySelector('[data-shift-chip="sam-wed"]') as HTMLElement).getByRole('button', { name: /^Actions for/ })).toHaveFocus()
   })
 })

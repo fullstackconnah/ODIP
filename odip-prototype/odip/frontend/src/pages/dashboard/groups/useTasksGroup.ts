@@ -2,7 +2,7 @@ import { apiGet } from '@/api/client'
 import { useTasks, useUpdateTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS, type TaskDto, type UpdateTaskDto } from '@/api/types'
 import { formatDayMonth } from '@/lib/dateRange'
-import { groupPhase, noBreak, type GroupModel, type QuickRow, type RowAction } from '../quickGroupModel'
+import { groupPhase, type GroupModel, type QuickRow, type RowAction } from '../quickGroupModel'
 
 const PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 }
 const isOpen = (t: TaskDto) => t.status !== 'Completed' && t.status !== 'Cancelled'
@@ -33,7 +33,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
         const fresh = await apiGet<TaskDto>(`/tasks/${t.id}`)
         if (!isOpen(fresh)) {
           void overdue.refetch(); void dueOnToday.refetch()
-          return { announce: `Already ${fresh.status.toLowerCase()} by someone else.` }
+          return { announce: `Already ${fresh.status.toLowerCase()} by someone else.`, stale: true }
         }
         await updateTask.mutateAsync({ id: t.id, data: { ...fresh, status: 'Completed', completedDate: today } as UpdateTaskDto })
         return { announce: `Marked done: ${t.title}.` }
@@ -48,13 +48,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
     return {
       id: t.id,
       subject: t.title,
-      // The date first, so a narrow row cuts the context and never the date; the trip only from lg (finish re-score 1).
-      meta: [
-        isLate && t.dueDate && noBreak(`due ${formatDayMonth(t.dueDate)}`),
-        TASK_TYPE_LABELS[t.taskType],
-        (t.priority === 'High' || t.priority === 'Urgent') && t.priority,
-      ],
-      wideMeta: [t.tripName],
+      facts: [TASK_TYPE_LABELS[t.taskType], formatDayMonth(t.dueDate), t.priority, t.tripName],
       // Why the row has no Done is a flag, which never truncates.
       flags: [isLate ? { label: 'Overdue', tone: 'danger' } : { label: 'Due today', tone: 'warning' }, ...(signOff ? [{ label: 'An admin signs this off', tone: 'neutral' as const }] : [])],
       actions,
@@ -64,8 +58,11 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
   const rows = [...late.map((t) => row(t, true)), ...dueToday.map((t) => row(t, false))]
   return {
     key: 'tasks',
-    title: 'Tasks due',
+    title: 'Tasks',
     noun: 'tasks due',
+    subjectHeader: 'Task',
+    // The trip is on a card only from lg: one tap away, and the longest wrap on a phone.
+    columns: [{ header: 'Type' }, { header: 'Due' }, { header: 'Priority' }, { header: 'Trip', long: true, fromLg: true }],
     phase: groupPhase(overdue, dueOnToday),
     refetch: () => { void overdue.refetch(); void dueOnToday.refetch() },
     count: rows.length,

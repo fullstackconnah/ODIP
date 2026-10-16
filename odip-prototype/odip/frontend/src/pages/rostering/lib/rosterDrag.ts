@@ -29,9 +29,10 @@ export type DropOutcome =
 /** While a drop's request is out: the target reads "Assigning {first name}…", a move's source fades, and every drag waits. */
 export type PendingDrop = { targetId: string; sourceId?: string; staffName: string }
 /**
- * `pick` opens the staff picker for a Needs staff shift: the chip's plus, and its menu's "Assign to…" (spec 2026-10-15). `pickingId` is the shift whose picker is open; the chip rings it.
+ * `pick` opens the staff picker for a Needs staff shift: the chip's plus, and its menu's "Assign to…" (spec 2026-10-15). `swap` opens the swap picker for an assigned shift: its menu's
+ * "Swap with…" (the lead's decision 1, 2026-10-15). `pickingId` is the shift whose picker, either one, is open; the chip rings it.
  */
-export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; pickingId?: string | null }
+export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; swap?: (shift: ShiftDto) => void; pickingId?: string | null }
 
 /** Shared by the page with the strip and every puck, so neither is threaded through the grid's rows. Outside a provider nothing is disabled or pending, and no chip has a plus. */
 export const DropStateContext = createContext<DropState>({ disabled: false, pending: null })
@@ -344,4 +345,19 @@ export function pickerPlacement(chip: Pick<DOMRect, 'top' | 'bottom' | 'left' | 
   return below < FLIP_BELOW && above > below
     ? { left, width: PANEL_WIDTH, bottom: view.height - chip.top + GAP, maxHeight: Math.min(PANEL_MAX_HEIGHT, above) }
     : { left, width: PANEL_WIDTH, top: chip.bottom + GAP, maxHeight: Math.min(PANEL_MAX_HEIGHT, below) }
+}
+
+/**
+ * The menu's "Swap with…" (the lead's decision 1, 2026-10-15): the shifts in the loaded week that a person carried off `source` could be swapped onto by a drag, i.e. where `dropOutcome`
+ * offers Swap. Not the shift itself, nobody, a locked shift, the same person, or a worker on approved leave (a hole: a drag fills it, it does not swap). Same day first, then by date and start.
+ */
+export function swapCandidates(source: ShiftDto, shifts: ShiftDto[]): ShiftDto[] {
+  return shifts
+    .filter(s => s.id !== source.id && s.staffId && s.staffName && s.staffId !== source.staffId && !isLockedShift(s) && !s.assigneeOnApprovedLeave)
+    .sort((a, b) => Number(b.serviceDate === source.serviceDate) - Number(a.serviceDate === source.serviceDate) || shiftMinutes(a)[0] - shiftMinutes(b)[0])
+}
+
+/** A swap row's accessible name, spoken as the plus's and the picker's are: "Sam Wilson, Tuesday 9am to 3pm". It shows as "Sam Wilson · Tue 9am–3pm · Daniel" (the participant, as the Move line shows it). */
+export function swapOptionName(shift: ShiftDto): string {
+  return `${shift.staffName}, ${format(parseISO(shift.serviceDate), 'EEEE')} ${spokenRange(shift)}, for ${firstName(shift.participantName)}`
 }
