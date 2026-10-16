@@ -61,22 +61,56 @@ public class AuthController : ControllerBase
         // Every rejection below funnels through Rejected() so the failure is always
         // counted. A path that returns Unauthorized directly would be a free retry and
         // would make the lockout bypassable by aiming at that specific case.
+        //
+        // A null key means the client address cannot be told apart from the proxy, so
+        // the caller is UNKNOWN and there is no budget that is theirs alone to spend.
+        // Counting anyway would be counting against a key every client on the internet
+        // shares — the denial of service this is here to prevent. See ClientIp.
         var attemptKey = LoginAttemptKey();
 
-        if (_loginAttempts.IsLockedOut(attemptKey, out var retryAfter))
+        // The lockout is checked up front so a locked-out client's failures answer
+        // 429 straight away, but it is NOT the whole defence and it is not final.
+        //
+        // It keys on an ADDRESS, and an address is not always one person: behind
+        // shared egress (a NAT, and in this deployment the proxy hop itself) several
+        // people legitimately share one. Refusing at this point would lock out a
+        // genuine holder of a valid credential because of a stranger's failures —
+        // and the address cannot be relied on to tell them apart.
+        //
+        // So this only RECORDS the state. The token is still verified below, and a
+        // real, valid credential always wins: it returns 200 whatever the counter
+        // says. Brute-force protection is not weakened, because a token that does
+        // not verify cannot pass — the Firebase verification is the cost of a guess,
+        // and an unverified caller reaches no ODIP data on any path.
+        var isLockedOut = false;
+        var lockedOutRetryAfter = TimeSpan.Zero;
+        if (attemptKey is not null)
+            isLockedOut = _loginAttempts.IsLockedOut(attemptKey, out lockedOutRetryAfter);
+
+        if (isLockedOut)
         {
-            _logger.LogWarning("Exchange locked out after repeated failures: {Key}", attemptKey);
-            Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds))
+            _logger.LogWarning("Exchange attempt from a locked-out client, verifying the token anyway: {Key}", attemptKey);
+            Response.Headers.RetryAfter = ((int)Math.Ceiling(lockedOutRetryAfter.TotalSeconds))
                 .ToString(CultureInfo.InvariantCulture);
-            return StatusCode(
-                StatusCodes.Status429TooManyRequests,
-                ApiResponse<AuthResponseDto>.Fail(ExchangeRefusal.MessageFor(ExchangeRefusal.LockedOut), ExchangeRefusal.LockedOut));
         }
 
         ActionResult<ApiResponse<AuthResponseDto>> Rejected(string code, string logMessage, params object?[] logArgs)
         {
-            _loginAttempts.RecordFailure(attemptKey);
+            if (attemptKey is not null)
+                _loginAttempts.RecordFailure(attemptKey);
             _logger.LogWarning(logMessage, logArgs);
+
+            // A locked-out client is told so — that is the whole point of the counter —
+            // but only once the token has failed, so the 429 means "your token was no
+            // good AND this address is over its budget", never "your token was not
+            // even looked at".
+            if (isLockedOut)
+            {
+                return StatusCode(
+                    StatusCodes.Status429TooManyRequests,
+                    ApiResponse<AuthResponseDto>.Fail(ExchangeRefusal.MessageFor(ExchangeRefusal.LockedOut), ExchangeRefusal.LockedOut));
+            }
+
             // Still a 401, and still counted. The code says why, so the sign-in page can tell the person what to do. That is safe because of the order
             // the checks run in (see ExchangeRefusal): everything that depends on ODIP's own rows is decided only after the token's email is verified and
             // its provider allowed, i.e. only for someone who controls the mailbox, and about their own address; an unverified token (which anyone can
@@ -182,7 +216,8 @@ public class AuthController : ControllerBase
 
             var superAdminToken = GenerateSuperAdminJwtToken(superAdmin);
             SetJwtCookie(superAdminToken);
-            _loginAttempts.RecordSuccess(attemptKey);
+            if (attemptKey is not null)
+                _loginAttempts.RecordSuccess(attemptKey);
 
             return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
             {
@@ -238,7 +273,8 @@ public class AuthController : ControllerBase
 
         var tenantToken = GenerateJwtToken(user, tenant.Id);
         SetJwtCookie(tenantToken);
-        _loginAttempts.RecordSuccess(attemptKey);
+        if (attemptKey is not null)
+            _loginAttempts.RecordSuccess(attemptKey);
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
@@ -395,17 +431,26 @@ public class AuthController : ControllerBase
             limiterPartitionKey = HttpContext.Items.TryGetValue("__odip.limiterPartitionKey", out var k) ? k : null,
             // Controller-time view, kept only so the two can be compared. If these
             // disagree, trust limiterPartitionKey.
-            controllerTimeIp = connection.RemoteIpAddress?.ToString()
+            controllerTimeIp = connection.RemoteIpAddress?.ToString(),
+
+            // Whether this address can actually tell clients apart, and so whether
+            // the sign-in failure budget is per-client at all. True here is the
+            // docker-proxy shape: nginx's $remote_addr was already rewritten to the
+            // bridge gateway, so one key is shared by every caller and sign-in
+            // failures are deliberately not counted (ClientIp.LoginAttemptKey).
+            clientIndistinguishableFromProxy = ClientIp.IsIndistinguishableFromProxy(HttpContext),
+            // Null exactly when the address is the proxy's — see above.
+            loginAttemptKey = ClientIp.LoginAttemptKey(HttpContext)
 
         }));
     }
 
-    // Same notion of "a client" the rate limiter uses (Program.cs RateLimitPartitionKey):
-    // post-forwarded-header remote IP, falling back to the per-request TraceIdentifier so
-    // an unresolvable address can never bucket every caller together. Behind shared egress
-    // this is one key for several people, which is exactly why only FAILURES are counted.
-    private string LoginAttemptKey() =>
-        HttpContext.Connection.RemoteIpAddress?.ToString() ?? HttpContext.TraceIdentifier;
+    // Which client's failure budget this attempt spends from. Returns null when
+    // the caller cannot be told apart from the proxy (ClientIp.LoginAttemptKey),
+    // which is the deployed shape: counting then would be counting against a key
+    // EVERY client shares, so one noisy caller locks out everyone. A null key
+    // means the attempt is not counted and is not locked out.
+    private string? LoginAttemptKey() => ClientIp.LoginAttemptKey(HttpContext);
 
     private static bool IsDevAuthEnabled()
         => string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);

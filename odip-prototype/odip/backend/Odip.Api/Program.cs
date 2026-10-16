@@ -590,6 +590,30 @@ app.Use(async (context, next) =>
 });
 
 app.UseMiddleware<Odip.Api.Middleware.ExceptionHandlingMiddleware>();
+
+// ── Loud warning: the per-client sign-in budget cannot partition ──
+// The failed-sign-in lockout (AuthController.Exchange -> ClientIp) can only give
+// each caller their own budget when the request carries a real client address.
+// Behind a published Docker port served by the userspace `docker-proxy`, it does
+// not: the proxy accepts the client's TCP connection and originates a new one to
+// nginx, so nginx's $remote_addr is the Docker bridge gateway for EVERY caller and
+// the genuine address never reaches this process.
+//
+// Consequences, stated plainly rather than left to be discovered in production:
+// the address-keyed rate limiter collapses to one shared bucket, and the sign-in
+// failure budget is not counted at all (ClientIp.LoginAttemptKey returns null),
+// because counting it would be counting against that shared key.
+//
+// Detected by a real request, not by guessing: if a request cannot be attributed to
+// one client, say so once and loudly.
+//
+// The guard is ClientIp.SignInBudgetCannotBePartitioned — the SAME predicate that
+// decides whether a key exists — and it is NOT negated. An inline lambda here was
+// harder to test than the behaviour was worth, and the untested version shipped with
+// its guard inverted: it stayed silent on the deployed proxy shape that needs the
+// warning and fired on every healthy client instead.
+app.UseMiddleware<Odip.Api.Middleware.SignInBudgetPartitionWarningMiddleware>();
+
 app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();
