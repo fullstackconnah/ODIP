@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
@@ -533,5 +533,75 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
 
     expect(await screen.findByText("This visit's time has passed. To book another time, change the date and time.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancel visit' })).not.toBeInTheDocument()
+  })
+})
+
+describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
+  it('Close enquiry from the form says unsaved changes are discarded, POSTs the close, then goes to the tab with the closed notice', async () => {
+    serve({ '/inquiries/i1': detail() })
+    mockApiPost.mockResolvedValue({ inquiry: detail({ closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'DeclinedByUs' }), cancellationEmail: 'NoVisit' })
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    const first = await screen.findByLabelText(/^First name/)
+    await user.type(first, 'n')
+    await user.click(screen.getByRole('button', { name: 'Close enquiry' }))
+
+    const dialog = screen.getByRole('alertdialog', { name: "Close Rowan Blake's enquiry?" })
+    expect(dialog).toHaveTextContent("Changes you haven't saved on this page are discarded.")
+    await user.selectOptions(within(dialog).getByLabelText(/^Why is it closing/), 'Declined by us')
+    await user.click(within(dialog).getByRole('button', { name: 'Close enquiry' }))
+
+    await screen.findByText('Enquiries tab destination')
+    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/close', { outcome: 'DeclinedByUs', note: null })
+    expect(mockApiPut).not.toHaveBeenCalled()
+    expect(screen.getByTestId('notice')).toHaveTextContent("Enquiry closed: Rowan Blake's enquiry is closed: Declined by us.")
+  })
+
+  it('a form with no changes does not warn about discarding any', async () => {
+    serve({ '/inquiries/i1': detail() })
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    await screen.findByLabelText(/^First name/)
+    await user.click(screen.getByRole('button', { name: 'Close enquiry' }))
+
+    expect(screen.getByRole('alertdialog')).not.toHaveTextContent("Changes you haven't saved")
+  })
+
+  it('a closed enquiry opens read-only, and Reopen turns it into the edit form in place', async () => {
+    serve({ '/inquiries/i1': detail({ closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'NotGoingAhead', closeNote: 'Chose a closer provider' }) })
+    mockApiPost.mockResolvedValue(detail())
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Closed enquiry' })).toBeInTheDocument()
+    expect(screen.getByText('Closed on Fri 16 Oct: Not going ahead.')).toBeInTheDocument()
+    expect(screen.getByText('Chose a closer provider')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save enquiry' })).not.toBeInTheDocument()
+    expect(screen.getByText('Contacts were deleted when this enquiry closed.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Reopen enquiry' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Reopen enquiry' }))
+
+    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/reopen')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Edit enquiry' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^First name/)).toHaveValue('Rowan')
+    const reopened = screen.getByText('Reopened. Add the contacts again below.')
+    await waitFor(() => expect(document.activeElement?.contains(reopened)).toBe(true))
+  })
+
+  it('there is no Close enquiry on a new enquiry or a converted one', async () => {
+    renderForm()
+    expect(screen.queryByRole('button', { name: 'Close enquiry' })).not.toBeInTheDocument()
+    cleanup()
+    serve({ '/inquiries/i1': detail({ participantId: 'p-1' }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    await screen.findByLabelText(/^First name/)
+    expect(screen.queryByRole('button', { name: 'Close enquiry' })).not.toBeInTheDocument()
+  })
+
+  it('the contacts hint says contacts are deleted if the enquiry is closed', () => {
+    renderForm()
+    expect(screen.getByText("Family, guardians and anyone else to keep in touch with. They move to the participant's record when intake starts, and are deleted if the enquiry is closed.")).toBeInTheDocument()
   })
 })
