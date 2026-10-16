@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
@@ -9,11 +9,14 @@ import { TextAreaField } from '@/components/TextAreaField'
 import { SelectField } from '@/components/SelectField'
 import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
-import { useCreateParticipantInquiry, useParticipantInquiries, useUpdateParticipantInquiry } from '@/api/hooks'
-import type { CreateParticipantInquiryDto, InquirySource, ParticipantInquiryDto } from '@/api/types/inquiries'
+import { useCreateParticipantInquiry, useParticipantInquiry, useUpdateParticipantInquiry } from '@/api/hooks'
+import type { CreateParticipantInquiryDto, InquiryContactDto, InquirySource, ParticipantInquiryDetailDto, ParticipantInquiryDto } from '@/api/types/inquiries'
+import { fieldErrors } from '@/lib/fieldErrors'
 import { formGrid, span } from '@/lib/formGrid'
+import { isNotFoundError } from '@/lib/httpStatus'
+import { contactRowErrors, contactRowOf, contactsPayload, serverContactErrors, type ContactFieldErrors, type ContactRow } from '@/lib/inquiryContacts'
 import { extractErrorMessage } from '@/lib/utils'
-import { queryPhase } from '@/lib/queryPhase'
+import { InquiryContactsCard } from './inquiries/InquiryContactsCard'
 
 /** The form's own state: every field is text while it is being typed. */
 type FormState = { firstName: string; lastName: string; phone: string; email: string; source: InquirySource; provenance: string }
@@ -27,35 +30,43 @@ const fromInquiry = (row: ParticipantInquiryDto): FormState => ({
 
 const orNull = (value: string) => value.trim() || null
 
-/** What goes on the wire. A field left blank is sent as null, never "": the API rejects "" as a bad email address. */
-const toPayload = (form: FormState): CreateParticipantInquiryDto => ({
+/** What goes on the wire. A field left blank is sent as null, never "": the API rejects "" as a bad email address. `contacts` only when given. */
+const toPayload = (form: FormState, contacts?: InquiryContactDto[]): CreateParticipantInquiryDto => ({
   firstName: form.firstName.trim(),
   lastName: form.lastName.trim(),
   phone: orNull(form.phone),
   email: orNull(form.email),
   source: form.source,
   provenance: orNull(form.provenance),
+  ...(contacts ? { contacts } : {}),
 })
 
+const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
+
 /**
- * Routed enquiry form. Lives at /participants/new-inquiry. With no ?id= it creates a new
- * enquiry; with ?id=<enquiry-id> it loads the existing row and submits an update. Either way
- * the page owns its own PageHeader + Card + Button stack and navigates back to
- * /participants?tab=enquiries on save so the enquiries tab re-renders the new/edited row.
+ * Routed enquiry form. Lives at /participants/new-inquiry. With no ?id= it creates a new enquiry; with ?id=<enquiry-id> it loads that enquiry
+ * (GET /inquiries/{id}, with its pending contacts) and submits an update. Either way it navigates back to /participants?tab=enquiries on save.
  *
- * Editing waits for the stored enquiry before it shows a form: opened cold (a reload, a bookmark, a new tab) the list has not arrived yet,
- * and a form built from nothing used to stay blank after the list landed, then save blanks over the email, source and provenance (L2-08).
+ * Editing waits for the stored enquiry, fetched fresh for this visit, before it shows a form: a form built from nothing, or from a cached copy, then
+ * saves over what is stored (L2-08; the contacts are a full replace, plan check S2). After its own create the page moves to ?id= without remounting
+ * (D1), so a refused booking's entries and its reason stay, and a retry is a PUT, never a second enquiry.
  */
 export default function InquiryFormPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const editId = searchParams.get('id')
   const navigate = useNavigate()
-  const inquiriesQuery = useParticipantInquiries()
-  const inquiries = inquiriesQuery.data ?? []
-  // A direct intake rides in the same list with the participant's id: there is no enquiry behind it to edit.
-  const existing = editId ? inquiries.find(row => row.id === editId && !row.isDirectIntake) : undefined
-  // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
-  const phase = queryPhase(inquiriesQuery)
+  // The enquiry this page created itself: the URL moves to it (replace), so a reload edits it, while the mounted form stays exactly as it is.
+  // Only an enquiry opened by URL is loaded.
+  const [createdHere, setCreatedHere] = useState<string | null>(null)
+  const loadId = editId && editId !== createdHere ? editId : undefined
+  const detailQuery = useParticipantInquiry(loadId)
+  const existing = detailQuery.data
+  // A cached copy is not enough: the form mounts on this visit's own answer, and stays mounted if a later refetch fails behind it.
+  const fresh = !!existing && detailQuery.isFetchedAfterMount && !detailQuery.isError
+  const [opened, setOpened] = useState<string | null>(null)
+  // Remembered during render (React's "adjusting state when a prop changes"), so the form never flickers back to loading.
+  if (fresh && loadId && opened !== loadId) setOpened(loadId)
+  const ready = fresh || (!!existing && opened === loadId)
 
   const header = (
     <div className="flex items-start gap-4">
@@ -67,26 +78,23 @@ export default function InquiryFormPage() {
   )
 
   let content
-  if (editId && !existing) {
-    // Three different facts: still loading, the load failed, and there is no such enquiry.
-    content = phase === 'loading'
+  if (loadId && !ready) {
+    // Three facts: still loading (a paused offline request included, review F-1), no such enquiry (a direct intake's id included: the API has
+    // no enquiry for it), and a failed load.
+    content = !detailQuery.isError
       ? <PageState kind="loading" noun="enquiry" />
-      : phase === 'error'
-        ? <PageState kind="error" noun="enquiry" onRetry={() => inquiriesQuery.refetch()} />
-        : <PageState kind="not-found" noun="enquiry" backTo="/participants?tab=enquiries" backLabel="enquiries" />
+      : isNotFoundError(detailQuery.error)
+        ? <PageState kind="not-found" noun="enquiry" backTo="/participants?tab=enquiries" backLabel="enquiries" />
+        : <PageState kind="error" noun="enquiry" onRetry={() => detailQuery.refetch()} />
   } else {
     content = (
-      <Card title={editId ? 'Edit enquiry' : 'New enquiry'}>
-        {/* Keyed on the enquiry being edited, so switching between create and edit resets the state; the form is only ever mounted once
-            `existing` has arrived, so the lazy initial value is the stored enquiry and never a blank. */}
-        <InquiryFormBody
-          key={existing?.id ?? 'new'}
-          initial={existing ? fromInquiry(existing) : blank()}
-          editId={editId}
-          onCancel={() => navigate('/participants?tab=enquiries')}
-          onSaved={() => navigate('/participants?tab=enquiries')}
-        />
-      </Card>
+      <InquiryFormBody
+        key={loadId ?? 'new'}
+        initial={loadId ? existing! : null}
+        onCreated={id => { setCreatedHere(id); setSearchParams({ id }, { replace: true }) }}
+        onCancel={() => navigate('/participants?tab=enquiries')}
+        onDone={() => navigate('/participants?tab=enquiries')}
+      />
     )
   }
 
@@ -98,108 +106,162 @@ export default function InquiryFormPage() {
   )
 }
 
-function InquiryFormBody({
-  initial,
-  editId,
-  onCancel,
-  onSaved,
-}: {
-  initial: FormState
-  editId: string | null
+function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
+  initial: ParticipantInquiryDetailDto | null
+  onCreated: (id: string) => void
   onCancel: () => void
-  onSaved: () => void
+  onDone: () => void
 }) {
-  const [form, setForm] = useState<FormState>(initial)
+  // The stored copy (null until the first save), apart from what is being typed.
+  const [row, setRow] = useState<ParticipantInquiryDto | null>(initial)
+  const [form, setForm] = useState<FormState>(() => (initial ? fromInquiry(initial) : blank()))
+  const [contacts, setContacts] = useState<ContactRow[]>(() => (initial?.contacts ?? []).map(contactRowOf))
+  const [contactErrors, setContactErrors] = useState<ContactFieldErrors>({})
+  const [listError, setListError] = useState<string | undefined>()
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'saving' | null>(null)
   const create = useCreateParticipantInquiry()
   const update = useUpdateParticipantInquiry()
-  const isSaving = create.isPending || update.isPending
+  // The click guard: aria-disabled does not stop a click, and Enter or a second press before the re-render must never send a second POST.
+  const inFlight = useRef(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
+  // Where focus goes once the next render is on screen: the errors are not in the DOM yet when they are found.
+  const focusNext = useRef<'first-invalid' | 'error' | null>(null)
+  useEffect(() => {
+    const target = focusNext.current
+    if (!target) return
+    focusNext.current = null
+    if (target === 'error') errorRef.current?.focus()
+    else formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+  })
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const converted = row?.participantId ? { participantId: row.participantId, firstName: row.firstName } : null
+
+  function changeContacts(next: ContactRow[], changed?: { key: string; field: string }) {
+    setContacts(next)
+    if (changed) setContactErrors(e => (e[changed.key] ? { ...e, [changed.key]: { ...e[changed.key], [changed.field]: undefined } } : e))
+  }
+
+  /** The enquiry was refused: nothing was saved. The reason on its fields, else the Callout; every value kept. */
+  function refuseEnquiry(err: unknown) {
+    setError(extractErrorMessage(err, row ? 'Could not update this enquiry. Check the details and try again.' : 'Could not capture this enquiry. Check the details and try again.'))
+    const mapped = serverContactErrors(err, contacts)
+    setContactErrors(mapped)
+    setListError(fieldErrors(err).contacts)
+    focusNext.current = Object.keys(mapped).length > 0 ? 'first-invalid' : 'error'
+  }
+
+  async function submit(event: React.FormEvent) {
     event.preventDefault()
-    setError(null)
-    if (editId) {
-      update.mutate(
-        { id: editId, data: toPayload(form) },
-        {
-          onSuccess: onSaved,
-          onError: err => setError(extractErrorMessage(err, 'Could not update this enquiry. Check the details and try again.')),
-        },
-      )
-    } else {
-      create.mutate(toPayload(form), {
-        onSuccess: onSaved,
-        onError: err => setError(extractErrorMessage(err, 'Could not capture this enquiry. Check the details and try again.')),
-      })
+    if (inFlight.current) return
+    const rowErrors = contactRowErrors(contacts)
+    setContactErrors(rowErrors); setListError(undefined); setError(null)
+    if (Object.keys(rowErrors).length > 0) {
+      focusNext.current = 'first-invalid'
+      return
+    }
+    inFlight.current = true
+    setBusy('saving')
+    try {
+      // The enquiry and its contacts in one request: saved together or not at all (D5). A converted enquiry's contacts are the participant's.
+      const body = toPayload(form, converted ? undefined : contactsPayload(contacts))
+      let saved: ParticipantInquiryDto
+      try {
+        saved = row ? await update.mutateAsync({ id: row.id, data: body }) : await create.mutateAsync(body)
+      } catch (err) {
+        refuseEnquiry(err)
+        return
+      }
+      if (!row) onCreated(saved.id)
+      setRow(saved)
+      onDone()
+    } finally {
+      inFlight.current = false
+      setBusy(null)
     }
   }
 
-  const ctaLabel = editId ? 'Save enquiry' : 'Capture enquiry'
+  const title = row ? 'Edit enquiry' : 'New enquiry'
 
   return (
-    <form className={formGrid} onSubmit={handleSubmit} aria-label={editId ? 'Edit enquiry' : 'New enquiry'}>
-      <TextField
-        id="inquiry-first-name"
-        className={span.medium}
-        label="First name"
-        required
-        autoComplete="given-name"
-        value={form.firstName}
-        onChange={e => setForm({ ...form, firstName: e.target.value })}
+    <form ref={formRef} className="flex flex-col gap-[var(--section-gap)]" onSubmit={submit} aria-label={title}>
+      <Card title={title}>
+        <div className={formGrid}>
+          <TextField
+            id="inquiry-first-name"
+            className={span.medium}
+            label="First name"
+            required
+            autoComplete="given-name"
+            value={form.firstName}
+            onChange={e => setForm({ ...form, firstName: e.target.value })}
+          />
+          <TextField
+            id="inquiry-last-name"
+            className={span.medium}
+            label="Last name"
+            required
+            autoComplete="family-name"
+            value={form.lastName}
+            onChange={e => setForm({ ...form, lastName: e.target.value })}
+          />
+          <TextField
+            id="inquiry-phone"
+            className={span.medium}
+            label="Phone"
+            type="tel"
+            autoComplete="tel"
+            value={form.phone}
+            onChange={e => setForm({ ...form, phone: e.target.value })}
+          />
+          <TextField
+            id="inquiry-email"
+            className={span.medium}
+            label="Email"
+            type="email"
+            autoComplete="email"
+            value={form.email}
+            onChange={e => setForm({ ...form, email: e.target.value })}
+          />
+          <SelectField
+            id="inquiry-source"
+            className={span.short}
+            label="Source"
+            value={form.source}
+            onChange={e => setForm({ ...form, source: e.target.value as InquirySource })}
+            options={[{ value: 'Web', label: 'Web' }, { value: 'Email', label: 'Email' }, { value: 'Phone', label: 'Phone' }]}
+          />
+          <TextAreaField
+            id="inquiry-provenance"
+            className={span.long}
+            label="Provenance or referral notes"
+            hint="Where this enquiry came from: who referred them, and anything worth knowing."
+            rows={3}
+            maxLength={2000}
+            value={form.provenance}
+            onChange={e => setForm({ ...form, provenance: e.target.value })}
+          />
+        </div>
+      </Card>
+
+      <InquiryContactsCard
+        rows={contacts}
+        errors={contactErrors}
+        listError={listError}
+        enquirer={{ phone: form.phone, email: form.email }}
+        converted={converted}
+        onChange={changeContacts}
       />
-      <TextField
-        id="inquiry-last-name"
-        className={span.medium}
-        label="Last name"
-        required
-        autoComplete="family-name"
-        value={form.lastName}
-        onChange={e => setForm({ ...form, lastName: e.target.value })}
-      />
-      <TextField
-        id="inquiry-phone"
-        className={span.medium}
-        label="Phone"
-        type="tel"
-        autoComplete="tel"
-        value={form.phone}
-        onChange={e => setForm({ ...form, phone: e.target.value })}
-      />
-      <TextField
-        id="inquiry-email"
-        className={span.medium}
-        label="Email"
-        type="email"
-        autoComplete="email"
-        value={form.email}
-        onChange={e => setForm({ ...form, email: e.target.value })}
-      />
-      <SelectField
-        id="inquiry-source"
-        className={span.short}
-        label="Source"
-        value={form.source}
-        onChange={e => setForm({ ...form, source: e.target.value as InquirySource })}
-        options={[{ value: 'Web', label: 'Web' }, { value: 'Email', label: 'Email' }, { value: 'Phone', label: 'Phone' }]}
-      />
-      <TextAreaField
-        id="inquiry-provenance"
-        className={span.long}
-        label="Provenance or referral notes"
-        hint="Where this enquiry came from: who referred them, and anything worth knowing."
-        rows={3}
-        maxLength={2000}
-        value={form.provenance}
-        onChange={e => setForm({ ...form, provenance: e.target.value })}
-      />
+
       {error && (
-        <div className={span.long}>
+        <div ref={errorRef} tabIndex={-1} className="focus:outline-none">
           <Callout tone="error">{error}</Callout>
         </div>
       )}
-      <div className={`flex gap-2 ${span.long}`}>
-        <Button type="submit" disabled={isSaving}>{ctaLabel}</Button>
-        <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
+      <div className="flex gap-2">
+        <Button type="submit" aria-disabled={busy ? true : undefined} className={DISABLED_LOOK}>{busy ? 'Saving…' : row ? 'Save enquiry' : 'Capture enquiry'}</Button>
+        <Button variant="secondary" onClick={onCancel}>{!initial && row ? 'Back to enquiries' : 'Cancel'}</Button>
       </div>
     </form>
   )
