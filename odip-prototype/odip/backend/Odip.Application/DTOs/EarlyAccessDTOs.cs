@@ -17,6 +17,18 @@ public class EarlyAccessRequestDto
 
     public string? Email { get; set; }
 
+    /// <summary>One of <see cref="EarlyAccess.EarlyAccessRequestValidator.OrganisationSizes"/>; optional until the new form ships.</summary>
+    public string? OrganisationSize { get; set; }
+
+    /// <summary>Optional free text, one line.</summary>
+    public string? Role { get; set; }
+
+    /// <summary>Optional: ASCII digits, spaces and + ( ) - only.</summary>
+    public string? Phone { get; set; }
+
+    /// <summary>Optional free text; the server keeps line breaks and drops control and bidi characters.</summary>
+    public string? Message { get; set; }
+
     /// <summary>
     /// Honeypot. The form renders this input hidden from people and from assistive technology, so a
     /// real visitor never fills it in; a bot that fills every input does. A non-empty value gets the
