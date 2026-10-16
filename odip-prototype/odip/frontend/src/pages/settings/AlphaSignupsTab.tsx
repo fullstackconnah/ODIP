@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, MessageSquareText, Trash2 } from 'lucide-react'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
+import { ROW_ACTIONS_CARD } from '@/components/tapArea'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { NoticesRegion } from '@/components/NoticesRegion'
@@ -128,7 +129,7 @@ export default function AlphaSignupsTab() {
   // ends with Delete. A stack at the name's indent, so it never looks like columns of the table above.
   const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
     <>
-    <dl id={detailId(row)} className="grid grid-cols-2 gap-x-8 gap-y-2 md:grid-cols-[auto_auto] md:justify-start md:pl-[1.125rem]">
+    <dl id={detailId(row)} className="grid grid-cols-2 gap-x-8 gap-y-2 md:flex md:flex-wrap md:gap-x-10 md:pl-[1.125rem]">
       <div>
         <dt className={detailLabel}>Role</dt>
         <dd>{row.role ?? '—'}</dd>
@@ -137,12 +138,12 @@ export default function AlphaSignupsTab() {
         <dt className={detailLabel}>Phone</dt>
         <dd>{row.phone ?? '—'}</dd>
       </div>
-      <div className="col-span-2 min-w-0">
+      <div className="col-span-2 min-w-0 md:basis-full">
         <dt className={detailLabel}>Message</dt>
         <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
       </div>
     </dl>
-    {isBelowMd && <div className="mt-2 flex justify-end">{deleteButton(row)}</div>}
+    {isBelowMd && <div className={`mt-2 flex justify-end ${ROW_ACTIONS_CARD}`}>{deleteButton(row)}</div>}
     </>
   ) : null
 
