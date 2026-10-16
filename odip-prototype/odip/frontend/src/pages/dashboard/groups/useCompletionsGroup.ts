@@ -26,8 +26,9 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
   // (decision-bulk DECISIONS 1); five are shown. Its own entry beside the nav badge's 1-row one; every approve hook invalidates ['rostering-completions'].
   // shortcut: past 200 pending, the rows after the first 200 are neither counted nor sent; page the read if a provider ever queues that many.
   const queue = useCompletions({ status: 'PendingReview' }, 1, 200, { enabled })
-  const approve = useApproveCompletion()
-  const approveBatch = useApproveCompletionsBatch()
+  // Clean only: a flag that appeared since this read (an incident filed after Finish) refuses on the server rather than approves (deep M2).
+  const approve = useApproveCompletion({ requireClean: true })
+  const approveBatch = useApproveCompletionsBatch({ cleanOnly: true })
   const giveBack = useReturnCompletion()
 
   const rows = (queue.data?.items ?? []).map((item): QuickRow => {

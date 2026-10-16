@@ -55,7 +55,8 @@ describe('Shift completions group — clean rows approve in one tap', () => {
     fireEvent.click(await screen.findByRole('button', { name: APPROVE }))
 
     await waitFor(() => expect(announcement()).toHaveTextContent("Approved Sam Lee's shift with Grace Palmer-Hughes on 14 Oct."))
-    expect(apiPost).toHaveBeenCalledWith('/rostering/shifts/s1/completion/approve')
+    // requireClean: a flag that appeared since the queue read refuses on the server rather than approves (decision-bulk deep M2).
+    expect(apiPost).toHaveBeenCalledWith('/rostering/shifts/s1/completion/approve?requireClean=true')
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['rostering-completions'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['roster-board'] })
     expect(screen.queryByText('Sam Lee')).not.toBeInTheDocument()
@@ -160,10 +161,10 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
 
     await waitFor(() => expect(screen.getByText('Approved 4 completions')).toBeInTheDocument())
     expect(apiPost).toHaveBeenCalledTimes(1)
-    expect(apiPost).toHaveBeenCalledWith('/rostering/completions/approve-batch', { shiftIds: ['s1', 's2', 's3', 's4', 's5', 's6'] })
+    expect(apiPost).toHaveBeenCalledWith('/rostering/completions/approve-batch', { shiftIds: ['s1', 's2', 's3', 's4', 's5', 's6'], cleanOnly: true })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['rostering-completions'] })
     expect(screen.getByText(
-      "1 needs review and stays here. 1 was already reviewed. 1 couldn't be approved: Worker 6 with Grace Palmer-Hughes, 14 Oct: Couldn't approve. Try again.")).toBeInTheDocument()
+      "1 needs review and stays here. 1 was already reviewed. 1 couldn't be approved: Worker 6 with Grace Palmer-Hughes, 14 Oct.")).toBeInTheDocument()
   })
 
   it('sends the first 100 clean ids over the cap, and says so', async () => {
@@ -178,6 +179,22 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     await waitFor(() => expect(screen.getByText('Approved 100 of 134')).toBeInTheDocument())
     expect(apiPost.mock.calls[0][1].shiftIds).toEqual(Array.from({ length: 100 }, (_, i) => `s${i}`))
     expect(screen.getByText('Run it again for the rest.')).toBeInTheDocument()
+  })
+
+  it('counts a shift the server found flagged at approval time as needing review, not as a failure', async () => {
+    apiGet.mockResolvedValue(page([item(), item({ shiftId: 's2', staffName: 'Ana Ruiz' })]))
+    apiPost.mockResolvedValue([
+      { shiftId: 's1', approved: true, code: null, message: null },
+      { shiftId: 's2', approved: false, code: 'SHIFT_NEEDS_REVIEW', message: 'This shift needs review now: open it on the Completions page.' },
+    ])
+    renderGroup(() => useCompletionsGroup(true))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
+
+    await waitFor(() => expect(screen.getByText('Approved 1 completion')).toBeInTheDocument())
+    expect(screen.getByText('1 needs review and stays here.')).toBeInTheDocument()
+    expect(screen.getByText('Ana Ruiz')).toBeInTheDocument()
   })
 
   it("counts a shift or completion gone (the single approve's 404) as stale, not failed", async () => {
