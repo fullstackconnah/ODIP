@@ -71,6 +71,11 @@ describe('bulkCopy — the result notice (SHAPE §6)', () => {
     })
   })
 
+  it("ends a failure at the row's name when the server gave no words: never a second colon or a Try again", () => {
+    expect(resultNotice('completions', result({ total: 2, decided: 1, failed: [{ ref: 'Priya Nadarajah with Liam Okafor, 13 Oct', message: '' }] })).message)
+      .toBe("1 couldn't be approved: Priya Nadarajah with Liam Okafor, 13 Oct.")
+  })
+
   it('names at most three failures, then how many more', () => {
     const failed = ['A', 'B', 'C', 'D', 'E'].map((ref) => ({ ref, message: 'No.' }))
     expect(resultNotice('tasks', result({ total: 6, decided: 1, failed })).message).toBe("5 couldn't be marked done: A: No; B: No; C: No; and 2 more.")

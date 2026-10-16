@@ -434,6 +434,11 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     render(<Harness model={model({ rows: [tapRow('a'), row('b', { flags: [{ label: 'Your request', tone: 'neutral' }] })] })} />)
 
     expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Select', 'Staff', 'Type', 'Dates', 'Note', ''])
+    // A row with nothing to tick keeps its empty box cell on a card too, so every name in the list starts at one edge (finish fix 3).
+    const empty = rowOf('Person b').querySelector('td[data-select]')!
+    expect(empty).toBeEmptyDOMElement()
+    expect(empty).not.toHaveClass('max-xl:hidden')
+    expect(rowOf('Person b').querySelector('td[data-subject]')).toHaveClass('max-xl:basis-[calc(100%-1.75rem)]')
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
     expect(within(rowOf('Person b')).queryByRole('checkbox')).toBeNull()
     expect(screen.getByRole('checkbox', { name: 'Select all shown leave requests' })).not.toBeChecked()
@@ -468,6 +473,9 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))
     expect(all.indeterminate).toBe(true)
     expect(screen.getByText('1 selected')).toBeInTheDocument()
+    // Once ticked, the bar's box takes the row boxes' touch pad (size-4 + TAP_AREA), so the count sits where "Select all" was (finish fix 2).
+    expect(all.closest('label')).toHaveClass('size-4', 'before:min-w-[var(--tap-min)]')
+    expect(all.closest('label')).not.toHaveClass('pointer-coarse:min-w-[var(--tap-min)]')
     const action = screen.getByRole('button', { name: 'Approve 1 selected leave request' })
 
     fireEvent.click(all)
@@ -507,7 +515,9 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(screen.queryByRole('alertdialog')).toBeNull()
     await waitFor(() => expect(runA).toHaveBeenCalled())
     expect(runB).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: /^Approve 3 selected/ })).toHaveTextContent('Approving 1 of 3…')
+    // Its name is its visible count (WCAG 2.5.3), and the run is announced once as it starts, never per row.
+    expect(screen.getByRole('button', { name: 'Approving 1 of 3…' })).toHaveAttribute('aria-disabled', 'true')
+    expect(status()).toHaveTextContent('Approving 1 of 3…')
     expect(screen.getByRole('button', { name: 'Approve leave: Person a' })).toHaveAttribute('aria-disabled', 'true')
     // The run holds the selection it took: every box, and the bar's controls (aria-disabled, so focus stays).
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person c' })).toBeDisabled()

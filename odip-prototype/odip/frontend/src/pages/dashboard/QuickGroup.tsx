@@ -252,8 +252,9 @@ function QuickRowView({ row, columns, box, inRun, onOccupied, onDone, onRefused 
     <tbody ref={rowRef} role="rowgroup" className={`max-xl:block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4 ${SUBGRID}`}>
       <tr role="row" className={`max-xl:flex max-xl:flex-wrap max-xl:items-center max-xl:gap-x-3 max-xl:gap-y-1 xl:h-[var(--row-h)] xl:items-center xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)] ${SUBGRID}`}>
         {box !== undefined && (
-          // Below xl the box leads the card's subject line, on its first line (the subject wraps beside it). A row with nothing to tick keeps its cell in the table.
-          <td role="cell" data-select className={`${CELL} max-xl:self-start max-xl:pt-0.5 ${box ? '' : 'max-xl:hidden'}`}>
+          // Below xl the box leads the card's subject line, on its first line (the subject wraps beside it). A row with nothing to tick keeps its empty
+          // cell, in the table and on a card, so every name in the list starts at one edge.
+          <td role="cell" data-select className={`${CELL} max-xl:w-4 max-xl:shrink-0 max-xl:self-start max-xl:pt-0.5`}>
             {box && tapAction && (
               <label className={`${TAP_AREA} flex size-4`}>
                 <input
@@ -268,7 +269,7 @@ function QuickRowView({ row, columns, box, inRun, onOccupied, onDone, onRefused 
             )}
           </td>
         )}
-        <td role="cell" data-subject className={`${CELL} ${box ? 'max-xl:min-w-0 max-xl:basis-[calc(100%-1.75rem)]' : 'max-xl:basis-full'}`}>
+        <td role="cell" data-subject className={`${CELL} ${box !== undefined ? 'max-xl:min-w-0 max-xl:basis-[calc(100%-1.75rem)]' : 'max-xl:basis-full'}`}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 xl:flex-nowrap">
             <span className="min-w-0 text-sm font-semibold text-[var(--color-foreground)] xl:truncate" title={row.subject}>{row.subject}</span>
             {row.flags.slice(0, 2).map((flag) => (
@@ -345,7 +346,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
   const [occupied, setOccupied] = useState<ReadonlySet<string>>(() => new Set())
   const [confirm, setConfirm] = useState<'all' | 'selected' | null>(null)
-  const [progress, setProgress] = useState<{ done: number; total: number; ids: ReadonlySet<string>; name: string } | null>(null)
+  const [progress, setProgress] = useState<{ done: number; total: number; ids: ReadonlySet<string> } | null>(null)
   const onOccupied = useCallback((rowId: string, on: boolean) => setOccupied((prev) => {
     if (prev.has(rowId) === on) return prev
     const next = new Set(prev)
@@ -410,7 +411,9 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     }
     const leaving: string[] = []
     state.setRunning(model.key, true)
-    setProgress({ done: 0, total: list.length, ids: new Set(list.map((row) => row.id)), name: actionLabel(bulkKey, runMode, count).name })
+    setProgress({ done: 0, total: list.length, ids: new Set(list.map((row) => row.id)) })
+    // Once, as it starts (the button's count is the progress; no announcement per row).
+    state.announce(runningLabel(bulkKey, 0, list.length))
     if (model.approveBatch) {
       try {
         const answers = new Map((await model.approveBatch(list.map((row) => row.id))).map((answer) => [answer.shiftId, answer]))
@@ -419,7 +422,9 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
           if (answer?.approved) { result.decided++; leaving.push(row.id) }
           // Stale as the single approve's 409 and 404 are: reviewed already, or the shift or its completion gone (a not-found shift has no code).
           else if (answer && (answer.code === null || answer.code === 'SHIFT_NOT_PENDING_REVIEW' || answer.code === 'SHIFT_COMPLETION_NOT_FOUND')) result.stale++
-          else result.failed.push({ ref: rowRef(tapOf(row)!.name), message: answer?.message ?? tapOf(row)!.failText })
+          // Flagged since the queue read: the server skipped it (clean only); it stays, needing review.
+          else if (answer?.code === 'SHIFT_NEEDS_REVIEW') result.skipped++
+          else result.failed.push({ ref: rowRef(tapOf(row)!.name), message: answer?.message ?? '' })
         }
       } catch {
         // One SaveChanges on the server: a failed request approved nothing.
@@ -440,7 +445,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         } catch (err) {
           const status = statusOf(err)
           if (status === 404 || status === 409) result.stale++
-          else result.failed.push({ ref: rowRef(tap.name), message: extractErrorMessage(err, tap.failText) })
+          else result.failed.push({ ref: rowRef(tap.name), message: extractErrorMessage(err, '') })
         }
       }
     }
@@ -486,7 +491,9 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         <div className="mb-2 flex items-center justify-between gap-3 xl:h-[var(--control-h)] xl:px-[calc(1px+var(--cell-px))] max-xl:sticky max-xl:top-12 max-xl:z-20 max-xl:bg-[var(--color-background)] max-xl:px-[calc(1px+1rem)] max-xl:py-2 max-xl:shadow-[0_24px_32px_-12px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)]">
           <div className="flex min-w-0 items-center gap-3">
             {tickable.length > 0 && (
-              <label className="flex min-h-[var(--control-h)] items-center gap-2 text-[13px] font-medium text-[var(--color-foreground)] pointer-coarse:min-w-[var(--tap-min)]">
+              // Once ticked, the box alone: the row boxes' size-4 + touch pad, so the count sits where "Select all" was (no jump on a phone).
+              <label className={ticked.length > 0 ? `${TAP_AREA} flex size-4`
+                : 'flex min-h-[var(--control-h)] items-center gap-2 text-[13px] font-medium text-[var(--color-foreground)] pointer-coarse:min-w-[var(--tap-min)]'}>
                 <input
                   ref={allRef}
                   type="checkbox"
@@ -509,7 +516,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
           {(count > 0 || progress) && (
             <Button
               data-bulk-action
-              aria-label={progress?.name ?? action.name}
+              // While running, the name is the visible count (label in name, WCAG 2.5.3).
+              aria-label={progress ? undefined : action.name}
               aria-disabled={progress ? true : undefined}
               className={`shrink-0 ${progress ? HELD : ''}`}
               onClick={() => { if (!progress) setConfirm(mode) }}

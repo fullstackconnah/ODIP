@@ -18,7 +18,7 @@ export interface BulkResult {
   decided: number
   /** Decided or removed by somebody else first (404, 409, a task already closed). */
   stale: number
-  /** Refused: the row's reference (its action name after the verb) and the server's words. */
+  /** Refused: the row's reference (its action name after the verb) and the server's words ('' when it sent none). */
   failed: Array<{ ref: string; message: string }>
   /** Left out of a Complete all by the tab's rule (need review, your own request, can't be marked done here). */
   skipped: number
@@ -103,7 +103,8 @@ export function resultNotice(key: BulkKey, r: BulkResult): { tone: 'success' | '
     parts.push(key === 'completions' ? `${was} reviewed.` : key === 'leave' ? `${was} decided by someone else.` : `${was} closed.`)
   }
   if (r.failed.length) {
-    const named = r.failed.slice(0, 3).map((f) => `${f.ref}: ${f.message.replace(/\.$/, '')}`)
+    // With no words from the server the clause ends at the row's name: the single tap's fallback ("Couldn't approve. Try again.") would repeat the verb.
+    const named = r.failed.slice(0, 3).map((f) => (f.message ? `${f.ref}: ${f.message.replace(/\.$/, '')}` : f.ref))
     const more = r.failed.length - named.length
     parts.push(`${r.failed.length} couldn't be ${key === 'tasks' ? 'marked done' : 'approved'}: ${named.join('; ')}${more ? `; and ${more} more` : ''}.`)
   }
