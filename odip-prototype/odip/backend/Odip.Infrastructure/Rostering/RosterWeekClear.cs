@@ -63,7 +63,8 @@ public static class RosterWeekClear
         var shifts = await db.Shifts.IgnoreQueryFilters().AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => new
         {
             s.Id, s.ServiceDate,
-            Untouched = s.Status == ShiftStatus.Draft && s.UserId == null && s.ShiftPatternId != null && s.ReturnCount == 0
+            // shortcut: an edit within a second of the shift's creation counts as untouched (CreatedAt and UpdatedAt are separate UtcNow reads); add an edited flag if that ever matters.
+            Untouched = s.Status == ShiftStatus.Draft && s.UserId == null && s.ShiftPatternId != null && s.ReturnCount == 0 && s.UpdatedAt <= s.CreatedAt.AddSeconds(1)
                 && (s.Notes == null || s.Notes == "") && (s.OverrideReason == null || s.OverrideReason == "") && (s.AcknowledgedFindingCodes == null || s.AcknowledgedFindingCodes == "")
                 && !db.ShiftNotes.IgnoreQueryFilters().Any(n => n.ShiftId == s.Id) && !db.ShiftCompletions.IgnoreQueryFilters().Any(c => c.ShiftId == s.Id)
                 && !db.HandoverAcknowledgements.IgnoreQueryFilters().Any(a => a.ShiftId == s.Id) && !db.ClaimLineItems.IgnoreQueryFilters().Any(c => c.ShiftId == s.Id)

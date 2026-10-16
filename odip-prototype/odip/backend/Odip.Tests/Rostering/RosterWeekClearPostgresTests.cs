@@ -102,6 +102,27 @@ public class RosterWeekClearPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task OnPostgres_ADraftACoordinatorEdited_IsKept()   // B-M2: a changed time or ratio leaves no other mark than UpdatedAt
+    {
+        RequirePostgres();
+        var org = await NewDatabaseAsync();
+        Guid edited;
+        await using (var db = PostgresFixture.NewContext(org.Cs))
+        {
+            var shift = Untouched(db, org, W1);
+            shift.UpdatedAt = shift.CreatedAt.AddMinutes(5);
+            edited = shift.Id;
+            await db.SaveChangesAsync();
+        }
+
+        var run = await RosterWeekClear.RunAsync(Options(org.Cs), Clock, NullLogger.Instance, default);
+
+        Assert.Equal(0, run.ShiftsRemoved);
+        await using var read = PostgresFixture.NewContext(org.Cs);
+        Assert.True(await read.Shifts.AnyAsync(s => s.Id == edited));
+    }
+
+    [SkippableFact]
     public async Task OnPostgres_TheLockIsTheBoardLock()
     {
         RequirePostgres();

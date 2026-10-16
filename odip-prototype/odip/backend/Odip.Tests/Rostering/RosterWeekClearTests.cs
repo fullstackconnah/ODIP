@@ -87,6 +87,7 @@ public class RosterWeekClearTests
     [InlineData("override")]
     [InlineData("codes")]
     [InlineData("returned")]
+    [InlineData("edited")]
     [InlineData("one-off")]
     [InlineData("note-row")]
     [InlineData("completion-row")]
@@ -109,6 +110,7 @@ public class RosterWeekClearTests
                 case "override": touched.OverrideReason = "Agreed with family"; break;
                 case "codes": touched.AcknowledgedFindingCodes = "OVER_HOURS"; break;
                 case "returned": touched.ReturnCount = 1; break;
+                case "edited": touched.UpdatedAt = touched.CreatedAt.AddMinutes(5); break;   // a coordinator changed its times or ratio, nothing else
                 case "one-off": touched.ShiftPatternId = null; break;
                 case "note-row": db.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), TenantId = TenantA, ShiftId = touched.Id, AuthorUserId = Guid.NewGuid(), AuthorName = "Sam Hill", Body = "Note" }); break;
                 case "completion-row":
