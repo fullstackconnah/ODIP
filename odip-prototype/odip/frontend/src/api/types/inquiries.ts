@@ -15,6 +15,10 @@ export interface ParticipantInquiryDto {
   createdAt: string
   /** The enquiry's version: the edit form sends it back as `expectedUpdatedAt`. */
   updatedAt?: string
+  /** Closed (spec addendum E1): all null or absent while open. The note is null for roles without lifecycle rights. */
+  closedAt?: string | null
+  closeOutcome?: InquiryCloseOutcome | null
+  closeNote?: string | null
   /**
    * Where the participant this enquiry became has got to: all three are null (or absent) while the enquiry has no participant, so the
    * Enquiries tab can tell "New" (no participant), "Draft intake" (intake open) from an enquiry that has moved on (intake complete: the
@@ -46,6 +50,22 @@ export interface ParticipantInquiryDto {
 
 export type IntakeInviteError = 'NotConfigured' | 'Failed'
 
+export type InquiryCloseOutcome = 'DeclinedByUs' | 'NotGoingAhead' | 'Other'
+
+/** POST /inquiries/{id}/close. */
+export interface CloseInquiryDto {
+  outcome: InquiryCloseOutcome
+  note: string | null
+  /** The version the screen loaded: a save since then makes the close a 409. */
+  expectedUpdatedAt?: string
+}
+
+/** What a close did. NoVisit: there was no upcoming visit to cancel; the rest are a cancel's. */
+export interface CloseInquiryResultDto {
+  inquiry: ParticipantInquiryDto
+  cancellationEmail: 'NoVisit' | 'NoInvite' | 'Sent' | IntakeInviteError
+}
+
 /** PUT /inquiries/{id}/intake-booking. `startsAt` is the provider-local choice as an instant with Z; `contactEmail` only when the enquiry has none. */
 export interface SetIntakeBookingDto {
   startsAt: string
@@ -54,6 +74,8 @@ export interface SetIntakeBookingDto {
   staffUserId: string
   notes: string | null
   contactEmail?: string
+  /** The version the form holds (ODIP-REVIEW-268): a save since then makes the booking a 409. The slide-over sends none. */
+  expectedUpdatedAt?: string
 }
 
 export interface CancelIntakeBookingResultDto {

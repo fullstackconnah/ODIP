@@ -2442,7 +2442,7 @@ const routes = [
   // Honours the filters the Active participants tab sends (Active = isActive=true, Archived = isActive=false, both isDraft=false); the fixtures here have no drafts.
   ['participants', (searchParams) => paged(participants.filter((p) =>
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
-  ['inquiries', () => intake.feed()],
+  ['inquiries', (params) => intake.feed(params)],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
   ...intake.detail,
   ['inquiries/:id/onboarding', (id) => {
@@ -3226,7 +3226,8 @@ const server = http.createServer((req, res) => {
       for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
-          sendResult(res, handler(...params, body))
+          // The query too: Cancel visit sends the form's version as ?expectedUpdatedAt (ODIP-REVIEW-268).
+          sendResult(res, handler(...params, body, url.searchParams))
           return
         }
       }

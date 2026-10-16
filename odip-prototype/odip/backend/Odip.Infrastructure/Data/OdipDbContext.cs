@@ -1582,6 +1582,10 @@ public class OdipDbContext : DbContext
             // The enquiry's version (deep review S1/S2): every write bumps it, so an edit from a form loaded before another save, or a contacts save racing
             // Start intake, matches no row and gets a 409. The entity keeps it in whole microseconds, as PostgreSQL stores it.
             entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+            // Closed: Close and Reopen bump UpdatedAt too, so a write that loaded the enquiry before a close gets the same 409.
+            entity.Property(e => e.CloseNote).HasMaxLength(500);
+            // SetNull: whoever closed an enquiry never blocks deleting their user; the audit trail keeps who it was.
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.ClosedByUserId).OnDelete(DeleteBehavior.SetNull);
             // Restrict: a staff member booked for a visit is never deleted out from under it (ImportUntouched.StaffBlockersAsync lists it).
             entity.HasOne(e => e.IntakeStaffUser).WithMany().HasForeignKey(e => e.IntakeStaffUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.IntakeBookedByUser).WithMany().HasForeignKey(e => e.IntakeBookedByUserId).OnDelete(DeleteBehavior.Restrict);

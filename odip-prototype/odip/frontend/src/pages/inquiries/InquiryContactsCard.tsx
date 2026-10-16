@@ -79,7 +79,7 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
   return (
     <Card title="Contacts">
       <div ref={bodyRef} className="flex flex-col gap-[var(--field-gap-y)]">
-        <p className={MUTED}>Family, guardians and anyone else to keep in touch with. They move to the participant's record when intake starts.</p>
+        <p className={MUTED}>Family, guardians and anyone else to keep in touch with. They move to the participant's record when intake starts, and are deleted if the enquiry is closed.</p>
         {listError && <p className="text-[13px] text-[var(--color-destructive)]">{listError}</p>}
         {rows.length === 0 && <p className={MUTED}>No contacts yet.</p>}
         {rows.map((row, index) => {

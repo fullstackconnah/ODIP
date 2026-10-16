@@ -211,12 +211,12 @@ describe('ParticipantsHubPage (wire) — the other two tabs have their search an
     expect(screen.queryByText('No open enquiries')).not.toBeInTheDocument()
   })
 
-  it('shows the enquiries search, and no status filter: the tab already says which stage it is', async () => {
+  it('shows the enquiries search, and no stage filter (the tab already says which stage it is): only Open | Closed', async () => {
     serve({ enquiries: [{ id: 'e1', firstName: 'Eve', lastName: 'Enquiry', phone: '0400', email: null, source: 'Phone', provenance: null, participantId: null, createdAt: '2026-09-01' }] })
     renderHub('/participants?tab=enquiries')
 
     await screen.findByText('Eve Enquiry')
-    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+    expect(screen.getByRole('radiogroup')).toHaveAccessibleName('Show open or closed enquiries')
     expect(screen.getByRole('textbox', { name: /search enquiries/i })).toBeInTheDocument()
   })
 })

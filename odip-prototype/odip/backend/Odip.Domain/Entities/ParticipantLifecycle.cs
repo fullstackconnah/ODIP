@@ -43,6 +43,11 @@ public class ParticipantInquiry : ITenantEntity
     public DateTime? IntakeConfirmedAt { get; set; }
     public int IntakeIcsSequence { get; set; }
     public string? IntakeUid { get; set; }
+    // Closed (spec addendum E1): when, by whom, why and an optional note; all null while open. Reopen clears them; the audit trail keeps the history.
+    public DateTime? ClosedAt { get; set; }
+    public Guid? ClosedByUserId { get; set; }
+    public InquiryCloseOutcome? CloseOutcome { get; set; }
+    public string? CloseNote { get; set; }
 
     /// <summary>Cancels the booking: every intake column back to empty. The next booking gets a new UID and starts at SEQUENCE 0.</summary>
     public void ClearIntakeBooking()

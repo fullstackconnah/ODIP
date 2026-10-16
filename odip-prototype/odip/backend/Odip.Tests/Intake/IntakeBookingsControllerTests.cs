@@ -277,7 +277,7 @@ public class IntakeBookingsControllerTests
     }
 
     /// <summary>Runs a callback once, the first time a staff notification is raised: the gap between a save's read and its write.</summary>
-    private sealed class InterleavingRaiser(INotificationRaiser inner, Func<Task> once) : INotificationRaiser
+    internal sealed class InterleavingRaiser(INotificationRaiser inner, Func<Task> once) : INotificationRaiser
     {
         private Func<Task>? _once = once;
         public async Task RaiseAsync(NotificationEventType type, string entityType, Guid entityId, IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default)
