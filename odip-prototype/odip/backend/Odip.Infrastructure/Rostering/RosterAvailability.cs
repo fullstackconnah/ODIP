@@ -102,8 +102,12 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         {
             if (candidate.UserId is not { } userId) return null;
             if (!_staff.TryGetValue(userId, out var worker) || !worker.IsActive) return "inactive";
-            return CheckCore(candidate, null, null, liveOnly: true).Select(f => AwayReasons.GetValueOrDefault(f.Code)).FirstOrDefault(reason => reason is not null);
+            return CheckCore(candidate, null, null, liveOnly: true).Select(ReasonOf).FirstOrDefault(reason => reason is not null);
         }
+
+        /// <summary>The short reason a finding makes its worker away (L-b), null when it does not: the mapped codes, and any other Blocking finding (B-S1) with a generic one.</summary>
+        public static string? ReasonOf(RosterFinding finding) =>
+            AwayReasons.GetValueOrDefault(finding.Code) ?? (finding.Severity == RosterFindingSeverity.Blocking ? "can't work this shift" : null);
 
         /// <summary>A shift placed in this batch: later checks see the worker as booked.</summary>
         public void Add(Shift shift) => _shifts.Add(shift);
