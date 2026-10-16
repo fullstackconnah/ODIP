@@ -84,8 +84,9 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
         {rows.length === 0 && <p className={MUTED}>No contacts yet.</p>}
         {rows.map((row, index) => {
           const name = `${row.firstName} ${row.lastName}`.trim()
+          // Below md the row drops its inset box for a divider, so the fields get the card's full width and Role shows its longest label whole.
           return (
-            <fieldset key={row.key} className="relative p-[var(--card-pad)] rounded-[var(--radius-sm)] border border-[var(--color-border)]">
+            <fieldset key={row.key} className="relative p-[var(--card-pad)] rounded-[var(--radius-sm)] border border-[var(--color-border)] max-md:p-0 max-md:pt-[var(--field-gap-y)] max-md:rounded-none max-md:border-x-0 max-md:border-b-0">
               <legend className="sr-only">Contact {index + 1}</legend>
               <div className="flex items-start gap-2">
                 <div className={`flex-1 min-w-0 ${formGrid}`}>
@@ -101,7 +102,7 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
                   {field(row, index, 'phone', 'Phone', span.short, 'tel')}
                   {field(row, index, 'email', 'Email', span.medium, 'email')}
                 </div>
-                <Button variant="ghost" iconOnly className="mt-6 max-md:absolute max-md:right-[var(--card-pad)] max-md:top-[var(--card-pad)]" aria-label={`Remove ${name || `contact ${index + 1}`}`} title="Remove contact" onClick={() => remove(index)}>
+                <Button variant="ghost" iconOnly className="mt-6 max-md:absolute max-md:right-0 max-md:top-[var(--field-gap-y)]" aria-label={`Remove ${name || `contact ${index + 1}`}`} title="Remove contact" onClick={() => remove(index)}>
                   <Trash2 className="w-4 h-4" aria-hidden />
                 </Button>
               </div>
