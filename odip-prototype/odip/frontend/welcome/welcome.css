@@ -203,7 +203,7 @@ a:hover { color: var(--deep); }
   .plan li:first-child a::before { animation: fade var(--dur-fade) ease both; }
   .rail__dot { transition: none; }
 }
-@media print { .js .slot .shot { opacity: 1; transform: none; } .js .slot .slot__before h3 span::after { transform: none; } .plan li:first-child a::before { animation: none; } }
+@media print { .js .slot:not([data-in]) .shot { opacity: 1; transform: none; } .js .slot:not([data-in]) .slot__before h3 span::after { transform: none; opacity: 1; } .plan li:first-child a::before { animation: none; } }
 
 /* Before day one, and what alpha means */
 .section { padding-block: clamp(72px, 8vw, 128px); }
