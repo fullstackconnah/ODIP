@@ -29,14 +29,14 @@ export function renderGroup(useGroup: () => GroupModel) {
 /** The page's AnnouncementRegion in these tests (the NoticesRegion is a status too, but not sr-only). */
 export const announcement = () => document.querySelector('.sr-only[role="status"]')
 
-/** The table's column headers, the empty actions header last. */
-export const headers = () => screen.getAllByRole('columnheader').map((th) => th.textContent)
+/** The table's column headers, the empty actions header last (the bulk box column, when a tab has one, is left out: QuickGroup's own tests cover it). */
+export const headers = () => screen.getAllByRole('columnheader').filter((th) => !th.hasAttribute('data-select')).map((th) => th.textContent)
 
 /** A decision row's row group (its row, and its detail row while it has one), found by its subject. */
 export const rowOf = (subject: string) => screen.getByText(subject).closest('tbody')!
 
 /** The subjects of the rows, in order. */
-export const subjects = () => [...document.querySelectorAll('tbody > tr:not([data-detail]) > td:first-child span:first-child')].map((el) => el.textContent)
+export const subjects = () => [...document.querySelectorAll('tbody > tr:not([data-detail]) > td[data-subject] span:first-child')].map((el) => el.textContent)
 
 /** One row's fact cells, between its subject and its buttons. */
-export const facts = (subject: string) => [...rowOf(subject).querySelectorAll('tr:not([data-detail]) > td')].slice(1, -1).map((td) => td.textContent)
+export const facts = (subject: string) => [...rowOf(subject).querySelectorAll('tr:not([data-detail]) > td:not([data-select])')].slice(1, -1).map((td) => td.textContent)

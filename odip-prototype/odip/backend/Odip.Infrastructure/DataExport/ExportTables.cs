@@ -148,6 +148,7 @@ public static class ExportTables
         // Participants
         Own<Participant>("participants.csv", "Participants: personal, NDIS, Medicare and card details, diagnoses, support needs and plan details."),
         Own<ParticipantInquiry>("participant-inquiries.csv", "Enquiries from people who might become participants."),
+        Own<InquiryContact>("inquiry-contacts.csv", "Contacts noted on enquiries before intake started: family, guardians and others to keep in touch with."),
         Own<ParticipantOnboarding>("participant-onboarding.csv", "Each participant's onboarding steps and when they were done."),
         Own<ParticipantIntakeSnapshot>("participant-intake-snapshots.csv", "Each completed intake: when, by whom, and its data. The PDF of each is in documents/."),
         Own<Person>("people.csv", "People connected to participants: family, guardians, nominees, plan managers and health professionals."),

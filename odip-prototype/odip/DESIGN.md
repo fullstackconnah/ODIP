@@ -228,6 +228,14 @@ may read as a warning unless it genuinely is one.
 - Fine pointer: compact (32px controls). Coarse pointer: 44px targets, row actions always visible
 - Text floor of 12px; 13px for secondary and label text; 14px for data
 
+### Brand
+
+The user-facing name is **Bunya Support** (owner, 2026-10-16); ODIP stays the name of the code and this system.
+- **Wordmark:** `components/Wordmark.tsx` (`size`, `tone`), the only way to set the name as a mark: "bunya" 500 in ink, "support" 800 in `--color-primary` (lime on dark), then a `--color-primary-fixed` dot. Lowercase, Plus Jakarta Sans, -0.04em. It sits in the sidebar's 48px brand row and the public pages' bar (21px), and above sign-in (32px).
+- **Icon:** a lime (`--color-primary-fixed`) mark on a `--color-primary` tile. At 16 and 32px it is "b" alone (`public/favicon.svg`); the "b" is drawn larger than the board's (about 65% of the tile height against 50%) on purpose, so it stays legible at 16px. At 48px and up it is "bs" with a white dot (`public/apple-touch-icon.png`, 180px, full-bleed because iOS rounds it itself).
+- **Email:** the wordmark as a PNG on a #0f2000 header band (`Notifications/Templates/email-wordmark.png`, sent inline by Content-ID from `EmailLayout.cs`; mail clients load no web fonts and invert text in dark mode, but not images), alt "Bunya Support"; sender name "Bunya Support".
+- **Tab title:** `Bunya Support · <page>` (`hooks/useDocumentTitle.ts`).
+
 ## Colors
 
 A single olive-green accent family on a warm neutral base, with slate and rose reserved strictly
@@ -602,19 +610,30 @@ All clear row).
 
 ### Decision list
 
-The dashboard's first section after the greeting, "Needs your decision" (an `h2`): what only this viewer can decide, decided on the row. ONE `Card` holds a
-group per kind (Shift completions, Leave, Incidents, Tasks due, Staff compliance; PR C adds Unfilled shifts and Agreements to approve), in that fixed order,
-told apart by space (`--card-pad`) and an `h3` with its count in a neutral pill, never by a frame. `pages/dashboard/QuickGroup.tsx` draws every group from
-a plain model; a hook per kind (`pages/dashboard/groups`) maps the real queries and the real mutation hooks to it, so a decision here is the same decision
-as on the full page.
+The dashboard's section under the Alerts, "Needs your decision" (an `h2`): what only this viewer can decide, decided on the row. ONE strip of house `Tabs`
+(Completions, Leave, Incidents, Credentials, Tasks, in that fixed order; PR C adds Unfilled shifts and Agreements to approve), each tab over its group's
+table. `pages/dashboard/QuickGroup.tsx` draws every group from a plain model; a hook per kind (`pages/dashboard/groups`) maps the real queries and the real
+mutation hooks to it, so a decision here is the same decision as on the full page.
 
-- **A group** shows its first five rows, hairlines between them, and a link to the full page: "Open Leave" when every row is shown, "See all" when rows
-  are cut. The link never carries a number; the pill does. A group at zero is absent and named in one All clear row at the card's foot. A group still
-  waiting (`awaitsData`) or failed is never absent and never named clear: an en dash pill and one line ("Loading leave requests…", or "Couldn't load leave
-  requests." with Try again), and no rows until every request it makes has answered.
-- **A row** is `--row-h` tall on one line from md (subject, flags, facts, then at most two buttons at the right edge), two lines below md with 44px
-  buttons (`ROW_ACTIONS_CARD`). Buttons are `Button size="sm"`, always visible, each named for its row. Olive means one tap decides: only Approve, Done
-  (and in PR C Start review) are primary; Return, Decline, Review, Open and Update expiry are secondary.
+- **A tab** reads its title in semibold and its count in the house tab-counter pill (12px bold, rounded-full, at least 20px wide): solid olive with white
+  on the open tab, Mist (`surface-container`) with ink on the others, an en dash while waiting or failed. The pill is drawn by the section, not by Tabs'
+  `badge`; the visible label is hidden and one sr-only text node names the tab ("Leave (3)", "Leave, loading").
+- **A group** shows its first five rows and a link to the full page: "Open Leave" when every row is shown, "See all" when rows are cut. The link never
+  carries a number; the pill does. A group at zero is a muted tab, named in one All clear row. A group still waiting (`awaitsData`) or failed is never
+  clear: one line ("Loading leave requests…", or "Couldn't load leave requests." with Try again), and no rows until every request it makes has answered.
+- **The table** (from xl; house phone cards below it) is DataTable's box with one exception, this table's only: its header row is a Mist band
+  (`surface-container`, labels 12px/600 muted ink) and its subjects are 14px/600 (bolder, 2026-10-16). Whether DataTable follows is the owner's call.
+- **A row** is `--row-h` tall on one line from xl (subject, flags, facts, then at most two buttons at the right edge). Buttons are `Button size="sm"`,
+  always visible, each named for its row. Olive means one tap decides: only Approve and Done are primary; Return, Decline, Review, Open and Update expiry
+  are secondary.
+- **Bulk** (Completions, Leave, Tasks only; a row is safe when it has its olive one-tap button): a panel bar heads the tab, on the page paper 8px over the
+  table, its box over the row boxes and its button's right edge on the row buttons'. At rest: Select all (the shown safe rows) and **Complete all**
+  (`Button` md primary, one size up from the row buttons) with the true count of safe rows in the whole tab ("Approve all 12 clean", "Approve all 9",
+  "Mark all 7 done"; Completions sends the first 100 through approve-batch and says so). Ticked: the count, Clear and the one action valid for every ticked
+  row. A box column (the first track, 40px) carries a box only on safe rows; a row with its form open or a tap in flight has its box unticked and disabled.
+  Below xl the bar sticks under the app header inside its panel, with the Header Hairline shadow. Every run asks first (`ConfirmDialog`, the count in the
+  title), counts on the bar's button, holds its rows, and ends in ONE notice (success when anything was decided; need review, stale and failures by name;
+  Leave's overlaps rolled up) with focus moved onto it. No bulk Return or Decline: both take a reason.
 - **A tap** reads its "-ing" label and holds both buttons of its row (`aria-disabled`, so focus stays). On success the row leaves at once, the pill
   drops, the page's one `AnnouncementRegion` says what happened, and focus moves to the next row's first button. A consequence the server returns
   (leave that overlaps shifts) is a success notice with a link button in the group's `NoticesRegion`, under its rows. A refusal stays on the row in the

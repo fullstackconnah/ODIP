@@ -53,6 +53,12 @@ describe('isPresent', () => {
     expect(isPresent(model(), gone, 1)).toBe(true)
   })
 
+  it('stays while a bulk run is in flight, though the refetch has already emptied it (SHAPE §6)', () => {
+    const gone = new Set(['a', 'b', 'c'].map((id) => rowKey('leave', id)))
+    expect(isPresent(model({ rows: [], count: 0 }), new Set(), 0, true)).toBe(true)
+    expect(isPresent(model(), gone, 0, true)).toBe(true)
+  })
+
   it('stays while the server still counts rows beyond the ones decided here: never named clear with work left', () => {
     // 8 waiting, 5 fetched, all 5 decided before the refetch lands (or it is paused offline): 3 still wait.
     const fetched = ['a', 'b', 'c', 'd', 'e']

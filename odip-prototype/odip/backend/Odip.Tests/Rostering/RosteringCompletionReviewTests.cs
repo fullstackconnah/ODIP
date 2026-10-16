@@ -798,6 +798,101 @@ public class RosteringCompletionReviewTests
         Assert.All(updateLogs, l => Assert.Contains("ReviewOutcome", l.Changes));
     }
 
+    // ── Clean only (decision-bulk deep M2): the dashboard's one-tap and Complete all re-check the queue's flags at approval time ──
+
+    private static ApproveBatchResultDto BatchItem(ActionResult<ApiResponse<List<ApproveBatchResultDto>>> result, Guid shiftId) =>
+        Assert.IsType<ApiResponse<List<ApproveBatchResultDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Single(r => r.ShiftId == shiftId);
+
+    [Fact]
+    public async Task ApproveBatch_CleanOnly_SkipsAShiftWhoseIncidentWasLinkedAfterFinish_AndApprovesItsCleanSibling()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var flagged = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, flagged.Id, staff.Id);
+        var clean = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, clean.Id, staff.Id);
+        SeedIncident(db, staff.Id, flagged.Id, isActive: true);   // filed after the dashboard read the queue
+
+        var result = await MakeController(db).ApproveBatch(new ApproveBatchDto([flagged.Id, clean.Id], CleanOnly: true), CancellationToken.None);
+
+        var refused = BatchItem(result, flagged.Id);
+        Assert.False(refused.Approved);
+        Assert.Equal(ShiftErrorCodes.ShiftNeedsReview, refused.Code);
+        Assert.True(BatchItem(result, clean.Id).Approved);
+        Assert.Equal(ShiftStatus.PendingReview, (await db.Shifts.SingleAsync(s => s.Id == flagged.Id)).Status);
+        Assert.Equal(ShiftStatus.Completed, (await db.Shifts.SingleAsync(s => s.Id == clean.Id)).Status);
+    }
+
+    [Fact]
+    public async Task ApproveBatch_CleanOnly_SkipsAReturnedThenRefinishedShiftWithMovedTimes_AndAnOutlier()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var adjusted = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, adjusted.Id, staff.Id, isActive: false);   // the returned one
+        var refinished = SeedCompletion(db, adjusted.Id, staff.Id);
+        refinished.OriginalActualStart = refinished.ActualStart.AddMinutes(-20);   // the worker moved the start at Finish: "Times adjusted"
+        db.SaveChanges();
+        var outlier = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, outlier.Id, staff.Id, varianceStart: 90);
+
+        var result = await MakeController(db).ApproveBatch(new ApproveBatchDto([adjusted.Id, outlier.Id], CleanOnly: true), CancellationToken.None);
+
+        Assert.Equal(ShiftErrorCodes.ShiftNeedsReview, BatchItem(result, adjusted.Id).Code);
+        Assert.Equal(ShiftErrorCodes.ShiftNeedsReview, BatchItem(result, outlier.Id).Code);
+        Assert.Equal(2, await db.Shifts.CountAsync(s => s.Status == ShiftStatus.PendingReview));
+    }
+
+    [Fact]
+    public async Task ApproveBatch_WithoutCleanOnly_StillApprovesAFlaggedShift_TheCompletionsPagesDeliberateChoice()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var flagged = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, flagged.Id, staff.Id);
+        SeedIncident(db, staff.Id, flagged.Id, isActive: true);
+
+        var result = await MakeController(db).ApproveBatch(new ApproveBatchDto([flagged.Id]), CancellationToken.None);
+
+        Assert.True(BatchItem(result, flagged.Id).Approved);
+    }
+
+    [Fact]
+    public async Task ApproveCompletion_RequireClean_RefusesAFlaggedShift409_AndLeavesItPending()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+        SeedIncident(db, staff.Id, shift.Id, isActive: true);
+
+        var result = await MakeController(db).ApproveCompletion(shift.Id, CancellationToken.None, requireClean: true);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(ShiftErrorCodes.ShiftNeedsReview, Assert.IsType<ApiResponse<ShiftCompletionDto>>(conflict.Value).Code);
+        Assert.Equal(ShiftStatus.PendingReview, (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status);
+    }
+
+    [Fact]
+    public async Task ApproveCompletion_RequireClean_ApprovesACleanShift()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+
+        var result = await MakeController(db).ApproveCompletion(shift.Id, CancellationToken.None, requireClean: true);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(ShiftStatus.Completed, (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(101)]

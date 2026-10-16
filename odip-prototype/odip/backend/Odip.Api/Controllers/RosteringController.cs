@@ -1233,7 +1233,7 @@ public class RosteringController : ControllerBase
     /// Return raise one (deferred to the notifications spec, out of scope for this PR).
     /// </summary>
     [HttpPost("shifts/{id:guid}/completion/approve")]
-    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ApproveCompletion(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ApproveCompletion(Guid id, CancellationToken ct, [FromQuery] bool requireClean = false)
     {
         var reviewerId = ResolveCurrentUserId();
         if (reviewerId is null)
@@ -1242,6 +1242,10 @@ public class RosteringController : ControllerBase
 
         var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
         if (error is not null) return error;
+        // The dashboard's one tap asks for this: a flag that appeared since its queue read refuses rather than approves. The Completions page approves
+        // a flagged shift deliberately, after its review, so it leaves this off.
+        if (requireClean && (await ShiftCompletionMapper.ShiftsNeedingReviewAsync(_db, [(shift!, completion!)], VarianceReviewMinutes, ct)).Count > 0)
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(NeedsReviewMessage, ShiftErrorCodes.ShiftNeedsReview));
 
         var now = DateTime.UtcNow;
         completion!.ReviewedByUserId = reviewerId;
@@ -1368,15 +1372,29 @@ public class RosteringController : ControllerBase
             .Where(c => distinctIds.Contains(c.ShiftId) && c.IsActive)
             .ToDictionaryAsync(c => c.ShiftId, ct);
 
-        foreach (var shiftId in distinctIds)
+        var resolved = distinctIds.Select(shiftId =>
         {
             shiftsById.TryGetValue(shiftId, out var shift);
             completionsByShiftId.TryGetValue(shiftId, out var completion);
-            var (resolvedShift, resolvedCompletion, error) = ResolvePendingReviewCompletion(shift, completion);
+            return (ShiftId: shiftId, Resolved: ResolvePendingReviewCompletion(shift, completion));
+        }).ToList();
+        // Clean only (the dashboard's Complete all): the queue's flags re-read now, in one pass for the batch; a flagged shift is skipped, never approved.
+        var needsReview = dto.CleanOnly
+            ? await ShiftCompletionMapper.ShiftsNeedingReviewAsync(_db,
+                resolved.Where(r => r.Resolved.Error is null).Select(r => (r.Resolved.Shift!, r.Resolved.Completion!)).ToList(), VarianceReviewMinutes, ct)
+            : new HashSet<Guid>();
+
+        foreach (var (shiftId, (resolvedShift, resolvedCompletion, error)) in resolved)
+        {
             if (error is not null)
             {
                 var (code, message) = ExtractBatchFailure(error);
                 results.Add(new ApproveBatchResultDto(shiftId, false, code, message));
+                continue;
+            }
+            if (needsReview.Contains(shiftId))
+            {
+                results.Add(new ApproveBatchResultDto(shiftId, false, ShiftErrorCodes.ShiftNeedsReview, NeedsReviewMessage));
                 continue;
             }
 
@@ -1796,6 +1814,8 @@ public class RosteringController : ControllerBase
 
         return (shift, completion, null);
     }
+
+    private const string NeedsReviewMessage = "This shift needs review now: open it on the Completions page.";
 
     /// <summary>Unwraps the Code/Message a single-approve rejection would have returned, for the batch's per-item report.</summary>
     private static (string? Code, string? Message) ExtractBatchFailure(ActionResult<ApiResponse<ShiftCompletionDto>> error)

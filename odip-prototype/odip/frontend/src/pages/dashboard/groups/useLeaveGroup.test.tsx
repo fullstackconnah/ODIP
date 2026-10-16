@@ -170,6 +170,31 @@ describe('Leave group — unavailability', () => {
   })
 })
 
+describe('Leave group — Complete all (decision-bulk)', () => {
+  it("approves every request but the viewer's own, one at a time through each row's own endpoint, and rolls the overlaps into one notice", async () => {
+    answer(
+      [leave(), leave({ id: 'l-own', userId: 'u-viewer', userFullName: 'Dev Admin', startDate: '2026-10-19' })],
+      [rule()],
+    )
+    apiPost.mockImplementation((url: string) => Promise.resolve(url === '/leave/l1/approve'
+      ? { leave: leave({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP'), finding('TRIP_OVERLAP')], overlapShifts: [shift('2026-10-22')] }
+      : { unavailability: rule({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP')], overlapShifts: [shift('2026-10-27')] }))
+    renderGroup(() => useLeaveGroup(true, 'u-viewer'))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 leave requests' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent("Your own request isn't included: someone else decides it.")
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
+
+    await waitFor(() => expect(screen.getByText('Approved 2 leave requests')).toBeInTheDocument())
+    expect(apiPost.mock.calls.map(([url]) => url)).toEqual(['/leave/l1/approve', '/leave/unavailability/r1/approve'])
+    expect(screen.getByText(
+      'Your own request stays for someone else. 2 overlap the roster: 1 shift now has a cover task, 1 shift overlaps regular unavailability and 1 trip overlaps.')).toBeInTheDocument()
+    // One notice for the run, not one per overlapping approval.
+    expect(screen.queryByText(/^Leave approved\./)).toBeNull()
+    expect(subjects()).toEqual(['Dev Admin'])
+  })
+})
+
 describe('overlapNotice', () => {
   it('is null when nothing overlaps, and opens the whole board when the shifts are for several participants', () => {
     expect(overlapNotice('leave', 'Sam Lee', { overlaps: [], overlapShifts: [] })).toBeNull()

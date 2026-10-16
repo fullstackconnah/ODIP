@@ -8,11 +8,14 @@ import { extractErrorMessage } from '@/lib/utils'
 type IntakeCancelDialogProps = {
   row: ParticipantInquiryDto | null
   onCancel: () => void
-  onDone: (row: ParticipantInquiryDto, email: CancelIntakeBookingResultDto['cancellationEmail']) => void
+  /** `cleared` is the server's copy after the cancel (the enquiry form keeps it). */
+  onDone: (row: ParticipantInquiryDto, email: CancelIntakeBookingResultDto['cancellationEmail'], cleared: ParticipantInquiryDto) => void
+  /** The enquiry form sends the version it holds, so a cancel from a stale form is a 409 (ODIP-REVIEW-268). The table sends none. */
+  checkVersion?: boolean
 }
 
 /** "Cancel Noah Fitzgerald's intake visit?" The server emails a CANCEL only if an invite had gone out, and the message says which. */
-export function IntakeCancelDialog({ row, onCancel, onDone }: IntakeCancelDialogProps) {
+export function IntakeCancelDialog({ row, onCancel, onDone, checkVersion = false }: IntakeCancelDialogProps) {
   const cancel = useCancelIntakeBooking()
   const [error, setError] = useState<string | null>(null)
   if (!row?.intakeStartsAt) return null
@@ -33,9 +36,9 @@ export function IntakeCancelDialog({ row, onCancel, onDone }: IntakeCancelDialog
       onConfirm={async () => {
         if (cancel.isPending) return
         try {
-          const result = await cancel.mutateAsync(row.id)
+          const result = await cancel.mutateAsync(checkVersion ? { id: row.id, expectedUpdatedAt: row.updatedAt } : row.id)
           setError(null)
-          onDone(row, result.cancellationEmail)
+          onDone(row, result.cancellationEmail, result.inquiry)
         } catch (failure) {
           setError(extractErrorMessage(failure, "The visit wasn't cancelled. Try again."))
         }

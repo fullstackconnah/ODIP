@@ -28,6 +28,7 @@ public class OdipDbContext : DbContext
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Participant> Participants => Set<Participant>();
     public DbSet<ParticipantInquiry> ParticipantInquiries => Set<ParticipantInquiry>();
+    public DbSet<InquiryContact> InquiryContacts => Set<InquiryContact>();
     public DbSet<ParticipantOnboarding> ParticipantOnboardings => Set<ParticipantOnboarding>();
     public DbSet<ParticipantIntakeSnapshot> ParticipantIntakeSnapshots => Set<ParticipantIntakeSnapshot>();
     public DbSet<ServiceAgreementDraft> ServiceAgreementDrafts => Set<ServiceAgreementDraft>();
@@ -1591,11 +1592,32 @@ public class OdipDbContext : DbContext
             // each other cannot interleave into a booked row with no UID; the loser gets a 409 or drops its write.
             entity.Property(e => e.IntakeIcsSequence).IsConcurrencyToken();
             entity.Property(e => e.IntakeUid).IsConcurrencyToken();
+            // The enquiry's version (deep review S1/S2): every write bumps it, so an edit from a form loaded before another save, or a contacts save racing
+            // Start intake, matches no row and gets a 409. The entity keeps it in whole microseconds, as PostgreSQL stores it.
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+            // Closed: Close and Reopen bump UpdatedAt too, so a write that loaded the enquiry before a close gets the same 409.
+            entity.Property(e => e.CloseNote).HasMaxLength(500);
+            // SetNull: whoever closed an enquiry never blocks deleting their user; the audit trail keeps who it was.
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.ClosedByUserId).OnDelete(DeleteBehavior.SetNull);
             // Restrict: a staff member booked for a visit is never deleted out from under it (ImportUntouched.StaffBlockersAsync lists it).
             entity.HasOne(e => e.IntakeStaffUser).WithMany().HasForeignKey(e => e.IntakeStaffUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.IntakeBookedByUser).WithMany().HasForeignKey(e => e.IntakeBookedByUserId).OnDelete(DeleteBehavior.Restrict);
             // The schedule views read visits by organisation and start.
             entity.HasIndex(e => new { e.TenantId, e.IntakeStartsAt });
+        });
+        // Pending contacts on an enquiry (spec 2026-10-16, D3). The lengths are Person's and ParticipantContactRole's, so the move at Start intake never truncates.
+        modelBuilder.Entity<InquiryContact>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Email).HasMaxLength(200);
+            entity.Property(e => e.Relationship).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            // Cascade: pending contacts live and die with their enquiry (owner decision 5).
+            entity.HasOne<ParticipantInquiry>().WithMany().HasForeignKey(e => e.InquiryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.InquiryId });
         });
         modelBuilder.Entity<ParticipantOnboarding>(entity =>
         {
@@ -1864,6 +1886,8 @@ public class OdipDbContext : DbContext
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantInquiry>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<InquiryContact>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantOnboarding>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

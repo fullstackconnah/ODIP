@@ -163,14 +163,14 @@ describe('every routed page has one h1 and a tab title (UI standard 6)', () => {
     await renderAt(route)
     await screen.findByRole('heading', { level: 1 }, { timeout: 10_000 })
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(document.title).toMatch(/^\S.* — Odip$/)
+    expect(document.title).toMatch(/^Bunya Support · \S/)
   }, 20_000)
 
   it.each(RENAMED_TO_NAV_LABEL)('titles %s with its nav label', async url => {
     await renderAt(ROUTES.find(r => r.url === url)!)
     const label = navLeaves.find(leaf => leaf.to === url)!.label
     expect(await screen.findByRole('heading', { level: 1, name: label }, { timeout: 10_000 })).toBeInTheDocument()
-    expect(document.title).toBe(`${label} — Odip`)
+    expect(document.title).toBe(`Bunya Support · ${label}`)
   }, 20_000)
 
   // A list whose header has a create action does not repeat it in its empty state (every list here is empty).

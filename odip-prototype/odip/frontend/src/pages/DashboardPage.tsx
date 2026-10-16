@@ -252,7 +252,7 @@ export default function DashboardPage() {
   // Every item has data and is at zero: the band is clear.
   const bandClear = !!d && attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
   // "Nothing needs you" only when it is true: every group and every alert has data and is at zero, and no consequence notice is waiting (SHAPE §6).
-  const groupsClear = groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length))
+  const groupsClear = groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
   const pageClear = bandClear && groupsClear
 
   return (
