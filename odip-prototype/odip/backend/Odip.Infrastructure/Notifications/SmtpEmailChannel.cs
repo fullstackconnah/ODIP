@@ -99,9 +99,8 @@ public sealed class SmtpEmailChannel : INotificationChannel
     /// </summary>
     public static MailMessage BuildMailMessage(NotificationMessage message, string from)
     {
-        var sender = new MailAddress(from);
-        if (sender.DisplayName.Length == 0) sender = new MailAddress(sender.Address, EmailLayout.SenderName);
-        var mail = new MailMessage(sender, new MailAddress(message.RecipientAddress)) { Subject = message.Subject, Body = message.PlainTextBody };
+        var mail = new MailMessage(from, message.RecipientAddress, message.Subject, message.PlainTextBody);
+        if (mail.From!.DisplayName.Length == 0) mail.From = new MailAddress(mail.From.Address, EmailLayout.SenderName);
         mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(EmailLayout.WithHeader(message.HtmlBody), null, "text/html"));
         if (message.Ics is { } ics)
             mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(ics.Content, new ContentType($"text/calendar; method={ics.Method}; charset=UTF-8")));
