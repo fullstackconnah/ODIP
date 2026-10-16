@@ -2754,8 +2754,8 @@ const postRoutes = [
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
     return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
   }],
-  // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers.
-  ['rostering/weeks/:weekStart/start', (weekStart) => {
+  // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers. matchRoute only reads a literal :id.
+  ['rostering/weeks/:id/start', (weekStart) => {
     const monday = planApproval.mondayOf(weekStart)
     if (startedWeeks.has(monday)) return respond(409, failEnvelope(null, ['This week has already been started.'], 'roster-week-started'))
     startedWeeks.add(monday)
@@ -2932,6 +2932,16 @@ const putRoutes = [
     }
     if (code && claim.status === 'Rejected') claim.rejectionCode = code
     return true
+  }],
+  // Make or stop being the regular (2026-10-16): the pattern slot's default worker, as the server's SetRegular. No shift changes.
+  ['rostering/patterns/:id/regular', (id, body) => {
+    const pattern = rosterPatterns.find((p) => p.id === id)
+    if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    const regular = body && body.staffId ? staff.find((s) => s.id === body.staffId) : null
+    if (body && body.staffId && !regular) return respond(400, failEnvelope(null, ['Staff member not found.']))
+    pattern.defaultStaffId = regular ? regular.id : null
+    pattern.defaultStaffName = regular ? regular.fullName : null
+    return pattern
   }],
   // A pattern edited or switched off on the Patterns page (phase D keeps the patterns an approval made in memory). The fields the real PUT takes; where it came from is never the form's to change.
   ['rostering/patterns/:id', (id, body) => {
