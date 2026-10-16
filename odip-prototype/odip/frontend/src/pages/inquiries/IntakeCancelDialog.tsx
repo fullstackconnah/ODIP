@@ -8,7 +8,8 @@ import { extractErrorMessage } from '@/lib/utils'
 type IntakeCancelDialogProps = {
   row: ParticipantInquiryDto | null
   onCancel: () => void
-  onDone: (row: ParticipantInquiryDto, email: CancelIntakeBookingResultDto['cancellationEmail']) => void
+  /** `cleared` is the server's copy after the cancel (the enquiry form keeps it). */
+  onDone: (row: ParticipantInquiryDto, email: CancelIntakeBookingResultDto['cancellationEmail'], cleared: ParticipantInquiryDto) => void
 }
 
 /** "Cancel Noah Fitzgerald's intake visit?" The server emails a CANCEL only if an invite had gone out, and the message says which. */
@@ -35,7 +36,7 @@ export function IntakeCancelDialog({ row, onCancel, onDone }: IntakeCancelDialog
         try {
           const result = await cancel.mutateAsync(row.id)
           setError(null)
-          onDone(row, result.cancellationEmail)
+          onDone(row, result.cancellationEmail, result.inquiry)
         } catch (failure) {
           setError(extractErrorMessage(failure, "The visit wasn't cancelled. Try again."))
         }
