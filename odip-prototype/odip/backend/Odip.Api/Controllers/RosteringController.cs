@@ -1091,6 +1091,7 @@ public class RosteringController : ControllerBase
             x.Shift, x.Completion,
             Outlier = Math.Abs(x.Completion.VarianceMinutesStart) > thresholdMinutes || Math.Abs(x.Completion.VarianceMinutesEnd) > thresholdMinutes,
         });
+        // The whole queue, counted before the cursor window on purpose: the client wants the queue size, not the rest after the cursor.
         var totalCount = await keyed.CountAsync(ct);
         var windowed = keyed;
         if (cursor is { } cur)

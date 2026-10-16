@@ -115,6 +115,27 @@ public class CompletionsPagingPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task AKeysetRead_CrossesFromTheLastOutlierToTheFirstCleanRow_WhenAPageEndsOnAnOutlier()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (db, _) = await NewDatabaseAsync();
+        await using var _db = db;
+        // Page size 2: page one is {8, 9}, both outliers, so the cursor is an outlier and only the outlier-to-clean branch of the window reads the clean rows.
+        await SeedAsync(db, [5, 2, 8, 1, 9, 3, 7, 4, 6], new HashSet<int> { 8, 9 });
+
+        var rostering = Rostering(db);
+        var page = await ReadAsync(rostering, 1, 2);
+        var seen = page.Items.Select(i => i.ShiftId).ToList();
+        while (page.Items.Count == 2)
+        {
+            page = await ReadAsync(rostering, 1, 2, page.NextCursor);
+            seen.AddRange(page.Items.Select(i => i.ShiftId));
+        }
+
+        Assert.Equal(new[] { 8, 9, 1, 2, 3, 4, 5, 6, 7 }.Select(IdOf), seen);
+    }
+
+    [SkippableFact]
     public async Task TheStatusRead_SaysWhatBecameOfEachShift_AndNeverAnotherTenantsShift()
     {
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");

@@ -39,7 +39,8 @@ export function NeedsYourDecision({ groups, state }: { groups: GroupModel[]; sta
   // QuickGroup: a group with every row marked is absent from the page, so it could never see its own rows come back.
   const readStamp = groups.map((group) => group.readAt ?? 0).join()
   useEffect(() => {
-    const back = groups.flatMap((group) => group.rows.map((row) => rowKey(group.key, row.id))).filter((key) => state.gone.has(key))
+    // Its own group's read, later than the mark: another group's read (or a failed refetch) says nothing about this row.
+    const back = groups.flatMap((group) => group.rows.map((row) => rowKey(group.key, row.id)).filter((key) => (state.gone.get(key) ?? Infinity) < (group.readAt ?? 0)))
     if (back.length) state.unmarkGone(back)
     // Only a new read decides: `gone` itself changing (a row just marked) must not undo the mark.
     // eslint-disable-next-line react-hooks/exhaustive-deps
