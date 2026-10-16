@@ -860,4 +860,41 @@ public class IntakeBookingsControllerTests
 
         Assert.Equal(f.Sam.Id, f.Row().IntakeStaffUserId);
     }
+
+    [Theory]
+    [InlineData(-90, false)] // ends exactly as this one starts: back to back, free
+    [InlineData(-89, true)]  // ends a minute into this one: a clash
+    public async Task Another_visit_ending_as_this_one_starts_is_free_but_a_minute_later_is_a_clash(int startOffset, bool clash)
+    {
+        // Deep review N1: the earlier side of back to back for another visit (a mutant turning End > start into >= survived).
+        var f = new Fixture();
+        f.Db.ParticipantInquiries.Add(new ParticipantInquiry
+        {
+            Id = Guid.NewGuid(), TenantId = f.TenantId, FirstName = "Ivy", LastName = "Tran", Source = "Phone", Email = "ivy@example.com",
+            IntakeStartsAt = Start.AddMinutes(startOffset), IntakeDurationMinutes = 90, IntakeLocation = "Home", IntakeStaffUserId = f.Sam.Id, IntakeUid = $"{Guid.NewGuid():N}@odip",
+        });
+        f.Db.SaveChanges();
+
+        var result = (await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result;
+
+        if (clash) AssertBusy(result, "Sam Lee has another intake visit 8:31 – 10:01 am on Fri 16 Oct.");
+        else Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task A_shift_in_another_organisation_for_the_same_user_id_does_not_make_them_busy()
+    {
+        // Deep review N2: the shift query keeps to the enquiry's organisation (IgnoreQueryFilters drops the filter; a mutant without the clause survived).
+        var f = new Fixture();
+        f.Db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), ParticipantId = Guid.NewGuid(), UserId = f.Sam.Id, ServiceDate = Oct16,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), Status = ShiftStatus.Published,
+        });
+        f.Db.SaveChanges();
+
+        await f.BookAsync();
+
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
+    }
 }
