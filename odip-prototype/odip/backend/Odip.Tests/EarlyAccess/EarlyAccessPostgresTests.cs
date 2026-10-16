@@ -1,9 +1,18 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Odip.Api.Controllers;
+using Odip.Application.DTOs;
+using Odip.Application.EarlyAccess;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.EarlyAccess;
 using Xunit;
@@ -119,6 +128,13 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
     private EarlyAccessService NewService(OdipDbContext db) => new(db, NullLogger<EarlyAccessService>.Instance);
 
+    private static EarlyAccessValidationResult Checked(
+        string name, string organisation, string email, string size = "under-10", string? role = null, string? phone = null, string? message = null) =>
+        EarlyAccessRequestValidator.Validate(new EarlyAccessRequestDto
+        {
+            Name = name, Organisation = organisation, Email = email, OrganisationSize = size, Role = role, Phone = phone, Message = message,
+        });
+
     [SkippableFact]
     public async Task Migration_CreatesTheTable_WithTheAgreedColumns_AndAUniqueEmailIndex()
     {
@@ -141,9 +157,13 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             "Email|character varying|254|NO",
             "Id|uuid||NO",
             "LastRequestedAtUtc|timestamp without time zone||NO",
+            "Message|character varying|1000|YES",
             "Name|character varying|100|NO",
             "Organisation|character varying|150|NO",
+            "OrganisationSize|character varying|16|YES",
+            "Phone|character varying|30|YES",
             "RequestCount|integer||NO",
+            "Role|character varying|100|YES",
         }, found);
 
         await using var index = new NpgsqlCommand(
@@ -152,6 +172,41 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         Assert.NotNull(definition);
         Assert.Contains("UNIQUE", definition);
         Assert.Contains("(\"Email\")", definition);
+    }
+
+    [SkippableFact]
+    public async Task TheExtraFields_RoundTrip_AtTheirLimits_AndARepeatReplacesThem()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("limits");
+        var role = new string('é', 100);
+        var phone = new string('1', 30);
+        var message = new string('€', 1000); // varchar(1000) counts characters, not bytes
+
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "200-plus", role, phone, message), CancellationToken.None);
+
+        await using (var db = _pg.CreateContext())
+        {
+            var row = await db.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+            Assert.Equal("200-plus", row.OrganisationSize);
+            Assert.Equal(role, row.Role);
+            Assert.Equal(phone, row.Phone);
+            Assert.Equal(message, row.Message);
+        }
+
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "under-10"), CancellationToken.None);
+
+        await using (var db = _pg.CreateContext())
+        {
+            var row = await db.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+            Assert.Equal(2, row.RequestCount);
+            Assert.Equal("under-10", row.OrganisationSize);
+            Assert.Null(row.Role);
+            Assert.Null(row.Phone);
+            Assert.Null(row.Message);
+        }
     }
 
     [SkippableFact]
@@ -180,9 +235,9 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         var email = NewEmail("sequence");
 
         EarlyAccessRecordResult first, second, third;
-        await using (var db = _pg.CreateContext()) first = await NewService(db).RecordAsync("Jane", "Org", email, CancellationToken.None);
-        await using (var db = _pg.CreateContext()) second = await NewService(db).RecordAsync("Other", "Other Org", email, CancellationToken.None);
-        await using (var db = _pg.CreateContext()) third = await NewService(db).RecordAsync("Other", "Other Org", email, CancellationToken.None);
+        await using (var db = _pg.CreateContext()) first = await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        await using (var db = _pg.CreateContext()) second = await NewService(db).RecordAsync(Checked("Other", "Other Org", email), CancellationToken.None);
+        await using (var db = _pg.CreateContext()) third = await NewService(db).RecordAsync(Checked("Other", "Other Org", email), CancellationToken.None);
 
         Assert.Equal(EarlyAccessOutcome.Created, first.Outcome);
         Assert.Equal(EarlyAccessOutcome.Repeated, second.Outcome);
@@ -215,7 +270,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, CancellationToken.None);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), CancellationToken.None);
 
         Assert.Equal(1, interfered);
         Assert.Equal(EarlyAccessOutcome.Repeated, result.Outcome);
@@ -253,7 +308,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, CancellationToken.None);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), CancellationToken.None);
 
         Assert.Equal(EarlyAccessOutcome.Repeated, result.Outcome);
         Assert.Equal(3, result.RequestCount); // seed (1) + the rival's bump (1) + this request (1)
@@ -280,7 +335,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, cancellation.Token);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), cancellation.Token);
 
         Assert.Equal(EarlyAccessOutcome.Created, result.Outcome);
         await using var check = _pg.CreateContext();
@@ -302,7 +357,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             {
                 await gate.Task;
                 await using var db = _pg.CreateContext();
-                return await NewService(db).RecordAsync($"Person {i}", "Org", email, CancellationToken.None);
+                return await NewService(db).RecordAsync(Checked($"Person {i}", "Org", email), CancellationToken.None);
             })).ToArray();
             gate.SetResult();
             var results = await Task.WhenAll(tasks);
@@ -313,6 +368,146 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             var row = await check.EarlyAccessRequests.SingleAsync(e => e.Email == email);
             Assert.Equal(contenders, row.RequestCount);
         }
+    }
+
+    // ── The 12-month purge (EarlyAccessPurgeBackgroundService) ──
+
+    private EarlyAccessPurgeBackgroundService Purger(CapturingLogger<EarlyAccessPurgeBackgroundService>? log = null)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<OdipDbContext>(o => o.UseNpgsql(_pg.ConnectionString));
+        return new EarlyAccessPurgeBackgroundService(
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), log ?? new CapturingLogger<EarlyAccessPurgeBackgroundService>());
+    }
+
+    private async Task<EarlyAccessRequest> SeedRowAsync(string tag, DateTime createdUtc, DateTime lastSentUtc, int count = 1)
+    {
+        var row = Row(NewEmail(tag), name: "Purge " + tag);
+        row.CreatedAtUtc = createdUtc;
+        row.LastRequestedAtUtc = lastSentUtc;
+        row.RequestCount = count;
+        await using var db = _pg.CreateContext();
+        db.EarlyAccessRequests.Add(row);
+        await db.SaveChangesAsync();
+        return row;
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_DeletesSignupsFirstSentMoreThan12MonthsAgo_EvenIfSentAgainSince_AndKeepsTheRest()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        // PostgreSQL keeps microseconds, so the clock is cut to them and the boundary can be pinned exactly.
+        var now = new DateTime(DateTime.UtcNow.Ticks / 10 * 10, DateTimeKind.Utc);
+        var cutoff = now.AddMonths(-12);
+        var oneMicrosecond = TimeSpan.FromTicks(10);
+        var expired = await SeedRowAsync("expired", cutoff - oneMicrosecond, cutoff - oneMicrosecond);
+        var atTheCutoff = await SeedRowAsync("cutoff", cutoff, cutoff);
+        // Anyone can send the form again with someone's address, so a repeat must not extend how long their details are kept.
+        var resent = await SeedRowAsync("resent", now.AddMonths(-24), now.AddDays(-7), count: 2);
+        var recent = await SeedRowAsync("recent", now.AddDays(-30), now.AddDays(-30));
+        var log = new CapturingLogger<EarlyAccessPurgeBackgroundService>();
+
+        var deleted = await Purger(log).PurgeExpiredAsync(now, CancellationToken.None);
+
+        Assert.True(deleted >= 2); // the class shares one database
+        await using var check = _pg.CreateContext();
+        var ids = new[] { expired.Id, atTheCutoff.Id, resent.Id, recent.Id };
+        var remaining = await check.EarlyAccessRequests.Where(e => ids.Contains(e.Id)).Select(e => e.Id).ToListAsync();
+        Assert.Equal(new[] { atTheCutoff.Id, recent.Id }.OrderBy(i => i), remaining.OrderBy(i => i));
+
+        var entry = Assert.Single(log.Entries, e => e.Level == LogLevel.Information);
+        Assert.Contains(deleted.ToString(System.Globalization.CultureInfo.InvariantCulture), entry.Message);
+        Assert.DoesNotContain("@", entry.Message);
+        Assert.DoesNotContain(expired.Name, entry.Message);
+        Assert.DoesNotContain(expired.Email, entry.Message);
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_RunsWhenTheServiceStarts()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var old = DateTime.UtcNow.AddMonths(-13);
+        var expired = await SeedRowAsync("at-start", old, old);
+        var purger = Purger();
+
+        await purger.StartAsync(CancellationToken.None);
+        var gone = false;
+        for (var waited = 0; waited < 10_000 && !gone; waited += 100)
+        {
+            await using var check = _pg.CreateContext();
+            gone = !await check.EarlyAccessRequests.AnyAsync(e => e.Id == expired.Id);
+            if (!gone) await Task.Delay(100);
+        }
+        await purger.StopAsync(CancellationToken.None);
+
+        Assert.True(gone, "the first purge should run at start, not a day later");
+    }
+
+    // ── SuperAdmin Delete (AdminEarlyAccessController) against the RequestCount concurrency token ──
+
+    [SkippableFact]
+    public async Task Delete_ThatRacesARepeatSignup_StillDeletes_InsteadOf500()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var row = await SeedRowAsync();
+
+        var result = await DeleteWhileAsync(row.Id, "UPDATE \"EarlyAccessRequests\" SET \"RequestCount\" = \"RequestCount\" + 1 WHERE \"Id\" = @id");
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await using var check = _pg.CreateContext();
+        Assert.False(await check.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id));
+        Assert.Equal(1, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
+    }
+
+    [SkippableFact]
+    public async Task Delete_OfARowRemovedMidway_Returns404()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var row = await SeedRowAsync();
+
+        var result = await DeleteWhileAsync(row.Id, "DELETE FROM \"EarlyAccessRequests\" WHERE \"Id\" = @id");
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        await using var check = _pg.CreateContext();
+        Assert.Equal(0, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
+    }
+
+    private async Task<EarlyAccessRequest> SeedRowAsync()
+    {
+        var row = Row(NewEmail("delete"));
+        await using var db = _pg.CreateContext();
+        db.EarlyAccessRequests.Add(row);
+        await db.SaveChangesAsync();
+        return row;
+    }
+
+    /// <summary>A SuperAdmin's Delete, with <paramref name="sql"/> run on another connection just before its first save.</summary>
+    private async Task<ActionResult<Odip.Application.Common.ApiResponse<bool>>> DeleteWhileAsync(Guid id, string sql)
+    {
+        var interfere = new BeforeFirstSave(async () =>
+        {
+            await using var connection = _pg.OpenConnection();
+            await using var command = new NpgsqlCommand(sql, connection);
+            command.Parameters.AddWithValue("id", id);
+            await command.ExecuteNonQueryAsync();
+        });
+        await using var db = _pg.CreateContext(interfere);
+        var controller = new AdminEarlyAccessController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, "SuperAdmin"),
+                        new Claim("fullName", "Jordan Lee"),
+                    }, "Test")),
+                },
+            },
+        };
+        return await controller.Delete(id, CancellationToken.None);
     }
 
     private static EarlyAccessRequest Row(string email, string name = "Jane") => new()

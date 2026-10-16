@@ -6,6 +6,7 @@ using Odip.Api.Controllers;
 using Odip.Api.Services;
 using Odip.Application.Interfaces;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.EarlyAccess;
 using Xunit;
@@ -46,6 +47,15 @@ public class EarlyAccessWiringTests
         Assert.Same(notifier, provider.GetRequiredService<EarlyAccessNotifier>());
         var hosted = Assert.Single(provider.GetServices<IHostedService>().OfType<EarlyAccessNotifier>());
         Assert.Same(notifier, hosted);
+    }
+
+    // The 12-month purge keeps the landing page's retention promise; registered here so this test fails if the line is dropped.
+    [Fact]
+    public void ThePurge_IsRegisteredOnce_AsAHostedService()
+    {
+        using var provider = Build();
+
+        Assert.Single(provider.GetServices<IHostedService>().OfType<EarlyAccessPurgeBackgroundService>());
     }
 
     [Fact]
