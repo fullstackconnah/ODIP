@@ -50,6 +50,7 @@ public static class ExportTables
         [typeof(PublicHoliday)] = "The public holiday calendar, which is the same for every organisation.",
         [typeof(PublicHolidayOverride)] = "Changes to the public holiday calendar, which apply to every organisation.",
         [typeof(EarlyAccessRequest)] = "Early access requests from the ODIP website, which aren't your organisation's records.",
+        [typeof(EarlyAccessLaterSubmission)] = "Repeat early access requests from the ODIP website, which aren't your organisation's records.",
     };
 
     /// <summary>

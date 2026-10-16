@@ -46,4 +46,20 @@ public class EarlyAccessMigrationTests
         Assert.True(previous >= 0, "the previous latest migration was not discovered (renamed?)");
         Assert.True(previous < index, "must sort after the previous latest migration");
     }
+
+    [Fact]
+    public void AddEarlyAccessLaterSubmissions_IsDiscovered_AfterAddEarlyAccessAlphaFields()
+    {
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
+            .UseNpgsql("Host=localhost;Database=odip_migration_discovery_test;Username=postgres;Password=postgres")
+            .Options;
+        using var db = new OdipDbContext(options, new Mock<ICurrentTenant>().Object);
+
+        var migrations = db.Database.GetMigrations().ToList();
+
+        var index = migrations.FindIndex(m => m.EndsWith("_AddEarlyAccessLaterSubmissions", StringComparison.Ordinal));
+        Assert.True(index >= 0, "AddEarlyAccessLaterSubmissions was not discovered");
+        var previous = migrations.FindIndex(m => m.EndsWith("_AddEarlyAccessAlphaFields", StringComparison.Ordinal));
+        Assert.True(previous >= 0 && previous < index, "must sort after AddEarlyAccessAlphaFields");
+    }
 }

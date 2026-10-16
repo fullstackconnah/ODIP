@@ -111,7 +111,7 @@ public sealed class EarlyAccessNotifier : BackgroundService, IEarlyAccessNotifie
             }
 
             var message = EarlyAccessRequestTemplate.Render(new EarlyAccessRequestPayload(
-                recipient, notification.Name, notification.Organisation, notification.Email, notification.RequestedAtUtc));
+                recipient, notification.Name, notification.Organisation, notification.Email, notification.RequestedAtUtc, notification.Kind));
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(SendTimeout);

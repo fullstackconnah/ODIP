@@ -43,6 +43,7 @@ public class TenantFilterCoverageTests
         ["PublicHolidayOverride"] = "a state's calendar, the same for every provider; written by the owner",
         ["Tenant"] = "the organisation table itself, written by SuperAdmin only (TenantsController, AdminUsersController); read across organisations on purpose for sign-in and the email-domain checks",
         ["EarlyAccessRequest"] = "anonymous public submissions with no tenant (see the comment on its mapping)",
+        ["EarlyAccessLaterSubmission"] = "a repeat of an anonymous public submission, read only through its sign-up (EarlyAccessRequest)",
         // Legacy.
         ["Contact"] = "legacy; no endpoint reads or writes it, only the seeder",
         ["ParticipantContact"] = "legacy; no endpoint reads or writes it, only the seeder",
