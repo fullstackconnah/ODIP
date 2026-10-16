@@ -13,6 +13,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Notifications;
 using Odip.Tests.Postgres;
 using Xunit;
@@ -171,5 +172,41 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         db.ChangeTracker.Clear();
         Assert.Equal(samA.Id, (await db.ParticipantInquiries.SingleAsync(x => x.Id == noah.Id)).IntakeStaffUserId);
         Assert.Single(await db.NotificationOutbox.Where(o => o.RecipientUserId == samA.Id).ToListAsync());
+    }
+
+    [SkippableFact]
+    public async Task The_clash_queries_translate_and_keep_to_the_viewed_organisation_as_a_SuperAdmin_viewing_A()
+    {
+        RequirePostgres();
+        var (dbA, a) = await _pg.NewTenantContextAsync();
+        var (dbB, b) = await _pg.NewTenantContextAsync();
+        await using var _a = dbA;
+        await using var _b = dbB;
+        var samA = Staff(a);
+        var admin = Staff(a, UserRole.Admin, firstName: "Ada");
+        dbA.Users.AddRange(samA, admin);
+        var pA = new Participant { Id = Guid.NewGuid(), TenantId = a, FirstName = "Pat", LastName = "Ng" };
+        dbA.Participants.Add(pA);
+        // Back to back on both sides: a shift that ends as the visit starts, and another visit that starts as it ends.
+        dbA.Shifts.Add(new Shift { Id = Guid.NewGuid(), TenantId = a, ParticipantId = pA.Id, UserId = samA.Id, ServiceDate = new DateOnly(2026, 10, 16), StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(10, 0), Status = ShiftStatus.Published });
+        var ivy = Booked(a, samA.Id, IntakeBookingsControllerTests.Start.AddMinutes(90));
+        var noah = Booked(a, samA.Id, IntakeBookingsControllerTests.Start);
+        noah.IntakeStartsAt = null; noah.IntakeStaffUserId = null; noah.IntakeUid = null;
+        var nia = Booked(a, samA.Id, IntakeBookingsControllerTests.Start);
+        nia.FirstName = "Nia"; nia.IntakeStartsAt = null; nia.IntakeStaffUserId = null; nia.IntakeUid = null;
+        dbA.ParticipantInquiries.AddRange(ivy, noah, nia);
+        await dbA.SaveChangesAsync();
+        // Organisation B books Sam's id at the same time: it overlaps, but it is another organisation's.
+        // It starts first, so a query that leaked it would name 9:30 – 11:00 am instead.
+        dbB.ParticipantInquiries.Add(Booked(b, samA.Id, IntakeBookingsControllerTests.Start.AddMinutes(-30)));
+        await dbB.SaveChangesAsync();
+
+        var (db, controller) = SuperAdminViewing(a, admin.Id);
+        await using var _ = db;
+        SetIntakeBookingDto Body(DateTime startsAt) => new() { StartsAt = startsAt, DurationMinutes = 90, Location = "12 Smith St", StaffUserId = samA.Id };
+
+        Assert.IsType<OkObjectResult>((await controller.Set(noah.Id, Body(IntakeBookingsControllerTests.Start), CancellationToken.None)).Result);
+        var refused = Assert.IsType<ConflictObjectResult>((await controller.Set(nia.Id, Body(IntakeBookingsControllerTests.Start.AddMinutes(30)), CancellationToken.None)).Result);
+        Assert.Equal(["Sam Lee has another intake visit 10:00 – 11:30 am on Fri 16 Oct."], Assert.IsType<ValidationProblemDetails>(refused.Value).Errors["staffUserId"]);
     }
 }

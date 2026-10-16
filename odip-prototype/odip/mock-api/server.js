@@ -2444,6 +2444,7 @@ const routes = [
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
   ['inquiries', () => intake.feed()],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
+  ...intake.detail,
   ['inquiries/:id/onboarding', (id) => {
     const budget = funding.budgetStatus(id)
     // Mei is the fresh case; everyone else on a checklist (Daniel, and p-0004 opened by URL) has everything but, perhaps, the plan budget.

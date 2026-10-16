@@ -1219,6 +1219,62 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("IncidentWitnesses");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.InquiryContact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("InquiryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Relationship")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InquiryId");
+
+                    b.HasIndex("TenantId", "InquiryId");
+
+                    b.ToTable("InquiryContacts");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.MedicationAdministration", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2409,6 +2465,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
@@ -6013,6 +6070,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("IncidentReport");
 
                     b.Navigation("WitnessUser");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.InquiryContact", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ParticipantInquiry", null)
+                        .WithMany()
+                        .HasForeignKey("InquiryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.MedicationAdministration", b =>
