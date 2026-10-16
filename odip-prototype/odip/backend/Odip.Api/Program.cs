@@ -590,6 +590,40 @@ app.Use(async (context, next) =>
 });
 
 app.UseMiddleware<Odip.Api.Middleware.ExceptionHandlingMiddleware>();
+
+// ── Loud warning: the per-client sign-in budget cannot partition ──
+// The failed-sign-in lockout (AuthController.Exchange -> ClientIp) can only give
+// each caller their own budget when the request carries a real client address.
+// Behind a published Docker port served by the userspace `docker-proxy`, it does
+// not: the proxy accepts the client's TCP connection and originates a new one to
+// nginx, so nginx's $remote_addr is the Docker bridge gateway for EVERY caller and
+// the genuine address never reaches this process.
+//
+// Consequences, stated plainly rather than left to be discovered in production:
+// the address-keyed rate limiter collapses to one shared bucket, and the sign-in
+// failure budget is not counted at all (ClientIp.LoginAttemptKey returns null),
+// because counting it would be counting against that shared key.
+//
+// Detected by a real request at startup, not by guessing: if the very first
+// request looks like the proxy hop, say so once and loudly.
+app.Use(async (context, next) =>
+{
+    if (!Odip.Api.Services.ClientIp.IsIndistinguishableFromProxy(context))
+    {
+        var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Odip.ClientIp");
+        logger.LogWarning(
+            "SIGN-IN BUDGET NOT PARTITIONED: this request resolved to the proxy address {Address}, " +
+            "not a client. The address-keyed rate limiter is one shared bucket and failed sign-ins are not " +
+            "counted. If the published port is served by docker-proxy (a userspace proxy), the real client " +
+            "address is destroyed before nginx sees it and no application code can recover it. Fix at the " +
+            "deploy layer: publish without the userspace proxy (userland-proxy:false), or serve from a " +
+            "reverse proxy that terminates outside the published port.",
+            context.Connection.RemoteIpAddress);
+    }
+
+    await next();
+});
+
 app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();
