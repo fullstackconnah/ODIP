@@ -60,7 +60,7 @@ vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => h.screen.belowMd })
 const at = (o: Partial<ShiftDto>) => makeShift({ participantId: 'p-1', participantName: 'Mia Chen', startTime: '09:00:00', endTime: '15:00:00', durationHours: 6, status: 'Draft', ...o })
 const DRAFTS = [
   makeUnfilledShift({ id: 'open-tue', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', status: 'Draft' }),
-  at({ id: 'sam-wed', serviceDate: '2026-08-19', staffId: 'staff-2', staffName: 'Sam Wilson', shiftPatternId: 'pat-wed' }),
+  at({ id: 'sam-wed', serviceDate: '2026-08-19', staffId: 'staff-2', staffName: 'Sam Wilson', shiftPatternId: 'pat-wed', fromAgreement: true }),
   at({ id: 'alex-fri', serviceDate: '2026-08-21', staffId: 'staff-9', staffName: 'Alex Ng' }),
   at({ id: 'sam-sat', serviceDate: '2026-08-22', staffId: 'staff-2', staffName: 'Sam Wilson' }),
   at({ id: 'alex-mon', serviceDate: '2026-08-17', staffId: 'staff-9', staffName: 'Alex Ng', status: 'Published' }),
@@ -225,6 +225,9 @@ describe('Start rostering', () => {
     const busy = screen.getByRole('button', { name: 'Starting…' })
     expect(busy).toHaveAttribute('aria-disabled', 'true')
     expect(busy).toHaveFocus()
+    // A second click while it is out sends nothing: its 409 would replace the result with "already started".
+    await user.click(busy)
+    expect(h.start).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('region', { name: CARD })).toHaveAttribute('aria-busy', 'true')
 
     showBoard(STARTED)

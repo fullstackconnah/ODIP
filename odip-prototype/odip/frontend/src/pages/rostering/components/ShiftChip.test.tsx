@@ -915,7 +915,7 @@ describe('ShiftChip: the regular (2026-10-16)', () => {
     return { onSetRegular, ...result }
   }
   const openMenu = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /^Actions for/ }))
-  const kim = makeShift({ id: 'kim', staffName: 'Kim Lee', shiftPatternId: 'pat-1' })
+  const kim = makeShift({ id: 'kim', staffName: 'Kim Lee', shiftPatternId: 'pat-1', fromAgreement: true })
 
   it('offers "Make Kim the regular" on a pattern shift with a worker, after Swap and before Remove, and hands the shift up', async () => {
     const user = userEvent.setup()
@@ -936,10 +936,12 @@ describe('ShiftChip: the regular (2026-10-16)', () => {
     expect(screen.getByRole('option', { name: 'Stop being the regular' })).toBeInTheDocument()
   })
 
-  it('offers neither on a one-off, an open shift, or where nothing handles it, and keeps it on a locked chip', async () => {
+  it('offers neither on a one-off, a Patterns-page pattern, an open shift, or where nothing handles it, and keeps it on a locked chip', async () => {
     const user = userEvent.setup()
     const cases: [ShiftDto, Partial<ShiftChipProps>][] = [
       [makeShift({ id: 'one-off', staffName: 'Kim Lee', shiftPatternId: null }), {}],
+      // A Patterns-page pattern: Start never makes its shifts, so "every week you start" would be untrue there (deep review S2).
+      [makeShift({ id: 'hand-made', staffName: 'Kim Lee', shiftPatternId: 'pat-2' }), {}],
       [makeUnfilledShift({ id: 'open', shiftPatternId: 'pat-1' }), {}],
       [kim, { onSetRegular: undefined }],
     ]

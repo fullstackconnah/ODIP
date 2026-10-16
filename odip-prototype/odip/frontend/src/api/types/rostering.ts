@@ -501,7 +501,6 @@ export interface MoveStaffDto {
   acknowledgedFindingCodes: string[]
 }
 
-/** What Publish week did: Draft shifts now Published (unfilled ones too), how many different workers were told, how many went out needing staff, and how many stayed Draft because their worker now has a blocking problem. */
 /** One participant in Start's answer: one it skipped (not ready for rostering), or one whose new shifts went over budget. */
 export interface StartWeekParticipantDto {
   participantId: string
@@ -519,6 +518,7 @@ export interface StartWeekResultDto {
   budgetWarnings?: StartWeekParticipantDto[]
 }
 
+/** What Publish week did: Draft shifts now Published (unfilled ones too), how many different workers were told, how many went out needing staff, and how many stayed Draft because their worker now has a blocking problem. */
 export interface PublishWeekResultDto {
   published: number
   notified: number

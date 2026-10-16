@@ -48,7 +48,7 @@ export type ShiftChipProps = {
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
   onDelete: (shift: ShiftDto) => void
-  /** "Make {first} the regular" / "Stop being the regular" (L2), on a pattern shift with a worker. It changes the pattern, not the shift, so a locked chip keeps it. */
+  /** "Make {first} the regular" / "Stop being the regular" (L2), on an agreement pattern's shift with a worker: the only patterns Start makes shifts from. It changes the pattern, not the shift, so a locked chip keeps it. */
   onSetRegular?: (shift: ShiftDto) => void
 }
 
@@ -134,7 +134,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
     // Swap (the lead's decision 1): an assigned, unlocked chip, wherever the page can open the swap picker. It waits while a write is out, as every drag and plus does.
     ...(swap && isFilled && !locked ? [{ value: 'swap', label: `Swap ${firstName(shift.staffName)} with…`, disabled: dragsOff }] : []),
-    ...(onSetRegular && shift.shiftPatternId && shift.staffId ? [{ value: 'regular', label: shift.isRegular ? 'Stop being the regular' : `Make ${firstName(shift.staffName)} the regular` }] : []),
+    // Agreement patterns only: Start never makes a Patterns-page pattern's shifts, so the confirm's "every week you start" would be untrue there (its regular is the Patterns page's own field).
+    ...(onSetRegular && shift.shiftPatternId && shift.fromAgreement && shift.staffId ? [{ value: 'regular', label: shift.isRegular ? 'Stop being the regular' : `Make ${firstName(shift.staffName)} the regular` }] : []),
     ...(shift.staffId ? [{ value: 'unassign', label: `Remove ${firstName(shift.staffName)}` }] : []),
     { value: 'delete', label: 'Delete' },
   ]

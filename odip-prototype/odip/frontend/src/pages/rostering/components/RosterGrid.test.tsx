@@ -241,7 +241,7 @@ describe('RosterGrid frame under a wrapped toolbar (finish review, 1280)', () =>
 describe('RosterGrid: the regular (2026-10-16)', () => {
   it('hands "Make … the regular" up from staff and participant rows, never from the Unfilled lane', async () => {
     const user = userEvent.setup()
-    const kim = makeShift({ id: 'kim', staffId: 'staff-1', staffName: 'Kim Lee', shiftPatternId: 'pat-1' })
+    const kim = makeShift({ id: 'kim', staffId: 'staff-1', staffName: 'Kim Lee', shiftPatternId: 'pat-1', fromAgreement: true })
     const open = makeUnfilledShift({ id: 'open', serviceDate: '2026-08-18', shiftPatternId: 'pat-2' })
     for (const board of [
       makeStaffBoard({ staffRows: [makeStaffRow({ staffId: 'staff-1', fullName: 'Kim Lee', shifts: [kim] })], unfilled: [open] }),
