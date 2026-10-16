@@ -148,7 +148,7 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     apiPost.mockResolvedValue([
       ...['s1', 's2', 's3', 's4'].map((shiftId) => ({ shiftId, approved: true, code: null, message: null })),
       { shiftId: 's5', approved: false, code: 'SHIFT_NOT_PENDING_REVIEW', message: 'This shift is not awaiting review.' },
-      { shiftId: 's6', approved: false, code: 'SHIFT_COMPLETION_NOT_FOUND', message: 'Shift completion not found.' },
+      // s6 has no answer at all: a failure, named. (Not found, by any code, is stale like the single approve's 404.)
     ])
     const { client } = renderGroup(() => useCompletionsGroup(true))
     const invalidate = vi.spyOn(client, 'invalidateQueries')
@@ -163,7 +163,7 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     expect(apiPost).toHaveBeenCalledWith('/rostering/completions/approve-batch', { shiftIds: ['s1', 's2', 's3', 's4', 's5', 's6'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['rostering-completions'] })
     expect(screen.getByText(
-      "1 needs review and stays here. 1 was already reviewed. 1 couldn't be approved: Worker 6 with Grace Palmer-Hughes, 14 Oct: Shift completion not found.")).toBeInTheDocument()
+      "1 needs review and stays here. 1 was already reviewed. 1 couldn't be approved: Worker 6 with Grace Palmer-Hughes, 14 Oct: Couldn't approve. Try again.")).toBeInTheDocument()
   })
 
   it('sends the first 100 clean ids over the cap, and says so', async () => {
@@ -178,6 +178,21 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     await waitFor(() => expect(screen.getByText('Approved 100 of 134')).toBeInTheDocument())
     expect(apiPost.mock.calls[0][1].shiftIds).toEqual(Array.from({ length: 100 }, (_, i) => `s${i}`))
     expect(screen.getByText('Run it again for the rest.')).toBeInTheDocument()
+  })
+
+  it("counts a shift or completion gone (the single approve's 404) as stale, not failed", async () => {
+    apiGet.mockResolvedValue(page([item(), item({ shiftId: 's2', staffName: 'Ana Ruiz' })]))
+    apiPost.mockResolvedValue([
+      { shiftId: 's1', approved: false, code: null, message: 'Shift not found.' },
+      { shiftId: 's2', approved: false, code: 'SHIFT_COMPLETION_NOT_FOUND', message: 'Shift completion not found.' },
+    ])
+    renderGroup(() => useCompletionsGroup(true))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
+
+    await waitFor(() => expect(screen.getByText("Couldn't approve 2 completions")).toBeInTheDocument())
+    expect(screen.getByText('2 were already reviewed.')).toBeInTheDocument()
   })
 
   it('says nothing was approved when the batch fails whole, and keeps every row', async () => {

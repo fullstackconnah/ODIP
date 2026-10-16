@@ -195,7 +195,7 @@ function QuickRowView({ row, columns, box, inRun, onOccupied, onDone, onRefused 
   row: QuickRow
   columns: FactColumn[]
   /** The bulk box column (SHAPE §3): absent on a tab without it; null for a row with nothing to tick (its cell stays, empty). */
-  box?: { checked: boolean; onChange: (checked: boolean) => void } | null
+  box?: { checked: boolean; locked: boolean; onChange: (checked: boolean) => void } | null
   /** In a bulk run: its buttons are held, as a tap in flight holds them. */
   inRun: boolean
   /** Tells the group while a form is open or a tap is in flight here: its box is unticked and disabled, and Complete all leaves it out. */
@@ -261,7 +261,7 @@ function QuickRowView({ row, columns, box, inRun, onOccupied, onDone, onRefused 
                   className={BOX}
                   aria-label={selectName(tapAction.name)}
                   checked={box.checked && !occupied}
-                  disabled={occupied}
+                  disabled={occupied || box.locked}
                   onChange={(e) => box.onChange(e.target.checked)}
                 />
               </label>
@@ -417,7 +417,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         for (const row of list) {
           const answer = answers.get(row.id)
           if (answer?.approved) { result.decided++; leaving.push(row.id) }
-          else if (answer?.code === 'SHIFT_NOT_PENDING_REVIEW') result.stale++
+          // Stale as the single approve's 409 and 404 are: reviewed already, or the shift or its completion gone (a not-found shift has no code).
+          else if (answer && (answer.code === null || answer.code === 'SHIFT_NOT_PENDING_REVIEW' || answer.code === 'SHIFT_COMPLETION_NOT_FOUND')) result.stale++
           else result.failed.push({ ref: rowRef(tapOf(row)!.name), message: answer?.message ?? tapOf(row)!.failText })
         }
       } catch {
@@ -492,8 +493,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
                   className={BOX}
                   aria-label={`Select all shown ${model.noun}`}
                   checked={ticked.length > 0 && ticked.length === tickable.length}
-                  disabled={!!progress}
-                  onChange={(e) => setSelected(new Set(e.target.checked ? tickable.map((row) => row.id) : []))}
+                  aria-disabled={progress ? true : undefined}
+                  onChange={(e) => { if (!progress) setSelected(new Set(e.target.checked ? tickable.map((row) => row.id) : [])) }}
                 />
                 <span className={ticked.length > 0 ? 'sr-only' : undefined}>Select all</span>
               </label>
@@ -543,6 +544,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
                 columns={model.columns}
                 box={!bar ? undefined : tapOf(row) ? {
                   checked: selected.has(row.id),
+                  // A run holds every box: its selection was taken at Confirm.
+                  locked: !!progress,
                   onChange: (checked) => setSelected((prev) => { const next = new Set(prev); if (checked) next.add(row.id); else next.delete(row.id); return next }),
                 } : null}
                 inRun={!!progress?.ids.has(row.id)}

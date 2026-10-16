@@ -509,6 +509,10 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(runB).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /^Approve 3 selected/ })).toHaveTextContent('Approving 1 of 3…')
     expect(screen.getByRole('button', { name: 'Approve leave: Person a' })).toHaveAttribute('aria-disabled', 'true')
+    // The run holds the selection it took: every box, and the bar's controls (aria-disabled, so focus stays).
+    expect(screen.getByRole('checkbox', { name: 'Select leave: Person c' })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: 'Select all shown leave requests' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: 'Clear' })).toHaveAttribute('aria-disabled', 'true')
     await act(async () => first.resolve({ announce: 'Approved Person a.' }))
 
     await waitFor(() => expect(notice()).toHaveTextContent('Approved 2 leave requests'))
