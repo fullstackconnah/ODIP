@@ -139,8 +139,8 @@ export function useStartWeek() {
 export function useSetRegular() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ patternId, staffId }: { patternId: string; staffId: string | null }) =>
-      apiPut<ShiftPatternDto>(`/rostering/patterns/${patternId}/regular`, { staffId }),
+    mutationFn: ({ patternId, shiftId, staffId }: { patternId: string; shiftId: string; staffId: string | null }) =>
+      apiPut<ShiftPatternDto>(`/rostering/patterns/${patternId}/regular`, { shiftId, staffId }),
     onSuccess: () => Promise.all([
       qc.invalidateQueries({ queryKey: ['roster-board'] }),
       qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
