@@ -90,8 +90,6 @@ public class AuthController : ControllerBase
         if (isLockedOut)
         {
             _logger.LogWarning("Exchange attempt from a locked-out client, verifying the token anyway: {Key}", attemptKey);
-            Response.Headers.RetryAfter = ((int)Math.Ceiling(lockedOutRetryAfter.TotalSeconds))
-                .ToString(CultureInfo.InvariantCulture);
         }
 
         ActionResult<ApiResponse<AuthResponseDto>> Rejected(string code, string logMessage, params object?[] logArgs)
@@ -106,6 +104,9 @@ public class AuthController : ControllerBase
             // even looked at".
             if (isLockedOut)
             {
+                // Only a refusal carries it: a valid token that wins during a lockout must not.
+                Response.Headers.RetryAfter = ((int)Math.Ceiling(lockedOutRetryAfter.TotalSeconds))
+                    .ToString(CultureInfo.InvariantCulture);
                 return StatusCode(
                     StatusCodes.Status429TooManyRequests,
                     ApiResponse<AuthResponseDto>.Fail(ExchangeRefusal.MessageFor(ExchangeRefusal.LockedOut), ExchangeRefusal.LockedOut));
