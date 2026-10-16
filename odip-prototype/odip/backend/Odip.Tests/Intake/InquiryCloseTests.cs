@@ -175,6 +175,21 @@ public class InquiryCloseTests
     }
 
     [Fact]
+    public async Task A_closed_enquirys_kept_past_visit_cannot_be_marked_confirmed()
+    {
+        // Verify C2: Close keeps a past visit as the record, and Confirm must not write onto a closed enquiry.
+        var f = new Fixture();
+        await f.BookAsync();
+        var later = Start.AddHours(3);
+        await f.Controller(now: later).Close(f.Noah.Id, Why(), CancellationToken.None);
+
+        var refused = await f.Controller(now: later).Confirm(f.Noah.Id, new ConfirmIntakeBookingDto { Confirmed = true }, CancellationToken.None);
+
+        Assert.Equal(("inquiry-closed", "This enquiry is closed. Reopen it first."), Refusal(refused));
+        Assert.Null(f.Row().IntakeConfirmedAt);
+    }
+
+    [Fact]
     public async Task The_list_is_open_by_default_and_closed_on_request_and_hides_the_note_from_other_roles()
     {
         var f = new Fixture();
@@ -258,5 +273,105 @@ public class InquiryCloseTests
         var json = JsonSerializer.Serialize(rows);
         foreach (var personal in new[] { "Noah", "Fitzgerald", "0412 555 010", "priya.nair", "Chose another provider" }) Assert.DoesNotContain(personal, json);
         Assert.DoesNotContain(typeof(ParticipantInquiry), AuditedEntities.Types);
+    }
+
+    // ── Verify C1 / deep review M1: Close and Reopen carry the version the screen loaded ──
+
+    [Fact]
+    public async Task A_close_from_a_stale_row_is_a_409_and_the_enquiry_stays_open_with_its_visit()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        var loaded = f.Row().UpdatedAt;          // the row as the table had it
+        await f.BookAsync(now: Now.AddMinutes(1)); // someone books in the meantime: the version moves on
+
+        var result = await f.Controller(now: Now.AddMinutes(2)).Close(f.Noah.Id, Why() with { ExpectedUpdatedAt = loaded }, CancellationToken.None);
+
+        Assert.Equal((null, "Someone else just changed this visit. Reload and try again."), Refusal(result));
+        var row = f.OtherDb().ParticipantInquiries.AsNoTracking().Single(x => x.Id == f.Noah.Id);
+        Assert.Null(row.ClosedAt);
+        Assert.Equal(Start, row.IntakeStartsAt);
+        Assert.Single(f.Channel.Sent); // the booking's invite; no cancellation went
+    }
+
+    [Fact]
+    public async Task A_reopen_from_a_stale_row_is_a_409_and_the_enquiry_stays_closed()
+    {
+        var f = new Fixture();
+        await f.Controller(now: Now.AddMinutes(1)).Close(f.Noah.Id, Why(), CancellationToken.None);
+        var loaded = f.Row().UpdatedAt;
+        await f.Controller(now: Now.AddMinutes(2)).Reopen(f.Noah.Id, CancellationToken.None);
+        await f.Controller(now: Now.AddMinutes(3)).Close(f.Noah.Id, Why(InquiryCloseOutcome.Other), CancellationToken.None);
+
+        var stale = await f.Controller(now: Now.AddMinutes(4)).Reopen(f.Noah.Id, CancellationToken.None, new InquiryVersionDto { ExpectedUpdatedAt = loaded });
+
+        Assert.Equal((null, "Someone else just changed this visit. Reload and try again."), Refusal(stale));
+        var row = f.OtherDb().ParticipantInquiries.AsNoTracking().Single(x => x.Id == f.Noah.Id);
+        Assert.Equal(InquiryCloseOutcome.Other, row.CloseOutcome);
+        // The current version reopens it (a new request, so a new context: the failed one still tracks the stale version).
+        Assert.IsType<OkObjectResult>((await f.Controller(now: Now.AddMinutes(5), db: f.OtherDb()).Reopen(f.Noah.Id, CancellationToken.None, new InquiryVersionDto { ExpectedUpdatedAt = row.UpdatedAt })).Result);
+    }
+
+    // ── ODIP-REVIEW-268: every booking write the form makes carries the version it holds; a write from a stale form is a 409 ──
+
+    /// <summary>Editor B saves a contact list through the enquiry form (a real edit: its UpdatedAt is the wall clock, so the version moves on).</summary>
+    private static void EditorBSavesContacts(Fixture f)
+    {
+        var edit = new UpdateParticipantInquiryDto { FirstName = "Noah", LastName = "Fitzgerald", Source = "Phone", Email = "priya.nair@example.com.au", Contacts = [new InquiryContactDto { Role = ContactRoleType.NextOfKin, FirstName = "Tom", LastName = "Ng" }] };
+        var db = f.OtherDb();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.SetupGet(t => t.TenantId).Returns(f.TenantId);
+        Assert.IsType<OkObjectResult>(new ParticipantInquiriesController(db, tenant.Object).Update(f.Noah.Id, edit, CancellationToken.None).Result.Result);
+    }
+
+    [Fact]
+    public async Task A_cancel_from_a_stale_form_is_a_409_and_the_visit_stands_and_nobody_is_emailed()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        await f.BookAsync();
+        var v1 = f.Row().UpdatedAt;
+        EditorBSavesContacts(f);
+        var v2 = f.Row().UpdatedAt;
+
+        var stale = await f.Controller(db: f.OtherDb()).Cancel(f.Noah.Id, CancellationToken.None, v1);
+
+        Assert.Equal((null, "Someone else just changed this visit. Reload and try again."), Refusal(stale));
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
+        Assert.Single(f.Channel.Sent); // the booking's invite; no cancellation
+        // InMemory has no transactions, so the outbox row's rollback is the PostgreSQL fact's to show.
+        Assert.IsType<OkObjectResult>((await f.Controller(db: f.OtherDb()).Cancel(f.Noah.Id, CancellationToken.None, v2)).Result);
+        Assert.Null(f.Row().IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task A_booking_from_a_stale_form_is_a_409_and_no_invite_goes()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        var v1 = f.Row().UpdatedAt;
+        EditorBSavesContacts(f);
+        var v2 = f.Row().UpdatedAt;
+
+        var stale = await f.Controller(db: f.OtherDb()).Set(f.Noah.Id, f.Body() with { ExpectedUpdatedAt = v1 }, CancellationToken.None);
+
+        Assert.Equal((null, "Someone else just changed this visit. Reload and try again."), Refusal(stale));
+        Assert.Null(f.Row().IntakeStartsAt);
+        Assert.Empty(f.Channel.Sent);
+        Assert.IsType<OkObjectResult>((await f.Controller(db: f.OtherDb()).Set(f.Noah.Id, f.Body() with { ExpectedUpdatedAt = v2 }, CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task A_resend_from_a_stale_form_is_a_409_and_sends_nothing()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent);
+        await f.BookAsync();
+        var v1 = f.Row().UpdatedAt;
+        EditorBSavesContacts(f);
+        var v2 = f.Row().UpdatedAt;
+
+        var stale = await f.Controller(db: f.OtherDb()).Resend(f.Noah.Id, CancellationToken.None, new InquiryVersionDto { ExpectedUpdatedAt = v1 });
+
+        Assert.Equal((null, "Someone else just changed this visit. Reload and try again."), Refusal(stale));
+        Assert.Single(f.Channel.Sent);
+        Assert.IsType<OkObjectResult>((await f.Controller(db: f.OtherDb()).Resend(f.Noah.Id, CancellationToken.None, new InquiryVersionDto { ExpectedUpdatedAt = v2 })).Result);
+        Assert.Equal(2, f.Channel.Sent.Count);
     }
 }

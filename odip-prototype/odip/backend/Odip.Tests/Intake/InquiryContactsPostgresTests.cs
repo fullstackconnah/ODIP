@@ -290,4 +290,94 @@ public class InquiryContactsPostgresTests : IClassFixture<PostgresFixture>
             Assert.Equal(1, await after.NotificationOutbox.CountAsync(o => o.RecipientUserId == sam.Id));
         }
     }
+
+    // Verify C1: a close sent from a row loaded before someone else's save is a 409, and the whole close rolls back: the visit, the contacts, no outbox.
+    [SkippableFact]
+    public async Task A_stale_close_is_a_409_and_nothing_changes()
+    {
+        RequirePostgres();
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        var sam = IntakeBookingPostgresTests.Staff(tenantId);
+        var inquiry = IntakeBookingPostgresTests.Booked(tenantId, sam.Id, IntakeBookingsControllerTests.Start);
+        inquiry.IntakeInviteSentAt = IntakeBookingsControllerTests.Now;
+        await using (seed)
+        {
+            seed.Users.Add(sam);
+            seed.ParticipantInquiries.Add(inquiry);
+            await seed.SaveChangesAsync();
+        }
+        var loaded = inquiry.UpdatedAt;
+        // Someone adds a contact in the meantime.
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Update(inquiry.Id, Form(null, (ContactRoleType.Guardian, "Mei")) with { FirstName = "Noah", LastName = "Fitzgerald", Email = "noah@example.com" }, CancellationToken.None)).Result); }
+
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        var channel = new IntakeBookingsControllerTests.RecordingChannel(ChannelSendOutcome.Sent);
+        var (closing, _x) = Request(tenantId);
+        await using (closing)
+        {
+            var controller = new IntakeBookingsController(closing, tenant.Object, new IntakeInviteSender([channel], NullLogger<IntakeInviteSender>.Instance), new NotificationRaiser(closing),
+                new IntakeBookingsControllerTests.FixedClock(IntakeBookingsControllerTests.Now))
+            {
+                ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, sam.Id.ToString()), new Claim(ClaimTypes.Role, "Coordinator")], "test")) } },
+            };
+            var result = await controller.Close(inquiry.Id, new CloseInquiryDto { Outcome = InquiryCloseOutcome.Other, ExpectedUpdatedAt = loaded }, CancellationToken.None);
+            Assert.IsType<ConflictObjectResult>(result.Result);
+        }
+        Assert.Empty(channel.Sent);
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            var row = await check.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id);
+            Assert.Null(row.ClosedAt);
+            Assert.NotNull(row.IntakeStartsAt);
+            Assert.Equal(1, await check.InquiryContacts.CountAsync(c => c.InquiryId == inquiry.Id));
+            Assert.Equal(0, await check.NotificationOutbox.CountAsync(o => o.RecipientUserId == sam.Id));
+        }
+    }
+
+    // ODIP-REVIEW-268: A's form holds v1; B saves contacts (v2); A's Cancel visit with v1 is a 409 and nothing of the cancel saves.
+    [SkippableFact]
+    public async Task A_cancel_from_a_stale_form_is_a_409_and_the_visit_and_outbox_are_untouched()
+    {
+        RequirePostgres();
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        var sam = IntakeBookingPostgresTests.Staff(tenantId);
+        var inquiry = IntakeBookingPostgresTests.Booked(tenantId, sam.Id, IntakeBookingsControllerTests.Start);
+        inquiry.IntakeInviteSentAt = IntakeBookingsControllerTests.Now;
+        await using (seed)
+        {
+            seed.Users.Add(sam);
+            seed.ParticipantInquiries.Add(inquiry);
+            await seed.SaveChangesAsync();
+        }
+        var v1 = inquiry.UpdatedAt;
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Update(inquiry.Id, Form(null, (ContactRoleType.Guardian, "Tom")) with { FirstName = "Noah", LastName = "Fitzgerald", Email = "noah@example.com" }, CancellationToken.None)).Result); }
+
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        var channel = new IntakeBookingsControllerTests.RecordingChannel(ChannelSendOutcome.Sent);
+        var (cancelling, _x) = Request(tenantId);
+        await using (cancelling)
+        {
+            var controller = new IntakeBookingsController(cancelling, tenant.Object, new IntakeInviteSender([channel], NullLogger<IntakeInviteSender>.Instance), new NotificationRaiser(cancelling),
+                new IntakeBookingsControllerTests.FixedClock(IntakeBookingsControllerTests.Now))
+            {
+                ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, sam.Id.ToString()), new Claim(ClaimTypes.Role, "Coordinator")], "test")) } },
+            };
+            Assert.IsType<ConflictObjectResult>((await controller.Cancel(inquiry.Id, CancellationToken.None, v1)).Result);
+        }
+        Assert.Empty(channel.Sent);
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            Assert.NotNull((await check.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id)).IntakeStartsAt);
+            Assert.Equal(new[] { "Tom" }, await check.InquiryContacts.Where(c => c.InquiryId == inquiry.Id).Select(c => c.FirstName).ToListAsync());
+            Assert.Equal(0, await check.NotificationOutbox.CountAsync(o => o.RecipientUserId == sam.Id));
+        }
+    }
 }

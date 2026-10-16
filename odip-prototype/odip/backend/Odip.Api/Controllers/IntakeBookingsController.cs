@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -59,6 +60,8 @@ public class IntakeBookingsController : ControllerBase
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ClosedRefusal, ClosedCode));
+        // ODIP-REVIEW-268: the version the form holds goes into the UPDATE's WHERE, so a write from a stale form is a 409 and nothing of it saves.
+        if (dto.ExpectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
 
         var now = NowUtc;
         var startsAt = ProviderLocalTime.AsUtc(dto.StartsAt);
@@ -150,7 +153,7 @@ public class IntakeBookingsController : ControllerBase
 
     [HttpDelete("inquiries/{id:guid}/intake-booking")]
     [Authorize(Roles = LifecycleRoles)]
-    public async Task<ActionResult<ApiResponse<CancelIntakeBookingResultDto>>> Cancel(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<CancelIntakeBookingResultDto>>> Cancel(Guid id, CancellationToken ct, [FromQuery] DateTime? expectedUpdatedAt = null)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<CancelIntakeBookingResultDto>.Fail("A tenant context is required."));
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
@@ -158,6 +161,8 @@ public class IntakeBookingsController : ControllerBase
         // A visit that has happened stays on the enquiry as its record; it can be rescheduled, not cancelled.
         if (ProviderLocalTime.AsUtc(start).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) <= NowUtc)
             return Conflict(ApiResponse<CancelIntakeBookingResultDto>.Fail("This visit has already happened, so it can't be cancelled."));
+        // ODIP-REVIEW-268: the version the form holds goes into the UPDATE's WHERE, so a write from a stale form is a 409 and nothing of it saves.
+        if (expectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
 
         var provider = await ProviderAsync(inquiry.TenantId, ct);
         var cancellation = await CancelVisitAsync(inquiry, provider, ct);
@@ -170,7 +175,6 @@ public class IntakeBookingsController : ControllerBase
         }));
     }
 
-    /// <summary>The family replied or rang: the coordinator marks it by hand (no confirm link in v1). Emails nobody.</summary>
     /// <summary>
     /// Cancels the enquiry's visit on the tracked row: the next SEQUENCE, the staff member's CANCEL raised (an outbox row in the caller's save) and the
     /// columns cleared. Returns the contact's cancellation to send AFTER the caller's save, or null when no invite had gone out. Used by Cancel and Close.
@@ -223,6 +227,8 @@ public class IntakeBookingsController : ControllerBase
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<CloseInquiryResultDto>.Fail("This enquiry is already closed.", ClosedCode));
         if (inquiry.ParticipantId is not null)
             return Conflict(ApiResponse<CloseInquiryResultDto>.Fail($"Intake has started for {inquiry.FirstName}, so this enquiry can't be closed.", "inquiry-converted"));
+        // The version the screen loaded goes into the UPDATE's WHERE: a booking or an edit since then makes this close a 409, and nothing of it saves (verify C1).
+        if (dto.ExpectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
 
         // Only an upcoming visit is cancelled: one that has happened stays on the enquiry as its record (as Cancel refuses to cancel it).
         var provider = await ProviderAsync(inquiry.TenantId, ct);
@@ -241,12 +247,13 @@ public class IntakeBookingsController : ControllerBase
     /// <summary>Reopens a closed enquiry (spec addendum E3): the close is cleared; its contacts and any cancelled visit don't come back.</summary>
     [HttpPost("inquiries/{id:guid}/reopen")]
     [Authorize(Roles = LifecycleRoles)]
-    public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Reopen(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Reopen(Guid id, CancellationToken ct, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] InquiryVersionDto? dto = null)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry is null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (inquiry.ClosedAt is null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("This enquiry is already open.", "inquiry-open"));
+        if (dto?.ExpectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
         _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ParticipantInquiry), inquiry.Id, "Reopen", inquiry.CloseOutcome?.ToString(), null, User));
         inquiry.ClosedAt = null; inquiry.ClosedByUserId = null; inquiry.CloseOutcome = null; inquiry.CloseNote = null; inquiry.UpdatedAt = NowUtc;
         if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
@@ -254,6 +261,7 @@ public class IntakeBookingsController : ControllerBase
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, null, provider.ZoneId)));
     }
 
+    /// <summary>The family replied or rang: the coordinator marks it by hand (no confirm link in v1). Emails nobody.</summary>
     [HttpPost("inquiries/{id:guid}/intake-booking/confirm")]
     [Authorize(Roles = LifecycleRoles)]
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Confirm(Guid id, ConfirmIntakeBookingDto dto, CancellationToken ct)
@@ -261,6 +269,8 @@ public class IntakeBookingsController : ControllerBase
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry is null || inquiry.IntakeStartsAt is null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("No intake visit is booked for this enquiry."));
+        // A closed enquiry keeps a past visit as its record; it is not marked confirmed after the fact (verify C2).
+        if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ClosedRefusal, ClosedCode));
         inquiry.IntakeConfirmedAt = dto.Confirmed ? NowUtc : null;
         inquiry.UpdatedAt = NowUtc;
         if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
@@ -271,7 +281,7 @@ public class IntakeBookingsController : ControllerBase
     /// <summary>Send again: the current invite, with the same UID and SEQUENCE, to the enquiry's current email. The outcome is stored like any send.</summary>
     [HttpPost("inquiries/{id:guid}/intake-booking/send")]
     [Authorize(Roles = LifecycleRoles)]
-    public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Resend(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Resend(Guid id, CancellationToken ct, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] InquiryVersionDto? dto = null)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
@@ -280,6 +290,10 @@ public class IntakeBookingsController : ControllerBase
             return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("This visit has already happened, so there's no invite to send."));
         if (inquiry.Email is null || !IsSendable(inquiry.Email))
             return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["contactEmail"] = [$"Add {inquiry.FirstName}'s email to the enquiry to send the invite."] }));
+        // ODIP-REVIEW-268: the email goes before any save, so the version is compared here, before sending: a form that holds an older version (another
+        // address, a moved visit) gets the 409 and nobody is emailed. Two requests at the same instant can still both pass; the outcome save then drops the loser's.
+        if (dto?.ExpectedUpdatedAt is DateTime expected && inquiry.UpdatedAt != new DateTime(expected.Ticks - expected.Ticks % 10, expected.Kind))
+            return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
 
         var staff = await StaffAsync(inquiry.IntakeStaffUserId, inquiry.TenantId, ct);
         var provider = await ProviderAsync(inquiry.TenantId, ct);

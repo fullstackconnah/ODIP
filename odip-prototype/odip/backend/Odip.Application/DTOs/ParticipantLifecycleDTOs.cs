@@ -112,6 +112,8 @@ public record SetIntakeBookingDto
     public string? Notes { get; init; }
     /// <summary>Sent only when the enquiry has no email: validated and saved to the enquiry in the same save as the booking.</summary>
     public string? ContactEmail { get; init; }
+    /// <summary>The UpdatedAt the form holds (ODIP-REVIEW-268): a save since then makes the booking a 409. Null skips the check (the slide-over).</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
 public record ConfirmIntakeBookingDto { public bool Confirmed { get; init; } }
@@ -121,6 +123,14 @@ public record CloseInquiryDto
 {
     public InquiryCloseOutcome? Outcome { get; init; }
     public string? Note { get; init; }
+    /// <summary>The UpdatedAt the screen loaded: another save since makes the close a 409, enforced in the UPDATE (verify C1). Null skips the check.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
+
+/// <summary>The UpdatedAt the screen holds, as an optional body (POST .../reopen, POST .../intake-booking/send): a save since then makes the write a 409.</summary>
+public record InquiryVersionDto
+{
+    public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
 /// <summary>What a close did. CancellationEmail: "NoVisit" (no upcoming visit), or as a cancel's: "Sent", "NoInvite", "NotConfigured" or "Failed".</summary>
