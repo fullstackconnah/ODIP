@@ -722,7 +722,6 @@ public class PortalShiftPackageTests
     [InlineData(ShiftStatus.PendingReview, "waiting for review")]
     [InlineData(ShiftStatus.Completed, "completed")]
     [InlineData(ShiftStatus.Cancelled, "cancelled")]
-    [InlineData(ShiftStatus.Draft, "not published")]
     public void ForAnyOtherShiftStatus_TheyAreExplicitNull_WithThePlainReason_AndTheOtherCareFactsStay(ShiftStatus status, string stateInWords)
     {
         var f = Create(status);

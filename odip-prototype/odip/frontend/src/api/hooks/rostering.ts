@@ -10,6 +10,7 @@ import type {
   AssignShiftDto,
   MoveStaffDto,
   PublishWeekResultDto,
+  StartWeekResultDto,
   CheckShiftDto,
   ShiftCheckResult,
   RosterFindingDto,
@@ -121,6 +122,29 @@ export function usePublishWeek() {
   return useMutation({
     mutationFn: (weekStart: string) => apiPost<PublishWeekResultDto>(`/rostering/weeks/${weekStart}/publish`),
     onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/** Start rostering (2026-10-16): the week's agreement shifts, made once. The board refetch is awaited, so the card is gone when mutateAsync settles; a refusal refetches too (a 409 roster-week-started means the board is stale). */
+export function useStartWeek() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (weekStart: string) => apiPost<StartWeekResultDto>(`/rostering/weeks/${weekStart}/start`),
+    onSuccess: () => refreshBudgetFigures(qc),   // the shifts it makes are booked ahead
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/** Make or stop being the regular: the pattern slot's default worker (null for none). No shift changes; the board and the patterns refetch before mutateAsync settles. */
+export function useSetRegular() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ patternId, staffId }: { patternId: string; staffId: string | null }) =>
+      apiPut<ShiftPatternDto>(`/rostering/patterns/${patternId}/regular`, { staffId }),
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['roster-board'] }),
+      qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
+    ]),
   })
 }
 

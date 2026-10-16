@@ -189,7 +189,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
     if (!existing) return
     setError(null)
     try {
-      // Default staff and notes are the pattern's own and save on it now, with the times the agreement set; the new times wait for the revision's approval.
+      // The regular and notes are the pattern's own and save on it now, with the times the agreement set; the new times wait for the revision's approval.
       if (defaultStaffId !== existing.defaultStaffId || notes !== (existing.notes ?? '')) {
         await updatePattern.mutateAsync({ id: existing.id, data: { ...storedDefinition(existing), defaultStaffId, notes: notes.trim() || null } })
       }
@@ -260,8 +260,8 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
               <p>{`This changes the service agreement. Saving creates ${nextRevision} from ${formatServiceDate(preview?.agreementStartDate ?? fromDate)}, re-priced, for approval.`}</p>
               {preview && <p>{priceLine(preview)}</p>}
               {preview?.needsReview && <p>The revision needs a look in the agreement before it can be approved.</p>}
-              {/* Default staff saves on this pattern now (handleCreate); the changed pattern the approval makes starts with none (D10). */}
-              {defaultStaffId !== (existing?.defaultStaffId ?? null) && <p>Default staff is saved on the current pattern now. After approval, set it on the changed pattern.</p>}
+              {/* The regular saves on this pattern now (handleCreate); the changed pattern the approval makes starts with none (D10). */}
+              {defaultStaffId !== (existing?.defaultStaffId ?? null) && <p>The regular is saved on the current pattern now. After approval, set it on the changed pattern.</p>}
             </Callout>
             <div className={modalGrid}>
               <FormField label="Change starts" required hint="The new revision runs from this day to the end of the agreement.">
@@ -294,7 +294,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
           />
         </FormField>
 
-        <FormField label="Default staff" hint="Pre-fills every shift this pattern generates. Leave unassigned to generate unfilled shifts.">
+        <FormField label="Regular" hint="Goes on every shift this pattern makes. Leave unassigned to make open shifts.">
           <SearchableSelect
             value={defaultStaffId ?? ''}
             onChange={v => setDefaultStaffId(v || null)}

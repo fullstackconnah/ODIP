@@ -26,11 +26,14 @@ export type WeekToolbarProps = {
   onOpenExceptions: () => void
   canWrite: boolean
   onNewShift: () => void
-  /** Draft shifts in the loaded week (all participants), or null for an empty week: the badge beside the range, and whether Publish week shows. */
-  draftCount?: number | null
-  /** Opens Publish week's confirm. Offered to writers while the week has drafts, in both views: it acts on the week, not on a drag. */
-  onPublishWeek?: () => void
+  /** "All published" beside the range: a started week whose shifts are all published. The drafts count and Publish week are the page's banner now (2026-10-16). */
+  allPublished?: boolean
+  /** The page's one primary is elsewhere (Start, or the banner's Publish week), so New shift steps back. */
+  newShiftSecondary?: boolean
 }
+
+/** The week heading's id: the page moves focus here when the button it came from goes (after a publish). */
+export const WEEK_HEADING_ID = 'roster-week-heading'
 
 export function WeekToolbar({
   days,
@@ -51,8 +54,8 @@ export function WeekToolbar({
   onOpenExceptions,
   canWrite,
   onNewShift,
-  draftCount,
-  onPublishWeek,
+  allPublished,
+  newShiftSecondary,
 }: WeekToolbarProps) {
   // Every control here is a --control-h row: Button md / ToggleGroup / Dropdown form are all 32px at a
   // fine pointer and 44px under `pointer: coarse`, so the toolbar is one 32px line.
@@ -73,10 +76,8 @@ export function WeekToolbar({
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <h2 className="whitespace-nowrap font-display text-sm font-semibold tabular-nums text-foreground">{formatWeekRange(days)}</h2>
-        {draftCount != null && (draftCount > 0
-          ? <StatusBadge tone="neutral" label={plural(draftCount, 'draft')} className="shrink-0 whitespace-nowrap" />
-          : <StatusBadge tone="info" label="All published" className="shrink-0 whitespace-nowrap" />)}
+        <h2 id={WEEK_HEADING_ID} tabIndex={-1} className="whitespace-nowrap font-display text-sm font-semibold tabular-nums text-foreground outline-none">{formatWeekRange(days)}</h2>
+        {allPublished && <StatusBadge tone="info" label="All published" className="shrink-0 whitespace-nowrap" />}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -123,12 +124,9 @@ export function WeekToolbar({
             {plural(exceptionsCount, 'exception')}
           </Button>
         )}
-        {canWrite && onPublishWeek && !!draftCount && (
-          <Button size="md" onClick={onPublishWeek}>Publish week</Button>
-        )}
         {canWrite && (
-          // One primary per page: New shift steps back while Publish week shows.
-          <Button size="md" variant={onPublishWeek && draftCount ? 'secondary' : 'primary'} onClick={onNewShift}>
+          // One primary per page: New shift steps back while Start or Publish week is the page's.
+          <Button size="md" variant={newShiftSecondary ? 'secondary' : 'primary'} onClick={onNewShift}>
             <Plus className="h-4 w-4" /> New shift
           </Button>
         )}

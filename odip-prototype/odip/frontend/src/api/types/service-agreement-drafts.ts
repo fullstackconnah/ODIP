@@ -57,8 +57,6 @@ export interface DraftApprovalDto {
   horizonEnd?: string
   /** The first day it made a shift for; absent when it made none. */
   firstShiftDate?: string
-  /** Whether the daily top-up is on, as the server has it now (not stored with the approval). Shifts are added each day after the horizon only while it is: the card says so only then. */
-  topUpEnabled?: boolean
 }
 
 /** The shifts of the previous approved revisions from the day the new one starts (or today): approval removes the unfilled Draft ones, carries those of a support that did not change, and lists the rest. */
@@ -133,8 +131,6 @@ export interface DraftApprovalPreviewDto {
   overlappingPatterns: OverlappingPatternDto[]
   /** The provider's today plus the horizon (56 days), held to the end of the agreement. */
   horizonEnd?: string
-  /** Whether the daily top-up is on: the dialog says shifts are added each day after the horizon only while it is. Absent from an older server: read as on. */
-  topUpEnabled?: boolean
   /** Where the shifts approval would make take a pool past its funding for a period (budget phase 3), one entry for each pool and period. A warning only: approving is never refused for a budget. Omitted when there is nothing to say. */
   budgetWarnings?: BudgetWarningDto[]
 }

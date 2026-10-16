@@ -1,6 +1,6 @@
 import { Locator, Page } from '@playwright/test';
 import { test, expect, call } from '../../support/fixtures';
-import { approveDraft, assignShift, ensureProviderSettings, makeParticipant, makeShift, makeStaff, saveBlocksDraft } from '../../support/data';
+import { approveDraft, assignShift, ensureProviderSettings, makeParticipant, makeShift, makeStaff, saveBlocksDraft, startWeek } from '../../support/data';
 import { addDays, mondayOf, nextWednesday, sydneyToday } from '../../support/dates';
 
 // Roster agreed shifts, the plus picker and ad-hoc shifts (spec 2026-10-15), on the real API and PostgreSQL. An agreement saved from blocks waits for approval (the board says so),
@@ -45,12 +45,13 @@ test('agreed shifts wait for approval, then fill from the plus, and a person dro
 
   // 1. Not approved yet: the notice names the participant and links to the agreement; none of its shifts are on the board.
   await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
-  const notice = page.getByText(/^Shifts from a service agreement appear here once it's approved for rostering\./);
+  const notice = page.getByText(/^Shifts from a service agreement appear here once it's approved for rostering and the week is started\./);
   await expect(notice).toContainText(`Pw ${participant.token} v1`);
   await expect(page.getByRole('link', { name: `Pw ${participant.token} v1: open the service agreement` })).toHaveAttribute('href', `/participants/${participant.id}/agreement-draft`);
   expect(await shiftsOf(participant.id)).toEqual([]);
 
   // 2. Approved: Wednesday and Thursday hold Agreed Needs staff shifts, and the notice has gone.
+  await startWeek(session, wednesday);
   await approveDraft(session, participant.id, draft.id);
   const agreed = await shiftsOf(participant.id);
   const wedId = agreed.find(s => s.serviceDate === wednesday && s.fromAgreement)!.id;

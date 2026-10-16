@@ -2,13 +2,13 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Configuration;
 using Moq;
 using Odip.Api.Services;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
@@ -27,7 +27,7 @@ internal static class ApprovalTestSupport
     public static readonly Guid TenantA = Guid.NewGuid(), TenantB = Guid.NewGuid();
     public static readonly DateOnly Today = new(2026, 10, 10);
     public static readonly DateOnly Start = new(2026, 10, 12);               // the Monday after today
-    public static readonly DateOnly HorizonEnd = new(2026, 12, 5);           // today + 56 days
+    public static readonly DateOnly HorizonEnd = new(2026, 12, 6);           // the Sunday of the last week the fixture starts
     public static readonly DayOfWeek[] Weekdays = { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
 
     public static readonly ApprovalCaller Admin = new(Guid.NewGuid(), "Alex Admin", new[] { "Admin" });
@@ -40,12 +40,7 @@ internal static class ApprovalTestSupport
         public required OdipDbContext Db { get; init; }
         public required Guid ParticipantId { get; init; }
         public FakeClock Clock { get; } = FakeClock.AtUtc(2026, 10, 10, 2, 0);
-        /// <summary>The settings the service and the controller read (<c>RosterTopUp:*</c>); none is the defaults: the top-up on, 56 days.</summary>
-        public IConfiguration? Configuration { get; set; }
-        public ServiceAgreementApprovalService Service => new(Db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: Clock, configuration: Configuration);
-
-        /// <summary>The daily top-up switched off (<c>RosterTopUp:Enabled</c> false), for the service and the controller alike.</summary>
-        public void SwitchTopUpOff() => Configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["RosterTopUp:Enabled"] = "false" }).Build();
+        public ServiceAgreementApprovalService Service => new(Db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: Clock);
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }
 
@@ -67,13 +62,20 @@ internal static class ApprovalTestSupport
         return new OdipDbContext(options.Options, tenant.Object);
     }
 
-    public static async Task<Fixture> SetUpAsync(bool active = true, bool audited = false, string state = "NSW", string firstName = "Amy")
+    /// <summary>The nine weeks the fixture starts on the roster (Start rostering, L6): Mondays 2026-10-05 to 2026-11-30, so approval fills 2026-10-12 to 2026-12-06.</summary>
+    public static IEnumerable<RosterWeek> StartedWeekRows(Guid tenantId) => Enumerable.Range(0, 9).Select(i => new RosterWeek
+    {
+        Id = Guid.NewGuid(), TenantId = tenantId, WeekStart = new DateOnly(2026, 10, 5).AddDays(7 * i), StartedAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+    });
+
+    public static async Task<Fixture> SetUpAsync(bool active = true, bool audited = false, string state = "NSW", string firstName = "Amy", bool weeksStarted = true)
     {
         var name = Guid.NewGuid().ToString();
         var db = NewDb(name, audited);
         var participant = new Participant { Id = Guid.NewGuid(), TenantId = TenantA, FirstName = firstName, LastName = "Ng", IsActive = active, IsDraft = !active };
         db.Participants.Add(participant);
         db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantA, State = state });
+        if (weeksStarted) db.RosterWeeks.AddRange(StartedWeekRows(TenantA));
         await db.SaveChangesAsync();
         return new Fixture { DbName = name, Db = db, ParticipantId = participant.Id };
     }

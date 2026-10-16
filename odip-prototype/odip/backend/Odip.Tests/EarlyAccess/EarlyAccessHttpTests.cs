@@ -14,6 +14,7 @@ using Odip.Api.Middleware;
 using Odip.Api.RateLimiting;
 using Odip.Api.Services;
 using Odip.Application.Interfaces;
+using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.EarlyAccess;
@@ -47,6 +48,19 @@ public class EarlyAccessHttpTests
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("received", json.RootElement.GetProperty("status").GetString());
         Assert.Single(json.RootElement.EnumerateObject()); // nothing else in the body
+        Assert.Equal(1, await host.CountRowsAsync());
+    }
+
+    // The live /welcome form's body: name, organisation and email only. Landing PR 1 adds the alpha fields as optional
+    // (expand), so this still gets 202; PR 2 changes this test to expect 400 organisationSize (contract).
+    [Fact]
+    public async Task TheOldFormsBody_IsStillAccepted_AndStored()
+    {
+        await using var host = await TestHost.StartAsync();
+
+        var response = await host.PostAsync(ValidJson);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.Equal(1, await host.CountRowsAsync());
     }
 
@@ -181,12 +195,12 @@ public class EarlyAccessHttpTests
     }
 
     [Fact]
-    public async Task Body_AtExactly4096Bytes_IsAccepted_And4097_Returns413()
+    public async Task Body_AtExactlyTheCap_IsAccepted_AndOneByteMore_Returns413()
     {
         await using var host = await TestHost.StartAsync();
 
-        var atLimit = await host.PostAsync(JsonOfExactly(4096));
-        var overLimit = await host.PostAsync(JsonOfExactly(4097), client: "second");
+        var atLimit = await host.PostAsync(JsonOfExactly(EarlyAccessController.MaxBodyBytes));
+        var overLimit = await host.PostAsync(JsonOfExactly(EarlyAccessController.MaxBodyBytes + 1), client: "second");
 
         Assert.Equal(HttpStatusCode.Accepted, atLimit.StatusCode);
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, overLimit.StatusCode);
@@ -198,10 +212,64 @@ public class EarlyAccessHttpTests
     }
 
     [Fact]
-    public async Task ChunkedBody_Over4096Bytes_Returns413()
+    public async Task TheLargestValidForm_FitsUnderTheCap_AndIsAccepted()
     {
         await using var host = await TestHost.StartAsync();
-        var content = new StreamContent(new MemoryStream(Encoding.UTF8.GetBytes(JsonOfExactly(6000))));
+        var email = new string('a', 64) + "@" + string.Concat(Enumerable.Repeat(new string('b', 60) + ".", 3)) + new string('c', 6);
+        Assert.Equal(254, email.Length);
+        var phone = "+61 (02) 5550-1234 5550-1234 1";
+        Assert.Equal(30, phone.Length);
+
+        // Built by hand, not with System.Text.Json defaults, which escape every non-ASCII character as \uXXXX (6 bytes, not 3).
+        // Measured with JSON.stringify on 2026-10-16: every field at its limit in '€' (an email of 254 '€' too) is 4,959 bytes.
+        // Name, organisation and role use '李', also 3 bytes: '€' is a symbol, and a name needs a letter or digit.
+        string Body(string message) =>
+            "{\"name\":\"" + new string('李', 100) + "\",\"organisation\":\"" + new string('李', 150) + "\",\"email\":\"" + email
+            + "\",\"role\":\"" + new string('李', 100) + "\",\"organisationSize\":\"200-plus\",\"phone\":\"" + phone
+            + "\",\"message\":\"" + message + "\",\"website\":\"\"}";
+
+        var largest = Body(new string('€', 1000));
+        Assert.True(Encoding.UTF8.GetByteCount(largest) > 4096); // the old 4 KB cap would refuse it
+        Assert.True(Encoding.UTF8.GetByteCount(largest) <= EarlyAccessController.MaxBodyBytes);
+
+        var response = await host.PostAsync(largest);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal(1, await host.CountRowsAsync());
+        Assert.Equal(1000, (await host.SingleRowAsync()).Message!.Length);
+
+        // The worst a client can send while its own length check passes: 1,000 control characters, each a 6-byte JSON
+        // escape as JSON.stringify sends a BEL. The server strips them all.
+        var controls = Body(string.Concat(Enumerable.Repeat("\\u0007", 1000)));
+        Assert.True(Encoding.UTF8.GetByteCount(controls) <= EarlyAccessController.MaxBodyBytes);
+
+        var repeat = await host.PostAsync(controls);
+
+        Assert.Equal(HttpStatusCode.Accepted, repeat.StatusCode);
+        var row = await host.SingleRowAsync();
+        Assert.Equal(2, row.RequestCount);
+        Assert.Null(row.Message);
+    }
+
+    [Fact]
+    public async Task ABodyUnderTheCapInCharacters_ButOverItInBytes_Returns413()
+    {
+        await using var host = await TestHost.StartAsync();
+        var body = "{\"name\":\"Jane\",\"organisation\":\"Org\",\"email\":\"j@example.com\",\"pad\":\"" + new string('€', 3000) + "\"}";
+        Assert.True(body.Length < EarlyAccessController.MaxBodyBytes);
+        Assert.True(Encoding.UTF8.GetByteCount(body) > EarlyAccessController.MaxBodyBytes);
+
+        var response = await host.PostAsync(body);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        Assert.Equal(0, await host.CountRowsAsync());
+    }
+
+    [Fact]
+    public async Task ChunkedBody_OverTheCap_Returns413()
+    {
+        await using var host = await TestHost.StartAsync();
+        var content = new StreamContent(new MemoryStream(Encoding.UTF8.GetBytes(JsonOfExactly(EarlyAccessController.MaxBodyBytes + 2000))));
         content.Headers.ContentType = new("application/json");
         // No Content-Length => chunked transfer: the limit must still bite while the body is being read.
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/public/early-access") { Content = content };
@@ -406,6 +474,8 @@ public class EarlyAccessHttpTests
             });
             builder.Services.AddScoped<ICurrentTenant, AnonymousTenant>();
             builder.Services.AddEarlyAccess();
+            // The purge uses ExecuteDeleteAsync, which EF InMemory lacks; its own PostgreSQL facts cover it.
+            builder.Services.Remove(builder.Services.Single(d => d.ImplementationType == typeof(Odip.Infrastructure.BackgroundServices.EarlyAccessPurgeBackgroundService)));
             // Last registration wins: the controller gets the stub; the real notifier stays registered (and idle) as a hosted service.
             builder.Services.AddSingleton<IEarlyAccessNotifier>(notifier ?? new NoopNotifier());
             builder.Services.AddControllers()
@@ -457,6 +527,12 @@ public class EarlyAccessHttpTests
         {
             using var scope = _app.Services.CreateScope();
             return await scope.ServiceProvider.GetRequiredService<OdipDbContext>().EarlyAccessRequests.CountAsync();
+        }
+
+        public async Task<EarlyAccessRequest> SingleRowAsync()
+        {
+            using var scope = _app.Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<OdipDbContext>().EarlyAccessRequests.AsNoTracking().SingleAsync();
         }
 
         public async Task<int> RequestCountAsync(string email)

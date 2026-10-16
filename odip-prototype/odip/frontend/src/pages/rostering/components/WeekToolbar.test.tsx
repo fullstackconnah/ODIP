@@ -141,39 +141,37 @@ describe('WeekToolbar — the exceptions button', () => {
   })
 })
 
-describe('WeekToolbar drafts badge and Publish week', () => {
-  it('counts the week’s drafts, and offers Publish week as the one primary button', async () => {
-    const user = userEvent.setup()
-    const onPublishWeek = vi.fn()
-    renderToolbar({ draftCount: 14, onPublishWeek })
-
-    expect(screen.getByText('14 drafts')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Publish week' }))
-    expect(onPublishWeek).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: /New shift/ })).not.toHaveClass('bg-[var(--color-primary)]')
-  })
-
-  it('says "All published" when nothing is left in draft, with no Publish week and New shift primary again', () => {
-    renderToolbar({ draftCount: 0, onPublishWeek: vi.fn() })
+describe('WeekToolbar: All published and the one primary (Start rostering, 2026-10-16)', () => {
+  it('says "All published" when told, and has no drafts badge or Publish week any more', () => {
+    renderToolbar({ allPublished: true })
     expect(screen.getByText('All published')).toBeInTheDocument()
+    expect(screen.queryByText(/drafts/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /New shift/ })).toHaveClass('bg-[var(--color-primary)]')
   })
 
-  it('shows no badge for an empty week, and no Publish week to a reader', () => {
-    const { unmount } = renderToolbar({ draftCount: null, onPublishWeek: vi.fn() })
+  it('shows nothing beside the range by default', () => {
+    renderToolbar()
     expect(screen.queryByText(/drafts|All published/)).not.toBeInTheDocument()
-    unmount()
-    renderToolbar({ draftCount: 3, onPublishWeek: vi.fn(), canWrite: false })
-    expect(screen.getByText('3 drafts')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+  })
+
+  it("steps New shift back when the page's primary is elsewhere", () => {
+    renderToolbar({ newShiftSecondary: true })
+    expect(screen.getByRole('button', { name: /New shift/ })).not.toHaveClass('bg-[var(--color-primary)]')
+  })
+
+  it('the week heading can take focus from the page', () => {
+    renderToolbar()
+    const heading = screen.getByRole('heading', { name: /Aug/ })
+    expect(heading).toHaveAttribute('id', 'roster-week-heading')
+    expect(heading).toHaveAttribute('tabindex', '-1')
   })
 })
 
 describe('WeekToolbar at phone width (finish review)', () => {
-  it('keeps the drafts badge, the week range and "This week" each on one line, and wraps the row between them instead', () => {
-    renderToolbar({ draftCount: 4, onPublishWeek: vi.fn() })
-    const badge = screen.getByText('4 drafts')
+  it('keeps the "All published" badge, the week range and "This week" each on one line, and wraps the row between them instead', () => {
+    renderToolbar({ allPublished: true })
+    const badge = screen.getByText('All published')
     expect(badge).toHaveClass('whitespace-nowrap', 'shrink-0')
     expect(screen.getByRole('heading', { name: /Aug/ })).toHaveClass('whitespace-nowrap')
     expect(screen.getByRole('button', { name: 'This week' })).toHaveClass('whitespace-nowrap')
