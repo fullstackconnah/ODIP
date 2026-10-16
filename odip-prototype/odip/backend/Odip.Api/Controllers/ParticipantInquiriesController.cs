@@ -117,7 +117,12 @@ public class ParticipantInquiriesController : ControllerBase
         var contacts = await _db.InquiryContacts.Where(c => c.InquiryId == inquiry.Id && c.TenantId == inquiry.TenantId).OrderBy(c => c.SortOrder)
             .Select(c => new InquiryContactDto { Role = c.Role, FirstName = c.FirstName, LastName = c.LastName, Phone = c.Phone, Email = c.Email, Relationship = c.Relationship, Notes = c.Notes })
             .ToListAsync(ct);
-        return Ok(ApiResponse<ParticipantInquiryDetailDto>.Ok(new ParticipantInquiryDetailDto(await FullDtoAsync(inquiry, ct)) { Contacts = contacts }));
+        return Ok(ApiResponse<ParticipantInquiryDetailDto>.Ok(new ParticipantInquiryDetailDto(await FullDtoAsync(inquiry, ct))
+        {
+            Contacts = contacts, ContactRole = inquiry.ContactRole, DateOfBirth = inquiry.DateOfBirth, NdisNumber = inquiry.NdisNumber,
+            AddressStreet = inquiry.AddressStreet, AddressSuburb = inquiry.AddressSuburb, AddressState = inquiry.AddressState, AddressPostcode = inquiry.AddressPostcode,
+            PlanType = inquiry.PlanType, PlanStartDate = inquiry.PlanStartDate, PlanEndDate = inquiry.PlanEndDate,
+        }));
     }
 
     [HttpPost]
@@ -126,9 +131,10 @@ public class ParticipantInquiriesController : ControllerBase
     {
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
-        var errors = ContactErrors(dto.Contacts);
+        var errors = await InquiryErrorsAsync(dto, null, tenantId, ct);
         if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
-        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = dto.FirstName.Trim(), LastName = dto.LastName.Trim(), Phone = Blank(dto.Phone), Email = Blank(dto.Email), Source = dto.Source, Provenance = Blank(dto.Provenance) };
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId };
+        Apply(inquiry, dto, converted: false);
         _db.ParticipantInquiries.Add(inquiry);
         if (dto.Contacts is { } contacts) AddContacts(inquiry, contacts);
         await _db.SaveChangesAsync(ct);
@@ -143,13 +149,14 @@ public class ParticipantInquiriesController : ControllerBase
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(IntakeBookingsController.ClosedRefusal, IntakeBookingsController.ClosedCode));
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
-        var errors = ContactErrors(dto.Contacts);
+        var errors = await InquiryErrorsAsync(dto, inquiry, inquiry.TenantId, ct);
         // Once intake has started the contacts are the participant's (Convert moved them): adding pending ones now would strand them.
         if (dto.Contacts is { Count: > 0 } && inquiry.ParticipantId is not null) errors["contacts"] = ["Intake has started, so add contacts on the participant's record."];
         if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
         // The version the form loaded goes into the UPDATE's WHERE (not a read-then-compare, which would race): another save since then is a 409.
         if (dto.ExpectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
-        inquiry.FirstName = dto.FirstName.Trim(); inquiry.LastName = dto.LastName.Trim(); inquiry.Phone = Blank(dto.Phone); inquiry.Email = Blank(dto.Email); inquiry.Source = dto.Source; inquiry.Provenance = Blank(dto.Provenance); inquiry.UpdatedAt = DateTime.UtcNow;
+        Apply(inquiry, dto, converted: inquiry.ParticipantId is not null);
+        inquiry.UpdatedAt = DateTime.UtcNow;
         if (dto.Contacts is { } contacts)
         {
             // A full replace: what the form shows is what is stored, and a retry can never add a second copy. Null leaves them alone, so a caller that never
@@ -347,11 +354,73 @@ public class ParticipantInquiriesController : ControllerBase
     // ParticipantPatchApplier.ValidatePhone's pattern: the participant's own phone is held to it, and a contact's now is too.
     private static readonly Regex PhonePattern = new(@"^\+?[\d\s\-()]{6,20}$", RegexOptions.CultureInvariant);
 
+    private static readonly HashSet<string> AuStates = new(StringComparer.Ordinal) { "NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT" };
+    private static readonly Regex NineDigits = new(@"^\d{9}$", RegexOptions.CultureInvariant);
+    private static string? NdisDigits(string? value) => Blank(value)?.Replace(" ", "", StringComparison.Ordinal);
+
     /// <summary>
-    /// The pending contacts' refusals, keyed as the form's rows are. Any role but PlanManager (it needs a plan type an enquiry hasn't got); both names, as a Person
-    /// has; a phone and an email that are one, which no contact endpoint checks today (D3). The email check is the invite's own (IntakeBookingsController.IsSendable).
+    /// Every refusal of an enquiry save, keyed by the form's fields and worded as the form words them (spec 2026-10-16 redesign, L3/L4), so the client
+    /// can mark the field. Only the first name is required. The main contact's phone and email are checked only when they change (D4): every enquiry
+    /// saved before this rule may hold free text there ("after 3pm, ask for Mum"), and holding it to the pattern on an unrelated edit would block every
+    /// save with no way out but retyping it. Ticking "their own contact" counts as a change, because it makes that phone the participant's own, which
+    /// Start intake copies. A converted enquiry (D7) is checked for its first name only: its contact and details are the participant's record now.
     /// </summary>
-    private static Dictionary<string, string[]> ContactErrors(List<InquiryContactDto>? contacts)
+    private async Task<Dictionary<string, string[]>> InquiryErrorsAsync(CreateParticipantInquiryDto dto, ParticipantInquiry? stored, Guid tenantId, CancellationToken ct)
+    {
+        var converted = stored?.ParticipantId is not null;
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        // Convert leaves a null plan at the Participant's default (L5's known limit), so the role rules read it the same way.
+        var plan = dto.PlanType ?? PlanType.SelfManaged;
+        var errors = converted ? new Dictionary<string, string[]>() : ContactErrors(dto.Contacts, plan, dto.DateOfBirth, today);
+        if (Blank(dto.FirstName) is null) errors["firstName"] = ["Add the participant's first name."];
+        if (converted) return errors;
+        var recheck = stored is null || (dto.ContactIsParticipant && !stored.ContactIsParticipant);
+        if (Blank(dto.Phone) is { } phone && (recheck || phone != stored!.Phone) && !PhonePattern.IsMatch(phone)) errors["phone"] = ["Enter a phone number, like 0412 345 678."];
+        if (Blank(dto.Email) is { } email && (recheck || email != stored!.Email) && !IntakeBookingsController.IsSendable(email)) errors["email"] = ["Enter a full email address, like name@example.com."];
+        if (NdisDigits(dto.NdisNumber) is { } ndis && !NineDigits.IsMatch(ndis)) errors["ndisNumber"] = ["Enter the 9-digit NDIS number, like 430 123 456."];
+        if (dto.DateOfBirth > today) errors["dateOfBirth"] = ["The date of birth can't be in the future."];
+        else if (dto.DateOfBirth < today.AddYears(-120)) errors["dateOfBirth"] = ["Check the year: that's more than 120 years ago."];
+        if (Blank(dto.AddressState) is { } state && !AuStates.Contains(state)) errors["addressState"] = ["Choose a state from the list."];
+        if (ParticipantPatchApplier.ValidateAddressPostcode(new CreateParticipantDto { AddressPostcode = Blank(dto.AddressPostcode) }) is { } postcode) errors["addressPostcode"] = [postcode];
+        if (dto.PlanEndDate < dto.PlanStartDate) errors["planEndDate"] = ["The plan end can't be before the plan start."];
+        if (dto.PlanType is { } type && !Enum.IsDefined(type)) errors["planType"] = ["Choose how the plan is managed."];
+        if (!dto.ContactIsParticipant && RoleError(dto.ContactRole, plan, dto.DateOfBirth, today, required: false) is { } role) errors["contactRole"] = [role];
+        return errors;
+    }
+
+    /// <summary>
+    /// One role rule for the main contact and every pending row (L4): the participant's own contact rules, read against the enquiry's date of birth and
+    /// plan type at save, so a refusal shows on the form and not at Start intake. No registered-provider flag exists on an enquiry, so an NDIA-managed
+    /// Provider Contact is refused (D5). PlanManager is never pending: it is added on the participant's Contacts tab.
+    /// </summary>
+    private static string? RoleError(ContactRoleType? role, PlanType plan, DateOnly? dob, DateOnly today, bool required) => role switch
+    {
+        null => required ? "Choose a role." : null,
+        { } r when !Enum.IsDefined(r) => "Choose a role.",
+        ContactRoleType.PlanManager => "Add a plan manager on the participant's Contacts tab once intake starts.",
+        { } r => ContactRoleRules.Validate(r, plan, dob, null, today),
+    };
+
+    /// <summary>Writes a validated save onto the enquiry. Blanks are stored as null; with "their own contact" ticked the contact's names, relationship and role are null whatever was sent (L4).</summary>
+    private static void Apply(ParticipantInquiry x, CreateParticipantInquiryDto dto, bool converted)
+    {
+        x.FirstName = Blank(dto.FirstName)!; x.LastName = Blank(dto.LastName); x.Source = dto.Source; x.Provenance = Blank(dto.Provenance);
+        // D7: the main contact and details are the participant's record now; omitted by the form, ignored if sent.
+        if (converted) return;
+        x.Phone = Blank(dto.Phone); x.Email = Blank(dto.Email); x.ContactIsParticipant = dto.ContactIsParticipant;
+        var self = dto.ContactIsParticipant;
+        x.ContactFirstName = self ? null : Blank(dto.ContactFirstName); x.ContactLastName = self ? null : Blank(dto.ContactLastName);
+        x.ContactRelationship = self ? null : Blank(dto.ContactRelationship); x.ContactRole = self ? null : dto.ContactRole;
+        x.DateOfBirth = dto.DateOfBirth; x.NdisNumber = NdisDigits(dto.NdisNumber);
+        x.AddressStreet = Blank(dto.AddressStreet); x.AddressSuburb = Blank(dto.AddressSuburb); x.AddressState = Blank(dto.AddressState); x.AddressPostcode = Blank(dto.AddressPostcode);
+        x.PlanType = dto.PlanType; x.PlanStartDate = dto.PlanStartDate; x.PlanEndDate = dto.PlanEndDate;
+    }
+
+    /// <summary>
+    /// The pending contacts' refusals, keyed as the form's rows are. A role the participant's contact rules allow for the enquiry's age and plan (<see cref="RoleError"/>);
+    /// both names, as a Person has; a phone and an email that are one, which no contact endpoint checks today (D3). The email check is the invite's own (IntakeBookingsController.IsSendable).
+    /// </summary>
+    private static Dictionary<string, string[]> ContactErrors(List<InquiryContactDto>? contacts, PlanType plan, DateOnly? dob, DateOnly today)
     {
         var errors = new Dictionary<string, string[]>();
         if (contacts is null) return errors;
@@ -359,8 +428,7 @@ public class ParticipantInquiriesController : ControllerBase
         for (var i = 0; i < contacts.Count; i++)
         {
             var (c, key) = (contacts[i], $"contacts[{i}].");
-            if (c.Role is not { } role || !Enum.IsDefined(role)) errors[key + "role"] = ["Choose a role."];
-            else if (role == ContactRoleType.PlanManager) errors[key + "role"] = ["Add a plan manager on the participant's Contacts tab once intake starts."];
+            if (RoleError(c.Role, plan, dob, today, required: true) is { } role) errors[key + "role"] = [role];
             if (Blank(c.FirstName) is null) errors[key + "firstName"] = ["Add their first name."];
             if (Blank(c.LastName) is null) errors[key + "lastName"] = ["Add their last name."];
             if (Blank(c.Phone) is { } phone && !PhonePattern.IsMatch(phone)) errors[key + "phone"] = ["Enter a phone number, like 0412 345 678."];
@@ -407,7 +475,9 @@ public class ParticipantInquiriesController : ControllerBase
 
     internal static ParticipantInquiryDto ToDto(ParticipantInquiry x, User? staff = null, string? timeZoneId = null) => new()
     {
-        Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName, Phone = x.Phone, Email = x.Email, Source = x.Source,
+        Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName ?? string.Empty, Phone = x.Phone, Email = x.Email, Source = x.Source,
+        ContactIsParticipant = x.ContactIsParticipant, HasAddress = x.HasFullAddress, ContactNeedsName = x.ContactNeedsName,
+        ContactFirstName = x.ContactFirstName, ContactLastName = x.ContactLastName, ContactRelationship = x.ContactRelationship,
         Provenance = x.Provenance, CreatedAt = x.CreatedAt, UpdatedAt = x.UpdatedAt, ClosedAt = x.ClosedAt, CloseOutcome = x.CloseOutcome, CloseNote = x.CloseNote,
         IntakeStartsAt = x.IntakeStartsAt, IntakeDurationMinutes = x.IntakeDurationMinutes, IntakeLocation = x.IntakeLocation,
         IntakeStaffUserId = x.IntakeStaffUserId, IntakeStaffFirstName = staff?.FirstName, IntakeStaffName = staff?.FullName, IntakeNotes = x.IntakeNotes,

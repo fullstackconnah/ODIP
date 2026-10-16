@@ -1563,9 +1563,18 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100);
             entity.Property(e => e.Phone).HasMaxLength(50);
             entity.Property(e => e.Email).HasMaxLength(200);
+            // The main contact and the participant details: the Person and Participant lengths, so Start intake never truncates.
+            entity.Property(e => e.ContactFirstName).HasMaxLength(100);
+            entity.Property(e => e.ContactLastName).HasMaxLength(100);
+            entity.Property(e => e.ContactRelationship).HasMaxLength(100);
+            entity.Property(e => e.NdisNumber).HasMaxLength(20);
+            entity.Property(e => e.AddressStreet).HasMaxLength(200);
+            entity.Property(e => e.AddressSuburb).HasMaxLength(100);
+            entity.Property(e => e.AddressState).HasMaxLength(10);
+            entity.Property(e => e.AddressPostcode).HasMaxLength(4);
             entity.Property(e => e.Source).HasMaxLength(20).IsRequired();
             entity.Property(e => e.Provenance).HasMaxLength(2000);
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);

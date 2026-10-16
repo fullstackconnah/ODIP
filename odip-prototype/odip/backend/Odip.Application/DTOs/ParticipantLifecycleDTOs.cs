@@ -8,9 +8,21 @@ public record ParticipantInquiryDto
     public Guid Id { get; init; }
     public Guid? ParticipantId { get; init; }
     public string FirstName { get; init; } = string.Empty;
+    /// <summary>The participant's last name; "" when none (it is stored as null). Join names with a full-name helper, never by hand.</summary>
     public string LastName { get; init; } = string.Empty;
+    /// <summary>The MAIN CONTACT's phone and email, or the participant's own when <see cref="ContactIsParticipant"/>.</summary>
     public string? Phone { get; init; }
     public string? Email { get; init; }
+    /// <summary>The participant is their own contact: no contact name, and the phone and email are theirs.</summary>
+    public bool ContactIsParticipant { get; init; }
+    /// <summary>The full address is in, so Start intake's address gate passes.</summary>
+    public bool HasAddress { get; init; }
+    /// <summary>A main contact was noted without a first or last name: Start intake's name gate refuses until both are in.</summary>
+    public bool ContactNeedsName { get; init; }
+    /// <summary>The main contact's names and relationship. Withheld (null) in the list from roles without lifecycle rights.</summary>
+    public string? ContactFirstName { get; init; }
+    public string? ContactLastName { get; init; }
+    public string? ContactRelationship { get; init; }
     public string Source { get; init; } = string.Empty;
     public string? Provenance { get; init; }
     public DateTime CreatedAt { get; init; }
@@ -63,10 +75,28 @@ public sealed class OptionalEmailAddressAttribute : ValidationAttribute
 
 public record CreateParticipantInquiryDto
 {
-    [Required, StringLength(100)] public string FirstName { get; init; } = string.Empty;
-    [Required, StringLength(100)] public string LastName { get; init; } = string.Empty;
+    // No [Required]: the controller refuses a blank first name keyed "firstName" in the form's words (the framework's would be keyed "FirstName").
+    [StringLength(100)] public string? FirstName { get; init; }
+    [StringLength(100)] public string? LastName { get; init; }
+    /// <summary>The main contact's; 50 is the column. The controller holds a changed one to the contacts' phone pattern (D4).</summary>
     [StringLength(50)] public string? Phone { get; init; }
     [OptionalEmailAddress, StringLength(200)] public string? Email { get; init; }
+    [StringLength(100)] public string? ContactFirstName { get; init; }
+    [StringLength(100)] public string? ContactLastName { get; init; }
+    [StringLength(100)] public string? ContactRelationship { get; init; }
+    public ContactRoleType? ContactRole { get; init; }
+    /// <summary>Ticked: the contact's names, relationship and role are stored as null whatever was sent (L4).</summary>
+    public bool ContactIsParticipant { get; init; }
+    public DateOnly? DateOfBirth { get; init; }
+    /// <summary>9 digits once spaces are stripped, and stored stripped. It, the state and the postcode are checked by hand, in the form's words.</summary>
+    public string? NdisNumber { get; init; }
+    [StringLength(200)] public string? AddressStreet { get; init; }
+    [StringLength(100)] public string? AddressSuburb { get; init; }
+    public string? AddressState { get; init; }
+    public string? AddressPostcode { get; init; }
+    public PlanType? PlanType { get; init; }
+    public DateOnly? PlanStartDate { get; init; }
+    public DateOnly? PlanEndDate { get; init; }
     [Required, RegularExpression("^(Web|Email|Phone)$")] public string Source { get; init; } = string.Empty;
     [StringLength(2000)] public string? Provenance { get; init; }
     /// <summary>Saved in the enquiry's own save. On update a list replaces the stored ones; null (or left out) leaves them as they are.</summary>
@@ -93,6 +123,17 @@ public record ParticipantInquiryDetailDto : ParticipantInquiryDto
 {
     public ParticipantInquiryDetailDto(ParticipantInquiryDto inquiry) : base(inquiry) { }
     public List<InquiryContactDto> Contacts { get; init; } = [];
+    // The main contact's role and the participant details (L2): on this detail DTO only, never the list, which every role reads.
+    public ContactRoleType? ContactRole { get; init; }
+    public DateOnly? DateOfBirth { get; init; }
+    public string? NdisNumber { get; init; }
+    public string? AddressStreet { get; init; }
+    public string? AddressSuburb { get; init; }
+    public string? AddressState { get; init; }
+    public string? AddressPostcode { get; init; }
+    public PlanType? PlanType { get; init; }
+    public DateOnly? PlanStartDate { get; init; }
+    public DateOnly? PlanEndDate { get; init; }
 }
 
 public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto
@@ -163,6 +204,10 @@ public record IntakeVisitDto
     public string StaffName { get; init; } = string.Empty;
     public DateTime? ConfirmedAt { get; init; }
     public string TimeZoneId { get; init; } = string.Empty;
+    /// <summary>The enquiry's full address is in (Start intake's address gate).</summary>
+    public bool HasAddress { get; init; }
+    /// <summary>The main contact needs a name before Start intake (its second gate).</summary>
+    public bool ContactNeedsName { get; init; }
 }
 
 /// <summary>
