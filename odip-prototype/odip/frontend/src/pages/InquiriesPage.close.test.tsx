@@ -18,7 +18,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 const UPCOMING = '2030-10-15T23:00:00Z'
-const base = { source: 'Phone', createdAt: '2026-09-28T01:10:00Z', participantId: null, timeZoneId: 'Australia/Sydney', email: 'ana@example.com' }
+const base = { source: 'Phone', createdAt: '2026-09-28T01:10:00Z', participantId: null, timeZoneId: 'Australia/Sydney', email: 'ana@example.com', contactIsParticipant: true, hasAddress: true }
 const open = [
   { ...base, id: 'new', firstName: 'Noah', lastName: 'Fitzgerald' },
   { ...base, id: 'booked', firstName: 'Ana', lastName: 'Lopez', intakeStartsAt: UPCOMING, intakeDurationMinutes: 90, intakeStaffUserId: 'kim', intakeStaffFirstName: 'Kim', intakeStaffName: 'Kim Lee', intakeInviteSentAt: '2026-10-14T03:05:00Z', updatedAt: '2026-10-15T02:00:00.123456Z' },
@@ -148,7 +148,7 @@ describe('the Open and Closed views', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reopen Ivy Park' }))
     const dialog = screen.getByRole('alertdialog', { name: "Reopen Ivy Park's enquiry?" })
-    expect(dialog).toHaveTextContent('Its contacts were deleted when it closed, so add them again, and book a new intake visit if you need one.')
+    expect(dialog).toHaveTextContent('Its other contacts were deleted when it closed, so add them again, and book a new intake visit if you need one.')
     await user.click(within(dialog).getByRole('button', { name: 'Reopen enquiry' }))
 
     expect(mocks.reopen).toHaveBeenCalledWith({ id: 'gone', expectedUpdatedAt: '2026-10-16T01:00:00.654321Z' })

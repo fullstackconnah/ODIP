@@ -3,6 +3,7 @@ import { useReopenInquiry } from '@/api/hooks'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { refusalOf } from '@/lib/intakeBooking'
+import { fullName } from '@/lib/inquiryDetails'
 
 /** "Reopen Ana Lopez's enquiry?" (SHAPE.md section 11). Renders nothing while `row` is null; a refusal stays in the dialog with the server's sentence. */
 export function ReopenInquiryDialog({ row, onCancel, onDone }: {
@@ -30,13 +31,13 @@ export function ReopenInquiryDialog({ row, onCancel, onDone }: {
       open
       onCancel={() => { setError(null); onCancel() }}
       onConfirm={confirm}
-      title={`Reopen ${row.firstName} ${row.lastName}'s enquiry?`}
+      title={`Reopen ${fullName(row.firstName, row.lastName)}'s enquiry?`}
       confirmLabel="Reopen enquiry"
       cancelLabel="Keep it closed"
       loading={reopen.isPending}
       message={
         <>
-          <p>It goes back on the Open list as New. Its contacts were deleted when it closed, so add them again, and book a new intake visit if you need one.</p>
+          <p>It goes back on the Open list as New. Its other contacts were deleted when it closed, so add them again, and book a new intake visit if you need one.</p>
           {error && <p role="alert" className="mt-2 text-[var(--color-destructive)] break-words">{error}</p>}
         </>
       }

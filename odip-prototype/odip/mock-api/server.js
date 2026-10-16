@@ -91,7 +91,9 @@ const participants = [
 const enquiryFeed = [
   { id: 'inq-0001', participantId: null, firstName: 'Noah', lastName: 'Fitzgerald', phone: '0412 555 010', email: null, source: 'Phone', provenance: 'GP referral',
     createdAt: '2026-09-28T01:10:00Z', participantIsDraft: null, participantIsActive: null, participantIntakeCompletedAt: null },
+  // E2: Noah above is a legacy row (a phone, no contact name). E5: Priya is converted, with a named main contact.
   { id: 'inq-0002', participantId: 'p-0101', firstName: 'Priya', lastName: 'Nair', phone: null, email: 'priya.nair@example.com.au', source: 'Web', provenance: null,
+    contactFirstName: 'Anika', contactLastName: 'Nair', contactRelationship: 'Mother', contactRole: 'Guardian',
     createdAt: '2026-09-26T04:00:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null },
   // A draft intake started in the Intake wizard with no enquiry behind it: it rides in the same feed, with the participant's id as its id.
   { id: 'p-0102', participantId: 'p-0102', firstName: 'Tomas', lastName: 'Becker', phone: '0433 555 020', email: null, source: '', provenance: null,

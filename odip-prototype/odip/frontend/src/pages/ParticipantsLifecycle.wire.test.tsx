@@ -27,7 +27,7 @@ type FakeParticipant = {
   id: string; firstName: string; lastName: string; phone: string | null; email: string | null
   isDraft: boolean; isActive: boolean; intakeCompletedAt: string | null; servicesStartedAt?: string | null
 }
-type FakeInquiry = { id: string; firstName: string; lastName: string; phone: string | null; source: string; participantId: string | null; createdAt: string }
+type FakeInquiry = { id: string; firstName: string; lastName: string; phone: string | null; source: string; participantId: string | null; createdAt: string; hasAddress?: boolean; contactIsParticipant?: boolean }
 
 const INTAKE_DONE_AT = '2026-10-02T03:00:00Z'
 /**
@@ -53,7 +53,7 @@ function createServer(mode: Mode, extra: FakeParticipant[] = []) {
     ...extra,
   ]
   const inquiries: FakeInquiry[] = [
-    { id: 'enq-ada', firstName: 'Ada', lastName: 'Lovelace', phone: '0400 000 001', source: 'Phone', participantId: null, createdAt: '2026-09-01' },
+    { id: 'enq-ada', firstName: 'Ada', lastName: 'Lovelace', phone: '0400 000 001', source: 'Phone', participantId: null, createdAt: '2026-09-01', hasAddress: true, contactIsParticipant: true },
   ]
   const calls: string[] = []
   const name = (p: FakeParticipant) => `${p.firstName} ${p.lastName}`

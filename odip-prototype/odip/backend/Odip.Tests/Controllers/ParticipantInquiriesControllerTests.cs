@@ -10,6 +10,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Tests.Intake;
 using Xunit;
 
 namespace Odip.Tests.Controllers;
@@ -40,8 +41,9 @@ public class ParticipantInquiriesControllerTests
         var payload = new CreateParticipantInquiryDto
         {
             FirstName = "  Ada ", LastName = "  Lovelace ", Phone = "0400 000 001",
-            Email = "ada@example.test", Source = "Email", Provenance = "Hospital referral #R-9"
-        };
+            Email = "ada@example.test", Source = "Email", Provenance = "Hospital referral #R-9",
+            ContactFirstName = "Byron", ContactLastName = "Lovelace",
+        }.WithFullAddress();
 
         var create = await controller.Create(payload, CancellationToken.None);
         var created = Data<ParticipantInquiryDto>(create.Result!);
@@ -66,9 +68,31 @@ public class ParticipantInquiriesControllerTests
         Assert.False(participant.IsActive);
         Assert.Equal("Ada", participant.FirstName);
         Assert.Equal("Lovelace", participant.LastName);
-        Assert.Equal(payload.Phone, participant.Phone);
-        Assert.Equal(payload.Email, participant.Email);
+        // Spec L5: the phone and email are the main contact's, so they go onto the contact, not the participant.
+        Assert.Null(participant.Phone);
+        Assert.Null(participant.Email);
         Assert.Single(fixture.ParticipantOnboardings);
+    }
+
+    [Fact]
+    public async Task Convert_of_a_participant_who_is_their_own_contact_copies_the_phone_and_email_onto_them()
+    {
+        var tenantId = Guid.NewGuid();
+        using var fixture = CreateDb(tenantId).Db;
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.SetupGet(x => x.TenantId).Returns(tenantId);
+        tenant.SetupGet(x => x.IsSuperAdmin).Returns(false);
+        var controller = new ParticipantInquiriesController(fixture, tenant.Object);
+        var created = Data<ParticipantInquiryDto>((await controller.Create(new CreateParticipantInquiryDto
+        {
+            FirstName = "Ada", LastName = "Lovelace", Phone = "0400 000 001", Email = "ada@example.test", Source = "Email", ContactIsParticipant = true,
+        }.WithFullAddress(), CancellationToken.None)).Result!);
+
+        Data<ParticipantInquiryDto>((await controller.Convert(created.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).Result!);
+
+        var participant = Assert.Single(fixture.Participants);
+        Assert.Equal(("0400 000 001", "ada@example.test"), (participant.Phone, participant.Email));
+        Assert.Empty(fixture.ParticipantContactRoles);
     }
 
     [Fact]

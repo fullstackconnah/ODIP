@@ -16,7 +16,7 @@ public class IntakeVisitStaffTemplateTests
         Location: "12 Smith St, Parramatta", ContactPhone: "0412 555 010", ContactEmail: "priya.nair@example.com.au",
         Notes: "Bring the consent forms", BookedByName: "Dana Smith", OrganizerEmail: "dana@provider.example",
         ProviderName: "Sample Support Co", ManagerName: "Alex Brown", ManagerPhone: "02 9000 0000", Uid: "abc@odip", Sequence: 0,
-        StampUtc: new DateTime(2026, 10, 14, 3, 5, 0, DateTimeKind.Utc), ReplyTo: "dana@provider.example");
+        StampUtc: new DateTime(2026, 10, 14, 3, 5, 0, DateTimeKind.Utc), ReplyTo: "dana@provider.example", ContactName: "Sarah Walsh");
 
     [Fact]
     public void A_booking_tells_the_staff_member_everything_including_the_notes()
@@ -35,7 +35,7 @@ public class IntakeVisitStaffTemplateTests
             IntakeVisitStaffTemplate.Render(Payload() with { PersonFullName = "Noah\r\nFitzgerald" }, BaseUrl).Subject);
         Assert.Contains("When: Friday 16 October 2026, 10:00 am to 11:30 am", message.PlainTextBody);
         Assert.Contains("Where: 12 Smith St, Parramatta", message.PlainTextBody);
-        Assert.Contains("Contact: 0412 555 010 · priya.nair@example.com.au", message.PlainTextBody);
+        Assert.Contains("Contact: Sarah Walsh · 0412 555 010 · priya.nair@example.com.au", message.PlainTextBody);
         Assert.Contains("Notes: Bring the consent forms", message.PlainTextBody);
         Assert.Contains("Booked by Dana Smith", message.PlainTextBody);
         Assert.Contains("https://odip.test/portal", message.HtmlBody);
@@ -62,7 +62,7 @@ public class IntakeVisitStaffTemplateTests
     [Fact]
     public void Missing_notes_and_contact_details_are_said_not_left_blank()
     {
-        var message = IntakeVisitStaffTemplate.Render(Payload() with { Notes = null, ContactPhone = null, ContactEmail = " " }, BaseUrl);
+        var message = IntakeVisitStaffTemplate.Render(Payload() with { Notes = null, ContactName = null, ContactPhone = null, ContactEmail = " " }, BaseUrl);
 
         Assert.Contains("Notes: No notes", message.PlainTextBody);
         Assert.Contains("Contact: No contact details", message.PlainTextBody);
@@ -73,7 +73,7 @@ public class IntakeVisitStaffTemplateTests
     {
         var message = IntakeVisitStaffTemplate.Render(Payload() with
         {
-            PersonFullName = Script, Location = Script, ContactPhone = Script, ContactEmail = Script, Notes = Script, BookedByName = Script, StaffFullName = Script,
+            PersonFullName = Script, Location = Script, ContactName = Script, ContactPhone = Script, ContactEmail = Script, Notes = Script, BookedByName = Script, StaffFullName = Script,
         }, BaseUrl);
 
         Assert.DoesNotContain("<script>", message.HtmlBody);

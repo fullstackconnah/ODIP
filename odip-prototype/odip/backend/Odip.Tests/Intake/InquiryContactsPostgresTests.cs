@@ -82,7 +82,7 @@ public class InquiryContactsPostgresTests : IClassFixture<PostgresFixture>
     {
         RequirePostgres();
         var (seed, tenantId) = await _pg.NewTenantContextAsync();
-        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone" };
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone", ContactFirstName = "Sarah", ContactLastName = "Walsh", Phone = "0412 555 061" }.WithFullAddress();
         await using (seed)
         {
             seed.ParticipantInquiries.Add(inquiry);
@@ -103,13 +103,14 @@ public class InquiryContactsPostgresTests : IClassFixture<PostgresFixture>
         {
             Assert.Null((await check.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id)).ParticipantId);
             Assert.False(await check.Participants.AnyAsync(p => p.TenantId == tenantId));
+            Assert.False(await check.People.AnyAsync(p => p.TenantId == tenantId)); // the main contact's Person rolls back too
             Assert.Equal(2, await check.InquiryContacts.CountAsync(c => c.InquiryId == inquiry.Id));
         }
         await using (var db = Context())
         {
             Assert.IsType<OkObjectResult>((await new ParticipantInquiriesController(db, tenant.Object).Convert(inquiry.Id, new(), CancellationToken.None)).Result);
             db.ChangeTracker.Clear();
-            Assert.Equal(new[] { "Maria", "Tom" }, await db.ParticipantContactRoles.Where(r => r.TenantId == tenantId).Select(r => r.Person!.FirstName).OrderBy(n => n).ToListAsync());
+            Assert.Equal(new[] { "Maria", "Sarah", "Tom" }, await db.ParticipantContactRoles.Where(r => r.TenantId == tenantId).Select(r => r.Person!.FirstName).OrderBy(n => n).ToListAsync());
             Assert.Equal(0, await db.InquiryContacts.CountAsync(c => c.InquiryId == inquiry.Id));
         }
     }
@@ -169,13 +170,63 @@ public class InquiryContactsPostgresTests : IClassFixture<PostgresFixture>
         }
     }
 
+    // G3: a legacy phone longer than Person.Phone's 30 characters must never reach it (PostgreSQL would refuse the save with a 500).
+    [SkippableFact]
+    public async Task A_45_character_legacy_phone_never_reaches_Person_Phone()
+    {
+        RequirePostgres();
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        var legacy = "0412 555 010 after 3pm, ask for Mum or Dad ok";
+        Assert.Equal(45, legacy.Length);
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone", ContactFirstName = "Sarah", ContactLastName = "Walsh", Phone = legacy }.WithFullAddress();
+        await using (seed) { seed.ParticipantInquiries.Add(inquiry); await seed.SaveChangesAsync(); }
+
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Convert(inquiry.Id, new(), CancellationToken.None)).Result); }
+
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            var role = await check.ParticipantContactRoles.Include(r => r.Person).SingleAsync(r => r.TenantId == tenantId);
+            Assert.Null(role.Person!.Phone);
+            Assert.Equal($"Phone on the enquiry: {legacy}", role.Notes);
+        }
+    }
+
+    // L5: Convert checks the address when it reads the enquiry; one cleared before its save commits makes the save a 409 that creates nothing.
+    [SkippableFact]
+    public async Task An_address_cleared_while_Start_intake_runs_is_a_409_and_creates_no_participant()
+    {
+        RequirePostgres();
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone", ContactFirstName = "Sarah", ContactLastName = "Walsh" }.WithFullAddress();
+        await using (seed) { seed.ParticipantInquiries.Add(inquiry); await seed.SaveChangesAsync(); }
+        var (db, controller) = Request(tenantId, new Interleave(async () =>
+        {
+            var (other, _o) = Request(tenantId);
+            await using var _ = other;
+            var row = await other.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id);
+            row.AddressStreet = null; row.UpdatedAt = DateTime.UtcNow;
+            await other.SaveChangesAsync();
+        }));
+        await using (db)
+            Assert.IsType<ConflictObjectResult>((await controller.Convert(inquiry.Id, new(), CancellationToken.None)).Result);
+
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            Assert.Null((await check.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id)).ParticipantId);
+            Assert.False(await check.Participants.AnyAsync(p => p.TenantId == tenantId));
+            Assert.False(await check.People.AnyAsync(p => p.TenantId == tenantId));
+        }
+    }
+
     // Deep review S1: a contacts save that loaded the enquiry before Start intake committed must not leave pending rows on a converted enquiry.
     [SkippableFact]
     public async Task A_contacts_save_racing_Start_intake_loses_and_strands_nothing()
     {
         RequirePostgres();
         var (seed, tenantId) = await _pg.NewTenantContextAsync();
-        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone" };
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone" }.WithFullAddress();
         await using (seed)
         {
             seed.ParticipantInquiries.Add(inquiry);

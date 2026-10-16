@@ -25,7 +25,7 @@ import { addDays, sydneyToday } from '../../support/dates';
 //   SearchInput                     the search box's accessible name is its `label` prop: "Search participants".
 //
 // THE SEARCH IS PROVEN TO NARROW, NOT TO FILTER BY SOMETHING ELSE. Two participants are seeded with
-// deliberately distinguishable names and plans whose statuses differ, so a search that matched nothing would
+// distinguishable names, so a search that matched nothing would
 // empty the table, a search that matched everything would leave it alone, and a search that matched the wrong
 // column would leave the wrong rows. Both directions are asserted: one name narrows to exactly that
 // participant's rows, and a name that matches nothing takes the page to its own "No budgets match these
@@ -124,21 +124,23 @@ async function makeFundedParticipant(session: Session, person: (typeof SEEDED_PE
   return id as string;
 }
 
-/** The server's own rows for this tenant, straight from the API. This is the ground truth the search narrows:
- *  a search may only ever REMOVE rows from what the server sent, never reorder, rename or restate them. */
 type BudgetRow = { participantId: string; participantName: string; poolName: string; status: string };
+/** The rows of a budget list response's `data` (the API wraps every body in `data`, as `call` unwraps it). */
+function rowsIn(data: { rows?: unknown } | undefined): BudgetRow[] {
+  return (data?.rows ?? []) as BudgetRow[];
+}
+/** The server's rows for this tenant, straight from the API: confirms the seed before the page is opened. */
 async function serverRows(session: Session): Promise<BudgetRow[]> {
   const res: ApiResult = await expectStatus(
     'GET funding budgets',
     200,
     await call(session, 'GET', '/funding/budgets'),
   );
-  return (res.data?.rows ?? []) as BudgetRow[];
+  return rowsIn(res.data);
 }
 
 /** The participant names of the rows currently drawn in the table, in the order they are drawn. Read from the
- *  Participant column's links (each row's participant cell is a link to that participant's Funding tab), which
- *  is also how each row's link target is proved. */
+ *  Participant column's links (their accessible names carry the participant's name). */
 async function visibleRowNames(page: Page): Promise<string[]> {
   const links = page.getByRole('link', { name: /^Open funding for / });
   const names: string[] = [];
@@ -177,20 +179,23 @@ test.describe('Budget phase 2b: the Budgets list search', () => {
         `the server lists "${name}" on the Budgets list before the page is opened`,
       ).toBe(true);
     }
-    // The server's own order is the risk order; this spec does not re-derive it, it only checks the page
-    // shows the server's rows in the order they arrived. EVERY served row, not only this run's two: the page
-    // is expected to render exactly what the server sent, so comparing against a filtered subset would let a
-    // page that dropped or reordered somebody else's rows pass.
-    const serverOrder = served.map(r => r.participantName);
 
-    // ── Open the list unfiltered: every seeded participant is present, in the server's order. ──
+    // ── Open the list unfiltered. The page's OWN list response is the reference: the shared tenant's list moves
+    // while other specs run, so the snapshot above can differ from what this page loaded. ──
+    const listResponse = page.waitForResponse(
+      r => r.request().method() === 'GET' && new URL(r.url()).pathname === '/api/v1/funding/budgets' && r.ok(),
+    );
     await page.goto('/budgets');
+    const pageRows = rowsIn((await (await listResponse).json())?.data);
+    const pageNames = pageRows.map(r => r.participantName);
+    expect(pageNames, 'the page\'s own list response holds both seeded participants').toEqual(
+      expect.arrayContaining(wanted),
+    );
     await expect(
       page.getByRole('heading', { name: 'Budgets', exact: true }),
       'the Budgets page is open',
     ).toBeVisible({ timeout: 60_000 });
-    const rowsRegion = page.getByRole('table');
-    await expect(rowsRegion, 'the budget risk table is rendered').toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('table'), 'the budget risk table is rendered').toBeVisible({ timeout: 60_000 });
 
     await expect
       .poll(
@@ -200,13 +205,13 @@ test.describe('Budget phase 2b: the Budgets list search', () => {
       .toEqual(expect.arrayContaining(wanted));
     expect(
       await visibleRowNames(page),
-      'with no search typed, the page shows the rows in the order the server sent them',
-    ).toEqual(serverOrder);
+      'with no search typed, the page shows its own response\'s rows in the order it sent them',
+    ).toEqual(pageNames);
 
-    // ── Each row's participant cell links to that participant's Funding tab (budgetRows.ts fundingTabPath). ──
+    // ── The first seeded participant's row links to their Funding tab (budgetRows.ts fundingTabPath). ──
     const firstName = wanted[0];
-    const firstRow = served.find(r => r.participantName === firstName);
-    expect(firstRow, 'the server sent a row for this participant, so its link target is known').toBeTruthy();
+    const firstRow = pageRows.find(r => r.participantName === firstName);
+    expect(firstRow, 'the page sent a row for this participant, so its link target is known').toBeTruthy();
     await expect(
       page.getByRole('link', { name: `Open funding for ${firstName}` }),
       'the row for this participant links to their Funding tab',
@@ -224,18 +229,15 @@ test.describe('Budget phase 2b: the Budgets list search', () => {
       )
       .toEqual([firstName]);
 
-    // The narrowing is against the WHOLE list, not only this spec's two rows: some participant the server also
-    // sent (the seed's own, if any) must have been removed too. Asserted as "at most this spec's rows remain",
-    // and proved strict below by the two-name case.
+    // The other seeded participant is gone as well (the exact-list check above already leaves no other row).
     await expect(
       page.getByRole('link', { name: `Open funding for ${wanted[1]}` }),
       'the other seeded participant is gone from the list while the search names the first',
     ).toHaveCount(0);
 
-    // The status filter's counts are counts of the SEARCHED rows, not of the whole list (BudgetsPage counts
-    // `found`, not `rows`), so the All tab's count drops to exactly this participant's own row count, whatever
-    // else the tenant holds. ToggleGroup is a role="radiogroup" of role="radio" (single-select from a set),
-    // NOT a set of buttons, so it is addressed by its own role and its own group name.
+    // The All count is of the SEARCHED rows (BudgetsPage counts `found`, not `rows`), so it drops to this
+    // participant's own row count. Only the All tab is checked. ToggleGroup is a role="radiogroup" of
+    // role="radio", so it is addressed by its own role and group name.
     const allTab = page
       .getByRole('radiogroup', { name: 'Filter budgets by status' })
       .getByRole('radio', { name: /^All \(\d+\)$/ });
@@ -281,7 +283,7 @@ test.describe('Budget phase 2b: the Budgets list search', () => {
         () => visibleRowNames(page),
         { message: 'clearing the filters brings the server\'s rows back' },
       )
-      .toEqual(serverOrder);
+      .toEqual(pageNames);
 
     // ── The search is case-insensitive, because it is lowercased on both sides (BudgetsPage). ──
     await searchBox(page).fill(firstName.toUpperCase());

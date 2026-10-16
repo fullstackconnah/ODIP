@@ -13,7 +13,7 @@ vi.mock('@/api/hooks', () => ({
 const visit = (inquiryId: string, startsAt: string, overrides = {}) => ({
   inquiryId, firstName: 'Noah', lastName: inquiryId, participantId: null, participantIsDraft: null, participantIntakeCompletedAt: null,
   startsAt, durationMinutes: 90, location: '12 Smith St, Parramatta', staffUserId: 'sam', staffName: 'Sam Lee', confirmedAt: null,
-  timeZoneId: 'Australia/Sydney', ...overrides,
+  timeZoneId: 'Australia/Sydney', hasAddress: true, contactNeedsName: false, ...overrides,
 })
 const section = () => render(<MemoryRouter><IntakeVisitsSection /></MemoryRouter>)
 
