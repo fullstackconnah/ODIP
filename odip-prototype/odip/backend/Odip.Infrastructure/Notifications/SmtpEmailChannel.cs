@@ -101,7 +101,9 @@ public sealed class SmtpEmailChannel : INotificationChannel
     {
         var mail = new MailMessage(from, message.RecipientAddress, message.Subject, message.PlainTextBody);
         if (mail.From!.DisplayName.Length == 0) mail.From = new MailAddress(mail.From.Address, EmailLayout.SenderName);
-        mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(EmailLayout.WithHeader(message.HtmlBody), null, "text/html"));
+        var html = AlternateView.CreateAlternateViewFromString(EmailLayout.WithHeader(message.HtmlBody), null, "text/html");
+        html.LinkedResources.Add(EmailLayout.WordmarkImage());
+        mail.AlternateViews.Add(html);
         if (message.Ics is { } ics)
             mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(ics.Content, new ContentType($"text/calendar; method={ics.Method}; charset=UTF-8")));
         if (MailAddress.TryCreate(message.ReplyTo, out var replyTo))

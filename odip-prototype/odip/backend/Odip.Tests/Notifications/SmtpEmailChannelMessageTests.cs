@@ -46,18 +46,41 @@ public class SmtpEmailChannelMessageTests
     }
 
     [Fact]
-    public void The_html_view_opens_with_the_text_wordmark_header_then_the_body()
+    public void The_html_view_opens_with_the_wordmark_image_then_the_body()
     {
         using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>Body here</p>"), From);
 
-        using var reader = new StreamReader(mail.AlternateViews[0].ContentStream);
+        var view = Assert.Single(mail.AlternateViews);
+        using var reader = new StreamReader(view.ContentStream);
         var html = reader.ReadToEnd();
-        Assert.Contains(">bunya<", html);
-        Assert.Contains(">support<", html);
-        Assert.DoesNotContain("<svg", html);
-        Assert.DoesNotContain("<img", html);
-        Assert.True(html.IndexOf(">support<", StringComparison.Ordinal) < html.IndexOf("<p>Body here</p>", StringComparison.Ordinal));
+        var img = html.IndexOf("<img src=\"cid:bunya-wordmark\"", StringComparison.Ordinal);
+        Assert.True(img >= 0);
+        Assert.Contains("alt=\"Bunya Support\"", html);
+        Assert.Matches("<img [^>]*width=\"\\d+\" height=\"\\d+\"", html);
+        Assert.True(img < html.IndexOf("<p>Body here</p>", StringComparison.Ordinal));
         Assert.Equal("P", mail.Body);
+    }
+
+    [Fact]
+    public void The_wordmark_rides_along_as_a_linked_png_the_cid_names()
+    {
+        using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>"), From);
+
+        var image = Assert.Single(mail.AlternateViews[0].LinkedResources);
+        Assert.Equal("bunya-wordmark", image.ContentId);
+        Assert.Equal("image/png", image.ContentType.MediaType);
+        var signature = new byte[8];
+        Assert.Equal(8, image.ContentStream.Read(signature, 0, 8));
+        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, signature);
+    }
+
+    [Fact]
+    public void Each_message_gets_its_own_image_stream()
+    {
+        using var first = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("a@example.com", "S", "P", "<p>H</p>"), From);
+        using var second = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("b@example.com", "S", "P", "<p>H</p>"), From);
+
+        Assert.NotSame(first.AlternateViews[0].LinkedResources[0].ContentStream, second.AlternateViews[0].LinkedResources[0].ContentStream);
     }
 
     [Theory]
