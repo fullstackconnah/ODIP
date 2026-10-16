@@ -133,7 +133,7 @@ function OverlapShiftsList({ shifts, unassigningShiftId, unassignedShiftIds, una
 }
 
 export default function LeaveApprovalsPage() {
-  const { canApproveLeave } = usePermissions()
+  const { canApproveLeave, id: viewerId } = usePermissions()
   const [searchParams] = useSearchParams()
   // A ?userId= link (e.g. from a staff profile) means "show me this person's history" — the
   // default Pending-only view would otherwise hide everything but their live requests.
@@ -193,6 +193,10 @@ export default function LeaveApprovalsPage() {
   const assignShift = useAssignShift()
 
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
+  // Leave and unavailability entered on behalf land Approved, so the viewer is left out there: nobody approves their own (D4; the server refuses it too).
+  const othersOptions = useMemo(() => staffOptions.filter(o => o.value !== viewerId), [staffOptions, viewerId])
+  // The viewer's own pending request: shown, never decided here (the dashboard's rule and its "Your request" flag).
+  const isOwnPending = (row: ApprovalRow) => row.rowKind !== 'legacy' && row.data.status === 'Pending' && !!viewerId && row.data.userId === viewerId
   const staffNameById = useMemo(() => new Map(staff.map(s => [s.id, s.fullName])), [staff])
 
   // A legacy record has no status of its own — it's shown as a settled "Record" whenever the
@@ -477,7 +481,12 @@ export default function LeaveApprovalsPage() {
   // against a ~1006px box at 1280 and pushed the buttons off-screen. The text columns are capped (ellipsis, full text in the tooltip);
   // Requested (who asked, and when) stays, and the buttons stay pinned while the table scrolls in its box (DataTable's column rule).
   const columns: Column<ApprovalRow>[] = [
-    { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => row.data.userFullName },
+    { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => isOwnPending(row) ? (
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 truncate">{row.data.userFullName}</span>
+        <StatusBadge tone="neutral" label="Your request" className="shrink-0 whitespace-nowrap" />
+      </span>
+    ) : row.data.userFullName },
     { key: 'type', header: 'Type', maxWidth: '8rem', render: rowType },
     { key: 'window', header: 'Dates', maxWidth: '16rem', render: rowWindow },
     { key: 'requestedAt', header: 'Requested', maxWidth: '12rem', render: rowRequestedBy },
@@ -510,6 +519,7 @@ export default function LeaveApprovalsPage() {
             </div>
           )
         }
+        if (isOwnPending(row)) return <div className="flex justify-end">{edit}</div>
         if (row.data.status === 'Pending') {
           return (
             <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
@@ -605,7 +615,7 @@ export default function LeaveApprovalsPage() {
           onSubmit={handleOnBehalfLeave}
           submitting={createLeaveOnBehalf.isPending}
           errorMessage={onBehalfError}
-          staffOptions={staffOptions}
+          staffOptions={othersOptions}
         />
       )}
       {onBehalfMode === 'unavailability' && (
@@ -615,7 +625,7 @@ export default function LeaveApprovalsPage() {
           onSubmit={handleOnBehalfUnavailability}
           submitting={createUnavailabilityOnBehalf.isPending}
           errorMessage={onBehalfError}
-          staffOptions={staffOptions}
+          staffOptions={othersOptions}
         />
       )}
       {onBehalfMode === 'availability' && (
