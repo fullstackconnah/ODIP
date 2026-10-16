@@ -689,7 +689,8 @@ export default function RosterBoardPage() {
           {/* relative: the faded layer's opacity paints it as a positioned layer, so this one must be positioned too, and later in the tree, to paint above it. */}
           <div className="relative col-start-1 row-start-1 flex min-w-0 items-start justify-center pt-12 pb-6 md:items-center md:py-6">
             <section aria-labelledby="start-week-heading" aria-busy={starting || undefined} className="w-[min(24rem,calc(100%_-_2*var(--card-pad)))]">
-              <Card className="p-[calc(2*var(--card-pad))]! shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)]">
+              {/* The Floating Panel shadow (Dropdown's), its tint written from the foreground token: the house colour rule allows no literal colour. */}
+              <Card className="p-[calc(2*var(--card-pad))]! shadow-[0_24px_40px_-12px_color-mix(in_srgb,var(--color-foreground)_14%,transparent)]">
                 <div className="flex items-center gap-2">
                   <CalendarPlus className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <h3 id="start-week-heading" className="font-display text-base font-semibold text-foreground">This week hasn't been started</h3>
