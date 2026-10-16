@@ -2,7 +2,8 @@
 // timeZoneId), never the browser's, so a coordinator in another state still sees the family's 10:00 am. Pure and JSX-free.
 import type { CancelIntakeBookingResultDto, IntakeInviteError, IntakeVisitDto, ParticipantInquiryDto, SetIntakeBookingDto } from '@/api/types/inquiries'
 import type { StaffListDto } from '@/api/types'
-import { parseApiDate } from '@/lib/utils'
+import { fieldErrors } from '@/lib/fieldErrors'
+import { extractErrorMessage, parseApiDate } from '@/lib/utils'
 import { providerLocalToUtcInstant, utcInstantToProviderLocal } from '@/pages/portal/shift/shiftTime'
 
 /** The server's own fallback zone (ProviderLocalTime.FallbackZoneId), for a response that carries none. */
@@ -80,7 +81,7 @@ export type BookingField = keyof BookingForm
 export type BookingErrors = Partial<Record<BookingField, string>>
 
 /** The panel's fields: the booking as the provider's wall clock, or a new one at 1 hour 30 min with `defaultStaffId` going. */
-export function bookingFormOf(row: ParticipantInquiryDto, defaultStaffId: string): BookingForm {
+export function bookingFormOf(row: Partial<ParticipantInquiryDto>, defaultStaffId: string): BookingForm {
   const local = row.intakeStartsAt ? utcInstantToProviderLocal(row.intakeStartsAt, row.timeZoneId || FALLBACK_ZONE) : ''
   return {
     email: '', date: local.slice(0, 10), time: local.slice(11, 16), duration: String(row.intakeDurationMinutes ?? DEFAULT_DURATION),
@@ -140,6 +141,32 @@ export const SERVER_FIELD: Record<string, BookingField> = {
 export function noAnswer(error: unknown): boolean {
   const e = error as { isAxiosError?: boolean; response?: unknown } | null
   return !!e?.isAxiosError && !e.response
+}
+
+/** The booking fields in screen order: where focus goes for the first refused one. */
+export const FIELD_ORDER: BookingField[] = ['email', 'date', 'time', 'duration', 'location', 'staffUserId', 'notes']
+export const NO_CONNECTION = "Couldn't reach ODIP. Check your connection and try again. Your entries are kept."
+
+/** The server's sentence for a refusal: the first field message of a ValidationProblemDetails, else its message, else the fallback. */
+export function refusalOf(error: unknown, fallback: string): string {
+  return noAnswer(error) ? NO_CONNECTION : Object.values(fieldErrors(error)).find(Boolean) ?? extractErrorMessage(error, fallback)
+}
+
+/** A booking refusal's field errors, on the booking fields (SERVER_FIELD): a staff-busy 409 lands on Who's going. */
+export function serverBookingErrors(error: unknown): BookingErrors {
+  const mapped: BookingErrors = {}
+  for (const [key, message] of Object.entries(fieldErrors(error))) if (SERVER_FIELD[key] && message) mapped[SERVER_FIELD[key]] = message
+  return mapped
+}
+
+/** The result line, from the stored outcome of the latest send (as SignInEmailOutcome does for the set-password email). */
+export function resultLine(row: ParticipantInquiryDto, zone: string): { tone: 'success' | 'warning'; text: string } {
+  if (row.intakeInviteError === 'NotConfigured')
+    return { tone: 'warning', text: `Invite not sent: email isn't set up yet. The visit is still booked, so let ${row.firstName} know another way.` }
+  if (row.intakeInviteError) return { tone: 'warning', text: "Invite not sent: the email couldn't be sent. The visit is still booked." }
+  // An enquiry whose email was cleared after the send has no address to name.
+  if (row.intakeInviteSentAt) return { tone: 'success', text: `Invite sent${row.email ? ` to ${row.email}` : ''} on ${visitWhen(row.intakeInviteSentAt, zone)}.` }
+  return { tone: 'warning', text: 'No invite has gone out yet.' }
 }
 
 /** Who can go: Admins and Coordinators (never SuperAdmin, never filtered on `position`), "(you)" on the signed-in user. A booked person who no

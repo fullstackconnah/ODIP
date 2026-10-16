@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bookingBody, bookingFormOf, cancelNotice, visitsByDay, visitStage, withVisits, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, staffOptions, visitTimes, visitWhen,
+  NO_CONNECTION, refusalOf, serverBookingErrors,
 } from './intakeBooking'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 
@@ -149,5 +150,26 @@ describe('visits beside shifts', () => {
     expect([...visitsByDay([tenAm]).keys()]).toEqual(['2026-10-16'])
     const shifts = [{ id: 's1', startTime: '09:00:00' }, { id: 's2', startTime: '13:00:00' }]
     expect(withVisits(shifts, [tenAm]).map(e => (e.kind === 'shift' ? e.shift.id : 'visit'))).toEqual(['s1', 'visit', 's2'])
+  })
+})
+
+describe('the shared refusal helpers (the slide-over and the enquiry form)', () => {
+  const axiosRefusal = (data: unknown) => Object.assign(new Error('Request failed'), { isAxiosError: true, response: { status: 409, data } })
+
+  it('refusalOf: no answer, a field sentence, a message list, or the fallback', () => {
+    expect(refusalOf(Object.assign(new Error('Network Error'), { isAxiosError: true }), 'fallback')).toBe(NO_CONNECTION)
+    expect(refusalOf(axiosRefusal({ errors: { staffUserId: ['Kim is busy'] } }), 'fallback')).toBe('Kim is busy')
+    expect(refusalOf(axiosRefusal({ success: false, errors: ['Inquiry not found'] }), 'fallback')).toBe('Inquiry not found')
+    expect(refusalOf(new Error('x'), 'fallback')).toBe('fallback')
+  })
+
+  it('serverBookingErrors: the server keys on the booking fields, others dropped', () => {
+    expect(serverBookingErrors(axiosRefusal({ errors: { startsAt: ['past'], contactEmail: ['bad'], staffUserId: ['busy'], other: ['x'] } })))
+      .toEqual({ time: 'past', email: 'bad', staffUserId: 'busy' })
+    expect(serverBookingErrors(axiosRefusal({ errors: ['Inquiry not found'] }))).toEqual({})
+  })
+
+  it('bookingFormOf an enquiry with no visit: the empty form at 1 hour 30 min', () => {
+    expect(bookingFormOf({}, '')).toEqual({ email: '', date: '', time: '', duration: '90', location: '', staffUserId: '', notes: '' })
   })
 })
