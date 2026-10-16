@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { isAxiosError } from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import { useConvertParticipantInquiry } from '@/api/hooks'
 import type { IntakeVisitDto } from '@/api/types/inquiries'
@@ -6,6 +7,9 @@ import { Button } from '@/components/Button'
 import { convertRefusal, fullName, startIntakeReason } from '@/lib/inquiryDetails'
 import { visitStage } from '@/lib/intakeBooking'
 import { usePermissions } from '@/lib/permissions'
+import { extractErrorMessage } from '@/lib/utils'
+
+const TRY_AGAIN = "Couldn't start the intake. Try again."
 
 /**
  * Start intake (or Resume intake) from a schedule entry, with today's behaviour: convert the enquiry, then open the intake form prefilled. It shows
@@ -32,7 +36,8 @@ export function StartIntakeButton({ visit, size = 'md' }: { visit: IntakeVisitDt
     }
     convert.mutate({ id: visit.inquiryId }, {
       onSuccess: inquiry => { if (inquiry.participantId) navigate(`/participants/${inquiry.participantId}/intake`) },
-      onError: err => setFailed(convertRefusal(err, name) ?? "Couldn't start the intake. Try again."),
+      // A 409 carries its own sentence (the role rules, closed, changed by someone else); anything else is not the coordinator's to read.
+      onError: err => setFailed(convertRefusal(err, name) ?? (isAxiosError(err) && err.response?.status === 409 ? extractErrorMessage(err, TRY_AGAIN) : TRY_AGAIN)),
     })
   }
   return (

@@ -7,7 +7,7 @@ import { Callout } from '@/components/Callout'
 import { FormField } from '@/components/FormField'
 import { SlideOver } from '@/components/SlideOver'
 import {
-  DEFAULT_DURATION, FALLBACK_ZONE, FIELD_ORDER, bookingBody, bookingFormOf, invitee, inviteeEmailLabel, isPastVisit, notSentReason, refusalOf, resultLine,
+  DEFAULT_DURATION, FALLBACK_ZONE, FIELD_ORDER, bookingBody, bookingFormOf, inviteEmail, invitee, inviteeEmailLabel, isPastVisit, noInviteWhy, notSentReason, refusalOf, resultLine,
   sendsInvite, serverBookingErrors, validateBooking, visitDay,
   type BookingErrors, type BookingField, type BookingForm,
 } from '@/lib/intakeBooking'
@@ -30,7 +30,7 @@ const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed
 function savedAnnouncement(kind: 'booked' | 'updated' | 'notes', row: ParticipantInquiryDto): string {
   if (kind === 'notes') return 'Notes saved.'
   // L7: never "sent to null".
-  if (!row.email) return kind === 'booked' ? `Intake visit booked. No invite sent: ${invitee(row)} has no email.` : `Visit updated. No invite went out: ${invitee(row)} has no email.`
+  if (!inviteEmail(row)) return kind === 'booked' ? `Intake visit booked. No invite sent: ${noInviteWhy(row)}.` : `Visit updated. No invite went out: ${noInviteWhy(row)}.`
   const what = kind === 'booked' ? 'Intake visit booked. Invite' : 'Updated invite'
   return row.intakeInviteError ? `${what} not sent: ${notSentReason(row.intakeInviteError)}.` : `${what} sent to ${row.email}.`
 }
@@ -86,7 +86,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
   const emailGiven = askEmail && !!form.email.trim()
   const sends = sendsInvite(effective, saved, booked) || (booked && emailGiven)
   // L7: with no email the visit is booked, or changed, without an invite.
-  const hasEmail = !!current.email || emailGiven
+  const hasEmail = !!inviteEmail(current) || emailGiven
   const dirty = booked
     ? sends || form.notes.trim() !== saved.notes.trim()
     : !!(form.email || form.date || form.time || form.location || form.notes || form.staffUserId) || form.duration !== String(DEFAULT_DURATION)
@@ -183,7 +183,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
       open
       onClose={onClose}
       title={`Intake visit for ${fullName(current.firstName, current.lastName)}`}
-      description={booked ? undefined : current.email ? `Pick a time and we'll email ${invitee(current)} an invite with a calendar file.` : 'Pick a time. With no email, the visit is booked without an invite.'}
+      description={booked ? undefined : inviteEmail(current) ? `Pick a time and we'll email ${invitee(current)} an invite with a calendar file.` : current.email ? "Pick a time. The email on file can't take an invite, so the visit is booked without one." : 'Pick a time. With no email, the visit is booked without an invite.'}
       dirty={dirty}
       initialFocusRef={!booked || focusDate ? firstFieldRef : undefined}
       footerClassName="flex items-center justify-between gap-3"
@@ -205,7 +205,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
               <Callout
                 tone={result.tone}
                 announce={false}
-                actions={past || !current.email ? undefined : (
+                actions={past || !inviteEmail(current) ? undefined : (
                   <Button variant="secondary" size="sm" onClick={sendAgain} aria-disabled={busy === 'resend' || undefined} className={DISABLED_LOOK}>
                     {busy === 'resend' ? 'Sending…' : 'Send again'}
                   </Button>
@@ -241,10 +241,15 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
             >
               <input ref={firstFieldRef} type="email" autoComplete="off" value={form.email} onChange={e => set('email', e.target.value)} />
             </FormField>
-          ) : current.email && (
+          ) : inviteEmail(current) ? (
             <div className="text-sm">
               <p>The invite goes to <span className="font-medium break-all">{current.email}</span>.</p>
               <p className="mt-0.5 text-[13px] text-[var(--color-muted-foreground)]">To use another address, edit the enquiry.</p>
+            </div>
+          ) : current.email && (
+            <div className="text-sm">
+              <p>No invite will go out: the email on file, <span className="font-medium break-all">{current.email}</span>, can't take one.</p>
+              <p className="mt-0.5 text-[13px] text-[var(--color-muted-foreground)]">It can't be changed here: the enquiry is the participant's record now.</p>
             </div>
           )}
         </div>

@@ -39,6 +39,18 @@ describe('StartIntakeButton: the intake gates (L5, D1, G2)', () => {
     expect(screen.getByRole('link', { name: "Add the main contact's name to start intake" })).toHaveAttribute('href', '/participants/new-inquiry?id=inq-1&focus=contact')
   })
 
+  it("a refused Start intake (a 409) shows the server's reason; a 500 still says try again", async () => {
+    const user = userEvent.setup()
+    const sentence = 'A child can only have a Child Representative.'
+    mocks.convert.mockImplementationOnce((_v, o) => o.onError({ isAxiosError: true, response: { status: 409, data: { success: false, message: sentence } } }))
+    show(visit())
+    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(sentence)
+    mocks.convert.mockImplementationOnce((_v, o) => o.onError({ isAxiosError: true, response: { status: 500, data: { message: 'Object reference not set.' } } }))
+    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't start the intake. Try again.")
+  })
+
   it('enabled when both are clear: it converts', async () => {
     const user = userEvent.setup()
     show(visit())

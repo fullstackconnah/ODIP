@@ -440,6 +440,16 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     expect(screen.getByTestId('notice')).toHaveTextContent('Enquiry captured: Intake visit booked for Wed 16 Oct 2030, 10:00 am with Dana Smith. No invite sent: the main contact has no email.')
   })
 
+  it("a converted enquiry's email that cannot take an invite: the card says why, and Send the invite is not offered (D)", async () => {
+    serve({ '/inquiries/i1': detail({ ...booked, participantId: 'p-1', email: 'a b@c.d', intakeInviteSentAt: null, intakeInviteError: null }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    const user = userEvent.setup()
+    expect(await screen.findByText("No invite sent: the email on file can't take an invite. Let the main contact know another way.")).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/^Where/), ' Library')
+    expect(screen.getByText("Saving updates the visit. No invite goes out: the email on file can't take an invite.")).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /Send the invite/ })).not.toBeInTheDocument()
+  })
+
   it('booked and never sent, with an email typed: "Send the invite to x" is offered; ticked, resend runs after the PUTs', async () => {
     serve({ '/inquiries/i1': detail({ ...booked, email: null, intakeInviteSentAt: null, intakeInviteError: null }) })
     mockApiPut.mockResolvedValue(detail({ ...booked, email: 'sarah@example.com', intakeInviteSentAt: null }))

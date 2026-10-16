@@ -56,6 +56,14 @@ describe('intake visit wording', () => {
     expect(inviteLine({ email, intakeInviteSentAt: null, intakeInviteError: null })).toBeNull()
   })
 
+  // D: a converted enquiry's email is read-only, so one that cannot take an invite reads as none (a non-converted one is the server's 400).
+  it('says the email on file cannot take an invite for a converted enquiry only', () => {
+    const bad = { email: 'a b@c.d', intakeInviteSentAt: null, intakeInviteError: null }
+    expect(inviteLine({ ...bad, participantId: 'p-1' })).toEqual({ text: 'No invite: bad email', failed: false })
+    expect(inviteLine({ ...bad, participantId: null })).toBeNull()
+    expect(inviteLine({ ...bad, email: 'ok@example.com', participantId: 'p-1' })).toBeNull()
+  })
+
   // L7: booked with no email is not a failure (the Tone Rule): a muted line, not a warning.
   it('says no invite went out because there is no email, not that one failed', () => {
     expect(inviteLine({ email: null, intakeInviteSentAt: null, intakeInviteError: null })).toEqual({ text: 'No invite: no email', failed: false })

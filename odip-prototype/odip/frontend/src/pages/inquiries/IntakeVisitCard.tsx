@@ -23,7 +23,7 @@ const REFUSAL_TITLE: Record<VisitRefusal['kind'], string> = {
  * the shared fields read as they do in the slide-over.
  */
 export function IntakeVisitCard({
-  row, booked, past, zone, bookingOn, onBookingOn, email, invitee, sends, fields, resend, refusal, refusalRef, cancelled, cancelledRef, onCancelVisit,
+  row, booked, past, zone, bookingOn, onBookingOn, email, emailUnusable, invitee, sends, fields, resend, refusal, refusalRef, cancelled, cancelledRef, onCancelVisit,
 }: {
   /** The stored enquiry; null before the first save. */
   row: ParticipantInquiryDto | null
@@ -34,6 +34,8 @@ export function IntakeVisitCard({
   onBookingOn: (on: boolean) => void
   /** The main contact's Email field above, as typed: the invite goes there (D2). Blank books without an invite (L7). */
   email: string
+  /** The enquiry has an email but it can't take an invite (a converted enquiry's, which can't be edited): the no-invite line says so. */
+  emailUnusable: boolean
   /** Who the invite is for, as a sentence names them ("Sarah", "the main contact"). */
   invitee: string
   /** Whether this Save emails the contact (a new booking, or a change to anything the invite states). */
@@ -52,7 +54,7 @@ export function IntakeVisitCard({
     // SHAPE 3c: on a booked visit the update line is muted; a new booking's line is the card's main statement.
     ? <p className={booked ? MUTED : 'text-sm'}>{booked ? 'Saving emails an updated invite to ' : 'Saving books the visit and emails an invite with a calendar file to '}<span className="font-medium [overflow-wrap:anywhere]">{email}</span>.</p>
     // L7: no email books the visit without an invite. Not booked, it is the card's main statement, so not muted.
-    : <p className={booked ? MUTED : 'text-sm'}>{booked ? `Saving updates the visit. No invite goes out: ${invitee} has no email.` : `Saving books the visit without an invite: ${invitee} has no email.`}</p>
+    : <p className={booked ? MUTED : 'text-sm'}>{booked ? 'Saving updates the visit. No invite goes out: ' : 'Saving books the visit without an invite: '}{emailUnusable ? "the email on file can't take an invite" : `${invitee} has no email`}.</p>
 
   return (
     <Card title="Intake visit" action={booked && !past ? <Button variant="ghost-danger" onClick={onCancelVisit}>Cancel visit</Button> : undefined}>

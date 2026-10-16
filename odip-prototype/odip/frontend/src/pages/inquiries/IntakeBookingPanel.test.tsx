@@ -146,6 +146,30 @@ describe('IntakeBookingPanel: a new booking', () => {
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
   })
 
+  // D: a converted enquiry's email can't be fixed (D7), so one that can't take an invite books as no email.
+  it('a converted enquiry whose email cannot take an invite: Book visit, the note says why, nothing is sent to the email', async () => {
+    const user = userEvent.setup()
+    mocks.save.mockResolvedValue(bookedRow({ email: 'a b@c.d', participantId: 'p-1', intakeInviteSentAt: null }))
+    panel(newRow({ email: 'a b@c.d', participantId: 'p-1' }))
+    expect(screen.getByText("Pick a time. The email on file can't take an invite, so the visit is booked without one.")).toBeInTheDocument()
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === "No invite will go out: the email on file, a b@c.d, can't take one.")).toBeInTheDocument()
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
+    await fillNewBooking(user)
+    await user.click(screen.getByRole('button', { name: 'Book visit' }))
+    expect(mocks.save).toHaveBeenCalledWith({ id: 'inq-1', data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null } })
+    expect(await screen.findByText("Intake visit booked. No invite sent: the email on file can't take an invite.")).toBeInTheDocument() // the live region
+  })
+
+  it('booked, converted, unsendable email: the result line says why, there is no Send again, and a change is Save changes', async () => {
+    const user = userEvent.setup()
+    panel(bookedRow({ email: 'a b@c.d', participantId: 'p-1', intakeInviteSentAt: null }))
+    expect(screen.getByText("No invite sent: the email on file can't take an invite. Let Sarah know another way.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Send again' })).not.toBeInTheDocument()
+    await user.clear(screen.getByLabelText(/^Where/))
+    await user.type(screen.getByLabelText(/^Where/), 'Library')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+  })
+
   it('a stored email that cannot take the invite: the server\'s sentence in the refusal', async () => {
     const user = userEvent.setup()
     const sentence = "This email can't take the invite. Check it on the enquiry, or clear it there to book without one."

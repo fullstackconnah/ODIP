@@ -19,7 +19,7 @@ import { isNotFoundError } from '@/lib/httpStatus'
 import { contactRowErrors, contactRowOf, contactsPayload, pendingRoleOptions, serverContactErrors, type ContactFieldErrors, type ContactRow } from '@/lib/inquiryContacts'
 import { DETAIL_FIELDS, inquiryErrors, INQUIRY_MESSAGES, ndisDigits, serverInquiryErrors, type InquiryErrors, type InquiryField } from '@/lib/inquiryDetails'
 import {
-  DEFAULT_DURATION, FALLBACK_ZONE, FIELD_ORDER, bookingBody, bookingFormOf, cancelNotice, enquirySavedNotice, invitee, isPastVisit, refusalOf, sendsInvite,
+  DEFAULT_DURATION, FALLBACK_ZONE, FIELD_ORDER, bookingBody, bookingFormOf, cancelNotice, enquirySavedNotice, inviteEmail, invitee, isPastVisit, refusalOf, sendsInvite,
   serverBookingErrors, validateBooking, type BookingErrors, type BookingField, type BookingForm, type EnquiryNotice,
 } from '@/lib/intakeBooking'
 import { extractErrorMessage } from '@/lib/utils'
@@ -247,7 +247,9 @@ function InquiryFormBody({ initial, focus, onCreated, onCancel, onReopened, onDo
   const wantsVisit = booked ? sends || effective.notes.trim() !== savedBooking.notes.trim() : bookingOn
   // Send again (D2, SHAPE 3c): only when this save won't email anyway, and the invite went to another address or its last send failed, or (L7) the
   // visit was booked with no email and one has been typed since.
-  const typedEmail = form.email.trim()
+  // D: a converted enquiry's email is read-only, so one that can't take an invite counts as none (the card says why; no Send again).
+  const emailUnusable = !!form.email.trim() && !inviteEmail({ email: form.email.trim(), participantId: row?.participantId })
+  const typedEmail = emailUnusable ? '' : form.email.trim()
   const neverSent = booked && !row!.email && !row!.intakeInviteSentAt && !row!.intakeInviteError
   const offerResend = booked && !past && !sends && !!typedEmail
     && (neverSent || !!row!.intakeInviteError || (!!row!.intakeInviteSentAt && typedEmail !== (row!.email ?? '')))
@@ -457,6 +459,7 @@ function InquiryFormBody({ initial, focus, onCreated, onCancel, onReopened, onDo
           bookingOn={bookingOn}
           onBookingOn={setBookingOn}
           email={typedEmail}
+          emailUnusable={emailUnusable}
           invitee={inviteeName}
           sends={sends}
           fields={<BookingFields form={effective} errors={visitErrors} zone={zone} staff={staff} onChange={setBookingField} />}

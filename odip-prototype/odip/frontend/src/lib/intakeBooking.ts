@@ -71,11 +71,23 @@ export function notSentReason(code: IntakeInviteError): string {
   return code === 'NotConfigured' ? "email isn't set up yet" : "the email couldn't be sent"
 }
 
+type EmailRow = Pick<ParticipantInquiryDto, 'email' | 'participantId'>
+
+/** The email an invite can go to. A converted enquiry's email is read-only (D7), so one the server can't send to counts as none: the visit books without an invite. */
+export function inviteEmail(row: EmailRow): string | null {
+  return row.email && (!row.participantId || EMAIL.test(row.email)) ? row.email : null
+}
+
+/** Why no invite goes, for the sentence after "No invite sent:" (the caller names who to tell). */
+export function noInviteWhy(row: EmailRow & InviteeRow): string {
+  return row.email ? "the email on file can't take an invite" : `${invitee(row)} has no email`
+}
+
 /** The table's second line, from the latest send's stored outcome: the server owns the rule, the client only reads it. No email is not a failure (L7). */
-export function inviteLine(row: Pick<ParticipantInquiryDto, 'intakeInviteError' | 'intakeInviteSentAt' | 'email'>): { text: string; failed: boolean } | null {
+export function inviteLine(row: Pick<ParticipantInquiryDto, 'intakeInviteError' | 'intakeInviteSentAt' | 'email' | 'participantId'>): { text: string; failed: boolean } | null {
   if (row.intakeInviteError) return { text: `Invite not sent: ${notSentReason(row.intakeInviteError)}`, failed: true }
   if (row.intakeInviteSentAt) return { text: 'Invite sent', failed: false }
-  return row.email ? null : { text: 'No invite: no email', failed: false }
+  return inviteEmail(row) ? null : { text: row.email ? 'No invite: bad email' : 'No invite: no email', failed: false }
 }
 
 type InviteeRow = Pick<ParticipantInquiryDto, 'firstName' | 'contactIsParticipant' | 'contactFirstName'>
@@ -182,8 +194,8 @@ export function resultLine(row: ParticipantInquiryDto, zone: string): { tone: 's
   if (row.intakeInviteError) return { tone: 'warning', text: "Invite not sent: the email couldn't be sent. The visit is still booked." }
   // An enquiry whose email was cleared after the send has no address to name.
   if (row.intakeInviteSentAt) return { tone: 'success', text: `Invite sent${row.email ? ` to ${row.email}` : ''} on ${visitWhen(row.intakeInviteSentAt, zone)}.` }
-  if (row.email) return { tone: 'warning', text: 'No invite has gone out yet.' }
-  return { tone: 'warning', text: `No invite sent: ${invitee(row)} has no email. Let them know another way.` }
+  if (inviteEmail(row)) return { tone: 'warning', text: 'No invite has gone out yet.' }
+  return { tone: 'warning', text: `No invite sent: ${noInviteWhy(row)}. Let ${row.email ? invitee(row) : 'them'} know another way.` }
 }
 
 /** Who can go: Admins and Coordinators (never SuperAdmin, never filtered on `position`), "(you)" on the signed-in user. A booked person who no
@@ -251,9 +263,9 @@ export function enquirySavedNotice(s: {
     failed = true
     sentences.push(`The intake visit is ${s.visit === 'booked' ? 'booked for' : 'moved to'} ${when}, but ${notSentReason(e.intakeInviteError)}, so ${invitee(e)} wasn't told. Let them know another way.`)
   } else if (s.visit === 'booked') {
-    sentences.push(`Intake visit booked for ${when}${e.intakeStaffName ? ` with ${e.intakeStaffName}` : ''}.`, e.email ? `Invite sent to ${e.email}.` : `No invite sent: ${invitee(e)} has no email.`)
+    sentences.push(`Intake visit booked for ${when}${e.intakeStaffName ? ` with ${e.intakeStaffName}` : ''}.`, inviteEmail(e) ? `Invite sent to ${e.email}.` : `No invite sent: ${noInviteWhy(e)}.`)
   } else if (s.visit === 'moved') {
-    sentences.push(`Intake visit moved to ${when}.`, e.email ? `Updated invite sent to ${e.email}.` : `No invite went out: ${invitee(e)} has no email.`)
+    sentences.push(`Intake visit moved to ${when}.`, inviteEmail(e) ? `Updated invite sent to ${e.email}.` : `No invite went out: ${noInviteWhy(e)}.`)
   }
   if (s.resent && e.intakeInviteError) {
     failed = true
