@@ -47,7 +47,7 @@ export function IntakeVisitCard({
 }) {
   const result = booked && row ? resultLine(row, zone) : null
   const inviteTo = email
-    ? <p className="text-sm">{booked ? 'Saving emails an updated invite to ' : 'Saving books the visit and emails an invite with a calendar file to '}<span className="font-medium break-all">{email}</span>.</p>
+    ? <p className="text-sm">{booked ? 'Saving emails an updated invite to ' : 'Saving books the visit and emails an invite with a calendar file to '}<span className="font-medium [overflow-wrap:anywhere]">{email}</span>.</p>
     : <p className={MUTED}>Add an email above. The invite goes there.</p>
 
   return (
@@ -75,7 +75,7 @@ export function IntakeVisitCard({
             {fields}
             {resend && (
               <CheckboxField
-                label={<>Send the invite again to <span className="font-medium break-all">{email}</span></>}
+                label={<>Send the invite again to <span className="font-medium [overflow-wrap:anywhere]">{email}</span></>}
                 hint={resend.hint}
                 checked={resend.on}
                 onChange={e => resend.onChange(e.target.checked)}
