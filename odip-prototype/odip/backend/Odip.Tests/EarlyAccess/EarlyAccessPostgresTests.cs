@@ -392,16 +392,26 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         return row;
     }
 
+    // The purge runs hourly and deletes one interval early, so a row is gone at least an hour before its 12 months and never after.
+    private static DateTime EarlyCutoff(DateTime now) => now.AddMonths(-12) + EarlyAccessPurgeBackgroundService.Interval;
+
+    [Fact]
+    public void ThePurge_RunsEveryHour()
+    {
+        Assert.Equal(TimeSpan.FromHours(1), EarlyAccessPurgeBackgroundService.Interval);
+    }
+
     [SkippableFact]
-    public async Task ThePurge_DeletesSignupsFirstSentMoreThan12MonthsAgo_EvenIfSentAgainSince_AndKeepsTheRest()
+    public async Task ThePurge_DeletesSignupsAtOrBeforeTheEarlyCutoff_EvenIfSentAgainSince_AndKeepsTheRest()
     {
         Skip.IfNot(_pg.Available, _pg.UnavailableReason);
         // PostgreSQL keeps microseconds, so the clock is cut to them and the boundary can be pinned exactly.
         var now = new DateTime(DateTime.UtcNow.Ticks / 10 * 10, DateTimeKind.Utc);
-        var cutoff = now.AddMonths(-12);
+        var cutoff = EarlyCutoff(now);
         var oneMicrosecond = TimeSpan.FromTicks(10);
         var expired = await SeedRowAsync("expired", cutoff - oneMicrosecond, cutoff - oneMicrosecond);
         var atTheCutoff = await SeedRowAsync("cutoff", cutoff, cutoff);
+        var justYounger = await SeedRowAsync("younger", cutoff + oneMicrosecond, cutoff + oneMicrosecond);
         // Anyone can send the form again with someone's address, so a repeat must not extend how long their details are kept.
         var resent = await SeedRowAsync("resent", now.AddMonths(-24), now.AddDays(-7), count: 2);
         var recent = await SeedRowAsync("recent", now.AddDays(-30), now.AddDays(-30));
@@ -409,17 +419,34 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         var deleted = await Purger(log).PurgeExpiredAsync(now, CancellationToken.None);
 
-        Assert.True(deleted >= 2); // the class shares one database
+        Assert.True(deleted >= 3); // the class shares one database
         await using var check = _pg.CreateContext();
-        var ids = new[] { expired.Id, atTheCutoff.Id, resent.Id, recent.Id };
+        var ids = new[] { expired.Id, atTheCutoff.Id, justYounger.Id, resent.Id, recent.Id };
         var remaining = await check.EarlyAccessRequests.Where(e => ids.Contains(e.Id)).Select(e => e.Id).ToListAsync();
-        Assert.Equal(new[] { atTheCutoff.Id, recent.Id }.OrderBy(i => i), remaining.OrderBy(i => i));
+        Assert.Equal(new[] { justYounger.Id, recent.Id }.OrderBy(i => i), remaining.OrderBy(i => i));
 
         var entry = Assert.Single(log.Entries, e => e.Level == LogLevel.Information);
         Assert.Contains(deleted.ToString(System.Globalization.CultureInfo.InvariantCulture), entry.Message);
         Assert.DoesNotContain("@", entry.Message);
         Assert.DoesNotContain(expired.Name, entry.Message);
         Assert.DoesNotContain(expired.Email, entry.Message);
+    }
+
+    [SkippableFact]
+    public async Task ARowCreatedAtT_IsGoneByTheFirstRunAtOrAfterT_Plus12Months_Minus1Hour_AndNotBefore()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var created = new DateTime(2025, 3, 10, 6, 30, 0, DateTimeKind.Utc);
+        var row = await SeedRowAsync("window", created, created);
+        var due = created.AddMonths(12) - EarlyAccessPurgeBackgroundService.Interval;
+
+        await Purger().PurgeExpiredAsync(due - TimeSpan.FromTicks(10), CancellationToken.None);
+        await using (var before = _pg.CreateContext())
+            Assert.True(await before.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id), "kept until the hour before its 12 months");
+
+        await Purger().PurgeExpiredAsync(due, CancellationToken.None);
+        await using (var after = _pg.CreateContext())
+            Assert.False(await after.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id), "gone by the first run at or after T + 12 months - 1 h");
     }
 
     [SkippableFact]
@@ -440,7 +467,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         }
         await purger.StopAsync(CancellationToken.None);
 
-        Assert.True(gone, "the first purge should run at start, not a day later");
+        Assert.True(gone, "the first purge should run at start, not an hour later");
     }
 
     // ── SuperAdmin Delete (AdminEarlyAccessController) against the RequestCount concurrency token ──
