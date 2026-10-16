@@ -113,9 +113,10 @@ public class PortalController : ControllerBase
         // ValidateRefsAsync gates that at creation) — this filter is defence in depth for the
         // edge case of a participant later flipped back to draft mid-edit while an old shift
         // still references them, so the portal never shows it.
+        // L1 (2026-10-16): a Draft is invisible to its worker until it is published.
         var shifts = await _db.Shifts
             .Include(s => s.Participant)
-            .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
+            .Where(s => s.UserId == staffId.Value && s.Status != ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
             .ToListAsync(ct);
         var shiftDtos = shifts.Where(s => Participant.ServicesBegun(s.Participant!)).Select(ToSummaryDto).ToList();
@@ -147,8 +148,10 @@ public class PortalController : ControllerBase
     {
         var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
         if (error is not null) return error;
+        // L1: a Draft answers as "not yours" does (the class remarks: never tell the two apart).
+        if (shift!.Status == ShiftStatus.Draft) return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found."));
 
-        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift!, ct)));
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
 
     /// <summary>

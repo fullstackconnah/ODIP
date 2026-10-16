@@ -173,6 +173,46 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task MyShifts_LeavesOutDrafts()   // L1 (2026-10-16): a Draft is invisible to its worker until it is published
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var participant = SeedParticipant(db);
+        var shown = new List<Guid>();
+        Guid draftId = default;
+        foreach (var status in new[] { ShiftStatus.Draft, ShiftStatus.Published, ShiftStatus.InProgress, ShiftStatus.Completed, ShiftStatus.Cancelled })
+        {
+            var shift = SeedShift(db, participant.Id, me.Id);
+            shift.Status = status;
+            if (status == ShiftStatus.Draft) draftId = shift.Id; else shown.Add(shift.Id);
+        }
+        db.SaveChanges();
+
+        var result = await MakeController(db, tenant.Object, me.Id).GetMyShifts(ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None);
+
+        var ids = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Shifts.Select(s => s.Id).ToList();
+        Assert.Equal(shown.OrderBy(id => id), ids.OrderBy(id => id));
+        Assert.DoesNotContain(draftId, ids);
+    }
+
+    [Fact]
+    public async Task ShiftDetail_OfADraft_IsNotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var participant = SeedParticipant(db);
+        var draft = SeedShift(db, participant.Id, me.Id);
+        draft.Status = ShiftStatus.Draft;
+        var published = SeedShift(db, participant.Id, me.Id);
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>((await controller.GetShiftDetail(draft.Id, CancellationToken.None)).Result);
+        Assert.Equal("Shift not found.", Assert.Single(Assert.IsType<ApiResponse<PortalShiftDetailDto>>(notFound.Value).Errors!));
+        Assert.IsType<OkObjectResult>((await controller.GetShiftDetail(published.Id, CancellationToken.None)).Result);
+    }
+
+    [Fact]
     public async Task GetMyShifts_ValidUserWithNoShifts_ReturnsEmptyListNotSpecialPayload()
     {
         // Post staff/user unification there is no "not linked" concept any more — a real,
