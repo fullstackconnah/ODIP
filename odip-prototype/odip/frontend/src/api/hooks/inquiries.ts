@@ -1,9 +1,13 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiDeleteRaw, apiGet, apiPost, apiPut } from '../client'
-import type { CancelIntakeBookingResultDto, CreateParticipantInquiryDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, SetIntakeBookingDto, UpdateParticipantInquiryDto } from '../types/inquiries'
+import type { CancelIntakeBookingResultDto, CloseInquiryDto, CloseInquiryResultDto, CreateParticipantInquiryDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, SetIntakeBookingDto, UpdateParticipantInquiryDto } from '../types/inquiries'
 
-export function useParticipantInquiries() {
-  return useQuery({ queryKey: ['participant-inquiries'], queryFn: () => apiGet<ParticipantInquiryDto[]>('/inquiries') })
+/** The Enquiries tab's rows: the open view (today's key and URL, so every existing caller is unchanged) or the closed one. */
+export function useParticipantInquiries(view: 'open' | 'closed' = 'open') {
+  return useQuery({
+    queryKey: view === 'open' ? ['participant-inquiries'] : ['participant-inquiries', 'closed'],
+    queryFn: () => (view === 'open' ? apiGet<ParticipantInquiryDto[]>('/inquiries') : apiGet<ParticipantInquiryDto[]>('/inquiries', { view: 'closed' })),
+  })
 }
 
 /**
@@ -81,6 +85,20 @@ export function useCancelIntakeBooking() {
       refreshIntake(qc)
     },
   })
+}
+
+/** Close (spec addendum E1-E2): cancels an upcoming visit and deletes the pending contacts on the server. */
+export function useCloseInquiry() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: CloseInquiryDto }) => apiPost<CloseInquiryResultDto>(`/inquiries/${id}/close`, data),
+    onSuccess: () => refreshIntake(qc),
+  })
+}
+
+export function useReopenInquiry() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (id: string) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/reopen`), onSuccess: () => refreshIntake(qc) })
 }
 
 export function useConfirmIntakeBooking() {
