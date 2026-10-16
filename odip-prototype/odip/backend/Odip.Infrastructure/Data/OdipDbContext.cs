@@ -28,6 +28,7 @@ public class OdipDbContext : DbContext
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Participant> Participants => Set<Participant>();
     public DbSet<ParticipantInquiry> ParticipantInquiries => Set<ParticipantInquiry>();
+    public DbSet<InquiryContact> InquiryContacts => Set<InquiryContact>();
     public DbSet<ParticipantOnboarding> ParticipantOnboardings => Set<ParticipantOnboarding>();
     public DbSet<ParticipantIntakeSnapshot> ParticipantIntakeSnapshots => Set<ParticipantIntakeSnapshot>();
     public DbSet<ServiceAgreementDraft> ServiceAgreementDrafts => Set<ServiceAgreementDraft>();
@@ -1584,6 +1585,20 @@ public class OdipDbContext : DbContext
             // The schedule views read visits by organisation and start.
             entity.HasIndex(e => new { e.TenantId, e.IntakeStartsAt });
         });
+        // Pending contacts on an enquiry (spec 2026-10-16, D3). The lengths are Person's and ParticipantContactRole's, so the move at Start intake never truncates.
+        modelBuilder.Entity<InquiryContact>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Email).HasMaxLength(200);
+            entity.Property(e => e.Relationship).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            // Cascade: pending contacts live and die with their enquiry (owner decision 5).
+            entity.HasOne<ParticipantInquiry>().WithMany().HasForeignKey(e => e.InquiryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.InquiryId });
+        });
         modelBuilder.Entity<ParticipantOnboarding>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -1851,6 +1866,8 @@ public class OdipDbContext : DbContext
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantInquiry>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<InquiryContact>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantOnboarding>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
