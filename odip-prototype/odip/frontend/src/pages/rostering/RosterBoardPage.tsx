@@ -269,7 +269,7 @@ export default function RosterBoardPage() {
     const shift = regularTarget
     if (!shift?.shiftPatternId) return
     try {
-      await setRegular.mutateAsync({ patternId: shift.shiftPatternId, staffId: shift.isRegular ? null : shift.staffId ?? null })
+      await setRegular.mutateAsync({ patternId: shift.shiftPatternId, shiftId: shift.id, staffId: shift.isRegular ? null : shift.staffId ?? null })
       setRegularNotice(regularDone(shift))
     } catch (err: unknown) {
       setAssignError(extractErrorMessage(err, 'Something went wrong changing the regular. Please try again.'))

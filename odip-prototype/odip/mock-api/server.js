@@ -2976,6 +2976,12 @@ const putRoutes = [
   ['rostering/patterns/:id/regular', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
     if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    // REV274: the server compares the shown shift with the pattern's own slot and refuses a stale board (409); a Make also needs the shift's own worker; an ended pattern has no regular to change.
+    const shown = rosterShifts.find((s) => s.id === (body && body.shiftId))
+    const slotMatches = shown && shown.shiftPatternId === pattern.id && shown.participantId === pattern.participantId && planApproval.DAYS[planApproval.weekday(shown.serviceDate)] === pattern.dayOfWeek
+      && shown.startTime === pattern.startTime && shown.endTime === pattern.endTime && !!shown.endsNextDay === !!pattern.endsNextDay
+    if (!slotMatches || (body.staffId && shown.staffId !== body.staffId)) return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
+    if (!pattern.isActive || (pattern.effectiveTo && pattern.effectiveTo < providerToday())) return respond(409, failEnvelope(null, ["This shift's agreement pattern has ended, so it has no regular to change."], 'pattern-ended'))
     const regular = body && body.staffId ? staff.find((s) => s.id === body.staffId) : null
     if (body && body.staffId && !regular) return respond(400, failEnvelope(null, ['Staff member not found.']))
     pattern.defaultStaffId = regular ? regular.id : null

@@ -499,7 +499,7 @@ public record CreateShiftPatternDto
 public record UpdateShiftPatternDto : CreateShiftPatternDto;
 
 /// <summary>"Make X the regular" / "Stop being the regular" (L2): the worker for the pattern's slot, or null to clear it.</summary>
-public record SetRegularDto { public Guid? StaffId { get; init; } }
+public record SetRegularDto { public Guid ShiftId { get; init; } public Guid? StaffId { get; init; } }
 
 public record GeneratePatternResultDto
 {
