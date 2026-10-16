@@ -374,4 +374,20 @@ public class InquiryCloseTests
         Assert.IsType<OkObjectResult>((await f.Controller(db: f.OtherDb()).Resend(f.Noah.Id, CancellationToken.None, new InquiryVersionDto { ExpectedUpdatedAt = v2 })).Result);
         Assert.Equal(2, f.Channel.Sent.Count);
     }
+
+    // ODIP-REVIEW-268, second finding: "has passed" is the instant, so the server judges a Perth visit the same whichever zone the browser is in.
+    [Theory]
+    [InlineData(7, true)]  // 3:00 pm Perth, at 2:30 pm Perth: upcoming
+    [InlineData(6, false)] // 2:00 pm Perth: passed
+    public async Task A_perth_providers_visit_is_judged_past_by_the_instant(int startHourUtc, bool accepted)
+    {
+        var f = new Fixture();
+        f.Db.ProviderSettings.Single().State = "WA";
+        f.Db.SaveChanges();
+        var now = new DateTime(2026, 10, 16, 6, 30, 0, DateTimeKind.Utc); // 2:30 pm in Perth
+        var result = await f.Controller(now: now).Set(f.Noah.Id, f.Body() with { StartsAt = new DateTime(2026, 10, 16, startHourUtc, 0, 0, DateTimeKind.Utc) }, CancellationToken.None);
+
+        if (accepted) Assert.IsType<OkObjectResult>(result.Result);
+        else Assert.Equal(["Choose a time that hasn't passed."], Problems(result.Result!)["startsAt"]);
+    }
 }

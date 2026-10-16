@@ -10,7 +10,7 @@ import { TextAreaField } from '@/components/TextAreaField'
 import { SelectField } from '@/components/SelectField'
 import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
-import { useCreateParticipantInquiry, useParticipantInquiry, useResendIntakeInvite, useSetIntakeBooking, useUpdateParticipantInquiry } from '@/api/hooks'
+import { useCreateParticipantInquiry, useParticipantInquiries, useParticipantInquiry, useResendIntakeInvite, useSetIntakeBooking, useUpdateParticipantInquiry } from '@/api/hooks'
 import type { CreateParticipantInquiryDto, InquiryContactDto, InquirySource, ParticipantInquiryDetailDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { fieldErrors } from '@/lib/fieldErrors'
 import { formGrid, span } from '@/lib/formGrid'
@@ -179,7 +179,11 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
 
   const converted = row?.participantId ? { participantId: row.participantId, firstName: row.firstName } : null
   // Before the first save the zone is only for checking: the booking is sent in the zone the save answered with (lead decision 6).
-  const zone = row?.timeZoneId || FALLBACK_ZONE
+  // The provider's zone (ODIP-REVIEW-268): the stored row's, else the Enquiries list's (every row carries the server's own). Until one is known a new
+  // enquiry's visit is not checked for "has passed" here: Sydney's clock would refuse a Perth visit that is still ahead. The server stays the authority.
+  const listQuery = useParticipantInquiries()
+  const knownZone = row?.timeZoneId || listQuery.data?.find(r => r.timeZoneId)?.timeZoneId || null
+  const zone = knownZone || FALLBACK_ZONE
   const booked = !!row?.intakeStartsAt
   const past = booked && isPastVisit(row!.intakeStartsAt!, row!.intakeDurationMinutes ?? DEFAULT_DURATION)
   const effective: BookingForm = { ...booking, staffUserId: booking.staffUserId || staff.defaultStaff }
@@ -228,7 +232,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
     const missingEmail = needsEmail && !typedEmail ? 'Add an email to send the invite to.' : undefined
     const rowErrors = contactRowErrors(contacts)
     const timeChanged = !booked || booking.date !== savedBooking.date || booking.time !== savedBooking.time
-    const found = wantsVisit ? validateBooking(effective, { askEmail: false, firstName: form.firstName, timeChanged, zone, pastVisitChange: past && sends }) : {}
+    const found = wantsVisit ? validateBooking(effective, { askEmail: false, firstName: form.firstName, timeChanged: timeChanged && !!knownZone, zone, pastVisitChange: past && sends }) : {}
     setEmailError(missingEmail); setContactErrors(rowErrors); setVisitErrors(found); setVisitRefusal(null); setError(null); setListError(undefined); setCancelled(null)
     if (missingEmail || Object.keys(rowErrors).length > 0 || Object.keys(found).length > 0) {
       focusNext.current = 'first-invalid'

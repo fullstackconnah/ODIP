@@ -686,3 +686,36 @@ describe('InquiryFormPage (wire) — every booking write carries the version the
     expect(mockApiPut.mock.calls[1]).toEqual(['/inquiries/i1/intake-booking', expect.objectContaining({ expectedUpdatedAt: V2 })])
   })
 })
+
+describe('InquiryFormPage (wire) — a new enquiry\'s visit is checked in the provider\'s zone (ODIP-REVIEW-268, second finding)', () => {
+  // 06:30Z is 2:30 pm in Perth (UTC+8, no daylight saving) on Fri 16 Oct 2026, and 5:30 pm in Sydney.
+  const NOW_PERTH_1430 = new Date('2026-10-16T06:30:00Z')
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW_PERTH_1430) })
+  afterEach(() => { vi.useRealTimers() })
+
+  async function bookAt(time: string) {
+    serve({ '/inquiries': [{ ...stored({ id: 'other' }), timeZoneId: 'Australia/Perth' }] })
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(screen.getByLabelText(/^First name/), 'Ana')
+    await user.type(screen.getByLabelText(/^Last name/), 'Lopez')
+    await user.type(screen.getByLabelText(/^Email/), 'ana@example.com')
+    await user.click(screen.getByRole('checkbox', { name: /book the intake visit now/i }))
+    fireEvent.change(screen.getByLabelText(/^Date/), { target: { value: '2026-10-16' } })
+    fireEvent.change(screen.getByLabelText(/^Start time/), { target: { value: time } })
+    await user.type(screen.getByLabelText(/^Where/), 'Library')
+    await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
+  }
+
+  it('3:00 pm Perth, booked at 2:30 pm Perth, is upcoming: the enquiry is sent', async () => {
+    await bookAt('15:00')
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText("Choose a time that hasn't passed.")).not.toBeInTheDocument()
+  })
+
+  it('2:00 pm Perth has passed: refused here, nothing sent', async () => {
+    await bookAt('14:00')
+    expect(await screen.findByText("Choose a time that hasn't passed.")).toBeInTheDocument()
+    expect(mockApiPost).not.toHaveBeenCalled()
+  })
+})
