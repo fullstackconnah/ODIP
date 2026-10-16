@@ -195,8 +195,9 @@ export default function LeaveApprovalsPage() {
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
   // Leave and unavailability entered on behalf land Approved, so the viewer is left out there: nobody approves their own (D4; the server refuses it too).
   const othersOptions = useMemo(() => staffOptions.filter(o => o.value !== viewerId), [staffOptions, viewerId])
-  // The viewer's own pending request: shown, never decided here (the dashboard's rule and its "Your request" flag).
-  const isOwnPending = (row: ApprovalRow) => row.rowKind !== 'legacy' && row.data.status === 'Pending' && !!viewerId && row.data.userId === viewerId
+  // The viewer's own request: shown, never decided or edited here (the dashboard's rule and its "Your request" flag; the server refuses both). Own
+  // requests change through the Portal, back to Pending.
+  const isOwn = (row: ApprovalRow) => row.rowKind !== 'legacy' && !!viewerId && row.data.userId === viewerId
   const staffNameById = useMemo(() => new Map(staff.map(s => [s.id, s.fullName])), [staff])
 
   // A legacy record has no status of its own — it's shown as a settled "Record" whenever the
@@ -481,7 +482,7 @@ export default function LeaveApprovalsPage() {
   // against a ~1006px box at 1280 and pushed the buttons off-screen. The text columns are capped (ellipsis, full text in the tooltip);
   // Requested (who asked, and when) stays, and the buttons stay pinned while the table scrolls in its box (DataTable's column rule).
   const columns: Column<ApprovalRow>[] = [
-    { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => isOwnPending(row) ? (
+    { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => isOwn(row) ? (
       <span className="flex min-w-0 items-center gap-2">
         <span className="min-w-0 truncate">{row.data.userFullName}</span>
         <StatusBadge tone="neutral" label="Your request" className="shrink-0 whitespace-nowrap" />
@@ -519,7 +520,8 @@ export default function LeaveApprovalsPage() {
             </div>
           )
         }
-        if (isOwnPending(row)) return <div className="flex justify-end">{edit}</div>
+        // Your own: no Approve, Decline or Edit. An approved one keeps Cancel below (it only takes leave away).
+        if (isOwn(row) && row.data.status !== 'Approved') return null
         if (row.data.status === 'Pending') {
           return (
             <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
@@ -537,7 +539,7 @@ export default function LeaveApprovalsPage() {
           const label = row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'
           return (
             <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
-              {edit}
+              {!isOwn(row) && edit}
               <Button variant="ghost-danger" size="sm" onClick={() => setCancelTarget(row)} aria-label={named(label)}>
                 {label}
               </Button>
