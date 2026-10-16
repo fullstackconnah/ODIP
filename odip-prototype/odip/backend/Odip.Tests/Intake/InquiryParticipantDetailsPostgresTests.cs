@@ -119,8 +119,8 @@ public class InquiryParticipantDetailsPostgresTests : IClassFixture<PostgresFixt
         var loadedA = await LoadedAsync(tenantId, inquiry.Id);
         var loadedB = await LoadedAsync(tenantId, inquiry.Id);
 
-        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Update(inquiry.Id, new UpdateParticipantInquiryDto { FirstName = "Ari", Source = "Phone", ExpectedUpdatedAt = loadedB, AddressStreet = "12 Smith St", AddressSuburb = "Parramatta", AddressState = "NSW", AddressPostcode = "2150" }, CancellationToken.None)).Result); }
-        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Update(inquiry.Id, new UpdateParticipantInquiryDto { FirstName = "Ari", Source = "Phone", ExpectedUpdatedAt = loadedA, ContactFirstName = "Sarah" }, CancellationToken.None)).Result); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Update(inquiry.Id, new UpdateParticipantInquiryDto { FirstName = "Ari", Source = "Phone", ExpectedUpdatedAt = loadedB, ContactIsParticipant = false, AddressStreet = "12 Smith St", AddressSuburb = "Parramatta", AddressState = "NSW", AddressPostcode = "2150" }, CancellationToken.None)).Result); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Update(inquiry.Id, new UpdateParticipantInquiryDto { FirstName = "Ari", Source = "Phone", ExpectedUpdatedAt = loadedA, ContactIsParticipant = false, ContactFirstName = "Sarah" }, CancellationToken.None)).Result); }
 
         var (check, _c) = Request(tenantId);
         await using (check)
