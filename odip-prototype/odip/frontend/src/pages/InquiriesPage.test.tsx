@@ -231,4 +231,14 @@ describe('InquiriesPage: the participant and the main contact (spec 2026-10-16 r
     await user.click(screen.getByRole('button', { name: /^Start intake/ }))
     expect(screen.getByRole('alert')).toHaveTextContent("Add Ari Walsh's full address before starting intake: street, suburb, state and postcode.")
   })
+
+  it('a 409 names the participant and says the intake did not start, then gives the server sentence', async () => {
+    mocks.inquiries.mockReturnValue({ data: [inquiry({ firstName: 'Jo', lastName: 'Smith' })], isLoading: false })
+    const refused = { isAxiosError: true, response: { status: 409, data: { success: false, message: 'Plan Nominee is not available for a participant under 18.' } } }
+    mocks.convert.mockImplementation((_data: unknown, options: { onError: (e: unknown) => void }) => options.onError(refused))
+    const user = userEvent.setup()
+    page()
+    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent("Jo Smith's intake didn't start. Plan Nominee is not available for a participant under 18.")
+  })
 })

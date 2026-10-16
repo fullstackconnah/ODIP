@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isAxiosError } from 'axios'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ClipboardPlus, MoreVertical, Search } from 'lucide-react'
 import { Button } from '@/components/Button'
@@ -202,7 +203,8 @@ function useInquiriesScreen() {
           if (inquiry.participantId) navigate(`/participants/${inquiry.participantId}/intake`)
         },
         // The address or the contact's name went after the list loaded (L5, D1): say which, not "could not start".
-        onError: err => setError(convertRefusal(err, nameOf(row)) ?? extractErrorMessage(err, 'Could not start intake. Please try again.')),
+        onError: err => setError(convertRefusal(err, nameOf(row))
+          ?? (isAxiosError(err) && err.response?.status === 409 ? `${nameOf(row)}'s intake didn't start. ${extractErrorMessage(err, 'Please try again.')}` : extractErrorMessage(err, 'Could not start intake. Please try again.'))),
       },
     )
   }

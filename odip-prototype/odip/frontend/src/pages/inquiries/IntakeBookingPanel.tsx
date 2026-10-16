@@ -90,7 +90,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
   const dirty = booked
     ? sends || form.notes.trim() !== saved.notes.trim()
     : !!(form.email || form.date || form.time || form.location || form.notes || form.staffUserId) || form.duration !== String(DEFAULT_DURATION)
-  const result = resultLine(current, zone)
+  const result = resultLine(current, zone, form.email)
 
   const set = (field: BookingField, value: string) => {
     setForm(f => ({ ...f, [field]: value }))
@@ -248,8 +248,8 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
             </div>
           ) : current.email && (
             <div className="text-sm">
-              <p>No invite will go out: the email on file, <span className="font-medium break-all">{current.email}</span>, can't take one.</p>
-              <p className="mt-0.5 text-[13px] text-[var(--color-muted-foreground)]">It can't be changed here: the enquiry is the participant's record now.</p>
+              {!booked && <p>No invite will go out: the email on file, <span className="font-medium break-all">{current.email}</span>, can't take one.</p>}
+              <p className={`${booked ? '' : 'mt-0.5 '}text-[13px] text-[var(--color-muted-foreground)]`}>It can't be changed here: the enquiry is the participant's record now.</p>
             </div>
           )}
         </div>

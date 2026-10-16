@@ -28,7 +28,7 @@ describe('StartIntakeButton: the intake gates (L5, D1, G2)', () => {
     expect(button).toHaveAttribute('aria-disabled', 'true')
     const line = screen.getByText(/Start intake needs Ari's full address\./)
     expect(button).toHaveAttribute('aria-describedby', line.id)
-    expect(screen.getByRole('link', { name: 'Add an address to start intake' })).toHaveAttribute('href', '/participants/new-inquiry?id=inq-1&focus=address')
+    expect(screen.getByRole('link', { name: 'Add the address' })).toHaveAttribute('href', '/participants/new-inquiry?id=inq-1&focus=address')
     await user.click(button)
     expect(mocks.convert).not.toHaveBeenCalled()
   })
@@ -36,7 +36,7 @@ describe('StartIntakeButton: the intake gates (L5, D1, G2)', () => {
   it("without the main contact's name: says so, and links to the contact", () => {
     show(visit({ contactNeedsName: true }))
     expect(screen.getByText(/Start intake needs the main contact's name\./)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: "Add the main contact's name to start intake" })).toHaveAttribute('href', '/participants/new-inquiry?id=inq-1&focus=contact')
+    expect(screen.getByRole('link', { name: 'Add the name' })).toHaveAttribute('href', '/participants/new-inquiry?id=inq-1&focus=contact')
   })
 
   it("a refused Start intake (a 409) shows the server's reason; a 500 still says try again", async () => {

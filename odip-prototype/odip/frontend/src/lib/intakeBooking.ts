@@ -188,14 +188,16 @@ export function serverBookingErrors(error: unknown): BookingErrors {
 }
 
 /** The result line, from the stored outcome of the latest send (as SignInEmailOutcome does for the set-password email). */
-export function resultLine(row: ParticipantInquiryDto, zone: string): { tone: 'success' | 'warning'; text: string } {
+/** `typedEmail` is the Email field as typed and not yet saved: with one there, no invite has gone out yet, whatever the stored row says. */
+export function resultLine(row: ParticipantInquiryDto, zone: string, typedEmail = ''): { tone: 'success' | 'warning'; text: string } {
   if (row.intakeInviteError === 'NotConfigured')
     return { tone: 'warning', text: `Invite not sent: email isn't set up yet. The visit is still booked, so let ${invitee(row)} know another way.` }
   if (row.intakeInviteError) return { tone: 'warning', text: "Invite not sent: the email couldn't be sent. The visit is still booked." }
   // An enquiry whose email was cleared after the send has no address to name.
   if (row.intakeInviteSentAt) return { tone: 'success', text: `Invite sent${row.email ? ` to ${row.email}` : ''} on ${visitWhen(row.intakeInviteSentAt, zone)}.` }
-  if (inviteEmail(row)) return { tone: 'warning', text: 'No invite has gone out yet.' }
-  return { tone: 'warning', text: `No invite sent: ${noInviteWhy(row)}. Let ${row.email ? invitee(row) : 'them'} know another way.` }
+  if (inviteEmail(row) || typedEmail.trim()) return { tone: 'warning', text: 'No invite has gone out yet.' }
+  const why = row.email ? `the email on file, ${row.email}, can't take an invite` : noInviteWhy(row)
+  return { tone: 'warning', text: `No invite sent: ${why}. Let ${row.email ? invitee(row) : 'them'} know another way.` }
 }
 
 /** Who can go: Admins and Coordinators (never SuperAdmin, never filtered on `position`), "(you)" on the signed-in user. A booked person who no

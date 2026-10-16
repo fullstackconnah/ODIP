@@ -444,7 +444,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     serve({ '/inquiries/i1': detail({ ...booked, participantId: 'p-1', email: 'a b@c.d', intakeInviteSentAt: null, intakeInviteError: null }) })
     renderForm('/participants/new-inquiry?id=i1')
     const user = userEvent.setup()
-    expect(await screen.findByText("No invite sent: the email on file can't take an invite. Let the main contact know another way.")).toBeInTheDocument()
+    expect(await screen.findByText("No invite sent: the email on file, a b@c.d, can't take an invite. Let the main contact know another way.")).toBeInTheDocument()
     await user.type(screen.getByLabelText(/^Where/), ' Library')
     expect(screen.getByText("Saving updates the visit. No invite goes out: the email on file can't take an invite.")).toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: /Send the invite/ })).not.toBeInTheDocument()
@@ -460,6 +460,9 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     await user.type(byId('inquiry-email'), 'sarah@example.com')
     const box = screen.getByRole('checkbox', { name: 'Send the invite to sarah@example.com' })
     expect(screen.getByText('No invite went out when it was booked.')).toBeInTheDocument()
+    // An address typed since: the result line no longer says the contact has no email (SHAPE 7).
+    expect(screen.getByText('No invite has gone out yet.')).toBeInTheDocument()
+    expect(screen.queryByText(/has no email/)).not.toBeInTheDocument()
     await user.click(box)
     await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
 

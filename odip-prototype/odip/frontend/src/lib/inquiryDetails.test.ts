@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  addressLine, convertRefusal, detailFacts, fullName, hasFullAddress, hasStoredDetails, inquiryErrors, INQUIRY_MESSAGES, mainContactFacts, startIntakeReason,
+  addressLine, convertRefusal, detailFacts, FACT_LIST_WRAP, fullName, hasFullAddress, hasStoredDetails, inquiryErrors, INQUIRY_MESSAGES, mainContactFacts, startIntakeReason,
   type InquiryFormValues,
 } from './inquiryDetails'
 
@@ -75,8 +75,13 @@ describe("Start intake's reasons (G2)", () => {
   it('names what is missing and links to it', () => {
     expect(startIntakeReason({ id: 'inq 1', hasAddress: true, contactNeedsName: false })).toBeNull()
     expect(startIntakeReason({ id: 'inq 1', hasAddress: false })).toMatchObject({ text: 'Add an address to start intake', to: '/participants/new-inquiry?id=inq%201&focus=address' })
-    expect(startIntakeReason({ id: 'inq-1', hasAddress: true, contactNeedsName: true })).toMatchObject({ text: "Add the main contact's name to start intake", to: '/participants/new-inquiry?id=inq-1&focus=contact' })
-    expect(startIntakeReason({ id: 'inq-1', contactNeedsName: true })).toMatchObject({ text: "Add an address and the main contact's name to start intake", to: '/participants/new-inquiry?id=inq-1&focus=address' })
+    expect(startIntakeReason({ id: 'inq-1', hasAddress: true, contactNeedsName: true })).toMatchObject({ text: "Add the main contact's name to start intake", action: 'Add the name', to: '/participants/new-inquiry?id=inq-1&focus=contact' })
+    expect(startIntakeReason({ id: 'inq-1', contactNeedsName: true })).toMatchObject({ text: "Add an address and the main contact's name to start intake", action: 'Add the address and name', to: '/participants/new-inquiry?id=inq-1&focus=address' })
+  })
+
+  it('the fact list stacks label over value below sm', () => {
+    expect(FACT_LIST_WRAP).toContain('grid-cols-1!')
+    expect(FACT_LIST_WRAP).toContain('sm:grid-cols-[10rem_minmax(0,1fr)]!')
   })
 
   it("reads Start intake's 400 in words", () => {
@@ -84,7 +89,7 @@ describe("Start intake's reasons (G2)", () => {
     const name = "Add the main contact's name before starting intake."
     expect(convertRefusal(refusal({ addressSuburb: ['x'], addressState: ['x'] }), 'Ari Walsh')).toBe(address)
     expect(convertRefusal(refusal({ contactFirstName: ['x'] }), 'Ari Walsh')).toBe(name)
-    expect(convertRefusal(refusal({ addressStreet: ['x'], contactLastName: ['x'] }), 'Ari Walsh')).toBe(`${address} ${name}`)
+    expect(convertRefusal(refusal({ addressStreet: ['x'], contactLastName: ['x'] }), 'Ari Walsh')).toBe("Add Ari Walsh's full address (street, suburb, state and postcode) and the main contact's name before starting intake.")
     expect(convertRefusal(refusal({ other: ['x'] }), 'Ari Walsh')).toBeNull()
   })
 })

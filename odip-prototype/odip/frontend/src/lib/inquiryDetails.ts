@@ -103,23 +103,25 @@ export function serverInquiryErrors(err: unknown): InquiryErrors {
 }
 
 /** Why Start intake is blocked, with where to fix it (G2); null when nothing blocks. A missing flag counts as blocked for the address. */
-export function startIntakeReason(row: { id: string; hasAddress?: boolean; contactNeedsName?: boolean }): { text: string; to: string; address: boolean; name: boolean } | null {
+export function startIntakeReason(row: { id: string; hasAddress?: boolean; contactNeedsName?: boolean }): { text: string; action: string; to: string; address: boolean; name: boolean } | null {
   const address = !row.hasAddress
   const name = !!row.contactNeedsName
   if (!address && !name) return null
   const text = address && name ? "Add an address and the main contact's name to start intake"
     : address ? 'Add an address to start intake' : "Add the main contact's name to start intake"
-  return { text, to: `/participants/new-inquiry?id=${encodeURIComponent(row.id)}&focus=${address ? 'address' : 'contact'}`, address, name }
+  // `action` is the link alone, for a spot that already gives the reason in a sentence.
+  const action = address && name ? 'Add the address and name' : address ? 'Add the address' : 'Add the name'
+  return { text, action, to: `/participants/new-inquiry?id=${encodeURIComponent(row.id)}&focus=${address ? 'address' : 'contact'}`, address, name }
 }
 
 /** A Start intake 400 in words: the address, the contact's name, or both; null for any other refusal. */
 export function convertRefusal(err: unknown, participantName: string): string | null {
   const keys = Object.keys(fieldErrors(err))
-  const sentences = [
-    keys.some(k => k.startsWith('address')) ? `Add ${participantName}'s full address before starting intake: street, suburb, state and postcode.` : '',
-    keys.some(k => k === 'contactFirstName' || k === 'contactLastName') ? "Add the main contact's name before starting intake." : '',
-  ].filter(Boolean)
-  return sentences.length > 0 ? sentences.join(' ') : null
+  const address = keys.some(k => k.startsWith('address'))
+  const name = keys.some(k => k === 'contactFirstName' || k === 'contactLastName')
+  if (address && name) return `Add ${participantName}'s full address (street, suburb, state and postcode) and the main contact's name before starting intake.`
+  if (address) return `Add ${participantName}'s full address before starting intake: street, suburb, state and postcode.`
+  return name ? "Add the main contact's name before starting intake." : null
 }
 
 type ContactFacts = Pick<ParticipantInquiryDetailDto, 'contactIsParticipant' | 'contactFirstName' | 'contactLastName' | 'contactRelationship' | 'contactRole' | 'phone' | 'email'>
@@ -148,7 +150,8 @@ export function detailFacts(d: InquiryDetails): { label: string; value: string |
 }
 
 // AccommodationDetailPage's fix for the same case: FactList's bare 1fr value track lets an unbreakable email push past the card at 390.
-export const FACT_LIST_WRAP = 'grid-cols-[10rem_minmax(0,1fr)]! [&_dd]:break-words'
+// Below sm each label stacks above its value at full width, so a long value reads as lines, not a narrow column.
+export const FACT_LIST_WRAP = 'grid-cols-1! sm:grid-cols-[10rem_minmax(0,1fr)]! [&_dd]:break-words [&>div+div>dt]:mt-2 sm:[&>div+div>dt]:mt-0'
 
 /** Whether the closed view shows the details card at all. */
 export const hasStoredDetails = (d: InquiryDetails) => detailFacts(d).some(f => !!f.value)

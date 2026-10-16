@@ -163,8 +163,10 @@ describe('IntakeBookingPanel: a new booking', () => {
   it('booked, converted, unsendable email: the result line says why, there is no Send again, and a change is Save changes', async () => {
     const user = userEvent.setup()
     panel(bookedRow({ email: 'a b@c.d', participantId: 'p-1', intakeInviteSentAt: null }))
-    expect(screen.getByText("No invite sent: the email on file can't take an invite. Let Sarah know another way.")).toBeInTheDocument()
+    expect(screen.getByText("No invite sent: the email on file, a b@c.d, can't take an invite. Let Sarah know another way.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Send again' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/No invite will go out/)).not.toBeInTheDocument() // the warning says it once
+    expect(screen.getByText("It can't be changed here: the enquiry is the participant's record now.")).toBeInTheDocument()
     await user.clear(screen.getByLabelText(/^Where/))
     await user.type(screen.getByLabelText(/^Where/), 'Library')
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()

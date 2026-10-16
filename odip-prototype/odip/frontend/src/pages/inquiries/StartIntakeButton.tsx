@@ -55,7 +55,7 @@ export function StartIntakeButton({ visit, size = 'md' }: { visit: IntakeVisitDt
       {reason && (
         <p id={reasonId} className="mt-1.5 max-w-[18rem] whitespace-normal text-sm text-[var(--color-muted-foreground)]">
           {reason.address ? `Start intake needs ${visit.firstName}'s full address.` : "Start intake needs the main contact's name."}{' '}
-          <Link to={reason.to} className="underline underline-offset-2 hover:text-[var(--color-primary)]">{reason.text}</Link>
+          <Link to={reason.to} className="underline underline-offset-2 hover:text-[var(--color-primary)]">{reason.action}</Link>
         </p>
       )}
       {failed && <p role="alert" className="mt-1.5 text-sm text-[var(--color-destructive)]">{failed}</p>}
