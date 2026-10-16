@@ -492,7 +492,6 @@ public class ParticipantsController : ControllerBase
 
         // ── Write ──
         var previousSupportRatio = p.SupportRatio;
-        var previousEmail = p.Email;
         ApplyIntakeScope(p, dto);
         p.UpdatedAt = DateTime.UtcNow;
 
@@ -508,13 +507,12 @@ public class ParticipantsController : ControllerBase
             });
         }
 
-        // The enquiry this participant came from keeps its own copy of the name and contact details (the Enquiries tab reads it):
-        // keep it in step. Where the enquiry came from (source, provenance) is its own record and is not touched.
+        // The enquiry keeps the participant's name in step (the Enquiries tab reads it). Its phone and email are the MAIN CONTACT's (spec L6): not touched.
+        // Where the enquiry came from (source, provenance) is its own record and is not touched either.
         foreach (var inquiry in await _db.ParticipantInquiries.Where(i => i.ParticipantId == p.Id).ToListAsync(ct))
         {
-            inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone;
-            // The enquiry's email is where the intake visit's invite goes, and a booking can store it on the enquiry alone: a participant that never had one never blanks it, but one the coordinator just cleared does.
-            if (!string.IsNullOrWhiteSpace(p.Email) || !string.IsNullOrWhiteSpace(previousEmail)) inquiry.Email = p.Email;
+            inquiry.FirstName = p.FirstName;
+            inquiry.LastName = string.IsNullOrWhiteSpace(p.LastName) ? string.Empty : p.LastName; // "" not null: see ParticipantInquiriesController.Apply
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 

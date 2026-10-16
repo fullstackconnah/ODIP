@@ -26,7 +26,7 @@ vi.mock('@/api/hooks', () => ({
 const apiError = (message: string) => ({ response: { data: { success: false, errors: [message] } } })
 
 const row = (overrides: Record<string, unknown> = {}) => ({
-  id: 'inquiry-1', firstName: 'Ava', lastName: 'Ng', phone: '0400000000', email: null, source: 'Phone', provenance: null, createdAt: '2026-09-01',
+  id: 'inquiry-1', firstName: 'Ava', lastName: 'Ng', phone: '0400000000', email: null, source: 'Phone', provenance: null, createdAt: '2026-09-01', hasAddress: true,
   participantId: 'p-1', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null,
   ...overrides,
 })

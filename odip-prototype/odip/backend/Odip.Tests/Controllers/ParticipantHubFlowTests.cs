@@ -16,6 +16,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
+using Odip.Tests.Intake;
 using Xunit;
 
 namespace Odip.Tests.Controllers;
@@ -101,7 +102,7 @@ public class ParticipantHubFlowTests
     }
 
     private static async Task<ParticipantInquiryDto> CaptureEnquiryAsync(Caller caller, string first = "Ada", string last = "Lovelace") =>
-        Ok(await caller.Inquiries.Create(new CreateParticipantInquiryDto { FirstName = first, LastName = last, Phone = "0400 000 001", Source = "Phone" }, CancellationToken.None));
+        Ok(await caller.Inquiries.Create(new CreateParticipantInquiryDto { FirstName = first, LastName = last, Phone = "0400 000 001", Source = "Phone", ContactIsParticipant = true }.WithFullAddress(), CancellationToken.None));
 
     private static async Task SetReadinessModeAsync(OdipDbContext db, Guid tenantId, ParticipantReadinessMode mode)
     {
@@ -431,6 +432,10 @@ public class ParticipantHubFlowTests
         Assert.Equal("Phone", newRow.GetProperty("source").GetString());
         Assert.False(newRow.TryGetProperty("participantId", out _));
         Assert.False(newRow.TryGetProperty("participantIsDraft", out _));
+        // The redesign's list keys (spec 2026-10-16): the gates and the self flag, for every role.
+        Assert.True(newRow.GetProperty("hasAddress").GetBoolean());
+        Assert.False(newRow.GetProperty("contactNeedsName").GetBoolean());
+        Assert.True(newRow.GetProperty("contactIsParticipant").GetBoolean());
 
         // An enquiry whose intake is complete: the participant's state is there, and the completion time is a UTC instant the screens treat as "done".
         var doneRow = rows["Intake"];
@@ -699,7 +704,8 @@ public class ParticipantHubFlowTests
     // Follow-ups (intake): the enquiry's email is the contact the intake visit's invite goes to. A booking may ask for it after Start intake and writes it to the enquiry only, so the
     // participant can have none: the wizard's save must not blank the enquiry's email with the participant's empty one. An email the wizard does give is still copied over.
     [Fact]
-    public async Task Saving_an_intake_keeps_the_enquiry_email_the_participant_does_not_have()
+    // Spec L6: the enquiry's phone and email are the main contact's, so the intake save keeps only the name in step.
+    public async Task Saving_an_intake_keeps_the_enquirys_name_in_step_and_never_touches_its_main_contact_email()
     {
         var tenantId = Guid.NewGuid();
         using var caller = NewCaller(tenantId);
@@ -715,12 +721,11 @@ public class ParticipantHubFlowTests
 
         Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false) with { Email = "ada@example.test" }, CancellationToken.None));
 
-        Assert.Equal("ada@example.test", (await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email);
+        Assert.Equal("family@example.test", (await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email);
 
-        // Cleared by the coordinator after the participant had one: the enquiry is cleared too (only a participant that never had an email leaves it alone).
         Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false) with { Email = "" }, CancellationToken.None));
 
-        Assert.True(string.IsNullOrWhiteSpace((await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email));
+        Assert.Equal("family@example.test", (await caller.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == enquiry.Id)).Email);
     }
 
     /// <summary>Before every save that writes an enquiry, a booking lands on it first through another context: the wizard's one retry meets a conflict too.</summary>
