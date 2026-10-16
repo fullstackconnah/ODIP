@@ -22,8 +22,8 @@ class FakeIO {
   observe(el: Element) { this.observed.add(el) }
   unobserve(el: Element) { this.observed.delete(el) }
   disconnect() {}
-  hit(id: string, isIntersecting = true) {
-    const target = document.getElementById(id)!
+  hit(idOrEl: string | Element, isIntersecting = true) {
+    const target = typeof idOrEl === 'string' ? document.getElementById(idOrEl)! : idOrEl
     this.cb([{ target, isIntersecting } as unknown as IntersectionObserverEntry], this as unknown as IntersectionObserver)
   }
 }
@@ -35,6 +35,7 @@ const html = document.documentElement
 const dot = () => document.querySelector<HTMLElement>('.rail__dot')!
 const nowStops = () => Array.from(document.querySelectorAll('.rail .is-now')).map((li) => li.getAttribute('data-for'))
 const arrived = (id: string) => document.getElementById(id)!.hasAttribute('data-in')
+const shotsOf = (id: string) => Array.from(document.querySelectorAll(`#${id} .shot`))
 
 const pageBody = new DOMParser().parseFromString(indexHtml, 'text/html').body.innerHTML
 
@@ -54,8 +55,18 @@ afterEach(() => {
 describe('initDay: the slots arrive and the now dot follows the day', () => {
   it('sets html.js, after both observers are attached', () => {
     initDay()
-    expect([arrive().observed.size, centre().observed.size]).toEqual([7, 7])
+    // The 7 slots (their "Before" strike) and the 11 screens, each on its own.
+    expect([arrive().observed.size, centre().observed.size]).toEqual([18, 7])
     expect(html.classList.contains('js')).toBe(true)
+  })
+
+  it('a screen settles when it enters the viewport itself, not when its slot heading does', () => {
+    initDay()
+    arrive().hit('t1130')
+    expect([arrived('t1130'), shotsOf('t1130').map((s) => s.hasAttribute('data-in'))]).toEqual([true, [false, false]])
+    const [first, second] = shotsOf('t1130')
+    arrive().hit(first)
+    expect([first.hasAttribute('data-in'), second.hasAttribute('data-in'), arrive().observed.has(first)]).toEqual([true, false, false])
   })
 
   it('an intersecting slot gets data-in once and is unobserved', () => {
@@ -100,6 +111,16 @@ describe('initDay: the slots arrive and the now dot follows the day', () => {
     expect(arrived('t1430')).toBe(true)
     expect(arrive().observed.has(document.getElementById('t1430')!)).toBe(false)
     expect(arrive().observed.has(document.getElementById('t0830')!)).toBe(true)
+    // its screens are below the fold (zero rects here), so they still wait for their own arrival
+    expect(shotsOf('t1430').every((s) => !s.hasAttribute('data-in') && arrive().observed.has(s))).toBe(true)
+  })
+
+  it('marks screens already in view as arrived before html.js is set', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(900)
+    const [shot] = shotsOf('t1000')
+    vi.spyOn(shot, 'getBoundingClientRect').mockReturnValue({ top: 500, bottom: 1200 } as DOMRect)
+    initDay()
+    expect([shot.hasAttribute('data-in'), arrive().observed.has(shot), arrived('t1000')]).toEqual([true, false, false])
   })
 
   it('leaves html.js unset when IntersectionObserver throws, so nothing stays hidden', () => {
@@ -112,6 +133,7 @@ describe('initDay: the slots arrive and the now dot follows the day', () => {
     history.replaceState(null, '', '#t1430')
     initDay()
     expect(arrived('t1430')).toBe(true)
+    expect(shotsOf('t1430').every((s) => s.hasAttribute('data-in'))).toBe(true)
     expect(arrived('t1000')).toBe(false)
   })
 
@@ -119,6 +141,7 @@ describe('initDay: the slots arrive and the now dot follows the day', () => {
     vi.stubGlobal('IntersectionObserver', undefined)
     initDay()
     expect(SLOTS.map(arrived)).toEqual(SLOTS.map(() => true))
+    expect(Array.from(document.querySelectorAll('.shot')).every((s) => s.hasAttribute('data-in'))).toBe(true)
     expect(html.classList.contains('js')).toBe(false)
   })
 })
@@ -167,7 +190,7 @@ describe('the motion CSS', () => {
 
   it('print shows every hidden start, with selectors at least as specific as the ones that hide', () => {
     const print = mediaBlocks(css, '@media print')
-    expect(print).toMatch(/\.js \.slot:not\(\[data-in\]\) \.shot\s*\{\s*opacity:\s*1;\s*transform:\s*none;?\s*\}/)
+    expect(print).toMatch(/\.js \.shot:not\(\[data-in\]\)\s*\{\s*opacity:\s*1;\s*transform:\s*none;?\s*\}/)
     expect(print).toMatch(/\.js \.slot:not\(\[data-in\]\) \.slot__before h3 span::after\s*\{\s*transform:\s*none;\s*opacity:\s*1;?\s*\}/)
   })
 
@@ -176,7 +199,7 @@ describe('the motion CSS', () => {
     expect(reduced).toMatch(/\.btn:active[^{]*\{[^}]*transform:\s*none/)
     expect(reduced).toMatch(/\.rail__dot\s*\{\s*transition:\s*none;\s*\}/)
     expect(reduced).toMatch(/\.js \.slot \.shot\s*\{\s*transition:\s*opacity [^;,}]+;?\s*\}/)
-    expect(reduced).toMatch(/\.js \.slot:not\(\[data-in\]\) \.shot\s*\{\s*transform:\s*none;\s*\}/)
+    expect(reduced).toMatch(/\.js \.shot:not\(\[data-in\]\)\s*\{\s*transform:\s*none;\s*\}/)
     expect(reduced).toMatch(/\.plan li:first-child a::before\s*\{\s*animation:\s*fade/)
     expect(reduced).not.toMatch(/transition:[^;}]*transform/)
   })

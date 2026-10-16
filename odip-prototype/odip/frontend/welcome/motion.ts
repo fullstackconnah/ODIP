@@ -1,11 +1,16 @@
-/** The day's motion (SHAPE section 9). Slots arrive once; the "now" dot follows the slot in the centre band. Observers only, no scroll handlers. */
+/**
+ * The day's motion (SHAPE section 9). Each slot arrives once (its "Before" is struck), and so does each screen, when it reaches the
+ * viewport itself: a slot's screens sit well below its heading, so arriving with the slot would settle them out of sight.
+ * The "now" dot follows the slot in the centre band. Observers only, no scroll handlers.
+ */
 export function initDay(doc: Document = document): void {
   const win = doc.defaultView!
   const slots = Array.from(doc.querySelectorAll<HTMLElement>('.slot'))
+  const parts = [...slots, ...Array.from(doc.querySelectorAll<HTMLElement>('.slot .shot'))]
   const arrived = (s: Element) => s.setAttribute('data-in', '')
-  if (typeof win.IntersectionObserver !== 'function') return slots.forEach(arrived) // no hidden starts without observers
-  // A slot already in view (a deep link, a reload mid-page) arrives now, before the hidden starts exist, so it never flashes.
-  for (const s of slots) {
+  if (typeof win.IntersectionObserver !== 'function') return parts.forEach(arrived) // no hidden starts without observers
+  // A slot or screen already in view (a deep link, a reload mid-page) arrives now, before the hidden starts exist, so it never flashes.
+  for (const s of parts) {
     const r = s.getBoundingClientRect()
     if (r.top < win.innerHeight * 0.88 && r.bottom > 0) arrived(s)
   }
@@ -16,7 +21,7 @@ export function initDay(doc: Document = document): void {
   } catch {
     /* a malformed #% hash */
   }
-  if (hashed) arrived(hashed)
+  if (hashed) [hashed, ...Array.from(hashed.querySelectorAll('.shot'))].forEach(arrived)
   const arrive = new win.IntersectionObserver((entries) => {
     for (const e of entries) {
       if (!e.isIntersecting) continue
@@ -24,7 +29,7 @@ export function initDay(doc: Document = document): void {
       arrive.unobserve(e.target)
     }
   }, { rootMargin: '0px 0px -12% 0px' })
-  slots.filter((s) => !s.hasAttribute('data-in')).forEach((s) => arrive.observe(s))
+  parts.filter((s) => !s.hasAttribute('data-in')).forEach((s) => arrive.observe(s))
 
   const rail = doc.querySelector('.rail')
   const dot = rail?.querySelector<HTMLElement>('.rail__dot')

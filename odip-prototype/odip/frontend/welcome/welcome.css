@@ -184,7 +184,7 @@ a:hover { color: var(--deep); }
 .js .slot:not([data-in]) .slot__before h3 span::after { transform: scaleX(0); }
 .js .slot .shot { transition: opacity var(--dur-frame) var(--ease-out) var(--delay-frame), transform var(--dur-frame) var(--ease-out) var(--delay-frame); }
 .js .slot .shot + .shot, .js .slot .phones .shot + .shot { transition-delay: calc(var(--delay-frame) + var(--stagger)); }
-.js .slot:not([data-in]) .shot { opacity: 0; transform: translateY(24px) scale(0.98); }
+.js .shot:not([data-in]) { opacity: 0; transform: translateY(24px) scale(0.98); }
 /* The hero dot is not gated on .js: main.ts is deferred, so a gate would paint it at rest, then hide and drop it. It ends visible. */
 .plan li:first-child a::before { animation: drop var(--dur-drop) var(--ease-out) var(--delay-drop) both; }
 @keyframes drop { from { opacity: 0; transform: translateY(-14px); } }
@@ -192,13 +192,13 @@ a:hover { color: var(--deep); }
 @media (prefers-reduced-motion: reduce) {
   .btn:active, .btn:hover .ico { transform: none; }
   .js .slot .shot { transition: opacity var(--dur-fade) ease; }
-  .js .slot:not([data-in]) .shot { transform: none; }
+  .js .shot:not([data-in]) { transform: none; }
   .js .slot .slot__before h3 span::after { transform: none; opacity: 1; transition: opacity var(--dur-fade) ease; }
   .js .slot:not([data-in]) .slot__before h3 span::after { opacity: 0; }
   .plan li:first-child a::before { animation: fade var(--dur-fade) ease both; }
   .rail__dot { transition: none; }
 }
-@media print { .js .slot:not([data-in]) .shot { opacity: 1; transform: none; } .js .slot:not([data-in]) .slot__before h3 span::after { transform: none; opacity: 1; } .plan li:first-child a::before { animation: none; } }
+@media print { .js .shot:not([data-in]) { opacity: 1; transform: none; } .js .slot:not([data-in]) .slot__before h3 span::after { transform: none; opacity: 1; } .plan li:first-child a::before { animation: none; } }
 
 /* Before day one, and what alpha means */
 .section { padding-block: clamp(72px, 8vw, 128px); }
