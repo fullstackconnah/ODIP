@@ -618,6 +618,22 @@ public class ParticipantIntakeControllerTests
         Assert.Equal("keep", other.Phone);
     }
 
+    [Fact]
+    public async Task SaveIntake_StoresABlankLastNameOnTheLinkedEnquiryAsEmpty_NotNull()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = Create(tenantId);
+        using var _ = db;
+        var participant = DraftWithProfileData(tenantId);
+        var linked = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, FirstName = "Jamie", LastName = "Rivers", Source = "Web" };
+        db.AddRange(participant, linked);
+        await db.SaveChangesAsync();
+
+        Ok(await controller.SaveIntake(participant.Id, WizardBody() with { LastName = " " }, CancellationToken.None));
+
+        Assert.Equal("", linked.LastName); // not null: a rollback to the previous image reads the column as required
+    }
+
     // ── POST /participants: a retried Complete Intake does not create a second participant ──
 
     [Fact]

@@ -77,7 +77,7 @@ public class InquiryDetailsTests
     };
 
     [Fact]
-    public async Task Create_with_only_a_first_name_saves_and_stores_the_rest_as_null()
+    public async Task Create_with_only_a_first_name_saves_an_empty_last_name_and_stores_the_rest_as_null()
     {
         var result = await Controller().Create(new CreateParticipantInquiryDto { FirstName = " Ari ", Source = "Phone" }, CancellationToken.None);
 
@@ -85,7 +85,8 @@ public class InquiryDetailsTests
         var s = Stored();
         Assert.Equal("Ari", s.FirstName);
         Assert.False(s.ContactIsParticipant);
-        Assert.All(new object?[] { s.LastName, s.Phone, s.Email, s.ContactFirstName, s.ContactLastName, s.ContactRelationship, s.ContactRole, s.DateOfBirth,
+        Assert.Equal("", s.LastName); // not null: a rollback to the previous image reads the column as required
+        Assert.All(new object?[] { s.Phone, s.Email, s.ContactFirstName, s.ContactLastName, s.ContactRelationship, s.ContactRole, s.DateOfBirth,
             s.NdisNumber, s.AddressStreet, s.AddressSuburb, s.AddressState, s.AddressPostcode, s.PlanType, s.PlanStartDate, s.PlanEndDate }, Assert.Null);
     }
 
@@ -109,6 +110,8 @@ public class InquiryDetailsTests
         { "dateOfBirth", "1900-01-01", "Check the year: that's more than 120 years ago." },
         { "addressState", "XX", "Choose a state from the list." },
         { "addressPostcode", "215", "Postcode must be exactly 4 digits." },
+        { "ndisNumber", "٤٣٠١٢٣٤٥٦", "Enter the 9-digit NDIS number, like 430 123 456." },
+        { "addressPostcode", "٢١٥٠", "Postcode must be exactly 4 digits." },
         { "planEndDate", "before", "The plan end can't be before the plan start." },
     };
 
@@ -161,7 +164,7 @@ public class InquiryDetailsTests
     [Fact]
     public async Task A_legacy_phone_or_email_that_fails_the_rules_saves_while_unchanged_and_is_refused_once_changed()
     {
-        var seeded = Seed(x => { x.Phone = "0412 555 010 after 3pm, ask for Mum"; x.Email = "noah at home"; });
+        var seeded = Seed(x => { x.Phone = "0412 555 010 after 3pm, ask for Mum"; x.Email = "a b@c.d"; });
 
         var unrelated = await Controller().Update(seeded.Id, Echo(seeded) with { Provenance = "GP referral" }, CancellationToken.None);
         Assert.IsType<OkObjectResult>(unrelated.Result);
@@ -279,6 +282,32 @@ public class InquiryDetailsTests
         Assert.Equal(("12 Smith St", "Parramatta", "NSW", "2150"), (d.AddressStreet, d.AddressSuburb, d.AddressState, d.AddressPostcode));
         Assert.Equal((PlanType.AgencyManaged, new DateOnly(2026, 7, 1), new DateOnly(2027, 6, 30)), (d.PlanType!.Value, d.PlanStartDate!.Value, d.PlanEndDate!.Value));
         Assert.True(d.HasAddress);
+    }
+
+    [Fact]
+    public async Task An_old_clients_PUT_without_the_new_fields_updates_the_old_ones_and_keeps_the_new()
+    {
+        var seeded = Seed(x =>
+        {
+            x.ContactIsParticipant = false; x.ContactFirstName = "Sarah"; x.ContactLastName = "Walsh"; x.ContactRelationship = "Mother"; x.ContactRole = ContactRoleType.Guardian;
+            x.DateOfBirth = new DateOnly(2014, 3, 12); x.NdisNumber = "430123456"; x.AddressStreet = "1 High St"; x.AddressSuburb = "Epping"; x.AddressState = "NSW"; x.AddressPostcode = "2121";
+            x.PlanType = PlanType.AgencyManaged; x.PlanStartDate = new DateOnly(2026, 7, 1); x.PlanEndDate = new DateOnly(2027, 6, 30);
+        });
+        var before = Stored();
+
+        // What a tab still running the old bundle sends: no contactIsParticipant and none of the 14 new fields.
+        var old = new UpdateParticipantInquiryDto { FirstName = "Noa", LastName = "Li", Phone = "0412 000 111", Email = "n@example.test", Source = "Email", Provenance = "GP", ExpectedUpdatedAt = before.UpdatedAt };
+        var result = await Controller().Update(seeded.Id, old, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var s = Stored();
+        Assert.Equal(("Noa", "Li", "0412 000 111", "n@example.test", "Email", "GP"), (s.FirstName, s.LastName, s.Phone, s.Email, s.Source, s.Provenance));
+        Assert.Equal(
+            (before.ContactIsParticipant, before.ContactFirstName, before.ContactLastName, before.ContactRelationship, before.ContactRole, before.DateOfBirth, before.NdisNumber),
+            (s.ContactIsParticipant, s.ContactFirstName, s.ContactLastName, s.ContactRelationship, s.ContactRole, s.DateOfBirth, s.NdisNumber));
+        Assert.Equal(
+            (before.AddressStreet, before.AddressSuburb, before.AddressState, before.AddressPostcode, before.PlanType, before.PlanStartDate, before.PlanEndDate),
+            (s.AddressStreet, s.AddressSuburb, s.AddressState, s.AddressPostcode, s.PlanType, s.PlanStartDate, s.PlanEndDate));
     }
 
     [Fact]

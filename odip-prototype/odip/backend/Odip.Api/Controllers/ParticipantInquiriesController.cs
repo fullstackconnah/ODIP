@@ -133,6 +133,7 @@ public class ParticipantInquiriesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Create(CreateParticipantInquiryDto dto, CancellationToken ct)
     {
+        dto = dto with { ContactIsParticipant = dto.ContactIsParticipant ?? false }; // only an update can come from a client that predates the field
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
         var errors = await InquiryErrorsAsync(dto, null, tenantId, ct);
@@ -397,7 +398,7 @@ public class ParticipantInquiriesController : ControllerBase
     private static readonly Regex PhonePattern = new(@"^\+?[\d\s\-()]{6,20}$", RegexOptions.CultureInvariant);
 
     private static readonly HashSet<string> AuStates = new(StringComparer.Ordinal) { "NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT" };
-    private static readonly Regex NineDigits = new(@"^\d{9}$", RegexOptions.CultureInvariant);
+    private static readonly Regex NineDigits = new(@"^[0-9]{9}$", RegexOptions.CultureInvariant);
     private static string? NdisDigits(string? value) => Blank(value)?.Replace(" ", "", StringComparison.Ordinal);
 
     /// <summary>
@@ -416,7 +417,7 @@ public class ParticipantInquiriesController : ControllerBase
         var errors = converted ? new Dictionary<string, string[]>() : ContactErrors(dto.Contacts, plan, dto.DateOfBirth, today);
         if (Blank(dto.FirstName) is null) errors["firstName"] = ["Add the participant's first name."];
         if (converted) return errors;
-        var recheck = stored is null || (dto.ContactIsParticipant && !stored.ContactIsParticipant);
+        var recheck = stored is null || (dto.ContactIsParticipant == true && !stored.ContactIsParticipant);
         if (Blank(dto.Phone) is { } phone && (recheck || phone != stored!.Phone) && !PhonePattern.IsMatch(phone)) errors["phone"] = ["Enter a phone number, like 0412 345 678."];
         if (Blank(dto.Email) is { } email && (recheck || email != stored!.Email) && !IntakeBookingsController.IsSendable(email)) errors["email"] = ["Enter a full email address, like name@example.com."];
         if (NdisDigits(dto.NdisNumber) is { } ndis && !NineDigits.IsMatch(ndis)) errors["ndisNumber"] = ["Enter the 9-digit NDIS number, like 430 123 456."];
@@ -426,7 +427,7 @@ public class ParticipantInquiriesController : ControllerBase
         if (ParticipantPatchApplier.ValidateAddressPostcode(new CreateParticipantDto { AddressPostcode = Blank(dto.AddressPostcode) }) is { } postcode) errors["addressPostcode"] = [postcode];
         if (dto.PlanEndDate < dto.PlanStartDate) errors["planEndDate"] = ["The plan end can't be before the plan start."];
         if (dto.PlanType is { } type && !Enum.IsDefined(type)) errors["planType"] = ["Choose how the plan is managed."];
-        if (!dto.ContactIsParticipant && RoleError(dto.ContactRole, plan, dto.DateOfBirth, today, required: false) is { } role) errors["contactRole"] = [role];
+        if (dto.ContactIsParticipant == false && RoleError(dto.ContactRole, plan, dto.DateOfBirth, today, required: false) is { } role) errors["contactRole"] = [role];
         return errors;
     }
 
@@ -446,11 +447,15 @@ public class ParticipantInquiriesController : ControllerBase
     /// <summary>Writes a validated save onto the enquiry. Blanks are stored as null; with "their own contact" ticked the contact's names, relationship and role are null whatever was sent (L4).</summary>
     private static void Apply(ParticipantInquiry x, CreateParticipantInquiryDto dto, bool converted)
     {
-        x.FirstName = Blank(dto.FirstName)!; x.LastName = Blank(dto.LastName); x.Source = dto.Source; x.Provenance = Blank(dto.Provenance);
+        x.FirstName = Blank(dto.FirstName)!; x.Source = dto.Source; x.Provenance = Blank(dto.Provenance);
+        // "" not null: a rollback to the previous image reads the column as required. A later release may store null.
+        x.LastName = Blank(dto.LastName) ?? string.Empty;
         // D7: the main contact and details are the participant's record now; omitted by the form, ignored if sent.
         if (converted) return;
-        x.Phone = Blank(dto.Phone); x.Email = Blank(dto.Email); x.ContactIsParticipant = dto.ContactIsParticipant;
-        var self = dto.ContactIsParticipant;
+        x.Phone = Blank(dto.Phone); x.Email = Blank(dto.Email);
+        // N1: a tab still on the old bundle sends no contactIsParticipant and none of the new fields, so it leaves them as stored.
+        if (dto.ContactIsParticipant is not { } self) return;
+        x.ContactIsParticipant = self;
         x.ContactFirstName = self ? null : Blank(dto.ContactFirstName); x.ContactLastName = self ? null : Blank(dto.ContactLastName);
         x.ContactRelationship = self ? null : Blank(dto.ContactRelationship); x.ContactRole = self ? null : dto.ContactRole;
         x.DateOfBirth = dto.DateOfBirth; x.NdisNumber = NdisDigits(dto.NdisNumber);

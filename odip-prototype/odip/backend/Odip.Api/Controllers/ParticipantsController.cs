@@ -512,7 +512,7 @@ public class ParticipantsController : ControllerBase
         foreach (var inquiry in await _db.ParticipantInquiries.Where(i => i.ParticipantId == p.Id).ToListAsync(ct))
         {
             inquiry.FirstName = p.FirstName;
-            inquiry.LastName = string.IsNullOrWhiteSpace(p.LastName) ? null : p.LastName;
+            inquiry.LastName = string.IsNullOrWhiteSpace(p.LastName) ? string.Empty : p.LastName; // "" not null: see ParticipantInquiriesController.Apply
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 

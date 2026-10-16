@@ -29,7 +29,7 @@ public class InquiryParticipantDetailsPostgresTests : IClassFixture<PostgresFixt
         await using var _ = db;
         var inquiry = new ParticipantInquiry
         {
-            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ari", LastName = null, Source = "Phone",
+            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ari", LastName = "", Source = "Phone",
             ContactFirstName = new string('f', 100), ContactLastName = new string('l', 100), ContactRelationship = new string('r', 100),
             ContactRole = ContactRoleType.Guardian, ContactIsParticipant = true,
             DateOfBirth = new DateOnly(2014, 3, 12), NdisNumber = new string('9', 20),
@@ -41,7 +41,7 @@ public class InquiryParticipantDetailsPostgresTests : IClassFixture<PostgresFixt
         db.ChangeTracker.Clear();
 
         var r = await db.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id);
-        Assert.Null(r.LastName);
+        Assert.Equal("", r.LastName);
         Assert.Equal((100, 100, 100), (r.ContactFirstName!.Length, r.ContactLastName!.Length, r.ContactRelationship!.Length));
         Assert.Equal(ContactRoleType.Guardian, r.ContactRole);
         Assert.True(r.ContactIsParticipant);

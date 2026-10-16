@@ -86,7 +86,8 @@ public record CreateParticipantInquiryDto
     [StringLength(100)] public string? ContactRelationship { get; init; }
     public ContactRoleType? ContactRole { get; init; }
     /// <summary>Ticked: the contact's names, relationship and role are stored as null whatever was sent (L4).</summary>
-    public bool ContactIsParticipant { get; init; }
+    /// <summary>Null from a client that predates the redesign: an update then leaves the new fields as stored.</summary>
+    public bool? ContactIsParticipant { get; init; }
     public DateOnly? DateOfBirth { get; init; }
     /// <summary>9 digits once spaces are stripped, and stored stripped. It, the state and the postcode are checked by hand, in the form's words.</summary>
     public string? NdisNumber { get; init; }
