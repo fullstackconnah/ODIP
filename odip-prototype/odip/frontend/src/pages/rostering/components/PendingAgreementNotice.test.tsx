@@ -16,7 +16,7 @@ describe('PendingAgreementNotice (the brief, section 6; L10)', () => {
     [5, 'Person 1 v1, Person 2 v2, Person 3 v3 and 2 more.'],
   ])('names %i waiting the house way, no serial comma, at most three', (n, names) => {
     const { container } = renderNotice(Array.from({ length: n }, (_, i) => person(i + 1)))
-    expect(container).toHaveTextContent(`Shifts from a service agreement appear here once it's approved for rostering. Waiting: ${names}`)
+    expect(container).toHaveTextContent(`Shifts from a service agreement appear here once it's approved for rostering and the week is started. Waiting: ${names}`)
     expect(container).not.toHaveTextContent(START)
     expect(screen.getAllByRole('link')).toHaveLength(Math.min(n, 3))
   })

@@ -157,7 +157,6 @@ public class PortalRoutineChecksTests
     [InlineData(ShiftStatus.PendingReview, ShiftErrorCodes.ShiftAlreadyFinished)]
     [InlineData(ShiftStatus.Completed, ShiftErrorCodes.ShiftAlreadyCompleted)]
     [InlineData(ShiftStatus.Cancelled, ShiftErrorCodes.ShiftCancelled)]
-    [InlineData(ShiftStatus.Draft, ShiftErrorCodes.ShiftNotPublished)]
     public async Task OnlyWhileTheShiftIsInProgress_BothTickAndUntick_Are409(ShiftStatus status, string code)
     {
         var f = Create(status);
@@ -169,6 +168,20 @@ public class PortalRoutineChecksTests
         Assert.Equal(409, Status(tick));
         Assert.Equal(code, Body(tick).Code);
         Assert.Equal(409, Status(untick));
+        Assert.Empty(await f.Db.ShiftRoutineChecks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task OnADraft_TickAndUntick_AreNotFound()   // L1 (2026-10-16): a Draft is invisible to its worker on every portal path
+    {
+        var f = Create(ShiftStatus.Draft);
+        var lunch = AddRoutine(f, "Lunch", "12:00", "13:00");
+
+        var tick = await f.Controller.CheckRoutine(f.Shift.Id, lunch.Id, default);
+        var untick = await f.Controller.UncheckRoutine(f.Shift.Id, lunch.Id, default);
+
+        Assert.Equal((404, 404), (Status(tick), Status(untick)));
+        Assert.Equal("Shift not found.", Assert.Single(Body(tick).Errors!));
         Assert.Empty(await f.Db.ShiftRoutineChecks.ToListAsync());
     }
 

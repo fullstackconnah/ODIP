@@ -87,6 +87,12 @@ public class Shift : ITenantEntity
     /// <summary>Incremented every time office Returns this shift for correction (design spec §1/§3).</summary>
     public int ReturnCount { get; set; }
 
+    /// <summary>Start rostering (2026-10-16, L5): who the pattern's regular was when Start found them away, so the shift was made open. Null otherwise; assigning anyone clears it. The board shows the slot's live regular instead.</summary>
+    public Guid? RegularUserId { get; set; }
+
+    /// <summary>Why the regular was away, as a short reason ("on approved leave", "booked on another shift"...). Set and cleared with <see cref="RegularUserId"/>.</summary>
+    public string? RegularAwayReason { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -160,6 +166,24 @@ public class ShiftPattern : ITenantEntity
     /// way to ask for them. Null while nothing has been generated. Bookkeeping, not audited.
     /// </summary>
     public DateOnly? GeneratedThrough { get; set; }
+}
+
+/// <summary>
+/// A roster week someone has started (Start rostering, 2026-10-16, L3): its agreement shifts were generated then, and an approval adds to it. Monday to Sunday in provider-local dates,
+/// as <see cref="Shift.ServiceDate"/>. Unique per organisation and Monday: the tiebreaker when two people press Start together.
+/// </summary>
+public class RosterWeek : ITenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public DateOnly WeekStart { get; set; }
+    public DateTime StartedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Who started it; null for the one-off backfill.</summary>
+    public Guid? StartedByUserId { get; set; }
+
+    /// <summary>The Monday of the week holding <paramref name="date"/>: the one definition of a roster week.</summary>
+    public static DateOnly MondayOf(DateOnly date) => date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
 }
 
 /// <summary>

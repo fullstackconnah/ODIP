@@ -15,6 +15,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Tests.Support;
@@ -104,6 +105,17 @@ public class IntakeBookingsControllerTests
 
         public ParticipantInquiry Row() => Db.ParticipantInquiries.AsNoTracking().Single(x => x.Id == Noah.Id);
         public List<NotificationOutbox> Outbox() => Db.NotificationOutbox.AsNoTracking().OrderBy(o => o.CreatedAt).ToList();
+
+        /// <summary>A rostered shift for Sam (or <paramref name="userId"/>), in the provider's wall clock. InMemory checks no foreign keys, so the participant is made up.</summary>
+        public void Shift(DateOnly day, TimeOnly start, TimeOnly end, bool nextDay = false, ShiftStatus status = ShiftStatus.Published, Guid? userId = null)
+        {
+            Db.Shifts.Add(new Shift
+            {
+                Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = Guid.NewGuid(), UserId = userId ?? Sam.Id, ServiceDate = day, StartTime = start, EndTime = end,
+                EndsNextDay = nextDay, Status = status,
+            });
+            Db.SaveChanges();
+        }
     }
 
     internal static T Ok<T>(IActionResult result) => Assert.IsType<ApiResponse<T>>(Assert.IsType<OkObjectResult>(result).Value).Data!;
@@ -265,7 +277,7 @@ public class IntakeBookingsControllerTests
     }
 
     /// <summary>Runs a callback once, the first time a staff notification is raised: the gap between a save's read and its write.</summary>
-    private sealed class InterleavingRaiser(INotificationRaiser inner, Func<Task> once) : INotificationRaiser
+    internal sealed class InterleavingRaiser(INotificationRaiser inner, Func<Task> once) : INotificationRaiser
     {
         private Func<Task>? _once = once;
         public async Task RaiseAsync(NotificationEventType type, string entityType, Guid entityId, IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default)
@@ -426,20 +438,135 @@ public class IntakeBookingsControllerTests
     }
 
     [Fact]
-    public async Task A_contact_without_an_email_must_be_given_one_and_it_is_saved_with_the_booking()
+    public async Task A_booking_with_no_email_books_without_an_invite_and_an_email_given_is_saved_and_sent()
     {
         var f = new Fixture(contactEmail: null);
         var controller = f.Controller();
 
-        var missing = await controller.Set(f.Noah.Id, f.Body(), CancellationToken.None);
-        var invalid = await controller.Set(f.Noah.Id, f.Body() with { ContactEmail = "noah at home" }, CancellationToken.None);
-        var dto = Ok<ParticipantInquiryDto>((await controller.Set(f.Noah.Id, f.Body() with { ContactEmail = " noah@example.com " }, CancellationToken.None)).Result!);
+        var booked = Ok<ParticipantInquiryDto>((await controller.Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result!);
 
-        Assert.Equal(new[] { "Add Noah's email to send the invite." }, Problems(missing.Result!)["contactEmail"]);
+        // L7: booked, nobody emailed, nothing recorded as sent or failed; the staff member is still told.
+        Assert.Equal(Start, booked.IntakeStartsAt);
+        Assert.Empty(f.Channel.Sent);
+        var row = f.Row();
+        Assert.Equal(((DateTime?)null, (string?)null), (row.IntakeInviteSentAt, row.IntakeInviteError));
+        Assert.NotNull(row.IntakeUid);
+        Assert.Single(f.Outbox());
+
+        var invalid = await controller.Set(f.Noah.Id, f.Body() with { ContactEmail = "noah at home" }, CancellationToken.None);
         Assert.Equal(new[] { "Enter a full email address, like name@example.com." }, Problems(invalid.Result!)["contactEmail"]);
+
+        var dto = Ok<ParticipantInquiryDto>((await controller.Set(f.Noah.Id, f.Body() with { ContactEmail = " noah@example.com " }, CancellationToken.None)).Result!);
         Assert.Equal("noah@example.com", dto.Email);
         Assert.Equal("noah@example.com", f.Row().Email);
         Assert.Equal("noah@example.com", Assert.Single(f.Channel.Sent).RecipientAddress);
+    }
+
+    [Fact]
+    public async Task A_stored_email_that_cant_take_the_invite_is_refused_in_the_forms_words()
+    {
+        var f = new Fixture(contactEmail: "a b@c.d");
+
+        var result = await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None);
+
+        Assert.Equal(new[] { "This email can't take the invite. Check it on the enquiry, or clear it there to book without one." }, Problems(result.Result!)["contactEmail"]);
+        Assert.Null(f.Row().IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task A_change_to_a_visit_with_no_email_raises_the_staff_change_and_emails_nobody()
+    {
+        var f = new Fixture(contactEmail: null);
+        await f.BookAsync();
+
+        await f.BookAsync(f.Body() with { StartsAt = Start.AddHours(2) });
+
+        Assert.Equal(1, f.Row().IntakeIcsSequence);
+        Assert.Equal(new[] { "Booked", "Changed" }, f.Outbox().Select(o => Payload(o).GetProperty("Kind").GetString()));
+        Assert.Empty(f.Channel.Sent);
+    }
+
+    // Review Focus 2: the family's first invite must read as an invite, not as "Updated:", though the visit moved before they had an email.
+    [Fact]
+    public async Task The_first_invite_after_a_booking_with_no_email_says_booked_not_updated()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent, contactEmail: null);
+        await f.BookAsync();
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).Email = "noah@example.com";
+        f.Db.SaveChanges();
+
+        await f.BookAsync(f.Body() with { StartsAt = Start.AddHours(2) });
+
+        Assert.StartsWith("Your intake visit with", Assert.Single(f.Channel.Sent).Subject);
+    }
+
+    [Fact]
+    public async Task A_converted_enquirys_email_that_cant_take_the_invite_books_without_one_and_Resend_stays_refused()
+    {
+        // D7 makes a converted enquiry's email read-only, so the coordinator can't fix it: it books as no email (the staff notice, no invite).
+        var f = new Fixture(contactEmail: "a b@c.d");
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).ParticipantId = Guid.NewGuid();
+        f.Db.SaveChanges();
+
+        var booked = Ok<ParticipantInquiryDto>((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result!);
+
+        Assert.Equal(Start, booked.IntakeStartsAt);
+        Assert.Empty(f.Channel.Sent);
+        var row = f.Row();
+        Assert.Equal(((DateTime?)null, (string?)null), (row.IntakeInviteSentAt, row.IntakeInviteError));
+        Assert.Equal("a b@c.d", row.Email);
+        Assert.Single(f.Outbox());
+
+        var resend = await f.Controller().Resend(f.Noah.Id, CancellationToken.None);
+        Assert.Equal(new[] { "Add the main contact's email to send the invite." }, Problems(resend.Result!)["contactEmail"]);
+    }
+
+    [Fact]
+    public async Task A_converted_enquirys_booking_never_changes_its_email()
+    {
+        var f = new Fixture(contactEmail: null);
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).ParticipantId = Guid.NewGuid();
+        f.Db.SaveChanges();
+
+        await f.BookAsync(f.Body() with { ContactEmail = "noah@example.com" });
+
+        Assert.Null(f.Row().Email);
+        Assert.Empty(f.Channel.Sent);
+    }
+
+    private static void SarahWalsh(Fixture f)
+    {
+        var x = f.Db.ParticipantInquiries.Single(i => i.Id == f.Noah.Id);
+        x.ContactFirstName = "Sarah"; x.ContactLastName = "Walsh";
+        f.Db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task The_invite_greets_the_main_contact_and_makes_them_the_attendee()
+    {
+        var f = new Fixture();
+        SarahWalsh(f);
+        await f.BookAsync();
+        var email = Assert.Single(f.Channel.Sent);
+        Assert.StartsWith("Hello Sarah,", email.PlainTextBody);
+        Assert.Contains(email.Ics!.Content.Replace("\r\n ", "").Split("\r\n"), l => l.StartsWith("ATTENDEE") && l.Contains("CN=\"Sarah Walsh\""));
+
+        var self = new Fixture();
+        self.Db.ParticipantInquiries.Single(i => i.Id == self.Noah.Id).ContactIsParticipant = true;
+        self.Db.SaveChanges();
+        await self.BookAsync();
+        Assert.StartsWith("Hello Noah,", Assert.Single(self.Channel.Sent).PlainTextBody);
+    }
+
+    [Fact]
+    public async Task The_staff_email_names_the_main_contact()
+    {
+        var f = new Fixture();
+        SarahWalsh(f);
+
+        await f.BookAsync();
+
+        Assert.Equal("Sarah Walsh", Payload(Assert.Single(f.Outbox())).GetProperty("ContactName").GetString());
     }
 
     [Fact]
@@ -709,7 +836,7 @@ public class IntakeBookingsControllerTests
 
         var result = await f.Controller().Resend(f.Noah.Id, CancellationToken.None);
 
-        Assert.Equal(new[] { "Add Noah's email to the enquiry to send the invite." }, Problems(result.Result!)["contactEmail"]);
+        Assert.Equal(new[] { "Add the main contact's email to send the invite." }, Problems(result.Result!)["contactEmail"]);
     }
 
     [Fact]
@@ -731,5 +858,158 @@ public class IntakeBookingsControllerTests
         var roles = typeof(IntakeBookingsController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()!.Roles;
 
         Assert.Equal("Admin,Coordinator,SuperAdmin", roles);
+    }
+
+    // ── Staff busy (spec 2026-10-16, D4): a 409 naming the shift or visit, keyed staffUserId ──
+
+    private static readonly DateOnly Oct16 = new(2026, 10, 16);
+
+    private static void AssertBusy(IActionResult? result, string sentence)
+    {
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        var problem = Assert.IsType<ValidationProblemDetails>(conflict.Value);
+        Assert.Equal([sentence], problem.Errors["staffUserId"]);
+        Assert.Equal("intake-staff-busy", problem.Extensions["code"]);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.Status);
+    }
+
+    [Fact]
+    public async Task A_shift_that_overlaps_the_visit_is_a_409_naming_it_and_nothing_is_saved_or_sent()
+    {
+        var f = new Fixture();
+        f.Shift(Oct16, new TimeOnly(9, 0), new TimeOnly(10, 30));
+
+        AssertBusy((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result, "Sam Lee is on a shift 9:00 – 10:30 am on Fri 16 Oct.");
+
+        Assert.Null(f.Row().IntakeStartsAt);
+        Assert.Empty(f.Channel.Sent);
+        Assert.Empty(f.Outbox());
+    }
+
+    [Theory]
+    [InlineData(8, 0, 10, 0)]
+    [InlineData(11, 30, 14, 0)]
+    public async Task A_shift_that_ends_as_the_visit_starts_or_starts_as_it_ends_is_back_to_back_and_free(int fromH, int fromM, int toH, int toM)
+    {
+        var f = new Fixture();
+        f.Shift(Oct16, new TimeOnly(fromH, fromM), new TimeOnly(toH, toM));
+
+        await f.BookAsync();
+
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task An_overnight_shift_from_the_night_before_that_runs_into_the_visit_refuses_it()
+    {
+        var f = new Fixture();
+        f.Shift(new DateOnly(2026, 10, 15), new TimeOnly(22, 0), new TimeOnly(10, 30), nextDay: true);
+
+        AssertBusy((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result, "Sam Lee is on a shift 10:00 pm – 10:30 am on Thu 15 Oct.");
+    }
+
+    [Fact]
+    public async Task A_cancelled_shift_or_someone_elses_shift_does_not_refuse_it()
+    {
+        var f = new Fixture();
+        f.Shift(Oct16, new TimeOnly(9, 0), new TimeOnly(12, 0), status: ShiftStatus.Cancelled);
+        f.Shift(Oct16, new TimeOnly(9, 0), new TimeOnly(12, 0), userId: f.Dana.Id);
+
+        await f.BookAsync();
+
+        Assert.Equal(f.Sam.Id, f.Row().IntakeStaffUserId);
+    }
+
+    [Fact]
+    public async Task Another_enquirys_visit_for_the_same_person_refuses_it_but_back_to_back_is_free()
+    {
+        var f = new Fixture();
+        var ivy = new ParticipantInquiry
+        {
+            Id = Guid.NewGuid(), TenantId = f.TenantId, FirstName = "Ivy", LastName = "Tran", Source = "Phone", Email = "ivy@example.com",
+            IntakeStartsAt = Start.AddMinutes(60), IntakeDurationMinutes = 90, IntakeLocation = "Home", IntakeStaffUserId = f.Sam.Id, IntakeUid = $"{Guid.NewGuid():N}@odip",
+        };
+        f.Db.ParticipantInquiries.Add(ivy);
+        f.Db.SaveChanges();
+
+        AssertBusy((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result, "Sam Lee has another intake visit 11:00 am – 12:30 pm on Fri 16 Oct.");
+
+        ivy.IntakeStartsAt = Start.AddMinutes(90);
+        f.Db.SaveChanges();
+        await f.BookAsync();
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task Rescheduling_a_visit_over_its_own_old_time_is_not_a_clash()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+
+        var moved = await f.BookAsync(f.Body() with { StartsAt = Start.AddMinutes(30) });
+
+        Assert.Equal(Start.AddMinutes(30), moved.IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task A_notes_or_place_change_is_not_checked_so_it_saves_after_a_shift_is_rostered_over_the_visit()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        f.Shift(Oct16, new TimeOnly(9, 0), new TimeOnly(12, 0));
+
+        Assert.Equal("Gate code", (await f.BookAsync(f.Body() with { Notes = "Gate code" })).IntakeNotes);
+        Assert.Single(f.Channel.Sent);
+        Assert.Equal("Library", (await f.BookAsync(f.Body() with { Notes = "Gate code", Location = "Library" })).IntakeLocation);
+        Assert.Equal(2, f.Channel.Sent.Count);
+    }
+
+    [Fact]
+    public async Task Changing_who_goes_to_someone_busy_is_refused_and_the_booking_stands()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        f.Shift(Oct16, new TimeOnly(10, 0), new TimeOnly(11, 0), userId: f.Dana.Id);
+
+        AssertBusy((await f.Controller().Set(f.Noah.Id, f.Body(f.Dana.Id), CancellationToken.None)).Result, "Dana Smith is on a shift 10:00 – 11:00 am on Fri 16 Oct.");
+
+        Assert.Equal(f.Sam.Id, f.Row().IntakeStaffUserId);
+    }
+
+    [Theory]
+    [InlineData(-90, false)] // ends exactly as this one starts: back to back, free
+    [InlineData(-89, true)]  // ends a minute into this one: a clash
+    public async Task Another_visit_ending_as_this_one_starts_is_free_but_a_minute_later_is_a_clash(int startOffset, bool clash)
+    {
+        // Deep review N1: the earlier side of back to back for another visit (a mutant turning End > start into >= survived).
+        var f = new Fixture();
+        f.Db.ParticipantInquiries.Add(new ParticipantInquiry
+        {
+            Id = Guid.NewGuid(), TenantId = f.TenantId, FirstName = "Ivy", LastName = "Tran", Source = "Phone", Email = "ivy@example.com",
+            IntakeStartsAt = Start.AddMinutes(startOffset), IntakeDurationMinutes = 90, IntakeLocation = "Home", IntakeStaffUserId = f.Sam.Id, IntakeUid = $"{Guid.NewGuid():N}@odip",
+        });
+        f.Db.SaveChanges();
+
+        var result = (await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result;
+
+        if (clash) AssertBusy(result, "Sam Lee has another intake visit 8:31 – 10:01 am on Fri 16 Oct.");
+        else Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task A_shift_in_another_organisation_for_the_same_user_id_does_not_make_them_busy()
+    {
+        // Deep review N2: the shift query keeps to the enquiry's organisation (IgnoreQueryFilters drops the filter; a mutant without the clause survived).
+        var f = new Fixture();
+        f.Db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), ParticipantId = Guid.NewGuid(), UserId = f.Sam.Id, ServiceDate = Oct16,
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), Status = ShiftStatus.Published,
+        });
+        f.Db.SaveChanges();
+
+        await f.BookAsync();
+
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
     }
 }

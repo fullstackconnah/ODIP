@@ -28,6 +28,7 @@ public class OdipDbContext : DbContext
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Participant> Participants => Set<Participant>();
     public DbSet<ParticipantInquiry> ParticipantInquiries => Set<ParticipantInquiry>();
+    public DbSet<InquiryContact> InquiryContacts => Set<InquiryContact>();
     public DbSet<ParticipantOnboarding> ParticipantOnboardings => Set<ParticipantOnboarding>();
     public DbSet<ParticipantIntakeSnapshot> ParticipantIntakeSnapshots => Set<ParticipantIntakeSnapshot>();
     public DbSet<ServiceAgreementDraft> ServiceAgreementDrafts => Set<ServiceAgreementDraft>();
@@ -103,6 +104,7 @@ public class OdipDbContext : DbContext
     // Rostering (M4)
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
+    public DbSet<RosterWeek> RosterWeeks => Set<RosterWeek>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
 
@@ -1076,6 +1078,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.OverrideReason).HasMaxLength(2000);
             entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+            entity.Property(e => e.RegularAwayReason).HasMaxLength(200);
             // What the pattern the shift was generated from asked of a worker (plan builder, phase D). Deliberately no unique index on a shift: the demo pack places its shifts by a
             // deterministic id, and a natural key here would wedge it. Generation is made safe by an advisory lock (RosterShiftGenerator), not by a key.
             entity.Property(e => e.RequirementsJson).HasColumnType("jsonb");
@@ -1094,6 +1097,9 @@ public class OdipDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // SetNull: losing the user only loses the flag's name, never the shift (as ShiftPattern.DefaultUser).
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.RegularUserId).OnDelete(DeleteBehavior.SetNull);
 
             // Board queries filter by day/week; the roster-check helper filters by staff+week.
             entity.HasIndex(e => new { e.TenantId, e.ServiceDate });
@@ -1132,6 +1138,14 @@ public class OdipDbContext : DbContext
             entity.HasOne<ServiceAgreementDraft>().WithMany().HasForeignKey(e => e.SourceDraftId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.SourceDraftId);
             entity.HasIndex(e => new { e.SourceDraftId, e.SourceBlockKey, e.DayOfWeek, e.WorkerSlot }).IsUnique().HasFilter("\"SourceDraftId\" IS NOT NULL").HasDatabaseName("IX_ShiftPatterns_SourceDraft_Block_Day_Slot");
+        });
+
+        // ── RosterWeek (Start rostering, 2026-10-16) ─────────────
+        modelBuilder.Entity<RosterWeek>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.TenantId, e.WeekStart }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.StartedByUserId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── StaffParticipantCompatibility ────────────────────────
@@ -1562,9 +1576,18 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100);
             entity.Property(e => e.Phone).HasMaxLength(50);
             entity.Property(e => e.Email).HasMaxLength(200);
+            // The main contact and the participant details: the Person and Participant lengths, so Start intake never truncates.
+            entity.Property(e => e.ContactFirstName).HasMaxLength(100);
+            entity.Property(e => e.ContactLastName).HasMaxLength(100);
+            entity.Property(e => e.ContactRelationship).HasMaxLength(100);
+            entity.Property(e => e.NdisNumber).HasMaxLength(20);
+            entity.Property(e => e.AddressStreet).HasMaxLength(200);
+            entity.Property(e => e.AddressSuburb).HasMaxLength(100);
+            entity.Property(e => e.AddressState).HasMaxLength(10);
+            entity.Property(e => e.AddressPostcode).HasMaxLength(4);
             entity.Property(e => e.Source).HasMaxLength(20).IsRequired();
             entity.Property(e => e.Provenance).HasMaxLength(2000);
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
@@ -1578,11 +1601,32 @@ public class OdipDbContext : DbContext
             // each other cannot interleave into a booked row with no UID; the loser gets a 409 or drops its write.
             entity.Property(e => e.IntakeIcsSequence).IsConcurrencyToken();
             entity.Property(e => e.IntakeUid).IsConcurrencyToken();
+            // The enquiry's version (deep review S1/S2): every write bumps it, so an edit from a form loaded before another save, or a contacts save racing
+            // Start intake, matches no row and gets a 409. The entity keeps it in whole microseconds, as PostgreSQL stores it.
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+            // Closed: Close and Reopen bump UpdatedAt too, so a write that loaded the enquiry before a close gets the same 409.
+            entity.Property(e => e.CloseNote).HasMaxLength(500);
+            // SetNull: whoever closed an enquiry never blocks deleting their user; the audit trail keeps who it was.
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.ClosedByUserId).OnDelete(DeleteBehavior.SetNull);
             // Restrict: a staff member booked for a visit is never deleted out from under it (ImportUntouched.StaffBlockersAsync lists it).
             entity.HasOne(e => e.IntakeStaffUser).WithMany().HasForeignKey(e => e.IntakeStaffUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.IntakeBookedByUser).WithMany().HasForeignKey(e => e.IntakeBookedByUserId).OnDelete(DeleteBehavior.Restrict);
             // The schedule views read visits by organisation and start.
             entity.HasIndex(e => new { e.TenantId, e.IntakeStartsAt });
+        });
+        // Pending contacts on an enquiry (spec 2026-10-16, D3). The lengths are Person's and ParticipantContactRole's, so the move at Start intake never truncates.
+        modelBuilder.Entity<InquiryContact>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Email).HasMaxLength(200);
+            entity.Property(e => e.Relationship).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            // Cascade: pending contacts live and die with their enquiry (owner decision 5).
+            entity.HasOne<ParticipantInquiry>().WithMany().HasForeignKey(e => e.InquiryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.InquiryId });
         });
         modelBuilder.Entity<ParticipantOnboarding>(entity =>
         {
@@ -1779,6 +1823,10 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Organisation).HasMaxLength(150).IsRequired();
             // 254 is the longest valid email address (RFC 5321 path limit minus the angle brackets).
             entity.Property(e => e.Email).HasMaxLength(254).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Role).HasMaxLength(100);
+            entity.Property(e => e.OrganisationSize).HasMaxLength(16);
+            entity.Property(e => e.Message).HasMaxLength(1000);
             // Concurrency token: two simultaneous repeat submissions from one address must both be
             // counted. The loser's UPDATE matches no row, EF throws DbUpdateConcurrencyException and
             // EarlyAccessService retries against the fresh count instead of losing an increment.
@@ -1851,6 +1899,8 @@ public class OdipDbContext : DbContext
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantInquiry>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<InquiryContact>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantOnboarding>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
@@ -1942,6 +1992,9 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftPattern>()
             .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<RosterWeek>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<StaffParticipantCompatibility>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

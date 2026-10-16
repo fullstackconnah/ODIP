@@ -22,10 +22,10 @@ export default function AccessibilityPage({ info = PLATFORM_INFO }: { info?: Pla
   return (
     <PublicPage>
       <h1 className="text-xl font-bold">Accessibility</h1>
-      <p className="mt-4">Odip should work for everyone who uses it, including people who use a screen reader, a keyboard, voice control, magnification or a touch screen.</p>
+      <p className="mt-4">Bunya Support should work for everyone who uses it, including people who use a screen reader, a keyboard, voice control, magnification or a touch screen.</p>
 
       <h2 className={H2}>Our target</h2>
-      <p className="mt-3">We aim to meet the Web Content Accessibility Guidelines (WCAG) 2.2 at level AA. That's our target, not a claim: Odip hasn't been independently audited yet, so we can't say it meets every requirement.</p>
+      <p className="mt-3">We aim to meet the Web Content Accessibility Guidelines (WCAG) 2.2 at level AA. That's our target, not a claim: Bunya Support hasn't been independently audited yet, so we can't say it meets every requirement.</p>
 
       <h2 className={H2}>What we do</h2>
       <ul className={LIST}>
@@ -41,15 +41,15 @@ export default function AccessibilityPage({ info = PLATFORM_INFO }: { info?: Pla
       <h2 className={H2}>What we know isn't right yet</h2>
       <ul className={LIST}>
         <li>The page that resets your password is run by Google (Firebase), not by us, so we can't change how it works.</li>
-        <li>We haven't yet tested the PDF documents Odip creates, such as invoices and service agreements, with screen readers. They may be hard to read with one.</li>
+        <li>We haven't yet tested the PDF documents Bunya Support creates, such as invoices and service agreements, with screen readers. They may be hard to read with one.</li>
       </ul>
 
       <h2 className={H2}>Tell us about a problem</h2>
-      <p className="mt-3">If part of Odip is hard or impossible for you to use, please tell us. Say which page you were on, what you were trying to do and what happened. If you can, include the build number from the bottom of the page.</p>
+      <p className="mt-3">If part of Bunya Support is hard or impossible for you to use, please tell us. Say which page you were on, what you were trying to do and what happened. If you can, include the build number from the bottom of the page.</p>
       {supportEmail ? (
         <p className="mt-3">Email us at <a href={`mailto:${supportEmail}`} className={LINK}>{supportEmail}</a>.</p>
       ) : (
-        <p className="mt-3">Tell the person who manages Odip at your organisation, usually your administrator, and they'll pass it on to us.</p>
+        <p className="mt-3">Tell the person who manages Bunya Support at your organisation, usually your administrator, and they'll pass it on to us.</p>
       )}
       <p className="mt-3">If a provider sent you a link to a form, you can also tell the person who sent it.</p>
       <p className="mt-3">We'll let you know what we're going to do about it.</p>

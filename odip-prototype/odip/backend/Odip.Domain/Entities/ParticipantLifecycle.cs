@@ -1,3 +1,4 @@
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 
 namespace Odip.Domain.Entities;
@@ -10,14 +11,38 @@ public class ParticipantInquiry : ITenantEntity
     public Tenant? Tenant { get; set; }
     public Guid? ParticipantId { get; set; }
     public Participant? Participant { get; set; }
+    // The PARTICIPANT's name (spec 2026-10-16 redesign, owner decision 1). Only the first name is required; a blank last name is stored as null (L1).
     public string FirstName { get; set; } = string.Empty;
-    public string LastName { get; set; } = string.Empty;
+    public string? LastName { get; set; }
+    // The MAIN CONTACT's phone and email (owner decision 2), or the participant's own when ContactIsParticipant.
     public string? Phone { get; set; }
     public string? Email { get; set; }
+    // The main contact (L4): who the coordinator is talking to. Start intake makes them the participant's first contact.
+    public string? ContactFirstName { get; set; }
+    public string? ContactLastName { get; set; }
+    public string? ContactRelationship { get; set; }
+    public ContactRoleType? ContactRole { get; set; }
+    public bool ContactIsParticipant { get; set; }
+    // Optional participant details (owner decision 3), copied onto the Participant at Start intake.
+    public DateOnly? DateOfBirth { get; set; }
+    public string? NdisNumber { get; set; } // 9 digits, stored without spaces
+    public string? AddressStreet { get; set; }
+    public string? AddressSuburb { get; set; }
+    public string? AddressState { get; set; }
+    public string? AddressPostcode { get; set; }
+    public PlanType? PlanType { get; set; }
+    public DateOnly? PlanStartDate { get; set; }
+    public DateOnly? PlanEndDate { get; set; }
     public string Source { get; set; } = "Phone";
     public string? Provenance { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>
+    /// The enquiry's version as well as its last change: a concurrency token (OdipDbContext). Held in whole microseconds, as PostgreSQL stores it, so the
+    /// value an answer carries, sent back by the form, still matches the stored one.
+    /// </summary>
+    public DateTime UpdatedAt { get => _updatedAt; set => _updatedAt = Micro(value); }
+    private DateTime _updatedAt = Micro(DateTime.UtcNow);
+    private static DateTime Micro(DateTime value) => new(value.Ticks - value.Ticks % 10, value.Kind);
     // The intake visit booked for this enquiry (owner decisions 2026-10-14): one current booking, every column empty when there is none.
     // IntakeStartsAt is a UTC instant; the visit is entered and shown in the provider's zone. IntakeInviteSentAt is when an invite last went out
     // for this UID; IntakeInviteError is the latest send's failure ("NotConfigured", "Failed"), cleared by a send that works. IntakeUid and
@@ -36,6 +61,26 @@ public class ParticipantInquiry : ITenantEntity
     public DateTime? IntakeConfirmedAt { get; set; }
     public int IntakeIcsSequence { get; set; }
     public string? IntakeUid { get; set; }
+    // Closed (spec addendum E1): when, by whom, why and an optional note; all null while open. Reopen clears them; the audit trail keeps the history.
+    public DateTime? ClosedAt { get; set; }
+    public Guid? ClosedByUserId { get; set; }
+    public InquiryCloseOutcome? CloseOutcome { get; set; }
+    public string? CloseNote { get; set; }
+
+    /// <summary>"First Last", or whichever is given: never a double or trailing space. Null when both are blank.</summary>
+    public static string? JoinName(string? first, string? last) =>
+        string.Join(" ", new[] { first, last }.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!.Trim())) is { Length: > 0 } n ? n : null;
+    public string FullName => JoinName(FirstName, LastName) ?? string.Empty;
+    public string? ContactFullName => ContactIsParticipant ? null : JoinName(ContactFirstName, ContactLastName);
+    /// <summary>Start intake's address gate (owner decision 4).</summary>
+    public bool HasFullAddress => new[] { AddressStreet, AddressSuburb, AddressState, AddressPostcode }.All(v => !string.IsNullOrWhiteSpace(v));
+    /// <summary>Anything typed for a main contact who isn't the participant: Convert makes them a contact.</summary>
+    public bool HasMainContact => !ContactIsParticipant && (ContactRole is not null
+        || new[] { ContactFirstName, ContactLastName, ContactRelationship, Phone, Email }.Any(v => !string.IsNullOrWhiteSpace(v)));
+    /// <summary>Start intake's second gate (lead decision D1): a Person needs both names.</summary>
+    public bool ContactNeedsName => HasMainContact && (string.IsNullOrWhiteSpace(ContactFirstName) || string.IsNullOrWhiteSpace(ContactLastName));
+    /// <summary>Who the invite greets: the participant when self-managing, else the contact's first name; null when unnamed.</summary>
+    public string? InviteeFirstName => ContactIsParticipant ? FirstName : (string.IsNullOrWhiteSpace(ContactFirstName) ? null : ContactFirstName.Trim());
 
     /// <summary>Cancels the booking: every intake column back to empty. The next booking gets a new UID and starts at SEQUENCE 0.</summary>
     public void ClearIntakeBooking()
@@ -43,6 +88,27 @@ public class ParticipantInquiry : ITenantEntity
         IntakeStartsAt = null; IntakeDurationMinutes = null; IntakeLocation = null; IntakeStaffUserId = null; IntakeBookedByUserId = null; IntakeNotes = null;
         IntakeInviteSentAt = null; IntakeInviteError = null; IntakeConfirmedAt = null; IntakeIcsSequence = 0; IntakeUid = null;
     }
+}
+
+/// <summary>
+/// A contact noted on an enquiry before any participant exists (spec 2026-10-16, D3): family, guardians and others to keep in touch with. Only
+/// GET /inquiries/{id} reads it, for the roles that edit enquiries. Start intake (Convert) moves it onto the participant as a Person and a contact role,
+/// and deletes it; deleting the enquiry deletes it (cascade). Any role but PlanManager, which needs a plan type an enquiry hasn't got.
+/// </summary>
+public class InquiryContact : ITenantEntity
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid InquiryId { get; set; }
+    public int SortOrder { get; set; }
+    public ContactRoleType Role { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? Relationship { get; set; }
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>Server-owned onboarding evidence. Readiness is derived, never supplied by a UI checkbox.</summary>

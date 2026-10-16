@@ -113,9 +113,10 @@ public class PortalController : ControllerBase
         // ValidateRefsAsync gates that at creation) — this filter is defence in depth for the
         // edge case of a participant later flipped back to draft mid-edit while an old shift
         // still references them, so the portal never shows it.
+        // L1 (2026-10-16): a Draft is invisible to its worker until it is published.
         var shifts = await _db.Shifts
             .Include(s => s.Participant)
-            .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
+            .Where(s => s.UserId == staffId.Value && s.Status != ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
             .ToListAsync(ct);
         var shiftDtos = shifts.Where(s => Participant.ServicesBegun(s.Participant!)).Select(ToSummaryDto).ToList();
@@ -278,7 +279,8 @@ public class PortalController : ControllerBase
 
         var shift = await _db.Shifts
             .Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+            // L1 (2026-10-16): a Draft is invisible to its worker until it is published, on every path, and answers as "not yours" does.
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);
         if (shift?.Participant is null || !Participant.ServicesBegun(shift.Participant))
             return (null, NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found.")));
 
@@ -436,10 +438,6 @@ public class PortalController : ControllerBase
         if (shift.Status == ShiftStatus.Cancelled)
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                 "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled));
-
-        if (shift.Status == ShiftStatus.Draft)
-            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
-                "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
 
         // A shift note is required - or, since the shift package, an explicit "nothing to note" confirmation.
         var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
@@ -652,7 +650,7 @@ public class PortalController : ControllerBase
             return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
 
         var shift = await _db.Shifts.Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
         if (shift?.Participant is null || !Participant.ServicesBegun(shift.Participant))
             return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
 
@@ -999,7 +997,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
 
-        var ownsShift = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        var ownsShift = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
         if (!ownsShift)
             return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
 
@@ -1022,7 +1020,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 
-        var owns = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
+        var owns = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
         if (!owns)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 
@@ -1061,7 +1059,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
-        var note = await _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId.Value, ct);
+        var note = await FindOwnNoteAsync(noteId, staffId.Value, ct);
         if (note is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
@@ -1092,6 +1090,10 @@ public class PortalController : ControllerBase
         return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId)));
     }
 
+    /// <summary>The caller's own note, unless its shift is a Draft: a Draft is invisible to the worker (L1), so an open edit of an older note stops there too. Missing, not-yours and Draft are one 404.</summary>
+    private Task<ShiftNote?> FindOwnNoteAsync(Guid noteId, Guid staffId, CancellationToken ct) =>
+        _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId && _db.Shifts.Any(s => s.Id == n.ShiftId && s.Status != ShiftStatus.Draft), ct);
+
     /// <summary>
     /// NOTES-02: dismisses the "consider filing an incident report?" prompt for one of the
     /// caller's own flagged notes. Persisted server-side (see <see cref="ShiftNote.FlagsAcknowledgedAt"/>
@@ -1107,7 +1109,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
-        var note = await _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId.Value, ct);
+        var note = await FindOwnNoteAsync(noteId, staffId.Value, ct);
         if (note is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 

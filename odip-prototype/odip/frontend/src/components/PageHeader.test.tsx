@@ -10,15 +10,15 @@ describe('PageHeader — per-route document title (I-4)', () => {
 
   it('sets document.title from its title prop, so tab switching and the back button work per-route', () => {
     render(<PageHeader title="Incident Reports" />)
-    expect(document.title).toBe('Incident Reports — Odip')
+    expect(document.title).toBe('Bunya Support · Incident Reports')
   })
 
   it('updates document.title when a different page renders with a different title', () => {
     const { rerender } = render(<PageHeader title="Trips" />)
-    expect(document.title).toBe('Trips — Odip')
+    expect(document.title).toBe('Bunya Support · Trips')
 
     rerender(<PageHeader title="Participants" />)
-    expect(document.title).toBe('Participants — Odip')
+    expect(document.title).toBe('Bunya Support · Participants')
   })
 })
 
@@ -262,7 +262,7 @@ describe('PageHeader — variant="detail"', () => {
 
   it('still sets document.title from its title prop', () => {
     renderDetail()
-    expect(document.title).toBe('Sunshine Coast Beach Escape — Odip')
+    expect(document.title).toBe('Bunya Support · Sunshine Coast Beach Escape')
   })
 
   it('still renders the filter row after the meta row', () => {
@@ -314,17 +314,17 @@ describe('PageHeader — titleNote and documentTitle', () => {
 
   it('names the tab by documentTitle when the h1 says something else, and keeps it steady while the h1 changes', () => {
     const { rerender } = render(<PageHeader variant="detail" title="Good morning, Sarah" documentTitle="Management Dashboard" />)
-    expect(document.title).toBe('Management Dashboard — Odip')
+    expect(document.title).toBe('Bunya Support · Management Dashboard')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Good morning, Sarah')
 
     rerender(<PageHeader variant="detail" title="Good afternoon, Sarah" documentTitle="Management Dashboard" />)
-    expect(document.title).toBe('Management Dashboard — Odip')
+    expect(document.title).toBe('Bunya Support · Management Dashboard')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Good afternoon, Sarah')
   })
 
   it('falls back to the title for the tab when documentTitle is not given', () => {
     render(<PageHeader title="Incident Reports" />)
-    expect(document.title).toBe('Incident Reports — Odip')
+    expect(document.title).toBe('Bunya Support · Incident Reports')
   })
 })
 

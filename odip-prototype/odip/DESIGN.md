@@ -228,6 +228,14 @@ may read as a warning unless it genuinely is one.
 - Fine pointer: compact (32px controls). Coarse pointer: 44px targets, row actions always visible
 - Text floor of 12px; 13px for secondary and label text; 14px for data
 
+### Brand
+
+The user-facing name is **Bunya Support** (owner, 2026-10-16); ODIP stays the name of the code and this system.
+- **Wordmark:** `components/Wordmark.tsx` (`size`, `tone`), the only way to set the name as a mark: "bunya" 500 in ink, "support" 800 in `--color-primary` (lime on dark), then a `--color-primary-fixed` dot. Lowercase, Plus Jakarta Sans, -0.04em. It sits in the sidebar's 48px brand row and the public pages' bar (21px), and above sign-in (32px).
+- **Icon:** a lime (`--color-primary-fixed`) mark on a `--color-primary` tile. At 16 and 32px it is "b" alone (`public/favicon.svg`); the "b" is drawn larger than the board's (about 65% of the tile height against 50%) on purpose, so it stays legible at 16px. At 48px and up it is "bs" with a white dot (`public/apple-touch-icon.png`, 180px, full-bleed because iOS rounds it itself).
+- **Email:** the wordmark as a PNG on a #0f2000 header band (`Notifications/Templates/email-wordmark.png`, sent inline by Content-ID from `EmailLayout.cs`; mail clients load no web fonts and invert text in dark mode, but not images), alt "Bunya Support"; sender name "Bunya Support".
+- **Tab title:** `Bunya Support · <page>` (`hooks/useDocumentTitle.ts`).
+
 ## Colors
 
 A single olive-green accent family on a warm neutral base, with slate and rose reserved strictly

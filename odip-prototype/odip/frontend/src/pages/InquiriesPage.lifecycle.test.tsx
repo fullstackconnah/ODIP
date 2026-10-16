@@ -15,6 +15,8 @@ vi.mock('@/api/hooks', () => ({
   useSetIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useResendIntakeInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useStaff: () => ({ data: [], isLoading: false }),
+  useCloseInquiry: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useReopenInquiry: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useParticipantInquiries: mocks.inquiries,
   useCreateParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateParticipantInquiry: () => ({ mutate: vi.fn(), isPending: false }),
@@ -24,7 +26,7 @@ vi.mock('@/api/hooks', () => ({
 const apiError = (message: string) => ({ response: { data: { success: false, errors: [message] } } })
 
 const row = (overrides: Record<string, unknown> = {}) => ({
-  id: 'inquiry-1', firstName: 'Ava', lastName: 'Ng', phone: '0400000000', email: null, source: 'Phone', provenance: null, createdAt: '2026-09-01',
+  id: 'inquiry-1', firstName: 'Ava', lastName: 'Ng', phone: '0400000000', email: null, source: 'Phone', provenance: null, createdAt: '2026-09-01', hasAddress: true,
   participantId: 'p-1', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null,
   ...overrides,
 })
@@ -95,12 +97,12 @@ describe('InquiriesPage — open enquiries only', () => {
     expect(within(screen.getByRole('table')).queryByText(/intake complete/i)).not.toBeInTheDocument()
   })
 
-  it('has no status filter chips: the tab is the filter', () => {
+  it('has no stage filter chips (the tab is the stage filter): its one filter is Open | Closed (spec addendum E4)', () => {
     mocks.inquiries.mockReturnValue({ data: [row(), row({ id: 'b', ...NO_PARTICIPANT })], isLoading: false })
     renderPage()
 
-    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
-    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.getByRole('radiogroup')).toHaveAccessibleName('Show open or closed enquiries')
+    expect(screen.getAllByRole('radio').map(r => r.textContent)).toEqual(['Open', 'Closed'])
     expect(screen.getByRole('textbox', { name: /search enquiries/i })).toBeInTheDocument()
   })
 

@@ -58,7 +58,7 @@ public class ExportTablesTests
         Assert.Empty(exported.Intersect(leftOut));
         Assert.Empty(exported.Concat(leftOut).Except(model));
         Assert.Equal(exported.Count, exported.Distinct().Count());
-        Assert.Equal((71, 9), (exported.Count, leftOut.Count));
+        Assert.Equal((73, 9), (exported.Count, leftOut.Count));
     }
 
     [Fact]

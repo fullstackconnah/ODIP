@@ -14,6 +14,8 @@ export type ParticipantRowProps = {
   onOpen: (shift: ShiftDto) => void
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
+  /** Make or Stop the regular, from the chip menu (2026-10-16): on a pattern shift with a worker, for writers. Threaded like onUnassign. */
+  onSetRegular?: (shift: ShiftDto) => void
   onDelete: (shift: ShiftDto) => void
   onAddShift: (participantId: string, participantName: string, day: string) => void
   /** True when the whole board has zero shifts this week — every row would show the same "N days uncovered" badge, which is tautological noise the hint above the grid already covers, so suppress it here rather than repeat it once per row. */
@@ -30,7 +32,7 @@ export type ParticipantRowProps = {
  * live inline on the day they fall on, rendered dashed by RosterDayCell/ShiftChip — there is no
  * separate Unfilled lane here, that stays a staff-view concept.
  */
-export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift, hideCoverageBadge, draggable, pendingAgreement }: ParticipantRowProps) {
+export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onSetRegular, onDelete, onAddShift, hideCoverageBadge, draggable, pendingAgreement }: ParticipantRowProps) {
   const visibleTripBars = row.tripBars.filter(t => barOverlapsWeek(t.startDate, t.endDate, days))
   const covered = row.daysWithoutCover === 0
   const ratioLabel = RATIO_LABELS[row.supportRatio] ?? row.supportRatio
@@ -145,6 +147,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
             onOpen={onOpen}
             onAssignTo={onAssignTo}
             onUnassign={onUnassign}
+            onSetRegular={onSetRegular}
             onDelete={onDelete}
           />
         ))}

@@ -250,6 +250,10 @@ public class EarlyAccessControllerTests
     [InlineData("name")]
     [InlineData("organisation")]
     [InlineData("email")]
+    [InlineData("organisationSize")]
+    [InlineData("role")]
+    [InlineData("phone")]
+    [InlineData("message")]
     public async Task EachInvalidField_IsNamedOnItsOwn(string field)
     {
         using var db = CreateDb();
@@ -258,7 +262,12 @@ public class EarlyAccessControllerTests
         {
             case "name": dto.Name = ""; break;
             case "organisation": dto.Organisation = "   "; break;
-            default: dto.Email = "jane@"; break;
+            case "email": dto.Email = "jane@"; break;
+            case "organisationSize": dto.OrganisationSize = "huge"; break;
+            case "role": dto.Role = new string('r', 101); break;
+            case "phone": dto.Phone = "0491#570"; break;
+            case "message": dto.Message = new string('m', 1001); break;
+            default: throw new ArgumentOutOfRangeException(nameof(field));
         }
 
         var problem = AssertValidationProblem(await MakeController(db).Submit(dto, CancellationToken.None));
@@ -276,6 +285,109 @@ public class EarlyAccessControllerTests
 
         Assert.Equal(3, problem.Errors.Count);
         Assert.Empty(db.EarlyAccessRequests);
+    }
+
+    // ── The alpha fields (landing PR 1) ────────────────────────
+
+    [Fact]
+    public async Task FirstSubmission_StoresTheFourExtraFields_Cleaned()
+    {
+        using var db = CreateDb();
+        var dto = Valid();
+        dto.Role = " Ops lead ";
+        dto.Phone = " 0491 570 156 ";
+        dto.OrganisationSize = "50-199";
+        dto.Message = "Rostering\r\nand leave";
+
+        AssertReceived(await MakeController(db).Submit(dto, CancellationToken.None));
+
+        var row = await db.EarlyAccessRequests.SingleAsync();
+        Assert.Equal("Ops lead", row.Role);
+        Assert.Equal("0491 570 156", row.Phone);
+        Assert.Equal("50-199", row.OrganisationSize);
+        Assert.Equal("Rostering\nand leave", row.Message);
+    }
+
+    // Expand phase (D11): the live /welcome form sends none of the alpha fields and must keep working.
+    [Fact]
+    public async Task ARequestWithoutTheAlphaFields_IsStillAccepted_AndStoresThemAsNull()
+    {
+        using var db = CreateDb();
+
+        AssertReceived(await MakeController(db).Submit(
+            new EarlyAccessRequestDto { Name = "Jane Citizen", Organisation = "Sample Support Co", Email = "jane@example.com", Website = "" },
+            CancellationToken.None));
+
+        var row = await db.EarlyAccessRequests.SingleAsync();
+        Assert.Null(row.OrganisationSize);
+        Assert.Null(row.Role);
+        Assert.Null(row.Phone);
+        Assert.Null(row.Message);
+    }
+
+    [Fact]
+    public async Task ARepeat_ReplacesTheFourExtraFields_ClearingBlankOnes_AndKeepsNameAndOrganisation()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using (var db = CreateDb(dbName))
+        {
+            var first = Valid();
+            first.Role = "Ops";
+            first.Phone = "0491 570 156";
+            first.OrganisationSize = "10-49";
+            first.Message = "Rostering";
+            AssertReceived(await MakeController(db).Submit(first, CancellationToken.None));
+        }
+
+        using (var db = CreateDb(dbName))
+        {
+            var repeat = Valid("JANE@Example.com");
+            repeat.Name = "Someone Else";
+            repeat.Role = null;
+            repeat.Phone = "";
+            repeat.OrganisationSize = "50-199";
+            repeat.Message = "Please remove my details";
+            AssertReceived(await MakeController(db).Submit(repeat, CancellationToken.None));
+        }
+
+        using (var db = CreateDb(dbName))
+        {
+            var row = await db.EarlyAccessRequests.SingleAsync();
+            Assert.Equal(2, row.RequestCount);
+            Assert.Null(row.Role);
+            Assert.Null(row.Phone);
+            Assert.Equal("50-199", row.OrganisationSize);
+            Assert.Equal("Please remove my details", row.Message);
+            Assert.Equal("Jane Citizen", row.Name);
+            Assert.Equal("Sample Support Co", row.Organisation);
+        }
+    }
+
+    [Fact]
+    public async Task ARepeatWithAnInvalidExtraField_ChangesNothing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using (var db = CreateDb(dbName))
+        {
+            var first = Valid();
+            first.Phone = "0491 570 156";
+            AssertReceived(await MakeController(db).Submit(first, CancellationToken.None));
+        }
+
+        using (var db = CreateDb(dbName))
+        {
+            var repeat = Valid();
+            repeat.Phone = "call me";
+            var problem = AssertValidationProblem(await MakeController(db).Submit(repeat, CancellationToken.None));
+            Assert.Equal("phone", Assert.Single(problem.Errors.Keys));
+        }
+
+        using (var db = CreateDb(dbName))
+        {
+            var row = await db.EarlyAccessRequests.SingleAsync();
+            Assert.Equal(1, row.RequestCount);
+            Assert.Equal("0491 570 156", row.Phone);
+        }
     }
 
     [Fact]
@@ -488,7 +600,7 @@ public class EarlyAccessControllerTests
     }
 
     [Fact]
-    public void SubmitAction_IsPostOnly_JsonOnly_LimitedTo4KB_AndUnderTheEarlyAccessRateLimiter()
+    public void SubmitAction_IsPostOnly_JsonOnly_LimitedTo8KB_AndUnderTheEarlyAccessRateLimiter()
     {
         var action = typeof(EarlyAccessController).GetMethod(nameof(EarlyAccessController.Submit))!;
 
@@ -498,8 +610,8 @@ public class EarlyAccessControllerTests
         // RequestSizeLimitAttribute keeps its limit in a private field; read the constructor argument instead.
         var limit = action.CustomAttributes.Single(a => a.AttributeType == typeof(RequestSizeLimitAttribute))
             .ConstructorArguments.Single().Value;
-        Assert.Equal(4096L, Convert.ToInt64(limit));
-        Assert.Equal(4096, EarlyAccessController.MaxBodyBytes);
+        Assert.Equal(8192L, Convert.ToInt64(limit));
+        Assert.Equal(8192, EarlyAccessController.MaxBodyBytes);
     }
 
     [Fact]

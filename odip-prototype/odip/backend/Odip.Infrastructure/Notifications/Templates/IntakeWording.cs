@@ -22,6 +22,10 @@ public static class IntakeWording
 
     public static string Time(DateTime local) => local.ToString("h:mm", Inv) + (local.Hour < 12 ? " am" : " pm");
     public static string ShortDay(DateTime local) => local.ToString("ddd d MMM", Inv);
+
+    /// <summary>"10:00 am – 2:00 pm"; "9:30 – 11:00 am" when both are in the same half of the day (the screens' visitTimes, compact).</summary>
+    public static string Span(DateTime fromLocal, DateTime toLocal) =>
+        (fromLocal.Hour < 12) == (toLocal.Hour < 12) ? $"{fromLocal.ToString("h:mm", Inv)} – {Time(toLocal)}" : $"{Time(fromLocal)} – {Time(toLocal)}";
     public static string LongDay(DateTime local) => local.ToString("dddd d MMMM yyyy", Inv);
     public static string LongDayNoYear(DateTime local) => local.ToString("dddd d MMMM", Inv);
 

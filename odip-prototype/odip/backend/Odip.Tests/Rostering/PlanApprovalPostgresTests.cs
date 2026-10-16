@@ -3,9 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Npgsql;
 using Odip.Api.Controllers;
@@ -17,7 +14,6 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
-using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
@@ -54,8 +50,8 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
 
     private static OdipDbContext Open(string connectionString, Guid tenantId) => PostgresFixture.NewContext(connectionString, TenantOf(tenantId));
 
-    /// <summary>A migrated scratch database with one organisation (a Sydney provider) and one participant of it.</summary>
-    private async Task<(string ConnectionString, Guid TenantId, Guid ParticipantId)> SetUpAsync(bool active = true)
+    /// <summary>A migrated scratch database with one organisation (a Sydney provider) and one participant of it; by default the fixture's nine roster weeks are started (StartedWeekRows).</summary>
+    private async Task<(string ConnectionString, Guid TenantId, Guid ParticipantId)> SetUpAsync(bool active = true, bool weeksStarted = true)
     {
         var connectionString = await _pg.CreateDatabaseAsync();
         await using (var migrate = PostgresFixture.NewContext(connectionString)) await migrate.Database.MigrateAsync();
@@ -64,6 +60,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         {
             var participant = setup.Participants.Add(new Participant { Id = Guid.NewGuid(), FirstName = "Amy", LastName = "Ng", NdisNumber = "43100001234", DateOfBirth = new DateOnly(1990, 1, 2), IsActive = active, IsDraft = !active }).Entity;
             setup.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Provider", State = "NSW", BSB = "062000", AccountNumber = "12345678" });
+            if (weeksStarted) setup.RosterWeeks.AddRange(StartedWeekRows(tenantId));
             await setup.SaveChangesAsync();
             return (connectionString, tenantId, participant.Id);
         }
@@ -214,10 +211,34 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal((draft.Id, 1, "Alex Admin", 5, 0, 40), (approval.DraftId, approval.DraftVersion, approval.ApprovedByName, approval.PatternsCreated, approval.PatternsEnded, approval.ShiftsCreated));
         Assert.Equal(new DateTime(2026, 10, 10, 2, 0, 0), approval.ApprovedAt);
         Assert.Equal(5, await read.ShiftPatterns.CountAsync(p => p.SourceDraftId == draft.Id));
-        Assert.All(await read.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Equal(new DateOnly(2026, 12, 5), p.GeneratedThrough));      // how far shifts were made, in a real date column
+        Assert.All(await read.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Equal(new DateOnly(2026, 12, 6), p.GeneratedThrough));      // how far shifts were made, in a real date column
         Assert.Equal(40, await read.Shifts.CountAsync());
         var again = await ApproveAsync(cs, tenantId, participantId, draft.Id, clock, Coordinator);
         Assert.Equal((ApprovalStatus.AlreadyApproved, "Alex Admin"), (again.Status, again.Approval!.ApprovedByName));
+    }
+
+    [SkippableFact]
+    public async Task AFirstApproval_WaitsForAStartInFlight_AndFillsTheWeekItStarted()   // R6: approval takes the organisation's board lock before the participant's
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync(weeksStarted: false);
+        var draft = await StoreAsync(cs, tenantId, participantId, 1);
+        var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
+
+        await using var holder = Open(cs, tenantId);
+        await using var held = await RosterGenerationLock.AcquireAsync(holder, tenantId, default, scope: "roster-board");   // a Start, still running
+        var approving = ApproveAsync(cs, tenantId, participantId, draft.Id, clock, lockWait: TimeSpan.FromSeconds(10));
+        await Task.Delay(500);
+        Assert.False(approving.IsCompleted);                                                                            // waiting on the board lock
+        holder.RosterWeeks.Add(new RosterWeek { Id = Guid.NewGuid(), TenantId = tenantId, WeekStart = new DateOnly(2026, 10, 19) });
+        await holder.SaveChangesAsync();
+        await held.CommitAsync(default);
+
+        var outcome = await approving;
+
+        Assert.Equal(ApprovalStatus.Approved, outcome.Status);
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(Enumerable.Range(0, 5).Select(i => new DateOnly(2026, 10, 19).AddDays(i)), await read.Shifts.Select(s => s.ServiceDate).OrderBy(d => d).ToListAsync());
     }
 
     [SkippableFact]
@@ -287,7 +308,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task ApprovingTheNextRevision_EndsTheOldPatterns_RemovesTheirUnfilledShiftsFromItsStart_AndTheTopUpThenWorksOnlyForTheLivePatterns()
+    public async Task ApprovingTheNextRevision_EndsTheOldPatterns_RemovesTheirUnfilledShiftsFromItsStart()
     {
         RequirePostgres();
         var (cs, tenantId, participantId) = await SetUpAsync();
@@ -306,21 +327,6 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
             Assert.Equal(15, await read.Shifts.CountAsync(s => read.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v1.Id)));
         }
 
-        // A week later the horizon has moved. v1's patterns still run to 1 November (they are read) but already have every shift they will; v2's are topped up with the five weekdays of 7 to 11 December.
-        var later = FakeClock.AtUtc(2026, 10, 17, 2, 0);
-        var services = new ServiceCollection();
-        services.AddDbContext<OdipDbContext>(o => o.UseNpgsql(cs));
-        services.AddSingleton<IRosterPlacementGate>(new RosterPlacementGate());
-        services.AddSingleton<RosterShiftGenerator>();
-        await using var provider = services.BuildServiceProvider();
-        var job = new RosterTopUpBackgroundService(provider.GetRequiredService<IServiceScopeFactory>(), new ConfigurationBuilder().Build(), NullLogger<RosterTopUpBackgroundService>.Instance, later);
-
-        var run = await job.RunOnceAsync(CancellationToken.None);
-
-        Assert.Equal((1, 10, 5, 0), (run.Tenants, run.Patterns, run.ShiftsCreated, run.Failures));
-        await using var after = Open(cs, tenantId);
-        Assert.Equal(15, await after.Shifts.CountAsync(s => after.ShiftPatterns.Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId == v1.Id)));      // v1's shifts: no more
-        Assert.Equal(new DateOnly(2026, 12, 11), await after.Shifts.MaxAsync(s => s.ServiceDate));
     }
 
     [SkippableFact]
@@ -569,43 +575,6 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var made = await impatient.GenerateAsync(free, participantId, new[] { handMadeId }, new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 26), CancellationToken.None);
         Assert.Equal(3, made.Created);
     }
-
-    // ── Shifts a coordinator deleted ──────────────────────────────────────────────
-
-    [SkippableFact]
-    public async Task ShiftsACoordinatorDeleted_AreNotMadeAgainByTheTopUp_AndTheHorizonStillMovesOn()
-    {
-        RequirePostgres();
-        var (cs, tenantId, participantId) = await SetUpAsync();
-        var draft = await StoreAsync(cs, tenantId, participantId, 1);
-        await ApproveAsync(cs, tenantId, participantId, draft.Id, FakeClock.AtUtc(2026, 10, 10, 2, 0));                 // 40 shifts, 12 October to 4 December
-        await using (var db = Open(cs, tenantId))
-        {
-            var interior = await db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 10, 26) && s.ServiceDate <= new DateOnly(2026, 10, 30)).ToListAsync();      // a whole week in the middle
-            var tail = await db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 12, 1)).ToListAsync();                                                       // and the last days
-            db.Shifts.RemoveRange(interior.Concat(tail));
-            await db.SaveChangesAsync();
-        }
-
-        var services = new ServiceCollection();
-        services.AddDbContext<OdipDbContext>(o => o.UseNpgsql(cs));
-        services.AddSingleton<IRosterPlacementGate>(new RosterPlacementGate());
-        services.AddSingleton<RosterShiftGenerator>();
-        await using var provider = services.BuildServiceProvider();
-        RosterTopUpBackgroundService Job(FakeClock clock) => new(provider.GetRequiredService<IServiceScopeFactory>(), new ConfigurationBuilder().Build(), NullLogger<RosterTopUpBackgroundService>.Instance, clock);
-        var sameDay = await Job(FakeClock.AtUtc(2026, 10, 10, 2, 0)).RunOnceAsync(CancellationToken.None);               // a deploy: a fresh job on the day approval was
-        Assert.Equal(0, sameDay.ShiftsCreated);
-
-        var monday = await Job(FakeClock.AtUtc(2026, 10, 12, 2, 0)).RunOnceAsync(CancellationToken.None);                // Monday 12 October: the horizon is 7 December
-        Assert.Equal(1, monday.ShiftsCreated);                                                                          // only Monday 7 December: the week in the middle and 1 to 4 December stay deleted
-
-        await using var read = Open(cs, tenantId);
-        Assert.Equal(40 - 5 - 4 + 1, await read.Shifts.CountAsync());
-        Assert.Empty(await read.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 10, 26) && s.ServiceDate <= new DateOnly(2026, 10, 30)).ToListAsync());
-        Assert.Empty(await read.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 12, 1) && s.ServiceDate <= new DateOnly(2026, 12, 4)).ToListAsync());
-    }
-
-    // ── Generation at once ────────────────────────────────────────────────────────
 
     [SkippableFact]
     public async Task GenerationRunningAtOnce_ForOneParticipant_NeverMakesAShiftTwice()

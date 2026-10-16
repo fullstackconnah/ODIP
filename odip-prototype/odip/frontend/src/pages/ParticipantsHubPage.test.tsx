@@ -103,11 +103,11 @@ describe('ParticipantsHubPage — single PageHeader + tabbed lifecycle', () => {
     const user = userEvent.setup()
     renderHub()
     // Default tab is Active participants — that's also the document title.
-    expect(document.title).toBe('Active participants — Odip')
+    expect(document.title).toBe('Bunya Support · Active participants')
     await user.click(screen.getByRole('tab', { name: 'Enquiries' }))
-    expect(document.title).toBe('Enquiries — Odip')
+    expect(document.title).toBe('Bunya Support · Enquiries')
     await user.click(screen.getByRole('tab', { name: 'Onboarding' }))
-    expect(document.title).toBe('Onboarding — Odip')
+    expect(document.title).toBe('Bunya Support · Onboarding')
   })
 
   it('mirrors the active tab into the URL so a stage is shareable, and drops ?tab= on the default', async () => {

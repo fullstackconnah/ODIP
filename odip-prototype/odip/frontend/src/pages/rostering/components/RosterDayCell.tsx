@@ -23,6 +23,8 @@ export type RosterDayCellProps = {
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
   onDelete: (shift: ShiftDto) => void
+  /** Make or Stop the regular, from the chip menu (2026-10-16): on a pattern shift with a worker, for writers. Threaded like onUnassign. */
+  onSetRegular?: (shift: ShiftDto) => void
 }
 
 /**
@@ -37,7 +39,7 @@ export type RosterDayCellProps = {
  * shifts is 34px at a fine pointer, 48px under `pointer: coarse`. A chip is 56px (68px coarse, see
  * ShiftChip), so a day with a shift grows its row to 61px (73px), and one with several grows it more.
  */
-export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipContext, draggable, dayTarget, onAdd, onOpen, onAssignTo, onUnassign, onDelete }: RosterDayCellProps) {
+export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipContext, draggable, dayTarget, onAdd, onOpen, onAssignTo, onUnassign, onDelete, onSetRegular }: RosterDayCellProps) {
   const style = { gridColumn: dayIndex + 1, gridRow: 1 }
   // One target per day (the brief, section 7): the whole of an empty cell, as before; on a day that has pucks, the new-shift slot below, which exists only while a person is carried.
   // The chips stay targets of their own, so a drop on a chip keeps its outcome.
@@ -82,6 +84,7 @@ export function RosterDayCell({ day, dayIndex, shifts, canWrite, addLabel, chipC
           onOpen={onOpen}
           onAssignTo={onAssignTo}
           onUnassign={onUnassign}
+          onSetRegular={onSetRegular}
           onDelete={onDelete}
         />
       ))}

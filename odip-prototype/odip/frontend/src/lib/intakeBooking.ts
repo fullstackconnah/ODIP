@@ -2,7 +2,9 @@
 // timeZoneId), never the browser's, so a coordinator in another state still sees the family's 10:00 am. Pure and JSX-free.
 import type { CancelIntakeBookingResultDto, IntakeInviteError, IntakeVisitDto, ParticipantInquiryDto, SetIntakeBookingDto } from '@/api/types/inquiries'
 import type { StaffListDto } from '@/api/types'
-import { parseApiDate } from '@/lib/utils'
+import { fieldErrors } from '@/lib/fieldErrors'
+import { fullName } from '@/lib/inquiryDetails'
+import { extractErrorMessage, parseApiDate } from '@/lib/utils'
 import { providerLocalToUtcInstant, utcInstantToProviderLocal } from '@/pages/portal/shift/shiftTime'
 
 /** The server's own fallback zone (ProviderLocalTime.FallbackZoneId), for a response that carries none. */
@@ -69,10 +71,37 @@ export function notSentReason(code: IntakeInviteError): string {
   return code === 'NotConfigured' ? "email isn't set up yet" : "the email couldn't be sent"
 }
 
-/** The table's second line, from the latest send's stored outcome: the server owns the rule, the client only reads it. */
-export function inviteLine(row: Pick<ParticipantInquiryDto, 'intakeInviteError' | 'intakeInviteSentAt'>): { text: string; failed: boolean } | null {
+type EmailRow = Pick<ParticipantInquiryDto, 'email' | 'participantId'>
+
+/** The email an invite can go to. A converted enquiry's email is read-only (D7), so one the server can't send to counts as none: the visit books without an invite. */
+export function inviteEmail(row: EmailRow): string | null {
+  return row.email && (!row.participantId || EMAIL.test(row.email)) ? row.email : null
+}
+
+/** Why no invite goes, for the sentence after "No invite sent:" (the caller names who to tell). */
+export function noInviteWhy(row: EmailRow & InviteeRow): string {
+  return row.email ? "the email on file can't take an invite" : `${invitee(row)} has no email`
+}
+
+/** The table's second line, from the latest send's stored outcome: the server owns the rule, the client only reads it. No email is not a failure (L7). */
+export function inviteLine(row: Pick<ParticipantInquiryDto, 'intakeInviteError' | 'intakeInviteSentAt' | 'email' | 'participantId'>): { text: string; failed: boolean } | null {
   if (row.intakeInviteError) return { text: `Invite not sent: ${notSentReason(row.intakeInviteError)}`, failed: true }
-  return row.intakeInviteSentAt ? { text: 'Invite sent', failed: false } : null
+  if (row.intakeInviteSentAt) return { text: 'Invite sent', failed: false }
+  return inviteEmail(row) ? null : { text: row.email ? 'No invite: bad email' : 'No invite: no email', failed: false }
+}
+
+type InviteeRow = Pick<ParticipantInquiryDto, 'firstName' | 'contactIsParticipant' | 'contactFirstName'>
+
+/** Who the invite goes to, as a sentence names them (SHAPE section 9): the participant when they are their own contact, else the contact's first name, else "the main contact". */
+export function invitee(row: InviteeRow, { start = false }: { start?: boolean } = {}): string {
+  if (row.contactIsParticipant) return row.firstName
+  return row.contactFirstName?.trim() || (start ? 'The main contact' : 'the main contact')
+}
+
+/** The slide-over's email label: "Sarah's email", or "Main contact's email" with no name. */
+export function inviteeEmailLabel(row: InviteeRow): string {
+  const name = row.contactIsParticipant ? row.firstName : row.contactFirstName?.trim()
+  return name ? `${name}'s email` : "Main contact's email"
 }
 
 export type BookingForm = { email: string; date: string; time: string; duration: string; location: string; staffUserId: string; notes: string }
@@ -80,7 +109,7 @@ export type BookingField = keyof BookingForm
 export type BookingErrors = Partial<Record<BookingField, string>>
 
 /** The panel's fields: the booking as the provider's wall clock, or a new one at 1 hour 30 min with `defaultStaffId` going. */
-export function bookingFormOf(row: ParticipantInquiryDto, defaultStaffId: string): BookingForm {
+export function bookingFormOf(row: Partial<ParticipantInquiryDto>, defaultStaffId: string): BookingForm {
   const local = row.intakeStartsAt ? utcInstantToProviderLocal(row.intakeStartsAt, row.timeZoneId || FALLBACK_ZONE) : ''
   return {
     email: '', date: local.slice(0, 10), time: local.slice(11, 16), duration: String(row.intakeDurationMinutes ?? DEFAULT_DURATION),
@@ -94,17 +123,17 @@ export function sendsInvite(form: BookingForm, saved: BookingForm, booked: boole
     || form.location.trim() !== saved.location.trim() || form.staffUserId !== saved.staffUserId
 }
 
-const EMAIL = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/
+export const EMAIL = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/
 
 /** The client's mirror of the server's checks, in the brief's words. The server is the floor. A past time is checked only when the time changed. */
 export function validateBooking(
   form: BookingForm,
   /** pastVisitChange: the saved visit has passed and this save would send an invite (the server refuses it unless the time changes). */
-  opts: { askEmail: boolean; firstName: string; timeChanged: boolean; zone: string; now?: Date; pastVisitChange?: boolean },
+  opts: { askEmail: boolean; timeChanged: boolean; zone: string; now?: Date; pastVisitChange?: boolean },
 ): BookingErrors {
   const errors: BookingErrors = {}
-  if (opts.askEmail && !form.email.trim()) errors.email = `Add ${opts.firstName}'s email to send the invite.`
-  else if (opts.askEmail && !EMAIL.test(form.email.trim())) errors.email = 'Enter a full email address, like name@example.com.'
+  // L7: the email is never required. One typed is checked for its format.
+  if (opts.askEmail && form.email.trim() && !EMAIL.test(form.email.trim())) errors.email = 'Enter a full email address, like name@example.com.'
   if (!form.date) errors.date = 'Choose a date.'
   if (!form.time) errors.time = 'Choose a start time.'
   if (form.date && form.time && opts.timeChanged) {
@@ -119,7 +148,7 @@ export function validateBooking(
   return errors
 }
 
-/** The PUT body: the start as an instant with Z, and the email only when the panel asked for one. */
+/** The PUT body: the start as an instant with Z, and the email only when the panel asked for one and one is typed. */
 export function bookingBody(form: BookingForm, zone: string, askEmail: boolean): SetIntakeBookingDto {
   return {
     startsAt: providerLocalToUtcInstant(`${form.date}T${form.time}`, zone) ?? '',
@@ -127,7 +156,7 @@ export function bookingBody(form: BookingForm, zone: string, askEmail: boolean):
     location: form.location.trim(),
     staffUserId: form.staffUserId,
     notes: form.notes.trim() || null,
-    ...(askEmail ? { contactEmail: form.email.trim() } : {}),
+    ...(askEmail && form.email.trim() ? { contactEmail: form.email.trim() } : {}),
   }
 }
 
@@ -140,6 +169,35 @@ export const SERVER_FIELD: Record<string, BookingField> = {
 export function noAnswer(error: unknown): boolean {
   const e = error as { isAxiosError?: boolean; response?: unknown } | null
   return !!e?.isAxiosError && !e.response
+}
+
+/** The booking fields in screen order: where focus goes for the first refused one. */
+export const FIELD_ORDER: BookingField[] = ['email', 'date', 'time', 'duration', 'location', 'staffUserId', 'notes']
+export const NO_CONNECTION = "Couldn't reach ODIP. Check your connection and try again. Your entries are kept."
+
+/** The server's sentence for a refusal: the first field message of a ValidationProblemDetails, else its message, else the fallback. */
+export function refusalOf(error: unknown, fallback: string): string {
+  return noAnswer(error) ? NO_CONNECTION : Object.values(fieldErrors(error)).find(Boolean) ?? extractErrorMessage(error, fallback)
+}
+
+/** A booking refusal's field errors, on the booking fields (SERVER_FIELD): a staff-busy 409 lands on Who's going. */
+export function serverBookingErrors(error: unknown): BookingErrors {
+  const mapped: BookingErrors = {}
+  for (const [key, message] of Object.entries(fieldErrors(error))) if (SERVER_FIELD[key] && message) mapped[SERVER_FIELD[key]] = message
+  return mapped
+}
+
+/** The result line, from the stored outcome of the latest send (as SignInEmailOutcome does for the set-password email). */
+/** `typedEmail` is the Email field as typed and not yet saved: with one there, no invite has gone out yet, whatever the stored row says. */
+export function resultLine(row: ParticipantInquiryDto, zone: string, typedEmail = ''): { tone: 'success' | 'warning'; text: string } {
+  if (row.intakeInviteError === 'NotConfigured')
+    return { tone: 'warning', text: `Invite not sent: email isn't set up yet. The visit is still booked, so let ${invitee(row)} know another way.` }
+  if (row.intakeInviteError) return { tone: 'warning', text: "Invite not sent: the email couldn't be sent. The visit is still booked." }
+  // An enquiry whose email was cleared after the send has no address to name.
+  if (row.intakeInviteSentAt) return { tone: 'success', text: `Invite sent${row.email ? ` to ${row.email}` : ''} on ${visitWhen(row.intakeInviteSentAt, zone)}.` }
+  if (inviteEmail(row) || typedEmail.trim()) return { tone: 'warning', text: 'No invite has gone out yet.' }
+  const why = row.email ? `the email on file, ${row.email}, can't take an invite` : noInviteWhy(row)
+  return { tone: 'warning', text: `No invite sent: ${why}. Let ${row.email ? invitee(row) : 'them'} know another way.` }
 }
 
 /** Who can go: Admins and Coordinators (never SuperAdmin, never filtered on `position`), "(you)" on the signed-in user. A booked person who no
@@ -184,4 +242,46 @@ export function withVisits<S extends { startTime: string }>(shifts: S[], visits:
     ...shifts.map(shift => ({ at: shift.startTime.slice(0, 5), entry: { kind: 'shift' as const, shift } })),
     ...visits.map(visit => ({ at: localStart(visit).slice(11, 16), entry: { kind: 'visit' as const, visit } })),
   ].sort((a, b) => a.at.localeCompare(b.at)).map(x => x.entry)
+}
+
+export type EnquiryNotice = { tone: 'success' | 'danger'; title: string; message: string; subject: string }
+
+/** The Enquiries tab's notice after the enquiry form saved (SHAPE.md section 6): only the sentences that apply. */
+export function enquirySavedNotice(s: {
+  created: boolean
+  /** The latest stored copy: the visit's or the resend's answer when there was one. */
+  enquiry: ParticipantInquiryDto
+  /** A booking PUT that emailed; a notes-only change is null. */
+  visit: 'booked' | 'moved' | null
+  resent: boolean
+  /** Rows sent with the enquiry; null when none were sent (a converted enquiry). */
+  contacts: number | null
+}): EnquiryNotice {
+  const e = s.enquiry
+  const when = e.intakeStartsAt ? visitWhen(e.intakeStartsAt, e.timeZoneId || FALLBACK_ZONE) : ''
+  const sentences: string[] = []
+  let failed = false
+  if (s.visit && e.intakeInviteError) {
+    failed = true
+    sentences.push(`The intake visit is ${s.visit === 'booked' ? 'booked for' : 'moved to'} ${when}, but ${notSentReason(e.intakeInviteError)}, so ${invitee(e)} wasn't told. Let them know another way.`)
+  } else if (s.visit === 'booked') {
+    sentences.push(`Intake visit booked for ${when}${e.intakeStaffName ? ` with ${e.intakeStaffName}` : ''}.`, inviteEmail(e) ? `Invite sent to ${e.email}.` : `No invite sent: ${noInviteWhy(e)}.`)
+  } else if (s.visit === 'moved') {
+    sentences.push(`Intake visit moved to ${when}.`, inviteEmail(e) ? `Updated invite sent to ${e.email}.` : `No invite went out: ${noInviteWhy(e)}.`)
+  }
+  if (s.resent && e.intakeInviteError) {
+    failed = true
+    sentences.push(`The invite wasn't sent again: ${notSentReason(e.intakeInviteError)}.`)
+  } else if (s.resent) {
+    sentences.push(`Invite sent again to ${e.email}.`)
+  }
+  const name = fullName(e.firstName, e.lastName)
+  if (sentences.length === 0) sentences.push(s.created ? `${name} is on the Enquiries list.` : `${name}'s changes are saved.`)
+  if (s.contacts) sentences.push(s.contacts === 1 ? '1 contact saved.' : `${s.contacts} contacts saved.`)
+  return {
+    tone: failed ? 'danger' : 'success',
+    title: failed ? 'Enquiry saved, invite not sent' : s.created ? 'Enquiry captured' : 'Enquiry saved',
+    message: sentences.join(' '),
+    subject: e.id,
+  }
 }

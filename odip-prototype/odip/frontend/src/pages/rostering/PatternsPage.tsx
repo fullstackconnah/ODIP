@@ -84,7 +84,7 @@ function PatternRowActions({
 function PatternsSkeleton() {
   const { prefs } = useUiPreferences()
   const dividerClass = prefs.tableVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''
-  const headers = ['Participant', 'Day', 'Time', 'Ratio', 'Night type', 'Default staff', 'Effective range', 'Source', 'Status', '']
+  const headers = ['Participant', 'Day', 'Time', 'Ratio', 'Night type', 'Regular', 'Effective range', 'Source', 'Status', '']
   const widths = ['w-28', 'w-16', 'w-20', 'w-10', 'w-16', 'w-24', 'w-32', 'w-24', 'w-14', 'w-8']
   return (
     <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-card" aria-hidden="true">
@@ -172,7 +172,7 @@ export default function PatternsPage() {
     { key: 'time', header: 'Time', render: p => formatShiftRange(p.startTime, p.endTime, p.endsNextDay) },
     { key: 'ratio', header: 'Ratio', render: p => RATIO_LABELS[p.ratio] ?? p.ratio },
     { key: 'nightType', header: 'Night type', render: p => NIGHT_TYPE_LABELS[p.nightType] ?? p.nightType },
-    { key: 'defaultStaffName', header: 'Default staff', render: p => p.defaultStaffName ?? 'Unfilled' },
+    { key: 'defaultStaffName', header: 'Regular', render: p => p.defaultStaffName ?? 'Unassigned' },
     { key: 'effectiveRange', header: 'Effective range', render: p => formatEffectiveRange(p.effectiveFrom, p.effectiveTo) },
     // Plan builder phase D: a pattern an approved agreement made says which version, and what the agreement asks of a worker. Information only.
     { key: 'source', header: 'Source', wrap: true, render: p => <PatternSource pattern={p} /> },

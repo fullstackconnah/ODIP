@@ -5,10 +5,11 @@ import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { isPastVisit, visitDay, visitTimes } from '@/lib/intakeBooking'
+import { fullName } from '@/lib/inquiryDetails'
 import { StartIntakeButton } from '@/pages/inquiries/StartIntakeButton'
 
 const columns: Column<IntakeVisitDto>[] = [
-  { key: 'firstName', header: 'Person', mobile: 'primary', render: v => `${v.firstName} ${v.lastName}` },
+  { key: 'firstName', header: 'Person', mobile: 'primary', render: v => fullName(v.firstName, v.lastName) },
   { key: 'startsAt', header: 'When', mobile: 'meta', render: v => `${visitDay(v.startsAt, v.timeZoneId)}, ${visitTimes(v.startsAt, v.durationMinutes, v.timeZoneId, true)}` },
   { key: 'location', header: 'Where', mobile: 'meta', maxWidth: '16rem' },
   { key: 'staffName', header: "Who's going", mobile: 'meta' },

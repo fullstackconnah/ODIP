@@ -111,6 +111,12 @@ export interface ShiftDto {
    * `findings` (those are computed at assign-time). Renders as a distinct "On leave" hole on the
    * board rather than a normal filled chip. */
   assigneeOnApprovedLeave: boolean
+  /** The slot's live regular: the pattern's default worker now, whoever this shift is on (Start rostering, 2026-10-16). Omitted when the slot has none. */
+  regularUserId?: string
+  /** Why this open shift's regular wasn't put on it at Start: "on approved leave", "unavailable", "booked on another shift", "on a trip", "inactive" or "screening expired". Omitted otherwise. */
+  regularAwayReason?: string
+  /** True when this shift's worker is its slot's regular. Omitted otherwise. */
+  isRegular?: boolean
   /** True when the pattern this shift was generated from was made by an agreement revision; omitted for any other shift. With `sourceDraftVersion` it is what the shift panel says ("From agreement v2"): no read of the pattern is needed. */
   fromAgreement?: boolean
   /** The version of that revision. */
@@ -424,6 +430,8 @@ export type RosterBoardDto =
       /** The week's approved and pending leave of every active staff member, for the staff picker. */
       staffLeave?: StaffLeaveDto[]
       exceptions: RosterExceptionDto[]
+      /** False until someone starts rostering this week (2026-10-16). The server always sends it; old fixtures leave it out, which reads as started. */
+      weekStarted?: boolean
     }
   | {
       groupBy: 'Staff'
@@ -432,6 +440,8 @@ export type RosterBoardDto =
       staffRows: RosterStaffRowDto[]
       unfilled: ShiftDto[]
       exceptions: RosterExceptionDto[]
+      /** False until someone starts rostering this week (2026-10-16). The server always sends it; old fixtures leave it out, which reads as started. */
+      weekStarted?: boolean
     }
 
 // ── Write bodies ──────────────────────────────────────────
@@ -489,6 +499,23 @@ export interface MoveStaffDto {
   expectedToStaffId: string | null
   overrideReason: string | null
   acknowledgedFindingCodes: string[]
+}
+
+/** One participant in Start's answer: one it skipped (not ready for rostering), or one whose new shifts went over budget. */
+export interface StartWeekParticipantDto {
+  participantId: string
+  fullName: string
+  warnings?: BudgetWarningDto[]
+}
+
+/** Start rostering's answer: what it made for the week, and why some shifts are open. */
+export interface StartWeekResultDto {
+  weekStart: string
+  created: number
+  assignedToRegulars: number
+  regularAway: number
+  skipped: StartWeekParticipantDto[]
+  budgetWarnings?: StartWeekParticipantDto[]
 }
 
 /** What Publish week did: Draft shifts now Published (unfilled ones too), how many different workers were told, how many went out needing staff, and how many stayed Draft because their worker now has a blocking problem. */

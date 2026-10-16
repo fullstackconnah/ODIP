@@ -104,7 +104,7 @@ describe('ProfileWizardPage — tab title', () => {
   it('names the browser tab after its heading', async () => {
     renderProfilePage()
     expect(await screen.findByRole('heading', { level: 1, name: 'Profile — Jamie Rivers' })).toBeInTheDocument()
-    expect(document.title).toBe('Profile — Jamie Rivers — Odip')
+    expect(document.title).toBe('Bunya Support · Profile — Jamie Rivers')
   })
 })
 

@@ -238,11 +238,6 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odi
 builder.Services.AddScoped<Odip.Infrastructure.Notifications.IntakeInviteSender>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
-// ── Roster top-up (plan builder phase D) ──────────────────────────
-// Keeps RosterTopUp:HorizonDays (56) days of open shifts generated for the patterns an approved agreement made, once for each organisation's provider day. RosterTopUp:Enabled (default true)
-// switches it off; hand-made and demo patterns are never touched. Reads the clock the rest of the API reads (TimeProvider.System, registered above).
-builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RosterTopUpBackgroundService>();
-
 // ── Employment Hero Payroll (Settings → Integrations) ────────────────
 // The key store reads Integrations:MasterKey, else INTEGRATIONS_MASTER_KEY (32 bytes, base64). With neither, connecting is refused and the rest of ODIP runs.
 builder.Services.AddSingleton<Odip.Infrastructure.Integrations.IntegrationKeyProtector>();
@@ -257,6 +252,7 @@ builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.Employm
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH
 // EarlyAccess:NotifyEmail and Notifications:Smtp:Host — by default nothing is sent). One singleton instance
 // serves as both the IEarlyAccessNotifier the controller calls and the hosted service that drains its queue.
+// It also registers the daily purge (each sign-up deleted 12 months after it was first sent).
 builder.Services.AddEarlyAccess();
 
 // ── Demo-data top-up (DemoData:Scenarios, Off by default: with it Off this registers nothing) ──
@@ -590,6 +586,30 @@ app.Use(async (context, next) =>
 });
 
 app.UseMiddleware<Odip.Api.Middleware.ExceptionHandlingMiddleware>();
+
+// ── Loud warning: the per-client sign-in budget cannot partition ──
+// The failed-sign-in lockout (AuthController.Exchange -> ClientIp) can only give
+// each caller their own budget when the request carries a real client address.
+// Behind a published Docker port served by the userspace `docker-proxy`, it does
+// not: the proxy accepts the client's TCP connection and originates a new one to
+// nginx, so nginx's $remote_addr is the Docker bridge gateway for EVERY caller and
+// the genuine address never reaches this process.
+//
+// Consequences, stated plainly rather than left to be discovered in production:
+// the address-keyed rate limiter collapses to one shared bucket, and the sign-in
+// failure budget is not counted at all (ClientIp.LoginAttemptKey returns null),
+// because counting it would be counting against that shared key.
+//
+// Detected by a real request, not by guessing: if a request cannot be attributed to
+// one client, say so once and loudly.
+//
+// The guard is ClientIp.SignInBudgetCannotBePartitioned — the SAME predicate that
+// decides whether a key exists — and it is NOT negated. An inline lambda here was
+// harder to test than the behaviour was worth, and the untested version shipped with
+// its guard inverted: it stayed silent on the deployed proxy shape that needs the
+// warning and fired on every healthy client instead.
+app.UseMiddleware<Odip.Api.Middleware.SignInBudgetPartitionWarningMiddleware>();
+
 app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();

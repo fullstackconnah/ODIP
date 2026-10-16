@@ -26,6 +26,63 @@ public class SmtpEmailChannelMessageTests
         Assert.Empty(mail.ReplyToList);
     }
 
+    // Bunya Support rebrand (owner, 2026-10-16): mail shows the product as its sender, unless the configured From already names one.
+    [Fact]
+    public void A_bare_from_address_is_sent_as_Bunya_Support()
+    {
+        using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>"), From);
+
+        Assert.Equal("Bunya Support", mail.From!.DisplayName);
+        Assert.Equal(From, mail.From.Address);
+    }
+
+    [Fact]
+    public void A_from_that_names_its_sender_keeps_that_name()
+    {
+        using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>"), "Rostering <rosters@odip.test>");
+
+        Assert.Equal("Rostering", mail.From!.DisplayName);
+        Assert.Equal("rosters@odip.test", mail.From.Address);
+    }
+
+    [Fact]
+    public void The_html_view_opens_with_the_wordmark_image_then_the_body()
+    {
+        using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>Body here</p>"), From);
+
+        var view = Assert.Single(mail.AlternateViews);
+        using var reader = new StreamReader(view.ContentStream);
+        var html = reader.ReadToEnd();
+        var img = html.IndexOf("<img src=\"cid:bunya-wordmark\"", StringComparison.Ordinal);
+        Assert.True(img >= 0);
+        Assert.Contains("alt=\"Bunya Support\"", html);
+        Assert.Matches("<img [^>]*width=\"\\d+\" height=\"\\d+\"", html);
+        Assert.True(img < html.IndexOf("<p>Body here</p>", StringComparison.Ordinal));
+        Assert.Equal("P", mail.Body);
+    }
+
+    [Fact]
+    public void The_wordmark_rides_along_as_a_linked_png_the_cid_names()
+    {
+        using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>"), From);
+
+        var image = Assert.Single(mail.AlternateViews[0].LinkedResources);
+        Assert.Equal("bunya-wordmark", image.ContentId);
+        Assert.Equal("image/png", image.ContentType.MediaType);
+        var signature = new byte[8];
+        Assert.Equal(8, image.ContentStream.Read(signature, 0, 8));
+        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, signature);
+    }
+
+    [Fact]
+    public void Each_message_gets_its_own_image_stream()
+    {
+        using var first = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("a@example.com", "S", "P", "<p>H</p>"), From);
+        using var second = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("b@example.com", "S", "P", "<p>H</p>"), From);
+
+        Assert.NotSame(first.AlternateViews[0].LinkedResources[0].ContentStream, second.AlternateViews[0].LinkedResources[0].ContentStream);
+    }
+
     [Theory]
     [InlineData("REQUEST")]
     [InlineData("CANCEL")]

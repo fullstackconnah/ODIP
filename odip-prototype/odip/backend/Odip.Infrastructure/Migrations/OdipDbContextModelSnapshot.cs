@@ -686,6 +686,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("LastRequestedAtUtc")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("Message")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -696,9 +700,21 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("OrganisationSize")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<int>("RequestCount")
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
 
@@ -1217,6 +1233,62 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("WitnessUserId");
 
                     b.ToTable("IncidentWitnesses");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.InquiryContact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("InquiryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Relationship")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InquiryId");
+
+                    b.HasIndex("TenantId", "InquiryId");
+
+                    b.ToTable("InquiryContacts");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.MedicationAdministration", b =>
@@ -2333,8 +2405,58 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AddressPostcode")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("AddressState")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("AddressStreet")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("AddressSuburb")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CloseNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("CloseOutcome")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("ClosedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContactFirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("ContactIsParticipant")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ContactLastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ContactRelationship")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("ContactRole")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date");
 
                     b.Property<string>("Email")
                         .HasMaxLength(200)
@@ -2385,9 +2507,12 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("LastName")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NdisNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid?>("ParticipantId")
                         .HasColumnType("uuid");
@@ -2395,6 +2520,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("Phone")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateOnly?>("PlanEndDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("PlanStartDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("PlanType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Provenance")
                         .HasMaxLength(2000)
@@ -2409,9 +2543,12 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClosedByUserId");
 
                     b.HasIndex("IntakeBookedByUserId");
 
@@ -5222,6 +5359,34 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("RecurringUnavailabilities");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Rostering.RosterWeek", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("StartedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("WeekStart")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedByUserId");
+
+                    b.HasIndex("TenantId", "WeekStart")
+                        .IsUnique();
+
+                    b.ToTable("RosterWeeks");
+                });
+
             modelBuilder.Entity("Odip.Domain.Rostering.Shift", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5258,6 +5423,13 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("Ratio")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RegularAwayReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("RegularUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("RequirementsJson")
                         .HasColumnType("jsonb");
 
@@ -5288,6 +5460,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParticipantId");
+
+                    b.HasIndex("RegularUserId");
 
                     b.HasIndex("TenantId");
 
@@ -6015,6 +6189,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("WitnessUser");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.InquiryContact", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ParticipantInquiry", null)
+                        .WithMany()
+                        .HasForeignKey("InquiryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.MedicationAdministration", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
@@ -6250,6 +6433,11 @@ namespace Odip.Infrastructure.Migrations
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantInquiry", b =>
                 {
+                    b.HasOne("Odip.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ClosedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Odip.Domain.Entities.User", "IntakeBookedByUser")
                         .WithMany()
                         .HasForeignKey("IntakeBookedByUserId")
@@ -6807,6 +6995,14 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Rostering.RosterWeek", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("StartedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("Odip.Domain.Rostering.Shift", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
@@ -6814,6 +7010,11 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("ParticipantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Odip.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RegularUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Odip.Domain.Entities.User", "User")
                         .WithMany()

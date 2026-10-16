@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Odip.Domain.Enums;
 
 namespace Odip.Application.DTOs;
 
@@ -7,12 +8,31 @@ public record ParticipantInquiryDto
     public Guid Id { get; init; }
     public Guid? ParticipantId { get; init; }
     public string FirstName { get; init; } = string.Empty;
+    /// <summary>The participant's last name; "" when none (it is stored as null). Join names with a full-name helper, never by hand.</summary>
     public string LastName { get; init; } = string.Empty;
+    /// <summary>The MAIN CONTACT's phone and email, or the participant's own when <see cref="ContactIsParticipant"/>.</summary>
     public string? Phone { get; init; }
     public string? Email { get; init; }
+    /// <summary>The participant is their own contact: no contact name, and the phone and email are theirs.</summary>
+    public bool ContactIsParticipant { get; init; }
+    /// <summary>The full address is in, so Start intake's address gate passes.</summary>
+    public bool HasAddress { get; init; }
+    /// <summary>A main contact was noted without a first or last name: Start intake's name gate refuses until both are in.</summary>
+    public bool ContactNeedsName { get; init; }
+    /// <summary>The main contact's names and relationship. Withheld (null) in the list from roles without lifecycle rights.</summary>
+    public string? ContactFirstName { get; init; }
+    public string? ContactLastName { get; init; }
+    public string? ContactRelationship { get; init; }
     public string Source { get; init; } = string.Empty;
     public string? Provenance { get; init; }
     public DateTime CreatedAt { get; init; }
+    /// <summary>The enquiry's version: an edit form sends back the one it loaded as UpdateParticipantInquiryDto.ExpectedUpdatedAt.</summary>
+    public DateTime UpdatedAt { get; init; }
+    /// <summary>Closed (spec addendum E1): all null while open.</summary>
+    public DateTime? ClosedAt { get; init; }
+    public InquiryCloseOutcome? CloseOutcome { get; init; }
+    /// <summary>Withheld (null) from roles without lifecycle rights, as the visit's notes are.</summary>
+    public string? CloseNote { get; init; }
     // The linked participant's lifecycle state, so the Enquiries tab can tell an open enquiry ("New": no participant; "Draft intake":
     // intake started, not complete) from one that has moved on, which it does not list: intake complete (the Onboarding tab) or finalised
     // (Active participants). All three are null while the enquiry has no participant.
@@ -55,15 +75,73 @@ public sealed class OptionalEmailAddressAttribute : ValidationAttribute
 
 public record CreateParticipantInquiryDto
 {
-    [Required, StringLength(100)] public string FirstName { get; init; } = string.Empty;
-    [Required, StringLength(100)] public string LastName { get; init; } = string.Empty;
+    // No [Required]: the controller refuses a blank first name keyed "firstName" in the form's words (the framework's would be keyed "FirstName").
+    [StringLength(100)] public string? FirstName { get; init; }
+    [StringLength(100)] public string? LastName { get; init; }
+    /// <summary>The main contact's; 50 is the column. The controller holds a changed one to the contacts' phone pattern (D4).</summary>
     [StringLength(50)] public string? Phone { get; init; }
     [OptionalEmailAddress, StringLength(200)] public string? Email { get; init; }
+    [StringLength(100)] public string? ContactFirstName { get; init; }
+    [StringLength(100)] public string? ContactLastName { get; init; }
+    [StringLength(100)] public string? ContactRelationship { get; init; }
+    public ContactRoleType? ContactRole { get; init; }
+    /// <summary>Ticked: the contact's names, relationship and role are stored as null whatever was sent (L4).</summary>
+    /// <summary>Null from a client that predates the redesign: an update then leaves the new fields as stored.</summary>
+    public bool? ContactIsParticipant { get; init; }
+    public DateOnly? DateOfBirth { get; init; }
+    /// <summary>9 digits once spaces are stripped, and stored stripped. It, the state and the postcode are checked by hand, in the form's words.</summary>
+    public string? NdisNumber { get; init; }
+    [StringLength(200)] public string? AddressStreet { get; init; }
+    [StringLength(100)] public string? AddressSuburb { get; init; }
+    public string? AddressState { get; init; }
+    public string? AddressPostcode { get; init; }
+    public PlanType? PlanType { get; init; }
+    public DateOnly? PlanStartDate { get; init; }
+    public DateOnly? PlanEndDate { get; init; }
     [Required, RegularExpression("^(Web|Email|Phone)$")] public string Source { get; init; } = string.Empty;
     [StringLength(2000)] public string? Provenance { get; init; }
+    /// <summary>Saved in the enquiry's own save. On update a list replaces the stored ones; null (or left out) leaves them as they are.</summary>
+    public List<InquiryContactDto>? Contacts { get; init; }
 }
 
-public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto;
+/// <summary>
+/// A pending contact on an enquiry (spec 2026-10-16, D3). The role, names, phone and email are checked by hand in the controller, so its refusals are
+/// keyed by the form's rows (contacts[i].field); the lengths are the columns'. Role is nullable so a missing one is refused, not read as NextOfKin.
+/// </summary>
+public record InquiryContactDto
+{
+    public ContactRoleType? Role { get; init; }
+    [StringLength(100)] public string? FirstName { get; init; }
+    [StringLength(100)] public string? LastName { get; init; }
+    [StringLength(30)] public string? Phone { get; init; }
+    [StringLength(200)] public string? Email { get; init; }
+    [StringLength(100)] public string? Relationship { get; init; }
+    [StringLength(2000)] public string? Notes { get; init; }
+}
+
+/// <summary>GET /inquiries/{id}: the enquiry and its pending contacts, for the enquiry form. Its own type, so the list's rows (open to every role) can't hold contacts.</summary>
+public record ParticipantInquiryDetailDto : ParticipantInquiryDto
+{
+    public ParticipantInquiryDetailDto(ParticipantInquiryDto inquiry) : base(inquiry) { }
+    public List<InquiryContactDto> Contacts { get; init; } = [];
+    // The main contact's role and the participant details (L2): on this detail DTO only, never the list, which every role reads.
+    public ContactRoleType? ContactRole { get; init; }
+    public DateOnly? DateOfBirth { get; init; }
+    public string? NdisNumber { get; init; }
+    public string? AddressStreet { get; init; }
+    public string? AddressSuburb { get; init; }
+    public string? AddressState { get; init; }
+    public string? AddressPostcode { get; init; }
+    public PlanType? PlanType { get; init; }
+    public DateOnly? PlanStartDate { get; init; }
+    public DateOnly? PlanEndDate { get; init; }
+}
+
+public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto
+{
+    /// <summary>The UpdatedAt the form loaded. Another save since then makes this one a 409, enforced in the UPDATE itself (deep review S2). Null skips the check.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
 public record ConvertParticipantInquiryDto { public Guid? ParticipantId { get; init; } }
 
 public record SetIntakeBookingDto
@@ -76,9 +154,33 @@ public record SetIntakeBookingDto
     public string? Notes { get; init; }
     /// <summary>Sent only when the enquiry has no email: validated and saved to the enquiry in the same save as the booking.</summary>
     public string? ContactEmail { get; init; }
+    /// <summary>The UpdatedAt the form holds (ODIP-REVIEW-268): a save since then makes the booking a 409. Null skips the check (the slide-over).</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
 public record ConfirmIntakeBookingDto { public bool Confirmed { get; init; } }
+
+/// <summary>POST /inquiries/{id}/close. Note has no [StringLength]: the action checks it after the trim, keyed "note" in SHAPE's words (the column keeps 500).</summary>
+public record CloseInquiryDto
+{
+    public InquiryCloseOutcome? Outcome { get; init; }
+    public string? Note { get; init; }
+    /// <summary>The UpdatedAt the screen loaded: another save since makes the close a 409, enforced in the UPDATE (verify C1). Null skips the check.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
+
+/// <summary>The UpdatedAt the screen holds, as an optional body (POST .../reopen, POST .../intake-booking/send): a save since then makes the write a 409.</summary>
+public record InquiryVersionDto
+{
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
+
+/// <summary>What a close did. CancellationEmail: "NoVisit" (no upcoming visit), or as a cancel's: "Sent", "NoInvite", "NotConfigured" or "Failed".</summary>
+public record CloseInquiryResultDto
+{
+    public ParticipantInquiryDto Inquiry { get; init; } = new();
+    public string CancellationEmail { get; init; } = "NoVisit";
+}
 
 /// <summary>What a cancel did. CancellationEmail: "Sent", "NoInvite" (none had gone out, so nobody was emailed), "NotConfigured" or "Failed".</summary>
 public record CancelIntakeBookingResultDto
@@ -103,6 +205,10 @@ public record IntakeVisitDto
     public string StaffName { get; init; } = string.Empty;
     public DateTime? ConfirmedAt { get; init; }
     public string TimeZoneId { get; init; } = string.Empty;
+    /// <summary>The enquiry's full address is in (Start intake's address gate).</summary>
+    public bool HasAddress { get; init; }
+    /// <summary>The main contact needs a name before Start intake (its second gate).</summary>
+    public bool ContactNeedsName { get; init; }
 }
 
 /// <summary>
