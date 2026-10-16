@@ -186,6 +186,8 @@ public class LeaveController : ControllerBase
 
         var updateCallerId = ResolveCallerId();
         if (updateCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
+        // Your own request changes through the Portal, where it goes back to Pending; edited here an Approved one would widen with nobody's say (D4, deep M1).
+        if (leave.UserId == updateCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         leave.LeaveType = dto.LeaveType;
         leave.StartDate = dto.StartDate;
@@ -330,6 +332,8 @@ public class LeaveController : ControllerBase
 
         var updateRuleCallerId = ResolveCallerId();
         if (updateRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("Caller identity could not be resolved."));
+        // As UpdateLeave: your own rule changes through the Portal (D4, deep M1).
+        if (rule.UserId == updateRuleCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         rule.DayOfWeek = dto.DayOfWeek;
         rule.StartTime = dto.StartTime;
