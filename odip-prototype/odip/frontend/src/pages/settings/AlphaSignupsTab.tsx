@@ -13,6 +13,8 @@ import { extractErrorMessage } from '@/lib/utils'
 import { formatInstantDateAu } from '@/lib/format'
 
 const muted = 'text-[var(--color-muted-foreground)]'
+// On a phone the detail labels match the card's own field labels (index.css .mobile-card-table td::before).
+const detailLabel = `text-xs ${muted} max-md:font-semibold max-md:uppercase max-md:tracking-[0.05em]`
 const detailId = (row: EarlyAccessSignupDto) => `alpha-signup-${row.id}-detail`
 
 /**
@@ -121,17 +123,17 @@ export default function AlphaSignupsTab() {
 
   // Role, phone and the whole message: under the row once its name is opened, and always on a phone card.
   const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
-    <dl id={detailId(row)} className="grid gap-x-8 gap-y-2 md:grid-cols-[minmax(8rem,auto)_minmax(8rem,auto)_minmax(0,1fr)] md:pl-[1.125rem]">
+    <dl id={detailId(row)} className="grid gap-x-8 gap-y-2 md:grid-cols-[11rem_9rem_minmax(0,1fr)] md:pl-[1.125rem]">
       <div>
-        <dt className={`text-xs ${muted}`}>Role</dt>
+        <dt className={detailLabel}>Role</dt>
         <dd>{row.role ?? '—'}</dd>
       </div>
       <div>
-        <dt className={`text-xs ${muted}`}>Phone</dt>
+        <dt className={detailLabel}>Phone</dt>
         <dd>{row.phone ?? '—'}</dd>
       </div>
       <div className="min-w-0">
-        <dt className={`text-xs ${muted}`}>Message</dt>
+        <dt className={detailLabel}>Message</dt>
         <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
       </div>
     </dl>
