@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, MessageSquareText, Trash2 } from 'lucide-react'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -46,10 +46,9 @@ export default function AlphaSignupsTab() {
     seen.current = notices.length
   }, [notices.length])
 
-  // Deleting the only row of the last page must not leave an empty page while sign-ups remain.
-  useEffect(() => {
-    if (data && data.items.length === 0 && page > 1) setPage(p => p - 1)
-  }, [data, page])
+  // Deleting the only row of the last page must not leave an empty page while sign-ups remain. Set during render (React's
+  // derived-state pattern), not in an effect.
+  if (data && data.items.length === 0 && page > 1) setPage(page - 1)
 
   async function confirmDelete() {
     if (!pending) return
@@ -67,6 +66,18 @@ export default function AlphaSignupsTab() {
     setPending(null)
   }
 
+  const deleteButton = (row: EarlyAccessSignupDto) => (
+    <Button
+      variant="ghost"
+      iconOnly
+      aria-label={`Delete sign-up from ${row.name}`}
+      title="Delete sign-up"
+      onClick={() => { setDeleteError(null); setPending(row) }}
+    >
+      <Trash2 className="w-4 h-4" aria-hidden />
+    </Button>
+  )
+
   const columns: Column<EarlyAccessSignupDto>[] = [
     {
       key: 'name', header: 'Name', mobile: 'primary',
@@ -74,6 +85,7 @@ export default function AlphaSignupsTab() {
       render: row => isBelowMd ? row.name : (
         <button
           type="button"
+          aria-label={row.message ? `${row.name}, has a message` : undefined}
           aria-expanded={open.has(row.id)}
           aria-controls={open.has(row.id) ? detailId(row) : undefined}
           onClick={() => toggle(row.id)}
@@ -83,6 +95,8 @@ export default function AlphaSignupsTab() {
             ? <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 ${muted}`} aria-hidden="true" />
             : <ChevronRight className={`h-3.5 w-3.5 flex-shrink-0 ${muted}`} aria-hidden="true" />}
           <span className="truncate">{row.name}</span>
+          {/* Removal requests arrive in the message, so a closed row says it has one (the text stays in the detail). */}
+          {row.message && <MessageSquareText className={`h-3.5 w-3.5 flex-shrink-0 ${muted}`} aria-hidden="true" />}
         </button>
       ),
     },
@@ -104,26 +118,17 @@ export default function AlphaSignupsTab() {
       ),
     },
     {
-      key: 'actions', header: '', align: 'right' as const,
-      render: row => (
-        <RowActions>
-          <Button
-            variant="ghost"
-            iconOnly
-            aria-label={`Delete sign-up from ${row.name}`}
-            title="Delete sign-up"
-            onClick={() => { setDeleteError(null); setPending(row) }}
-          >
-            <Trash2 className="w-4 h-4" aria-hidden />
-          </Button>
-        </RowActions>
-      ),
+      // On a phone Delete sits at the foot of the card instead (rowDetail), so it has one place and never splits the details.
+      key: 'actions', header: '', align: 'right' as const, mobile: 'hidden',
+      render: row => isBelowMd ? null : <RowActions>{deleteButton(row)}</RowActions>,
     },
   ]
 
-  // Role, phone and the whole message: under the row once its name is opened, and always on a phone card.
+  // Role and phone as a pair, then the whole message: under the row once its name is opened, and always on a phone card, which
+  // ends with Delete. A stack at the name's indent, so it never looks like columns of the table above.
   const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
-    <dl id={detailId(row)} className="grid gap-x-8 gap-y-2 md:grid-cols-[11rem_9rem_minmax(0,1fr)] md:pl-[1.125rem]">
+    <>
+    <dl id={detailId(row)} className="grid grid-cols-2 gap-x-8 gap-y-2 md:grid-cols-[auto_auto] md:justify-start md:pl-[1.125rem]">
       <div>
         <dt className={detailLabel}>Role</dt>
         <dd>{row.role ?? '—'}</dd>
@@ -132,11 +137,13 @@ export default function AlphaSignupsTab() {
         <dt className={detailLabel}>Phone</dt>
         <dd>{row.phone ?? '—'}</dd>
       </div>
-      <div className="min-w-0">
+      <div className="col-span-2 min-w-0">
         <dt className={detailLabel}>Message</dt>
         <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
       </div>
     </dl>
+    {isBelowMd && <div className="mt-2 flex justify-end">{deleteButton(row)}</div>}
+    </>
   ) : null
 
   return (

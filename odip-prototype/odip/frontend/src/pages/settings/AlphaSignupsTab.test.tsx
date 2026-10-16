@@ -177,6 +177,26 @@ describe('AlphaSignupsTab', () => {
     })
     afterEach(() => vi.unstubAllGlobals())
 
+    it('marks a sign-up that has a message in its name, and leaves one without unmarked', () => {
+      returns(page([makeRow(), makeRow({ id: 'b', name: 'Sam Field', message: undefined })]))
+      render(<AlphaSignupsTab />)
+
+      expect(screen.getByRole('button', { name: 'Amara Okafor, has a message' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Sam Field' })).toBeInTheDocument()
+      expect(screen.queryByText('Please remove my details.')).not.toBeInTheDocument()
+    })
+
+    it('keeps Delete in the row from md up, not in the opened detail', async () => {
+      returns(page([makeRow()]))
+      const { container } = render(<AlphaSignupsTab />)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+
+      const buttons = screen.getAllByRole('button', { name: 'Delete sign-up from Amara Okafor' })
+      expect(buttons).toHaveLength(1)
+      expect(container.querySelector('tr[data-row-detail]')!.contains(buttons[0])).toBe(false)
+    })
+
     it('has six columns, so the table never scrolls sideways', () => {
       returns(page([makeRow()]))
       render(<AlphaSignupsTab />)
@@ -189,7 +209,7 @@ describe('AlphaSignupsTab', () => {
       returns(page([makeRow({ message })]))
       const { container } = render(<AlphaSignupsTab />)
 
-      const toggle = screen.getByRole('button', { name: 'Amara Okafor' })
+      const toggle = screen.getByRole('button', { name: 'Amara Okafor, has a message' })
       expect(toggle).toHaveAttribute('aria-expanded', 'false')
       expect(screen.queryByText('Operations manager')).not.toBeInTheDocument()
 
@@ -207,6 +227,18 @@ describe('AlphaSignupsTab', () => {
       expect(toggle).toHaveAttribute('aria-expanded', 'false')
       expect(container.querySelectorAll('tr[data-row-detail]')).toHaveLength(0)
     })
+  })
+
+  it('puts Delete at the foot of each phone card, after the message, and only once', () => {
+    returns(page([makeRow()]))
+    const { container } = render(<AlphaSignupsTab />)
+
+    const buttons = screen.getAllByRole('button', { name: 'Delete sign-up from Amara Okafor' })
+    expect(buttons).toHaveLength(1)
+    const detail = container.querySelector('tr[data-row-detail]')!
+    expect(detail.contains(buttons[0])).toBe(true)
+    const message = [...detail.querySelectorAll('p')].find(p => p.textContent === 'Please remove my details.')!
+    expect(message.compareDocumentPosition(buttons[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('goes back a page when the last row of the last page is deleted', async () => {
