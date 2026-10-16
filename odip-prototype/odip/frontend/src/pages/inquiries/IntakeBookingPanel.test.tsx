@@ -166,7 +166,7 @@ describe('IntakeBookingPanel: a new booking', () => {
     expect(screen.getByText("No invite sent: the email on file, a b@c.d, can't take an invite. Let Sarah know another way.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Send again' })).not.toBeInTheDocument()
     expect(screen.queryByText(/No invite will go out/)).not.toBeInTheDocument() // the warning says it once
-    expect(screen.getByText("It can't be changed here: the enquiry is the participant's record now.")).toBeInTheDocument()
+    expect(screen.getByText("The email can't be changed here: the enquiry is the participant's record now.")).toBeInTheDocument()
     await user.clear(screen.getByLabelText(/^Where/))
     await user.type(screen.getByLabelText(/^Where/), 'Library')
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()

@@ -249,7 +249,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
           ) : current.email && (
             <div className="text-sm">
               {!booked && <p>No invite will go out: the email on file, <span className="font-medium break-all">{current.email}</span>, can't take one.</p>}
-              <p className={`${booked ? '' : 'mt-0.5 '}text-[13px] text-[var(--color-muted-foreground)]`}>It can't be changed here: the enquiry is the participant's record now.</p>
+              <p className={`${booked ? '' : 'mt-0.5 '}text-[13px] text-[var(--color-muted-foreground)]`}>The email can't be changed here: the enquiry is the participant's record now.</p>
             </div>
           )}
         </div>
