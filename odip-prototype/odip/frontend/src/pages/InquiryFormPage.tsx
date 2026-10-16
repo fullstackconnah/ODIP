@@ -476,13 +476,13 @@ function InquiryFormBody({ initial, focus, onCreated, onCancel, onReopened, onDo
             <Callout tone="error">{error}</Callout>
           </div>
         )}
-        <div className="flex gap-2">
-          <Button type="submit" aria-disabled={busy ? true : undefined} className={DISABLED_LOOK}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button type="submit" aria-disabled={busy ? true : undefined} className={`${DISABLED_LOOK} w-full sm:w-auto`}>
             {busy === 'saving' ? 'Saving…' : busy === 'booking' ? 'Booking the visit…' : busy === 'resending' ? 'Sending the invite…' : row ? 'Save enquiry' : 'Capture enquiry'}
           </Button>
-          <Button variant="secondary" onClick={onCancel}>{!initial && row ? 'Back to enquiries' : 'Cancel'}</Button>
+          <Button variant="secondary" className="w-full sm:w-auto" onClick={onCancel}>{!initial && row ? 'Back to enquiries' : 'Cancel'}</Button>
           {/* Only an enquiry that hasn't started intake can close; never a new one (SHAPE section 11). */}
-          {row && !row.participantId && <Button variant="ghost-danger" className="ml-auto" onClick={() => setClosing(true)}>Close enquiry</Button>}
+          {row && !row.participantId && <Button variant="ghost-danger" className="w-full sm:ml-auto sm:w-auto" onClick={() => setClosing(true)}>Close enquiry</Button>}
         </div>
       </form>
 
