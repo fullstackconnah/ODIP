@@ -604,25 +604,15 @@ app.UseMiddleware<Odip.Api.Middleware.ExceptionHandlingMiddleware>();
 // failure budget is not counted at all (ClientIp.LoginAttemptKey returns null),
 // because counting it would be counting against that shared key.
 //
-// Detected by a real request at startup, not by guessing: if the very first
-// request looks like the proxy hop, say so once and loudly.
-app.Use(async (context, next) =>
-{
-    if (!Odip.Api.Services.ClientIp.IsIndistinguishableFromProxy(context))
-    {
-        var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Odip.ClientIp");
-        logger.LogWarning(
-            "SIGN-IN BUDGET NOT PARTITIONED: this request resolved to the proxy address {Address}, " +
-            "not a client. The address-keyed rate limiter is one shared bucket and failed sign-ins are not " +
-            "counted. If the published port is served by docker-proxy (a userspace proxy), the real client " +
-            "address is destroyed before nginx sees it and no application code can recover it. Fix at the " +
-            "deploy layer: publish without the userspace proxy (userland-proxy:false), or serve from a " +
-            "reverse proxy that terminates outside the published port.",
-            context.Connection.RemoteIpAddress);
-    }
-
-    await next();
-});
+// Detected by a real request, not by guessing: if a request cannot be attributed to
+// one client, say so once and loudly.
+//
+// The guard is ClientIp.SignInBudgetCannotBePartitioned — the SAME predicate that
+// decides whether a key exists — and it is NOT negated. An inline lambda here was
+// harder to test than the behaviour was worth, and the untested version shipped with
+// its guard inverted: it stayed silent on the deployed proxy shape that needs the
+// warning and fired on every healthy client instead.
+app.UseMiddleware<Odip.Api.Middleware.SignInBudgetPartitionWarningMiddleware>();
 
 app.UseRateLimiter();
 app.UseCors();

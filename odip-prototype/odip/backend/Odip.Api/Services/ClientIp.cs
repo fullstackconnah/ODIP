@@ -82,6 +82,41 @@ public static class ClientIp
             return resolved is not null && IsTrustedProxyNetwork(resolved);
         }
 
+        /// <summary>
+        /// TRUE when this request has no failed-sign-in budget that belongs to one caller
+        /// alone — the exact condition <see cref="LoginAttemptKey"/> answers
+        /// <see langword="null"/> for. This is the shape the startup warning middleware
+        /// reports on, so it is defined here rather than at the call site.
+        ///
+        /// <para>
+        /// It covers BOTH of the two shapes <see cref="LoginAttemptKey"/> declines to
+        /// count, not just the proxy one, and that is deliberate:
+        /// </para>
+        /// <list type="bullet">
+        /// <item>the address resolved to the proxy's (see
+        /// <see cref="IsIndistinguishableFromProxy"/>) — every caller shares it;</item>
+        /// <item>there is no address at all, which
+        /// <see cref="IsIndistinguishableFromProxy"/> reports FALSE for, because "no
+        /// address" is not "an address inside the bridge range".</item>
+        /// </list>
+        ///
+        /// <para>
+        /// Warning on only the first would UNDER-report: on a request with no address
+        /// the budget is just as absent, and a diagnostic that goes quiet exactly when
+        /// the defence is missing is worse than none, because silence there reads as an
+        /// all-clear.
+        /// </para>
+        ///
+        /// <para>
+        /// It is derived from <see cref="LoginAttemptKey"/> rather than re-testing the
+        /// address, so the warning and the key it describes cannot drift apart: one
+        /// predicate, one range test. A call site therefore cannot end up warning about
+        /// a shape the budget is in fact counted for.
+        /// </para>
+        /// </summary>
+        public static bool SignInBudgetCannotBePartitioned(HttpContext context) =>
+            LoginAttemptKey(context) is null;
+
     /// <summary>
     /// The partition key for the failed-sign-in budget, or <see langword="null"/>
     /// when there is no budget that belongs to this caller alone.
