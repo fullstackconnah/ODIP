@@ -238,7 +238,7 @@ function useInquiriesScreen() {
         if (!row.provenance) return <span>{text}</span>
         return (
           <span
-            className="block max-w-[9.5rem] truncate text-sm text-[var(--color-muted-foreground)]"
+            className="block max-w-[8rem] truncate text-sm text-[var(--color-muted-foreground)]"
             title={row.provenance}
           >
             {text}
@@ -250,7 +250,7 @@ function useInquiriesScreen() {
     {
       key: 'intakeStartsAt', header: 'Intake', sortable: true, wrap: true,
       // Room for the date and time unbroken; a narrower window scrolls the table in its box (the Column Rule) rather than crushing the cell.
-      // 14rem holds line 1 ("Fri 16 Oct, 10:00 am · Callum") unbroken; with Provenance capped at 9.5rem the whole table, one-row Actions
+      // 14rem holds line 1 ("Fri 16 Oct, 10:00 am · Callum") unbroken; with Provenance capped at 8rem (9.5rem until the row menu joined Actions) the whole table, one-row Actions
       // included, still fits its box at 1440.
       minWidth: '14rem',
       // ISO instants sort in time order. An empty cell sorts last on the ascending sort.

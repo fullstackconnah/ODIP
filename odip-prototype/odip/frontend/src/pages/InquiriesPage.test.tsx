@@ -152,8 +152,8 @@ describe('InquiriesPage lifecycle handoff', () => {
     const editBtn = screen.getByRole('button', { name: /^Edit enquiry/ })
     // the primary CTA must precede the outlined secondary in DOM reading order
     expect(resume.compareDocumentPosition(editBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // provenance is truncated and carries the full text for hover; capped at 9.5rem so the table, Intake on two lines and one-row Actions included, fits at 1440
+    // provenance is truncated and carries the full text for hover; capped at 8rem (since the row menu joined Actions) so the table, Intake on two lines and one-row Actions included, fits at 1440
     const prov = screen.getByTitle(LONG_PROVENANCE)
-    expect(prov).toHaveClass('truncate', 'max-w-[9.5rem]')
+    expect(prov).toHaveClass('truncate', 'max-w-[8rem]')
   })
 })
