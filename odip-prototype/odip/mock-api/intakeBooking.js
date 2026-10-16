@@ -44,6 +44,12 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   const sydneyDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: ZONE }).format(new Date(iso))
   const inRange = (day, params) => (!params?.get('from') || day >= params.get('from')) && (!params?.get('to') || day <= params.get('to'))
   const notBooked = () => respond(404, failEnvelope(null, ['No intake visit is booked for this enquiry.']))
+  // The enquiry form (spec 2026-10-16): pending contacts by enquiry id, as GET /inquiries/{id} carries them. A list replaces them and null leaves them, as the API does.
+  const contacts = {}
+  let made = 0
+  const saveContacts = (id, list) => { if (Array.isArray(list)) contacts[id] = list }
+  const fields = (body) => ({ firstName: body.firstName, lastName: body.lastName, phone: body.phone ?? null, email: body.email ?? null, source: body.source, provenance: body.provenance ?? null })
+  const notFound = () => respond(404, failEnvelope(null, ['Inquiry not found']))
 
   const get = [
     ['intake-visits', (params) => Object.entries(bookings)
@@ -75,6 +81,11 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       if ((body.location ?? '').trim().toLowerCase() === 'refuse') {
         return respond(400, { title: 'One or more validation errors occurred.', status: 400, errors: { staffUserId: ["Callum can't do intakes. Choose an active coordinator or admin."] } })
       }
+      // The capture's staff-busy state, in the API's 409 shape (intake-staff-busy, keyed staffUserId).
+      if ((body.location ?? '').trim().toLowerCase() === 'busy') {
+        const day = new Intl.DateTimeFormat('en-GB', { timeZone: ZONE, weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(body.startsAt)).replace(',', '')
+        return respond(409, { title: 'One or more validation errors occurred.', status: 409, code: 'intake-staff-busy', errors: { staffUserId: [`Callum Radford is on a shift 10:00 am – 2:00 pm on ${day}.`] } })
+      }
       if (!row.email && body.contactEmail) row.email = body.contactEmail
       const before = bookings[id]
       bookings[id] = {
@@ -83,9 +94,12 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       }
       return withBooking(row)
     }],
+    // Its 2 segments never match .../intake-booking.
+    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); Object.assign(row, fields(body)); saveContacts(id, body.contacts); return withBooking(row) }],
   ]
 
   const post = [
+    ['inquiries', (body) => { const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return withBooking(row) }],
     ['inquiries/:id/intake-booking/confirm', (id, body) => {
       if (!bookings[id]) return notBooked()
       bookings[id].intakeConfirmedAt = body.confirmed ? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') : null
@@ -103,7 +117,9 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     }],
   ]
 
-  return { feed: () => rows().map(withBooking), get, put, post, delete: del }
+  const detail = [['inquiries/:id', (id) => { const row = find(id); return row ? { ...withBooking(row), contacts: contacts[id] ?? [] } : notFound() }]]
+
+  return { feed: () => rows().map(withBooking), get, put, post, delete: del, detail }
 }
 
 module.exports = { create }
