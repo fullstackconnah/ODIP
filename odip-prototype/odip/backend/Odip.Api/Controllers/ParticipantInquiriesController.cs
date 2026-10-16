@@ -194,7 +194,9 @@ public class ParticipantInquiriesController : ControllerBase
             if (ContactRoleRules.Validate(c.Role, participant.PlanType, participant.DateOfBirth, null, today) is string gate)
                 return $"{c.FirstName} {c.LastName} can't be added as this participant's contact: {gate}";
             _db.InquiryContacts.Remove(c);
+            // Already on the participant, or the same contact twice on the enquiry (plan check B-S1): one copy.
             if (recorded.Any(r => r.RoleType == c.Role && Same(r.FirstName, c.FirstName) && Same(r.LastName, c.LastName))) continue;
+            recorded.Add(new { RoleType = c.Role, c.FirstName, c.LastName });
             var person = new Person { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = c.FirstName, LastName = c.LastName, Phone = c.Phone, Email = c.Email };
             _db.People.Add(person);
             _db.ParticipantContactRoles.Add(new ParticipantContactRole

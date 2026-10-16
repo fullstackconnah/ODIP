@@ -339,4 +339,21 @@ public class InquiryContactsTests
         Assert.Equal(("Sam Lee", "Sam"), (dto.IntakeStaffName, dto.IntakeStaffFirstName));
         Assert.Equal("Australia/Sydney", dto.TimeZoneId);
     }
+
+    [Fact]
+    public async Task Convert_adds_pending_rows_that_are_the_same_contact_once()
+    {
+        // Plan check B-S1: the same role and names twice on the enquiry (any case) make one contact on the participant.
+        var inquiry = SeedInquiry();
+        SeedContacts(inquiry,
+            new InquiryContact { Role = ContactRoleType.Guardian, FirstName = "Maria", LastName = "Lopez" },
+            new InquiryContact { Role = ContactRoleType.Guardian, FirstName = " maria ", LastName = "LOPEZ" },
+            new InquiryContact { Role = ContactRoleType.NextOfKin, FirstName = "Maria", LastName = "Lopez" });
+
+        var dto = Data<ParticipantInquiryDto>((await Controller().Convert(inquiry.Id, new(), CancellationToken.None)).Result);
+
+        Assert.Equal(new[] { ContactRoleType.NextOfKin, ContactRoleType.Guardian }, RolesOf(dto.ParticipantId!.Value).Select(r => r.RoleType).OrderBy(r => r));
+        Assert.Equal(2, _db.People.AsNoTracking().Count());
+        Assert.Empty(Stored());
+    }
 }
