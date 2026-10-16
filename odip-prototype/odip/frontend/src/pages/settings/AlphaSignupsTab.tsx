@@ -130,7 +130,8 @@ export default function AlphaSignupsTab() {
   const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
     <>
     <dl id={detailId(row)} className="grid grid-cols-2 gap-x-8 gap-y-2 md:flex md:flex-wrap md:gap-x-10 md:pl-[1.125rem]">
-      <div>
+      {/* A fixed width from md up, so Phone starts at the same x in every opened row. */}
+      <div className="min-w-0 break-words md:w-48">
         <dt className={detailLabel}>Role</dt>
         <dd>{row.role ?? '—'}</dd>
       </div>
