@@ -1571,7 +1571,7 @@ public class RosteringController : ControllerBase
     // ══════════════════════════════════════════════════════════════
 
     /// <summary>Monday of the week containing <paramref name="date"/>.</summary>
-    private static DateOnly WeekStart(DateOnly date) => date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
+    private static DateOnly WeekStart(DateOnly date) => RosterWeek.MondayOf(date);
 
     /// <summary>
     /// Parses the board's <c>groupBy</c> query param case-insensitively. Missing/empty
