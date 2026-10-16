@@ -11,6 +11,8 @@ vi.mock('@/api/hooks', () => ({
   useSetIntakeBooking: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useResendIntakeInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useStaff: () => ({ data: [], isLoading: false }),
+  useCloseInquiry: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useReopenInquiry: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useParticipantInquiries: mocks.inquiries,
   useCreateParticipantInquiry: () => ({ mutate: mocks.create, isPending: false }),
   useUpdateParticipantInquiry: () => ({ mutate: mocks.update, isPending: false }),
