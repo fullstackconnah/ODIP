@@ -82,7 +82,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   let made = 0
   const saveContacts = (id, list) => { if (Array.isArray(list)) contacts[id] = list }
   // What a save stores, as the API's Apply does: with "their own contact" ticked the contact's four fields are null whatever was sent; the NDIS number without spaces.
-  const own = (body) => ({ firstName: body.firstName, lastName: body.lastName ?? null, source: body.source, provenance: body.provenance ?? null })
+  const own = (body) => ({ firstName: body.firstName, lastName: body.lastName?.trim() ?? '', source: body.source, provenance: body.provenance ?? null })
   const fields = (body) => {
     const self = !!body.contactIsParticipant
     return {
@@ -151,10 +151,10 @@ function create({ respond, failEnvelope, enquiryFeed }) {
         // L7: with no email nothing is sent, so nothing is recorded; the mock has no SMTP, so a send stores NotConfigured.
         intakeStaffUserId: body.staffUserId, intakeNotes: body.notes, intakeInviteError: row.email ? 'NotConfigured' : (before?.intakeInviteError ?? null), intakeConfirmedAt: before?.intakeConfirmedAt ?? null,
       }
-      return withBooking(row)
+      return listRow(row)
     }],
     // Its 2 segments never match .../intake-booking.
-    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); if (stale(row, body)) return changedByOther(); stamp(row); Object.assign(row, row.participantId ? own(body) : fields(body)); saveContacts(id, body.contacts); return withBooking(row) }],
+    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); if (stale(row, body)) return changedByOther(); stamp(row); Object.assign(row, row.participantId ? own(body) : fields(body)); saveContacts(id, body.contacts); return listRow(row) }],
   ]
 
   const post = [
@@ -171,7 +171,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       delete contacts[id]
       closed[id] = { closedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), closeOutcome: body.outcome, closeNote: body.note ?? null }
       stamp(row)
-      return { inquiry: withBooking(row), cancellationEmail }
+      return { inquiry: listRow(row), cancellationEmail }
     }],
     ['inquiries/:id/reopen', (id, body) => {
       const row = find(id)
@@ -180,7 +180,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       if (stale(row, body)) return enquiryChangedByOther()
       delete closed[id]
       stamp(row)
-      return withBooking(row)
+      return listRow(row)
     }],
     // Start intake (L5, D1): closed first, then the full address and a named main contact, each a 400 keyed by field.
     ['inquiries/:id/convert', (id) => {
@@ -199,13 +199,13 @@ function create({ respond, failEnvelope, enquiryFeed }) {
         Object.assign(row, { participantId: `p-conv-${++converted}`, participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null })
         stamp(row)
       }
-      return withBooking(row)
+      return listRow(row)
     }],
-    ['inquiries', (body) => { const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return withBooking(row) }],
+    ['inquiries', (body) => { const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return listRow(row) }],
     ['inquiries/:id/intake-booking/confirm', (id, body) => {
       if (!bookings[id]) return notBooked()
       bookings[id].intakeConfirmedAt = body.confirmed ? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') : null
-      return withBooking(find(id))
+      return listRow(find(id))
     }],
     ['inquiries/:id/intake-booking/send', (id, body) => {
       if (!bookings[id]) return notBooked()
@@ -213,7 +213,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       if (!row.email) return problem({ contactEmail: ["Add the main contact's email to send the invite."] })
       if (stale(row, body)) return changedByOther()
       stamp(row)
-      return withBooking(row)
+      return listRow(row)
     }],
   ]
 
@@ -224,7 +224,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       if (stale(find(id), { expectedUpdatedAt: params?.get('expectedUpdatedAt') })) return changedByOther()
       stamp(find(id))
       delete bookings[id]
-      return { inquiry: withBooking(find(id)), cancellationEmail: before.intakeInviteSentAt ? 'NotConfigured' : 'NoInvite' }
+      return { inquiry: listRow(find(id)), cancellationEmail: before.intakeInviteSentAt ? 'NotConfigured' : 'NoInvite' }
     }],
   ]
 
