@@ -551,6 +551,21 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
     }
 }
 
+// Start rostering one-off (2026-10-16, L7): clears untouched future weeks and marks the kept ones started. On only through deploy/compose.yaml for the deploy that ships it;
+// the next PR deletes this call with RosterWeekClear. It never stops startup (S2): a failure is logged, and the next start tries again.
+if (app.Configuration.GetValue<bool>("RosterWeekClear:Enabled"))
+{
+    try
+    {
+        using var clearScope = app.Services.CreateScope();
+        await Odip.Infrastructure.Rostering.RosterWeekClear.RunAsync(clearScope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>(), TimeProvider.System, app.Logger, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Roster week clear could not run; startup carries on and the next start tries again");
+    }
+}
+
 // ── Middleware pipeline ──────────────────────────────────────
 // UseForwardedHeaders() MUST be the very first middleware — everything after this
 // point (security headers, exception handling, the rate limiter, CORS, auth,
