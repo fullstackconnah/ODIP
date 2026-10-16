@@ -14,7 +14,7 @@ export type SectionKey =
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'holidays'
   | 'import' | 'export' | 'integrations' | 'failed-sends'
-  | 'tenants' | 'users' | 'catalogue'
+  | 'tenants' | 'users' | 'catalogue' | 'alpha-signups'
 
 export type SectionGroup = 'My account' | 'Organisation' | 'Pricing and budgets' | 'Content' | 'Data' | 'Platform'
 
@@ -66,6 +66,8 @@ export const SECTIONS: SectionDef[] = [
   { key: 'catalogue', label: 'Support catalogue', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: 'NDIS price limits for every support item. Import the new catalogue when the NDIA publishes one.' },
   { key: 'holidays', label: 'Public holidays', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: HOLIDAYS },
   { key: 'failed-sends', label: 'Failed sends', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: "Emails ODIP couldn't deliver, across every organisation. Retry one, or send a test email." },
+  // Alpha sign-ups (landing PR 1): the public early-access rows. AdminEarlyAccessController admits a SuperAdmin only.
+  { key: 'alpha-signups', label: 'Alpha sign-ups', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: 'People who asked to join the alpha on the website. Each sign-up is deleted 12 months after it was last sent; delete one sooner if they ask.' },
 ]
 
 /** Old ?tab= keys whose section has a new name. Every other old key is its own section key. Old keys live forever: sent emails carry them. */

@@ -8,6 +8,7 @@ import { useNotices } from '@/hooks/useNotices'
 import { usePermissions } from '@/lib/permissions'
 import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
+import AlphaSignupsTab from '@/pages/settings/AlphaSignupsTab'
 import AlertWindowsSection from '@/pages/settings/AlertWindowsSection'
 import AppearanceSection from '@/pages/settings/AppearanceSection'
 import BillingDetailsSection from '@/pages/settings/BillingDetailsSection'
@@ -93,6 +94,7 @@ export default function SettingsPage() {
       case 'export': return framed(<DataExportTab />)
       case 'integrations': return framed(<IntegrationsTab />)
       case 'failed-sends': return framed(<AdminNotificationsTab />)
+      case 'alpha-signups': return framed(<AlphaSignupsTab />)
       case 'catalogue': return framed(<SupportCatalogueSection />)
       case 'users': return framed(<UsersTab notices={userNotices} onAddUser={addUser} onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }} />)
       case 'tenants': return framed(tenantDetail ? (
