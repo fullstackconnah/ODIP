@@ -1080,7 +1080,8 @@ public class RosteringController : ControllerBase
         var ordered = joined
             .OrderByDescending(x => Math.Abs(x.Completion.VarianceMinutesStart) > thresholdMinutes || Math.Abs(x.Completion.VarianceMinutesEnd) > thresholdMinutes)
             .ThenBy(x => x.Shift.ServiceDate)
-            .ThenBy(x => x.Shift.StartTime);
+            .ThenBy(x => x.Shift.StartTime)
+            .ThenBy(x => x.Shift.Id);   // unique: tied rows must page in one order, or a row at a page edge is repeated and another never read
 
         var totalCount = await ordered.CountAsync(ct);
 
