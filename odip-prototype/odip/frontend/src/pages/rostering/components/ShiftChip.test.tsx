@@ -903,3 +903,87 @@ describe('ShiftChip menu: Swap with… (the lead decision 1, 2026-10-15)', () =>
     expect(swap).not.toHaveBeenCalled()
   })
 })
+
+describe('ShiftChip: the regular (2026-10-16)', () => {
+  const chipIn = (shift: ShiftDto, state: Partial<DropState> = {}, extra: Partial<ShiftChipProps> = {}) => {
+    const onSetRegular = vi.fn()
+    const result = renderChip(
+      <DropStateContext.Provider value={{ disabled: false, pending: null, swap: vi.fn(), pick: vi.fn(), ...state }}>
+        <ShiftChip shift={shift} canWrite dashed={!shift.staffId} context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} onSetRegular={onSetRegular} {...extra} />
+      </DropStateContext.Provider>,
+    )
+    return { onSetRegular, ...result }
+  }
+  const openMenu = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /^Actions for/ }))
+  const kim = makeShift({ id: 'kim', staffName: 'Kim Lee', shiftPatternId: 'pat-1' })
+
+  it('offers "Make Kim the regular" on a pattern shift with a worker, after Swap and before Remove, and hands the shift up', async () => {
+    const user = userEvent.setup()
+    const { onSetRegular } = chipIn(kim)
+    await openMenu(user)
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Edit', 'Replace Kim…', 'Swap Kim with…', 'Make Kim the regular', 'Remove Kim', 'Delete'])
+    await user.click(screen.getByRole('option', { name: 'Make Kim the regular' }))
+    expect(onSetRegular).toHaveBeenCalledWith(kim)
+  })
+
+  it("\"Stop being the regular\" when Kim is the regular, said in the chip's title and name, with no mark drawn", async () => {
+    const user = userEvent.setup()
+    const { container } = chipIn({ ...kim, isRegular: true })
+    expect(container.querySelector('[data-shift-chip]')?.getAttribute('title')).toContain('Kim Lee is the regular')
+    expect(getOpenButton(kim).getAttribute('aria-label')).toContain(', Kim is the regular,')
+    expect(screen.queryByText(/regular/i)).not.toBeInTheDocument()
+    await openMenu(user)
+    expect(screen.getByRole('option', { name: 'Stop being the regular' })).toBeInTheDocument()
+  })
+
+  it('offers neither on a one-off, an open shift, or where nothing handles it, and keeps it on a locked chip', async () => {
+    const user = userEvent.setup()
+    const cases: [ShiftDto, Partial<ShiftChipProps>][] = [
+      [makeShift({ id: 'one-off', staffName: 'Kim Lee', shiftPatternId: null }), {}],
+      [makeUnfilledShift({ id: 'open', shiftPatternId: 'pat-1' }), {}],
+      [kim, { onSetRegular: undefined }],
+    ]
+    for (const [shift, extra] of cases) {
+      chipIn(shift, {}, extra)
+      await openMenu(user)
+      expect(screen.queryByRole('option', { name: /the regular$/ })).not.toBeInTheDocument()
+      cleanup()
+    }
+    chipIn({ ...kim, status: 'Completed' })
+    await openMenu(user)
+    expect(screen.getByRole('option', { name: 'Make Kim the regular' })).toBeInTheDocument()
+  })
+
+  const away = makeUnfilledShift({ id: 'away', participantName: 'Mia Chen', shiftPatternId: 'pat-1', regularUserId: 's-1', regularAwayReason: 'on approved leave' })
+
+  it('an open shift whose regular is away: the plus takes the lead cell, and the box says Away, or Regular away from 11rem', () => {
+    const { container } = chipIn(away)
+    const plus = container.querySelector('[data-shift-plus]')
+    expect(plus).toHaveClass('col-start-1')
+    expect(plus).not.toHaveClass('col-[1/span_2]')
+    const flag = container.querySelector('[data-regular-away]') as HTMLElement
+    expect(flag).toHaveAttribute('title', 'Regular away: on approved leave')
+    expect(within(flag).getByText('Away')).toHaveClass('@[11rem]:hidden')
+    expect(within(flag).getByText('Regular away')).toHaveClass('hidden', '@[11rem]:inline')
+    expect(getOpenButton(away).getAttribute('aria-label')).toContain('Needs staff, Regular away: on approved leave')
+    expect(container.querySelector('[data-shift-chip]')?.getAttribute('title')).toContain('Regular away: on approved leave')
+  })
+
+  it('a reader sees the flag in place of "Needs staff"', () => {
+    const { container } = chipIn(away, {}, { canWrite: false })
+    expect(screen.queryByText('Needs staff')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-regular-away]')).not.toBeNull()
+    expect(getOpenButton(away).getAttribute('aria-label')).toContain('Needs staff')
+  })
+
+  it("on the Unfilled lane the flag follows the participant's name: the glyph always, the words from 15rem", () => {
+    renderChip(
+      <DropStateContext.Provider value={{ disabled: false, pending: null, pick: vi.fn() }}>
+        <ShiftChip shift={away} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />
+      </DropStateContext.Provider>,
+    )
+    const flag = screen.getByRole('link', { name: 'Mia Chen' }).nextElementSibling as HTMLElement
+    expect(flag).toHaveAttribute('data-regular-away')
+    expect(within(flag).getByText('Regular away')).toHaveClass('hidden', '@[15rem]:inline')
+  })
+})
