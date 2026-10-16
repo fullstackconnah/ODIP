@@ -393,22 +393,27 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task ThePurge_DeletesSignupsLastSentMoreThan12MonthsAgo_AndKeepsTheRest()
+    public async Task ThePurge_DeletesSignupsFirstSentMoreThan12MonthsAgo_EvenIfSentAgainSince_AndKeepsTheRest()
     {
         Skip.IfNot(_pg.Available, _pg.UnavailableReason);
-        var now = DateTime.UtcNow;
-        var expired = await SeedRowAsync("expired", now.AddMonths(-12).AddMinutes(-1), now.AddMonths(-12).AddMinutes(-1));
-        var justInside = await SeedRowAsync("inside", now.AddMonths(-12).AddMinutes(1), now.AddMonths(-12).AddMinutes(1));
-        var refreshed = await SeedRowAsync("refreshed", now.AddMonths(-24), now.AddDays(-7), count: 2);
+        // PostgreSQL keeps microseconds, so the clock is cut to them and the boundary can be pinned exactly.
+        var now = new DateTime(DateTime.UtcNow.Ticks / 10 * 10, DateTimeKind.Utc);
+        var cutoff = now.AddMonths(-12);
+        var oneMicrosecond = TimeSpan.FromTicks(10);
+        var expired = await SeedRowAsync("expired", cutoff - oneMicrosecond, cutoff - oneMicrosecond);
+        var atTheCutoff = await SeedRowAsync("cutoff", cutoff, cutoff);
+        // Anyone can send the form again with someone's address, so a repeat must not extend how long their details are kept.
+        var resent = await SeedRowAsync("resent", now.AddMonths(-24), now.AddDays(-7), count: 2);
+        var recent = await SeedRowAsync("recent", now.AddDays(-30), now.AddDays(-30));
         var log = new CapturingLogger<EarlyAccessPurgeBackgroundService>();
 
         var deleted = await Purger(log).PurgeExpiredAsync(now, CancellationToken.None);
 
-        Assert.True(deleted >= 1); // the class shares one database
+        Assert.True(deleted >= 2); // the class shares one database
         await using var check = _pg.CreateContext();
-        var ids = new[] { expired.Id, justInside.Id, refreshed.Id };
+        var ids = new[] { expired.Id, atTheCutoff.Id, resent.Id, recent.Id };
         var remaining = await check.EarlyAccessRequests.Where(e => ids.Contains(e.Id)).Select(e => e.Id).ToListAsync();
-        Assert.Equal(new[] { justInside.Id, refreshed.Id }.OrderBy(i => i), remaining.OrderBy(i => i));
+        Assert.Equal(new[] { atTheCutoff.Id, recent.Id }.OrderBy(i => i), remaining.OrderBy(i => i));
 
         var entry = Assert.Single(log.Entries, e => e.Level == LogLevel.Information);
         Assert.Contains(deleted.ToString(System.Globalization.CultureInfo.InvariantCulture), entry.Message);

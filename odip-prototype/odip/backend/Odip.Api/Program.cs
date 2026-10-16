@@ -252,13 +252,12 @@ builder.Services.AddHttpClient<Odip.Infrastructure.Integrations.EmploymentHeroCl
 builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroStaffSync>();
 // Every 30 minutes, each connected organisation. EmploymentHero:Enabled (default true) switches the loop off; Sync now still works.
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroSyncBackgroundService>();
-// Alpha sign-ups (landing page): deletes each early-access row 12 months after it was last sent, at start and then daily.
-builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EarlyAccessPurgeBackgroundService>();
 
 // ── Public early-access form (landing page) ──────────────────────
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH
 // EarlyAccess:NotifyEmail and Notifications:Smtp:Host — by default nothing is sent). One singleton instance
 // serves as both the IEarlyAccessNotifier the controller calls and the hosted service that drains its queue.
+// It also registers the daily purge (each sign-up deleted 12 months after it was first sent).
 builder.Services.AddEarlyAccess();
 
 // ── Demo-data top-up (DemoData:Scenarios, Off by default: with it Off this registers nothing) ──

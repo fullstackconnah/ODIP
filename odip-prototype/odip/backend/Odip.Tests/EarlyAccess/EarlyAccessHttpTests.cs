@@ -252,6 +252,20 @@ public class EarlyAccessHttpTests
     }
 
     [Fact]
+    public async Task ABodyUnderTheCapInCharacters_ButOverItInBytes_Returns413()
+    {
+        await using var host = await TestHost.StartAsync();
+        var body = "{\"name\":\"Jane\",\"organisation\":\"Org\",\"email\":\"j@example.com\",\"pad\":\"" + new string('€', 3000) + "\"}";
+        Assert.True(body.Length < EarlyAccessController.MaxBodyBytes);
+        Assert.True(Encoding.UTF8.GetByteCount(body) > EarlyAccessController.MaxBodyBytes);
+
+        var response = await host.PostAsync(body);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        Assert.Equal(0, await host.CountRowsAsync());
+    }
+
+    [Fact]
     public async Task ChunkedBody_OverTheCap_Returns413()
     {
         await using var host = await TestHost.StartAsync();
@@ -460,6 +474,8 @@ public class EarlyAccessHttpTests
             });
             builder.Services.AddScoped<ICurrentTenant, AnonymousTenant>();
             builder.Services.AddEarlyAccess();
+            // The purge uses ExecuteDeleteAsync, which EF InMemory lacks; its own PostgreSQL facts cover it.
+            builder.Services.Remove(builder.Services.Single(d => d.ImplementationType == typeof(Odip.Infrastructure.BackgroundServices.EarlyAccessPurgeBackgroundService)));
             // Last registration wins: the controller gets the stub; the real notifier stays registered (and idle) as a hosted service.
             builder.Services.AddSingleton<IEarlyAccessNotifier>(notifier ?? new NoopNotifier());
             builder.Services.AddControllers()
