@@ -1,7 +1,11 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Odip.Api.Controllers;
 using Odip.Application.DTOs;
 using Odip.Application.EarlyAccess;
 using Odip.Domain.Entities;
@@ -361,6 +365,73 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             var row = await check.EarlyAccessRequests.SingleAsync(e => e.Email == email);
             Assert.Equal(contenders, row.RequestCount);
         }
+    }
+
+    // ── SuperAdmin Delete (AdminEarlyAccessController) against the RequestCount concurrency token ──
+
+    [SkippableFact]
+    public async Task Delete_ThatRacesARepeatSignup_StillDeletes_InsteadOf500()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var row = await SeedRowAsync();
+
+        var result = await DeleteWhileAsync(row.Id, "UPDATE \"EarlyAccessRequests\" SET \"RequestCount\" = \"RequestCount\" + 1 WHERE \"Id\" = @id");
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await using var check = _pg.CreateContext();
+        Assert.False(await check.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id));
+        Assert.Equal(1, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
+    }
+
+    [SkippableFact]
+    public async Task Delete_OfARowRemovedMidway_Returns404()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var row = await SeedRowAsync();
+
+        var result = await DeleteWhileAsync(row.Id, "DELETE FROM \"EarlyAccessRequests\" WHERE \"Id\" = @id");
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        await using var check = _pg.CreateContext();
+        Assert.Equal(0, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
+    }
+
+    private async Task<EarlyAccessRequest> SeedRowAsync()
+    {
+        var row = Row(NewEmail("delete"));
+        await using var db = _pg.CreateContext();
+        db.EarlyAccessRequests.Add(row);
+        await db.SaveChangesAsync();
+        return row;
+    }
+
+    /// <summary>A SuperAdmin's Delete, with <paramref name="sql"/> run on another connection just before its first save.</summary>
+    private async Task<ActionResult<Odip.Application.Common.ApiResponse<bool>>> DeleteWhileAsync(Guid id, string sql)
+    {
+        var interfere = new BeforeFirstSave(async () =>
+        {
+            await using var connection = _pg.OpenConnection();
+            await using var command = new NpgsqlCommand(sql, connection);
+            command.Parameters.AddWithValue("id", id);
+            await command.ExecuteNonQueryAsync();
+        });
+        await using var db = _pg.CreateContext(interfere);
+        var controller = new AdminEarlyAccessController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, "SuperAdmin"),
+                        new Claim("fullName", "Jordan Lee"),
+                    }, "Test")),
+                },
+            },
+        };
+        return await controller.Delete(id, CancellationToken.None);
     }
 
     private static EarlyAccessRequest Row(string email, string name = "Jane") => new()

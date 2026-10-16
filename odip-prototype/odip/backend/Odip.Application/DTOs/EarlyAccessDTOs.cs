@@ -45,3 +45,19 @@ public record EarlyAccessReceivedDto(string Status)
 {
     public static EarlyAccessReceivedDto Received { get; } = new("received");
 }
+
+/// <summary>One alpha sign-up as the SuperAdmin list shows it (GET api/v1/admin/early-access).</summary>
+public class EarlyAccessSignupDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Organisation { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? Role { get; set; }
+    public string? Phone { get; set; }
+    public string? OrganisationSize { get; set; }
+    public string? Message { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime LastRequestedAtUtc { get; set; }
+    public int RequestCount { get; set; }
+}
