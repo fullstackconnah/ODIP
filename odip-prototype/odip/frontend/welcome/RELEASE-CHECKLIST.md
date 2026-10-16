@@ -50,7 +50,7 @@ Both run before any page change ships.
 
 - [ ] `bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <slot> shots <abs>/welcome/capture/page-checks.mjs <outdir>`: every `CHECK` line PASS (overflow, text floor, tap targets, contrast, h1, the first viewport, arrivals, the rail, the worst case, text at 200%, reduced motion, anchors, figures, the deep link and fonts), plus the form-state and viewport captures for review.
 - [ ] `bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <slot> shots <abs>/welcome/capture/motion-review.mjs <outdir>`: the slowed frames and videos of each animation, reviewed against SHAPE section 9.
-- [ ] `bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <slot> shots <abs>/welcome/capture/weight.mjs <outdir>`: the page's own built JS within its budget.
+- [ ] `bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <slot> shots <abs>/welcome/capture/weight.mjs <outdir>`: the page's own built JS (every chunk the page loads, platformFacts included) at most 10 KB raw (10,240 bytes) and 4.5 KB gzip (4,608 bytes).
 - [ ] Re-check the two font-preload URLs in `welcome/index.html` (Plus Jakarta Sans v12 and Manrope v20 Latin files, checked on 2026-10-17) against the CSS the page links; a stale hint still downloads.
 
 ## 8. Owner items still open (SHAPE section 13)

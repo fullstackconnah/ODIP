@@ -1,5 +1,5 @@
 // The welcome page's own built JS (SHAPE section 10 #14, as redefined in PLAN-PR2 S2): every chunk dist/welcome/index.html loads
-// or modulepreloads, at most 10 KB raw and 4 KB gzip. Runs as `odip-test.sh <slot> shots <this file> <outdir>` (it needs a build,
+// or modulepreloads, at most 10 KB raw and 4.5 KB gzip (lead, 2026-10-17: platformFacts counts, a visitor has no app cache). Runs as `odip-test.sh <slot> shots <this file> <outdir>` (it needs a build,
 // which the PC does not run); the runner starts it from e2e/, so the frontend is ../frontend.
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -20,7 +20,7 @@ const files = [...new Set(urls)].map((u) => {
 })
 const raw = files.reduce((n, f) => n + f.raw, 0)
 const gzip = files.reduce((n, f) => n + f.gzip, 0)
-const pass = files.length > 0 && raw <= 10 * 1024 && gzip <= 4 * 1024
+const pass = files.length > 0 && raw <= 10 * 1024 && gzip <= 4.5 * 1024
 fs.writeFileSync(path.join(process.env.OUT_DIR, 'weight.json'), JSON.stringify({ files, raw, gzip, pass }, null, 2) + '\n')
 for (const f of files) console.log(`  ${f.url} raw=${f.raw} gzip=${f.gzip}`)
 console.log(`CHECK weight ${pass ? 'PASS' : 'FAIL'} raw=${raw} gzip=${gzip}`)
