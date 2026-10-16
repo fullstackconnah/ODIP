@@ -686,7 +686,8 @@ export default function RosterBoardPage() {
         // above it, outside the scrolling frame so it never scrolls away sideways, the card. No scrim and no blur: the faded grid reads as dormant paper.
         <div className="grid grid-cols-[minmax(0,1fr)]">
           <div inert aria-hidden="true" className="col-start-1 row-start-1 min-w-0 opacity-40">{grid}</div>
-          <div className="col-start-1 row-start-1 flex min-w-0 items-start justify-center pt-12 pb-6 md:items-center md:py-6">
+          {/* relative: the faded layer's opacity paints it as a positioned layer, so this one must be positioned too, and later in the tree, to paint above it. */}
+          <div className="relative col-start-1 row-start-1 flex min-w-0 items-start justify-center pt-12 pb-6 md:items-center md:py-6">
             <section aria-labelledby="start-week-heading" aria-busy={starting || undefined} className="w-[min(24rem,calc(100%_-_2*var(--card-pad)))]">
               <Card className="p-[calc(2*var(--card-pad))]! shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)]">
                 <div className="flex items-center gap-2">
