@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Odip.Application.Interfaces;
 using Odip.Domain.Notifications;
+using Odip.Infrastructure.Notifications.Templates;
 
 namespace Odip.Infrastructure.Notifications;
 
@@ -94,11 +95,15 @@ public sealed class SmtpEmailChannel : INotificationChannel
     /// The message as sent: the plain-text body, an HTML alternate view and, when the message carries one, a <c>text/calendar</c> view whose
     /// <c>method</c> parameter matches the calendar's METHOD (mail apps show it as an invite card). A Reply-To goes in only when it parses as an
     /// address, so a blank or malformed coordinator email can never turn a send into an exception. Public so tests can read the views.
+    /// A bare From address goes out as "Bunya Support", and the HTML view opens with the wordmark header (<see cref="EmailLayout"/>).
     /// </summary>
     public static MailMessage BuildMailMessage(NotificationMessage message, string from)
     {
         var mail = new MailMessage(from, message.RecipientAddress, message.Subject, message.PlainTextBody);
-        mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(message.HtmlBody, null, "text/html"));
+        if (mail.From!.DisplayName.Length == 0) mail.From = new MailAddress(mail.From.Address, EmailLayout.SenderName);
+        var html = AlternateView.CreateAlternateViewFromString(EmailLayout.WithHeader(message.HtmlBody), null, "text/html");
+        html.LinkedResources.Add(EmailLayout.WordmarkImage());
+        mail.AlternateViews.Add(html);
         if (message.Ics is { } ics)
             mail.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(ics.Content, new ContentType($"text/calendar; method={ics.Method}; charset=UTF-8")));
         if (MailAddress.TryCreate(message.ReplyTo, out var replyTo))

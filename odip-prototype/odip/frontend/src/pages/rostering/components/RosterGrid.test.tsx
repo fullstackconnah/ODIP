@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen, type RenderResult } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, within, type RenderResult } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { RosterGrid, RosterGridSkeleton } from './RosterGrid'
-import { makeParticipantBoard, makeStaffBoard, makeParticipantRow, makeStaffRow, makeShift, WEEK_DAYS } from '../test-fixtures'
+import { makeParticipantBoard, makeStaffBoard, makeParticipantRow, makeStaffRow, makeShift, makeUnfilledShift, WEEK_DAYS } from '../test-fixtures'
 
 function noop() {}
 
@@ -234,5 +235,29 @@ describe('RosterGrid frame under a wrapped toolbar (finish review, 1280)', () =>
     unmount()
     const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
     expect(plain.container.firstElementChild?.className).toContain('var(--roster-toolbar-extra,0px)')
+  })
+})
+
+describe('RosterGrid: the regular (2026-10-16)', () => {
+  it('hands "Make … the regular" up from staff and participant rows, never from the Unfilled lane', async () => {
+    const user = userEvent.setup()
+    const kim = makeShift({ id: 'kim', staffId: 'staff-1', staffName: 'Kim Lee', shiftPatternId: 'pat-1', fromAgreement: true })
+    const open = makeUnfilledShift({ id: 'open', serviceDate: '2026-08-18', shiftPatternId: 'pat-2' })
+    for (const board of [
+      makeStaffBoard({ staffRows: [makeStaffRow({ staffId: 'staff-1', fullName: 'Kim Lee', shifts: [kim] })], unfilled: [open] }),
+      makeParticipantBoard({ participantRows: [makeParticipantRow({ shifts: [kim] })] }),
+    ]) {
+      const onSetRegular = vi.fn()
+      const { container, unmount } = renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} onSetRegular={onSetRegular} />)
+      await user.click(within(container.querySelector('[data-shift-chip="kim"]') as HTMLElement).getByRole('button', { name: /^Actions for/ }))
+      await user.click(screen.getByRole('option', { name: 'Make Kim the regular' }))
+      expect(onSetRegular).toHaveBeenCalledWith(kim)
+      const lane = container.querySelector('[data-shift-chip="open"]')
+      if (lane) {
+        await user.click(within(lane as HTMLElement).getByRole('button', { name: /^Actions for/ }))
+        expect(screen.queryByRole('option', { name: /the regular$/ })).not.toBeInTheDocument()
+      }
+      unmount()
+    }
   })
 })

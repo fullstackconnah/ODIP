@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ClipboardPlus, MoreVertical, Search } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -10,13 +10,17 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { ROW_ACTIONS_CARD } from '@/components/tapArea'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { useNotices } from '@/hooks/useNotices'
 import { useConfirmIntakeBooking, useConvertParticipantInquiry, useParticipantInquiries } from '@/api/hooks'
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase } from '@/lib/queryPhase'
-import { cancelNotice, DEFAULT_DURATION, isPastVisit, type EnquiryNotice } from '@/lib/intakeBooking'
+import { cancelNotice, DEFAULT_DURATION, FALLBACK_ZONE, isPastVisit, visitDay, type EnquiryNotice } from '@/lib/intakeBooking'
+import { CLOSE_OUTCOME_LABELS, closedNotice, reopenedNotice } from '@/lib/inquiryClose'
+import { CloseInquiryDialog } from './inquiries/CloseInquiryDialog'
+import { ReopenInquiryDialog } from './inquiries/ReopenInquiryDialog'
 import { IntakeBookingPanel } from './inquiries/IntakeBookingPanel'
 import { IntakeCell } from './inquiries/IntakeCell'
 import { IntakeCancelDialog } from './inquiries/IntakeCancelDialog'
@@ -52,7 +56,7 @@ export function InquiriesTable() {
   const screen = useInquiriesScreen()
   return (
     <>
-      {screen.showTable && <div className="flex flex-wrap items-center gap-3 mb-4">{screen.toolbar}</div>}
+      {screen.showToolbar && <div className="flex flex-wrap items-center gap-3 mb-4">{screen.toolbar}</div>}
       {screen.body}
     </>
   )
@@ -61,7 +65,10 @@ export function InquiriesTable() {
 function useInquiriesScreen() {
   const navigate = useNavigate()
   const { canManageParticipantLifecycle } = usePermissions()
-  const inquiriesQuery = useParticipantInquiries()
+  // Open | Closed (spec addendum E4, lead decision 6): the house status filter, in the URL beside tab=enquiries.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = searchParams.get('view') === 'closed' ? 'closed' : 'open'
+  const inquiriesQuery = useParticipantInquiries(view)
   const { data: inquiries = [], isError, refetch } = inquiriesQuery
   // A request that has not run (paused while the browser reports offline: isLoading false, isError false, data undefined) is loading, not an
   // empty list: "No open enquiries" follows only a request that succeeded.
@@ -84,6 +91,17 @@ function useInquiriesScreen() {
   }, [location, navigate, notify])
   const [booking, setBooking] = useState<{ id: string; focusDate: boolean } | null>(null)
   const [cancelling, setCancelling] = useState<ParticipantInquiryDto | null>(null)
+  const [closing, setClosing] = useState<ParticipantInquiryDto | null>(null)
+  const [reopening, setReopening] = useState<ParticipantInquiryDto | null>(null)
+  // After a close or a reopen the row has left this view, so focus goes into the new notice: its Dismiss, or its link to the reopened enquiry.
+  const focusNotice = useRef<string | null>(null)
+  useEffect(() => {
+    const selector = focusNotice.current
+    if (!selector) return
+    focusNotice.current = null
+    const found = document.querySelectorAll<HTMLElement>(selector)
+    found[found.length - 1]?.focus()
+  })
   const intakeControl = (id: string) => document.querySelector<HTMLElement>(`[data-intake-control="${id}"]`)
   // The row whose Intake control takes focus after the next render. The control that opened the panel may be gone by then (Book intake
   // becomes line 1 after a first booking, and the reverse after a cancel), so focus goes to the row's control as it is now, never the body.
@@ -118,7 +136,10 @@ function useInquiriesScreen() {
     notify(notice.tone, notice.title, notice.message, row.id)
     focusIntake.current = row.id
   }
-  // Below md the booking's secondary actions sit behind More (SHAPE.md section 1); a row with no booking keeps its two visible buttons.
+  // Only an enquiry that hasn't started intake can close (the server refuses the rest); a direct intake has no enquiry to close.
+  const canClose = (row: ParticipantInquiryDto) => !row.participantId && !row.isDirectIntake
+  const closeItem = (row: ParticipantInquiryDto) => (canClose(row) ? [{ value: 'close', label: 'Close enquiry' }] : [])
+  // Below md the booking's secondary actions sit behind More (SHAPE.md section 1); Close enquiry is the menu's last item at any width (section 11).
   const menuItems = (row: ParticipantInquiryDto) => {
     const upcoming = !isPastVisit(row.intakeStartsAt!, row.intakeDurationMinutes ?? DEFAULT_DURATION)
     return [
@@ -126,6 +147,7 @@ function useInquiriesScreen() {
       ...(upcoming ? [{ value: 'confirm', label: row.intakeConfirmedAt ? 'Mark not confirmed' : 'Mark confirmed' }] : []),
       { value: 'edit', label: 'Edit enquiry' },
       ...(upcoming ? [{ value: 'cancel', label: 'Cancel visit' }] : []),
+      ...closeItem(row),
     ]
   }
   const onMenu = (row: ParticipantInquiryDto, value: string) => {
@@ -133,7 +155,36 @@ function useInquiriesScreen() {
     else if (value === 'confirm') void markConfirmed(row, !row.intakeConfirmedAt)
     else if (value === 'edit') editExisting(row)
     else if (value === 'cancel') setCancelling(row)
+    else if (value === 'close') setClosing(row)
   }
+  const onClosed = (row: ParticipantInquiryDto, result: Parameters<typeof closedNotice>[0]) => {
+    const notice = closedNotice(result)
+    setClosing(null)
+    notify(notice.tone, notice.title, notice.message, row.id)
+    focusNotice.current = '[data-dismiss-notice]'
+  }
+  const onReopened = (answer: ParticipantInquiryDto) => {
+    const notice = reopenedNotice(answer)
+    const to = `/participants/new-inquiry?id=${encodeURIComponent(answer.id)}`
+    setReopening(null)
+    notify(notice.tone, notice.title, notice.message, answer.id, { label: 'Open enquiry', to })
+    focusNotice.current = `a[href="${to}"]`
+  }
+  const setView = (next: string) => setSearchParams(p => { if (next === 'closed') p.set('view', 'closed'); else p.delete('view'); return p })
+  const moreMenu = (row: ParticipantInquiryDto, items: { value: string; label: string }[], className?: string) => (
+    // The menu's items are portaled to <body>, but React still bubbles their clicks to the row, whose click opens the enquiry form or
+    // the wizard. A menu inside a clickable row stops its clicks here, as TripsPage's pill menu does.
+    <div className={className} onClick={e => e.stopPropagation()}>
+      <Dropdown
+        variant="icon"
+        align="left"
+        label={`More actions for ${nameOf(row)}`}
+        icon={<MoreVertical className="h-4 w-4" aria-hidden="true" />}
+        items={items}
+        onSelect={value => onMenu(row, value)}
+      />
+    </div>
+  )
   const editExisting = (row: ParticipantInquiryDto) => navigate(`/participants/new-inquiry?id=${encodeURIComponent(row.id)}`)
   const startIntake = (id: string) => {
     setError(null)
@@ -150,13 +201,18 @@ function useInquiriesScreen() {
   // The /inquiries endpoint takes no query parameters, so the stage and the search are client-side over the already-fetched tenant-scoped list
   // (the server owns the tenant predicate, and which drafts are direct intakes). An enquiry whose intake is complete is not listed: its participant
   // is on the Onboarding tab, and once finalised on Active participants.
-  const open = inquiries.filter(row => isOpen(stageOf(row)))
+  // The closed view lists what the server sent (closed enquiries only), newest close first.
+  const open = view === 'closed'
+    ? [...inquiries].sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? ''))
+    : inquiries.filter(row => isOpen(stageOf(row)))
   const filtered = open.filter(row => {
     if (!search.trim()) return true
     const term = search.trim().toLowerCase()
-    return [row.firstName, row.lastName, row.phone, row.email, sourceLabel(row), row.provenance]
-      .filter(Boolean)
-      .some(field => String(field).toLowerCase().includes(term))
+    const fields = view === 'closed'
+      // The note only where it shows: the server withholds it from roles without lifecycle rights.
+      ? [row.firstName, row.lastName, row.phone, row.email, row.closeOutcome && CLOSE_OUTCOME_LABELS[row.closeOutcome], row.closeNote]
+      : [row.firstName, row.lastName, row.phone, row.email, sourceLabel(row), row.provenance]
+    return fields.filter(Boolean).some(field => String(field).toLowerCase().includes(term))
   })
 
   // Only open enquiries are listed, so a row is New (no participant yet) or Draft intake (intake started, not complete).
@@ -182,7 +238,7 @@ function useInquiriesScreen() {
         if (!row.provenance) return <span>{text}</span>
         return (
           <span
-            className="block max-w-[9.5rem] truncate text-sm text-[var(--color-muted-foreground)]"
+            className="block max-w-[8rem] truncate text-sm text-[var(--color-muted-foreground)]"
             title={row.provenance}
           >
             {text}
@@ -194,7 +250,7 @@ function useInquiriesScreen() {
     {
       key: 'intakeStartsAt', header: 'Intake', sortable: true, wrap: true,
       // Room for the date and time unbroken; a narrower window scrolls the table in its box (the Column Rule) rather than crushing the cell.
-      // 14rem holds line 1 ("Fri 16 Oct, 10:00 am · Callum") unbroken; with Provenance capped at 9.5rem the whole table, one-row Actions
+      // 14rem holds line 1 ("Fri 16 Oct, 10:00 am · Callum") unbroken; with Provenance capped at 8rem (9.5rem until the row menu joined Actions) the whole table, one-row Actions
       // included, still fits its box at 1440.
       minWidth: '14rem',
       // ISO instants sort in time order. An empty cell sorts last on the ascending sort.
@@ -212,28 +268,56 @@ function useInquiriesScreen() {
               Edit enquiry<span className="sr-only"> for {nameOf(row)}</span>
             </Button>
           )}
-          {!row.isDirectIntake && row.intakeStartsAt && (
-            // The menu's items are portaled to <body>, but React still bubbles their clicks to the row, whose click opens the enquiry form or
-            // the wizard. A menu inside a clickable row stops its clicks here, as TripsPage's pill menu does.
-            <div className="md:hidden" onClick={e => e.stopPropagation()}>
-              <Dropdown
-                variant="icon"
-                align="left"
-                label={`More actions for ${nameOf(row)}`}
-                icon={<MoreVertical className="h-4 w-4" aria-hidden="true" />}
-                items={menuItems(row)}
-                onSelect={value => onMenu(row, value)}
-              />
-            </div>
-          )}
+          {/* A booked row's phone menu holds its visit actions too; elsewhere the menu holds Close enquiry alone. */}
+          {!row.isDirectIntake && row.intakeStartsAt && moreMenu(row, menuItems(row), 'md:hidden')}
+          {canClose(row) && moreMenu(row, closeItem(row), row.intakeStartsAt ? 'max-md:hidden' : undefined)}
+        </div>
+      ) : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span>,
+    },
+  ]
+  const zoneOf = (row: ParticipantInquiryDto) => row.timeZoneId || FALLBACK_ZONE
+  // The Closed view (SHAPE section 11): why and when, and Reopen. No "closed by" on the row (lead decision 7); the audit trail keeps who.
+  // The server withholds the note from roles without lifecycle rights, so they get no Note column at all: "—" would read as "no note" (SHAPE 11).
+  const noteColumn: Column<ParticipantInquiryDto> = {
+    key: 'closeNote', header: 'Note',
+    render: row => (row.closeNote
+      ? <span className="block max-w-[9.5rem] max-md:max-w-none truncate max-md:whitespace-normal text-sm text-[var(--color-muted-foreground)]" title={row.closeNote}>{row.closeNote}</span>
+      : <span>—</span>),
+  }
+  const closedColumns: Column<ParticipantInquiryDto>[] = [
+    { key: 'firstName', header: 'Name', sortable: true, mobile: 'primary', render: row => nameOf(row) },
+    { key: 'phone', header: 'Contact', render: row => row.phone || row.email || 'No contact details' },
+    { key: 'closeOutcome', header: 'Outcome', mobile: 'meta', render: row => (row.closeOutcome ? CLOSE_OUTCOME_LABELS[row.closeOutcome] : '') },
+    ...(canManageParticipantLifecycle ? [noteColumn] : []),
+    {
+      key: 'closedAt', header: 'Closed', sortable: true, mobile: 'meta',
+      sortFn: (a, b) => (a.closedAt ?? '').localeCompare(b.closedAt ?? ''),
+      render: row => (row.closedAt ? visitDay(row.closedAt, zoneOf(row)) : ''),
+    },
+    {
+      key: 'id', header: 'Actions', type: 'custom', pin: 'end',
+      render: row => canManageParticipantLifecycle ? (
+        <div className={`flex items-center gap-2 ${ROW_ACTIONS_CARD}`} onClick={e => e.stopPropagation()}>
+          <Button size="sm" variant="secondary" onClick={() => setReopening(row)}>Reopen<span className="sr-only"> {nameOf(row)}</span></Button>
         </div>
       ) : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span>,
     },
   ]
   const showEmptyState = !isError && !isLoading && open.length === 0
   const showTable = !isError && !showEmptyState && (open.length > 0 || isLoading)
+  const showToolbar = !isError
 
-  const toolbar = <SearchInput value={search} onChange={setSearch} placeholder="Search enquiries..." />
+  const toolbar = (
+    <>
+      <ToggleGroup
+        ariaLabel="Show open or closed enquiries"
+        options={[{ key: 'open', label: 'Open' }, { key: 'closed', label: 'Closed' }]}
+        value={view}
+        onChange={setView}
+      />
+      <SearchInput value={search} onChange={setSearch} placeholder="Search enquiries..." />
+    </>
+  )
 
   const body = (
     <>
@@ -251,16 +335,21 @@ function useInquiriesScreen() {
           Could not load enquiries. Please try again.
         </Callout>
       )}
-      {!canManageParticipantLifecycle && <p role="status" className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
+      {!canManageParticipantLifecycle && <p role="status" className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
       {error && <Callout tone="error">{error}</Callout>}
-      {showEmptyState && <EmptyState icon={ClipboardPlus} title="No open enquiries" description="Capture an enquiry when someone first contacts the service, then start their intake. Once an intake is complete, the participant moves to the Onboarding tab." />}
+      {showEmptyState && view === 'closed' && <EmptyState icon={ClipboardPlus} title="No closed enquiries" description="Enquiries you close show here, with why and when. You can reopen one." />}
+      {showEmptyState && view === 'open' && <EmptyState icon={ClipboardPlus} title="No open enquiries" description="Capture an enquiry when someone first contacts the service, then start their intake. Once an intake is complete, the participant moves to the Onboarding tab." />}
       {showTable && !isLoading && filtered.length === 0
-        ? <EmptyState icon={Search} title="No enquiries match your search" description="Try a different search term, or clear the search to see every open enquiry." action={{ label: 'Clear search', onClick: () => setSearch('') }} />
-        : showTable && <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={canManageParticipantLifecycle ? openRow : undefined} />}
+        ? <EmptyState icon={Search} title="No enquiries match your search" description={`Try a different search term, or clear the search to see every ${view} enquiry.`} action={{ label: 'Clear search', onClick: () => setSearch('') }} />
+        : showTable && (view === 'closed'
+          ? <DataTable data={filtered} columns={closedColumns} keyField="id" loading={isLoading} sortable emptyMessage="No closed enquiries." onRowClick={canManageParticipantLifecycle ? editExisting : undefined} />
+          : <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={canManageParticipantLifecycle ? openRow : undefined} />)}
       <IntakeBookingPanel row={bookingRow} focusDate={booking?.focusDate} onClose={closeBooking} onRequestCancel={setCancelling} />
       <IntakeCancelDialog row={cancelling} onCancel={() => setCancelling(null)} onDone={onCancelled} />
+      {closing && <CloseInquiryDialog row={closing} onCancel={() => setClosing(null)} onDone={onClosed} />}
+      {reopening && <ReopenInquiryDialog row={reopening} onCancel={() => setReopening(null)} onDone={onReopened} />}
     </>
   )
 
-  return { toolbar, showTable, body }
+  return { toolbar, showToolbar, body }
 }

@@ -32,9 +32,12 @@ public class ParticipantInquiriesController : ControllerBase
     /// <see cref="ParticipantInquiryDto.IsDirectIntake"/>). The tab itself shows only the open ones.
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<ParticipantInquiryDto>>>> GetAll(CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<List<ParticipantInquiryDto>>>> GetAll(CancellationToken ct, [FromQuery] string? view = null)
     {
-        var inquiries = await _db.ParticipantInquiries.Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId).OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
+        // view=closed lists the closed enquiries only; anything else is the open ones plus the direct intakes (spec addendum E4).
+        var closed = view == "closed";
+        var inquiries = await _db.ParticipantInquiries.Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId)
+            .Where(x => closed ? x.ClosedAt != null : x.ClosedAt == null).OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
         // Where each converted enquiry has got to, so the Enquiries tab can say "Draft intake" or "Intake complete" instead of offering
         // "Resume intake" for ever. One query for the page; the participants' own tenant filter applies.
         var participantIds = inquiries.Where(x => x.ParticipantId != null).Select(x => x.ParticipantId!.Value).Distinct().ToList();
@@ -54,7 +57,8 @@ public class ParticipantInquiriesController : ControllerBase
         // A visit's address (often a home), its internal notes and the staff member's full name are for the lifecycle roles, as on /intake-visits.
         // Everyone else who can open the Enquiries tab still sees when it is, the staff member's first name and what the invite did.
         var seesVisitDetails = User?.IsInRole("Admin") == true || User?.IsInRole("Coordinator") == true || User?.IsInRole("SuperAdmin") == true;
-        if (!seesVisitDetails) rows = rows.Select(r => r with { IntakeLocation = null, IntakeNotes = null, IntakeStaffName = null }).ToList();
+        if (!seesVisitDetails) rows = rows.Select(r => r with { IntakeLocation = null, IntakeNotes = null, IntakeStaffName = null, CloseNote = null }).ToList();
+        if (closed) return Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok(rows));
 
         // A draft intake started in the Intake wizard (/participants/new) has no enquiry. It used to be reachable only through the register's
         // Drafts view; with that view gone it rides here so it is not lost. A draft an enquiry already links is that enquiry's row, never a second one.
@@ -137,6 +141,7 @@ public class ParticipantInquiriesController : ControllerBase
     {
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && (_tenant.TenantId == null || x.TenantId == _tenant.TenantId), ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
+        if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(IntakeBookingsController.ClosedRefusal, IntakeBookingsController.ClosedCode));
         if (!Sources.Contains(dto.Source)) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("Source must be Web, Email, or Phone."));
         var errors = ContactErrors(dto.Contacts);
         // Once intake has started the contacts are the participant's (Convert moved them): adding pending ones now would strand them.
@@ -162,6 +167,7 @@ public class ParticipantInquiriesController : ControllerBase
     {
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && (_tenant.TenantId == null || x.TenantId == _tenant.TenantId), ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
+        if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(IntakeBookingsController.ClosedRefusal, IntakeBookingsController.ClosedCode));
         if (inquiry.ParticipantId is null)
         {
             Participant? participant = null;
@@ -402,7 +408,7 @@ public class ParticipantInquiriesController : ControllerBase
     internal static ParticipantInquiryDto ToDto(ParticipantInquiry x, User? staff = null, string? timeZoneId = null) => new()
     {
         Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName, Phone = x.Phone, Email = x.Email, Source = x.Source,
-        Provenance = x.Provenance, CreatedAt = x.CreatedAt, UpdatedAt = x.UpdatedAt,
+        Provenance = x.Provenance, CreatedAt = x.CreatedAt, UpdatedAt = x.UpdatedAt, ClosedAt = x.ClosedAt, CloseOutcome = x.CloseOutcome, CloseNote = x.CloseNote,
         IntakeStartsAt = x.IntakeStartsAt, IntakeDurationMinutes = x.IntakeDurationMinutes, IntakeLocation = x.IntakeLocation,
         IntakeStaffUserId = x.IntakeStaffUserId, IntakeStaffFirstName = staff?.FirstName, IntakeStaffName = staff?.FullName, IntakeNotes = x.IntakeNotes,
         IntakeInviteSentAt = x.IntakeInviteSentAt, IntakeInviteError = x.IntakeInviteError, IntakeConfirmedAt = x.IntakeConfirmedAt, TimeZoneId = timeZoneId,

@@ -19,7 +19,7 @@ public sealed record ShiftGeneration(int Created, int AlreadyThere, int Holidays
 }
 
 /// <summary>
-/// The one place a <see cref="ShiftPattern"/> becomes <see cref="Shift"/> rows, shared by the Generate button, the approval of an agreement revision and the daily top-up. A shift is made
+/// The one place a <see cref="ShiftPattern"/> becomes <see cref="Shift"/> rows, shared by Start rostering, the Generate button and the approval of an agreement revision. A shift is made
 /// for each day the pattern covers in the window that has no shift of that pattern yet (whatever became of it: a cancelled shift is not made again, but a DELETED one is not remembered here: see
 /// <see cref="ShiftPattern.GeneratedThrough"/>), as a Draft that copies the pattern's
 /// times, ratio, night type, worker (none for a pattern an agreement made) and what it asks of a worker. A pattern an agreement revision made also leaves out the days that revision's plan

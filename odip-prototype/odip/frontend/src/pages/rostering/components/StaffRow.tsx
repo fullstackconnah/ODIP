@@ -12,6 +12,8 @@ export type StaffRowProps = {
   onOpen: (shift: ShiftDto) => void
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
+  /** Make or Stop the regular, from the chip menu (2026-10-16): on a pattern shift with a worker, for writers. Threaded like onUnassign. */
+  onSetRegular?: (shift: ShiftDto) => void
   onDelete: (shift: ShiftDto) => void
   onAddShift: (staffId: string, day: string) => void
 }
@@ -21,7 +23,7 @@ export type StaffRowProps = {
 const NOTE_BUTTON =
   'min-w-0 max-w-full truncate rounded-sm text-left text-[13px] leading-4 focus:absolute focus:left-0 focus:top-full focus:z-20 focus:mt-1 focus:w-64 focus:max-w-[16rem] focus:whitespace-normal focus:overflow-visible focus:rounded-sm focus:border focus:border-border focus:bg-card focus:px-2 focus:py-1 focus:leading-snug focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
-export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onDelete, onAddShift }: StaffRowProps) {
+export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onSetRegular, onDelete, onAddShift }: StaffRowProps) {
   const overTarget = row.rosteredHours > row.targetHours
   const meterPct = row.targetHours > 0 ? Math.min(100, (row.rosteredHours / row.targetHours) * 100) : 0
 
@@ -92,6 +94,7 @@ export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, 
             onOpen={onOpen}
             onAssignTo={onAssignTo}
             onUnassign={onUnassign}
+            onSetRegular={onSetRegular}
             onDelete={onDelete}
           />
         ))}

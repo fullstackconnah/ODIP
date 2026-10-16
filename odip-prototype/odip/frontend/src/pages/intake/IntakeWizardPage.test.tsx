@@ -126,7 +126,7 @@ describe('IntakeWizardPage', () => {
   it('names the browser tab after its heading', () => {
     renderPage()
     expect(screen.getByRole('heading', { level: 1, name: 'Intake' })).toBeInTheDocument()
-    expect(document.title).toBe('Intake — Odip')
+    expect(document.title).toBe('Bunya Support · Intake')
   })
 
   it('renders the create wizard with no profile-only identity fields and enough focus clearance for every fixed and true-mobile narrow viewport', () => {

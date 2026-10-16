@@ -16,6 +16,11 @@ public record ParticipantInquiryDto
     public DateTime CreatedAt { get; init; }
     /// <summary>The enquiry's version: an edit form sends back the one it loaded as UpdateParticipantInquiryDto.ExpectedUpdatedAt.</summary>
     public DateTime UpdatedAt { get; init; }
+    /// <summary>Closed (spec addendum E1): all null while open.</summary>
+    public DateTime? ClosedAt { get; init; }
+    public InquiryCloseOutcome? CloseOutcome { get; init; }
+    /// <summary>Withheld (null) from roles without lifecycle rights, as the visit's notes are.</summary>
+    public string? CloseNote { get; init; }
     // The linked participant's lifecycle state, so the Enquiries tab can tell an open enquiry ("New": no participant; "Draft intake":
     // intake started, not complete) from one that has moved on, which it does not list: intake complete (the Onboarding tab) or finalised
     // (Active participants). All three are null while the enquiry has no participant.
@@ -107,9 +112,33 @@ public record SetIntakeBookingDto
     public string? Notes { get; init; }
     /// <summary>Sent only when the enquiry has no email: validated and saved to the enquiry in the same save as the booking.</summary>
     public string? ContactEmail { get; init; }
+    /// <summary>The UpdatedAt the form holds (ODIP-REVIEW-268): a save since then makes the booking a 409. Null skips the check (the slide-over).</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
 public record ConfirmIntakeBookingDto { public bool Confirmed { get; init; } }
+
+/// <summary>POST /inquiries/{id}/close. Note has no [StringLength]: the action checks it after the trim, keyed "note" in SHAPE's words (the column keeps 500).</summary>
+public record CloseInquiryDto
+{
+    public InquiryCloseOutcome? Outcome { get; init; }
+    public string? Note { get; init; }
+    /// <summary>The UpdatedAt the screen loaded: another save since makes the close a 409, enforced in the UPDATE (verify C1). Null skips the check.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
+
+/// <summary>The UpdatedAt the screen holds, as an optional body (POST .../reopen, POST .../intake-booking/send): a save since then makes the write a 409.</summary>
+public record InquiryVersionDto
+{
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
+
+/// <summary>What a close did. CancellationEmail: "NoVisit" (no upcoming visit), or as a cancel's: "Sent", "NoInvite", "NotConfigured" or "Failed".</summary>
+public record CloseInquiryResultDto
+{
+    public ParticipantInquiryDto Inquiry { get; init; } = new();
+    public string CancellationEmail { get; init; } = "NoVisit";
+}
 
 /// <summary>What a cancel did. CancellationEmail: "Sent", "NoInvite" (none had gone out, so nobody was emailed), "NotConfigured" or "Failed".</summary>
 public record CancelIntakeBookingResultDto

@@ -8,11 +8,12 @@ import { addDays, sydneyToday } from '../../support/dates';
 // intake-booking.spec.ts books the same coordinator on day +2, and the staff-busy check refuses an overlap.
 const token = `${(process.pid % 4096).toString(36)}${Date.now().toString(36).slice(-5)}`;
 
-test('a coordinator captures an enquiry with a contact and books the intake visit in one save', async ({ page, session }) => {
+test('a coordinator captures an enquiry with a contact and a visit in one save, then closes it', async ({ page, session }) => {
   const last = `Form${token}`;
   const day = addDays(sydneyToday(), 3);
   const start = await freeIntakeStart(session, day, '14:00');
   let id: string | undefined;
+  let closed = false;
   try {
     await page.goto('/participants/new-inquiry');
     await page.locator('#inquiry-first-name').fill('Mia');
@@ -40,8 +41,23 @@ test('a coordinator captures an enquiry with a contact and books the intake visi
     expect(JSON.stringify(row)).not.toContain('Maria'); // pending contacts never ride on the list
     const one = await expectStatus('one enquiry', 200, await call(session, 'GET', `/inquiries/${id}`));
     expect(one.data.contacts).toEqual([expect.objectContaining({ role: 'Guardian', firstName: 'Maria', lastName: last })]);
+
+    // Close it from the row menu: its visit is cancelled with it (no invite had gone, so nobody is emailed), and it moves to the Closed view.
+    await page.getByRole('button', { name: `More actions for Mia ${last}` }).click();
+    await page.getByRole('option', { name: 'Close enquiry' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await dialog.getByLabel(/^Why is it closing/).selectOption('NotGoingAhead');
+    await dialog.getByRole('button', { name: 'Close enquiry' }).click();
+    await expect(page.getByText(`Mia ${last}'s enquiry is closed: Not going ahead.`)).toBeVisible();
+    closed = true;
+    const after = await expectStatus('closed list', 200, await call(session, 'GET', '/inquiries?view=closed'));
+    const gone = after.data.find((r: { id: string }) => r.id === id);
+    expect(gone.closeOutcome).toBe('NotGoingAhead');
+    expect(gone.intakeStartsAt ?? null).toBeNull(); // the visit was cancelled with it
+    await page.getByRole('radio', { name: 'Closed' }).click();
+    await expect(page.getByRole('row', { name: new RegExp(last) })).toContainText('Not going ahead');
   } finally {
-    // A booking left behind would make a retry's own booking a staff-busy 409.
-    if (id) await call(session, 'DELETE', `/inquiries/${id}/intake-booking`);
+    // Closing cancels the booking too, and a booking left behind would make a retry's own booking a staff-busy 409.
+    if (id && !closed) await call(session, 'POST', `/inquiries/${id}/close`, { outcome: 'Other' });
   }
 });

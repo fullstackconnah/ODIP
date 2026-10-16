@@ -104,6 +104,7 @@ public class OdipDbContext : DbContext
     // Rostering (M4)
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
+    public DbSet<RosterWeek> RosterWeeks => Set<RosterWeek>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
 
@@ -1077,6 +1078,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.OverrideReason).HasMaxLength(2000);
             entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+            entity.Property(e => e.RegularAwayReason).HasMaxLength(200);
             // What the pattern the shift was generated from asked of a worker (plan builder, phase D). Deliberately no unique index on a shift: the demo pack places its shifts by a
             // deterministic id, and a natural key here would wedge it. Generation is made safe by an advisory lock (RosterShiftGenerator), not by a key.
             entity.Property(e => e.RequirementsJson).HasColumnType("jsonb");
@@ -1095,6 +1097,9 @@ public class OdipDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // SetNull: losing the user only loses the flag's name, never the shift (as ShiftPattern.DefaultUser).
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.RegularUserId).OnDelete(DeleteBehavior.SetNull);
 
             // Board queries filter by day/week; the roster-check helper filters by staff+week.
             entity.HasIndex(e => new { e.TenantId, e.ServiceDate });
@@ -1133,6 +1138,14 @@ public class OdipDbContext : DbContext
             entity.HasOne<ServiceAgreementDraft>().WithMany().HasForeignKey(e => e.SourceDraftId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.SourceDraftId);
             entity.HasIndex(e => new { e.SourceDraftId, e.SourceBlockKey, e.DayOfWeek, e.WorkerSlot }).IsUnique().HasFilter("\"SourceDraftId\" IS NOT NULL").HasDatabaseName("IX_ShiftPatterns_SourceDraft_Block_Day_Slot");
+        });
+
+        // ── RosterWeek (Start rostering, 2026-10-16) ─────────────
+        modelBuilder.Entity<RosterWeek>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.TenantId, e.WeekStart }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.StartedByUserId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── StaffParticipantCompatibility ────────────────────────
@@ -1582,6 +1595,10 @@ public class OdipDbContext : DbContext
             // The enquiry's version (deep review S1/S2): every write bumps it, so an edit from a form loaded before another save, or a contacts save racing
             // Start intake, matches no row and gets a 409. The entity keeps it in whole microseconds, as PostgreSQL stores it.
             entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+            // Closed: Close and Reopen bump UpdatedAt too, so a write that loaded the enquiry before a close gets the same 409.
+            entity.Property(e => e.CloseNote).HasMaxLength(500);
+            // SetNull: whoever closed an enquiry never blocks deleting their user; the audit trail keeps who it was.
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.ClosedByUserId).OnDelete(DeleteBehavior.SetNull);
             // Restrict: a staff member booked for a visit is never deleted out from under it (ImportUntouched.StaffBlockersAsync lists it).
             entity.HasOne(e => e.IntakeStaffUser).WithMany().HasForeignKey(e => e.IntakeStaffUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.IntakeBookedByUser).WithMany().HasForeignKey(e => e.IntakeBookedByUserId).OnDelete(DeleteBehavior.Restrict);
@@ -1966,6 +1983,9 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftPattern>()
             .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<RosterWeek>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<StaffParticipantCompatibility>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

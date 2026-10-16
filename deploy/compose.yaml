@@ -37,11 +37,9 @@ services:
       # Which packs of the top-up may run, comma-separated by name; empty is all of them. A new pack ships Off by listing every pack but it
       # here, and is brought up later by editing the list. See docs/runbooks/demo-data.md.
       - DemoData__Packs=${DEMO_DATA_PACKS:-}
-      # Roster top-up (plan builder phase D): the daily job that keeps open shifts generated for the patterns an approved agreement made, and never
-      # touches a hand-made or demo pattern. On unless the host's .env sets ROSTER_TOP_UP_ENABLED=false. ROSTER_TOP_UP_HORIZON_DAYS (7 to 366) is how
-      # many days ahead of the provider's today shifts are kept, and how many an approval generates at once.
-      - RosterTopUp__Enabled=${ROSTER_TOP_UP_ENABLED:-true}
-      - RosterTopUp__HorizonDays=${ROSTER_TOP_UP_HORIZON_DAYS:-56}
+      # Start rostering one-off (2026-10-16): off unless the host's .env sets ROSTER_WEEK_CLEAR=true, for the one deploy that ships it. It clears untouched future
+      # roster weeks and marks the kept weeks started; an organisation already done is skipped. Delete this line with RosterWeekClear in the follow-up PR.
+      - RosterWeekClear__Enabled=${ROSTER_WEEK_CLEAR:-false}
       # Employment Hero Payroll (Settings → Integrations). INTEGRATIONS_MASTER_KEY is 32 random bytes, base64, kept only in the host's .env: it encrypts
       # every organisation's EH API key, and losing it means each Admin pastes their key again. Empty = integrations off, the rest of ODIP runs.
       - INTEGRATIONS_MASTER_KEY=${INTEGRATIONS_MASTER_KEY:-}

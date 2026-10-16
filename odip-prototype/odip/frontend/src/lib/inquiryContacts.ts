@@ -13,8 +13,11 @@ export type ContactFieldErrors = Record<string, Partial<Record<ContactField, str
 /** Every role but Plan Manager: an enquiry has no plan type yet (SHAPE section 5), and the server refuses it. */
 export const PENDING_ROLES = availableContactRoleTypes(CONTACT_ROLE_TYPES, null, null)
 
+// A counter, not crypto.randomUUID: plain HTTP (live ODIP) is not a secure context, so randomUUID is undefined there.
+let nextKey = 0
+
 export const blankContact = (): ContactRow =>
-  ({ key: crypto.randomUUID(), role: 'NextOfKin', firstName: '', lastName: '', relationship: '', phone: '', email: '', notes: '' })
+  ({ key: `contact-${++nextKey}`, role: 'NextOfKin', firstName: '', lastName: '', relationship: '', phone: '', email: '', notes: '' })
 
 export const contactRowOf = (dto: InquiryContactDto): ContactRow => ({
   ...blankContact(), role: dto.role, firstName: dto.firstName, lastName: dto.lastName, relationship: dto.relationship ?? '', phone: dto.phone ?? '',

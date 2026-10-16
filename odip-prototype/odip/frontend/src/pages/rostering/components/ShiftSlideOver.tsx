@@ -519,6 +519,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
         {/* Where the shift came from, read only: all three kinds, because a chip's mark has no hover title on a touch screen (the brief, section 5). The shift says so itself: no read of the pattern. */}
         {existing && <p className="text-sm text-[var(--color-muted-foreground)]">{shiftSource(existing).title}</p>}
+        {/* A touch screen has no hover title, so the panel says why the regular is away too (the brief, 5.4). */}
+        {existing?.regularAwayReason && <p className="text-sm text-[var(--color-muted-foreground)]">Regular away: {existing.regularAwayReason}</p>}
 
         {/* Plan builder phase D: what the agreement asked of a worker for this shift (copied from its pattern). Information: nothing checks it against the worker yet. */}
         {existing?.requirements && requirementLabels(existing.requirements).length > 0 && (

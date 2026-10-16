@@ -34,7 +34,7 @@ public class ServiceAgreementDraftsController : ControllerBase
     public ServiceAgreementDraftsController(OdipDbContext db, ICurrentTenant tenant, ServiceAgreementDraftService service, ElectronicSigningEvidenceService? evidence = null, DemoJourneySimulationService? simulation = null, IConfiguration? configuration = null, PlanQuoteConcurrencyLimiter? saveLimiter = null, ServiceAgreementApprovalService? approval = null, AgreementPatternChangeService? patternChange = null, AgreementRenewalService? renewal = null)
     {
         _saveLimiter = saveLimiter;
-        _approval = approval ?? new ServiceAgreementApprovalService(db, new Odip.Api.Services.RosterPlacementGate(), configuration: configuration);
+        _approval = approval ?? new ServiceAgreementApprovalService(db, new Odip.Api.Services.RosterPlacementGate());
         _patternChange = patternChange ?? new AgreementPatternChangeService(db, service);
         _renewal = renewal ?? new AgreementRenewalService(db, service);
         _db = db; _tenant = tenant; _service = service; _evidence = evidence ?? new ElectronicSigningEvidenceService(db);
@@ -136,7 +136,7 @@ public class ServiceAgreementDraftsController : ControllerBase
 
     /// <summary>
     /// Approves the NEWEST revision for rostering (phase D), in one transaction: records who and when, makes the weekly roster patterns of its blocks, ends the patterns of the revision before it the
-    /// day before this one starts, and generates the open shifts up to the horizon (<c>RosterTopUp:HorizonDays</c>, 56 days by default) when the participant may be rostered. The revision before's unfilled Draft shifts from this one's start are removed in the same transaction; the rest are listed (<c>oldShiftsRemaining</c>) and left for a coordinator. 200 with
+    /// day before this one starts, and generates the open shifts of the weeks already started on the roster when the participant may be rostered. The revision before's unfilled Draft shifts from this one's start are removed in the same transaction; the rest are listed (<c>oldShiftsRemaining</c>) and left for a coordinator. 200 with
     /// the revision (its <c>approval</c> and <c>oldShiftsRemaining</c>); 400 with every reason in <c>errors</c>; 403 for a role that may not approve; 409 when a newer revision exists
     /// (<c>draft-superseded</c>) or another change to the participant's roster was still running (<c>roster-busy</c>; nothing was changed, try again). Approving an approved revision again is a 200 with
     /// the existing approval and writes nothing.
@@ -286,15 +286,13 @@ public class ServiceAgreementDraftsController : ControllerBase
         User.FindAll(ClaimTypes.Role).Select(claim => claim.Value).ToList());
 
     /// <summary>
-    /// The approval as the screen reads it. <c>ApprovedAt</c> is an instant: the API writes it as UTC with a Z (UtcInstantDateTimeConverter), whatever kind the column hands back. <c>TopUpEnabled</c> is the
-    /// setting as it is now (<c>RosterTopUp:Enabled</c>), not part of the stored approval: the card promises shifts "added each day" only while the daily top-up is on.
+    /// The approval as the screen reads it. <c>ApprovedAt</c> is an instant: the API writes it as UTC with a Z (UtcInstantDateTimeConverter), whatever kind the column hands back.
     /// </summary>
     private DraftApprovalDto? ApprovalOf(ServiceAgreementDraftApproval? approval) => approval is null ? null : new()
     {
         ApprovedAt = approval.ApprovedAt, ApprovedByName = approval.ApprovedByName,
         PatternsCreated = approval.PatternsCreated, PatternsEnded = approval.PatternsEnded, ShiftsCreated = approval.ShiftsCreated,
         HorizonEnd = approval.HorizonEnd, FirstShiftDate = approval.FirstShiftDate,
-        TopUpEnabled = RosterTopUpOptions.From(_configuration).Enabled,
     };
 
     /// <summary>What a line adds up to: the engine's total for a line it generated, hours times unit price floored to the cent for one typed by hand.</summary>

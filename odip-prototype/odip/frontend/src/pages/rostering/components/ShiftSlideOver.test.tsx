@@ -1707,3 +1707,11 @@ describe('ShiftSlideOver — the worker of a started or finished shift (post-mer
     expect(screen.getByText(/its worker can.t be changed here/i)).toBeInTheDocument()
   })
 })
+
+describe('ShiftSlideOver: the regular (2026-10-16)', () => {
+  it('says why the regular is away, under where the shift came from', () => {
+    const shift = makeShift({ staffId: undefined, staffName: undefined, shiftPatternId: 'pat-1', regularAwayReason: 'unavailable' })
+    render(<ShiftSlideOver target={{ mode: 'edit', shift }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+    expect(screen.getByText('Regular away: unavailable')).toBeInTheDocument()
+  })
+})

@@ -339,7 +339,6 @@ public class PortalBreaksTests
     [InlineData(ShiftStatus.PendingReview, 409, ShiftErrorCodes.ShiftAlreadyFinished)]
     [InlineData(ShiftStatus.Completed, 409, ShiftErrorCodes.ShiftAlreadyCompleted)]
     [InlineData(ShiftStatus.Cancelled, 409, ShiftErrorCodes.ShiftCancelled)]
-    [InlineData(ShiftStatus.Draft, 409, ShiftErrorCodes.ShiftNotPublished)]
     public async Task EveryBreakWrite_NeedsTheShiftInProgress(ShiftStatus status, int http, string code)
     {
         var f = Create(status);
@@ -354,6 +353,25 @@ public class PortalBreaksTests
                  })
         {
             Assert.Equal(code, Failure(result, http).Code);
+        }
+        Assert.Empty(await f.Db.ShiftBreaks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task EveryBreakWrite_OnADraft_IsNotFound()   // L1 (2026-10-16): a Draft is invisible to its worker on every portal path
+    {
+        var f = Create(ShiftStatus.Draft);
+        var anyId = Guid.NewGuid();
+
+        foreach (var result in new[]
+                 {
+                     await f.Controller.StartBreak(f.Shift.Id, default),
+                     await f.Controller.EndBreak(f.Shift.Id, anyId, default),
+                     await f.Controller.EditBreak(f.Shift.Id, anyId, new EditShiftBreakDto { StartedAt = NowUtc, EndedAt = NowUtc.AddMinutes(5) }, default),
+                     await f.Controller.DeleteBreak(f.Shift.Id, anyId, default),
+                 })
+        {
+            Assert.Equal("Shift not found.", Assert.Single(Failure(result, 404).Errors!));
         }
         Assert.Empty(await f.Db.ShiftBreaks.ToListAsync());
     }

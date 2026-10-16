@@ -41,7 +41,7 @@ public class ServiceAgreementApprovalReplacedTests
         tenant.Setup(t => t.TenantId).Returns(TenantA);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, Admin.UserId!.Value.ToString()), new Claim("fullName", "Alex Admin"), new Claim(ClaimTypes.Role, "Admin") };
-        return new ServiceAgreementDraftsController(f.Db, tenant.Object, new ServiceAgreementDraftService(f.Db), configuration: f.Configuration, approval: f.Service)
+        return new ServiceAgreementDraftsController(f.Db, tenant.Object, new ServiceAgreementDraftService(f.Db), approval: f.Service)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test")) } },
         };
