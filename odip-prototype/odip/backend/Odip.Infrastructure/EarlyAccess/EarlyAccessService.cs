@@ -12,7 +12,7 @@ public enum EarlyAccessOutcome
     /// <summary>First time this address has asked: a new row was inserted.</summary>
     Created,
 
-    /// <summary>The address is already on file: only LastRequestedAtUtc, RequestCount and the four answers changed.</summary>
+    /// <summary>The address is already on file: only LastRequestedAtUtc and RequestCount changed (a later submission may have been added).</summary>
     Repeated,
 }
 
@@ -21,9 +21,10 @@ public sealed record EarlyAccessRecordResult(EarlyAccessOutcome Outcome, int Req
 /// <summary>
 /// Stores one early-access request: inserts the address the first time, and on any later request from
 /// the same (already normalised) address bumps <see cref="EarlyAccessRequest.LastRequestedAtUtc"/> and
-/// <see cref="EarlyAccessRequest.RequestCount"/>, and replaces the four answers (role, phone, organisation size and message)
-/// with the latest ones, a blank one included: sending the form again is how someone changes or removes them. The stored
-/// name and organisation stay as first given, so nobody can rewrite someone else's identity by submitting their address again.
+/// <see cref="EarlyAccessRequest.RequestCount"/>. The stored answers stay as first given, for good: anyone who knows an address can
+/// post to it, so a repeat must not overwrite or erase them (a removal request in the message, say). A repeat whose answers differ is
+/// stored as an <see cref="EarlyAccessLaterSubmission"/> (the first <see cref="MaxLaterSubmissions"/> per sign-up) for a person to read, which is how
+/// the landing page's "send the form again and say so" promise to see, change or remove details is kept.
 ///
 /// Two simultaneous requests for the same address are the interesting case, and EF InMemory cannot show
 /// either failure mode (it enforces neither the unique index nor row versions): both may see "no row" and
@@ -35,6 +36,9 @@ public sealed record EarlyAccessRecordResult(EarlyAccessOutcome Outcome, int Req
 public sealed class EarlyAccessService
 {
     private const int MaxAttempts = 10;
+
+    // shortcut: the first 10 only, so a flood cannot push out an early removal request or grow a sign-up without bound; raise it if a real person needs more.
+    private const int MaxLaterSubmissions = 10;
 
     private readonly OdipDbContext _db;
     private readonly ILogger<EarlyAccessService> _logger;
@@ -79,12 +83,24 @@ public sealed class EarlyAccessService
             {
                 existing.LastRequestedAtUtc = now;
                 existing.RequestCount += 1;
-                // The latest answers replace the stored ones, a blank one included: sending the form again is how someone changes or
-                // removes them (the landing page's collection notice says so). Name and organisation stay as first given.
-                existing.Role = request.Role;
-                existing.Phone = request.Phone;
-                existing.OrganisationSize = request.OrganisationSize;
-                existing.Message = request.Message;
+                // The stored answers never change. A repeat that says something different is kept beside them, up to the cap. RequestCount
+                // is a concurrency token and every repeat bumps it, so two simultaneous repeats cannot both pass the cap check.
+                if (!SameAnswers(existing, request)
+                    && await _db.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == existing.Id, ct) < MaxLaterSubmissions)
+                {
+                    _db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
+                    {
+                        Id = Guid.NewGuid(),
+                        EarlyAccessRequestId = existing.Id,
+                        ReceivedAtUtc = now,
+                        Name = request.Name,
+                        Organisation = request.Organisation,
+                        Role = request.Role,
+                        Phone = request.Phone,
+                        OrganisationSize = request.OrganisationSize,
+                        Message = request.Message,
+                    });
+                }
             }
 
             try
@@ -111,6 +127,10 @@ public sealed class EarlyAccessService
             return new EarlyAccessRecordResult(EarlyAccessOutcome.Repeated, existing.RequestCount, now);
         }
     }
+
+    private static bool SameAnswers(EarlyAccessRequest stored, EarlyAccessValidationResult request) =>
+        stored.Name == request.Name && stored.Organisation == request.Organisation && stored.Role == request.Role
+        && stored.Phone == request.Phone && stored.OrganisationSize == request.OrganisationSize && stored.Message == request.Message;
 
     private static bool IsLostRace(Exception ex) =>
         ex is DbUpdateConcurrencyException

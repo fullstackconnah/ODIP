@@ -100,6 +100,7 @@ public class OdipDbContext : DbContext
 
     /// <summary>Public landing-page early-access requests. NOT tenant-scoped: see <see cref="Entities.EarlyAccessRequest"/>'s type doc.</summary>
     public DbSet<EarlyAccessRequest> EarlyAccessRequests => Set<EarlyAccessRequest>();
+    public DbSet<EarlyAccessLaterSubmission> EarlyAccessLaterSubmissions => Set<EarlyAccessLaterSubmission>();
 
     // Rostering (M4)
     public DbSet<Shift> Shifts => Set<Shift>();
@@ -1824,6 +1825,20 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.RequestCount).IsConcurrencyToken();
             // Email is stored trimmed + lower-cased, so a plain unique index is case-insensitive in effect.
             entity.HasIndex(e => e.Email).IsUnique();
+        });
+
+        // A repeat sign-up whose answers differed. Same exemptions as its parent (no tenant, no filter, not audited); same column lengths.
+        modelBuilder.Entity<EarlyAccessLaterSubmission>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Organisation).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Role).HasMaxLength(100);
+            entity.Property(e => e.OrganisationSize).HasMaxLength(16);
+            entity.Property(e => e.Message).HasMaxLength(1000);
+            entity.HasOne(e => e.EarlyAccessRequest).WithMany(r => r.LaterSubmissions)
+                .HasForeignKey(e => e.EarlyAccessRequestId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Onboarding import batches ──────────────────────────────

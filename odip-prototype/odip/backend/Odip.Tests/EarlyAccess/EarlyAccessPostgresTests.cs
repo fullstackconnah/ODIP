@@ -175,12 +175,12 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task TheExtraFields_RoundTrip_AtTheirLimits_AndARepeatReplacesThem()
+    public async Task TheExtraFields_RoundTrip_AtTheirLimits_AndARepeatDoesNotReplaceThem()
     {
         Skip.IfNot(_pg.Available, _pg.UnavailableReason);
         var email = NewEmail("limits");
         var role = new string('é', 100);
-        var phone = new string('1', 30);
+        var phone = "(1-1-1-1-1-1-1-1-1-1-1-1-1-1-1"; // 30 characters, 15 digits: the most the validator allows
         var message = new string('€', 1000); // varchar(1000) counts characters, not bytes
 
         await using (var db = _pg.CreateContext())
@@ -200,12 +200,18 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         await using (var db = _pg.CreateContext())
         {
-            var row = await db.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+            // The stored answers are the first ones; the repeat is a later submission.
+            var row = await db.EarlyAccessRequests.AsNoTracking().Include(e => e.LaterSubmissions).SingleAsync(e => e.Email == email);
             Assert.Equal(2, row.RequestCount);
-            Assert.Equal("under-10", row.OrganisationSize);
-            Assert.Null(row.Role);
-            Assert.Null(row.Phone);
-            Assert.Null(row.Message);
+            Assert.Equal("200-plus", row.OrganisationSize);
+            Assert.Equal(role, row.Role);
+            Assert.Equal(phone, row.Phone);
+            Assert.Equal(message, row.Message);
+            var later = Assert.Single(row.LaterSubmissions);
+            Assert.Equal("under-10", later.OrganisationSize);
+            Assert.Null(later.Role);
+            Assert.Null(later.Phone);
+            Assert.Null(later.Message);
         }
     }
 
@@ -368,6 +374,88 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             var row = await check.EarlyAccessRequests.SingleAsync(e => e.Email == email);
             Assert.Equal(contenders, row.RequestCount);
         }
+    }
+
+    // ── Later submissions (repeats whose answers differ) ──
+
+    [SkippableFact]
+    public async Task ARepeat_KeepsTheStoredAnswers_AndTheLaterSubmissionRoundTripsAtItsLimits()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("later");
+        var message = new string('€', 1000);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "10-49", "Ops", "0491 570 156", "Rostering"), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "under-10", new string('é', 100), "+61 491 570 156", message), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "10-49", "Ops", "0491 570 156", "Rostering"), CancellationToken.None); // identical: stores nothing
+
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.AsNoTracking().Include(e => e.LaterSubmissions).SingleAsync(e => e.Email == email);
+        Assert.Equal(3, row.RequestCount);
+        Assert.Equal("Rostering", row.Message);
+        Assert.Equal("0491 570 156", row.Phone);
+        var later = Assert.Single(row.LaterSubmissions);
+        Assert.Equal(message, later.Message);
+        Assert.Equal(new string('é', 100), later.Role);
+        Assert.Equal("under-10", later.OrganisationSize);
+    }
+
+    [SkippableFact]
+    public async Task OnlyTheFirstTenLaterSubmissions_AreKept_EvenWhenManyArriveTogether_AndEveryOneIsCounted()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("cap");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        for (var i = 0; i < 5; i++)
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: $"seq {i}"), CancellationToken.None);
+
+        // 8 more at once, all different: only 5 places are left, so a lost race must recount rather than store a sixth.
+        var gate = new TaskCompletionSource();
+        var tasks = Enumerable.Range(0, 8).Select(i => Task.Run(async () =>
+        {
+            await gate.Task;
+            await using var db = _pg.CreateContext();
+            return await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: $"race {i}"), CancellationToken.None);
+        })).ToArray();
+        gate.SetResult();
+        await Task.WhenAll(tasks);
+
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.SingleAsync(e => e.Email == email);
+        Assert.Equal(14, row.RequestCount);
+        Assert.Equal(10, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == row.Id));
+    }
+
+    [SkippableFact]
+    public async Task TheLaterSubmissions_GoWithTheirSignup_WhenTheSuperAdminDeletesIt_AndWhenThePurgeDoes()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var deleted = await SeedRowAsync("cascade-delete", DateTime.UtcNow.AddDays(-2), DateTime.UtcNow.AddDays(-1), count: 3);
+        var purged = await SeedRowAsync("cascade-purge", DateTime.UtcNow.AddMonths(-13), DateTime.UtcNow.AddMonths(-13), count: 3);
+        var kept = await SeedRowAsync("cascade-kept", DateTime.UtcNow.AddDays(-2), DateTime.UtcNow.AddDays(-1), count: 3);
+        await using (var db = _pg.CreateContext())
+        {
+            foreach (var parent in new[] { deleted, purged, kept })
+                for (var i = 0; i < 2; i++)
+                    db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
+                    {
+                        Id = Guid.NewGuid(), EarlyAccessRequestId = parent.Id, ReceivedAtUtc = DateTime.UtcNow, Name = "Jane", Organisation = "Org", Message = $"m{i}",
+                    });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await DeleteWhileAsync(deleted.Id, "UPDATE \"EarlyAccessRequests\" SET \"Name\" = \"Name\" WHERE \"Id\" = @id");
+        Assert.IsType<OkObjectResult>(result.Result);
+        await Purger().PurgeExpiredAsync(DateTime.UtcNow, CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        Assert.Equal(0, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == deleted.Id));
+        Assert.Equal(0, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == purged.Id));
+        Assert.Equal(2, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == kept.Id));
     }
 
     // ── The 12-month purge (EarlyAccessPurgeBackgroundService) ──

@@ -50,4 +50,7 @@ public class EarlyAccessRequest
 
     /// <summary>How many times this address has submitted the form; starts at 1.</summary>
     public int RequestCount { get; set; }
+
+    /// <summary>Repeat sign-ups whose answers differed from the ones above, oldest first; at most 10. See <see cref="EarlyAccessLaterSubmission"/>.</summary>
+    public List<EarlyAccessLaterSubmission> LaterSubmissions { get; set; } = [];
 }
