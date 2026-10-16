@@ -3,6 +3,11 @@ services:
     image: postgres:16-alpine
     container_name: odip-db
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       POSTGRES_DB: odip
       POSTGRES_USER: postgres
@@ -22,6 +27,11 @@ services:
     image: odip-api:local
     container_name: odip-api
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=odip;Username=postgres;Password=${POSTGRES_PASSWORD};Trust Server Certificate=true;SSL Mode=Disable
       - JWT_SECRET=${JWT_SECRET}
@@ -84,6 +94,11 @@ services:
     image: odip-frontend:local
     container_name: odip-frontend
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     ports:
       - "8475:80"
     depends_on:
