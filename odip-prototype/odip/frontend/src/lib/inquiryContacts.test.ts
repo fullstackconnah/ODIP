@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PENDING_ROLES, blankContact, contactRowErrors, contactRowOf, contactsPayload, enquirerContact, isBlankContact, serverContactErrors, type ContactRow,
 } from './inquiryContacts'
@@ -48,5 +48,17 @@ describe('pending contacts on the enquiry form', () => {
   it('enquirerContact copies only the phone and email (the enquiry\'s name is usually the participant\'s)', () => {
     const copy = enquirerContact({ phone: '0412', email: 'a@b.co' })
     expect(copy).toMatchObject({ phone: '0412', email: 'a@b.co', firstName: '', lastName: '', role: 'NextOfKin' })
+  })
+
+  // Live ODIP is plain HTTP on the LAN, which is not a secure context, so crypto.randomUUID is undefined there.
+  describe('on plain HTTP (no crypto.randomUUID)', () => {
+    beforeEach(() => vi.stubGlobal('crypto', {}))
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('creates rows without throwing, each with its own key', () => {
+      const dto = { role: 'Guardian' as const, firstName: 'Maria', lastName: 'Lopez', relationship: null, phone: null, email: null, notes: null }
+      const keys = [blankContact().key, contactRowOf(dto).key, enquirerContact({ phone: '', email: '' }).key]
+      expect(new Set(keys).size).toBe(3)
+    })
   })
 })
