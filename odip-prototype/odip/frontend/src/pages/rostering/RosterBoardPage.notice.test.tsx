@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RosterBoardPage from './RosterBoardPage'
 import { makeParticipantBoard, makeParticipantRow, makeShift, makeStaffBoard } from './test-fixtures'
@@ -35,7 +35,8 @@ const showBoard = (board: RosterBoardDto) => h.board.mockReturnValue({ data: boa
 
 function renderPage(entry = '/rostering?date=2026-08-17') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[entry]}><RosterBoardPage /></MemoryRouter></QueryClientProvider>)
+  const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: [entry] })
+  return { ...render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>), router }
 }
 
 beforeEach(() => {

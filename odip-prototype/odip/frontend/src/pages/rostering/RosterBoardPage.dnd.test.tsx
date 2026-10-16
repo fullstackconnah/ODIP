@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DragEndEvent } from '@dnd-kit/core'
 import RosterBoardPage from './RosterBoardPage'
@@ -76,7 +76,8 @@ const onShift = (shift: ShiftDto): DropTarget => ({ kind: 'shift', shift })
 
 function renderPage(entry = '/rostering?date=2026-08-17') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[entry]}><RosterBoardPage /></MemoryRouter></QueryClientProvider>)
+  const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: [entry] })
+  return { ...render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>), router }
 }
 
 /** What dnd-kit hands onDragEnd when a carried person is let go over `target` (null: over nothing). */
