@@ -226,6 +226,31 @@ public class AuthControllerProxyPartitionTests
     }
 
     [Fact]
+    public async Task A_valid_token_is_let_through_a_lockout_for_a_real_client_address()
+    {
+        // The twin of the proxied test above with a REAL non-null attempt key, so
+        // restoring an early 429 on the locked-out key turns this red.
+        using var db = CreateDb();
+        var tenant = SeedTenant(db);
+        var user = SeedUser(db, tenant.Id, "real.person@acme.example.com");
+        var tracker = new LoginAttemptTracker(TimeProvider.System);
+
+        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
+            await Exchange(Controller(db, tracker, DirectContext("198.51.100.7")));
+        Assert.Equal(StatusCodes.Status429TooManyRequests,
+            StatusOf(await Exchange(Controller(db, tracker, DirectContext("198.51.100.7")))));
+
+        var recovered = Controller(
+            db, tracker, DirectContext("198.51.100.7"),
+            new AcceptingVerifier("real.person@acme.example.com"));
+        var result = await Exchange(recovered);
+        Assert.False(recovered.Response.Headers.ContainsKey("Retry-After"), "a success must not carry a lockout header");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(user.Id, Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value).Data!.Id);
+    }
+
+    [Fact]
     public async Task A_locked_out_client_still_gets_a_429_for_a_bad_token_so_the_defence_is_not_merely_disarmed()
     {
         // The mitigation must not decay into "no lockout at all". Where a real
@@ -236,7 +261,9 @@ public class AuthControllerProxyPartitionTests
         for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
             await Exchange(Controller(db, tracker, DirectContext("198.51.100.7")));
 
-        var status = StatusOf(await Exchange(Controller(db, tracker, DirectContext("198.51.100.7"))));
+        var refused = Controller(db, tracker, DirectContext("198.51.100.7"));
+        var status = StatusOf(await Exchange(refused));
+        Assert.True(refused.Response.Headers.ContainsKey("Retry-After"));
 
         Assert.Equal(StatusCodes.Status429TooManyRequests, status);
     }

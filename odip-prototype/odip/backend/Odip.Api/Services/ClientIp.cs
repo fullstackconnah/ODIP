@@ -4,11 +4,12 @@ using System.Net.Sockets;
 namespace Odip.Api.Services;
 
 /// <summary>
-/// The ONE definition of "which client is this request from" for the sign-in
-/// defence. The rate limiter (<c>Program.RateLimitPartitionKey</c>), the
-/// early-access limiter (<c>EarlyAccessRateLimiting.ClientKey</c>) and the
-/// failed-sign-in tracker (<c>AuthController.LoginAttemptKey</c>) all resolve
-/// through here, so the three cannot drift apart again.
+/// The definition of "which client is this request from" for the SIGN-IN
+/// defence. Only the failed-sign-in tracker (<c>AuthController.LoginAttemptKey</c>)
+/// and the partition warning (<c>SignInBudgetPartitionWarningMiddleware</c>) go
+/// through here. The rate limiters do NOT: <c>Program.RateLimitPartitionKey</c>,
+/// <c>EarlyAccessRateLimiting.ClientKey</c> and <c>PlanQuoteConcurrency</c> read
+/// <c>Connection.RemoteIpAddress</c> directly.
 ///
 /// <para>
 /// Why this exists as a named, checked thing rather than three reads of

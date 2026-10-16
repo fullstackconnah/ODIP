@@ -79,3 +79,30 @@ describe('Dropdown — 44px option rows under a coarse pointer', () => {
     for (const option of options) expect(option).toHaveClass('min-h-[var(--tap-min)]')
   })
 })
+
+// Finish review 2026-10-16: on a phone the chip menu (6 items) opened down over the fixed bottom nav and lost Delete. The panel opens on the side that holds all of it, the nav not counted as room.
+describe('Dropdown — which way the panel opens', () => {
+  it('opens upward when the panel would run under the bottom nav, though 120px are free below', async () => {
+    const restore = { h: window.innerHeight }
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 })
+    const nav = document.createElement('nav')
+    nav.setAttribute('aria-label', 'Mobile')
+    nav.getBoundingClientRect = () => ({ top: 776, bottom: 844, height: 68, left: 0, right: 390, width: 390, x: 0, y: 776, toJSON: () => ({}) })
+    document.body.appendChild(nav)
+    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get() { return this.getAttribute('role') === 'listbox' ? 270 : 0 } })
+    try {
+      render(<Dropdown variant="menu" value="" onChange={() => {}} label="Actions" items={ITEMS} />)
+      const trigger = screen.getByRole('button', { name: 'Actions' })
+      trigger.getBoundingClientRect = () => ({ top: 560, bottom: 590, height: 30, left: 300, right: 340, width: 40, x: 300, y: 560, toJSON: () => ({}) })
+      trigger.click()
+      const panel = await screen.findByRole('listbox')
+      expect(panel.style.bottom).toBe(`${844 - 560 + 8}px`)
+      expect(panel.style.top).toBe('')
+    } finally {
+      nav.remove()
+      if (scroll) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scroll)
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: restore.h })
+    }
+  })
+})

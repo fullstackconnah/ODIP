@@ -330,7 +330,6 @@ public class PortalHandoverTests
     [InlineData(ShiftStatus.PendingReview, ShiftErrorCodes.ShiftAlreadyFinished)]
     [InlineData(ShiftStatus.Completed, ShiftErrorCodes.ShiftAlreadyCompleted)]
     [InlineData(ShiftStatus.Cancelled, ShiftErrorCodes.ShiftCancelled)]
-    [InlineData(ShiftStatus.Draft, ShiftErrorCodes.ShiftNotPublished)]
     public async Task Ack_IsOnlyBeforeTheShiftIsFinished(ShiftStatus status, string code)
     {
         var f = Create(status);
@@ -338,6 +337,19 @@ public class PortalHandoverTests
 
         Assert.Equal(code, Failure(await f.Controller.AcknowledgeHandover(f.Shift.Id, null, default), 409).Code);
         Assert.Empty(await f.Db.HandoverAcknowledgements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task OnADraft_TheAckStartAndFinish_AreNotFound()   // L1 (2026-10-16): a Draft is invisible to its worker on every portal path
+    {
+        var f = Create(ShiftStatus.Draft);
+        AddSubmitted(f, "Previous", new DateOnly(2026, 7, 13), T, "text");
+
+        Assert.Equal("Shift not found.", Assert.Single(Failure(await f.Controller.AcknowledgeHandover(f.Shift.Id, null, default), 404).Errors!));
+        Assert.Equal("Shift not found.", Assert.Single(Failure(await f.Controller.StartShift(f.Shift.Id, new StartShiftDto(), default), 404).Errors!));
+        Assert.Equal("Shift not found.", Assert.Single(Failure(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default), 404).Errors!));
+        Assert.Empty(await f.Db.HandoverAcknowledgements.ToListAsync());
+        Assert.Equal(ShiftStatus.Draft, (await f.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == f.Shift.Id)).Status);
     }
 
     [Fact]

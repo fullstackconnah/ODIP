@@ -329,7 +329,6 @@ public class ShiftCompletionStateMachineTests
     [InlineData(ShiftStatus.PendingReview, "SHIFT_ALREADY_FINISHED")]
     [InlineData(ShiftStatus.Completed, "SHIFT_ALREADY_COMPLETED")]
     [InlineData(ShiftStatus.Cancelled, "SHIFT_CANCELLED")]
-    [InlineData(ShiftStatus.Draft, "SHIFT_NOT_PUBLISHED")]
     public async Task StartShift_NotStartable_ReturnsDistinctCodePerStatus(ShiftStatus status, string expectedCode)
     {
         var (db, tenant) = CreateDb();
@@ -655,7 +654,6 @@ public class ShiftCompletionStateMachineTests
     [Theory]
     [InlineData(ShiftStatus.Completed, "SHIFT_ALREADY_COMPLETED")]
     [InlineData(ShiftStatus.Cancelled, "SHIFT_CANCELLED")]
-    [InlineData(ShiftStatus.Draft, "SHIFT_NOT_PUBLISHED")]
     public async Task FinishShift_NotFinishable_ReturnsDistinctCodePerStatus(ShiftStatus status, string expectedCode)
     {
         var (db, tenant) = CreateDb();

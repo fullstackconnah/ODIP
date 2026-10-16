@@ -686,6 +686,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("LastRequestedAtUtc")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("Message")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -696,9 +700,21 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("OrganisationSize")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<int>("RequestCount")
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
 
@@ -5343,6 +5359,34 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("RecurringUnavailabilities");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Rostering.RosterWeek", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("StartedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("WeekStart")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedByUserId");
+
+                    b.HasIndex("TenantId", "WeekStart")
+                        .IsUnique();
+
+                    b.ToTable("RosterWeeks");
+                });
+
             modelBuilder.Entity("Odip.Domain.Rostering.Shift", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5379,6 +5423,13 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("Ratio")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RegularAwayReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("RegularUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("RequirementsJson")
                         .HasColumnType("jsonb");
 
@@ -5409,6 +5460,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParticipantId");
+
+                    b.HasIndex("RegularUserId");
 
                     b.HasIndex("TenantId");
 
@@ -6942,6 +6995,14 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Rostering.RosterWeek", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("StartedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("Odip.Domain.Rostering.Shift", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
@@ -6949,6 +7010,11 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("ParticipantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Odip.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RegularUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Odip.Domain.Entities.User", "User")
                         .WithMany()

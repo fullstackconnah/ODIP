@@ -1,6 +1,6 @@
 import { test, expect, call } from '../../support/fixtures';
 import { expectStatus, type Session } from '../../support/api';
-import { makeParticipant, makeStaff, assignShift } from '../../support/data';
+import { makeParticipant, makeStaff, assignShift, startWeek } from '../../support/data';
 import { addDays, nextWednesday, sydneyToday } from '../../support/dates';
 
 // Real API + PostgreSQL: setup alone uses direct calls. Preview, revision creation and
@@ -39,6 +39,9 @@ for (const allDays of [false, true]) {
       }],
     }))).data;
     expect(v1.pricing.needsReview, 'the seed is genuinely priced and approvable').toBe(false);
+    // Start rostering (2026-10-16): approval fills only started weeks, and the agreement runs Wednesday to the next Thursday.
+    await startWeek(session, start);
+    await startWeek(session, addDays(start, 7));
     await expectStatus('approve initial agreement', 200, await call(session, 'POST', `${base}/${v1.id}/approve`, { acknowledgeOverlaps: false }));
     const originalPatterns = await patterns();
     expect(originalPatterns).toHaveLength(2);

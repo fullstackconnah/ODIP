@@ -1,13 +1,16 @@
 using System.Globalization;
 using System.Net.Mail;
+using System.Text;
 using Odip.Application.DTOs;
 
 namespace Odip.Application.EarlyAccess;
 
 /// <summary>
-/// Field rules for the public early-access form, and the normalisation the stored values rely on:
-/// name/organisation/email are trimmed, and the email is lower-cased with the invariant culture so
+/// Field rules for the public early-access form's seven fields, and the normalisation the stored values rely on:
+/// every value is trimmed, and the email is lower-cased with the invariant culture so
 /// the unique index on <c>EarlyAccessRequests.Email</c> matches the same person however they type it.
+/// Organisation size, role, phone and message are optional (blank is null). The two free-text rules differ on
+/// purpose: a control or bidi character in the one-line role is refused, while the message is cleaned of them.
 ///
 /// Error keys are the camelCase JSON property names of <see cref="EarlyAccessRequestDto"/>; the
 /// landing page keys its inline messages on them, so treat them as part of the API contract.
@@ -18,9 +21,19 @@ public static class EarlyAccessRequestValidator
     public const string NameField = "name";
     public const string OrganisationField = "organisation";
     public const string EmailField = "email";
+    public const string RoleField = "role";
+    public const string PhoneField = "phone";
+    public const string OrganisationSizeField = "organisationSize";
+    public const string MessageField = "message";
 
     public const int MaxNameLength = 100;
     public const int MaxOrganisationLength = 150;
+    public const int MaxRoleLength = 100;
+    public const int MaxPhoneLength = 30;
+    public const int MaxMessageLength = 1000;
+
+    /// <summary>The landing form's size bands, as stored (exact and case-sensitive after trimming).</summary>
+    public static readonly IReadOnlyList<string> OrganisationSizes = ["under-10", "10-49", "50-199", "200-plus"];
 
     /// <summary>The longest valid address (RFC 5321: 256-octet path, less the angle brackets).</summary>
     public const int MaxEmailLength = 254;
@@ -45,10 +58,63 @@ public static class EarlyAccessRequestValidator
         else if (!IsValidEmail(email))
             errors[EmailField] = new[] { "Enter a valid email address." };
 
-        return new EarlyAccessValidationResult(name, organisation, email.ToLowerInvariant(), errors);
+        var role = Optional(request?.Role);
+        if (role is not null)
+        {
+            if (role.Length > MaxRoleLength)
+                errors[RoleField] = new[] { $"Role must be {MaxRoleLength.ToString(CultureInfo.InvariantCulture)} characters or fewer." };
+            else if (role.Any(IsDisallowedInOneLineText))
+                errors[RoleField] = new[] { "Role contains characters that are not allowed." };
+        }
+
+        var phone = Optional(request?.Phone);
+        if (phone is not null)
+        {
+            if (phone.Length > MaxPhoneLength)
+                errors[PhoneField] = new[] { $"Phone must be {MaxPhoneLength.ToString(CultureInfo.InvariantCulture)} characters or fewer." };
+            else if (!phone.All(IsPhoneCharacter))
+                errors[PhoneField] = new[] { "Use digits, spaces and + ( ) - only." };
+        }
+
+        var organisationSize = Optional(request?.OrganisationSize);
+        // Optional in PR 1 (expand): the live /welcome form sends none. PR 2 makes it required, with the form that asks for it.
+        if (organisationSize is not null && !OrganisationSizes.Contains(organisationSize, StringComparer.Ordinal))
+            errors[OrganisationSizeField] = new[] { "Choose one of the listed sizes." };
+
+        var message = CleanMessage(request?.Message);
+        if (message is not null && message.Length > MaxMessageLength)
+            errors[MessageField] = new[] { "Message must be 1,000 characters or fewer." };
+
+        return new EarlyAccessValidationResult(
+            name, organisation, email.ToLowerInvariant(), role, phone, organisationSize, message, errors);
     }
 
     private static string Clean(string? value) => (value ?? string.Empty).Trim();
+
+    private static string? Optional(string? value) => Clean(value) is { Length: > 0 } v ? v : null;
+
+    // ASCII only: char.IsDigit also accepts Arabic-Indic, fullwidth and other scripts' digits.
+    private static bool IsPhoneCharacter(char c) => c is (>= '0' and <= '9') or ' ' or '+' or '(' or ')' or '-';
+
+    /// <summary>
+    /// The message is several lines of free text that the SuperAdmin list renders as plain text. Line breaks are kept (CRLF, CR and the
+    /// Unicode line/paragraph separators become LF), a tab becomes a space, and every other character IsDisallowedInOneLineText rejects
+    /// (controls, bidi overrides and isolates) is dropped rather than refused: a visitor pasting from a document should not get a 400.
+    /// Blank after cleaning is null. The length limit applies to the cleaned text, so it never refuses what the form's count allowed.
+    /// </summary>
+    private static string? CleanMessage(string? value)
+    {
+        if (value is null) return null;
+        var text = value.Replace("\r\n", "\n");
+        var cleaned = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if (c is '\n' or '\r' or '\u2028' or '\u2029') cleaned.Append('\n');
+            else if (c == '\t') cleaned.Append(' ');
+            else if (!IsDisallowedInOneLineText(c)) cleaned.Append(c);
+        }
+        return Optional(cleaned.ToString());
+    }
 
     private static void CheckText(
         Dictionary<string, string[]> errors, string field, string label, string missingMessage, string value, int maxLength)
@@ -116,6 +182,10 @@ public sealed record EarlyAccessValidationResult(
     string Name,
     string Organisation,
     string Email,
+    string? Role,
+    string? Phone,
+    string? OrganisationSize,
+    string? Message,
     Dictionary<string, string[]> Errors)
 {
     public bool IsValid => Errors.Count == 0;

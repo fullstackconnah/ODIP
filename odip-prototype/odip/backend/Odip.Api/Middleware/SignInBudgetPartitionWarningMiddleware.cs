@@ -30,6 +30,12 @@ public class SignInBudgetPartitionWarningMiddleware
     /// </summary>
     public const string LoggerCategory = "Odip.ClientIp";
 
+    // Once per process: a proxied deploy resolves EVERY request to the proxy, so a
+    // per-request warning is log amplification (and amplifies a flood).
+    private static int _warned;
+
+    internal static void ResetForTests() => Interlocked.Exchange(ref _warned, 0);
+
     private readonly RequestDelegate _next;
     private readonly ILoggerFactory _loggerFactory;
 
@@ -45,7 +51,7 @@ public class SignInBudgetPartitionWarningMiddleware
         // test lives in exactly one place, so this warning and the key it describes
         // cannot disagree about what "the proxy" is. It is deliberately NOT negated —
         // the budget is absent precisely WHEN the address is the proxy's.
-        if (ClientIp.SignInBudgetCannotBePartitioned(context))
+        if (ClientIp.SignInBudgetCannotBePartitioned(context) && Interlocked.Exchange(ref _warned, 1) == 0)
         {
             // Both shapes that leave LoginAttemptKey null are reported, and named
             // differently, because they are different faults: an in-range address is the

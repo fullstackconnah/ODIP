@@ -12,7 +12,7 @@ public enum EarlyAccessOutcome
     /// <summary>First time this address has asked: a new row was inserted.</summary>
     Created,
 
-    /// <summary>The address is already on file: only LastRequestedAtUtc and RequestCount changed.</summary>
+    /// <summary>The address is already on file: only LastRequestedAtUtc, RequestCount and the four answers changed.</summary>
     Repeated,
 }
 
@@ -21,8 +21,9 @@ public sealed record EarlyAccessRecordResult(EarlyAccessOutcome Outcome, int Req
 /// <summary>
 /// Stores one early-access request: inserts the address the first time, and on any later request from
 /// the same (already normalised) address bumps <see cref="EarlyAccessRequest.LastRequestedAtUtc"/> and
-/// <see cref="EarlyAccessRequest.RequestCount"/> — the stored name and organisation stay as first given,
-/// so nobody can overwrite someone else's entry by submitting their address again.
+/// <see cref="EarlyAccessRequest.RequestCount"/>, and replaces the four answers (role, phone, organisation size and message)
+/// with the latest ones, a blank one included: sending the form again is how someone changes or removes them. The stored
+/// name and organisation stay as first given, so nobody can rewrite someone else's identity by submitting their address again.
 ///
 /// Two simultaneous requests for the same address are the interesting case, and EF InMemory cannot show
 /// either failure mode (it enforces neither the unique index nor row versions): both may see "no row" and
@@ -44,10 +45,12 @@ public sealed class EarlyAccessService
         _logger = logger;
     }
 
-    /// <param name="email">Already trimmed and lower-cased (see <see cref="EarlyAccessRequestValidator"/>).</param>
-    public async Task<EarlyAccessRecordResult> RecordAsync(
-        string name, string organisation, string email, CancellationToken ct)
+    /// <param name="request">A valid result of <see cref="EarlyAccessRequestValidator.Validate"/>: trimmed, the email lower-cased.</param>
+    public async Task<EarlyAccessRecordResult> RecordAsync(EarlyAccessValidationResult request, CancellationToken ct)
     {
+        if (!request.IsValid) throw new ArgumentException("Only a validated request can be stored.", nameof(request));
+        var email = request.Email;
+
         for (var attempt = 1; ; attempt++)
         {
             var now = DateTime.UtcNow;
@@ -60,9 +63,13 @@ public sealed class EarlyAccessService
                 _db.EarlyAccessRequests.Add(new EarlyAccessRequest
                 {
                     Id = Guid.NewGuid(),
-                    Name = name,
-                    Organisation = organisation,
+                    Name = request.Name,
+                    Organisation = request.Organisation,
                     Email = email,
+                    Role = request.Role,
+                    Phone = request.Phone,
+                    OrganisationSize = request.OrganisationSize,
+                    Message = request.Message,
                     CreatedAtUtc = now,
                     LastRequestedAtUtc = now,
                     RequestCount = 1,
@@ -72,6 +79,12 @@ public sealed class EarlyAccessService
             {
                 existing.LastRequestedAtUtc = now;
                 existing.RequestCount += 1;
+                // The latest answers replace the stored ones, a blank one included: sending the form again is how someone changes or
+                // removes them (the landing page's collection notice says so). Name and organisation stay as first given.
+                existing.Role = request.Role;
+                existing.Phone = request.Phone;
+                existing.OrganisationSize = request.OrganisationSize;
+                existing.Message = request.Message;
             }
 
             try
