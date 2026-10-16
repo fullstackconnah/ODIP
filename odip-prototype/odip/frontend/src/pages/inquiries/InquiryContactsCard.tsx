@@ -85,11 +85,12 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
         {rows.map((row, index) => {
           const name = `${row.firstName} ${row.lastName}`.trim()
           return (
-            <fieldset key={row.key} className="p-[var(--card-pad)] rounded-[var(--radius-sm)] border border-[var(--color-border)]">
+            <fieldset key={row.key} className="relative p-[var(--card-pad)] rounded-[var(--radius-sm)] border border-[var(--color-border)]">
               <legend className="sr-only">Contact {index + 1}</legend>
               <div className="flex items-start gap-2">
                 <div className={`flex-1 min-w-0 ${formGrid}`}>
-                  {field(row, index, 'firstName', 'First name', span.short, 'text', true)}
+                  {/* Below md the remove control sits beside First name only, so every other field keeps the full width. */}
+                  {field(row, index, 'firstName', 'First name', `${span.short} max-md:pr-11`, 'text', true)}
                   {field(row, index, 'lastName', 'Last name', span.short, 'text', true)}
                   <FormField label="Role" required error={errors[row.key]?.role} className={span.medium}>
                     <select id={`contact-${row.key}-role`} value={row.role} onChange={e => set(index, 'role', e.target.value)}>
@@ -100,7 +101,7 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
                   {field(row, index, 'phone', 'Phone', span.short, 'tel')}
                   {field(row, index, 'email', 'Email', span.medium, 'email')}
                 </div>
-                <Button variant="ghost" iconOnly className="mt-6" aria-label={`Remove ${name || `contact ${index + 1}`}`} title="Remove contact" onClick={() => remove(index)}>
+                <Button variant="ghost" iconOnly className="mt-6 max-md:absolute max-md:right-[var(--card-pad)] max-md:top-[var(--card-pad)]" aria-label={`Remove ${name || `contact ${index + 1}`}`} title="Remove contact" onClick={() => remove(index)}>
                   <Trash2 className="w-4 h-4" aria-hidden />
                 </Button>
               </div>
