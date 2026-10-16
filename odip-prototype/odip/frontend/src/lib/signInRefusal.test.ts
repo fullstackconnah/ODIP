@@ -86,18 +86,18 @@ describe('describeSignInRefusal', () => {
   })
 
   it('says an address with no ODIP account is not set up and who to ask', () => {
-    expect(describeSignInRefusal(refused('NoOdipAccount'), email).sentence).toBe("jane.smith@acme.example.com isn't set up in ODIP. Ask your administrator to add you.")
+    expect(describeSignInRefusal(refused('NoOdipAccount'), email).sentence).toBe("jane.smith@acme.example.com isn't set up in Bunya Support. Ask your administrator to add you.")
   })
 
   it('says an inactive organisation is inactive, with the next step', () => {
     expect(describeSignInRefusal(refused('TenantInactive'), email)).toEqual({
-      sentence: "Your organisation's ODIP account is inactive.",
+      sentence: "Your organisation's Bunya Support account is inactive.",
       nextStep: 'Ask your administrator to reactivate it.',
     })
   })
 
   it('says a sign-in method that is not enabled, and to use email and password', () => {
-    expect(describeSignInRefusal(refused('ProviderNotAllowed'), email).sentence).toBe("That sign-in method isn't enabled for ODIP. Use your email and password.")
+    expect(describeSignInRefusal(refused('ProviderNotAllowed'), email).sentence).toBe("That sign-in method isn't enabled for Bunya Support. Use your email and password.")
   })
 
   it('says no more for an ambiguous address than that it cannot sign in yet and to ask the administrator: not that other accounts share it', () => {

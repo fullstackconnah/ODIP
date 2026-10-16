@@ -198,7 +198,6 @@ export default function LoginPage() {
         <div className="w-full max-w-md animate-fade-in">
           <div className="text-center mb-8">
             <h1><Wordmark size={32} /></h1>
-            <p className="text-[var(--color-muted-foreground)] mt-3">NDIS Trip Management Platform</p>
           </div>
 
           <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">

@@ -20,10 +20,11 @@ describe('AccessibilityPage', () => {
     expect(screen.getAllByRole('banner')).toHaveLength(1)
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
     expect(screen.getByRole('contentinfo').closest('main')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Odip home' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: 'Bunya Support home' })).toHaveAttribute('href', '/')
+    expect(document.body.textContent).not.toMatch(/Odip/i)
     // The wordmark sits in a box the width of the reading column, so it lines up with the h1 rather than the window edge.
     const column = screen.getByRole('heading', { level: 1 }).parentElement!
-    const box = screen.getByRole('link', { name: 'Odip home' }).parentElement!
+    const box = screen.getByRole('link', { name: 'Bunya Support home' }).parentElement!
     for (const cls of ['mx-auto', 'max-w-[68ch]', 'px-[var(--gutter,20px)]']) {
       expect(box, cls).toHaveClass(cls)
       expect(column, cls).toHaveClass(cls)

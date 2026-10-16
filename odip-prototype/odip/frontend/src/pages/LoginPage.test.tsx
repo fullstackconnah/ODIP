@@ -175,7 +175,7 @@ describe('LoginPage: a sign-in the exchange refused', () => {
 
     await signIn(u)
 
-    expect(within(await alert()).getByText(`${EMAIL} isn't set up in ODIP. Ask your administrator to add you.`)).toBeInTheDocument()
+    expect(within(await alert()).getByText(`${EMAIL} isn't set up in Bunya Support. Ask your administrator to add you.`)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Send it again' })).not.toBeInTheDocument()
   })
 
@@ -186,7 +186,7 @@ describe('LoginPage: a sign-in the exchange refused', () => {
     await signIn(u)
 
     const shown = await alert()
-    expect(within(shown).getByText("Your organisation's ODIP account is inactive.")).toBeInTheDocument()
+    expect(within(shown).getByText("Your organisation's Bunya Support account is inactive.")).toBeInTheDocument()
     expect(within(shown).getByText('Ask your administrator to reactivate it.')).toBeInTheDocument()
   })
 
@@ -196,7 +196,7 @@ describe('LoginPage: a sign-in the exchange refused', () => {
 
     await signIn(u)
 
-    expect(within(await alert()).getByText("That sign-in method isn't enabled for ODIP. Use your email and password.")).toBeInTheDocument()
+    expect(within(await alert()).getByText("That sign-in method isn't enabled for Bunya Support. Use your email and password.")).toBeInTheDocument()
   })
 
   it('tells an address that is on more than one account only that it cannot sign in yet, and to ask an administrator to check the account', async () => {
@@ -553,6 +553,7 @@ describe('LoginPage: landmarks and the platform footer', () => {
     const main = screen.getByRole('main')
     const footer = screen.getByRole('contentinfo')
     expect(main).toContainElement(screen.getByRole('heading', { level: 1, name: 'Bunya Support' }))
+    expect(screen.queryByText('NDIS Trip Management Platform')).toBeNull() // the board's sign-in has the wordmark alone
     expect(footer.closest('main')).toBeNull()
     expect(main.nextElementSibling).toBe(footer)
     expect(within(footer).getByText(ACKNOWLEDGEMENT_OF_COUNTRY)).toBeInTheDocument()
