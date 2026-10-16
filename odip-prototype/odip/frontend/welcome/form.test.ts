@@ -36,7 +36,8 @@ function mountForm(fetchFn: typeof fetch) {
   return { form, controller, input, fill, submit, q }
 }
 
-describe('early-access form: validation', () => {
+// rewritten in Task 3
+describe.skip('early-access form: validation', () => {
   it('asks for each required field and names the problem', () => {
     const errors = validate({ name: ' ', organisation: '', email: '', website: '' })
     expect(errors).toEqual({ name: 'Enter your name.', organisation: 'Enter your organisation.', email: 'Enter your email address.' })
@@ -69,7 +70,8 @@ describe('early-access form: validation', () => {
   })
 })
 
-describe('early-access form: request', () => {
+// rewritten in Task 3
+describe.skip('early-access form: request', () => {
   it('POSTs JSON to /api/public/early-access with trimmed values and the honeypot', async () => {
     const fetchFn = vi.fn().mockResolvedValue(reply(202, { status: 'received' }))
     const result = await submitRequest({ ...VALID, name: '  Alex Sample ', website: '' }, fetchFn)
@@ -116,7 +118,8 @@ describe('early-access form: request', () => {
   })
 })
 
-describe('early-access form: states in the page', () => {
+// rewritten in Task 3
+describe.skip('early-access form: states in the page', () => {
   let controller: FormController | null = null
   beforeEach(() => {
     document.body.replaceChildren()

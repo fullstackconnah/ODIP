@@ -14,7 +14,7 @@ const LINK = 'rounded-sm text-[var(--color-primary)] underline underline-offset-
  * contrast: src/test/toneContrast.test.ts; 44px on touch: --tap-min in index.css (AppLayout.test.tsx) and tapArea.ts (Button.test.tsx);
  * focus outline: DESIGN.md Focus Ring and src/test/focusRingTokens.test.ts; Escape and focus return: useDialogBehavior.test.tsx and
  * AppLayout.test.tsx (the drawer); 12px: src/test/textFloor.test.ts; table columns: src/test/dataTableColumnRule.test.ts; the
- * landing's pause control: welcome/page.test.ts, and its reduced-motion still frame: welcome/canopy.ts (code only, no test).
+ * landing's reduced motion: welcome/main.test.ts and welcome/capture/page-checks.mjs.
  */
 export default function AccessibilityPage({ info = PLATFORM_INFO }: { info?: PlatformInfo }) {
   useDocumentTitle('Accessibility')
@@ -35,7 +35,7 @@ export default function AccessibilityPage({ info = PLATFORM_INFO }: { info?: Pla
         <li>Dialogs and the main menu close with Escape, and the keyboard returns to where you were.</li>
         <li>Text is never smaller than 12 pixels.</li>
         <li>From tablet width up, tables keep every column. A wide table scrolls inside its own box.</li>
-        <li>On our public page, you can pause the moving background, and it stays still if your device asks for reduced motion.</li>
+        <li>Our public page has no moving background. Screens settle into place as you reach them and a marker follows the day; if your device asks for reduced motion, all of it becomes short fades.</li>
       </ul>
 
       <h2 className={H2}>What we know isn't right yet</h2>

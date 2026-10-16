@@ -24,20 +24,31 @@ const app = tokens(blockAfter(appCss, /@theme\s*\{/))
 const landing = tokens(blockAfter(landingCss, /:root\s*\{/))
 
 const REQUIRED = {
+  '--color-surface': '#ffffff',
+  '--color-foreground': '#1b1c1a',
+  '--color-muted-foreground': '#43493a',
   '--color-primary': '#396200',
-  '--color-primary-container': '#4d7c0f',
   '--color-primary-fixed': '#bbf37c',
   '--color-on-primary-fixed': '#0f2000',
-  '--color-background': '#fbf9f5',
-  '--color-border': '#c3c9b5',
-  '--color-foreground': '#1b1c1a',
+  '--color-secondary': '#515f74',
+  '--color-surface-container-low': '#f5f3ef',
   '--color-input': '#e4e2de',
+  '--color-border': '#c3c9b5',
+  '--color-destructive': '#ba1a1a',
+  '--color-error-container': '#ffdad6',
+  '--color-on-error-container': '#93000a',
+  '--color-warning-container': '#fef3c7',
+  '--color-on-warning-container': '#92400e',
+  '--radius-md': '0.5rem',
+  '--radius-lg': '0.75rem',
+  '--font-sans': "'manrope', system-ui, -apple-system, sans-serif",
+  '--font-display': "'plus jakarta sans', system-ui, -apple-system, sans-serif",
 }
 
 describe("landing tokens are the app's tokens", () => {
   it('reads both token blocks (so the checks below cannot pass on an empty parse)', () => {
     expect(app.size).toBeGreaterThan(30)
-    expect(landing.size).toBeGreaterThan(15)
+    expect(landing.size).toBeGreaterThan(25)
   })
 
   it.each(Object.keys(REQUIRED))('%s matches the app, by name', (name) => {
@@ -45,7 +56,7 @@ describe("landing tokens are the app's tokens", () => {
     expect(landing.get(name), `${name} in welcome.css`).toBe(app.get(name))
   })
 
-  it('the app still has the values the brief named (Ledger Olive, Deep Fern, Pale Sprout, Forest, Warm Paper, Ruled Line, Ledger Ink, Field Grey)', () => {
+  it('the app still has the values the brief named', () => {
     for (const [name, value] of Object.entries(REQUIRED)) expect(app.get(name)).toBe(value)
   })
 
@@ -55,8 +66,10 @@ describe("landing tokens are the app's tokens", () => {
     for (const name of shared) expect(landing.get(name), name).toBe(app.get(name))
   })
 
-  it('never uses pure white or pure black', () => {
-    // The colour keywords only: `white-space` is not a colour.
-    expect(landingCss).not.toMatch(/#fff\b|#ffffff\b|#000\b|#000000\b|(?<![\w-])(white|black)(?![\w-])|rgb\(\s*255\s+255\s+255|rgb\(\s*0\s+0\s+0\b/i)
+  it('uses pure white only as the white ground token (owner, 2026-10-16), and never pure black', () => {
+    const code = landingCss.replace(/\/\*[\s\S]*?\*\//g, '') // comments may say "white ground"
+    expect(code.match(/#fff\b|#ffffff\b/gi)).toEqual(['#ffffff']) // --color-surface only
+    expect(code).toMatch(/--color-surface:\s*#ffffff;/)
+    expect(code).not.toMatch(/#000\b|#000000\b|(?<![\w-])(white|black)(?![\w-])|rgb\(\s*0\s+0\s+0\b/i)
   })
 })
