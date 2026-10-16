@@ -5,6 +5,7 @@ import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeFinding } from '../test-fixtures'
 import { forecastOverFinding, forecastOverWarningForAdmin, forecastOverWithFigures, approachingFinding } from './parallel-budget-override/fixtures'
 import type { RosterFindingDto, ShiftCheckResult } from '@/api/types'
+import { SERVER_PERIOD, asWritten } from '@/test/fixtures/budgets'
 
 // The budget moments of the shift panel (budget phase 3): a warning in Warn mode, an Admin's reason, a Coordinator's refusal and the "Emergency or safety" way through, the marker a saved shift carries,
 // and the one informational line a shift the budget could not check gets. Only the API layer is mocked; every other collaborator is the real component, so this exercises the real save gate.
@@ -65,7 +66,7 @@ const description = () => screen.getByLabelText(/What made this an emergency or 
 
 const forecastOverWithCost: RosterFindingDto = {
   ...forecastOverWithFigures,
-  message: 'Takes Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026. This shift: about $292.32.',
+  message: `Takes Core (flexible) to $8,640.00 of $8,000.00 for ${SERVER_PERIOD}. This shift: about $292.32.`,
 }
 
 describe('a budget warning (Warn mode)', () => {
@@ -75,7 +76,7 @@ describe('a budget warning (Warn mode)', () => {
     answerCheckWith({ findings: [warning] })
     renderCreate()
 
-    expect(await screen.findByText('Takes Core (flexible) to $8,640.00 of $8,000.00 for 1 Oct–31 Dec 2026. This shift: about $292.32.')).toBeInTheDocument()
+    expect(await screen.findByText(`Takes Core (flexible) to $8,640.00 of $8,000.00 for ${SERVER_PERIOD}. This shift: about $292.32.`, { normalizer: asWritten })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Emergency or safety/i })).not.toBeInTheDocument()   // nothing is refused, so there is nothing to get through
     // M1: nothing is overridden in Warn mode, so the button does not say so, and there is no box for a reason the server would throw away.
     expect(saveButton()).toHaveTextContent('Save anyway')
@@ -83,7 +84,7 @@ describe('a budget warning (Warn mode)', () => {
     await user.click(saveButton())
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
-      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '09:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
       status: 'Draft', notes: null, overrideReason: null, acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'],
     })
   })
@@ -110,16 +111,16 @@ describe('an Admin’s override (a warning that asks for a reason)', () => {
     expect(saveButton()).toHaveTextContent('Save with override')   // a reason IS being asked for here
     // M5: the field says why it is asked for and that it is kept, in the budget's own words.
     expect(screen.getByLabelText(/reason for override/i)).toHaveAccessibleDescription('The hard limit is on. This reason is recorded in the audit log.')
-    expect(screen.getByPlaceholderText('Why this shift should go ahead past the budget')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Why this shift should go ahead over budget')).toBeInTheDocument()
 
     await user.click(saveButton())
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
-    expect(screen.getByText('Add a reason to save this shift past the budget.')).toBeInTheDocument()
+    expect(screen.getByText('Add a reason to save this shift over budget.')).toBeInTheDocument()
     expect(screen.queryByText(/A reason is required to save over the warnings/)).not.toBeInTheDocument()
 
     // M6: the error goes the moment there is a real answer under it, not only on the next save.
     await user.type(screen.getByLabelText(/reason for override/i), 'C')
-    expect(screen.queryByText('Add a reason to save this shift past the budget.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Add a reason to save this shift over budget.')).not.toBeInTheDocument()
     expect(screen.getByLabelText(/reason for override/i)).not.toBeInvalid()
     await user.type(screen.getByLabelText(/reason for override/i), 'lient’s carer is in hospital')
     await user.click(saveButton())
@@ -170,7 +171,7 @@ describe('a Coordinator the budget refused', () => {
     await user.click(saveButton())
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
-      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '09:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
       status: 'Draft', notes: null, overrideReason: DESCRIPTION, emergency: true, acknowledgedFindingCodes: ['BUDGET_APPROACHING'],
     })
     await waitFor(() => expect(onClose).toHaveBeenCalled())
@@ -201,7 +202,7 @@ describe('a Coordinator the budget refused', () => {
     await user.click(emergencyAction())
     await user.type(description(), DESCRIPTION)
 
-    await user.click(screen.getByRole('button', { name: /^Back$/ }))
+    await user.click(screen.getByRole('button', { name: /^Back: this is not an emergency$/ }))
 
     expect(saveButton()).toBeDisabled()
     await user.click(emergencyAction())
@@ -290,11 +291,11 @@ describe('a shift the budget could not check', () => {
   })
 })
 
-describe('a shift saved past the budget', () => {
+describe('a shift saved over budget', () => {
   const emergencyShift = makeShift({
     overrideReason: 'Emergency or safety: Participant unsafe at home tonight',
     acknowledgedFindingCodes: ['BUDGET_EMERGENCY'],
-    budgetReview: { state: 'Pending', recordedAt: '2026-10-04T03:12:00Z', reviewTaskTitle: 'Review emergency shift past budget: Mia Chen on 17 Aug 2026' },
+    budgetReview: { state: 'Pending', recordedAt: '2026-10-04T03:12:00Z', reviewTaskTitle: 'Review emergency shift over budget: Mia Chen on 17 Aug 2026' },
   })
 
   function renderEdit(shift = emergencyShift) {
@@ -308,7 +309,7 @@ describe('a shift saved past the budget', () => {
     expect(within(marker).getByText('Over budget: emergency')).toBeInTheDocument()
     expect(within(marker).getByText('Admin review pending')).toBeInTheDocument()
     expect(within(marker).getByText('Participant unsafe at home tonight')).toBeInTheDocument()   // the server's prefix is the pill's job, not a second line of the box
-    expect(within(marker).getByText('Review emergency shift past budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
+    expect(within(marker).getByText('Review emergency shift over budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
   })
 
   it('does not copy the stored emergency text into the ordinary reason field, and a later save sends no reason and no flag', async () => {
@@ -387,7 +388,7 @@ describe('the reason box keeps the generic words when the budget is not the only
     await screen.findAllByText(/Reason required/)
 
     expect(screen.getByPlaceholderText('Why this assignment should proceed despite the warnings above')).toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('Why this shift should go ahead past the budget')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Why this shift should go ahead over budget')).not.toBeInTheDocument()
   })
 })
 
@@ -574,7 +575,7 @@ describe('what a screen reader is told (M7)', () => {
     await user.click(emergencyAction())
     await user.type(description(), DESCRIPTION)
 
-    await user.click(screen.getByRole('button', { name: /^Back$/ }))
+    await user.click(screen.getByRole('button', { name: /^Back: this is not an emergency$/ }))
 
     expect(emergencyAction()).toHaveFocus()
   })

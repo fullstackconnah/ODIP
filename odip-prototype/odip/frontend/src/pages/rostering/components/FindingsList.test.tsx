@@ -3,6 +3,7 @@ import { render, cleanup, screen } from '@testing-library/react'
 import { FindingsList } from './FindingsList'
 import { makeFinding } from '../test-fixtures'
 import { forecastOverWithFigures } from './parallel-budget-override/fixtures'
+import { SERVER_PERIOD, asWritten } from '@/test/fixtures/budgets'
 
 // FindingsList, as the budget phase 3 design review changed it: two pools past their funding are two findings with ONE code (L7), and the warning triangle is not drawn in the amber fill (L1).
 
@@ -64,5 +65,25 @@ describe('the warning triangle (L1)', () => {
     const icon = screen.getByText('Needs a look').parentElement!.querySelector('svg')!
     expect(icon.getAttribute('class')).toMatch(/on-warning-container/)
     expect(icon.getAttribute('class')).not.toMatch(/text-\[var\(--color-warning\)\]/)
+  })
+})
+
+// Design review N8: the period in a finding is one unbreakable block (about 25 characters with two years), and `overflow-wrap: break-word` does not let a flex item shrink below it, so beside the
+// "Reason required" pill it left the sentence a few pixels. `anywhere` counts the soft breaks in the sentence's minimum width, so the sentence yields and the pill keeps its room.
+describe('the sentence beside the "Reason required" pill (design review N8)', () => {
+  const sent = `Takes Core (flexible) to $8,640.00 of $8,000.00 for ${SERVER_PERIOD}, $640.00 over.`
+
+  it('may shrink and wrap anywhere, so a period that cannot break does not squeeze the pill', () => {
+    render(<FindingsList findings={[{ ...forecastOverWithFigures, severity: 'Warning', requiresReason: true, message: sent }]} />)
+
+    const sentence = screen.getByText(sent, { normalizer: asWritten })
+    expect(sentence).toHaveClass('min-w-0', '[overflow-wrap:anywhere]')
+    expect(screen.getByText('Reason required')).toHaveClass('shrink-0')
+  })
+
+  it('does the same for the sentence of an answered refusal, which sits in a column', () => {
+    render(<FindingsList findings={[{ ...forecastOverWithFigures, severity: 'Blocking', message: sent }]} answered={{ codes: ['BUDGET_FORECAST_OVER'], label: 'Booking as an emergency' }} />)
+
+    expect(screen.getByText(sent, { normalizer: asWritten })).toHaveClass('[overflow-wrap:anywhere]')
   })
 })

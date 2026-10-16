@@ -37,13 +37,33 @@ public class TasksController : ControllerBase
             ? _db.Users.AnyAsync(u => u.Id == ownerId.Value && u.IsActive, ct)
             : Task.FromResult(true);
 
+    /// <summary>
+    /// The ids a new task links to must be the caller's: the trip is read through the tenant-filtered TripInstances, and the booking, reservation, vehicle assignment and staff assignment (which
+    /// have no query filter of their own) through their trip. Returns the message for the first one that is not, or null. Update never writes these links, so only Create needs it.
+    /// </summary>
+    private async Task<string?> LinkedRowErrorAsync(CreateTaskDto dto, CancellationToken ct)
+    {
+        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct)) return "Trip not found.";
+        if (dto.ParticipantBookingId is { } bookingId
+            && !await _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)) return "Booking not found.";
+        if (dto.AccommodationReservationId is { } reservationId
+            && !await _db.AccommodationReservations.AnyAsync(r => r.Id == reservationId && _db.TripInstances.Any(t => t.Id == r.TripInstanceId), ct)) return "Reservation not found.";
+        if (dto.VehicleAssignmentId is { } vehicleAssignmentId
+            && !await _db.VehicleAssignments.AnyAsync(a => a.Id == vehicleAssignmentId && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Vehicle assignment not found.";
+        if (dto.StaffAssignmentId is { } staffAssignmentId
+            && !await _db.StaffAssignments.AnyAsync(a => a.Id == staffAssignmentId && _db.TripInstances.Any(t => t.Id == a.TripInstanceId), ct)) return "Staff assignment not found.";
+        return null;
+    }
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<TaskDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] TaskItemStatus? status,
-        [FromQuery] bool? dueThisWeek, [FromQuery] Guid? ownerId, CancellationToken ct)
+        [FromQuery] bool? dueThisWeek, [FromQuery] Guid? ownerId, CancellationToken ct,
+        // Last, so every existing caller keeps compiling; bound by name like the others. The dashboard's Tasks due group: due on the provider's today.
+        [FromQuery] bool? dueToday = null)
     {
         var query = _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner).AsQueryable();
-        // The Admin's review of an emergency past budget names a participant whose budget is spent: only the roles that see budget standing elsewhere see it (the phase 3 review, C7).
+        // The Admin's review of an emergency over budget names a participant whose budget is spent: only the roles that see budget standing elsewhere see it (the phase 3 review, C7).
         if (!BudgetReviewAudience.MaySee(User)) query = query.Where(t => t.TaskType != TaskType.BudgetEmergencyReview);
         if (tripId.HasValue) query = query.Where(t => t.TripInstanceId == tripId.Value);
         if (status == TaskItemStatus.Overdue)
@@ -59,6 +79,12 @@ public class TasksController : ControllerBase
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             var weekEnd = today.AddDays(7);
             query = query.Where(t => t.DueDate != null && t.DueDate >= today && t.DueDate <= weekEnd);
+        }
+        if (dueToday == true)
+        {
+            // The same provider today as Overdue and dueThisWeek, so the client never judges the day in its own zone.
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+            query = query.Where(t => t.DueDate == today);
         }
 
         var items = await query.OrderBy(t => t.DueDate).ThenByDescending(t => t.Priority)
@@ -113,6 +139,8 @@ public class TasksController : ControllerBase
 
         if (!await IsValidOwnerRefAsync(dto.OwnerId, ct))
             return BadRequest(ApiResponse<TaskDto>.Fail("Task owner not found."));
+        if (await LinkedRowErrorAsync(dto, ct) is { } linkedRowError)
+            return BadRequest(ApiResponse<TaskDto>.Fail(linkedRowError));
 
         var task = new BookingTask
         {
@@ -147,7 +175,7 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
 
-        // The review of an emergency booking past budget is an Admin's: complete, cancel, delete or retype it only as an Admin or SuperAdmin, and neither retype it away nor retype another task into it (C2).
+        // The review of an emergency booking over budget is an Admin's: complete, cancel, delete or retype it only as an Admin or SuperAdmin, and neither retype it away nor retype another task into it (C2).
         var isReview = t.TaskType == TaskType.BudgetEmergencyReview || dto.TaskType == TaskType.BudgetEmergencyReview;
         if (isReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
 
@@ -215,10 +243,19 @@ public class ActivitiesController : ControllerBase
         return Ok(ApiResponse<List<ActivityDto>>.Ok(items));
     }
 
+    /// <summary>An activity's event template must be the caller's (EventTemplates is tenant-filtered). It need not be active: editing an old activity re-sends the id of a template that has since been deactivated.</summary>
+    private Task<bool> IsValidEventTemplateRefAsync(Guid? templateId, CancellationToken ct) =>
+        templateId.HasValue
+            ? _db.EventTemplates.AnyAsync(e => e.Id == templateId.Value, ct)
+            : Task.FromResult(true);
+
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ActivityDto>>> Create([FromBody] CreateActivityDto dto, CancellationToken ct)
     {
+        if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
+            return BadRequest(ApiResponse<ActivityDto>.Fail("Event template not found."));
+
         var a = new Activity
         {
             Id = Guid.NewGuid(), EventTemplateId = dto.EventTemplateId, ActivityName = dto.ActivityName,
@@ -236,6 +273,8 @@ public class ActivitiesController : ControllerBase
     {
         var a = await _db.Activities.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<ActivityDto>.Fail("Activity not found"));
+        if (!await IsValidEventTemplateRefAsync(dto.EventTemplateId, ct))
+            return BadRequest(ApiResponse<ActivityDto>.Fail("Event template not found."));
 
         a.EventTemplateId = dto.EventTemplateId; a.ActivityName = dto.ActivityName;
         a.Category = dto.Category; a.Location = dto.Location;
@@ -333,11 +372,21 @@ public class TripDayScheduleController : ControllerBase
     private readonly OdipDbContext _db;
     public TripDayScheduleController(OdipDbContext db) => _db = db;
 
+    /// <summary>TripDay and ScheduledActivity have no organisation column or query filter: an activity is the caller's only if its day's trip is (TripInstances is tenant-filtered).</summary>
+    private IQueryable<ScheduledActivity> TenantActivities() =>
+        _db.ScheduledActivities.Where(s => _db.TripDays.Any(d => d.Id == s.TripDayId && _db.TripInstances.Any(t => t.Id == d.TripInstanceId)));
+
+    /// <summary>A scheduled activity's library activity must be the caller's (Activities is tenant-filtered). It need not be active: editing an old trip re-sends the id of an activity that has since been deactivated.</summary>
+    private Task<bool> IsValidActivityRefAsync(Guid? activityId, CancellationToken ct) =>
+        activityId.HasValue
+            ? _db.Activities.AnyAsync(a => a.Id == activityId.Value, ct)
+            : Task.FromResult(true);
+
     [HttpPut("trip-days/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<TripDayDto>>> UpdateTripDay(Guid id, [FromBody] UpdateTripDayDto dto, CancellationToken ct)
     {
-        var d = await _db.TripDays.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var d = await _db.TripDays.FirstOrDefaultAsync(x => x.Id == id && _db.TripInstances.Any(t => t.Id == x.TripInstanceId), ct);
         if (d == null) return NotFound(ApiResponse<TripDayDto>.Fail("Trip day not found"));
         d.DayTitle = dto.DayTitle; d.DayNotes = dto.DayNotes; d.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -348,6 +397,11 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ScheduledActivityDto>>> AddActivity(Guid id, [FromBody] CreateScheduledActivityDto dto, CancellationToken ct)
     {
+        if (!await _db.TripDays.AnyAsync(d => d.Id == id && _db.TripInstances.Any(t => t.Id == d.TripInstanceId), ct))
+            return NotFound(ApiResponse<ScheduledActivityDto>.Fail("Trip day not found"));
+        if (!await IsValidActivityRefAsync(dto.ActivityId, ct))
+            return BadRequest(ApiResponse<ScheduledActivityDto>.Fail("Activity not found."));
+
         var a = new ScheduledActivity
         {
             Id = Guid.NewGuid(), TripDayId = id, ActivityId = dto.ActivityId,
@@ -379,8 +433,10 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ScheduledActivityDto>>> UpdateActivity(Guid id, [FromBody] UpdateScheduledActivityDto dto, CancellationToken ct)
     {
-        var a = await _db.ScheduledActivities.Include(s => s.Activity).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantActivities().Include(s => s.Activity).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<ScheduledActivityDto>.Fail("Activity not found"));
+        if (!await IsValidActivityRefAsync(dto.ActivityId, ct))
+            return BadRequest(ApiResponse<ScheduledActivityDto>.Fail("Activity not found."));
 
         a.ActivityId = dto.ActivityId; a.Title = dto.Title; a.StartTime = dto.StartTime;
         a.EndTime = dto.EndTime; a.Location = dto.Location; a.AccessibilityNotes = dto.AccessibilityNotes;
@@ -409,7 +465,7 @@ public class TripDayScheduleController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteActivity(Guid id, CancellationToken ct)
     {
-        var a = await _db.ScheduledActivities.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var a = await TenantActivities().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (a == null) return NotFound(ApiResponse<bool>.Fail("Activity not found"));
         _db.ScheduledActivities.Remove(a);
         await _db.SaveChangesAsync(ct);
@@ -455,7 +511,7 @@ public class DashboardController : ControllerBase
                 LeadCoordinatorName = t.LeadCoordinator != null ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null
             }).ToListAsync(ct);
 
-        // The Admin's review of an emergency past budget is left out for a role that may not see budget standing, in the list and in the counts (the phase 3 review, C7).
+        // The Admin's review of an emergency over budget is left out for a role that may not see budget standing, in the list and in the counts (the phase 3 review, C7).
         var mayReview = BudgetReviewAudience.MaySee(User);
         var overdueTasks = await _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner)
             .Where(TaskOverdue.IsOverdueExpr(today))
@@ -484,9 +540,10 @@ public class DashboardController : ControllerBase
             .Where(s => upcomingTripIds.Contains(s.TripInstanceId) && s.Status != AssignmentStatus.Cancelled)
             .Select(s => s.TripInstanceId).Distinct().ToListAsync(ct);
 
-        var conflictCount = await _db.AccommodationReservations.CountAsync(r => r.HasOverlapConflict, ct)
-            + await _db.VehicleAssignments.CountAsync(v => v.HasOverlapConflict, ct)
-            + await _db.StaffAssignments.CountAsync(s => s.HasConflict, ct);
+        // Reservations and assignments have no organisation column or query filter, so each count joins the caller's own trips: TripInstances is tenant-filtered. IncidentReport is filtered itself.
+        var conflictCount = await _db.AccommodationReservations.CountAsync(r => r.HasOverlapConflict && _db.TripInstances.Any(t => t.Id == r.TripInstanceId), ct)
+            + await _db.VehicleAssignments.CountAsync(v => v.HasOverlapConflict && _db.TripInstances.Any(t => t.Id == v.TripInstanceId), ct)
+            + await _db.StaffAssignments.CountAsync(s => s.HasConflict && _db.TripInstances.Any(t => t.Id == s.TripInstanceId), ct);
 
         var openIncidentCount = await _db.IncidentReports.CountAsync(
             i => i.IsActive && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
@@ -496,7 +553,8 @@ public class DashboardController : ControllerBase
         return Ok(ApiResponse<DashboardSummaryDto>.Ok(new DashboardSummaryDto
         {
             UpcomingTripCount = upcomingTrips.Count,
-            ActiveParticipantCount = await _db.Participants.CountAsync(p => p.IsActive, ct),
+            // The Active tab's rule: a draft is not counted, even one marked active (Participant.IsActive defaults to true) or whose services have begun.
+            ActiveParticipantCount = await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft, ct),
             OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => (mayReview || t.TaskType != TaskType.BudgetEmergencyReview) && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
             OverdueTaskCount = overdueTasks.Count,
             ConflictCount = conflictCount,
@@ -508,70 +566,5 @@ public class DashboardController : ControllerBase
             UpcomingTrips = upcomingTrips,
             OverdueTasks = overdueTasks
         }));
-    }
-}
-
-[ApiController]
-[Authorize]
-[Route("api/v1/conflicts")]
-public class ConflictsController : ControllerBase
-{
-    private readonly OdipDbContext _db;
-    public ConflictsController(OdipDbContext db) => _db = db;
-
-    /// <summary>Recheck all conflicts across accommodation, vehicles, and staff.
-    /// Staff assignments are no longer re-derived here: HasConflict is normalised to
-    /// (OverrideReason != null), the acknowledged-override invariant maintained at write time.</summary>
-    [HttpPost("recheck")]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<object>>> Recheck(CancellationToken ct)
-    {
-        int updated = 0;
-
-        // Accommodation conflicts
-        var reservations = await _db.AccommodationReservations
-            .Where(r => r.ReservationStatus != ReservationStatus.Cancelled && r.ReservationStatus != ReservationStatus.Unavailable)
-            .ToListAsync(ct);
-
-        foreach (var r in reservations)
-        {
-            var hasConflict = reservations.Any(other => other.Id != r.Id
-                && other.AccommodationPropertyId == r.AccommodationPropertyId
-                && other.CheckInDate < r.CheckOutDate && other.CheckOutDate > r.CheckInDate);
-            if (r.HasOverlapConflict != hasConflict) { r.HasOverlapConflict = hasConflict; updated++; }
-        }
-
-        // Vehicle conflicts
-        var vehicleAssignments = await _db.VehicleAssignments
-            .Include(a => a.TripInstance)
-            .Where(a => a.Status != VehicleAssignmentStatus.Cancelled && a.Status != VehicleAssignmentStatus.Unavailable)
-            .ToListAsync(ct);
-
-        foreach (var a in vehicleAssignments)
-        {
-            var tripEnd = a.TripInstance.StartDate.AddDays(a.TripInstance.DurationDays - 1);
-            var hasConflict = vehicleAssignments.Any(other => other.Id != a.Id
-                && other.VehicleId == a.VehicleId
-                && other.TripInstance.StartDate <= tripEnd
-                && other.TripInstance.StartDate.AddDays(other.TripInstance.DurationDays - 1) >= a.TripInstance.StartDate);
-            if (a.HasOverlapConflict != hasConflict) { a.HasOverlapConflict = hasConflict; updated++; }
-        }
-
-        // Staff conflicts
-        var staffAssignments = await _db.StaffAssignments
-            .Where(a => a.Status != AssignmentStatus.Cancelled)
-            .ToListAsync(ct);
-
-        foreach (var a in staffAssignments)
-        {
-            // HasConflict is the persisted acknowledged-override flag, derived at write time by
-            // StaffAssignmentsController (RosterGate) — not re-derived here from other
-            // assignments/availability, which would clobber that invariant.
-            var hasConflict = a.OverrideReason != null;
-            if (a.HasConflict != hasConflict) { a.HasConflict = hasConflict; updated++; }
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<object>.Ok(new { UpdatedRecords = updated }));
     }
 }

@@ -1,4 +1,4 @@
-import { ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Check, KeyRound, Siren } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateRange } from '@/lib/dateRange'
 import { formatNoteTimestamp } from '@/lib/format'
@@ -105,10 +105,11 @@ export function BudgetEmergencyReviewMarker({ details, className }: BudgetEmerge
               : 'bg-[var(--color-secondary-container)] text-[var(--color-info)]'
           }`}
         >
+          {/* The board chip's own glyphs, so one thing reads as one thing: a siren for an emergency waiting on its review, a tick once it is reviewed, a key for an Admin override. None is the generic override shield. */}
           {isEmergency ? (
-            <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+            reviewed ? <Check className="h-3 w-3" aria-hidden="true" /> : <Siren className="h-3 w-3" aria-hidden="true" />
           ) : (
-            <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+            <KeyRound className="h-3 w-3" aria-hidden="true" />
           )}
           {marker}
         </span>

@@ -5,13 +5,14 @@ import { MemoryRouter } from 'react-router-dom'
 import TasksPage from './TasksPage'
 
 // A test sets the role it needs and beforeEach puts it back: a Coordinator-like user who can write (the default).
-const { perms } = vi.hoisted(() => ({ perms: { canWrite: true, isAdmin: false, isSuperAdmin: false } }))
+const { perms } = vi.hoisted(() => ({ perms: { canWrite: true, isAdmin: false, isSuperAdmin: false, isReadOnly: false } }))
 
 vi.mock('@/lib/permissions', () => ({
   usePermissions: () => perms,
 }))
 
-const { mockUpdateMutate } = vi.hoisted(() => ({
+const { mockUpdateMutate, mockDeleteMutate } = vi.hoisted(() => ({
+  mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
 }))
 
@@ -20,7 +21,7 @@ const { mockUseTasks } = vi.hoisted(() => ({ mockUseTasks: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useTasks: mockUseTasks,
   useUpdateTask: () => ({ mutate: mockUpdateMutate, mutateAsync: vi.fn() }),
-  useDeleteTask: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeleteTask: () => ({ mutate: mockDeleteMutate, mutateAsync: vi.fn() }),
 }))
 
 function renderPage() {
@@ -32,7 +33,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  Object.assign(perms, { canWrite: true, isAdmin: false, isSuperAdmin: false })
+  Object.assign(perms, { canWrite: true, isAdmin: false, isSuperAdmin: false, isReadOnly: false })
   mockUseTasks.mockReturnValue({
     data: [
       { id: 't1', title: 'Confirm accommodation', tripInstanceId: 'trip-1', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted' },
@@ -129,20 +130,22 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
   it('shows an Admin the emergency booking review task by its human label, with the way to the shift on the roster board', () => {
     mockUseTasks.mockReturnValue({
       data: [
-        { id: 't6', title: 'Review emergency shift past budget: Mia Chen on 17 Aug 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-08-18', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering?date=2026-08-17&participant=p-1' },
+        { id: 't6', title: 'Review emergency shift over budget: Mia Chen on 17 Aug 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-08-18', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering?date=2026-08-17&participant=p-1' },
       ],
       isLoading: false,
     })
     renderPage()
 
     expect(screen.getByText('Budget emergency review')).toBeInTheDocument()
-    expect(screen.getByText('Review emergency shift past budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
+    expect(screen.getByText('Review emergency shift over budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/rostering?date=2026-08-17&participant=p-1')
   })
 
-  it('still shows the raw type text for an existing task type not in the new label map', () => {
+  // Platform review V2-B: every type has a label now, the trip-bound ones included (it printed "AccommodationRequest").
+  it('shows an existing task type in words too, never the raw enum', () => {
     renderPage()
-    expect(screen.getByText('AccommodationRequest')).toBeInTheDocument()
+    expect(screen.getByText('Accommodation request')).toBeInTheDocument()
+    expect(screen.queryByText('AccommodationRequest')).not.toBeInTheDocument()
   })
 })
 
@@ -164,12 +167,14 @@ describe('TasksPage — column budget', () => {
     const row = screen.getByRole('link', { name: 'Beach Trip' }).closest('tr')!
     const task = within(row).getByText('Confirm accommodation')
     expect(task).toHaveClass('md:truncate')
-    expect(task).toHaveStyle('--cell-max: 16rem')
+    expect(task).toHaveStyle('--cell-max: 13rem')
     expect(task).toHaveAttribute('title', 'Confirm accommodation')
     expect(within(row).getByText('Sam')).toHaveStyle('--cell-max: 8rem')
+    // Platform review V2-B (Tasks 1): at 1440 Status was clipped under the pinned actions by ~90px; Task, Trip and Type give ~112px back.
+    expect(within(row).getByText('Accommodation request')).toHaveStyle('--cell-max: 8rem')
     // The link is a custom cell, so it limits itself: truncation on the link (not a wrapper, which would clip its focus ring).
     const link = screen.getByRole('link', { name: 'Beach Trip' })
-    expect(link).toHaveClass('block', 'truncate', 'md:max-w-[11rem]')
+    expect(link).toHaveClass('block', 'truncate', 'md:max-w-[9rem]')
     expect(link).toHaveAttribute('title', 'Beach Trip')
   })
 
@@ -181,11 +186,11 @@ describe('TasksPage — column budget', () => {
   })
 })
 
-// The Admin's review of an emergency booking past budget (phase 3 review C2, C7, design review M9, M10): only an Admin or SuperAdmin may close it (the server forbids everyone else, and this page does not offer what
+// The Admin's review of an emergency booking over budget (phase 3 review C2, C7, design review M9, M10): only an Admin or SuperAdmin may close it (the server forbids everyone else, and this page does not offer what
 // the server would refuse), it is owned by "Admins" until somebody takes it, and its title is the way in, wrapped rather than cut so the participant and the day, the only parts that tell two emergencies apart, show.
 describe('TasksPage — the emergency review task', () => {
   const review = {
-    id: 't6', title: 'Review emergency shift past budget: Sienna Whitfield on 9 Oct 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-10-10', priority: 'Medium', status: 'NotStarted',
+    id: 't6', title: 'Review emergency shift over budget: Sienna Whitfield on 9 Oct 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-10-10', priority: 'Medium', status: 'NotStarted',
     linkTo: '/rostering?date=2026-10-09&participant=p-1',
   }
   const ordinary = { id: 't7', title: 'Find leave cover', taskType: 'LeaveCoverage', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted', linkTo: '/rostering/leave' }
@@ -271,8 +276,105 @@ describe('TasksPage — the emergency review task', () => {
     renderPage()
 
     const title = screen.getByRole('link', { name: 'Find leave cover' })
-    expect(title).toHaveClass('block', 'md:truncate', 'md:max-w-[16rem]')
+    expect(title).toHaveClass('block', 'md:truncate', 'md:max-w-[13rem]')
     expect(title).toHaveAttribute('title', 'Find leave cover')
     expect(title).toHaveAttribute('href', '/rostering/leave')
+  })
+})
+
+// STAFF-2 / CORE-2: the tick is a write (PUT /tasks/:id), refused to ReadOnly and SupportWorker; and a refusal is said, not swallowed.
+describe('TasksPage — the Mark complete tick', () => {
+  it('offers no tick to a role that cannot write', () => {
+    perms.canWrite = false
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'Mark complete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Add task/ })).not.toBeInTheDocument()
+  })
+
+  // Q2 fix round: ReadOnly has no Edit action, so the title opens the task as a view; SupportWorker is sent away from that route, so its title is text.
+  it('links the title to the task view for ReadOnly only', () => {
+    Object.assign(perms, { canWrite: false, isReadOnly: true })
+    const { unmount } = renderPage()
+    expect(screen.getByRole('link', { name: 'Confirm accommodation' })).toHaveAttribute('href', '/tasks/t1/edit')
+    unmount()
+    Object.assign(perms, { canWrite: false, isReadOnly: false })
+    renderPage()
+    expect(screen.queryByRole('link', { name: 'Confirm accommodation' })).not.toBeInTheDocument()
+  })
+
+  it('shows a role that cannot write the status as text, not a pill', () => {
+    perms.canWrite = false
+    renderPage()
+    expect(screen.getByText('Not Started')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Not Started/i })).not.toBeInTheDocument()
+  })
+
+  it('offers the tick to a role that can write, and shows the row alert when the save fails', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutate.mockImplementation((_data, { onError }) => onError(new Error('403')))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Mark complete' }))
+
+    expect(mockUpdateMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 't1', data: expect.objectContaining({ status: 'Completed' }) }),
+      expect.anything(),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't update status. Try again.")
+  })
+})
+
+// Q2 fix round 2: a task with a linkTo (leave cover, incident witness ...) sends its title elsewhere, so ReadOnly needs View in the actions to read the task itself.
+describe('TasksPage — View for ReadOnly on a linked task', () => {
+  it('shows ReadOnly a View link to the task view on a row with a linkTo', () => {
+    Object.assign(perms, { canWrite: false, isReadOnly: true })
+    mockUseTasks.mockReturnValue({
+      data: [{ id: 't9', title: 'Cover leave for Sam', taskType: 'Other', ownerName: null, dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering/leave' }],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: 'Cover leave for Sam' })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/tasks/t9/edit')
+  })
+})
+
+// STAFF-5: an archive the server refuses says why above the list.
+describe('TasksPage — a refused archive', () => {
+  it('shows the server message', async () => {
+    const user = userEvent.setup()
+    mockDeleteMutate.mockImplementation((_id: unknown, o?: { onError?: (e: unknown) => void }) => o?.onError?.({ response: { status: 403, data: { message: 'You do not have permission to do that.' } } }))
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Archive' }))
+
+    expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
+  })
+})
+
+// Platform review V2-A (Tasks 2): 21 tasks were 6,143px at 390, each card a grid of six caps labels with 20px icons.
+describe('TasksPage — phone card', () => {
+  it('puts the title and the status pill on the title line, trip, type, owner and priority on one muted line, and keeps the due date labelled', () => {
+    renderPage()
+
+    expect(screen.getByText('Confirm accommodation').closest('td')).toHaveAttribute('data-card', 'primary')
+    expect(screen.getByRole('button', { name: /Not Started/i }).closest('td')).toHaveAttribute('data-card', 'status')
+    for (const text of ['Beach Trip', 'Accommodation request', 'Sam', 'Medium']) {
+      expect(screen.getByText(text).closest('td'), text).toHaveAttribute('data-card', 'meta')
+    }
+    expect(screen.getByText('01/10/2026').closest('td')).not.toHaveAttribute('data-card')
+  })
+
+  it('gives the edit and archive icons and the tick a 44px target on the card', () => {
+    renderPage()
+
+    const edit = screen.getByRole('link', { name: 'Edit' })
+    expect(edit.closest('div.flex.justify-end')).toHaveClass('max-md:[&_:is(a,button)]:min-h-11', 'max-md:[&_:is(a,button)]:min-w-11')
+    // On a mouse at md+ the cluster overlays the row instead of holding a column, so the Open link beside Status is not cut at 1440.
+    expect(edit.closest('div.flex.justify-end')).toHaveClass('md:pointer-fine:absolute')
+    expect(screen.getByRole('button', { name: 'Mark complete' })).toHaveClass('max-md:min-h-11', 'max-md:min-w-11')
+    // VC design review fix 3: on the card the tick joins the controls after Due, so Due does not move on a card without a tick.
+    expect(screen.getByRole('button', { name: 'Mark complete' }).closest('td')).toHaveClass('max-md:order-1')
   })
 })

@@ -86,7 +86,7 @@ public class ShiftBudgetCheckTests : IDisposable
 
         var finding = Assert.Single(outcome.Findings);
         Assert.Equal((BudgetFindingCodes.ForecastOver, RosterFindingSeverity.Warning, false), (finding.Code, finding.Severity, finding.RequiresReason));
-        Assert.Equal("Takes Core (flexible) to $1,440.00 of $1,000.00 for 1 Oct\u00A0\u2013\u2060\u00A031 Dec 2026, $440.00 over. This shift: about $480.00.", finding.Message);
+        Assert.Equal("Takes Core (flexible) to $1,440.00 of $1,000.00 for 1\u00A0Oct\u00A0\u2013\u2060\u00A031\u00A0Dec\u00A02026, $440.00 over. This shift: about $480.00.", finding.Message);
         Assert.Equal(new BudgetFindingFigures("Core (flexible)", new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 31), 1000m, 0m, 1440m, 480m, BookedAhead: 960m, UnpricedShiftCount: 0), finding.Budget);
     }
 
@@ -105,6 +105,35 @@ public class ShiftBudgetCheckTests : IDisposable
 
         var figures = Find(outcome, BudgetFindingCodes.ForecastOver)!.Budget!;
         Assert.Equal((1, 960m), (figures.UnpricedShiftCount, figures.BookedAhead));
+    }
+
+    [Fact]
+    public async Task AShiftDatedBeforeToday_IsPending_SoUsedLeavesItOut_AndTheRowsAddUp()
+    {
+        // Phase 3 review, N3: a shift dated before today is Pending, so the period's Used already holds it. The figures report Used WITHOUT the new shift, as they report booked ahead without it, so used + booked ahead
+        // + this shift is the forecast the panel prints.
+        var (participant, _) = Seed(october: 1000m);
+        _kit.SeedShift(participant, new DateOnly(2026, 10, 1), ShiftStatus.Completed);   // $480 used, not yet claimed
+        _kit.SeedShift(participant, Mon12Oct);                                           // $480 booked ahead
+
+        var outcome = await Service().CheckAsync(Request(participant, new DateOnly(2026, 10, 2)), default);   // a backfill: Friday 2 Oct, before the 4 Oct clock
+
+        var figures = Find(outcome, BudgetFindingCodes.ForecastOver)!.Budget!;
+        Assert.Equal((480m, 480m, 480m, 1440m), (figures.Used, figures.BookedAhead, figures.ShiftCost, figures.Forecast));
+        Assert.Equal(figures.Forecast, figures.Used + figures.BookedAhead + figures.ShiftCost);
+    }
+
+    [Fact]
+    public async Task AShiftDatedBeforeToday_IsNotCalledAnOverrunThePeriodDidNotHaveBeforeIt()
+    {
+        // $480 used of $700: the period was not over before this $480 backfill, so "already over" would be false, though used WITH the shift ($960) is above $700.
+        var (participant, _) = Seed(october: 700m);
+        _kit.SeedShift(participant, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
+
+        var outcome = await Service().CheckAsync(Request(participant, new DateOnly(2026, 10, 2)), default);
+
+        Assert.Null(Find(outcome, BudgetFindingCodes.Over));
+        Assert.NotNull(Find(outcome, BudgetFindingCodes.ForecastOver));   // it is the new shift that takes it over
     }
 
     [Theory]

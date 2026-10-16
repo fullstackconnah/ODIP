@@ -99,7 +99,7 @@ export const pendingEmergency: EmergencyReviewDetails = {
   recordedAt: '2026-10-04T03:12:00Z',
   reviewedBy: null,
   reviewedAt: null,
-  reviewTaskTitle: 'Review emergency shift past budget: Alex Nguyen on 4 Oct 2026',
+  reviewTaskTitle: 'Review emergency shift over budget: Alex Nguyen on 4 Oct 2026',
 }
 
 /** The same shift after the review, as the server recorded it. */

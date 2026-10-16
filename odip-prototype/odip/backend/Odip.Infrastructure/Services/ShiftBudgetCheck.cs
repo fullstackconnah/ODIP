@@ -166,8 +166,11 @@ public sealed class ShiftBudgetCheck
         var period = after.Pools.First(p => p.Pool.Id == place.Pool!.Id).Periods.First(p => p.Period.Id == place.Period!.Id);
         // Booked ahead BEFORE this shift (the new item is booked ahead when its day is today or later), so used + booked ahead + this shift is the forecast the panel prints.
         var bookedAheadBefore = period.BookedAhead - (newItem.Group == LedgerGroup.BookedAhead ? priced.Amount : 0m);
+        // Used BEFORE this shift too: a shift dated before today is Pending, so the ledger's Used already holds it. Without this the rows repeat it ("This shift" beside a Used that includes it) and "already over" can
+        // read true for a period that only this shift took over (phase 3 review, N3).
+        var usedBefore = period.Used - (newItem.Group == LedgerGroup.Pending ? priced.Amount : 0m);
         var figures = new BudgetFindingFigures(
-            place.Pool!.Name, period.Period.PeriodStart, period.Period.PeriodEnd, period.Available, period.Used, period.Forecast, priced.Amount, bookedAheadBefore, period.UnpricedShiftCount);
+            place.Pool!.Name, period.Period.PeriodStart, period.Period.PeriodEnd, period.Available, usedBefore, period.Forecast, priced.Amount, bookedAheadBefore, period.UnpricedShiftCount);
 
         var mode = await _db.BudgetSettings.AsNoTracking().Where(b => b.TenantId == request.TenantId).Select(b => (BudgetLimitMode?)b.Mode).FirstOrDefaultAsync(ct) ?? BudgetSettings.DefaultMode;
         var oneOff = !await IsRoutineAsync(request, saved?.ShiftPatternId, ct);

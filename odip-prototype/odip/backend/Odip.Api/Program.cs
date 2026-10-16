@@ -168,6 +168,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>(
 builder.Services.AddScoped<Odip.Infrastructure.Services.PlanPricingService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.FundingPlanService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetLedgerService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetListService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementCheckService>();
 // Budget phase 3: the roster's budget check, with the one seam to the shift estimator (the ledger's own pricing).
 builder.Services.AddScoped<Odip.Infrastructure.Services.IShiftCostSource, Odip.Infrastructure.Services.LedgerShiftCostSource>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetCheck>();
@@ -175,7 +177,15 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetEffect>();
 // The plan quote is the one heavy request: about two in flight per organisation (a resource filter, because the rate limiter runs before authentication).
 builder.Services.AddSingleton<Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter>();
 builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
+// The data export: one at a time per organisation. The same limiter with one permit, keyed so the quote keeps its two.
+// shortcut: process-local, correct for the single api container in deploy/compose.yaml; move to a DB advisory lock if the API is ever scaled out.
+builder.Services.AddKeyedSingleton(Odip.Api.RateLimiting.DataExportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.DataExportConcurrencyFilter.PermitsPerOrganisation));
+builder.Services.AddScoped<Odip.Api.RateLimiting.DataExportConcurrencyFilter>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftService>();
+// Agreement PR 1: a change to a pattern an approved agreement made is saved as the agreement's next revision (through ServiceAgreementDraftService.SaveAsync).
+builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementPatternChangeService>();
+// Agreement PR 2: Renew agreement saves the newest approved revision's blocks as the next revision, from the day after it ends (through ServiceAgreementDraftService.SaveAsync).
+builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementRenewalService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ElectronicSigningEvidenceService>();
 // Plan builder phase D: "Mark approved" makes roster patterns and open shifts. The one generator is shared with the Generate button and the daily top-up; the gate is the readiness check the
 // roster writes use (the API owns it, so the infrastructure services reach it through this seam); the top-up job itself is registered below with the other hosted services.
@@ -187,11 +197,18 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.DemoJourneySimulationSer
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantDocumentService>();
 
 // ── Participant Risk Alerts (task 6c) — computed, not persisted ──
+builder.Services.AddScoped<Odip.Infrastructure.Services.NdiaRejectionReader>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetAlertSource>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService>();
 
 // ── Participant preferred-staff <-> rostering compatibility matrix link (task 6d) ──
 builder.Services.AddScoped<Odip.Infrastructure.Services.StaffCompatibilityLinkService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.SafetyNoteSyncService>();
+// Settings → Import data. ParticipantsController builds its own ParticipantCreateService (its tests construct it directly); the importer gets one from DI.
+builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantIntakeSnapshotService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantCreateService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.StaffCreateService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.OnboardingImportService>();
 builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffUnavailabilityQuery, Odip.Infrastructure.Rostering.StaffUnavailabilityQuery>();
 builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffAvailabilityItemsQuery, Odip.Infrastructure.Rostering.StaffAvailabilityItemsQuery>();
 
@@ -218,12 +235,23 @@ builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.Holiday
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationRaiser, Odip.Infrastructure.Notifications.NotificationRaiser>();
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmtpEmailChannel>();
 builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odip.Infrastructure.Notifications.SmsChannel>();
+builder.Services.AddScoped<Odip.Infrastructure.Notifications.IntakeInviteSender>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
 // ── Roster top-up (plan builder phase D) ──────────────────────────
 // Keeps RosterTopUp:HorizonDays (56) days of open shifts generated for the patterns an approved agreement made, once for each organisation's provider day. RosterTopUp:Enabled (default true)
 // switches it off; hand-made and demo patterns are never touched. Reads the clock the rest of the API reads (TimeProvider.System, registered above).
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RosterTopUpBackgroundService>();
+
+// ── Employment Hero Payroll (Settings → Integrations) ────────────────
+// The key store reads Integrations:MasterKey, else INTEGRATIONS_MASTER_KEY (32 bytes, base64). With neither, connecting is refused and the rest of ODIP runs.
+builder.Services.AddSingleton<Odip.Infrastructure.Integrations.IntegrationKeyProtector>();
+// The API key travels only in the Authorization header, which is kept out of HttpClient's own request logging.
+builder.Services.AddHttpClient<Odip.Infrastructure.Integrations.EmploymentHeroClient>(c => c.Timeout = TimeSpan.FromSeconds(30))
+    .RedactLoggedHeaders(new[] { "Authorization" });
+builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroStaffSync>();
+// Every 30 minutes, each connected organisation. EmploymentHero:Enabled (default true) switches the loop off; Sync now still works.
+builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroSyncBackgroundService>();
 
 // ── Public early-access form (landing page) ──────────────────────
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH
@@ -500,6 +528,8 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
         // Apply pending EF Core migrations
         await db.Database.MigrateAsync();
 
+        // Rollback-window incidents filed without a TenantId (see IncidentTenantHeal).
+        await db.Database.ExecuteSqlRawAsync(IncidentTenantHeal.Sql);
         await DbSeeder.SeedAsync(db);
         await DbSeeder.SeedNdisDataAsync(db);
         await DbSeeder.SeedMedicationsAsync(db);
@@ -567,9 +597,9 @@ app.UseAuthorization();
 app.UseMiddleware<Odip.Api.Middleware.ReadOnlyMiddleware>();
 
 // ── Health endpoints ─────────────────────────────────────────
-// The "/api/" prefix is mandatory: nginx (nginx/default.conf) proxies only `location /api/`
-// and `location /swagger` to the API — anything else falls through to the SPA's
-// `try_files … /index.html`, so a probe at bare "/health" would get index.html with a 200.
+// The "/api/" prefix is mandatory: nginx (nginx/default.conf) proxies only `location /api/` to the API
+// — anything else falls through to the SPA's `try_files … /index.html`, so a probe at bare "/health"
+// would get index.html with a 200.
 // No .RequireRateLimiting(...): probes fire on a fixed interval and would eat the
 // "api" 100/min budget. The default plain-text writer is kept deliberately — these are
 // unauthenticated endpoints, so no JSON body and no exception detail leaves the process.

@@ -106,10 +106,18 @@ describe('choosing the path', () => {
     await user.click(screen.getByRole('button', { name: /Emergency or safety/i }))
     await user.type(description(), 'Unsafe tonight')
 
-    await user.click(screen.getByRole('button', { name: /^Back$/ }))
+    await user.click(screen.getByRole('button', { name: /^Back: this is not an emergency$/ }))
 
     expect(screen.getByTestId('state')).toHaveTextContent('none|Unsafe tonight')
     expect(screen.getByRole('button', { name: /Emergency or safety/i })).toBeInTheDocument()
+  })
+
+  it('says "Back" on the button and "Back: this is not an emergency" to a screen reader, so the old meaning is kept (design review round 1, N4)', () => {
+    render(<Static choice="emergency" />)
+
+    const back = screen.getByRole('button', { name: 'Back: this is not an emergency' })
+    expect(back).toHaveTextContent('Back')
+    expect(back).toHaveAttribute('aria-label', 'Back: this is not an emergency')
   })
 
   it('puts focus on the "Emergency or safety" button when the user steps back, so it is not dropped to the page (M7)', async () => {
@@ -117,7 +125,7 @@ describe('choosing the path', () => {
     render(<Host />)
     await user.click(screen.getByRole('button', { name: /Emergency or safety/i }))
 
-    await user.click(screen.getByRole('button', { name: /^Back$/ }))
+    await user.click(screen.getByRole('button', { name: /^Back: this is not an emergency$/ }))
 
     expect(screen.getByRole('button', { name: /Emergency or safety/i })).toHaveFocus()
   })
@@ -136,7 +144,7 @@ describe('choosing the path', () => {
       const card = scrollIntoView.mock.contexts[0] as HTMLElement
       expect(card).toBe(screen.getByRole('region', { name: 'Emergency or safety' }))
       expect(card).toContainElement(description())
-      expect(card).toContainElement(screen.getByRole('button', { name: /^Back$/ }))
+      expect(card).toContainElement(screen.getByRole('button', { name: /^Back: this is not an emergency$/ }))
     } finally {
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
     }
@@ -152,7 +160,7 @@ describe('choosing the path', () => {
       scrollIntoView.mockClear()
 
       await user.type(description(), 'Unsafe tonight')
-      await user.click(screen.getByRole('button', { name: /^Back$/ }))
+      await user.click(screen.getByRole('button', { name: /^Back: this is not an emergency$/ }))
 
       expect(scrollIntoView).not.toHaveBeenCalled()
     } finally {
@@ -244,7 +252,7 @@ describe('pending, disabled and failed states', () => {
     render(<Static choice="emergency" reason={GOOD_EMERGENCY_REASON} pending />)
 
     expect(description()).toBeDisabled()
-    expect(screen.getByRole('button', { name: /^Back$/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Back: this is not an emergency$/ })).toBeDisabled()
   })
 
   it('says it is saving and that the description is kept, without adding a live region of its own', () => {

@@ -1,6 +1,6 @@
 import { useTasks, useUpdateTask, useDeleteTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS } from '@/api/types'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Dropdown } from '@/components/Dropdown'
@@ -10,7 +10,7 @@ import { getStatusColor } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, CheckCircle, Plus, ListChecks } from 'lucide-react'
+import { Filter, CheckCircle, Plus, ListChecks, Eye } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
 import { localIsoDate } from '@/lib/dateOnly'
@@ -23,11 +23,11 @@ const TASK_STATUS_ITEMS = [
   { value: 'Cancelled', label: 'Cancelled' },
 ]
 
-/** The Admin's review of an emergency booking past budget. Only an Admin or SuperAdmin closes it: the server forbids everyone else, so this page does not offer what it would refuse. */
+/** The Admin's review of an emergency booking over budget. Only an Admin or SuperAdmin closes it: the server forbids everyone else, so this page does not offer what it would refuse. */
 const isBudgetReview = (task: { taskType?: string }) => task.taskType === 'BudgetEmergencyReview'
 
 export default function TasksPage() {
-  const { canWrite, isAdmin, isSuperAdmin } = usePermissions()
+  const { canWrite, isAdmin, isSuperAdmin, isReadOnly } = usePermissions()
   const mayCloseBudgetReview = !!isAdmin || !!isSuperAdmin
   // The one place the rule lives: a row the user may not change gets no tick, a held status and no edit or archive.
   const mayChange = (task: { taskType?: string }) => canWrite && (!isBudgetReview(task) || mayCloseBudgetReview)
@@ -41,7 +41,7 @@ export default function TasksPage() {
   const updateTask = useUpdateTask()
   const deleteTask = useDeleteTask()
 
-  const { showArchived, params, toggleButtons, confirmDialog, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteTask,
     restoreMutation: updateTask,
     entityName: (t) => t.title,
@@ -56,11 +56,14 @@ export default function TasksPage() {
   const queryParams = { ...params }
   if (!showArchived && statusFilter) queryParams.status = statusFilter
 
-  const { data: tasks = [], isLoading } = useTasks(queryParams)
+  const { data: tasks = [], isLoading, isError, refetch } = useTasks(queryParams)
 
-  const markComplete = async (e: React.MouseEvent, task: any) => {
+  const markComplete = (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
-    await updateTask.mutateAsync({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } })
+    updateTask.mutate({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } }, {
+      onError: () => setFailedRowId(task.id),
+      onSuccess: () => setFailedRowId(prev => prev === task.id ? null : prev),
+    })
   }
 
   const taskColumns: Column<any>[] = [
@@ -68,63 +71,75 @@ export default function TasksPage() {
       key: 'checkbox',
       header: '',
       hidden: showArchived,
-      render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && (!isBudgetReview(t) || mayCloseBudgetReview) ? (
-        <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete">
+      // On the card the tick joins the controls after Due, so Due holds its place on a card without one.
+      className: 'max-md:order-1',
+      render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && mayChange(t) ? (
+        <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete" className="max-md:min-h-11 max-md:min-w-11">
           <CheckCircle className="w-4 h-4" />
         </Button>
       ) : null,
     },
     // Column budget (density §4): at 1280 the box is ~1006px and the fixed columns (tick, due, priority, status, Open, actions)
     // take ~500 of it, so the text columns are capped (an ellipsis, full text in the tooltip). Every column stays (Trip and Type were
-    // deleted below 1536 and 1792, L3-04): what does not fit scrolls in the box with the task and the actions pinned.
+    // deleted below 1536 and 1792, L3-04): what does not fit scrolls in the box with the task and the actions pinned. Task 13rem, Trip
+    // 9rem and Type 8rem keep Status clear of the pinned actions at 1440 (it was cut to "Sta", platform review V2-B).
+    // On the phone card the title and status make the title line, trip, type, owner and priority one muted line, and Due stays labelled.
     {
       key: 'title',
       header: 'Task',
       sortable: true,
+      mobile: 'primary',
       className: 'font-medium',
-      maxWidth: '16rem',
+      maxWidth: '13rem',
       // The title is the way in when the task has one (this column is pinned, so it is always reachable; "Open" stays for the habit). The review of an emergency names the participant and the day LAST, which is
       // exactly what a one-line cap cuts, so its title wraps instead and the row says which emergency it is. Every other title is cut on the link itself (a wrapper would clip its focus ring).
       render: (t) => t.linkTo ? (
         <Link
           to={t.linkTo}
           title={t.title}
-          className={`text-[var(--color-primary)] hover:underline ${isBudgetReview(t) ? 'whitespace-normal md:max-w-[16rem]' : 'block md:truncate md:max-w-[16rem]'}`}
+          className={`text-[var(--color-primary)] hover:underline ${isBudgetReview(t) ? 'whitespace-normal md:max-w-[13rem]' : 'block md:truncate md:max-w-[13rem]'}`}
         >
           {t.title}
         </Link>
       ) : isBudgetReview(t) ? (
-        <span className="block whitespace-normal md:max-w-[16rem]" title={t.title}>{t.title}</span>
+        <span className="block whitespace-normal md:max-w-[13rem]" title={t.title}>{t.title}</span>
+      ) : isReadOnly ? (
+        // ReadOnly has no Edit action: the title opens the task as a view (the only place its notes are shown).
+        <Link to={`/tasks/${t.id}/edit`} title={t.title} className="block text-[var(--color-primary)] hover:underline md:truncate md:max-w-[13rem]">{t.title}</Link>
       ) : t.title,
     },
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
-      maxWidth: '11rem',
+      maxWidth: '9rem',
+      mobile: 'meta',
       render: (t) => t.tripInstanceId && t.tripName ? (
         // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
-        <Link to={`/trips/${t.tripInstanceId}`} title={t.tripName} className="block truncate text-[var(--color-primary)] hover:underline md:max-w-[11rem]">
+        <Link to={`/trips/${t.tripInstanceId}`} title={t.tripName} className="block truncate text-[var(--color-primary)] hover:underline md:max-w-[9rem]">
           {t.tripName}
         </Link>
       ) : (t.tripName ?? '—'),
     },
-    { key: 'taskType', header: 'Type', sortable: true, maxWidth: '10rem', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
+    { key: 'taskType', header: 'Type', sortable: true, maxWidth: '8rem', mobile: 'meta', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
     // Nobody owns the review of an emergency until an Admin takes it, and it is the Admins' to take: say so rather than a dash that reads as "nobody's job".
-    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
+    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem', mobile: 'meta', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
     { key: 'dueDate', header: 'Due', type: 'date', sortable: true },
     {
       key: 'priority',
       header: 'Priority',
+      mobile: 'meta',
       render: (t) => <StatusBadge status={t.priority} />,
     },
     {
       key: 'status',
       header: 'Status',
       sortable: true,
+      mobile: 'status',
       // "Not Started" / "In Progress" swap in place: reserve the widest so the column does not jump.
       minWidth: '9rem',
-      render: (t) => (
+      // A role that cannot write reads the status; one that can but may not change this row (the emergency review) gets a held pill.
+      render: (t) => !canWrite ? <StatusBadge status={t.status} label={TASK_STATUS_ITEMS.find(i => i.value === t.status)?.label} /> : (
         <div>
           <Dropdown
             variant="pill"
@@ -164,7 +179,15 @@ export default function TasksPage() {
         </Link>
       ) : null,
     },
-    { key: 'actions', header: '', render: (t) => mayChange(t) ? actionButtons(t) : null },
+    // ReadOnly has no Edit: View opens the task itself, which a linked task's title does not (it goes to the linked page).
+    // On a mouse the cluster overlays the row's last cells (RowActions overlay) instead of holding a column, so "Open" is not cut at 1440.
+    { key: 'actions', header: '', className: 'relative', render: (t) => mayChange(t) ? <RowActions overlay>{actionButtons(t)}</RowActions> : isReadOnly && !isBudgetReview(t) ? (
+      <RowActions overlay>
+        <Button to={`/tasks/${t.id}/edit`} variant="ghost" size="sm" iconOnly title="View" aria-label="View">
+          <Eye className="w-4 h-4" />
+        </Button>
+      </RowActions>
+    ) : null },
   ]
 
   return (
@@ -174,7 +197,7 @@ export default function TasksPage() {
         subtitle={plural(tasks.length, 'task')}
         action={!showArchived && canWrite && (
           <Button to="/tasks/new" size="md">
-            <Plus className="w-4 h-4" /> New Task
+            <Plus className="w-4 h-4" /> New task
           </Button>
         )}
       >
@@ -194,7 +217,9 @@ export default function TasksPage() {
         )}
       </PageHeader>
 
-      {!isLoading && tasks.length === 0 ? (
+      {errorNotice}
+
+      {!isLoading && !isError && tasks.length === 0 ? (
         !showArchived && statusFilter ? (
           <EmptyState
             icon={ListChecks}
@@ -207,7 +232,6 @@ export default function TasksPage() {
             icon={ListChecks}
             title="No tasks yet"
             description="Tasks track the to-dos for a trip — accommodation confirmations, vehicle requests, medication checks and more. Add one to start tracking work."
-            action={!showArchived && canWrite ? { label: 'Add task', to: '/tasks/new' } : undefined}
           />
         )
       ) : (
@@ -217,6 +241,8 @@ export default function TasksPage() {
           keyField="id"
           sortable
           loading={isLoading}
+          error={isError}
+          onRetry={() => refetch()}
           emptyMessage="No tasks found"
         />
       )}

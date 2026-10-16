@@ -12,6 +12,7 @@ import {
   type BudgetFindingView,
   type BudgetOverrideChoice,
 } from './budgetOverrideTypes'
+import { Callout } from '@/components/Callout'
 
 export type BudgetOverrideReasonFieldsProps = {
   /**
@@ -94,9 +95,7 @@ export function BudgetOverrideReasonFields({
       } ${className ?? ''}`}
     >
       {error && (
-        <div role="alert" className="rounded-[var(--radius-sm)] bg-[var(--color-error-container)] px-3 py-2 text-sm text-[var(--color-destructive)]">
-          {error}
-        </div>
+        <Callout tone="error">{error}</Callout>
       )}
 
       {isEmergency ? (
@@ -125,7 +124,7 @@ export function BudgetOverrideReasonFields({
             />
           </FormField>
           <div>
-            <Button variant="ghost" size="sm" disabled={readOnly} onClick={() => onChoiceChange('none')}>
+            <Button variant="ghost" size="sm" disabled={readOnly} aria-label="Back: this is not an emergency" onClick={() => onChoiceChange('none')}>
               Back
             </Button>
           </div>

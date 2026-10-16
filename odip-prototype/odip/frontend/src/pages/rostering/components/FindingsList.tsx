@@ -18,6 +18,10 @@ export type FindingsListProps = {
   answered?: FindingsAnswered
 }
 
+// The sentence may shrink and wrap anywhere (design review N8): a budget finding carries a period that is one unbreakable block (about 25 characters with two years), and a flex item does not shrink below its
+// longest unbreakable run under `break-words` alone (overflow-wrap: break-word ignores the soft breaks in the minimum width; `anywhere` counts them), so beside "Reason required" it left the sentence a few pixels.
+const SENTENCE = 'min-w-0 [overflow-wrap:anywhere]'
+
 /**
  * Renders roster findings with severity distinguished — Blocking findings read as a hard stop,
  * Warnings read as something the coordinator can choose to override. Reused by the shift
@@ -52,11 +56,11 @@ export function FindingsList({ findings, className, answered }: FindingsListProp
             {isAnswered && answered ? (
               // The label goes under the sentence, not beside it: beside it the sentence was squeezed into a narrow column in a phone-width panel.
               <div className="flex min-w-0 flex-col items-start gap-1">
-                <span>{finding.message}</span>
+                <span className={SENTENCE}>{finding.message}</span>
                 <span className="rounded-sm border border-[var(--color-on-warning-container)]/40 px-1.5 py-0.5 text-xs font-medium">{answered.label}</span>
               </div>
             ) : (
-              <span>{finding.message}</span>
+              <span className={SENTENCE}>{finding.message}</span>
             )}
             {!blocking && finding.requiresReason && (
               <span className="ml-auto shrink-0 rounded-sm bg-[var(--color-warning-container)] px-1.5 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]">

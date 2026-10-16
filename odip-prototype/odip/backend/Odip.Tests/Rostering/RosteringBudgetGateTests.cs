@@ -106,6 +106,8 @@ public class RosteringBudgetGateTests : IDisposable
 
     private static string Said<T>(ActionResult<ApiResponse<T>> result) => Assert.Single(((ApiResponse<T>)Assert.IsType<BadRequestObjectResult>(result.Result).Value!).Errors!);
 
+    private static string? CodeOf<T>(ActionResult<ApiResponse<T>> result) => ((ApiResponse<T>)Assert.IsType<BadRequestObjectResult>(result.Result).Value!).Code;
+
     private static RosterFindingDto? Budget(IEnumerable<RosterFindingDto> findings, string code = BudgetFindingCodes.ForecastOver) => findings.SingleOrDefault(f => f.Code == code);
 
     private int ShiftCount() => _kit.Db.Shifts.IgnoreQueryFilters().Count();
@@ -174,6 +176,22 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Equal(EndsBeforeItStarts, Said(result));
     }
 
+    [Fact]
+    public async Task EveryRefusalForNoLength_CarriesTheCodeShiftNoLength_SoAScreenNeverHasToMatchItsSentence()
+    {
+        // The screens answer this 400 under End time, and they recognise it by this code (the sentence is only their fallback): the dry run, a create and an update (a pattern's own two are pinned in RosteringPatternLengthTests).
+        var controller = Rig();
+        var shift = _kit.Db.Shifts.First(s => s.ServiceDate == Mon12Oct);
+
+        var dryRun = await controller.CheckShift(Check(Wed14Oct) with { StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 0) }, default);
+        var create = await controller.CreateShift(Create(Wed14Oct) with { StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 0) }, default);
+        var update = await controller.UpdateShift(shift.Id, Update(shift, endHour: 8), default);
+
+        Assert.Equal("shift-no-length", CodeOf(dryRun));
+        Assert.Equal("shift-no-length", CodeOf(create));
+        Assert.Equal("shift-no-length", CodeOf(update));
+    }
+
     [Theory]
     [InlineData(22, 6)]   // an overnight shift, the box not ticked: a length of minus sixteen hours
     [InlineData(9, 9)]    // nothing at all
@@ -229,6 +247,25 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Equal("Family asked for a call first", annotated.Notes);
         Assert.Equal(EndsBeforeItStarts, Said(anotherBadTime));
         Assert.Equal(ShiftStatus.Cancelled, cancelled.Status);
+    }
+
+    [Fact]
+    public async Task Update_DoesNotLetACancelledRowWithNoLengthBeReopenedWithTheSameTimes()
+    {
+        // Cancelling is exempt (a row saved before the rule can always be cancelled), but reopening is somebody setting the shift live again: the same times must not bring a shift with no length back to life
+        // (phase 3 review, N1). Annotating the cancelled row is still fine.
+        var controller = Rig(booked: false);
+        var legacy = _kit.SeedShift(_participant, Wed14Oct);
+        legacy.EndTime = legacy.StartTime;
+        legacy.Status = ShiftStatus.Cancelled;
+        _kit.Db.SaveChanges();
+
+        var annotated = Ok(await controller.UpdateShift(legacy.Id, Update(legacy, notes: "Family cancelled by phone"), default));
+        var reopened = await controller.UpdateShift(legacy.Id, Update(legacy, status: ShiftStatus.Published), default);
+
+        Assert.Equal(ShiftStatus.Cancelled, annotated.Status);
+        Assert.Equal(EndsBeforeItStarts, Said(reopened));
+        Assert.Equal(ShiftStatus.Cancelled, _kit.Db.Shifts.Single(s => s.Id == legacy.Id).Status);
     }
 
     // ── The dry run ─────────────────────────────────────────────────────────
@@ -364,7 +401,7 @@ public class RosteringBudgetGateTests : IDisposable
     [Fact]
     public async Task TheClientCannotForgeTheOverBudgetCodes_ButItsOtherCodesStillGoThroughAsBefore()
     {
-        var controller = Rig("Coordinator", BudgetLimitMode.Warn);   // past the budget, but only a warning: nothing was overridden
+        var controller = Rig("Coordinator", BudgetLimitMode.Warn);   // over budget, but only a warning: nothing was overridden
 
         var saved = Ok(await controller.CreateShift(Create(Wed14Oct, codes: new List<string> { BudgetFindingCodes.Emergency, BudgetFindingCodes.ForecastOver, "SOME_OTHER_CODE" }), default));
 
@@ -426,7 +463,7 @@ public class RosteringBudgetGateTests : IDisposable
         Assert.Equal(new[] { BudgetFindingCodes.Emergency }, saved.AcknowledgedFindingCodes);
         var task = Assert.Single(_kit.Db.BookingTasks);
         Assert.Equal((TaskType.BudgetEmergencyReview, $"budget-emergency:{saved.Id}", saved.Id), (task.TaskType, task.SourceKey, task.ShiftId));
-        Assert.Equal("Review emergency shift past budget: Sophie Brown on 14 Oct 2026", task.Title);
+        Assert.Equal("Review emergency shift over budget: Sophie Brown on 14 Oct 2026", task.Title);
         Assert.Equal(new DateOnly(2026, 10, 5), task.DueDate);   // the provider's tomorrow: today is Sunday 4 Oct
         Assert.Equal($"/rostering?date=2026-10-14&participant={_participant.Id}", task.LinkTo);
         Assert.Equal((_participant.TenantId, TaskItemStatus.NotStarted), (task.TenantId, task.Status));
@@ -498,7 +535,7 @@ public class RosteringBudgetGateTests : IDisposable
 
         Assert.Null(saved.AcknowledgedFindingCodes);
         Assert.Null(saved.OverrideReason);
-        Assert.Empty(_kit.Db.BookingTasks);   // nothing past the budget to review
+        Assert.Empty(_kit.Db.BookingTasks);   // nothing over budget to review
     }
 
     [Fact]
