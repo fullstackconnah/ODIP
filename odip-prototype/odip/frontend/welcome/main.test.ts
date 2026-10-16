@@ -157,7 +157,7 @@ function rules(source: string): Array<{ selector: string; body: string }> {
       const head = text.slice(i, open).trim()
       let depth = 1
       let j = open + 1
-      while (depth && j < text.length) depth += text[j] === '{' ? 1 : text[j] === '}' ? -1 : 0, j++
+      for (; depth && j < text.length; j++) depth += text[j] === '{' ? 1 : text[j] === '}' ? -1 : 0
       const inner = text.slice(open + 1, j - 1)
       if (head.startsWith('@media') || head.startsWith('@supports')) walk(inner)
       else if (!head.startsWith('@keyframes')) out.push({ selector: head, body: inner })
@@ -174,7 +174,7 @@ const mediaBlocks = (source: string, query: string) => {
     const open = source.indexOf('{', at)
     let depth = 1
     let j = open + 1
-    while (depth) depth += source[j] === '{' ? 1 : source[j] === '}' ? -1 : 0, j++
+    for (; depth; j++) depth += source[j] === '{' ? 1 : source[j] === '}' ? -1 : 0
     blocks.push(source.slice(open + 1, j - 1))
     at = source.indexOf(query, j)
   }

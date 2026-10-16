@@ -107,7 +107,7 @@ describe('alpha form: checks', () => {
 
 describe('alpha form: request', () => {
   it('POSTs all 8 keys, trimmed, as JSON', async () => {
-    const fetchFn = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => reply(202, { status: 'received' }))
+    const fetchFn = vi.fn<typeof fetch>(async () => reply(202, { status: 'received' }))
     const padded = { name: '  Alex Sample ', organisation: ' Sample Support Co ', role: ' Ops lead ', organisationSize: ' 10-49 ', email: ' alex@example.org ', phone: ' 0491 570 156 ', message: '  Rostering  ', website: ' ' }
     expect(await submitRequest(padded, fetchFn as unknown as typeof fetch)).toEqual({ kind: 'received' })
     const [url, init] = fetchFn.mock.calls[0]
@@ -120,7 +120,7 @@ describe('alpha form: request', () => {
 
   it('sends a message with markup in it verbatim and never renders it', async () => {
     const markup = '<script>alert(1)</script> & <b>hi</b>'
-    const fetchFn = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => reply(400, { errors: { message: ['<img src=x onerror=alert(1)>'] } }))
+    const fetchFn = vi.fn<typeof fetch>(async () => reply(400, { errors: { message: ['<img src=x onerror=alert(1)>'] } }))
     const m = mountForm(fetchFn as unknown as typeof fetch)
     controller = m.controller
     m.fill({ ...VALID, message: markup })
