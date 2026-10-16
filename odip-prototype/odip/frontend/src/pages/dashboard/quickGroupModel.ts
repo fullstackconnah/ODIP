@@ -1,3 +1,4 @@
+import type { ApproveBatchResultDto, OverlapShiftDto } from '@/api/hooks'
 import { awaitsData, type QueryPhase } from '@/lib/queryPhase'
 import type { Tone } from '@/lib/tone'
 
@@ -15,6 +16,10 @@ export interface ActionOutcome {
   notice?: { title: string; message: string; link: { label: string; to: string } }
   /** The row still needs somebody (a credential saved with a date still inside the window): it stays, and the refetch redraws it. */
   keep?: boolean
+  /** Somebody else got there first (a task already closed): the row leaves, and a bulk run counts it as stale, not decided. */
+  stale?: boolean
+  /** A leave or unavailability approval that overlaps the roster: a bulk run rolls these into its one notice (DECISIONS 3). */
+  overlap?: { kind: 'leave' | 'unavailability'; shifts: OverlapShiftDto[]; trips: number }
 }
 
 export interface QuickForm {
@@ -78,6 +83,8 @@ export interface GroupModel {
   rows: QuickRow[]
   /** The full page: "Open Leave" when every row is shown, "See all" when rows are cut. Never a number (call 13). */
   link: { to: string; openLabel: string }
+  /** Completions only: approve these clean rows in ONE request (the existing approve-batch). Leave and Tasks run each row's own tap, one at a time. */
+  approveBatch?: (ids: string[]) => Promise<ApproveBatchResultDto[]>
 }
 
 export const SHOWN_ROWS = 5
@@ -105,10 +112,11 @@ export function shownCount(model: GroupModel, gone: ReadonlySet<string>): number
 
 /**
  * On the page while waiting, failed, holding a row, holding a notice, or while the server still counts rows beyond the ones decided here (every
- * fetched row decided before the refetch lands). Only a ready group with nothing left is absent, and named clear.
+ * fetched row decided before the refetch lands), or while a bulk run goes. Only a ready group with nothing left is absent, and named clear.
  */
-export function isPresent(model: GroupModel, gone: ReadonlySet<string>, notices: number): boolean {
-  return model.phase !== 'ready' || visibleRows(model, gone).length > 0 || shownCount(model, gone) > 0 || notices > 0
+export function isPresent(model: GroupModel, gone: ReadonlySet<string>, notices: number, running = false): boolean {
+  // A bulk run keeps its tab: the real server's refetch can empty it mid-run, before the run's notice exists (SHAPE §6).
+  return running || model.phase !== 'ready' || visibleRows(model, gone).length > 0 || shownCount(model, gone) > 0 || notices > 0
 }
 
 /**

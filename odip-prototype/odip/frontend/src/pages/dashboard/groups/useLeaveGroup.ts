@@ -32,11 +32,19 @@ export function overlapNotice(
   }
   if (trips > 0) parts.push(`It ${shifts > 0 ? 'also ' : ''}overlaps ${plural(trips, 'trip')}.`)
   if (shifts === 0 && trips === 0) parts.push('It overlaps the roster.')
-  // The board at the first overlapped shift's week, filtered to its participant when every shift is theirs; otherwise the whole board.
+  return { title: person, message: parts.join(' '), link: { label: 'Open roster', to: overlapRosterLink(overlapShifts) } }
+}
+
+/** The board at the first overlapped shift's week, filtered to its participant when every shift is theirs; otherwise the whole board. */
+export function overlapRosterLink(overlapShifts: OverlapShiftDto[]): string {
   const first = [...overlapShifts].sort((a, b) => a.serviceDate.localeCompare(b.serviceDate))[0]
   const oneParticipant = new Set(overlapShifts.map((s) => s.participantId)).size === 1
-  return { title: person, message: parts.join(' '), link: { label: 'Open roster', to: first && oneParticipant ? rosterLink(first.serviceDate, first.participantId) : '/rostering' } }
+  return first && oneParticipant ? rosterLink(first.serviceDate, first.participantId) : '/rostering'
 }
+
+/** An approval's overlap counts, for a bulk run's one rolled-up notice. */
+const overlapOf = (kind: 'leave' | 'unavailability', result: { overlaps: RosterFindingDto[]; overlapShifts: OverlapShiftDto[] }) =>
+  ({ kind, shifts: result.overlapShifts ?? [], trips: result.overlaps.filter((finding) => finding.code === 'TRIP_OVERLAP').length })
 
 const declineForm = (person: string, submit: QuickForm['submit']): QuickForm => ({
   field: 'textarea', label: 'Reason (optional)', hint: `${firstName(person)} sees this.`,
@@ -70,8 +78,9 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
         }) },
         { kind: 'tap', label: 'Approve', busyLabel: 'Approving…', name: `Approve leave: ${r.userFullName}, ${range}`, failText: "Couldn't approve. Try again.",
           run: async () => {
-            const notice = overlapNotice('leave', r.userFullName, await approveLeave.mutateAsync(r.id))
-            return notice ? { notice } : { announce: `Approved ${r.userFullName}'s leave, ${range}.` }
+            const result = await approveLeave.mutateAsync(r.id)
+            const notice = overlapNotice('leave', r.userFullName, result)
+            return notice ? { notice, overlap: overlapOf('leave', result) } : { announce: `Approved ${r.userFullName}'s leave, ${range}.` }
           } },
       ],
     } }
@@ -94,8 +103,9 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
         }) },
         { kind: 'tap', label: 'Approve', busyLabel: 'Approving…', name: `Approve unavailability: ${r.userFullName}, ${when}`, failText: "Couldn't approve. Try again.",
           run: async () => {
-            const notice = overlapNotice('unavailability', r.userFullName, await approveUnavailability.mutateAsync(r.id))
-            return notice ? { notice } : { announce: `Approved ${r.userFullName}'s unavailability, ${when} from ${from}.` }
+            const result = await approveUnavailability.mutateAsync(r.id)
+            const notice = overlapNotice('unavailability', r.userFullName, result)
+            return notice ? { notice, overlap: overlapOf('unavailability', result) } : { announce: `Approved ${r.userFullName}'s unavailability, ${when} from ${from}.` }
           } },
       ],
     } }

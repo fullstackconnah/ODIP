@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useNotices } from '@/hooks/useNotices'
+import type { GroupKey } from './quickGroupModel'
 
 /**
  * What the decision section remembers across its groups: the rows decided here (they leave at once, before the refetch), the consequence notices (a
@@ -13,7 +14,15 @@ export function useDecisionState() {
   const [gone, setGone] = useState<ReadonlySet<string>>(() => new Set())
   const [announcement, announce] = useState('')
   const markGone = useCallback((key: string) => setGone((prev) => new Set(prev).add(key)), [])
-  return { notices, notify, dismiss, gone, markGone, announcement, announce }
+  // The groups with a bulk run in flight: each keeps its tab until its run's notice lands (isPresent).
+  const [running, setRunningSet] = useState<ReadonlySet<GroupKey>>(() => new Set())
+  const setRunning = useCallback((key: GroupKey, on: boolean) => setRunningSet((prev) => {
+    const next = new Set(prev)
+    if (on) next.add(key)
+    else next.delete(key)
+    return next
+  }), [])
+  return { notices, notify, dismiss, gone, markGone, announcement, announce, running, setRunning }
 }
 
 export type DecisionState = ReturnType<typeof useDecisionState>

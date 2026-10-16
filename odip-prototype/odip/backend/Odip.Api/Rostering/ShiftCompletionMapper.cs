@@ -90,6 +90,32 @@ public static class ShiftCompletionMapper
     }
 
     /// <summary>
+    /// The review queue's flag rule, read off the same figures the queue row carries (the client's completionFlags / isClean): an incident on the
+    /// shift, a scheduled dose without an outcome, outlier time, a manual start, or times the worker moved at Finish. Any one means a person looks first.
+    /// </summary>
+    public static bool NeedsReview(QueueExtras extras, bool isOutlier, bool startWasManual, bool timesAdjusted) =>
+        extras.IncidentCount > 0 || extras.DosesWithoutOutcome > 0 || isOutlier || startWasManual || timesAdjusted;
+
+    /// <summary>
+    /// For a clean-only approve (the dashboard's): which of these shifts need review NOW, by <see cref="NeedsReview"/> over the queue's own joins
+    /// (<see cref="QueueExtrasAsync"/>), so a flag that appeared after the dashboard read the queue (an incident filed after Finish, a return then a
+    /// re-finish with moved times) is caught at approval time.
+    /// </summary>
+    public static async Task<HashSet<Guid>> ShiftsNeedingReviewAsync(
+        OdipDbContext db, IReadOnlyCollection<(Shift Shift, ShiftCompletion Completion)> rows, int thresholdMinutes, CancellationToken ct)
+    {
+        var extras = await QueueExtrasAsync(db, rows.Select(r => new QueueExtrasInput(
+            r.Shift.Id, r.Completion.Id, r.Shift.ParticipantId, r.Shift.ServiceDate, r.Shift.StartTime, r.Shift.EndTime, r.Shift.EndsNextDay,
+            r.Completion.ActualStart, r.Completion.ActualEnd)).ToList(), ct);
+        return rows.Where(r => NeedsReview(
+                extras[r.Completion.Id],
+                IsOutlierVariance(r.Completion.VarianceMinutesStart, r.Completion.VarianceMinutesEnd, thresholdMinutes),
+                r.Completion.StartWasManual,
+                r.Completion.OriginalActualStart != null || r.Completion.OriginalActualEnd != null))
+            .Select(r => r.Shift.Id).ToHashSet();
+    }
+
+    /// <summary>
     /// The CompletionQueueItemDto projection shared by StaffController's staff-overview endpoint
     /// (item 12 — RecentCompletions, filtered by staff and unbounded on status). NOTE:
     /// RosteringController.GetCompletions (the coordinator's review queue) does NOT use this —

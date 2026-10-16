@@ -46,6 +46,10 @@ public class LeaveController : ControllerBase
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
+    // D4 (2026-10-16): nobody approves or declines their own leave or unavailability, nor enters their own on someone's-behalf (it lands Approved). The
+    // dashboard and the Leave page only hid the buttons; this is the rule.
+    private const string OwnRequestMessage = "You can't decide your own request: someone else decides it.";
+
     // ══════════════════════════════════════════════════════════════
     // LEAVE
     // ══════════════════════════════════════════════════════════════
@@ -79,6 +83,8 @@ public class LeaveController : ControllerBase
 
         var callerId = ResolveCallerId();
         if (callerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
+        // On-behalf entry lands Approved with the caller as decider: for yourself it would be approving your own leave (D4). Yours goes through the Portal.
+        if (dto.UserId.Value == callerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveRequestDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
         var leave = new LeaveRequest
         {
             Id = Guid.NewGuid(), UserId = dto.UserId.Value, LeaveType = dto.LeaveType,
@@ -102,6 +108,7 @@ public class LeaveController : ControllerBase
 
         var approveCallerId = ResolveCallerId();
         if (approveCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
+        if (leave.UserId == approveCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         leave.Status = LeaveStatus.Approved;
         leave.DecidedByUserId = approveCallerId.Value;
@@ -139,6 +146,7 @@ public class LeaveController : ControllerBase
 
         var declineCallerId = ResolveCallerId();
         if (declineCallerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
+        if (leave.UserId == declineCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveRequestDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         leave.Status = LeaveStatus.Declined;
         leave.DecidedByUserId = declineCallerId.Value;
@@ -178,6 +186,8 @@ public class LeaveController : ControllerBase
 
         var updateCallerId = ResolveCallerId();
         if (updateCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
+        // Your own request changes through the Portal, where it goes back to Pending; edited here an Approved one would widen with nobody's say (D4, deep M1).
+        if (leave.UserId == updateCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         leave.LeaveType = dto.LeaveType;
         leave.StartDate = dto.StartDate;
@@ -265,6 +275,8 @@ public class LeaveController : ControllerBase
 
         var callerId = ResolveCallerId();
         if (callerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityDto>.Fail("Caller identity could not be resolved."));
+        // As CreateLeave: on-behalf entry for yourself would approve your own unavailability (D4).
+        if (dto.UserId.Value == callerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<RecurringUnavailabilityDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
         var rule = new RecurringUnavailability
         {
             Id = Guid.NewGuid(), UserId = dto.UserId.Value, DayOfWeek = dto.DayOfWeek,
@@ -289,6 +301,7 @@ public class LeaveController : ControllerBase
 
         var approveRuleCallerId = ResolveCallerId();
         if (approveRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("Caller identity could not be resolved."));
+        if (rule.UserId == approveRuleCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         rule.Status = LeaveStatus.Approved;
         rule.DecidedByUserId = approveRuleCallerId.Value;
@@ -319,6 +332,8 @@ public class LeaveController : ControllerBase
 
         var updateRuleCallerId = ResolveCallerId();
         if (updateRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail("Caller identity could not be resolved."));
+        // As UpdateLeave: your own rule changes through the Portal (D4, deep M1).
+        if (rule.UserId == updateRuleCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<RecurringUnavailabilityApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         rule.DayOfWeek = dto.DayOfWeek;
         rule.StartTime = dto.StartTime;
@@ -350,6 +365,7 @@ public class LeaveController : ControllerBase
 
         var declineRuleCallerId = ResolveCallerId();
         if (declineRuleCallerId is null) return Unauthorized(ApiResponse<RecurringUnavailabilityDto>.Fail("Caller identity could not be resolved."));
+        if (rule.UserId == declineRuleCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<RecurringUnavailabilityDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
         rule.Status = LeaveStatus.Declined;
         rule.DecidedByUserId = declineRuleCallerId.Value;

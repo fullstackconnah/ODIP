@@ -8,15 +8,24 @@ import type { DecisionState } from './useDecisionState'
 /** The open tab. `settled` once the viewer picked it, it had rows, or the one before it emptied: from then on only a pick or an emptying moves it. */
 type Open = { key: GroupKey | null; settled: boolean }
 
-/** The tab's label carries its count in its text (the Qualifications way), so a screen reader hears it. A dash while waiting or failed, named for what it is. */
-function tabLabel(group: GroupModel, count: number) {
-  if (group.phase === 'ready') return <>{group.title} <span className="tabular-nums">({count})</span></>
+/**
+ * The tab's label (bolder, SHAPE §2): the title in semibold, then its count in the house tab-counter pill, solid olive on the open tab and Mist on the
+ * others; a dash while waiting or failed. Drawn here, not through Tabs' `badge` (hidden, never drawn at 0, shared by every strip). The visible label is
+ * hidden and ONE sr-only text node names the tab ("Leave (3)", "Leave, loading"): split around the pill, a name can gain a stray space.
+ */
+function tabLabel(group: GroupModel, count: number, open: boolean) {
+  const ready = group.phase === 'ready'
+  const name = ready ? `${group.title} (${count})` : `${group.title}${group.phase === 'loading' ? ', loading' : ", couldn't load"}`
+  const pill = open ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-surface-container)] text-[var(--color-foreground)]'
+  // `relative`: the sr-only name is absolute, and must sit inside the strip's scroller, not stretch the page sideways from the last tab.
   return (
-    // One text node for the name ("Leave, loading"): split around the hidden dash, a name can gain a stray space before its comma.
-    <>
-      <span aria-hidden="true">{group.title} (–)</span>
-      <span className="sr-only">{group.title}{group.phase === 'loading' ? ', loading' : ", couldn't load"}</span>
-    </>
+    <span className="relative inline-flex items-center">
+      <span aria-hidden="true" className="inline-flex items-center gap-2">
+        <span className="font-semibold">{group.title}</span>
+        <span className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-xs font-bold tabular-nums ${pill}`}>{ready ? count : '–'}</span>
+      </span>
+      <span className="sr-only">{name}</span>
+    </span>
   )
 }
 
@@ -27,7 +36,7 @@ function tabLabel(group: GroupModel, count: number) {
  */
 export function NeedsYourDecision({ groups, state }: { groups: GroupModel[]; state: DecisionState }) {
   const notices = (group: GroupModel) => state.notices.filter((notice) => notice.subject === group.key).length
-  const present = groups.filter((group) => isPresent(group, state.gone, notices(group)))
+  const present = groups.filter((group) => isPresent(group, state.gone, notices(group), state.running.has(group.key)))
   const clear = groups.filter((group) => !present.includes(group)).map((group) => group.noun)
   const hasRows = (group: GroupModel) => group.phase === 'ready' && visibleRows(group, state.gone).length > 0
 
@@ -66,7 +75,7 @@ export function NeedsYourDecision({ groups, state }: { groups: GroupModel[]; sta
               onChange={(key) => setOpen({ key: key as GroupKey, settled: true })}
               tabs={groups.map((group) => ({
                 id: group.key,
-                label: tabLabel(group, shownCount(group, state.gone)),
+                label: tabLabel(group, shownCount(group, state.gone), group.key === next.key),
                 disabled: !present.includes(group),
                 panelId: present.includes(group) ? `decisions-panel-${group.key}` : undefined,
               }))}
