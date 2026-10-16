@@ -122,6 +122,23 @@ public class EarlyAccessNotifierTests
     }
 
     [Fact]
+    public async Task SendAsync_EmailsTheSubjectOfTheNoticeKind_NotAlwaysANewRequest()
+    {
+        var subjects = new List<string>();
+        var email = new RecordingChannel { Respond = m => { subjects.Add(m.Subject); return new ChannelSendResult(ChannelSendOutcome.Sent, null, null); } };
+        var (notifier, _) = Build(Configured(), email);
+
+        foreach (var kind in Enum.GetValues<EarlyAccessNoticeKind>())
+            await notifier.SendAsync(Sample with { Kind = kind }, "ops@example.com", CancellationToken.None);
+
+        Assert.Equal(new[]
+        {
+            EarlyAccessRequestTemplate.Subject, EarlyAccessRequestTemplate.SentAgainSubject,
+            EarlyAccessRequestTemplate.LastKeptSubject, EarlyAccessRequestTemplate.OverLimitSubject,
+        }, subjects);
+    }
+
+    [Fact]
     public async Task Configured_SendsOneEmail_ThroughTheEmailChannel_WithTheFixedSubject()
     {
         var email = new RecordingChannel();

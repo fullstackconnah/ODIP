@@ -137,8 +137,9 @@ public sealed class EarlyAccessService
                 return new EarlyAccessRecordResult(EarlyAccessOutcome.Created, 1, now, notice);
 
             _logger.LogInformation(
-                "Early-access request from {Email} repeated (request {RequestCount}); no notification re-sent",
-                EmailMasking.Mask(email), existing.RequestCount);
+                "Early-access request from {Email} repeated (request {RequestCount}); {Outcome}",
+                EmailMasking.Mask(email), existing.RequestCount,
+                notice is null ? "same answers as one on file, no notice" : $"different answers, notice: {notice}");
             return new EarlyAccessRecordResult(EarlyAccessOutcome.Repeated, existing.RequestCount, now, notice);
         }
     }
