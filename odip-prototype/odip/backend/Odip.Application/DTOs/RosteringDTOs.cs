@@ -115,6 +115,12 @@ public record ShiftDto
     /// RosteringController.GetBoard.
     /// </summary>
     public bool AssigneeOnApprovedLeave { get; init; }
+    /// <summary>The slot's live regular (L-a): its pattern's default worker now, not who it was at generation. Omitted for a one-off, or a pattern with no regular.</summary>
+    public Guid? RegularUserId { get; init; }
+    /// <summary>Why the regular was away when Start made this shift open (L-b, a short reason such as "on approved leave"), for the chip's "Regular away"; omitted otherwise.</summary>
+    public string? RegularAwayReason { get; init; }
+    /// <summary>True when the worker on this shift is its pattern's regular (L2); omitted otherwise.</summary>
+    public bool? IsRegular { get; init; }
     /// <summary>
     /// What is missing before this shift's participant is fully ready (intake, onboarding, signed
     /// service agreement). Null (omitted from the JSON) when nothing is. In Warn mode this is a
@@ -302,6 +308,8 @@ public enum RosterBoardGroupBy
 public record RosterBoardDto
 {
     public DateOnly WeekStart { get; init; }
+    /// <summary>Start rostering (L3, R1 as amended): a RosterWeek row, or a live pattern shift in the week. An unstarted week shows the Start overlay.</summary>
+    public bool WeekStarted { get; init; }
     public List<DateOnly> Days { get; init; } = new();
     public RosterBoardGroupBy GroupBy { get; init; }
     public List<RosterParticipantRowDto>? ParticipantRows { get; init; }
@@ -402,6 +410,28 @@ public record PublishWeekResultDto
     public int Skipped { get; init; }
 }
 
+/// <summary>What Start rostering made (2026-10-16, L4).</summary>
+public record StartWeekResultDto
+{
+    public DateOnly WeekStart { get; init; }
+    public int Created { get; init; }
+    /// <summary>Shifts made with their regular on them.</summary>
+    public int AssignedToRegulars { get; init; }
+    /// <summary>Shifts made open because their regular was away (L5).</summary>
+    public int RegularAway { get; init; }
+    /// <summary>Participants with an agreement pattern this week who may not be rostered yet: nothing was made for them.</summary>
+    public List<StartWeekParticipantDto> Skipped { get; init; } = new();
+    /// <summary>Participants whose new shifts take a pool past its funding (never a refusal); omitted when none.</summary>
+    public List<StartWeekParticipantDto>? BudgetWarnings { get; init; }
+}
+
+public record StartWeekParticipantDto
+{
+    public Guid ParticipantId { get; init; }
+    public string FullName { get; init; } = string.Empty;
+    public List<BudgetWarningDto>? Warnings { get; init; }
+}
+
 /// <summary>Dry-run input for <c>POST /shifts/check</c> — the same shape as a candidate shift, minus persistence fields.</summary>
 public record CheckShiftDto
 {
@@ -467,6 +497,9 @@ public record CreateShiftPatternDto
 }
 
 public record UpdateShiftPatternDto : CreateShiftPatternDto;
+
+/// <summary>"Make X the regular" / "Stop being the regular" (L2): the worker for the pattern's slot, or null to clear it.</summary>
+public record SetRegularDto { public Guid? StaffId { get; init; } }
 
 public record GeneratePatternResultDto
 {
