@@ -77,8 +77,9 @@ describe('Leave group — your own request', () => {
 
 describe('Leave group — Approve', () => {
   it('approves through useApproveLeave, takes the row away and announces it', async () => {
-    answer([leave()])
-    apiPost.mockResolvedValue({ leave: leave({ status: 'Approved' }), overlaps: [], overlapShifts: [] })
+    const leaves = [leave()]
+    answer(leaves)
+    apiPost.mockImplementation(async () => { leaves.splice(0, 1); return { leave: leave({ status: 'Approved' }), overlaps: [], overlapShifts: [] } })   // decided: the next read does not list it
     renderGroup(() => useLeaveGroup(true, 'u-viewer'))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve leave: Sam Lee, 20–24 Oct 2026' }))
