@@ -252,6 +252,7 @@ builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.Employm
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH
 // EarlyAccess:NotifyEmail and Notifications:Smtp:Host — by default nothing is sent). One singleton instance
 // serves as both the IEarlyAccessNotifier the controller calls and the hosted service that drains its queue.
+// It also registers the daily purge (each sign-up deleted 12 months after it was first sent).
 builder.Services.AddEarlyAccess();
 
 // ── Demo-data top-up (DemoData:Scenarios, Off by default: with it Off this registers nothing) ──
