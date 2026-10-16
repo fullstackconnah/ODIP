@@ -1556,7 +1556,9 @@ public class RosteringController : ControllerBase
         pattern.EffectiveFrom = dto.EffectiveFrom; pattern.EffectiveTo = dto.EffectiveTo; pattern.IsActive = dto.IsActive;
         pattern.Notes = dto.Notes;
 
-        await _db.SaveChangesAsync(ct);
+        // DefaultUserId is a concurrency token (REV281B): a regular changed since this load is the stale-board 409, not a silent overwrite.
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage)); }
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
 
@@ -1921,8 +1923,17 @@ public class RosteringController : ControllerBase
             return Conflict(ApiResponse<ShiftPatternDto>.Fail("This shift's agreement pattern has ended, so it has no regular to change.", PatternEndedCode));
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
+        // REV281B: the regular the coordinator was shown must still be the live one. DefaultUserId is also a concurrency token, so a change between this load and the save is refused at the UPDATE.
+        if (dto.ExpectedRegularId is { } seen && (seen == Guid.Empty ? null : seen) != pattern.DefaultUserId)
+            return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage));
         pattern.DefaultUserId = dto.StaffId;
-        await _db.SaveChangesAsync(ct);
+        // REV281B: a renewal's successor starts later and was copied this worker, and the next started week is made from it, so the change has to reach it too (in memory: the asks are jsonb).
+        if (pattern.EffectiveTo is { } endsOn)
+            foreach (var next in (await _db.ShiftPatterns.Where(p => p.ParticipantId == pattern.ParticipantId && p.IsActive && p.Id != pattern.Id && p.EffectiveFrom > endsOn).ToListAsync(ct))
+                .Where(n => ServiceAgreementApprovalService.SameSupport(pattern, n)))
+                next.DefaultUserId = dto.StaffId;
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage)); }
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
 

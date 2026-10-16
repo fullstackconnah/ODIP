@@ -5,6 +5,8 @@ using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
@@ -144,5 +146,48 @@ public class AgreementRenewalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal((int?)2, Assert.Single(outcomes, o => o.Draft is null).ConflictVersion);
         await using var read = Open(cs, tenantId);
         Assert.Equal(new[] { 1, 2 }, await read.ServiceAgreementDrafts.AsNoTracking().OrderBy(d => d.Version).Select(d => d.Version).ToListAsync());
+    }
+
+    [SkippableFact]   // REV281B #2: two coordinators on one pattern; the pre-check alone cannot stop the second, the concurrency token at the UPDATE does
+    public async Task SetRegular_TwoEditors_TheSecondSaveIsRefusedAtTheUpdate()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        Guid samId = Guid.NewGuid(), alexId = Guid.NewGuid(), patternId = Guid.NewGuid(), shiftId = Guid.NewGuid();
+        var monday = new DateOnly(2026, 10, 19);
+        await using (var setup = Open(cs, tenantId))
+        {
+            foreach (var (id, name) in new[] { (samId, "Sam"), (alexId, "Alex") })
+                setup.Users.Add(new User { Id = id, TenantId = tenantId, FirstName = name, LastName = "Lee", Username = name, Email = $"{name}@example.com", Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true });
+            setup.ShiftPatterns.Add(new ShiftPattern
+            {
+                Id = patternId, TenantId = tenantId, ParticipantId = participantId, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Ratio = SupportRatio.OneToOne,
+                NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true, DefaultUserId = samId,
+            });
+            setup.Shifts.Add(new Shift
+            {
+                Id = shiftId, TenantId = tenantId, ParticipantId = participantId, UserId = samId, ServiceDate = monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+                Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft, ShiftPatternId = patternId,
+            });
+            await setup.SaveChangesAsync();
+        }
+
+        await using var editorB = Open(cs, tenantId);
+        var loadedByB = await editorB.ShiftPatterns.SingleAsync(p => p.Id == patternId);          // B has Sam in hand
+        await using (var editorA = Open(cs, tenantId))
+        {
+            (await editorA.ShiftPatterns.SingleAsync(p => p.Id == patternId)).DefaultUserId = alexId;
+            await editorA.SaveChangesAsync();                                                       // A saves Alex first
+        }
+
+        loadedByB.DefaultUserId = null;                                                              // B's Stop, from its stale load
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => editorB.SaveChangesAsync());
+
+        await using var late = Open(cs, tenantId);                                                   // the same Stop arriving afterwards is the 409 of the pre-check
+        var tenant = Mock.Of<ICurrentTenant>(t => t.TenantId == tenantId);
+        var refused = await RosterStartWeekTests.Controller(late, tenant).SetRegular(patternId, new SetRegularDto { ShiftId = shiftId, StaffId = null, ExpectedRegularId = samId }, default);
+        Assert.IsType<ConflictObjectResult>(refused.Result);
+        await using var check = Open(cs, tenantId);
+        Assert.Equal(alexId, (await check.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == patternId)).DefaultUserId);
     }
 }
