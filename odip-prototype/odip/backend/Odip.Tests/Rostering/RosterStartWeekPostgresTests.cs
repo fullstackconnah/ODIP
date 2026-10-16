@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -121,5 +122,51 @@ public class RosterStartWeekPostgresTests : IClassFixture<PostgresFixture>
         }
 
         Assert.Equal((0, 0), await CountsAsync(tenantId));
+    }
+
+    /// <summary>Before the first save that adds a RosterWeek, saves that same week from another context: the Start that wins the race (S3).</summary>
+    private sealed class AStartWinsTheRow(string connectionString, Guid tenantId) : SaveChangesInterceptor
+    {
+        private bool _done;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            if (!_done && eventData.Context!.ChangeTracker.Entries<RosterWeek>().FirstOrDefault(e => e.State == EntityState.Added) is { } adding)
+            {
+                _done = true;
+                await using var start = PostgresFixture.NewContext(connectionString, TenantOf(tenantId));
+                start.RosterWeeks.Add(new RosterWeek { Id = Guid.NewGuid(), TenantId = tenantId, WeekStart = adding.Entity.WeekStart });
+                await start.SaveChangesAsync(ct);
+            }
+
+            return result;
+        }
+    }
+
+    [SkippableFact]
+    public async Task OnPostgres_GenerateLosesTheRowToAStart_AndStillAnswers200()
+    {
+        RequirePostgres();
+        var (db0, tenantId) = await _pg.NewTenantContextAsync();
+        await db0.DisposeAsync();
+        Guid patternId;
+        await using (var seed = Open(tenantId))
+        {
+            var mia = seed.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Mia", LastName = "Test", IsActive = true }).Entity;
+            patternId = seed.ShiftPatterns.Add(new ShiftPattern
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = mia.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+                Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true,
+            }).Entity.Id;
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString).AddInterceptors(new AStartWinsTheRow(_pg.ConnectionString, tenantId)).Options, TenantOf(tenantId)))
+        {
+            var result = await StartController(db, tenantId).GeneratePattern(patternId, Monday, Monday.AddDays(6), default);
+            Assert.Equal(1, Assert.IsType<ApiResponse<GeneratePatternResultDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Created);
+        }
+
+        Assert.Equal((1, 1), await CountsAsync(tenantId));   // the Start's row, and the Generate's shift kept
     }
 }

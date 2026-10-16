@@ -238,11 +238,6 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odi
 builder.Services.AddScoped<Odip.Infrastructure.Notifications.IntakeInviteSender>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
-// ── Roster top-up (plan builder phase D) ──────────────────────────
-// Keeps RosterTopUp:HorizonDays (56) days of open shifts generated for the patterns an approved agreement made, once for each organisation's provider day. RosterTopUp:Enabled (default true)
-// switches it off; hand-made and demo patterns are never touched. Reads the clock the rest of the API reads (TimeProvider.System, registered above).
-builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RosterTopUpBackgroundService>();
-
 // ── Employment Hero Payroll (Settings → Integrations) ────────────────
 // The key store reads Integrations:MasterKey, else INTEGRATIONS_MASTER_KEY (32 bytes, base64). With neither, connecting is refused and the rest of ODIP runs.
 builder.Services.AddSingleton<Odip.Infrastructure.Integrations.IntegrationKeyProtector>();

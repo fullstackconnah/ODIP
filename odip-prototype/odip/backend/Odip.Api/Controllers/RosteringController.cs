@@ -1531,12 +1531,30 @@ public class RosteringController : ControllerBase
             // so the daily top-up can still fill a gap before it.
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today);
+            await MarkWeeksStartedAsync(pattern.TenantId, generated.MadeShifts, ct);
             var warnings = await BudgetWarningsAsync(pattern.ParticipantId, generated.MadeShifts, ct);
             return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped, BudgetWarnings = warnings }));
         }
         catch (RosterBusyException busy)
         {
             return Conflict(ApiResponse<GeneratePatternResultDto>.Fail(busy.Message));
+        }
+    }
+
+    /// <summary>
+    /// L10: a Generate that made shifts in a week nobody has started starts it, so the board no longer offers Start there. Saved after the generation's own commit, one week at a time:
+    /// a Start that wins the unique row for a week makes it started anyway.
+    /// </summary>
+    private async Task MarkWeeksStartedAsync(Guid tenantId, IReadOnlyList<Shift> made, CancellationToken ct)
+    {
+        var weeks = made.Select(s => RosterWeek.MondayOf(s.ServiceDate)).Distinct().ToList();
+        if (weeks.Count == 0) return;
+        var started = await _db.RosterWeeks.Where(w => w.TenantId == tenantId && weeks.Contains(w.WeekStart)).Select(w => w.WeekStart).ToListAsync(ct);
+        foreach (var monday in weeks.Except(started))
+        {
+            var week = _db.RosterWeeks.Add(new RosterWeek { Id = Guid.NewGuid(), TenantId = tenantId, WeekStart = monday, StartedAt = _clock.GetUtcNow().UtcDateTime, StartedByUserId = ResolveCurrentUserId() });
+            try { await _db.SaveChangesAsync(ct); }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }) { week.State = EntityState.Detached; }
         }
     }
 

@@ -13,8 +13,7 @@ namespace Odip.Infrastructure.BackgroundServices;
 public sealed record EmploymentHeroSyncTick(int Organisations, int Failures);
 
 /// <summary>
-/// Runs the Employment Hero staff sync (<see cref="EmploymentHeroStaffSync"/>) every 30 minutes for every connected organisation. It has the same
-/// shape as <see cref="RosterTopUpBackgroundService"/>:
+/// Runs the Employment Hero staff sync (<see cref="EmploymentHeroStaffSync"/>) every 30 minutes for every connected organisation:
 /// - a fresh DI scope per tick and a Task.Delay loop;
 /// - a SuperAdmin-scoped context to read which organisations are connected, then one tenant-scoped context per organisation;
 /// - one organisation's failure is logged and counted, and the others carry on.
