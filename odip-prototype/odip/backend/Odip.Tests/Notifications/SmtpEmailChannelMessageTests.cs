@@ -26,6 +26,40 @@ public class SmtpEmailChannelMessageTests
         Assert.Empty(mail.ReplyToList);
     }
 
+    // Bunya Support rebrand (owner, 2026-10-16): mail shows the product as its sender, unless the configured From already names one.
+    [Fact]
+    public void A_bare_from_address_is_sent_as_Bunya_Support()
+    {
+        using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>"), From);
+
+        Assert.Equal("Bunya Support", mail.From!.DisplayName);
+        Assert.Equal(From, mail.From.Address);
+    }
+
+    [Fact]
+    public void A_from_that_names_its_sender_keeps_that_name()
+    {
+        using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>"), "Rostering <rosters@odip.test>");
+
+        Assert.Equal("Rostering", mail.From!.DisplayName);
+        Assert.Equal("rosters@odip.test", mail.From.Address);
+    }
+
+    [Fact]
+    public void The_html_view_opens_with_the_text_wordmark_header_then_the_body()
+    {
+        using var mail = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>Body here</p>"), From);
+
+        using var reader = new StreamReader(mail.AlternateViews[0].ContentStream);
+        var html = reader.ReadToEnd();
+        Assert.Contains(">bunya<", html);
+        Assert.Contains(">support<", html);
+        Assert.DoesNotContain("<svg", html);
+        Assert.DoesNotContain("<img", html);
+        Assert.True(html.IndexOf(">support<", StringComparison.Ordinal) < html.IndexOf("<p>Body here</p>", StringComparison.Ordinal));
+        Assert.Equal("P", mail.Body);
+    }
+
     [Theory]
     [InlineData("REQUEST")]
     [InlineData("CANCEL")]
