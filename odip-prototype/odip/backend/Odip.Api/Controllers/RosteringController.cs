@@ -42,10 +42,10 @@ namespace Odip.Api.Controllers;
 public class RosteringController : ControllerBase
 {
     private readonly OdipDbContext _db;
-    private readonly RosterConflictService _conflictService = new();
     private readonly RosterShiftGenerator _generator;
     private readonly StaffCompatibilityLinkService _compatLink;
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
+    private readonly RosterAvailability _availability;
     private readonly IConfiguration? _config;
 
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
@@ -75,6 +75,7 @@ public class RosteringController : ControllerBase
         _budgetEffect = budgetEffect ?? (tenant is null ? null : new ShiftBudgetEffect(db, new BudgetLedgerService(db, _clock)));
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
+        _availability = new RosterAvailability(db, unavailabilityQuery);
         _config = config;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
@@ -144,7 +145,7 @@ public class RosteringController : ControllerBase
         // PUBLIC_HOLIDAY (connection-map item 8): loaded once for the whole week and reused for
         // every shift's context below, same as weekShifts/weekTripAssignments/weekWindows — avoids
         // one PublicHolidays query per shift on the board.
-        var weekPublicHolidays = await LoadPublicHolidaysAsync(start, end, ct);
+        var weekPublicHolidays = await _availability.PublicHolidaysAsync(start, end, ct);
 
         // ── Every ACTIVE participant, not just ones with shifts this week — an empty week
         // is itself the coverage gap the participant-mode board exists to surface. Shifts
@@ -189,34 +190,14 @@ public class RosteringController : ControllerBase
             .Where(c => staffIds.Contains(c.UserId) && allParticipantIds.Contains(c.ParticipantId))
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
 
+        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays);
+
         List<RosterFinding> FindingsFor(Shift shift)
         {
-            if (!participantById.TryGetValue(shift.ParticipantId, out var participant))
-                return new List<RosterFinding>();
-            var readinessFinding = enforcingTenants.Contains(participant.TenantId)
-                && !readyParticipantIdSet.Contains(shift.ParticipantId)
-                ? new RosterFinding(
-                    "PARTICIPANT_NOT_READY",
-                    RosterFindingSeverity.Warning,
-                    "Participant is not ready for new booking or rostering assignments.")
-                : null;
-            if (shift.UserId is null || !staffById.TryGetValue(shift.UserId.Value, out var staff))
-                return readinessFinding is null ? new List<RosterFinding>() : new List<RosterFinding> { readinessFinding };
-
-            var staffShiftsInWeek = weekShifts.Where(s => s.UserId == shift.UserId && s.Id != shift.Id).ToList();
-            var participantShiftsOnDate = weekShifts
-                .Where(s => s.ParticipantId == shift.ParticipantId && s.ServiceDate == shift.ServiceDate && s.Id != shift.Id)
-                .ToList();
-            var tripAssignments = weekTripAssignments.Where(a => a.UserId == shift.UserId).ToList();
-            var availability = weekWindows.Where(w => w.UserId == shift.UserId).ToList();
-            var compatibility = compatByPair.TryGetValue((shift.UserId.Value, shift.ParticipantId), out var level)
-                ? level : CompatibilityLevel.Allowed;
-
-            var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-                tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold,
-                weekPublicHolidays);
-            var findings = _conflictService.Check(shift, ctx).ToList();
-            if (readinessFinding is not null) findings.Add(readinessFinding);
+            if (!participantById.TryGetValue(shift.ParticipantId, out var participant)) return new List<RosterFinding>();
+            var findings = availability.Check(shift);
+            if (enforcingTenants.Contains(participant.TenantId) && !readyParticipantIdSet.Contains(shift.ParticipantId))
+                findings.Add(new RosterFinding("PARTICIPANT_NOT_READY", RosterFindingSeverity.Warning, "Participant is not ready for new booking or rostering assignments."));
             return findings;
         }
 
@@ -1858,68 +1839,13 @@ public class RosteringController : ControllerBase
     /// </summary>
     private async Task<List<RosterFinding>> CheckAsync(Shift candidate, Guid? excludeId, CancellationToken ct, Guid? leavingShiftId = null)
     {
-        if (candidate.UserId is null)
-            return new List<RosterFinding>();
-
-        var staff = await _db.Users.FirstOrDefaultAsync(s => s.Id == candidate.UserId.Value, ct);
-        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == candidate.ParticipantId, ct);
-        if (staff is null || participant is null)
-            return new List<RosterFinding>();
-
+        if (candidate.UserId is not { } userId) return new List<RosterFinding>();
         var weekStart = WeekStart(candidate.ServiceDate);
-        var weekEnd = weekStart.AddDays(6);
-        var excludeShiftId = excludeId ?? candidate.Id;
-
         // A person being moved or swapped off leavingShiftId is judged without it: no DOUBLE_BOOKED_SHIFT or OVER_HOURS against the shift they are leaving (roster drag and drop, 2026-10-14).
         // shortcut: participantShiftsOnDate still counts them on the shift they leave, so a swap inside one 2:1 pair can warn RATIO_SHORTFALL falsely; filter it there too if pairs get swapped often.
-        // The day either side of the week too, so an overnight shift crossing the week edge is double-booking checked; OVER_HOURS still counts only the candidate's own Monday to Sunday.
-        var staffShiftsInWeek = await _db.Shifts
-            .Where(s => s.UserId == candidate.UserId.Value && s.ServiceDate >= weekStart.AddDays(-1) && s.ServiceDate <= weekEnd.AddDays(1)
-                        && s.Id != excludeShiftId && s.Id != leavingShiftId)
-            .ToListAsync(ct);
-
-        var participantShiftsOnDate = await _db.Shifts
-            .Where(s => s.ParticipantId == candidate.ParticipantId && s.ServiceDate == candidate.ServiceDate
-                        && s.Id != excludeShiftId)
-            .ToListAsync(ct);
-
-        var tripAssignments = await _db.StaffAssignments
-            .Where(a => a.UserId == candidate.UserId.Value && a.Status != AssignmentStatus.Cancelled
-                        && a.AssignmentStart <= candidate.ServiceDate && a.AssignmentEnd >= candidate.ServiceDate)
-            .ToListAsync(ct);
-
-        var toDate = candidate.EndsNextDay ? candidate.ServiceDate.AddDays(1) : candidate.ServiceDate;
-        var availability = await _unavailabilityQuery.GetWindowsAsync(
-            new[] { candidate.UserId.Value }, candidate.ServiceDate, toDate, ct);
-
-        var compatibility = await _db.StaffParticipantCompatibilities
-            .Where(c => c.UserId == candidate.UserId.Value && c.ParticipantId == candidate.ParticipantId)
-            .Select(c => (CompatibilityLevel?)c.Level)
-            .FirstOrDefaultAsync(ct) ?? CompatibilityLevel.Allowed;
-
-        // PUBLIC_HOLIDAY only ever checks the candidate's ServiceDate (see RosterConflictService.
-        // CheckPublicHoliday), so that's the only date this query needs regardless of EndsNextDay.
-        var publicHolidays = await LoadPublicHolidaysAsync(candidate.ServiceDate, candidate.ServiceDate, ct);
-
-        var ctx = new RosterCheckContext(staff, participant, staffShiftsInWeek, participantShiftsOnDate,
-            tripAssignments, availability, compatibility, RosterConflictService.DefaultWeeklyHoursThreshold,
-            publicHolidays);
-
-        return _conflictService.Check(candidate, ctx).ToList();
-    }
-
-    /// <summary>
-    /// PUBLIC_HOLIDAY source of truth (connection-map item 8): the same holidays as the claim engines
-    /// and the budget ledger, read by the same <see cref="PublicHolidayLoader"/> — the synced rows AND
-    /// the whole-day override rows (the feed misses days such as Boxing Day 2026) — with the same
-    /// state-scoping: a holiday with no state applies everywhere, one scoped to a state only applies
-    /// there, and the provider's own state (falling back to "VIC") decides which scoped rows count,
-    /// matched in any case. Two queries per call (the synced rows and the override rows).
-    /// </summary>
-    private async Task<List<PublicHolidayRef>> LoadPublicHolidaysAsync(DateOnly start, DateOnly end, CancellationToken ct)
-    {
-        var state = await _db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct);
-        return PublicHolidayLoader.RosterRefsFor(await PublicHolidayLoader.LoadAsync(_db, start, end, includePartDay: false, ct), state);
+        // The week and the day either side (RosterAvailability.LoadAsync), as before: an overnight shift across the week edge is double-booking checked; OVER_HOURS still counts the candidate's own week.
+        var snapshot = await _availability.LoadAsync([userId], [candidate.ParticipantId], weekStart, weekStart.AddDays(6), ct);
+        return snapshot.Check(candidate, excludeId ?? candidate.Id, leavingShiftId);
     }
 
     /// <summary>
