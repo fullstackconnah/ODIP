@@ -18,7 +18,8 @@ type Field = keyof DetailsForm
 /**
  * The enquiry form's Participant details (SHAPE.md section 5): optional, gathered by intake later, so a fold that is closed on a new enquiry and open
  * on edit. The house fold (NotRecordedFold): a native <details> whose summary is the card's heading row, with no motion when it opens. `open` is the
- * form's, so Save and ?focus=address can open it before focusing a field inside. Presentational: the form owns the state and the errors.
+ * form's, so Save and ?focus=address can open it before focusing a field inside. Dates take the house span.date (formGrid.test's R3 F-05 guard), and
+ * Plan start opens its own row at xl so the plan's two dates sit together. Presentational: the form owns the state and the errors.
  */
 export function ParticipantDetailsFold({ form, errors, open, today, onToggle, onChange }: {
   form: DetailsForm
@@ -60,7 +61,7 @@ export function ParticipantDetailsFold({ form, errors, open, today, onToggle, on
                 <TextField id="inquiry-address-postcode" className={span.short} label="Postcode" inputMode="numeric" maxLength={4} {...text('addressPostcode')} />
               </div>
             </fieldset>
-            <TextField id="inquiry-dob" className={span.short} label="Date of birth" type="date" max={today} {...text('dateOfBirth')} />
+            <TextField id="inquiry-dob" className={span.date} label="Date of birth" type="date" max={today} {...text('dateOfBirth')} />
             <TextField id="inquiry-ndis-number" className={span.short} label="NDIS number" inputMode="numeric" maxLength={20} hint="9 digits" {...text('ndisNumber')} />
             <fieldset className={`${span.long} min-w-0`}>
               <legend className={LEGEND}>NDIS plan</legend>
@@ -74,8 +75,8 @@ export function ParticipantDetailsFold({ form, errors, open, today, onToggle, on
                   onChange={e => onChange('planType', e.target.value)}
                   options={[{ value: '', label: 'Not specified' }, ...PLAN_MANAGEMENT_OPTIONS]}
                 />
-                <TextField id="inquiry-plan-start" className={span.short} label="Plan start" type="date" {...text('planStartDate')} />
-                <TextField id="inquiry-plan-end" className={span.short} label="Plan end" type="date" {...text('planEndDate')} />
+                <TextField id="inquiry-plan-start" className={`${span.date} xl:col-start-1`} label="Plan start" type="date" {...text('planStartDate')} />
+                <TextField id="inquiry-plan-end" className={span.date} label="Plan end" type="date" {...text('planEndDate')} />
               </div>
             </fieldset>
           </div>

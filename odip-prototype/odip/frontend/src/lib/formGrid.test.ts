@@ -26,6 +26,21 @@ function sourceFiles(): [string, string][] {
     .map((f) => [relative(SRC, join(SRC, f)), readFileSync(join(SRC, f), 'utf8')] as [string, string])
 }
 
+/** The index of the `>` that ends the JSX opening tag starting at `start`, skipping `{…}` expressions (arrow functions) and quoted strings. */
+function openingTagEnd(src: string, start: number): number {
+  let depth = 0
+  let quote: string | null = null
+  for (let i = start + 1; i < src.length; i++) {
+    const c = src[i]
+    if (quote) { if (c === quote) quote = null; continue }
+    if (c === '"' || c === "'" || c === '`') quote = c
+    else if (c === '{') depth++
+    else if (c === '}') depth--
+    else if (c === '>' && depth === 0) return i
+  }
+  return src.length
+}
+
 describe('date controls never sit in a span.short cell', () => {
   // R3 F-05: `short` (3 of 12 columns) is narrower than a native date or date-time control, so the year or the AM/PM segment
   // was cut off (measured at 1280-1536). Every FormField that wraps one takes `span.date`. jsdom does no layout, so this scans
@@ -36,7 +51,9 @@ describe('date controls never sit in a span.short cell', () => {
       for (const m of src.matchAll(/span\.short/g)) {
         const start = src.lastIndexOf('<', m.index)
         const tag = /^[A-Za-z]+/.exec(src.slice(start + 1))?.[0] ?? ''
-        let end = src.indexOf(`</${tag}>`, m.index)
+        const open = openingTagEnd(src, start)
+        // A self-closing element is only its own tag: scanning on would flag the next field (a Postcode just above a Date of birth).
+        let end = src[open - 1] === '/' ? open : src.indexOf(`</${tag}>`, m.index)
         if (end < 0 || end - start > 1500) end = Math.min(src.length, start + 600)
         const window = src.slice(start, end)
         if (/type=["'](date|datetime-local)["']/.test(window)) {
