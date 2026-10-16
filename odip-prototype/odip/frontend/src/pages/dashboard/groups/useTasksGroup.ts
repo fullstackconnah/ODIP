@@ -33,7 +33,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
         const fresh = await apiGet<TaskDto>(`/tasks/${t.id}`)
         if (!isOpen(fresh)) {
           void overdue.refetch(); void dueOnToday.refetch()
-          return { announce: `Already ${fresh.status.toLowerCase()} by someone else.` }
+          return { announce: `Already ${fresh.status.toLowerCase()} by someone else.`, stale: true }
         }
         await updateTask.mutateAsync({ id: t.id, data: { ...fresh, status: 'Completed', completedDate: today } as UpdateTaskDto })
         return { announce: `Marked done: ${t.title}.` }

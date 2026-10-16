@@ -77,6 +77,7 @@ beforeEach(() => {
   // that can, so the rest of this suite's write-path tests keep working unchanged; the ReadOnly
   // case gets its own test below.
   setUserRole('Coordinator')
+  mockUseStaff.mockReturnValue({ data: [{ id: 'staff-1', fullName: 'Alex Rivera' }] as StaffListDto[] })
   mockUseLeaveRequests.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
   mockUseRecurringUnavailabilities.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
   mockUseStaffAvailabilityRecords.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
@@ -419,6 +420,49 @@ describe('LeaveApprovalsPage', () => {
     expect(screen.queryByRole('button', { name: /^approve/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^decline/i })).not.toBeInTheDocument()
     expect(screen.getByText(/read-only access/i)).toBeInTheDocument()
+  })
+
+  describe("the viewer's own request (decision-bulk D4: nobody decides their own)", () => {
+    const asMe = () => localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', id: 'u-me' }))
+
+    it('shows "Your request" and no Approve, Decline or Edit on your own pending leave and unavailability; others keep theirs', () => {
+      asMe()
+      mockUseLeaveRequests.mockReturnValue({ data: [
+        makeLeaveRequest({ id: 'leave-me', userId: 'u-me', userFullName: 'Dana Me', status: 'Pending' }),
+        makeLeaveRequest({ id: 'leave-1', status: 'Pending' }),
+      ], isLoading: false, isError: false, refetch: vi.fn() })
+      mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ id: 'rule-me', userId: 'u-me', userFullName: 'Dana Me', status: 'Pending' })], isLoading: false, isError: false, refetch: vi.fn() })
+      renderPage()
+
+      // The server refuses deciding or editing your own (403 LEAVE_OWN_REQUEST): your own changes through the Portal, back to Pending.
+      expect(screen.queryByRole('button', { name: /^(Approve|Decline|Edit): Dana Me/ })).not.toBeInTheDocument()
+      expect(screen.getAllByText('Your request')).toHaveLength(2)
+      expect(screen.getByRole('button', { name: 'Approve: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+    })
+
+    it('keeps only Cancel on your own approved leave (it only takes leave away), with the "Your request" badge and no Edit', () => {
+      asMe()
+      mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ id: 'leave-me', userId: 'u-me', userFullName: 'Dana Me', status: 'Approved' })], isLoading: false, isError: false, refetch: vi.fn() })
+      renderPage()
+
+      expect(screen.getByRole('button', { name: /^Cancel leave: Dana Me/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Edit: Dana Me/ })).not.toBeInTheDocument()
+      expect(screen.getByText('Your request')).toBeInTheDocument()
+    })
+
+    it.each([['Leave'], ['Regular unavailability']])('leaves you out of the %s on-behalf staff picker: it lands approved, and the server refuses your own', async (kind) => {
+      asMe()
+      mockUseStaff.mockReturnValue({ data: [{ id: 'staff-1', fullName: 'Alex Rivera' }, { id: 'u-me', fullName: 'Dana Me' }] as StaffListDto[] })
+      const user = userEvent.setup()
+      renderPage()
+
+      await user.click(screen.getByRole('button', { name: /enter on behalf/i }))
+      await user.click(screen.getByRole('option', { name: kind }))
+      await user.click(screen.getByRole('combobox', { name: /staff member/i }))
+
+      expect(screen.getByRole('option', { name: 'Alex Rivera' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Dana Me' })).not.toBeInTheDocument()
+    })
   })
 
   it('gives a Pending leave row an Edit button alongside Decline/Approve', () => {

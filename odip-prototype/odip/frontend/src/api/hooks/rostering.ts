@@ -212,10 +212,11 @@ export function useCompletion(shiftId: string | undefined) {
   })
 }
 
-export function useApproveCompletion() {
+/** `requireClean` (the dashboard's one tap): the server re-checks the review flags and refuses a flagged shift (409 SHIFT_NEEDS_REVIEW). */
+export function useApproveCompletion({ requireClean = false }: { requireClean?: boolean } = {}) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (shiftId: string) => apiPost<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/approve`),
+    mutationFn: (shiftId: string) => apiPost<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/approve${requireClean ? '?requireClean=true' : ''}`),
     onSuccess: (_, shiftId) => {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
@@ -240,12 +241,13 @@ export function useReturnCompletion() {
   })
 }
 
-/** POST /rostering/completions/approve-batch — up to 100 ids, per-item results even on partial failure. */
-export function useApproveCompletionsBatch() {
+/** POST /rostering/completions/approve-batch — up to 100 ids, per-item results even on partial failure. `cleanOnly` (the dashboard's): a shift
+ * flagged since the queue read is skipped as SHIFT_NEEDS_REVIEW, never approved. */
+export function useApproveCompletionsBatch({ cleanOnly = false }: { cleanOnly?: boolean } = {}) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (shiftIds: string[]) =>
-      apiPost<ApproveBatchResultDto[]>('/rostering/completions/approve-batch', { shiftIds }),
+      apiPost<ApproveBatchResultDto[]>('/rostering/completions/approve-batch', cleanOnly ? { shiftIds, cleanOnly } : { shiftIds }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       // Any open review is now stale: a batch names many shifts, and the prefix key covers every one of them.

@@ -199,6 +199,25 @@ describe('DashboardPage — the whole page clear (SHAPE §6)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss notice about Person a' }))
     expect(await screen.findByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
   })
+
+  it('never says it while a bulk run is in flight, though the refetch has emptied the group (decision-bulk verify B-S1)', async () => {
+    asRole('Admin')
+    let finish!: () => void
+    const run = () => new Promise<{ announce: string }>((resolve) => { finish = () => resolve({ announce: 'Approved Person a.' }) })
+    const approve = { kind: 'tap' as const, label: 'Approve', busyLabel: 'Approving…', name: 'Approve leave: Person a', failText: "Couldn't approve. Try again.", run }
+    mockUseDecisionGroups.mockReturnValue([...allClearGroups().filter((g) => g.key !== 'leave'), group('leave', { count: 1, rows: [{ ...row('a'), actions: [approve] }] })])
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 leave request' }))
+    // The real server: the approval's invalidation refetches the list, and it comes back empty while the run is still going.
+    mockUseDecisionGroups.mockReturnValue(allClearGroups())
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+
+    expect(await screen.findByRole('button', { name: 'Approving 1 of 1…' })).toBeInTheDocument()
+    expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+    finish()
+    expect(await screen.findByText('Approved 1 leave request')).toBeInTheDocument()
+  })
 })
 
 describe('DashboardPage — focus when a group leaves the page (SHAPE §10)', () => {
