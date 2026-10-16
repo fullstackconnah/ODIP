@@ -238,7 +238,7 @@ public class IntakeBookingsController : ControllerBase
         inquiry.ClosedAt = NowUtc; inquiry.ClosedByUserId = (await CallerAsync(ct))?.Id; inquiry.CloseOutcome = dto.Outcome; inquiry.CloseNote = note; inquiry.UpdatedAt = NowUtc;
         // The trail keeps who, when and why, and nothing personal: never the whole enquiry (Decision 7).
         _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ParticipantInquiry), inquiry.Id, "Close", null, dto.Outcome!.Value.ToString(), User));
-        if (!await SavedAsync(ct)) return Conflict(ApiResponse<CloseInquiryResultDto>.Fail(ChangedByOther));
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<CloseInquiryResultDto>.Fail(EnquiryChangedByOther));
 
         var email = upcoming ? await SendCancellationAsync(cancellation) : "NoVisit";
         return Ok(ApiResponse<CloseInquiryResultDto>.Ok(new CloseInquiryResultDto { Inquiry = ParticipantInquiriesController.ToDto(inquiry, null, provider.ZoneId), CancellationEmail = email }));
@@ -256,7 +256,7 @@ public class IntakeBookingsController : ControllerBase
         if (dto?.ExpectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
         _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ParticipantInquiry), inquiry.Id, "Reopen", inquiry.CloseOutcome?.ToString(), null, User));
         inquiry.ClosedAt = null; inquiry.ClosedByUserId = null; inquiry.CloseOutcome = null; inquiry.CloseNote = null; inquiry.UpdatedAt = NowUtc;
-        if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(EnquiryChangedByOther));
         var provider = await ProviderAsync(inquiry.TenantId, ct);
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, null, provider.ZoneId)));
     }
@@ -413,6 +413,8 @@ public class IntakeBookingsController : ControllerBase
                 x.IntakeUid!, x.IntakeIcsSequence, NowUtc, ReplyTo: from.ReplyTo), ct);
 
     private const string ChangedByOther = "Someone else just changed this visit. Reload and try again.";
+    // Close and Reopen change the enquiry, not its visit: they say so as the enquiry's own edit does (ParticipantInquiriesController.ChangedByOther).
+    private const string EnquiryChangedByOther = "Someone else just changed this enquiry. Reload and try again.";
 
     // IntakeIcsSequence and IntakeUid are concurrency tokens: a write based on a revision someone else has since replaced matches no row.
     private async Task<bool> SavedAsync(CancellationToken ct)

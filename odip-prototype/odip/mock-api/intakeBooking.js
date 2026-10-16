@@ -59,6 +59,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   // The version check close and reopen make (verify C1): a stale expectedUpdatedAt is the API's 409. Rows with no version yet skip it.
   const stale = (row, body) => !!body?.expectedUpdatedAt && !!row.updatedAt && body.expectedUpdatedAt !== row.updatedAt
   const changedByOther = () => respond(409, failEnvelope(null, ['Someone else just changed this visit. Reload and try again.']))
+  const enquiryChangedByOther = () => respond(409, failEnvelope(null, ['Someone else just changed this enquiry. Reload and try again.']))
   const stamp = (row) => { row.updatedAt = new Date().toISOString() }
 
   const get = [
@@ -117,7 +118,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       if (!row) return notFound()
       if (closed[id]) return refuse409('This enquiry is already closed.', 'inquiry-closed')
       if (row.participantId) return refuse409(`Intake has started for ${row.firstName}, so this enquiry can't be closed.`, 'inquiry-converted')
-      if (stale(row, body)) return changedByOther()
+      if (stale(row, body)) return enquiryChangedByOther()
       if (!body?.outcome) return respond(400, { title: 'One or more validation errors occurred.', status: 400, errors: { outcome: ["Choose why it's closing."] } })
       const booking = bookings[id]
       const cancellationEmail = !booking ? 'NoVisit' : booking.intakeInviteSentAt ? 'NotConfigured' : 'NoInvite'
@@ -131,7 +132,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       const row = find(id)
       if (!row) return notFound()
       if (!closed[id]) return refuse409('This enquiry is already open.', 'inquiry-open')
-      if (stale(row, body)) return changedByOther()
+      if (stale(row, body)) return enquiryChangedByOther()
       delete closed[id]
       stamp(row)
       return withBooking(row)

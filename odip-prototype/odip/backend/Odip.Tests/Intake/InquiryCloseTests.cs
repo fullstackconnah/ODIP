@@ -286,7 +286,7 @@ public class InquiryCloseTests
 
         var result = await f.Controller(now: Now.AddMinutes(2)).Close(f.Noah.Id, Why() with { ExpectedUpdatedAt = loaded }, CancellationToken.None);
 
-        Assert.Equal((null, "Someone else just changed this visit. Reload and try again."), Refusal(result));
+        Assert.Equal((null, "Someone else just changed this enquiry. Reload and try again."), Refusal(result));
         var row = f.OtherDb().ParticipantInquiries.AsNoTracking().Single(x => x.Id == f.Noah.Id);
         Assert.Null(row.ClosedAt);
         Assert.Equal(Start, row.IntakeStartsAt);
@@ -304,7 +304,7 @@ public class InquiryCloseTests
 
         var stale = await f.Controller(now: Now.AddMinutes(4)).Reopen(f.Noah.Id, CancellationToken.None, new InquiryVersionDto { ExpectedUpdatedAt = loaded });
 
-        Assert.Equal((null, "Someone else just changed this visit. Reload and try again."), Refusal(stale));
+        Assert.Equal((null, "Someone else just changed this enquiry. Reload and try again."), Refusal(stale));
         var row = f.OtherDb().ParticipantInquiries.AsNoTracking().Single(x => x.Id == f.Noah.Id);
         Assert.Equal(InquiryCloseOutcome.Other, row.CloseOutcome);
         // The current version reopens it (a new request, so a new context: the failed one still tracks the stale version).
