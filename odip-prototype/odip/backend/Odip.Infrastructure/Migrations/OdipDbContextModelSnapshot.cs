@@ -2389,6 +2389,19 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CloseNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("CloseOutcome")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("ClosedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -2469,6 +2482,8 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClosedByUserId");
 
                     b.HasIndex("IntakeBookedByUserId");
 
@@ -6316,6 +6331,11 @@ namespace Odip.Infrastructure.Migrations
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantInquiry", b =>
                 {
+                    b.HasOne("Odip.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ClosedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Odip.Domain.Entities.User", "IntakeBookedByUser")
                         .WithMany()
                         .HasForeignKey("IntakeBookedByUserId")

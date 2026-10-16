@@ -193,4 +193,31 @@ public class InquiryContactsPostgresTests : IClassFixture<PostgresFixture>
             Assert.Equal(0, await check.InquiryContacts.CountAsync(x => x.InquiryId == inquiry.Id));
         }
     }
+
+    [SkippableFact]
+    public async Task A_closed_enquiry_round_trips_and_its_closer_can_be_deleted()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        var closer = IntakeBookingPostgresTests.Staff(tenantId);
+        db.Users.Add(closer);
+        var closedAt = new DateTime(2026, 10, 16, 1, 0, 0, DateTimeKind.Utc);
+        var inquiry = new ParticipantInquiry
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone",
+            ClosedAt = closedAt, ClosedByUserId = closer.Id, CloseOutcome = InquiryCloseOutcome.Other, CloseNote = new string('n', 500),
+        };
+        db.ParticipantInquiries.Add(inquiry);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var read = await db.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id);
+        Assert.Equal((closedAt, closer.Id, InquiryCloseOutcome.Other, 500), (read.ClosedAt!.Value, read.ClosedByUserId!.Value, read.CloseOutcome!.Value, read.CloseNote!.Length));
+
+        db.Users.Remove(await db.Users.SingleAsync(u => u.Id == closer.Id));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        Assert.Null((await db.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id)).ClosedByUserId);
+    }
 }

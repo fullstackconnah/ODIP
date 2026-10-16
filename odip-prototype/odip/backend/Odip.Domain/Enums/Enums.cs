@@ -1094,3 +1094,11 @@ public static class ChecklistItemTypeGroups
     public static ChecklistType CategoryOf(ChecklistItemType type) =>
         CommunityMobilityRisk.Contains(type) ? ChecklistType.CommunityMobilityRisk : ChecklistType.CommunityBehaviourOfConcern;
 }
+
+/// <summary>Why an enquiry closed (spec addendum E1). Stored as its number: never renumber.</summary>
+public enum InquiryCloseOutcome
+{
+    DeclinedByUs = 0,
+    NotGoingAhead = 1,
+    Other = 2,
+}
