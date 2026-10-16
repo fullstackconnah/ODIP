@@ -2117,7 +2117,7 @@ function notificationPreferenceGrid() {
   }
 }
 
-// GET admin/early-access (Settings › Alpha sign-ups), last sent first as the API orders it: a repeat carrying a removal request,
+// GET and DELETE admin/early-access (Settings › Alpha sign-ups), last sent first as the API orders it: a repeat carrying a removal request,
 // a long message with line breaks, one with nothing optional, and one from before the alpha form (no size).
 const earlyAccessSignups = [
   { id: 'eas-0001', name: 'Amara Okafor', organisation: 'Riverbend Community Care', email: 'amara.okafor@example.org',
@@ -2133,6 +2133,15 @@ const earlyAccessSignups = [
     createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1 },
   { id: 'eas-0004', name: 'Sam Field', organisation: 'Field Health', email: 'sam.field@example.org',
     createdAtUtc: '2026-09-30T06:00:00Z', lastRequestedAtUtc: '2026-09-30T06:00:00Z', requestCount: 1 },
+]
+// DELETE really removes the row for the life of the process, so the list after a Delete shows it gone (as the API does).
+const earlyAccessDelete = [
+  ['admin/early-access/:id', (id) => {
+    const index = earlyAccessSignups.findIndex(s => s.id === id)
+    if (index < 0) return { [HTTP]: 404, body: { success: false, data: false, message: 'Sign-up not found.', errors: ['Sign-up not found.'] } }
+    earlyAccessSignups.splice(index, 1)
+    return true
+  }],
 ]
 
 // GET admin/notifications fixture — the query string (?status=&from=&to=) isn't read here, same
@@ -2705,7 +2714,7 @@ const routes = [
   // is the self-service grid.
   ['notifications/preferences', () => notificationPreferenceGrid()],
   ['admin/notifications', () => notificationOutbox],
-  // Settings › Alpha sign-ups; Delete uses the generic DELETE fallback (stateless, as every write here).
+  // Settings › Alpha sign-ups (DELETE: earlyAccessDelete).
   ['admin/early-access', () => paged(earlyAccessSignups)],
   ['notifications/inbox', () => inAppInboxView()],
 ]
@@ -3264,7 +3273,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete]) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete, ...earlyAccessDelete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           sendResult(res, handler(...params, body))

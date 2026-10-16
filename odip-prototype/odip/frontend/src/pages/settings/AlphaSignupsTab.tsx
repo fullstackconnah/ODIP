@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { useNotices } from '@/hooks/useNotices'
+import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { EARLY_ACCESS_PAGE_SIZE, useDeleteEarlyAccessSignup, useEarlyAccessSignups } from '@/api/hooks'
 import { ORGANISATION_SIZE_LABELS, type EarlyAccessSignupDto } from '@/api/types'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
@@ -12,11 +13,13 @@ import { extractErrorMessage } from '@/lib/utils'
 import { formatInstantDateAu } from '@/lib/format'
 
 const muted = 'text-[var(--color-muted-foreground)]'
+const detailId = (row: EarlyAccessSignupDto) => `alpha-signup-${row.id}-detail`
 
 /**
  * Settings › Platform › Alpha sign-ups (SuperAdmin): who asked to join the alpha on the landing page, latest sent first (the server's
- * order, so a repeat carrying a "remove my details" request is on top), with Delete. The message is shown whole, line breaks kept,
- * because removal requests arrive in it.
+ * order, so a repeat carrying a "remove my details" request is on top), with Delete. Six columns from md up, so the table never scrolls
+ * sideways; role, phone and the message open under the row from its name (a row disclosure), and a phone card shows them all. The
+ * message is shown whole, line breaks kept, because removal requests arrive in it.
  */
 export default function AlphaSignupsTab() {
   const [page, setPage] = useState(1)
@@ -25,6 +28,13 @@ export default function AlphaSignupsTab() {
   const { notices, notify, dismiss } = useNotices()
   const [pending, setPending] = useState<EarlyAccessSignupDto | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const isBelowMd = useIsBelowMd()
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
+  const toggle = (id: string) => setOpen(current => {
+    const next = new Set(current)
+    if (!next.delete(id)) next.add(id)
+    return next
+  })
 
   // The deleted row and its trigger are gone, so focus goes to the notice saying so rather than falling to <body>.
   const noticesRef = useRef<HTMLDivElement>(null)
@@ -56,23 +66,31 @@ export default function AlphaSignupsTab() {
   }
 
   const columns: Column<EarlyAccessSignupDto>[] = [
-    { key: 'name', header: 'Name', mobile: 'primary' },
+    {
+      key: 'name', header: 'Name', mobile: 'primary',
+      // From md up the name opens the row's details (the SchedulePage staff-row disclosure); a phone card already shows them.
+      render: row => isBelowMd ? row.name : (
+        <button
+          type="button"
+          aria-expanded={open.has(row.id)}
+          aria-controls={open.has(row.id) ? detailId(row) : undefined}
+          onClick={() => toggle(row.id)}
+          className="inline-flex max-w-[14rem] items-center gap-1 rounded-[var(--radius-sm)] text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        >
+          {open.has(row.id)
+            ? <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 ${muted}`} aria-hidden="true" />
+            : <ChevronRight className={`h-3.5 w-3.5 flex-shrink-0 ${muted}`} aria-hidden="true" />}
+          <span className="truncate">{row.name}</span>
+        </button>
+      ),
+    },
     { key: 'organisation', header: 'Organisation', maxWidth: '12rem', mobile: 'meta' },
+    { key: 'email', header: 'Email', maxWidth: '16rem' },
     {
       key: 'organisationSize', header: 'Size', mobile: 'meta',
       render: row => row.organisationSize
         ? ORGANISATION_SIZE_LABELS[row.organisationSize] ?? row.organisationSize
         : <span className={muted}>Not given</span>,
-    },
-    { key: 'role', header: 'Role', render: row => row.role ?? '—' },
-    { key: 'email', header: 'Email' },
-    { key: 'phone', header: 'Phone', render: row => row.phone ?? '—' },
-    {
-      // Whole and wrapped, never cut to a tooltip: a removal request is read here.
-      key: 'message', header: 'Message', wrap: true, minWidth: '16rem',
-      render: row => row.message
-        ? <p className="max-w-[28rem] whitespace-pre-wrap break-words">{row.message}</p>
-        : '—',
     },
     {
       key: 'lastRequestedAtUtc', header: 'Last sent',
@@ -101,6 +119,24 @@ export default function AlphaSignupsTab() {
     },
   ]
 
+  // Role, phone and the whole message: under the row once its name is opened, and always on a phone card.
+  const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
+    <dl id={detailId(row)} className="grid gap-x-8 gap-y-2 md:grid-cols-[minmax(8rem,auto)_minmax(8rem,auto)_minmax(0,1fr)] md:pl-[1.125rem]">
+      <div>
+        <dt className={`text-xs ${muted}`}>Role</dt>
+        <dd>{row.role ?? '—'}</dd>
+      </div>
+      <div>
+        <dt className={`text-xs ${muted}`}>Phone</dt>
+        <dd>{row.phone ?? '—'}</dd>
+      </div>
+      <div className="min-w-0">
+        <dt className={`text-xs ${muted}`}>Message</dt>
+        <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
+      </div>
+    </dl>
+  ) : null
+
   return (
     <div>
       <div ref={noticesRef} tabIndex={-1} className={`outline-none ${notices.length > 0 ? 'mb-3' : ''}`}>
@@ -116,6 +152,7 @@ export default function AlphaSignupsTab() {
         error={isError}
         onRetry={() => refetch()}
         emptyMessage="No one has signed up for the alpha yet."
+        rowDetail={rowDetail}
         pagination={{ page, pageSize: EARLY_ACCESS_PAGE_SIZE, totalCount: data?.totalCount ?? 0, onPageChange: setPage }}
       />
 

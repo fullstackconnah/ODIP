@@ -121,6 +121,11 @@ export type DataTableProps<T> = {
    * `aria-invalid`) so the association reaches assistive tech, not just sighted users.
    */
   rowError?: (row: T) => string | undefined
+  /**
+   * A full-width line under a row (a row disclosure: the caller decides which rows are open and returns null for the rest). Drawn
+   * like `rowError`'s row, spanning every column, with no divider between it and its row; below md it continues the row's card.
+   */
+  rowDetail?: (row: T) => ReactNode
   className?: string
   /**
    * Extra-tight rows: the `--row-h` token minus 4px (30px on a mouse, 44px on a touch screen —
@@ -298,6 +303,7 @@ export function DataTable<T>({
   editingRows,
   onEditChange,
   rowError,
+  rowDetail,
   className,
   compact = false,
   selectable = false,
@@ -534,11 +540,12 @@ export function DataTable<T>({
             // Stable per-row id, only handed to editable.render (as ctx.errorId) when there's
             // actually an error <p> rendered at it — never a dangling aria-describedby reference.
             const rowErrorId = errorMessage ? `${rowKey}-row-error` : undefined
+            const detail = rowDetail?.(row) ?? null
 
             return (
               <Fragment key={rowKey}>
                 <tr
-                  className={`group/row ${bodyRowHeight} hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
+                  className={`group/row ${bodyRowHeight} hover:bg-[var(--color-accent)]/50 transition-colors ${dividerClass} ${detail != null ? 'border-b-0!' : ''} ${isClickable ? 'group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]' : ''} ${extraClass}`}
                   onClick={isClickable ? (e) => {
                     // A link or button in the row does its own job: a link that navigated and a row that navigated too
                     // pushed two history entries, or sent the user to the row's target instead of the link's.
@@ -615,6 +622,11 @@ export function DataTable<T>({
                     )
                   })}
                 </tr>
+                {detail != null && (
+                  <tr data-row-detail className={dividerClass}>
+                    <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPaddingX} pb-3`}>{detail}</td>
+                  </tr>
+                )}
                 {errorMessage && (
                   <tr className={dividerClass}>
                     <td colSpan={visibleColumns.length + (selectable ? 1 : 0)} className={`${cellPaddingX} pb-2`}>

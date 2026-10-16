@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AlphaSignupsTab from './AlphaSignupsTab'
@@ -167,6 +167,46 @@ describe('AlphaSignupsTab', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
     expect(mockUseEarlyAccessSignups).toHaveBeenLastCalledWith(2)
+  })
+
+  describe('from md up', () => {
+    beforeEach(() => {
+      vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      }))
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('has six columns, so the table never scrolls sideways', () => {
+      returns(page([makeRow()]))
+      render(<AlphaSignupsTab />)
+
+      expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Name', 'Organisation', 'Email', 'Size', 'Last sent', ''])
+    })
+
+    it('opens role, phone and the whole message under the row from its name, and closes them again', async () => {
+      const message = 'Please remove my details.\nThanks.'
+      returns(page([makeRow({ message })]))
+      const { container } = render(<AlphaSignupsTab />)
+
+      const toggle = screen.getByRole('button', { name: 'Amara Okafor' })
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByText('Operations manager')).not.toBeInTheDocument()
+
+      await userEvent.click(toggle)
+
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      const detail = document.getElementById(toggle.getAttribute('aria-controls')!)!
+      expect(within(detail).getByText('Operations manager')).toBeInTheDocument()
+      expect(within(detail).getByText('0491 570 156')).toBeInTheDocument()
+      const shown = [...detail.querySelectorAll('p')].find(p => p.textContent === message)
+      expect(shown).toHaveClass('whitespace-pre-wrap')
+      expect(container.querySelectorAll('tr[data-row-detail]')).toHaveLength(1)
+
+      await userEvent.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(container.querySelectorAll('tr[data-row-detail]')).toHaveLength(0)
+    })
   })
 
   it('goes back a page when the last row of the last page is deleted', async () => {
