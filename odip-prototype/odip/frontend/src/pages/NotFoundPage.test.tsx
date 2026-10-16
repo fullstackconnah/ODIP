@@ -32,6 +32,6 @@ describe('NotFoundPage', () => {
   it('gives the tab its own title', () => {
     renderAt('/does-not-exist')
 
-    expect(document.title).toBe('Page not found — Odip')
+    expect(document.title).toBe('Bunya Support · Page not found')
   })
 })

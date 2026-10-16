@@ -15,7 +15,7 @@ describe('AccessibilityPage', () => {
     renderPage()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByRole('heading', { level: 1, name: 'Accessibility' })).toBeInTheDocument()
-    expect(document.title).toBe('Accessibility — Odip')
+    expect(document.title).toBe('Bunya Support · Accessibility')
     expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getAllByRole('banner')).toHaveLength(1)
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
