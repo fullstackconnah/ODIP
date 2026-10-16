@@ -172,16 +172,11 @@ a:hover { color: var(--deep); }
 .slot--lime .tag { color: var(--deep); }
 .slot--lime .frame { border-color: rgb(15 32 0 / 0.3); box-shadow: none; }
 
-/* Screen frames: labelled placeholders until the captures exist (SHAPE §5). */
-.frame { position: relative; display: grid; place-items: center; aspect-ratio: var(--ar, 16 / 10); padding: 24px; border: 1px solid var(--hair); border-radius: var(--r-lg); background: var(--surface); outline: 1px dashed var(--edge); outline-offset: -12px; overflow: hidden; }
+/* Screen frames: the captured product screens (SHAPE §5), sized by their width and height attributes. */
+.frame { display: block; overflow: hidden; border: 1px solid var(--hair); border-radius: var(--r-lg); }
+.frame img { display: block; width: 100%; height: auto; }
 .slot__after .frame { border-color: transparent; box-shadow: 0 2px 6px rgb(27 28 26 / 0.2); }
-.frame--phone { --ar: 390 / 844; border-radius: 28px; padding: 20px 14px; outline-offset: -10px; }
-.ph { display: grid; justify-items: center; gap: 8px; min-width: 0; max-width: 34ch; overflow-wrap: anywhere; text-align: center; color: var(--ink); }
-.ph__kind { font: 600 0.8125rem/1.3 var(--body); color: var(--slate); }
-.ph__name { font: 700 clamp(1rem, 0.9rem + 0.35vw, 1.1875rem)/1.3 var(--display); letter-spacing: -0.01em; }
-.frame--phone .ph__name { font-size: 1rem; }
-.ph__state { font: 500 0.8125rem/1.45 var(--body); color: var(--muted); letter-spacing: 0.01em; }
-.ph__id { margin-top: 4px; padding: 4px 9px; border-radius: 999px; background: var(--white); font: 600 0.75rem/1.2 var(--body); color: var(--olive); }
+.frame--phone { border-radius: 28px; }
 .figcap { margin-top: 14px; max-width: 60ch; font-size: 0.9375rem; line-height: 1.5; color: var(--on-olive-2); }
 .tag { display: inline-block; margin-right: 8px; padding: 4px 8px 3px; border: 1px solid currentColor; border-radius: 999px; font: 700 0.75rem/1 var(--body); letter-spacing: 0.04em; white-space: nowrap; vertical-align: 1px; color: var(--lime); }
 
@@ -306,8 +301,6 @@ a:hover { color: var(--deep); }
   .f-col { margin-top: 16px; }
 }
 @media (max-width: 639px) {
-  .frame { aspect-ratio: var(--ar-m, var(--ar, 16 / 10)); }
-  .frame--phone { aspect-ratio: 390 / 844; }
   .cta-row .btn { flex: 1 1 100%; }
   .phones { gap: 14px; }
   .phones .shot:last-child { margin-top: 48px; }

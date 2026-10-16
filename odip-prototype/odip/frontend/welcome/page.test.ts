@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import indexHtml from './index.html?raw'
 import appIndexHtml from '../index.html?raw'
+import manifestRaw from './assets/screens/manifest.json?raw'
 import { ACKNOWLEDGEMENT_OF_COUNTRY } from '../src/lib/platformFacts'
 
 // CSS is read from disk: the test run does not process CSS (vite.config.ts `css: false`).
@@ -11,6 +12,8 @@ const css = readFileSync(join(__dirname, 'welcome.css'), 'utf-8')
 // Guards for the landing page's contract: the CSP it must satisfy, the copy and claims it must keep (SHAPE section 3,
 // spec L4), the form's markup, the footer's bound facts, and the proof it must show.
 const doc = new DOMParser().parseFromString(indexHtml, 'text/html')
+const manifest = JSON.parse(manifestRaw) as Array<{ name: string; file1x: string; file2x: string; width1x: number; height1x: number; alt: string }>
+const fileOf = (url: string | null) => (url ?? '').split(' ')[0].split('/').pop()!
 const squash = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim()
 const visibleText = (() => {
   const clone = doc.body.cloneNode(true) as HTMLElement
@@ -184,9 +187,56 @@ describe('the collection notice (L6) and the footer (SHAPE section 7)', () => {
     for (const el of Array.from(doc.querySelectorAll('[data-platform], [data-platform-group]'))) expect(el.hasAttribute('hidden')).toBe(true)
     for (const key of ['companyName', 'abn', 'collector']) expect(text(`[data-platform="${key}"]`)).toBe('')
   })
-  it('tags each of the 11 figures once as Sample data (placeholders until Task 6)', () => {
+  it('tags each of the 11 figures once as Sample data (spec L7)', () => {
     expect(Array.from(doc.querySelectorAll('main figure')).map((f) => Array.from(f.querySelectorAll('.tag')).map((t) => t.textContent))).toEqual(Array(11).fill(['Sample data']))
     expect(doc.querySelectorAll('.tag').length).toBe(11)
+  })
+})
+
+const IDS = ['decisions', 'roster-board', 'enquiries', 'intake-booking', 'agreement-draft', 'incident-body-map', 'credentials', 'completions', 'claim-preview', 'myshifts-week', 'myshifts-during']
+const NARROW = ['decisions', 'roster-board', 'enquiries', 'agreement-draft', 'incident-body-map', 'credentials', 'completions']
+const imgs = Array.from(doc.querySelectorAll<HTMLImageElement>('main img'))
+const entry = (file: string) => manifest.find((e) => e.file1x === file)!
+describe('proof: the real product, every figure a captured screen (SHAPE section 5)', () => {
+  it('shows the 11 screens in slot order, each a lazy WebP at 1x and 2x', () => {
+    expect(imgs.map((i) => fileOf(i.getAttribute('src')).replace('.webp', ''))).toEqual(IDS)
+    for (const [n, img] of imgs.entries()) {
+      expect(img.getAttribute('src')).toBe(`./assets/screens/${IDS[n]}.webp`)
+      expect(img.getAttribute('srcset')).toMatch(/^\.\/assets\/screens\/[\w-]+\.webp 1x, \.\/assets\/screens\/[\w-]+@2x\.webp 2x$/)
+      expect([img.getAttribute('loading'), img.getAttribute('decoding')]).toEqual(['lazy', 'async'])
+    }
+  })
+  it('serves the 7 narrow crops below 640 px', () => {
+    const sources = Array.from(doc.querySelectorAll('picture source'))
+    for (const s of sources) {
+      expect(s.getAttribute('media')).toBe('(max-width: 639px)')
+      expect(s.getAttribute('srcset')).toMatch(/^\.\/assets\/screens\/[\w-]+-m\.webp 1x, \.\/assets\/screens\/[\w-]+-m@2x\.webp 2x$/)
+    }
+    expect(sources.map((s) => fileOf(s.getAttribute('srcset')).replace('-m.webp', ''))).toEqual(NARROW)
+  })
+  it('sizes every image and source by the file it names', () => {
+    for (const el of Array.from(doc.querySelectorAll('main img, picture source'))) {
+      const e = entry(fileOf(el.getAttribute('src') ?? el.getAttribute('srcset')))
+      expect([Number(el.getAttribute('width')), Number(el.getAttribute('height'))], e.name).toEqual([e.width1x, e.height1x])
+    }
+  })
+  it('gives every screen real alt text that is not its caption', () => {
+    for (const img of imgs) {
+      const alt = img.getAttribute('alt')!
+      expect(alt).toBe(entry(fileOf(img.getAttribute('src'))).alt)
+      expect(alt.length).toBeGreaterThanOrEqual(40)
+      expect(squash(alt)).not.toBe(squash(img.closest('figure')!.querySelector('figcaption')!.textContent).replace(/^Sample data\s*/, ''))
+    }
+  })
+  it('keeps every file in its WebP budget (1x 90 KB, 2x 260 KB)', () => {
+    expect(manifest).toHaveLength(18)
+    for (const e of manifest) {
+      expect(statSync(join(__dirname, 'assets/screens', e.file1x)).size, e.file1x).toBeLessThanOrEqual(90 * 1024)
+      expect(statSync(join(__dirname, 'assets/screens', e.file2x)).size, e.file2x).toBeLessThanOrEqual(260 * 1024)
+    }
+  })
+  it('leaves no placeholder', () => {
+    expect([doc.querySelectorAll('.ph').length, indexHtml.includes('Screen to capture')]).toEqual([0, false])
   })
 })
 
