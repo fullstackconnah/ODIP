@@ -3127,6 +3127,7 @@ function validateEarlyAccess(body) {
   const phone = text(body.phone)
   if (phone.length > 30) errors.phone = ['Phone must be 30 characters or fewer.']
   else if (!/^[0-9 +()-]*$/.test(phone)) errors.phone = ['Use digits, spaces and + ( ) - only.']
+  else if (phone && (phone.lastIndexOf('+') > 0 || !/^(\D*\d){8,15}\D*$/.test(phone))) errors.phone = ['Enter a phone number with 8 to 15 digits.']
   const size = text(body.organisationSize) // optional in PR 1 (expand), checked when given; PR 2 makes it required
   if (size && !ORGANISATION_SIZES.includes(size)) errors.organisationSize = ['Choose one of the listed sizes.']
   if (cleanMessage(body.message).length > 1000) errors.message = ['Message must be 1,000 characters or fewer.']

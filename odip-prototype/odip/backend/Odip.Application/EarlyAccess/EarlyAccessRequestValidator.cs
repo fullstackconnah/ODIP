@@ -74,6 +74,8 @@ public static class EarlyAccessRequestValidator
                 errors[PhoneField] = new[] { $"Phone must be {MaxPhoneLength.ToString(CultureInfo.InvariantCulture)} characters or fewer." };
             else if (!phone.All(IsPhoneCharacter))
                 errors[PhoneField] = new[] { "Use digits, spaces and + ( ) - only." };
+            else if (!HasPhoneDigits(phone))
+                errors[PhoneField] = new[] { "Enter a phone number with 8 to 15 digits." };
         }
 
         var organisationSize = Optional(request?.OrganisationSize);
@@ -92,6 +94,9 @@ public static class EarlyAccessRequestValidator
     private static string Clean(string? value) => (value ?? string.Empty).Trim();
 
     private static string? Optional(string? value) => Clean(value) is { Length: > 0 } v ? v : null;
+
+    /// <summary>8 to 15 digits (E.164 allows 15), and a + only as the first character: "---" and "1+2345678" are not numbers.</summary>
+    private static bool HasPhoneDigits(string phone) => phone.LastIndexOf('+') <= 0 && phone.Count(char.IsAsciiDigit) is >= 8 and <= 15;
 
     // ASCII only: char.IsDigit also accepts Arabic-Indic, fullwidth and other scripts' digits.
     private static bool IsPhoneCharacter(char c) => c is (>= '0' and <= '9') or ' ' or '+' or '(' or ')' or '-';

@@ -217,7 +217,7 @@ public class EarlyAccessHttpTests
         await using var host = await TestHost.StartAsync();
         var email = new string('a', 64) + "@" + string.Concat(Enumerable.Repeat(new string('b', 60) + ".", 3)) + new string('c', 6);
         Assert.Equal(254, email.Length);
-        var phone = "+61 (02) 5550-1234 5550-1234 1";
+        var phone = "+61 (02) 5550-1234 --- --- ---"; // 12 digits: the validator allows 8 to 15
         Assert.Equal(30, phone.Length);
 
         // Built by hand, not with System.Text.Json defaults, which escape every non-ASCII character as \uXXXX (6 bytes, not 3).
