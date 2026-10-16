@@ -187,6 +187,31 @@ export function useCompletions(filters: CompletionFilters = {}, page = 1, pageSi
   })
 }
 
+/** The server's page maximum (PagingParams.MaxPageSize). */
+const MAX_PAGE_SIZE = 200
+
+/**
+ * The WHOLE queue for one filter, read a page maximum at a time until the server's total: the dashboard's Complete all counts and sends from every
+ * clean row, not the first page's (review #266 F2). One query, so it has data only once every page is in, never a partial count. Under the
+ * ['rostering-completions'] prefix, so every approve hook's invalidation refreshes it.
+ */
+export function useAllCompletions(filters: CompletionFilters, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['rostering-completions', filters, 'all'],
+    queryFn: async () => {
+      // Keyed by shift: a row decided mid-read moves the page edges, and must not come back twice.
+      const items = new Map<string, CompletionQueueItemDto>()
+      for (let page = 1; ; page++) {
+        const result = await apiGet<PagedResult<CompletionQueueItemDto>>('/rostering/completions', { ...filters, page, pageSize: MAX_PAGE_SIZE })
+        for (const item of result.items) items.set(item.shiftId, item)
+        if (result.items.length < MAX_PAGE_SIZE || items.size >= result.totalCount) return { items: [...items.values()], totalCount: result.totalCount }
+      }
+    },
+    refetchInterval: 60_000,
+    enabled: options?.enabled ?? true,
+  })
+}
+
 /**
  * The coordinator's one-call review of a submitted shift — GET /rostering/shifts/{id}/completion/review: the completion (breaks,
  * net worked minutes, handover, nothing-to-note), every scheduled dose in the rostered window with its outcome, PRN doses given

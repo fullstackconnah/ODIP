@@ -119,6 +119,10 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
     columns: [{ header: 'Type' }, { header: 'Dates' }, { header: 'Note', long: true }],
     phase: groupPhase(leave, unavailability),
     refetch: () => { void leave.refetch(); void unavailability.refetch() },
+    reread: async () => {
+      const [l, u] = await Promise.all([leave.refetch({ throwOnError: true }), unavailability.refetch({ throwOnError: true })])
+      return [...(l.data ?? []).map((r) => `leave:${r.id}`), ...(u.data ?? []).map((r) => `unavailability:${r.id}`)]
+    },
     count: (leave.data?.length ?? 0) + (unavailability.data?.length ?? 0),
     // Soonest start first: the nearest one is the most urgent decision (SHAPE §5).
     rows: [...leaveRows, ...ruleRows].sort((a, b) => a.start.localeCompare(b.start)).map((r) => r.row),

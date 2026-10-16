@@ -27,6 +27,11 @@ type TapAction = Extract<RowAction, { kind: 'tap' }>
 /** A row's one-tap decision: what makes it safe to tick and to Complete all (SHAPE §3). */
 const tapOf = (row: QuickRow) => row.actions.find((a): a is TapAction => a.kind === 'tap')
 const statusOf = (err: unknown) => (err as { response?: { status?: number } } | undefined)?.response?.status
+/** No answer from ODIP itself (no response, a timeout, a gateway's 502/503/504): the server may have committed, so the outcome is unknown, not failed. */
+const noAnswer = (err: unknown) => {
+  const status = statusOf(err)
+  return !(err as { response?: unknown } | undefined)?.response || status === 502 || status === 503 || status === 504
+}
 
 /**
  * Where focus goes when the row that holds it leaves (SHAPE §5), read BEFORE it leaves: the next row's first control, else this tab's link while the tab
@@ -347,6 +352,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const [occupied, setOccupied] = useState<ReadonlySet<string>>(() => new Set())
   const [confirm, setConfirm] = useState<'all' | 'selected' | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number; ids: ReadonlySet<string> } | null>(null)
+  // Sent with no answer, and the re-read failed too: held (no retry) until a fresh read, which a page refresh gives (review #266 F1).
+  const [unsure, setUnsure] = useState<ReadonlySet<string>>(() => new Set())
   const onOccupied = useCallback((rowId: string, on: boolean) => setOccupied((prev) => {
     if (prev.has(rowId) === on) return prev
     const next = new Set(prev)
@@ -355,10 +362,10 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     return next
   }), [])
   const safe = ready ? rows.filter((row) => tapOf(row)) : []
-  const free = safe.filter((row) => !occupied.has(row.id))
-  const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id))
+  const free = safe.filter((row) => !occupied.has(row.id) && !unsure.has(row.id))
+  const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id) && !unsure.has(row.id))
   const ticked = tickable.filter((row) => selected.has(row.id))
-  const bar = !!bulkKey && (safe.length > 0 || !!progress)
+  const bar = !!bulkKey && (safe.some((row) => !unsure.has(row.id)) || !!progress)
   const lead = bar ? 1 : 0
   const mode = ticked.length > 0 ? 'selected' : 'all'
   const count = mode === 'selected' ? ticked.length : free.length
@@ -410,6 +417,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       of: model.approveBatch && picked.length > BATCH_MAX ? picked.length : undefined,
     }
     const leaving: string[] = []
+    const unanswered: QuickRow[] = []
+    let unchecked: string[] = []
     state.setRunning(model.key, true)
     setProgress({ done: 0, total: list.length, ids: new Set(list.map((row) => row.id)) })
     // Once, as it starts (the button's count is the progress; no announcement per row).
@@ -426,9 +435,10 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
           else if (answer?.code === 'SHIFT_NEEDS_REVIEW') result.skipped++
           else result.failed.push({ ref: rowRef(tapOf(row)!.name), message: answer?.message ?? '' })
         }
-      } catch {
-        // One SaveChanges on the server: a failed request approved nothing.
-        result.wholeFailed = true
+      } catch (err) {
+        // One SaveChanges on the server: a request ODIP refused approved nothing. With no answer, it may have committed.
+        if (noAnswer(err)) unanswered.push(...list)
+        else result.wholeFailed = true
       }
     } else {
       for (const [i, row] of list.entries()) {
@@ -445,8 +455,22 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         } catch (err) {
           const status = statusOf(err)
           if (status === 404 || status === 409) result.stale++
+          else if (noAnswer(err)) unanswered.push(row)
           else result.failed.push({ ref: rowRef(tap.name), message: extractErrorMessage(err, '') })
         }
+      }
+    }
+    // Unknown is never reported as approved or as failed: a fresh read says which rows have left the list and which still wait.
+    if (unanswered.length) {
+      try {
+        const pending = new Set(await model.reread!())
+        for (const row of unanswered) {
+          if (pending.has(row.id)) result.waiting = (result.waiting ?? 0) + 1
+          else { result.left = (result.left ?? 0) + 1; leaving.push(row.id) }
+        }
+      } catch {
+        result.unchecked = unanswered.length
+        unchecked = unanswered.map((row) => row.id)
       }
     }
     const notice = resultNotice(bulkKey, result)
@@ -456,6 +480,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       state.setRunning(model.key, false)
       setProgress(null)
       setSelected(new Set())
+      if (unchecked.length) setUnsure((prev) => new Set([...prev, ...unchecked]))
     })
     if (result.stale) model.refetch()
     // Onto the run's notice (newest first), unless the viewer has gone to another tab or elsewhere.
@@ -553,10 +578,10 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
                 box={!bar ? undefined : tapOf(row) ? {
                   checked: selected.has(row.id),
                   // A run holds every box: its selection was taken at Confirm.
-                  locked: !!progress,
+                  locked: !!progress || unsure.has(row.id),
                   onChange: (checked) => setSelected((prev) => { const next = new Set(prev); if (checked) next.add(row.id); else next.delete(row.id); return next }),
                 } : null}
-                inRun={!!progress?.ids.has(row.id)}
+                inRun={!!progress?.ids.has(row.id) || unsure.has(row.id)}
                 onOccupied={onOccupied}
                 onDone={(outcome, rowEl) => finish(row, outcome, rowEl)}
                 onRefused={refused}

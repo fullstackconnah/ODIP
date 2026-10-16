@@ -193,6 +193,27 @@ describe('Leave group — Complete all (decision-bulk)', () => {
     expect(screen.queryByText(/^Leave approved\./)).toBeNull()
     expect(subjects()).toEqual(['Dev Admin'])
   })
+
+  it('re-reads after a row gets no answer: one that left goes uncredited, one still pending stays for a retry (review #266 F1)', async () => {
+    let pending = [leave(), leave({ id: 'l2', userFullName: 'Ana Ruiz' }), leave({ id: 'l3', userFullName: 'Bo Chan' })]
+    apiGetWithDefault.mockImplementation((url: string) => Promise.resolve(url === '/leave' ? pending : []))
+    const lost = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', request: {} })
+    apiPost.mockImplementation(async (url: string) => {
+      if (url === '/leave/l1/approve') { pending = pending.filter((r) => r.id !== 'l1'); return { leave: leave({ status: 'Approved' }), overlaps: [], overlapShifts: [] } }
+      // l2 commits, then its reply is lost; l3 never reaches the server.
+      if (url === '/leave/l2/approve') pending = pending.filter((r) => r.id !== 'l2')
+      throw lost()
+    })
+    renderGroup(() => useLeaveGroup(true, 'u-viewer'))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 3 leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3' }))
+
+    await waitFor(() => expect(screen.getByText('Approved 1 leave request')).toBeInTheDocument())
+    expect(screen.getByText('1 has left the list: approved here or by someone else. 1 is still waiting and stays here.')).toBeInTheDocument()
+    expect(subjects()).toEqual(['Bo Chan'])
+    expect(screen.getByRole('button', { name: /^Approve leave: Bo Chan/ })).not.toHaveAttribute('aria-disabled')
+  })
 })
 
 describe('overlapNotice', () => {

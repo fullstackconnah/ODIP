@@ -65,6 +65,10 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
     columns: [{ header: 'Type' }, { header: 'Due' }, { header: 'Priority' }, { header: 'Trip', long: true, fromLg: true }],
     phase: groupPhase(overdue, dueOnToday),
     refetch: () => { void overdue.refetch(); void dueOnToday.refetch() },
+    reread: async () => {
+      const [o, d] = await Promise.all([overdue.refetch({ throwOnError: true }), dueOnToday.refetch({ throwOnError: true })])
+      return [...(o.data ?? []), ...(d.data ?? []).filter(isOpen)].map((t) => t.id)
+    },
     count: rows.length,
     rows,
     link: { to: '/tasks', openLabel: 'Open Tasks' },

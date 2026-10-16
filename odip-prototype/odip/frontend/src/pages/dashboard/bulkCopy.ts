@@ -26,8 +26,15 @@ export interface BulkResult {
   overlaps: Array<{ kind: 'leave' | 'unavailability'; shifts: OverlapShiftDto[]; trips: number }>
   /** Over the batch cap: the clean total this run was the first 100 of. */
   of?: number
-  /** The batch request failed whole (one SaveChanges: nothing was approved). */
+  /** ODIP refused the batch request (one SaveChanges: nothing was approved). */
   wholeFailed?: boolean
+  /**
+   * Sent, but no answer came back (no response, a timeout, a gateway 502/503/504), so the server may have committed. A fresh read sorts them:
+   * `left` the list (this run or somebody else, so never counted as decided), still `waiting`, or `unchecked` because the read failed too.
+   */
+  left?: number
+  waiting?: number
+  unchecked?: number
 }
 
 const NOUN: Record<BulkKey, [string, string]> = { completions: ['shift completion', 'shift completions'], leave: ['leave request', 'leave requests'], tasks: ['task', 'tasks'] }
@@ -88,7 +95,9 @@ export function confirmCopy(key: BulkKey, mode: 'all' | 'selected', n: number, s
 export function resultNotice(key: BulkKey, r: BulkResult): { tone: 'success' | 'danger'; title: string; message: string; link?: { label: string; to: string } } {
   const failTitle = key === 'tasks' ? `Couldn't mark ${plural(r.total, 'task')} done` : `Couldn't approve ${plural(r.total, key === 'leave' ? 'leave request' : 'completion')}`
   if (r.wholeFailed) return { tone: 'danger', title: failTitle, message: 'Nothing was approved.' }
-  const title = r.decided === 0 ? failTitle
+  const unanswered = (r.left ?? 0) + (r.waiting ?? 0) + (r.unchecked ?? 0)
+  const title = r.decided === 0 && unanswered ? `No answer for ${plural(unanswered, key === 'tasks' ? 'task' : key === 'leave' ? 'leave request' : 'completion')}`
+    : r.decided === 0 ? failTitle
     : key === 'completions' ? (r.of ? `Approved ${r.decided} of ${r.of}` : `Approved ${plural(r.decided, 'completion')}`)
     : key === 'leave' ? `Approved ${plural(r.decided, 'leave request')}` : `Marked ${plural(r.decided, 'task')} done`
 
@@ -108,6 +117,9 @@ export function resultNotice(key: BulkKey, r: BulkResult): { tone: 'success' | '
     const more = r.failed.length - named.length
     parts.push(`${r.failed.length} couldn't be ${key === 'tasks' ? 'marked done' : 'approved'}: ${named.join('; ')}${more ? `; and ${more} more` : ''}.`)
   }
+  if (r.left) parts.push(`${r.left} ${s(r.left, 'has', 'have')} left the list: ${key === 'tasks' ? 'closed' : 'approved'} here or by someone else.`)
+  if (r.waiting) parts.push(`${r.waiting} ${s(r.waiting, 'is still waiting and stays', 'are still waiting and stay')} here.`)
+  if (r.unchecked) parts.push(`${r.unchecked} couldn't be checked: refresh the page to see where ${s(r.unchecked, 'it stands', 'they stand')} before trying again.`)
   let link: { label: string; to: string } | undefined
   if (r.overlaps.length) {
     const sum = (kind: 'leave' | 'unavailability') => r.overlaps.filter((o) => o.kind === kind).reduce((n, o) => n + o.shifts.length, 0)
@@ -123,6 +135,6 @@ export function resultNotice(key: BulkKey, r: BulkResult): { tone: 'success' | '
     parts.push(`${n} ${s(n, 'overlaps', 'overlap')} the roster${what.length ? `: ${joinList(what)}` : ''}.`)
     link = { label: 'Open roster', to: overlapRosterLink(r.overlaps.flatMap((o) => o.shifts)) }
   }
-  if (r.of) parts.push('Run it again for the rest.')
+  if (r.of && !r.unchecked) parts.push('Run it again for the rest.')
   return { tone: r.decided > 0 ? 'success' : 'danger', title, message: parts.join(' '), ...(link && { link }) }
 }

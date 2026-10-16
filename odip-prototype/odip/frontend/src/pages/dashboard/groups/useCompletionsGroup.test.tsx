@@ -212,9 +212,9 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     expect(screen.getByText('2 were already reviewed.')).toBeInTheDocument()
   })
 
-  it('says nothing was approved when the batch fails whole, and keeps every row', async () => {
+  it.each([400, 500])('says nothing was approved when ODIP answers the batch with a %i, and keeps every row', async (status) => {
     apiGet.mockResolvedValue(page([item(), item({ shiftId: 's2', staffName: 'Ana Ruiz' })]))
-    apiPost.mockRejectedValue({ response: { status: 500 } })
+    apiPost.mockRejectedValue({ response: { status } })
     renderGroup(() => useCompletionsGroup(true))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
@@ -223,5 +223,103 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     await waitFor(() => expect(screen.getByText("Couldn't approve 2 completions")).toBeInTheDocument())
     expect(screen.getByText('Nothing was approved.')).toBeInTheDocument()
     expect(screen.getByText('Sam Lee')).toBeInTheDocument()
+  })
+})
+
+describe('Shift completions group — a batch with no answer (review #266 F1)', () => {
+  const two = () => [item(), item({ shiftId: 's2', staffName: 'Ana Ruiz' })]
+  const networkError = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', request: {} })
+  const notice = () => document.querySelector('[data-quick-group] [role="status"] [data-tone]')
+  const runAll = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
+  }
+
+  it('re-reads the queue when the reply is lost, and lets the rows that left go without crediting them or offering a retry', async () => {
+    apiGet.mockResolvedValueOnce(page(two())).mockResolvedValue(page([]))
+    apiPost.mockRejectedValue(networkError())
+    renderGroup(() => useCompletionsGroup(true))
+    await runAll()
+
+    await waitFor(() => expect(notice()).toHaveTextContent('No answer for 2 completions'))
+    expect(notice()).toHaveTextContent('2 have left the list: approved here or by someone else.')
+    expect(notice()).not.toHaveTextContent('Nothing was approved')
+    expect(apiGet).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('Sam Lee')).toBeNull()
+    expect(screen.queryByRole('button', { name: APPROVE })).toBeNull()
+  })
+
+  it('keeps the rows the re-read still lists as waiting, live for a retry, and never says they were approved', async () => {
+    apiGet.mockResolvedValue(page(two()))
+    apiPost.mockRejectedValue({ response: { status: 504 } })
+    renderGroup(() => useCompletionsGroup(true))
+    await runAll()
+
+    await waitFor(() => expect(notice()).toHaveTextContent('No answer for 2 completions'))
+    expect(notice()).toHaveTextContent('2 are still waiting and stay here.')
+    expect(notice()).not.toHaveTextContent(/approved/i)
+    expect(apiGet).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: APPROVE })).not.toHaveAttribute('aria-disabled')
+    expect(screen.getByRole('button', { name: 'Approve all 2 clean shift completions' })).toBeInTheDocument()
+  })
+
+  it('asks for a refresh when the re-read fails too, and holds the rows: no retry until a fresh read', async () => {
+    apiGet.mockResolvedValueOnce(page(two())).mockRejectedValue(networkError())
+    apiPost.mockRejectedValue(networkError())
+    renderGroup(() => useCompletionsGroup(true))
+    await runAll()
+
+    await waitFor(() => expect(notice()).toHaveTextContent('No answer for 2 completions'))
+    expect(notice()).toHaveTextContent("2 couldn't be checked: refresh the page to see where they stand before trying again.")
+    expect(notice()).not.toHaveTextContent('Nothing was approved')
+    expect(screen.getByText('Sam Lee')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: APPROVE })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.queryByRole('button', { name: /^Approve all/ })).toBeNull()
+  })
+
+  it('re-reads the queue after the server skipped a row as needing review, so it redraws flagged (deep R-N1)', async () => {
+    apiGet.mockResolvedValue(page(two()))
+    apiPost.mockResolvedValue([
+      { shiftId: 's1', approved: true, code: null, message: null },
+      { shiftId: 's2', approved: false, code: 'SHIFT_NEEDS_REVIEW', message: 'This shift needs review now.' },
+    ])
+    renderGroup(() => useCompletionsGroup(true))
+    await runAll()
+
+    await waitFor(() => expect(notice()).toHaveTextContent('1 needs review and stays here.'))
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('Shift completions group — the whole queue past one page (review #266 F2)', () => {
+  it('pages the whole pending queue: 200 flagged first, 50 clean after them, counted and sent', async () => {
+    const flagged = Array.from({ length: 200 }, (_, i) => item({ shiftId: `f${i}`, staffName: `Flagged ${i}`, isOutlierVariance: true }))
+    const clean = Array.from({ length: 50 }, (_, i) => item({ shiftId: `c${i}`, staffName: `Clean ${i}` }))
+    apiGet.mockImplementation(async (_url: string, params: { page: number }) => (params.page === 1 ? page(flagged, 250) : page(clean, 250)))
+    apiPost.mockImplementation(async (_url: string, body: { shiftIds: string[] }) => body.shiftIds.map((shiftId) => ({ shiftId, approved: true, code: null, message: null })))
+    renderGroup(() => useCompletionsGroup(true))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 50 clean shift completions' }))
+    expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', page: 2, pageSize: 200 })
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 50 clean completions?')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('The 200 that need review stay here.')
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 50' }))
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1))
+    expect(apiPost.mock.calls[0][1].shiftIds).toEqual(clean.map((c) => c.shiftId))
+  })
+
+  it('shows no count until every page has answered', async () => {
+    let second!: (v: unknown) => void
+    apiGet.mockImplementation((_url: string, params: { page: number }) => (params.page === 1
+      ? Promise.resolve(page(Array.from({ length: 200 }, (_, i) => item({ shiftId: `f${i}`, isOutlierVariance: true })), 201))
+      : new Promise((resolve) => { second = resolve })))
+    renderGroup(() => useCompletionsGroup(true))
+
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('Loading shift completions…')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull()
+    second(page([item({ shiftId: 'c1' })], 201))
+    expect(await screen.findByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
   })
 })
