@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { apiGet } from '@/api/client'
 import { useTasks, useUpdateTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS, type TaskDto, type UpdateTaskDto } from '@/api/types'
@@ -15,6 +16,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
   const overdue = useTasks({ status: 'Overdue' }, { enabled })
   const dueOnToday = useTasks({ dueToday: 'true' }, { enabled })
   const updateTask = useUpdateTask()
+  const qc = useQueryClient()
 
   const late = [...(overdue.data ?? [])].sort((a, b) => dueDay(a).localeCompare(dueDay(b)))
   const lateIds = new Set(late.map((t) => t.id))
@@ -65,9 +67,16 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
     columns: [{ header: 'Type' }, { header: 'Due' }, { header: 'Priority' }, { header: 'Trip', long: true, fromLg: true }],
     phase: groupPhase(overdue, dueOnToday),
     refetch: () => { void overdue.refetch(); void dueOnToday.refetch() },
+    readAt: Math.min(overdue.dataUpdatedAt, dueOnToday.dataUpdatedAt),
     reread: async () => {
-      const [o, d] = await Promise.all([overdue.refetch({ throwOnError: true }), dueOnToday.refetch({ throwOnError: true })])
-      return [...(o.data ?? []), ...(d.data ?? []).filter(isOpen)].map((t) => t.id)
+      try {
+        const [o, d] = await Promise.all([overdue.refetch({ throwOnError: true }), dueOnToday.refetch({ throwOnError: true })])
+        return [...(o.data ?? []), ...(d.data ?? []).filter(isOpen)].map((t) => t.id)
+      } finally {
+        // A Done with no reply never ran its onSuccess, and may have committed: refresh what it would have (useUpdateTask).
+        void qc.invalidateQueries({ queryKey: ['trip-tasks'] })
+        void qc.invalidateQueries({ queryKey: ['dashboard'] })
+      }
     },
     count: rows.length,
     rows,

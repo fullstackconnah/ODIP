@@ -210,7 +210,7 @@ describe('Leave group — Complete all (decision-bulk)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Approve 3' }))
 
     await waitFor(() => expect(screen.getByText('Approved 1 leave request')).toBeInTheDocument())
-    expect(screen.getByText('1 has left the list: approved here or by someone else. 1 is still waiting and stays here.')).toBeInTheDocument()
+    expect(document.querySelector('[data-quick-group] [role="status"] [data-tone]')).toHaveTextContent("1 has left the list: approved here, or decided by someone else. 1 wasn't approved: it's still here to try again.")
     expect(subjects()).toEqual(['Bo Chan'])
     expect(screen.getByRole('button', { name: /^Approve leave: Bo Chan/ })).not.toHaveAttribute('aria-disabled')
   })

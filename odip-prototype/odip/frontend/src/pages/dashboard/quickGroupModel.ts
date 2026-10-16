@@ -79,6 +79,8 @@ export interface GroupModel {
   refetch: () => void
   /** A bulk tab's fresh read, for a run that got no answer: the ids of the rows still pending. Rejects when the read fails. */
   reread?: () => Promise<string[]>
+  /** When the group was last read in full (the oldest of its queries' dataUpdatedAt): a row held since an earlier read is released when it passes it. */
+  readAt?: number
   /** The server's total. */
   count: number
   /** Every row the group fetched, in its order. QuickGroup shows the first SHOWN_ROWS still undecided. */

@@ -117,9 +117,9 @@ export function resultNotice(key: BulkKey, r: BulkResult): { tone: 'success' | '
     const more = r.failed.length - named.length
     parts.push(`${r.failed.length} couldn't be ${key === 'tasks' ? 'marked done' : 'approved'}: ${named.join('; ')}${more ? `; and ${more} more` : ''}.`)
   }
-  if (r.left) parts.push(`${r.left} ${s(r.left, 'has', 'have')} left the list: ${key === 'tasks' ? 'closed' : 'approved'} here or by someone else.`)
-  if (r.waiting) parts.push(`${r.waiting} ${s(r.waiting, 'is still waiting and stays', 'are still waiting and stay')} here.`)
-  if (r.unchecked) parts.push(`${r.unchecked} couldn't be checked: refresh the page to see where ${s(r.unchecked, 'it stands', 'they stand')} before trying again.`)
+  if (r.left) parts.push(`${r.left} ${s(r.left, 'has', 'have')} left the list: ${key === 'tasks' ? 'done here, or changed' : 'approved here, or decided'} by someone else.`)
+  if (r.waiting) parts.push(`${r.waiting} ${s(r.waiting, "wasn't", "weren't")} ${key === 'tasks' ? 'marked done' : 'approved'}: ${s(r.waiting, "it's", "they're")} still here to try again.`)
+  if (r.unchecked) parts.push(`${r.unchecked} couldn't be checked, so ${s(r.unchecked, "it's", "they're")} held here until the list can be read again. Refresh the page to check now.`)
   let link: { label: string; to: string } | undefined
   if (r.overlaps.length) {
     const sum = (kind: 'leave' | 'unavailability') => r.overlaps.filter((o) => o.kind === kind).reduce((n, o) => n + o.shifts.length, 0)

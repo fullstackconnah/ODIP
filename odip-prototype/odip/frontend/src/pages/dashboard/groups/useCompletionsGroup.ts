@@ -1,4 +1,5 @@
-import { useAllCompletions, useApproveCompletion, useApproveCompletionsBatch, useReturnCompletion, type CompletionQueueItemDto } from '@/api/hooks'
+import { useQueryClient } from '@tanstack/react-query'
+import { refreshBudgetFigures, useAllCompletions, useApproveCompletion, useApproveCompletionsBatch, useReturnCompletion, type CompletionQueueItemDto } from '@/api/hooks'
 import { formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 import type { Tone } from '@/lib/tone'
@@ -25,6 +26,7 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
   // The whole pending queue, every page, so Complete all counts the clean rows of the whole tab (decision-bulk DECISIONS 1); five are shown. Its own
   // entry beside the nav badge's 1-row one; every approve hook invalidates ['rostering-completions'].
   const queue = useAllCompletions({ status: 'PendingReview' }, { enabled })
+  const qc = useQueryClient()
   // Clean only: a flag that appeared since this read (an incident filed after Finish) refuses on the server rather than approves (deep M2).
   const approve = useApproveCompletion({ requireClean: true })
   const approveBatch = useApproveCompletionsBatch({ cleanOnly: true })
@@ -73,7 +75,17 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
     columns: [{ header: 'Participant', long: true }, { header: 'Shift' }, { header: 'Variance' }],
     phase: groupPhase(queue),
     refetch: () => { void queue.refetch() },
-    reread: async () => (await queue.refetch({ throwOnError: true })).data!.items.map((item) => item.shiftId),
+    readAt: queue.dataUpdatedAt,
+    reread: async () => {
+      try {
+        return (await queue.refetch({ throwOnError: true })).data!.items.map((item) => item.shiftId)
+      } finally {
+        // A batch with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveCompletionsBatch).
+        void qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
+        void qc.invalidateQueries({ queryKey: ['roster-board'] })
+        refreshBudgetFigures(qc)
+      }
+    },
     count: queue.data?.totalCount ?? 0,
     rows,
     link: { to: '/rostering/completions', openLabel: 'Open Completions' },

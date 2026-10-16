@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import {
   useApproveLeave, useApproveUnavailability, useDeclineLeave, useDeclineUnavailability, useLeaveRequests, useRecurringUnavailabilities,
   LEAVE_TYPE_LABELS, type OverlapShiftDto, type RosterFindingDto,
@@ -60,6 +61,7 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
   const declineLeave = useDeclineLeave()
   const approveUnavailability = useApproveUnavailability()
   const declineUnavailability = useDeclineUnavailability()
+  const qc = useQueryClient()
 
   const leaveRows = (leave.data ?? []).map((r): { start: string; row: QuickRow } => {
     const range = formatDateRange(r.startDate, r.endDate)
@@ -119,9 +121,17 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
     columns: [{ header: 'Type' }, { header: 'Dates' }, { header: 'Note', long: true }],
     phase: groupPhase(leave, unavailability),
     refetch: () => { void leave.refetch(); void unavailability.refetch() },
+    readAt: Math.min(leave.dataUpdatedAt, unavailability.dataUpdatedAt),
     reread: async () => {
-      const [l, u] = await Promise.all([leave.refetch({ throwOnError: true }), unavailability.refetch({ throwOnError: true })])
-      return [...(l.data ?? []).map((r) => `leave:${r.id}`), ...(u.data ?? []).map((r) => `unavailability:${r.id}`)]
+      try {
+        const [l, u] = await Promise.all([leave.refetch({ throwOnError: true }), unavailability.refetch({ throwOnError: true })])
+        return [...(l.data ?? []).map((r) => `leave:${r.id}`), ...(u.data ?? []).map((r) => `unavailability:${r.id}`)]
+      } finally {
+        // An approval with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveLeave).
+        void qc.invalidateQueries({ queryKey: ['roster-board'] })
+        void qc.invalidateQueries({ queryKey: ['tasks'] })
+        void qc.invalidateQueries({ queryKey: ['dashboard'] })
+      }
     },
     count: (leave.data?.length ?? 0) + (unavailability.data?.length ?? 0),
     // Soonest start first: the nearest one is the most urgent decision (SHAPE §5).
