@@ -2117,6 +2117,24 @@ function notificationPreferenceGrid() {
   }
 }
 
+// GET admin/early-access (Settings › Alpha sign-ups), last sent first as the API orders it: a repeat carrying a removal request,
+// a long message with line breaks, one with nothing optional, and one from before the alpha form (no size).
+const earlyAccessSignups = [
+  { id: 'eas-0001', name: 'Amara Okafor', organisation: 'Riverbend Community Care', email: 'amara.okafor@example.org',
+    role: 'Operations manager', phone: '0491 570 156', organisationSize: '10-49',
+    message: "Please remove my details for now. We've signed with another system this year.\nThanks for the chat.",
+    createdAtUtc: '2026-10-02T01:15:00Z', lastRequestedAtUtc: '2026-10-15T22:40:00Z', requestCount: 2 },
+  { id: 'eas-0002', name: 'Tom Nguyen', organisation: 'Coastal Support Services', email: 'tom.nguyen@example.org',
+    role: 'Rostering lead', organisationSize: '50-199',
+    message: 'We run 14 SIL houses and about 60 community access shifts a week.\n\nMost of our admin time goes on filling last-minute gaps and chasing shift notes before claims. We would like to try the roster board and the completion review first.',
+    createdAtUtc: '2026-10-14T05:02:00Z', lastRequestedAtUtc: '2026-10-14T05:02:00Z', requestCount: 1 },
+  { id: 'eas-0003', name: 'Priya Raman', organisation: 'Kin & Co Disability Services', email: 'priya@example.org',
+    phone: '+61 2 5550 1234', organisationSize: 'under-10',
+    createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1 },
+  { id: 'eas-0004', name: 'Sam Field', organisation: 'Field Health', email: 'sam.field@example.org',
+    createdAtUtc: '2026-09-30T06:00:00Z', lastRequestedAtUtc: '2026-09-30T06:00:00Z', requestCount: 1 },
+]
+
 // GET admin/notifications fixture — the query string (?status=&from=&to=) isn't read here, same
 // caveat as leave/staff-availability above: always returns the full fixture list, any filtering
 // left to the frontend.
@@ -2687,6 +2705,8 @@ const routes = [
   // is the self-service grid.
   ['notifications/preferences', () => notificationPreferenceGrid()],
   ['admin/notifications', () => notificationOutbox],
+  // Settings › Alpha sign-ups; Delete uses the generic DELETE fallback (stateless, as every write here).
+  ['admin/early-access', () => paged(earlyAccessSignups)],
   ['notifications/inbox', () => inAppInboxView()],
 ]
 
@@ -3045,11 +3065,19 @@ function sendResult(res, result) {
 // Mirrors POST /api/public/early-access, which — like the real route — lives OUTSIDE BASE and outside the
 // ApiResponse envelope. Same contract as the API: 202 { status: 'received' } for a valid request after a
 // short delay; a filled honeypot (`website`) gets the same 202 and is dropped; invalid fields get a 400
-// ValidationProblemDetails whose `errors` are keyed name / organisation / email; a body over 4 KB gets 413.
+// ValidationProblemDetails whose `errors` are keyed name / organisation / email / organisationSize / role / phone /
+// message; a body over 8 KB (in BYTES, as the API counts) gets 413.
 // Nothing is stored. (The 429 rate limit is not simulated here.)
 const EARLY_ACCESS_PATH = '/api/public/early-access'
 const EARLY_ACCESS_DELAY_MS = 400
-const EARLY_ACCESS_MAX_BODY = 4096
+const EARLY_ACCESS_MAX_BODY = 8192 // bytes, as EarlyAccessController.MaxBodyBytes
+const ORGANISATION_SIZES = ['under-10', '10-49', '50-199', '200-plus']
+// char.IsControl, the line/paragraph separators and the bidi marks: what the API refuses in one-line fields.
+const ONE_LINE_BAD = /[\u0000-\u001F\u007F-\u009F\u2028\u2029\u202A-\u202E\u2066-\u2069]/
+// The API's message cleaning: line breaks kept as LF, a tab becomes a space, other controls and bidi marks dropped, then trimmed.
+const cleanMessage = (v) => (typeof v === 'string' ? v : '')
+  .replace(/\r\n?|[\u2028\u2029]/g, '\n').replace(/\t/g, ' ')
+  .replace(/[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, '').trim()
 
 function validateEarlyAccess(body) {
   const errors = {}
@@ -3064,6 +3092,15 @@ function validateEarlyAccess(body) {
   if (!email) errors.email = ['Enter your email address.']
   else if (email.length > 254) errors.email = ['Email must be 254 characters or fewer.']
   else if (!/^[^\s@"<>,]+@[^\s@.]+(\.[^\s@.]+)*\.[^\s@.]{2,}$/.test(email)) errors.email = ['Enter a valid email address.']
+  const role = text(body.role)
+  if (role.length > 100) errors.role = ['Role must be 100 characters or fewer.']
+  else if (ONE_LINE_BAD.test(role)) errors.role = ['Role contains characters that are not allowed.']
+  const phone = text(body.phone)
+  if (phone.length > 30) errors.phone = ['Phone must be 30 characters or fewer.']
+  else if (!/^[0-9 +()-]*$/.test(phone)) errors.phone = ['Use digits, spaces and + ( ) - only.']
+  const size = text(body.organisationSize) // optional in PR 1 (expand), checked when given; PR 2 makes it required
+  if (size && !ORGANISATION_SIZES.includes(size)) errors.organisationSize = ['Choose one of the listed sizes.']
+  if (cleanMessage(body.message).length > 1000) errors.message = ['Message must be 1,000 characters or fewer.']
   return errors
 }
 
@@ -3073,13 +3110,17 @@ function handleEarlyAccess(req, res) {
     res.end()
     return
   }
-  let raw = ''
+  // Buffers, so the cap counts bytes and a multi-byte character split across chunks survives.
+  const chunks = []
+  let bytes = 0
   let tooLarge = false
   req.on('data', (chunk) => {
-    raw += chunk
-    if (raw.length > EARLY_ACCESS_MAX_BODY) tooLarge = true
+    bytes += chunk.length
+    if (bytes > EARLY_ACCESS_MAX_BODY) tooLarge = true
+    else chunks.push(chunk)
   })
   req.on('end', () => {
+    const raw = Buffer.concat(chunks).toString('utf8')
     if (tooLarge) {
       send(res, 413, { success: false, data: null, message: null, errors: ['The request could not be processed. Please check its size and format.'] })
       return
