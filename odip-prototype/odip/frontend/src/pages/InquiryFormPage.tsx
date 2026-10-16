@@ -255,7 +255,8 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
       if (wantsVisit) {
         setBusy('booking')
         try {
-          visit = await setVisit.mutateAsync({ id: saved.id, data: bookingBody(effective, saved.timeZoneId || FALLBACK_ZONE, false) })
+          // Each step sends the version the step before it returned (ODIP-REVIEW-268): the enquiry PUT was checked, so its answer is this form's base.
+          visit = await setVisit.mutateAsync({ id: saved.id, data: { ...bookingBody(effective, saved.timeZoneId || FALLBACK_ZONE, false), expectedUpdatedAt: saved.updatedAt } })
         } catch (err) {
           refuseVisit(booked ? 'changed' : 'new', err)
           return
@@ -268,7 +269,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
       if (offerResend && resendOn) {
         setBusy('resending')
         try {
-          resent = await resend.mutateAsync(saved.id)
+          resent = await resend.mutateAsync({ id: saved.id, expectedUpdatedAt: (visit ?? saved).updatedAt })
         } catch (err) {
           refuseVisit('resend', err)
           return
@@ -418,6 +419,8 @@ function InquiryFormBody({ initial, onCreated, onCancel, onReopened, onDone }: {
         />
       )}
       <IntakeCancelDialog
+        // Checked against this form's version, so adopting the cleared row's version below is safe (ODIP-REVIEW-268).
+        checkVersion
         row={cancelling ? row : null}
         onCancel={() => setCancelling(false)}
         onDone={(cancelledRow, email, cleared) => {

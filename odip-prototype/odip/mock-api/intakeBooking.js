@@ -56,6 +56,10 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   const notFound = () => respond(404, failEnvelope(null, ['Inquiry not found']))
   const refuse409 = (sentence, code) => respond(409, { ...failEnvelope(null, [sentence]), code })
   const closedRefusal = () => refuse409('This enquiry is closed. Reopen it first.', 'inquiry-closed')
+  // The version check close and reopen make (verify C1): a stale expectedUpdatedAt is the API's 409. Rows with no version yet skip it.
+  const stale = (row, body) => !!body?.expectedUpdatedAt && !!row.updatedAt && body.expectedUpdatedAt !== row.updatedAt
+  const changedByOther = () => respond(409, failEnvelope(null, ['Someone else just changed this visit. Reload and try again.']))
+  const stamp = (row) => { row.updatedAt = new Date().toISOString() }
 
   const get = [
     ['intake-visits', (params) => Object.entries(bookings)
@@ -84,6 +88,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       const row = find(id)
       if (!row) return respond(404, failEnvelope(null, ['Inquiry not found']))
       if (closed[id]) return closedRefusal()
+      if (stale(row, body)) return changedByOther()
       // The capture's refused state: the 400 the server gives for a staff member who cannot do intakes, keyed by field.
       if ((body.location ?? '').trim().toLowerCase() === 'refuse') {
         return respond(400, { title: 'One or more validation errors occurred.', status: 400, errors: { staffUserId: ["Callum can't do intakes. Choose an active coordinator or admin."] } })
@@ -94,6 +99,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
         return respond(409, { title: 'One or more validation errors occurred.', status: 409, code: 'intake-staff-busy', errors: { staffUserId: [`Callum Radford is on a shift 10:00 am – 2:00 pm on ${day}.`] } })
       }
       if (!row.email && body.contactEmail) row.email = body.contactEmail
+      stamp(row)
       const before = bookings[id]
       bookings[id] = {
         ...booked(0, '00:00'), ...before, intakeStartsAt: body.startsAt, intakeDurationMinutes: body.durationMinutes, intakeLocation: body.location,
@@ -102,7 +108,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       return withBooking(row)
     }],
     // Its 2 segments never match .../intake-booking.
-    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); Object.assign(row, fields(body)); saveContacts(id, body.contacts); return withBooking(row) }],
+    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); if (stale(row, body)) return changedByOther(); stamp(row); Object.assign(row, fields(body)); saveContacts(id, body.contacts); return withBooking(row) }],
   ]
 
   const post = [
@@ -111,19 +117,23 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       if (!row) return notFound()
       if (closed[id]) return refuse409('This enquiry is already closed.', 'inquiry-closed')
       if (row.participantId) return refuse409(`Intake has started for ${row.firstName}, so this enquiry can't be closed.`, 'inquiry-converted')
+      if (stale(row, body)) return changedByOther()
       if (!body?.outcome) return respond(400, { title: 'One or more validation errors occurred.', status: 400, errors: { outcome: ["Choose why it's closing."] } })
       const booking = bookings[id]
       const cancellationEmail = !booking ? 'NoVisit' : booking.intakeInviteSentAt ? 'NotConfigured' : 'NoInvite'
       delete bookings[id]
       delete contacts[id]
       closed[id] = { closedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), closeOutcome: body.outcome, closeNote: body.note ?? null }
+      stamp(row)
       return { inquiry: withBooking(row), cancellationEmail }
     }],
-    ['inquiries/:id/reopen', (id) => {
+    ['inquiries/:id/reopen', (id, body) => {
       const row = find(id)
       if (!row) return notFound()
       if (!closed[id]) return refuse409('This enquiry is already open.', 'inquiry-open')
+      if (stale(row, body)) return changedByOther()
       delete closed[id]
+      stamp(row)
       return withBooking(row)
     }],
     ['inquiries', (body) => { const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return withBooking(row) }],
@@ -132,13 +142,21 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       bookings[id].intakeConfirmedAt = body.confirmed ? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') : null
       return withBooking(find(id))
     }],
-    ['inquiries/:id/intake-booking/send', (id) => (bookings[id] ? withBooking(find(id)) : notBooked())],
+    ['inquiries/:id/intake-booking/send', (id, body) => {
+      if (!bookings[id]) return notBooked()
+      const row = find(id)
+      if (stale(row, body)) return changedByOther()
+      stamp(row)
+      return withBooking(row)
+    }],
   ]
 
   const del = [
-    ['inquiries/:id/intake-booking', (id) => {
+    ['inquiries/:id/intake-booking', (id, _body, params) => {
       const before = bookings[id]
       if (!before) return notBooked()
+      if (stale(find(id), { expectedUpdatedAt: params?.get('expectedUpdatedAt') })) return changedByOther()
+      stamp(find(id))
       delete bookings[id]
       return { inquiry: withBooking(find(id)), cancellationEmail: before.intakeInviteSentAt ? 'NotConfigured' : 'NoInvite' }
     }],

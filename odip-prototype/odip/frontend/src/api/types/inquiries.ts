@@ -56,6 +56,8 @@ export type InquiryCloseOutcome = 'DeclinedByUs' | 'NotGoingAhead' | 'Other'
 export interface CloseInquiryDto {
   outcome: InquiryCloseOutcome
   note: string | null
+  /** The version the screen loaded: a save since then makes the close a 409. */
+  expectedUpdatedAt?: string
 }
 
 /** What a close did. NoVisit: there was no upcoming visit to cancel; the rest are a cancel's. */
@@ -72,6 +74,8 @@ export interface SetIntakeBookingDto {
   staffUserId: string
   notes: string | null
   contactEmail?: string
+  /** The version the form holds (ODIP-REVIEW-268): a save since then makes the booking a 409. The slide-over sends none. */
+  expectedUpdatedAt?: string
 }
 
 export interface CancelIntakeBookingResultDto {

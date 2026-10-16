@@ -21,11 +21,11 @@ const UPCOMING = '2030-10-15T23:00:00Z'
 const base = { source: 'Phone', createdAt: '2026-09-28T01:10:00Z', participantId: null, timeZoneId: 'Australia/Sydney', email: 'ana@example.com' }
 const open = [
   { ...base, id: 'new', firstName: 'Noah', lastName: 'Fitzgerald' },
-  { ...base, id: 'booked', firstName: 'Ana', lastName: 'Lopez', intakeStartsAt: UPCOMING, intakeDurationMinutes: 90, intakeStaffUserId: 'kim', intakeStaffFirstName: 'Kim', intakeStaffName: 'Kim Lee', intakeInviteSentAt: '2026-10-14T03:05:00Z' },
+  { ...base, id: 'booked', firstName: 'Ana', lastName: 'Lopez', intakeStartsAt: UPCOMING, intakeDurationMinutes: 90, intakeStaffUserId: 'kim', intakeStaffFirstName: 'Kim', intakeStaffName: 'Kim Lee', intakeInviteSentAt: '2026-10-14T03:05:00Z', updatedAt: '2026-10-15T02:00:00.123456Z' },
   { ...base, id: 'draft', participantId: 'p-1', participantIsDraft: true, firstName: 'Mei', lastName: 'Tanaka' },
   { ...base, id: 'p-direct', participantId: 'p-direct', participantIsDraft: true, isDirectIntake: true, firstName: 'Tomas', lastName: 'Becker', source: '' },
 ]
-const closed = [{ ...base, id: 'gone', firstName: 'Ivy', lastName: 'Park', closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'NotGoingAhead', closeNote: 'Chose a provider closer to home' }]
+const closed = [{ ...base, id: 'gone', firstName: 'Ivy', lastName: 'Park', closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'NotGoingAhead', closeNote: 'Chose a provider closer to home', updatedAt: '2026-10-16T01:00:00.654321Z' }]
 
 function Probe() {
   const location = useLocation()
@@ -83,7 +83,8 @@ describe('closing an enquiry from the table', () => {
     await user.type(within(dialog).getByLabelText(/^Note/), 'Chose another provider')
     await user.click(within(dialog).getByRole('button', { name: 'Close enquiry' }))
 
-    expect(mocks.close).toHaveBeenCalledWith({ id: 'booked', data: { outcome: 'NotGoingAhead', note: 'Chose another provider' } })
+    // The version the table loaded goes with it, so a booking or edit since then makes the close a 409 (verify C1).
+    expect(mocks.close).toHaveBeenCalledWith({ id: 'booked', data: { outcome: 'NotGoingAhead', note: 'Chose another provider', expectedUpdatedAt: '2026-10-15T02:00:00.123456Z' } })
     expect(await screen.findByText("Ana Lopez's enquiry is closed: Not going ahead. Their intake visit is cancelled and Ana was emailed.")).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Dismiss notice about Enquiry closed' })).toHaveFocus())
   })
@@ -133,6 +134,10 @@ describe('the Open and Closed views', () => {
     expect(row).toHaveTextContent('Fri 16 Oct')
     await user.type(screen.getByPlaceholderText(/Search enquiries/), 'closer to home')
     expect(screen.getByRole('row', { name: /Ivy Park/ })).toBeInTheDocument()
+    // Finish review 2: the no-match state names the view it is in.
+    await user.clear(screen.getByPlaceholderText(/Search enquiries/))
+    await user.type(screen.getByPlaceholderText(/Search enquiries/), 'nobody matches this')
+    expect(screen.getByText('Try a different search term, or clear the search to see every closed enquiry.')).toBeInTheDocument()
   })
 
   it('Reopen from the Closed view: the dialog, then a notice whose Open enquiry link takes focus', async () => {
@@ -146,7 +151,7 @@ describe('the Open and Closed views', () => {
     expect(dialog).toHaveTextContent('Its contacts were deleted when it closed, so add them again, and book a new intake visit if you need one.')
     await user.click(within(dialog).getByRole('button', { name: 'Reopen enquiry' }))
 
-    expect(mocks.reopen).toHaveBeenCalledWith('gone')
+    expect(mocks.reopen).toHaveBeenCalledWith({ id: 'gone', expectedUpdatedAt: '2026-10-16T01:00:00.654321Z' })
     expect(await screen.findByText('Ivy Park is back on the Open list.')).toBeInTheDocument()
     const link = screen.getByRole('link', { name: 'Open enquiry' })
     expect(link).toHaveAttribute('href', '/participants/new-inquiry?id=gone')

@@ -72,11 +72,21 @@ export function useSetIntakeBooking() {
   })
 }
 
+/** A booking write's target: the enquiry id, or the id with the version the caller holds (the enquiry form's; ODIP-REVIEW-268). */
+type VersionedId = string | { id: string; expectedUpdatedAt?: string }
+const idOf = (v: VersionedId) => (typeof v === 'string' ? v : v.id)
+const versionOf = (v: VersionedId) => (typeof v === 'string' ? undefined : v.expectedUpdatedAt)
+
 export function useCancelIntakeBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (id: string) => (await apiDeleteRaw<CancelIntakeBookingResultDto>(`/inquiries/${id}/intake-booking`)).data as CancelIntakeBookingResultDto,
-    onSuccess: (_result, id) => {
+    mutationFn: async (target: VersionedId) => {
+      const version = versionOf(target)
+      const query = version ? `?expectedUpdatedAt=${encodeURIComponent(version)}` : ''
+      return (await apiDeleteRaw<CancelIntakeBookingResultDto>(`/inquiries/${idOf(target)}/intake-booking${query}`)).data as CancelIntakeBookingResultDto
+    },
+    onSuccess: (_result, target) => {
+      const id = idOf(target)
       // The row shows Book intake at once, so the page can focus it now rather than the old line 1 the refetch would then remove.
       qc.setQueryData<ParticipantInquiryDto[]>(['participant-inquiries'], rows => rows?.map(r => r.id !== id ? r : {
         ...r, intakeStartsAt: null, intakeDurationMinutes: null, intakeLocation: null, intakeStaffUserId: null, intakeStaffFirstName: null,
@@ -98,7 +108,11 @@ export function useCloseInquiry() {
 
 export function useReopenInquiry() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (id: string) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/reopen`), onSuccess: () => refreshIntake(qc) })
+  return useMutation({
+    // The version the screen loaded goes with it, as on a close: a save since then makes the reopen a 409.
+    mutationFn: ({ id, expectedUpdatedAt }: { id: string; expectedUpdatedAt?: string }) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/reopen`, { expectedUpdatedAt }),
+    onSuccess: () => refreshIntake(qc),
+  })
 }
 
 export function useConfirmIntakeBooking() {
@@ -112,7 +126,13 @@ export function useConfirmIntakeBooking() {
 /** Send again: the same invite (UID and SEQUENCE), its outcome stored on the row. */
 export function useResendIntakeInvite() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (id: string) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/intake-booking/send`), onSuccess: () => refreshIntake(qc) })
+  return useMutation({
+    mutationFn: (target: VersionedId) => {
+      const version = versionOf(target)
+      return apiPost<ParticipantInquiryDto>(`/inquiries/${idOf(target)}/intake-booking/send`, ...(version ? [{ expectedUpdatedAt: version }] : []))
+    },
+    onSuccess: () => refreshIntake(qc),
+  })
 }
 
 /** Intake visits by provider-local date range. `staffUserId` filters to one person; the server lets only lifecycle roles leave it out. */

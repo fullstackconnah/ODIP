@@ -17,7 +17,7 @@ export function ReopenInquiryDialog({ row, onCancel, onDone }: {
   async function confirm() {
     if (reopen.isPending || !row) return
     try {
-      const answer = await reopen.mutateAsync(row.id)
+      const answer = await reopen.mutateAsync({ id: row.id, expectedUpdatedAt: row.updatedAt })
       setError(null)
       onDone(answer)
     } catch (failure) {

@@ -3226,7 +3226,8 @@ const server = http.createServer((req, res) => {
       for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
-          sendResult(res, handler(...params, body))
+          // The query too: Cancel visit sends the form's version as ?expectedUpdatedAt (ODIP-REVIEW-268).
+          sendResult(res, handler(...params, body, url.searchParams))
           return
         }
       }

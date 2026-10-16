@@ -538,7 +538,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
 
 describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
   it('Close enquiry from the form says unsaved changes are discarded, POSTs the close, then goes to the tab with the closed notice', async () => {
-    serve({ '/inquiries/i1': detail() })
+    serve({ '/inquiries/i1': detail({ updatedAt: '2026-10-16T00:00:00.5Z' }) })
     mockApiPost.mockResolvedValue({ inquiry: detail({ closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'DeclinedByUs' }), cancellationEmail: 'NoVisit' })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
@@ -552,7 +552,7 @@ describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Close enquiry' }))
 
     await screen.findByText('Enquiries tab destination')
-    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/close', { outcome: 'DeclinedByUs', note: null })
+    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/close', { outcome: 'DeclinedByUs', note: null, expectedUpdatedAt: '2026-10-16T00:00:00.5Z' })
     expect(mockApiPut).not.toHaveBeenCalled()
     expect(screen.getByTestId('notice')).toHaveTextContent("Enquiry closed: Rowan Blake's enquiry is closed: Declined by us.")
   })
@@ -568,7 +568,7 @@ describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
   })
 
   it('a closed enquiry opens read-only, and Reopen turns it into the edit form in place', async () => {
-    serve({ '/inquiries/i1': detail({ closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'NotGoingAhead', closeNote: 'Chose a closer provider' }) })
+    serve({ '/inquiries/i1': detail({ closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'NotGoingAhead', closeNote: 'Chose a closer provider', updatedAt: '2026-10-16T01:00:00.25Z' }) })
     mockApiPost.mockResolvedValue(detail())
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
@@ -583,7 +583,7 @@ describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
     await user.click(screen.getByRole('button', { name: 'Reopen enquiry' }))
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Reopen enquiry' }))
 
-    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/reopen')
+    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/reopen', { expectedUpdatedAt: '2026-10-16T01:00:00.25Z' })
     expect(await screen.findByRole('heading', { level: 1, name: 'Edit enquiry' })).toBeInTheDocument()
     expect(screen.getByLabelText(/^First name/)).toHaveValue('Rowan')
     const reopened = screen.getByText('Reopened. Add the contacts again below.')
@@ -625,5 +625,64 @@ describe('InquiryFormPage (wire) — someone else saved first (PR 1 version chec
     expect(callout.compareDocumentPosition(screen.getByRole('button', { name: 'Save enquiry' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByLabelText(/^First name/)).toHaveValue('Ro')
     expect(screen.queryByText('Enquiries tab destination')).not.toBeInTheDocument()
+  })
+})
+
+describe('InquiryFormPage (wire) — every booking write carries the version the form holds (ODIP-REVIEW-268)', () => {
+  const START = '2030-10-15T23:00:00Z'
+  const booked = {
+    intakeStartsAt: START, intakeDurationMinutes: 90, intakeLocation: '12 Smith St', intakeStaffUserId: 'sam', intakeStaffName: 'Sam Lee', intakeStaffFirstName: 'Sam',
+    intakeNotes: 'Gate code', intakeInviteSentAt: '2026-10-14T03:05:00Z',
+  }
+  const V1 = '2026-10-16T01:00:00.000001Z', V2 = '2026-10-16T01:05:00.000002Z', V3 = '2026-10-16T01:06:00.000003Z'
+
+  it('Cancel visit sends v1; its checked answer (v2) is what the next Save sends, with the unsaved edit kept', async () => {
+    serve({ '/inquiries/i1': detail({ ...booked, updatedAt: V1 }) })
+    mockApiDeleteRaw.mockResolvedValue({ success: true, data: { inquiry: detail({ updatedAt: V2 }), cancellationEmail: 'Sent' } })
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    const first = await screen.findByLabelText(/^First name/)
+    await user.clear(first)
+    await user.type(first, 'Ro')
+    await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel visit' }))
+
+    expect(mockApiDeleteRaw).toHaveBeenCalledWith(`/inquiries/i1/intake-booking?expectedUpdatedAt=${encodeURIComponent(V1)}`)
+    await screen.findByText('Intake visit cancelled')
+    expect(screen.getByLabelText(/^First name/)).toHaveValue('Ro')
+    await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', expect.objectContaining({ firstName: 'Ro', expectedUpdatedAt: V2 }))
+  })
+
+  it('a 409 from Cancel visit says someone else changed it, keeps the edits and the visit', async () => {
+    serve({ '/inquiries/i1': detail({ ...booked, updatedAt: V1 }) })
+    mockApiDeleteRaw.mockRejectedValue(Object.assign(new Error('Request failed with status code 409'), {
+      isAxiosError: true, response: { status: 409, data: { success: false, errors: ['Someone else just changed this visit. Reload and try again.'] } },
+    }))
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    const first = await screen.findByLabelText(/^First name/)
+    await user.type(first, 'n')
+    await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel visit' }))
+
+    expect(await within(screen.getByRole('alertdialog')).findByRole('alert')).toHaveTextContent('Someone else just changed this visit. Reload and try again.')
+    expect(screen.getByLabelText(/^First name/)).toHaveValue('Rowann')
+    expect(screen.queryByText('Intake visit cancelled')).not.toBeInTheDocument()
+  })
+
+  it('the save chain: the booking PUT sends the version the enquiry PUT returned', async () => {
+    serve({ '/inquiries/i1': detail({ ...booked, updatedAt: V1 }) })
+    mockApiPut.mockImplementation(async (url: string) => (url.endsWith('/intake-booking') ? detail({ ...booked, intakeStartsAt: '2030-10-16T00:00:00Z', updatedAt: V3 }) : detail({ ...booked, email: 'new@example.com', updatedAt: V2 })))
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    fireEvent.change(await screen.findByLabelText(/^Start time/), { target: { value: '11:00' } })
+    await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
+
+    await screen.findByText('Enquiries tab destination')
+    expect(mockApiPut.mock.calls[0]).toEqual(['/inquiries/i1', expect.objectContaining({ expectedUpdatedAt: V1 })])
+    expect(mockApiPut.mock.calls[1]).toEqual(['/inquiries/i1/intake-booking', expect.objectContaining({ expectedUpdatedAt: V2 })])
   })
 })

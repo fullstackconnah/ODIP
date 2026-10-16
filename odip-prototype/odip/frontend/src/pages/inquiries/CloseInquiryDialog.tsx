@@ -34,7 +34,7 @@ export function CloseInquiryDialog({ row, unsaved = false, onCancel, onDone }: {
       return
     }
     try {
-      const result = await close.mutateAsync({ id: row.id, data: { outcome, note: note.trim() || null } })
+      const result = await close.mutateAsync({ id: row.id, data: { outcome, note: note.trim() || null, expectedUpdatedAt: row.updatedAt } })
       setError(null)
       onDone(row, result)
     } catch (failure) {
