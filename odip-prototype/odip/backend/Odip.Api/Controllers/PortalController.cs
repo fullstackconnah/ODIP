@@ -1059,7 +1059,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
-        var note = await _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId.Value, ct);
+        var note = await FindOwnNoteAsync(noteId, staffId.Value, ct);
         if (note is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
@@ -1090,6 +1090,10 @@ public class PortalController : ControllerBase
         return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId)));
     }
 
+    /// <summary>The caller's own note, unless its shift is a Draft: a Draft is invisible to the worker (L1), so an open edit of an older note stops there too. Missing, not-yours and Draft are one 404.</summary>
+    private Task<ShiftNote?> FindOwnNoteAsync(Guid noteId, Guid staffId, CancellationToken ct) =>
+        _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId && _db.Shifts.Any(s => s.Id == n.ShiftId && s.Status != ShiftStatus.Draft), ct);
+
     /// <summary>
     /// NOTES-02: dismisses the "consider filing an incident report?" prompt for one of the
     /// caller's own flagged notes. Persisted server-side (see <see cref="ShiftNote.FlagsAcknowledgedAt"/>
@@ -1105,7 +1109,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
-        var note = await _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId.Value, ct);
+        var note = await FindOwnNoteAsync(noteId, staffId.Value, ct);
         if (note is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Note not found."));
 
