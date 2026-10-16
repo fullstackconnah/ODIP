@@ -252,6 +252,31 @@ public class LeaveControllerTests
         Assert.IsType<UnauthorizedObjectResult>(result.Result);
     }
 
+    /// <summary>D4: on-behalf entry lands Approved with the caller as decider, so entering your OWN leave there would approve it in one call. Your own goes through the Portal, Pending.</summary>
+    [Fact]
+    public async Task CreateLeave_ForYourself_Returns403_AndWritesNothing()
+    {
+        using var db = CreateDb();
+        var me = SeedUser(db);
+        var result = await MakeController(db, me.Id).CreateLeave(
+            new CreateLeaveRequestDto { UserId = me.Id, LeaveType = LeaveType.Annual, StartDate = Today, EndDate = Today }, CancellationToken.None);
+        AssertOwnRequestRefused(result);
+        Assert.Empty(db.LeaveRequests);
+    }
+
+    [Fact]
+    public async Task CreateUnavailability_ForYourself_Returns403_AndWritesNothing()
+    {
+        using var db = CreateDb();
+        var me = SeedUser(db);
+        var result = await MakeController(db, me.Id).CreateUnavailability(new CreateRecurringUnavailabilityDto
+        {
+            UserId = me.Id, DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = Today,
+        }, CancellationToken.None);
+        AssertOwnRequestRefused(result);
+        Assert.Empty(db.RecurringUnavailabilities);
+    }
+
     [Fact]
     public async Task CreateLeave_Valid_LandsApprovedWithRequesterAsDecider()
     {
