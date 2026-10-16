@@ -137,7 +137,9 @@ public class EarlyAccessNotifierTests
         Assert.Equal(1, email.Calls);
         Assert.Equal(0, sms.Calls);
         Assert.Equal("ops@example.com", message.RecipientAddress);
-        Assert.Equal("New Odip early-access request", message.Subject);
+        Assert.Equal("New Bunya Support early-access request", message.Subject);
+        Assert.Contains("early access to Bunya Support.", message.PlainTextBody);
+        Assert.Contains("early access to Bunya Support.", message.HtmlBody);
         Assert.Contains("Jane Citizen", message.PlainTextBody);
         Assert.Contains("Sample Support Co", message.PlainTextBody);
         Assert.Contains("jane.citizen@example.com", message.PlainTextBody);
@@ -286,7 +288,7 @@ public class EarlyAccessRequestTemplateTests
         var message = EarlyAccessRequestTemplate.Render(new EarlyAccessRequestPayload(
             "ops@example.com", Payload, Payload, "a@example.com", DateTime.UtcNow));
 
-        Assert.Equal("New Odip early-access request", message.Subject);
+        Assert.Equal("New Bunya Support early-access request", message.Subject);
         Assert.Equal("ops@example.com", message.RecipientAddress);
         Assert.DoesNotContain("script", message.Subject);
     }

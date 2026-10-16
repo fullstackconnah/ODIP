@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import PlatformFooter from '@/components/layout/PlatformFooter'
 import { TAP_FLOOR } from '@/components/tapArea'
+import { Wordmark } from '@/components/Wordmark'
 
 /**
  * The frame for the public reading pages: /accessibility now, and the legal documents once they are published. It has a 48px bar
@@ -18,10 +19,10 @@ export default function PublicPage({ children }: { children: ReactNode }) {
         <div className="mx-auto w-full max-w-[68ch] px-[var(--gutter,20px)]">
           <a
             href="/"
-            aria-label="Odip home"
-            className={`${TAP_FLOOR} rounded-sm font-display text-base font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
+            aria-label="Bunya Support home"
+            className={`${TAP_FLOOR} rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
           >
-            Odip
+            <Wordmark size={21} />
           </a>
         </div>
       </header>

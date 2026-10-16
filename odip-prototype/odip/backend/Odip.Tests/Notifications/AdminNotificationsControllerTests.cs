@@ -219,7 +219,7 @@ public class AdminNotificationsControllerTests
         Assert.True(body.Data!.Sent);
         Assert.Null(body.Data.Error);
         Assert.Empty(await db.NotificationOutbox.ToListAsync()); // bypasses the outbox entirely
-        emailChannel.Verify(c => c.SendAsync(It.Is<NotificationMessage>(m => m.RecipientAddress == "someone@example.com"), It.IsAny<CancellationToken>()), Times.Once);
+        emailChannel.Verify(c => c.SendAsync(It.Is<NotificationMessage>(m => m.RecipientAddress == "someone@example.com" && m.Subject == "Bunya Support test email" && !m.PlainTextBody.Contains("ODIP")), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>Not a 500 — a failed test is the endpoint's expected outcome, not a server error.</summary>

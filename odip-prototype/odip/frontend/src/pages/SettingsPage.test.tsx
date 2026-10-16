@@ -462,7 +462,7 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
     expect(screen.getByRole('heading', { level: 2, name: 'Profile' })).toBeInTheDocument()
     expect(rail().querySelector('[aria-current="page"]')).toHaveTextContent('Profile')
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(document.title).toMatch(/^Profile · Settings/)
+    expect(document.title).toBe('Bunya Support · Profile · Settings')
   })
 
   it('says on Profile who you are signed in as', () => {
@@ -563,7 +563,7 @@ describe('SettingsPage — below md: the list, one section per screen, and Back'
     const list = screen.getByRole('navigation', { name: 'Settings' })
     expect(list.querySelectorAll('[aria-current]')).toHaveLength(0)
     expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
-    expect(document.title).toMatch(/^Settings/)
+    expect(document.title).toBe('Bunya Support · Settings')
   })
 
   it('opens a section as its own screen with a Back link, keeps the h1 for screen readers, and Back returns focus to its row', async () => {
