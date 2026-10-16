@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Odip.Application.DTOs;
+using Odip.Application.EarlyAccess;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
@@ -119,6 +121,13 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
     private EarlyAccessService NewService(OdipDbContext db) => new(db, NullLogger<EarlyAccessService>.Instance);
 
+    private static EarlyAccessValidationResult Checked(
+        string name, string organisation, string email, string size = "under-10", string? role = null, string? phone = null, string? message = null) =>
+        EarlyAccessRequestValidator.Validate(new EarlyAccessRequestDto
+        {
+            Name = name, Organisation = organisation, Email = email, OrganisationSize = size, Role = role, Phone = phone, Message = message,
+        });
+
     [SkippableFact]
     public async Task Migration_CreatesTheTable_WithTheAgreedColumns_AndAUniqueEmailIndex()
     {
@@ -141,9 +150,13 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             "Email|character varying|254|NO",
             "Id|uuid||NO",
             "LastRequestedAtUtc|timestamp without time zone||NO",
+            "Message|character varying|1000|YES",
             "Name|character varying|100|NO",
             "Organisation|character varying|150|NO",
+            "OrganisationSize|character varying|16|YES",
+            "Phone|character varying|30|YES",
             "RequestCount|integer||NO",
+            "Role|character varying|100|YES",
         }, found);
 
         await using var index = new NpgsqlCommand(
@@ -152,6 +165,41 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         Assert.NotNull(definition);
         Assert.Contains("UNIQUE", definition);
         Assert.Contains("(\"Email\")", definition);
+    }
+
+    [SkippableFact]
+    public async Task TheExtraFields_RoundTrip_AtTheirLimits_AndARepeatReplacesThem()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("limits");
+        var role = new string('é', 100);
+        var phone = new string('1', 30);
+        var message = new string('€', 1000); // varchar(1000) counts characters, not bytes
+
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "200-plus", role, phone, message), CancellationToken.None);
+
+        await using (var db = _pg.CreateContext())
+        {
+            var row = await db.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+            Assert.Equal("200-plus", row.OrganisationSize);
+            Assert.Equal(role, row.Role);
+            Assert.Equal(phone, row.Phone);
+            Assert.Equal(message, row.Message);
+        }
+
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "under-10"), CancellationToken.None);
+
+        await using (var db = _pg.CreateContext())
+        {
+            var row = await db.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+            Assert.Equal(2, row.RequestCount);
+            Assert.Equal("under-10", row.OrganisationSize);
+            Assert.Null(row.Role);
+            Assert.Null(row.Phone);
+            Assert.Null(row.Message);
+        }
     }
 
     [SkippableFact]
@@ -180,9 +228,9 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         var email = NewEmail("sequence");
 
         EarlyAccessRecordResult first, second, third;
-        await using (var db = _pg.CreateContext()) first = await NewService(db).RecordAsync("Jane", "Org", email, CancellationToken.None);
-        await using (var db = _pg.CreateContext()) second = await NewService(db).RecordAsync("Other", "Other Org", email, CancellationToken.None);
-        await using (var db = _pg.CreateContext()) third = await NewService(db).RecordAsync("Other", "Other Org", email, CancellationToken.None);
+        await using (var db = _pg.CreateContext()) first = await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        await using (var db = _pg.CreateContext()) second = await NewService(db).RecordAsync(Checked("Other", "Other Org", email), CancellationToken.None);
+        await using (var db = _pg.CreateContext()) third = await NewService(db).RecordAsync(Checked("Other", "Other Org", email), CancellationToken.None);
 
         Assert.Equal(EarlyAccessOutcome.Created, first.Outcome);
         Assert.Equal(EarlyAccessOutcome.Repeated, second.Outcome);
@@ -215,7 +263,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, CancellationToken.None);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), CancellationToken.None);
 
         Assert.Equal(1, interfered);
         Assert.Equal(EarlyAccessOutcome.Repeated, result.Outcome);
@@ -253,7 +301,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, CancellationToken.None);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), CancellationToken.None);
 
         Assert.Equal(EarlyAccessOutcome.Repeated, result.Outcome);
         Assert.Equal(3, result.RequestCount); // seed (1) + the rival's bump (1) + this request (1)
@@ -280,7 +328,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, cancellation.Token);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), cancellation.Token);
 
         Assert.Equal(EarlyAccessOutcome.Created, result.Outcome);
         await using var check = _pg.CreateContext();
@@ -302,7 +350,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             {
                 await gate.Task;
                 await using var db = _pg.CreateContext();
-                return await NewService(db).RecordAsync($"Person {i}", "Org", email, CancellationToken.None);
+                return await NewService(db).RecordAsync(Checked($"Person {i}", "Org", email), CancellationToken.None);
             })).ToArray();
             gate.SetResult();
             var results = await Task.WhenAll(tasks);

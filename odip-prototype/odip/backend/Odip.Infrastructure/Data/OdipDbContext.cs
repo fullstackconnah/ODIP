@@ -1797,6 +1797,10 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Organisation).HasMaxLength(150).IsRequired();
             // 254 is the longest valid email address (RFC 5321 path limit minus the angle brackets).
             entity.Property(e => e.Email).HasMaxLength(254).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Role).HasMaxLength(100);
+            entity.Property(e => e.OrganisationSize).HasMaxLength(16);
+            entity.Property(e => e.Message).HasMaxLength(1000);
             // Concurrency token: two simultaneous repeat submissions from one address must both be
             // counted. The loser's UPDATE matches no row, EF throws DbUpdateConcurrencyException and
             // EarlyAccessService retries against the fresh count instead of losing an increment.
