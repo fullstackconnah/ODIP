@@ -605,3 +605,25 @@ describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
     expect(screen.getByText("Family, guardians and anyone else to keep in touch with. They move to the participant's record when intake starts, and are deleted if the enquiry is closed.")).toBeInTheDocument()
   })
 })
+
+describe('InquiryFormPage (wire) — someone else saved first (PR 1 version check)', () => {
+  it('a 409 "changed by someone else" shows the error Callout above the actions, keeps the typed values, and stays', async () => {
+    serve({ '/inquiries/i1': detail({ updatedAt: '2026-10-16T01:02:03.456789Z' }) })
+    mockApiPut.mockRejectedValue(Object.assign(new Error('Request failed with status code 409'), {
+      isAxiosError: true, response: { status: 409, data: { success: false, errors: ['Someone else just changed this enquiry. Reload and try again.'] } },
+    }))
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    const first = await screen.findByLabelText(/^First name/)
+    await user.clear(first)
+    await user.type(first, 'Ro')
+    await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
+
+    const callout = await screen.findByText('Someone else just changed this enquiry. Reload and try again.')
+    await waitFor(() => expect(document.activeElement?.contains(callout)).toBe(true))
+    // Above the actions (SHAPE section 6): the Callout comes before the Save button in the page.
+    expect(callout.compareDocumentPosition(screen.getByRole('button', { name: 'Save enquiry' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByLabelText(/^First name/)).toHaveValue('Ro')
+    expect(screen.queryByText('Enquiries tab destination')).not.toBeInTheDocument()
+  })
+})
