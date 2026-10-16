@@ -28,6 +28,7 @@ public class EarlyAccessRequestValidatorTests
             Email = "  jane.citizen@example.com.au ",
             Role = "  Ops lead ",
             Phone = " 0491 570 156 ",
+            OrganisationSize = "under-10",
         });
 
         Assert.True(result.IsValid);
@@ -84,7 +85,7 @@ public class EarlyAccessRequestValidatorTests
         var result = EarlyAccessRequestValidator.Validate(null);
 
         Assert.False(result.IsValid);
-        Assert.Equal(new[] { "email", "name", "organisation" }, result.Errors.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        Assert.Equal(new[] { "email", "name", "organisation", "organisationSize" }, result.Errors.Keys.OrderBy(k => k, StringComparer.Ordinal));
     }
 
     [Theory]
@@ -330,20 +331,19 @@ public class EarlyAccessRequestValidatorTests
         Assert.Equal("10-49", result.OrganisationSize);
     }
 
-    // Expand phase (landing PR 1): the live /welcome form sends no size. PR 2 replaces this with a required-size test.
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
-    public void OrganisationSize_MissingOrBlank_IsAccepted_AndIsNull(string? value)
+    public void OrganisationSize_MissingOrBlank_IsAnOrganisationSizeError(string? value)
     {
         var dto = Valid();
         dto.OrganisationSize = value;
 
         var result = EarlyAccessRequestValidator.Validate(dto);
 
-        Assert.True(result.IsValid);
-        Assert.Null(result.OrganisationSize);
+        Assert.Equal(new[] { "organisationSize" }, result.Errors.Keys);
+        Assert.Equal("Choose your organisation's size.", Assert.Single(result.Errors["organisationSize"]));
     }
 
     [Theory]
