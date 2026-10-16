@@ -240,9 +240,11 @@ public class AuthControllerProxyPartitionTests
         Assert.Equal(StatusCodes.Status429TooManyRequests,
             StatusOf(await Exchange(Controller(db, tracker, DirectContext("198.51.100.7")))));
 
-        var result = await Exchange(Controller(
+        var recovered = Controller(
             db, tracker, DirectContext("198.51.100.7"),
-            new AcceptingVerifier("real.person@acme.example.com")));
+            new AcceptingVerifier("real.person@acme.example.com"));
+        var result = await Exchange(recovered);
+        Assert.False(recovered.Response.Headers.ContainsKey("Retry-After"), "a success must not carry a lockout header");
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(user.Id, Assert.IsType<ApiResponse<AuthResponseDto>>(ok.Value).Data!.Id);
@@ -259,7 +261,9 @@ public class AuthControllerProxyPartitionTests
         for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
             await Exchange(Controller(db, tracker, DirectContext("198.51.100.7")));
 
-        var status = StatusOf(await Exchange(Controller(db, tracker, DirectContext("198.51.100.7"))));
+        var refused = Controller(db, tracker, DirectContext("198.51.100.7"));
+        var status = StatusOf(await Exchange(refused));
+        Assert.True(refused.Response.Headers.ContainsKey("Retry-After"));
 
         Assert.Equal(StatusCodes.Status429TooManyRequests, status);
     }
