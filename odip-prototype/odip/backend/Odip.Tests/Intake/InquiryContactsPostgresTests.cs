@@ -1,3 +1,8 @@
+using Odip.Infrastructure.Notifications;
+using Odip.Domain.Notifications;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 using System.Data.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +11,7 @@ using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
@@ -219,5 +225,69 @@ public class InquiryContactsPostgresTests : IClassFixture<PostgresFixture>
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         Assert.Null((await db.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id)).ClosedByUserId);
+    }
+
+    // Close's one save (spec addendum E2): the visit's cancellation, the staff CANCEL in the outbox, the deleted contacts and the close columns.
+    [SkippableFact]
+    public async Task Closing_is_one_transaction()
+    {
+        RequirePostgres();
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        var sam = IntakeBookingPostgresTests.Staff(tenantId);
+        var dana = IntakeBookingPostgresTests.Staff(tenantId, firstName: "Dana");
+        var inquiry = IntakeBookingPostgresTests.Booked(tenantId, sam.Id, IntakeBookingsControllerTests.Start);
+        inquiry.IntakeInviteSentAt = IntakeBookingsControllerTests.Now;
+        await using (seed)
+        {
+            seed.Users.AddRange(sam, dana);
+            seed.ParticipantInquiries.Add(inquiry);
+            seed.InquiryContacts.AddRange(
+                new InquiryContact { Id = Guid.NewGuid(), TenantId = tenantId, InquiryId = inquiry.Id, SortOrder = 0, Role = ContactRoleType.Guardian, FirstName = "Maria", LastName = "Lopez" },
+                new InquiryContact { Id = Guid.NewGuid(), TenantId = tenantId, InquiryId = inquiry.Id, SortOrder = 1, Role = ContactRoleType.NextOfKin, FirstName = "Tom", LastName = "Ng" });
+            await seed.SaveChangesAsync();
+        }
+        (OdipDbContext Db, IntakeBookingsController Controller, IntakeBookingsControllerTests.RecordingChannel Channel) Booking(params IInterceptor[] interceptors)
+        {
+            var (db, _) = Request(tenantId, interceptors);
+            var tenant = new Mock<ICurrentTenant>();
+            tenant.Setup(t => t.TenantId).Returns(tenantId);
+            tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+            var channel = new IntakeBookingsControllerTests.RecordingChannel(ChannelSendOutcome.Sent);
+            var controller = new IntakeBookingsController(db, tenant.Object, new IntakeInviteSender([channel], NullLogger<IntakeInviteSender>.Instance), new NotificationRaiser(db),
+                new IntakeBookingsControllerTests.FixedClock(IntakeBookingsControllerTests.Now))
+            {
+                ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, dana.Id.ToString()), new Claim(ClaimTypes.Role, "Coordinator")], "test")) } },
+            };
+            return (db, controller, channel);
+        }
+        var why = new CloseInquiryDto { Outcome = InquiryCloseOutcome.Other };
+
+        var failing = Booking(new FailOn("DELETE FROM \"InquiryContacts\""));
+        await using (failing.Db)
+            await Assert.ThrowsAnyAsync<Exception>(() => failing.Controller.Close(inquiry.Id, why, CancellationToken.None));
+        Assert.Empty(failing.Channel.Sent);
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            var row = await check.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id);
+            Assert.Null(row.ClosedAt);
+            Assert.NotNull(row.IntakeStartsAt);
+            Assert.Equal(2, await check.InquiryContacts.CountAsync(c => c.InquiryId == inquiry.Id));
+            Assert.Equal(0, await check.NotificationOutbox.CountAsync(o => o.RecipientUserId == sam.Id));
+        }
+
+        var working = Booking();
+        await using (working.Db)
+            Assert.IsType<OkObjectResult>((await working.Controller.Close(inquiry.Id, why, CancellationToken.None)).Result);
+        var (after, _a) = Request(tenantId);
+        await using (after)
+        {
+            var row = await after.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id);
+            Assert.NotNull(row.ClosedAt);
+            Assert.Null(row.IntakeStartsAt);
+            Assert.Equal(0, await after.InquiryContacts.CountAsync(c => c.InquiryId == inquiry.Id));
+            Assert.Equal(1, await after.NotificationOutbox.CountAsync(o => o.RecipientUserId == sam.Id));
+        }
     }
 }

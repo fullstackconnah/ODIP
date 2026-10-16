@@ -12,6 +12,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Infrastructure.Notifications.Templates;
@@ -57,6 +58,7 @@ public class IntakeBookingsController : ControllerBase
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
+        if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ClosedRefusal, ClosedCode));
 
         var now = NowUtc;
         var startsAt = ProviderLocalTime.AsUtc(dto.StartsAt);
@@ -157,8 +159,25 @@ public class IntakeBookingsController : ControllerBase
         if (ProviderLocalTime.AsUtc(start).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) <= NowUtc)
             return Conflict(ApiResponse<CancelIntakeBookingResultDto>.Fail("This visit has already happened, so it can't be cancelled."));
 
-        var staff = await StaffAsync(inquiry.IntakeStaffUserId, inquiry.TenantId, ct);
         var provider = await ProviderAsync(inquiry.TenantId, ct);
+        var cancellation = await CancelVisitAsync(inquiry, provider, ct);
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<CancelIntakeBookingResultDto>.Fail(ChangedByOther));
+
+        var email = await SendCancellationAsync(cancellation);
+        return Ok(ApiResponse<CancelIntakeBookingResultDto>.Ok(new CancelIntakeBookingResultDto
+        {
+            Inquiry = ParticipantInquiriesController.ToDto(inquiry, null, provider.ZoneId), CancellationEmail = email,
+        }));
+    }
+
+    /// <summary>The family replied or rang: the coordinator marks it by hand (no confirm link in v1). Emails nobody.</summary>
+    /// <summary>
+    /// Cancels the enquiry's visit on the tracked row: the next SEQUENCE, the staff member's CANCEL raised (an outbox row in the caller's save) and the
+    /// columns cleared. Returns the contact's cancellation to send AFTER the caller's save, or null when no invite had gone out. Used by Cancel and Close.
+    /// </summary>
+    private async Task<NotificationMessage?> CancelVisitAsync(ParticipantInquiry inquiry, Provider provider, CancellationToken ct)
+    {
+        var staff = await StaffAsync(inquiry.IntakeStaffUserId, inquiry.TenantId, ct);
         inquiry.IntakeIcsSequence += 1;
         // From the coordinator who booked, as every revision of this UID is (lead decision S2). Read before the columns are cleared.
         var from = await InviteFromAsync(inquiry, await CallerAsync(ct), ct);
@@ -169,22 +188,72 @@ public class IntakeBookingsController : ControllerBase
         if (staff != null) await RaiseStaffAsync(inquiry, staff, IntakeWording.Cancelled, provider, from, ct);
         inquiry.ClearIntakeBooking();
         inquiry.UpdatedAt = NowUtc;
-        if (!await SavedAsync(ct)) return Conflict(ApiResponse<CancelIntakeBookingResultDto>.Fail(ChangedByOther));
-
-        var email = "NoInvite";
-        if (cancellation != null)
-        {
-            // Not on the request's token: the booking is already cleared, so a CANCEL aborted with the browser could never be sent again.
-            var outcome = await _sender.SendAsync(cancellation, CancellationToken.None);
-            email = outcome.Sent ? "Sent" : outcome.ErrorCode ?? IntakeSendOutcome.Failed;
-        }
-        return Ok(ApiResponse<CancelIntakeBookingResultDto>.Ok(new CancelIntakeBookingResultDto
-        {
-            Inquiry = ParticipantInquiriesController.ToDto(inquiry, null, provider.ZoneId), CancellationEmail = email,
-        }));
+        return cancellation;
     }
 
-    /// <summary>The family replied or rang: the coordinator marks it by hand (no confirm link in v1). Emails nobody.</summary>
+    /// <summary>What became of the contact's cancellation: "NoInvite" (none had gone out, so nobody is emailed), "Sent", "NotConfigured" or "Failed".</summary>
+    private async Task<string> SendCancellationAsync(NotificationMessage? cancellation)
+    {
+        if (cancellation is null) return "NoInvite";
+        // Not on the request's token: the booking is already cleared, so a CANCEL aborted with the browser could never be sent again.
+        var outcome = await _sender.SendAsync(cancellation, CancellationToken.None);
+        return outcome.Sent ? "Sent" : outcome.ErrorCode ?? IntakeSendOutcome.Failed;
+    }
+
+    public const string ClosedCode = "inquiry-closed";
+    public const string ClosedRefusal = "This enquiry is closed. Reopen it first.";
+
+    /// <summary>
+    /// Closes an enquiry (spec addendum E1-E2): why (an outcome, an optional note), in one save with the upcoming visit's cancellation (as Cancel does it,
+    /// staff CANCEL included) and the deletion of its pending contacts. The contact's cancellation email goes after the save. A converted enquiry can't close.
+    /// Bumping UpdatedAt (the enforced version) makes any write that loaded the enquiry before this a 409.
+    /// </summary>
+    [HttpPost("inquiries/{id:guid}/close")]
+    [Authorize(Roles = LifecycleRoles)]
+    public async Task<ActionResult<ApiResponse<CloseInquiryResultDto>>> Close(Guid id, CloseInquiryDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<CloseInquiryResultDto>.Fail("A tenant context is required."));
+        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        if (inquiry is null) return NotFound(ApiResponse<CloseInquiryResultDto>.Fail("Inquiry not found"));
+        var note = Blank(dto.Note);
+        var errors = new Dictionary<string, string[]>();
+        if (dto.Outcome is not { } outcome || !Enum.IsDefined(outcome)) errors["outcome"] = ["Choose why it's closing."];
+        if (note?.Length > 500) errors["note"] = ["Keep the note under 500 characters."];
+        if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
+        if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<CloseInquiryResultDto>.Fail("This enquiry is already closed.", ClosedCode));
+        if (inquiry.ParticipantId is not null)
+            return Conflict(ApiResponse<CloseInquiryResultDto>.Fail($"Intake has started for {inquiry.FirstName}, so this enquiry can't be closed.", "inquiry-converted"));
+
+        // Only an upcoming visit is cancelled: one that has happened stays on the enquiry as its record (as Cancel refuses to cancel it).
+        var provider = await ProviderAsync(inquiry.TenantId, ct);
+        var upcoming = inquiry.IntakeStartsAt is DateTime start && ProviderLocalTime.AsUtc(start).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) > NowUtc;
+        var cancellation = upcoming ? await CancelVisitAsync(inquiry, provider, ct) : null;
+        _db.InquiryContacts.RemoveRange(await _db.InquiryContacts.Where(c => c.InquiryId == inquiry.Id && c.TenantId == inquiry.TenantId).ToListAsync(ct));
+        inquiry.ClosedAt = NowUtc; inquiry.ClosedByUserId = (await CallerAsync(ct))?.Id; inquiry.CloseOutcome = dto.Outcome; inquiry.CloseNote = note; inquiry.UpdatedAt = NowUtc;
+        // The trail keeps who, when and why, and nothing personal: never the whole enquiry (Decision 7).
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ParticipantInquiry), inquiry.Id, "Close", null, dto.Outcome!.Value.ToString(), User));
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<CloseInquiryResultDto>.Fail(ChangedByOther));
+
+        var email = upcoming ? await SendCancellationAsync(cancellation) : "NoVisit";
+        return Ok(ApiResponse<CloseInquiryResultDto>.Ok(new CloseInquiryResultDto { Inquiry = ParticipantInquiriesController.ToDto(inquiry, null, provider.ZoneId), CancellationEmail = email }));
+    }
+
+    /// <summary>Reopens a closed enquiry (spec addendum E3): the close is cleared; its contacts and any cancelled visit don't come back.</summary>
+    [HttpPost("inquiries/{id:guid}/reopen")]
+    [Authorize(Roles = LifecycleRoles)]
+    public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Reopen(Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
+        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        if (inquiry is null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
+        if (inquiry.ClosedAt is null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("This enquiry is already open.", "inquiry-open"));
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ParticipantInquiry), inquiry.Id, "Reopen", inquiry.CloseOutcome?.ToString(), null, User));
+        inquiry.ClosedAt = null; inquiry.ClosedByUserId = null; inquiry.CloseOutcome = null; inquiry.CloseNote = null; inquiry.UpdatedAt = NowUtc;
+        if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
+        var provider = await ProviderAsync(inquiry.TenantId, ct);
+        return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ParticipantInquiriesController.ToDto(inquiry, null, provider.ZoneId)));
+    }
+
     [HttpPost("inquiries/{id:guid}/intake-booking/confirm")]
     [Authorize(Roles = LifecycleRoles)]
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Confirm(Guid id, ConfirmIntakeBookingDto dto, CancellationToken ct)
@@ -246,7 +315,8 @@ public class IntakeBookingsController : ControllerBase
         var toUtc = ProviderLocalTime.LocalToUtc(last.AddDays(1).ToDateTime(TimeOnly.MinValue), zone.Zone);
         // Keyed on the caller's organisation explicitly: a SuperAdmin's context has no query filter.
         var rows = await _db.ParticipantInquiries
-            .Where(x => x.TenantId == tenantId && x.IntakeStartsAt != null && x.IntakeStartsAt >= fromUtc && x.IntakeStartsAt < toUtc
+            // A closed enquiry's retained past visit is its record, not a visit to be done (check S2).
+            .Where(x => x.TenantId == tenantId && x.ClosedAt == null && x.IntakeStartsAt != null && x.IntakeStartsAt >= fromUtc && x.IntakeStartsAt < toUtc
                         && (staffUserId == null || x.IntakeStaffUserId == staffUserId))
             .OrderBy(x => x.IntakeStartsAt)
             .Select(x => new { x.Id, x.FirstName, x.LastName, x.ParticipantId, x.IntakeStartsAt, x.IntakeDurationMinutes, x.IntakeLocation, x.IntakeStaffUserId, x.IntakeConfirmedAt })
