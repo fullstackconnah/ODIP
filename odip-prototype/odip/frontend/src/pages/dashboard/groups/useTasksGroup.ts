@@ -74,6 +74,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
         return [...(o.data ?? []), ...(d.data ?? []).filter(isOpen)].map((t) => t.id)
       } finally {
         // A Done with no reply never ran its onSuccess, and may have committed: refresh what it would have (useUpdateTask).
+        void qc.invalidateQueries({ queryKey: ['tasks'] })
         void qc.invalidateQueries({ queryKey: ['trip-tasks'] })
         void qc.invalidateQueries({ queryKey: ['dashboard'] })
       }

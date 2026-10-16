@@ -83,6 +83,8 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
         // A batch with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveCompletionsBatch).
         void qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
         void qc.invalidateQueries({ queryKey: ['roster-board'] })
+        // The nav badge's own entry (the group's "all" read was just refetched).
+        void qc.invalidateQueries({ queryKey: ['rostering-completions'], predicate: (q) => q.queryKey[2] !== 'all' })
         refreshBudgetFigures(qc)
       }
     },

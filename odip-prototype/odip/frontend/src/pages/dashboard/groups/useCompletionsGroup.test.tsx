@@ -312,17 +312,17 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
     expect(keys.length).toBeGreaterThan(2) // and the budget figures (refreshBudgetFigures)
   })
 
-  it("marks each held row \"Couldn't confirm\", and the mark survives dismissing the notice", async () => {
+  it("marks each held row \"Not confirmed yet\", and the mark survives dismissing the notice", async () => {
     apiGet.mockResolvedValueOnce(page(two())).mockRejectedValue(networkError())
     apiPost.mockRejectedValue(networkError())
     renderGroup(() => useCompletionsGroup(true))
     await runAll()
 
     await waitFor(() => expect(notice()).toHaveTextContent('No answer for 2 completions'))
-    expect(screen.getAllByText("Couldn't confirm")).toHaveLength(2)
+    expect(screen.getAllByText("Not confirmed yet")).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
     expect(notice()).toBeNull()
-    expect(screen.getAllByText("Couldn't confirm")).toHaveLength(2)
+    expect(screen.getAllByText("Not confirmed yet")).toHaveLength(2)
     expect(screen.getByRole('button', { name: APPROVE })).toHaveAttribute('aria-disabled', 'true')
   })
 
@@ -332,11 +332,11 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
     const { client } = renderGroup(() => useCompletionsGroup(true))
     await runAll()
     await waitFor(() => expect(notice()).toHaveTextContent("couldn't be checked"))
-    expect(screen.getAllByText("Couldn't confirm")).toHaveLength(2)
+    expect(screen.getAllByText("Not confirmed yet")).toHaveLength(2)
 
     await client.refetchQueries({ queryKey: ['rostering-completions'] })
 
-    await waitFor(() => expect(screen.queryByText("Couldn't confirm")).toBeNull())
+    await waitFor(() => expect(screen.queryByText("Not confirmed yet")).toBeNull())
     expect(screen.queryByText('Ana Ruiz')).toBeNull()
     expect(screen.getByRole('button', { name: APPROVE })).not.toHaveAttribute('aria-disabled')
     expect(screen.getByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
@@ -351,7 +351,7 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
 
     await client.refetchQueries({ queryKey: ['rostering-completions'] })
 
-    expect(screen.getAllByText("Couldn't confirm")).toHaveLength(2)
+    expect(screen.getAllByText("Not confirmed yet")).toHaveLength(2)
   })
 
   it('re-reads the queue after the server skipped a row as needing review, so it redraws flagged (deep R-N1)', async () => {

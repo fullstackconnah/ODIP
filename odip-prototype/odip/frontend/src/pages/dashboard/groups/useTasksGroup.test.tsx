@@ -189,4 +189,18 @@ describe('Tasks due group — Mark all done (decision-bulk)', () => {
     expect(screen.getByText("1 can't be marked done here and stays. 1 was already closed.")).toBeInTheDocument()
     expect(subjects()).toEqual(['Cover the shift'])
   })
+
+  it('refreshes the caches a Done would, when a row gets no answer and its re-read runs (review #266 fix round)', async () => {
+    answer([task()])
+    apiPutRaw.mockRejectedValue(Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', request: {} }))
+    const { client } = render()
+    const spy = vi.spyOn(client, 'invalidateQueries')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark 1 task done' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Mark 1 done' }))
+
+    await waitFor(() => expect(screen.getByText('No answer for 1 task')).toBeInTheDocument())
+    const keys = spy.mock.calls.map(([filters]) => JSON.stringify((filters as { queryKey?: unknown })?.queryKey))
+    expect(keys).toEqual(expect.arrayContaining([JSON.stringify(['tasks']), JSON.stringify(['trip-tasks']), JSON.stringify(['dashboard'])]))
+  })
 })

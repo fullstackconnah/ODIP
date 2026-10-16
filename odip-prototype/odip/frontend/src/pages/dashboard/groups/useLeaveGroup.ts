@@ -129,6 +129,7 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
       } finally {
         // An approval with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveLeave).
         void qc.invalidateQueries({ queryKey: ['roster-board'] })
+        void qc.invalidateQueries({ queryKey: ['recurring-unavailabilities'] })
         void qc.invalidateQueries({ queryKey: ['tasks'] })
         void qc.invalidateQueries({ queryKey: ['dashboard'] })
       }

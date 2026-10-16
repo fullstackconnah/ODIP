@@ -288,7 +288,7 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
             {row.flags.slice(0, 2).map((flag) => (
               <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
             ))}
-            {unconfirmed && <StatusBadge tone="neutral" label="Couldn't confirm" className="shrink-0 whitespace-nowrap" />}
+            {unconfirmed && <StatusBadge tone="neutral" label="Not confirmed yet" className="shrink-0 whitespace-nowrap" />}
           </div>
         </td>
         {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} />)}
