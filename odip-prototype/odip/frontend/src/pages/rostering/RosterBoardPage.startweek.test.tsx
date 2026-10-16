@@ -5,6 +5,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DragEndEvent } from '@dnd-kit/core'
 import RosterBoardPage from './RosterBoardPage'
+import { weekStartOf } from './lib/roster'
 import { makeFinding, makeParticipantBoard, makeParticipantRow, makeShift, makeStaffBoard, makeStaffRow, makeUnfilledShift } from './test-fixtures'
 import type { RosterBoardDto, ShiftDto } from '@/api/types'
 
@@ -313,5 +314,82 @@ describe('Start rostering', () => {
     await user.click(screen.getByRole('button', { name: 'Next week' }))
     await user.click(screen.getByRole('button', { name: 'Previous week' }))
     expect(screen.queryByText(/^Started/)).not.toBeInTheDocument()
+  })
+})
+
+describe('leaving a week with publishable drafts', () => {
+  const LEAVE = 'Leave without publishing?'
+  const heading = () => document.getElementById('roster-week-heading')
+  const lastWeekAsked = () => h.board.mock.calls[h.board.mock.calls.length - 1]
+
+  it("Next asks in the roster's words; Stay and Escape keep the week and give focus back to Next; Leave moves", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const week = heading()?.textContent
+
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    const dialog = screen.getByRole('alertdialog', { name: LEAVE })
+    expect(dialog).toHaveTextContent("4 shifts in 17–23 Aug aren't visible to staff yet. They stay saved as drafts until you publish the week.")
+    const go = within(dialog).getByRole('button', { name: 'Leave without publishing' })
+    expect(go).toHaveClass(PRIMARY)
+    expect(go).not.toHaveClass('bg-[var(--color-destructive)]')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Stay' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(heading()?.textContent).toBe(week)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next week' })).toHaveFocus())
+
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(heading()?.textContent).toBe(week)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next week' })).toHaveFocus())
+
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    await user.click(screen.getByRole('button', { name: 'Leave without publishing' }))
+    expect(lastWeekAsked()).toEqual(['2026-08-24', 'participant'])
+  })
+
+  it('Previous asks too; This week on the week already shown asks nothing', async () => {
+    const user = userEvent.setup()
+    renderPage(`/rostering?date=${weekStartOf(new Date())}`)
+    await user.click(screen.getByRole('button', { name: 'This week' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Previous week' }))
+    expect(screen.getByRole('alertdialog', { name: LEAVE })).toBeInTheDocument()
+  })
+
+  it('never asks when only blocked drafts are left, on an unstarted week, or a reader', async () => {
+    const user = userEvent.setup()
+    for (const setUp of [() => showBoard(board([BLOCKED])), () => showBoard(UNSTARTED), () => asReader()]) {
+      localStorage.clear()
+      showBoard(board(DRAFTS))
+      setUp()
+      const { unmount } = renderPage()
+      await user.click(screen.getByRole('button', { name: 'Next week' }))
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(lastWeekAsked()[0]).toBe('2026-08-24')
+      unmount()
+    }
+  })
+
+  it("a move to another page asks in the hook's dialog, in the same words, Stay first and no red button", async () => {
+    const { router } = renderPage('/rostering?date=2026-08-17', [{ path: '/elsewhere', element: <p>Elsewhere</p> }])
+    await act(async () => { await router.navigate('/elsewhere') })
+    const dialog = screen.getByRole('alertdialog', { name: LEAVE })
+    expect(within(dialog).getByRole('button', { name: 'Stay' })).toHaveFocus()
+    expect(within(dialog).getByRole('button', { name: 'Leave without publishing' })).not.toHaveClass('bg-[var(--color-destructive)]')
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Stay' }))
+    expect(router.state.location.pathname).toBe('/rostering')
+  })
+
+  it("the address: another week's ?date= asks; the same week's, ?participant= and ?unfilled= never do", async () => {
+    const { router } = renderPage()
+    await act(async () => { await router.navigate('/rostering?date=2026-08-19&participant=p-1') })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await act(async () => { await router.navigate('/rostering?date=2026-08-17&unfilled=1') })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await act(async () => { await router.navigate('/rostering?date=2026-08-26') })
+    expect(screen.getByRole('alertdialog', { name: LEAVE })).toBeInTheDocument()
   })
 })

@@ -8,6 +8,7 @@ import {
 import { CalendarClock, CalendarPlus, X } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
@@ -33,7 +34,7 @@ import {
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
 } from './lib/rosterDrag'
 import {
-  ALREADY_STARTED, START_FAILED, alreadyInWeekLine, bannerBlockedLine, bannerTitle, isBlocked, startBudgetWarnings, startResultBody, startResultTitle,
+  ALREADY_STARTED, LEAVE_TITLE, START_FAILED, alreadyInWeekLine, leaveMessage, bannerBlockedLine, bannerTitle, isBlocked, startBudgetWarnings, startResultBody, startResultTitle,
 } from './lib/rosterWeek'
 
 /** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
@@ -242,6 +243,26 @@ export default function RosterBoardPage() {
   function showWeek(target: string) {
     setWeekStart(target)
     setStartNotice(null)
+  }
+
+  // The leave guard (the brief, section 4): a writer, a started week, and a draft Publish could send. Drafts only a rule blocks never ask: publishing can't fix them.
+  const leaveArmed = canWrite && !unstarted && publishable.length > 0
+  const leaveCopy = { title: LEAVE_TITLE, message: leaveMessage(publishable.length, formatWeekSpan(days)), confirmLabel: 'Leave without publishing', stayLabel: 'Stay' }
+  const { dialog: leaveDialog } = useUnsavedChangesWarning(leaveArmed, {
+    leaveCopy,
+    // Another week by address (a bell or task link) leaves this one; the filters (?participant=, ?unfilled=) keep it.
+    blockIf: (_current, next) => {
+      const date = new URLSearchParams(next.search).get('date')
+      return date !== null && weekStartFromDateParam(date) !== weekStart
+    },
+  })
+  const [pendingWeek, setPendingWeek] = useState<string | null>(null)
+
+  /** Prev, Next and This week are local state, out of useBlocker's sight, so they ask here. The week already shown asks nothing. */
+  function moveToWeek(target: string) {
+    if (target === weekStart) return
+    if (leaveArmed) setPendingWeek(target)
+    else showWeek(target)
   }
 
   async function handleStartWeek() {
@@ -501,9 +522,9 @@ export default function RosterBoardPage() {
 
         <WeekToolbar
           days={days}
-          onPrevWeek={() => showWeek(shiftWeek(weekStart, -1))}
-          onThisWeek={() => showWeek(weekStartOf(new Date()))}
-          onNextWeek={() => showWeek(shiftWeek(weekStart, 1))}
+          onPrevWeek={() => moveToWeek(shiftWeek(weekStart, -1))}
+          onThisWeek={() => moveToWeek(weekStartOf(new Date()))}
+          onNextWeek={() => moveToWeek(shiftWeek(weekStart, 1))}
           groupBy={groupBy}
           onGroupByChange={setGroupBy}
           participantOptions={participantOptions}
@@ -722,6 +743,17 @@ export default function RosterBoardPage() {
           setExceptionsOpen(false)
           if (shift) setSlideOverTarget({ mode: 'edit', shift })
         }}
+      />
+
+      {leaveDialog}
+      <ConfirmDialog
+        open={pendingWeek !== null}
+        onCancel={() => setPendingWeek(null)}
+        onConfirm={() => { if (pendingWeek) showWeek(pendingWeek); setPendingWeek(null) }}
+        title={leaveCopy.title}
+        message={<p>{leaveCopy.message}</p>}
+        cancelLabel={leaveCopy.stayLabel}
+        confirmLabel={leaveCopy.confirmLabel}
       />
 
       <ConfirmDialog
