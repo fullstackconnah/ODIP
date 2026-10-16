@@ -293,6 +293,35 @@ public class EarlyAccessRequestTemplateTests
         Assert.DoesNotContain("script", message.Subject);
     }
 
+    [Fact]
+    public void ASecondSubmission_SaysSoWithoutAnyMessageText_AndPointsAtTheTab()
+    {
+        EarlyAccessRequestPayload Payload_(EarlyAccessNoticeKind kind) =>
+            new("ops@example.com", "Jane", "Org", "jane@example.com", DateTime.UtcNow, kind);
+        var again = EarlyAccessRequestTemplate.Render(Payload_(EarlyAccessNoticeKind.SentAgain));
+        var last = EarlyAccessRequestTemplate.Render(Payload_(EarlyAccessNoticeKind.SentAgainLastKept));
+        var over = EarlyAccessRequestTemplate.Render(Payload_(EarlyAccessNoticeKind.SentAgainOverLimit));
+
+        Assert.Contains("Jane sent the form again", again.PlainTextBody);
+        Assert.Contains("Settings > Alpha sign-ups", again.PlainTextBody);
+        Assert.Contains("last one that will be kept", last.PlainTextBody);
+        Assert.Contains("Settings &gt; Alpha sign-ups", last.HtmlBody);
+        Assert.Contains("Jane sent the form again after the 10-submission limit", over.PlainTextBody);
+        Assert.Contains("contact them by email", over.PlainTextBody);
+        Assert.Equal(3, new[] { again.Subject, last.Subject, over.Subject }.Distinct().Count());
+        Assert.DoesNotContain("early access to Bunya Support.", again.PlainTextBody);
+    }
+
+    [Fact]
+    public void ANoticeAboutASecondSubmission_HtmlEncodesTheName_AndKeepsItOutOfTheSubject()
+    {
+        var message = EarlyAccessRequestTemplate.Render(new EarlyAccessRequestPayload(
+            "ops@example.com", Payload, "Org", "a@example.com", DateTime.UtcNow, EarlyAccessNoticeKind.SentAgain));
+
+        Assert.DoesNotContain("<script>", message.HtmlBody);
+        Assert.DoesNotContain("script", message.Subject);
+    }
+
     // SkippableFact: under the deploy image's invariant globalization a non-invariant culture cannot be created.
     [SkippableFact]
     public void Render_FormatsTheTimestampCultureInvariantly()

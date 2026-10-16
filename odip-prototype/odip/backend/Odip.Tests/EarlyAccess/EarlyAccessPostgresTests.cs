@@ -431,6 +431,94 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task TheSameDifferingMessageSentTwice_IsStoredOnce_AndAnyStoredOneCountsAsADuplicate()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("dupes");
+        foreach (var message in new[] { "base", "note A", "note B", "note A", "note B", "note A" })
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: message), CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.AsNoTracking().Include(e => e.LaterSubmissions).SingleAsync(e => e.Email == email);
+        Assert.Equal(6, row.RequestCount);
+        Assert.Equal(new[] { "note A", "note B" }, row.LaterSubmissions.OrderBy(l => l.ReceivedAtUtc).Select(l => l.Message).ToArray());
+    }
+
+    [SkippableFact]
+    public async Task ARepeatThatRacesTheSuperAdminsDelete_IsRetriedAsAFreshSignup_NotA500()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("race-delete");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: "first"), CancellationToken.None);
+        var interfere = new BeforeFirstSave(async () =>
+        {
+            await using var connection = _pg.OpenConnection();
+            await using var command = new NpgsqlCommand("DELETE FROM \"EarlyAccessRequests\" WHERE \"Email\" = @email", connection);
+            command.Parameters.AddWithValue("email", email);
+            await command.ExecuteNonQueryAsync();
+        });
+
+        EarlyAccessRecordResult result;
+        await using (var db = _pg.CreateContext(interfere))
+            result = await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: "second"), CancellationToken.None);
+
+        Assert.Equal(EarlyAccessOutcome.Created, result.Outcome);
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+        Assert.Equal("second", row.Message);
+        Assert.Equal(1, row.RequestCount);
+    }
+
+    [SkippableFact]
+    public async Task TheSuperAdminList_LoadsEachSignupsLaterSubmissions_OldestFirst_AcrossMoreThanOneSignup()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var emails = new[] { NewEmail("list-a"), NewEmail("list-b") };
+        foreach (var email in emails)
+        {
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Listed " + tag, "Org", email), CancellationToken.None);
+            foreach (var message in new[] { "first", "second", "third" })
+                await using (var db = _pg.CreateContext())
+                    await NewService(db).RecordAsync(Checked("Listed " + tag, "Org", email, message: email + message), CancellationToken.None);
+        }
+
+        await using var read = _pg.CreateContext();
+        var response = await new AdminEarlyAccessController(read).GetAll(page: 1, pageSize: 100, ct: CancellationToken.None);
+        var page = Assert.IsType<OkObjectResult>(response.Result).Value;
+        var items = Assert.IsType<Odip.Application.Common.ApiResponse<Odip.Application.Common.PagedResult<EarlyAccessSignupDto>>>(page).Data!.Items;
+        var rows = items.Where(r => emails.Contains(r.Email)).ToList();
+
+        Assert.Equal(2, rows.Count);
+        foreach (var r in rows)
+            Assert.Equal(new[] { r.Email + "first", r.Email + "second", r.Email + "third" }, r.LaterSubmissions.Select(l => l.Message).ToArray());
+    }
+
+    [Fact]
+    public async Task ThePurge_RetriesInFiveMinutesAfterAFailedRun()
+    {
+        var now = new DateTime(2026, 10, 17, 3, 0, 0, DateTimeKind.Utc);
+        var scopes = new Moq.Mock<IServiceScopeFactory>();
+        scopes.Setup(f => f.CreateScope()).Throws(new InvalidOperationException("database down"));
+        var purger = new EarlyAccessPurgeBackgroundService(scopes.Object, NullLogger<EarlyAccessPurgeBackgroundService>.Instance);
+
+        Assert.Equal(TimeSpan.FromMinutes(5), EarlyAccessPurgeBackgroundService.RetryInterval);
+        Assert.Equal(EarlyAccessPurgeBackgroundService.RetryInterval, await purger.RunOnceAsync(now, CancellationToken.None));
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_WaitsAnHourAfterASuccessfulRun()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var now = new DateTime(2026, 10, 17, 3, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal(EarlyAccessPurgeBackgroundService.Interval, await Purger().RunOnceAsync(now, CancellationToken.None));
+    }
+
+    [SkippableFact]
     public async Task TheLaterSubmissions_GoWithTheirSignup_WhenTheSuperAdminDeletesIt_AndWhenThePurgeDoes()
     {
         Skip.IfNot(_pg.Available, _pg.UnavailableReason);

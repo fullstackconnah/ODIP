@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Odip.Application.EarlyAccess;
+using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
 
@@ -16,7 +17,9 @@ public enum EarlyAccessOutcome
     Repeated,
 }
 
-public sealed record EarlyAccessRecordResult(EarlyAccessOutcome Outcome, int RequestCount, DateTime RequestedAtUtc);
+/// <param name="Notice">What the operator should be told, or null for an identical repeat (nothing to tell).</param>
+public sealed record EarlyAccessRecordResult(
+    EarlyAccessOutcome Outcome, int RequestCount, DateTime RequestedAtUtc, EarlyAccessNoticeKind? Notice = null);
 
 /// <summary>
 /// Stores one early-access request: inserts the address the first time, and on any later request from
@@ -61,6 +64,7 @@ public sealed class EarlyAccessService
 
             // The DbSet has no query filter, so this sees every row whatever tenant context the request carries.
             var existing = await _db.EarlyAccessRequests.SingleOrDefaultAsync(e => e.Email == email, ct);
+            EarlyAccessNoticeKind? notice = null;
 
             if (existing is null)
             {
@@ -78,6 +82,7 @@ public sealed class EarlyAccessService
                     LastRequestedAtUtc = now,
                     RequestCount = 1,
                 });
+                notice = EarlyAccessNoticeKind.NewRequest;
             }
             else
             {
@@ -85,21 +90,31 @@ public sealed class EarlyAccessService
                 existing.RequestCount += 1;
                 // The stored answers never change. A repeat that says something different is kept beside them, up to the cap. RequestCount
                 // is a concurrency token and every repeat bumps it, so two simultaneous repeats cannot both pass the cap check.
-                if (!SameAnswers(existing, request)
-                    && await _db.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == existing.Id, ct) < MaxLaterSubmissions)
+                // An answer already on file, the original or any stored one, stores and tells no one, so duplicates cannot fill the cap.
+                var stored = await _db.EarlyAccessLaterSubmissions.AsNoTracking()
+                    .Where(l => l.EarlyAccessRequestId == existing.Id).ToListAsync(ct);
+                if (!SameAnswers(existing, request) && !stored.Any(l => SameAnswers(l, request)))
                 {
-                    _db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
+                    if (stored.Count >= MaxLaterSubmissions)
                     {
-                        Id = Guid.NewGuid(),
-                        EarlyAccessRequestId = existing.Id,
-                        ReceivedAtUtc = now,
-                        Name = request.Name,
-                        Organisation = request.Organisation,
-                        Role = request.Role,
-                        Phone = request.Phone,
-                        OrganisationSize = request.OrganisationSize,
-                        Message = request.Message,
-                    });
+                        notice = EarlyAccessNoticeKind.SentAgainOverLimit;
+                    }
+                    else
+                    {
+                        notice = stored.Count + 1 == MaxLaterSubmissions ? EarlyAccessNoticeKind.SentAgainLastKept : EarlyAccessNoticeKind.SentAgain;
+                        _db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
+                        {
+                            Id = Guid.NewGuid(),
+                            EarlyAccessRequestId = existing.Id,
+                            ReceivedAtUtc = now,
+                            Name = request.Name,
+                            Organisation = request.Organisation,
+                            Role = request.Role,
+                            Phone = request.Phone,
+                            OrganisationSize = request.OrganisationSize,
+                            Message = request.Message,
+                        });
+                    }
                 }
             }
 
@@ -119,20 +134,27 @@ public sealed class EarlyAccessService
             }
 
             if (existing is null)
-                return new EarlyAccessRecordResult(EarlyAccessOutcome.Created, 1, now);
+                return new EarlyAccessRecordResult(EarlyAccessOutcome.Created, 1, now, notice);
 
             _logger.LogInformation(
                 "Early-access request from {Email} repeated (request {RequestCount}); no notification re-sent",
                 EmailMasking.Mask(email), existing.RequestCount);
-            return new EarlyAccessRecordResult(EarlyAccessOutcome.Repeated, existing.RequestCount, now);
+            return new EarlyAccessRecordResult(EarlyAccessOutcome.Repeated, existing.RequestCount, now, notice);
         }
     }
 
     private static bool SameAnswers(EarlyAccessRequest stored, EarlyAccessValidationResult request) =>
-        stored.Name == request.Name && stored.Organisation == request.Organisation && stored.Role == request.Role
-        && stored.Phone == request.Phone && stored.OrganisationSize == request.OrganisationSize && stored.Message == request.Message;
+        SameAnswers(stored.Name, stored.Organisation, stored.Role, stored.Phone, stored.OrganisationSize, stored.Message, request);
+
+    private static bool SameAnswers(EarlyAccessLaterSubmission stored, EarlyAccessValidationResult request) =>
+        SameAnswers(stored.Name, stored.Organisation, stored.Role, stored.Phone, stored.OrganisationSize, stored.Message, request);
+
+    private static bool SameAnswers(
+        string name, string organisation, string? role, string? phone, string? size, string? message, EarlyAccessValidationResult request) =>
+        name == request.Name && organisation == request.Organisation && role == request.Role
+        && phone == request.Phone && size == request.OrganisationSize && message == request.Message;
 
     private static bool IsLostRace(Exception ex) =>
         ex is DbUpdateConcurrencyException
-        || ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } };
+        || ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation } };
 }

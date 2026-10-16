@@ -104,15 +104,17 @@ public class EarlyAccessController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<object>.Fail(UnexpectedErrorMessage));
         }
 
-        // Only a first-time address is worth an email. The notifier queues and returns at once, so the response
-        // is the same 202 in the same time whichever branch ran. The row is already stored: a notifier fault must
-        // not turn this into an error for the visitor.
-        if (result.Outcome == EarlyAccessOutcome.Created)
+        // A new address, or a known one that sent different answers, is worth an email (an identical repeat is not). The
+        // notifier queues and returns at once, so the response is the same 202 in the same time whichever branch ran.
+        // The row is already stored: a notifier fault must not turn this into an error for the visitor.
+        // shortcut: past the 10-submission limit every differing repeat still queues a notice; the notifier's bounded queue and the
+        // public rate limit cap the volume.
+        if (result.Notice is { } notice)
         {
             try
             {
                 _notifier.NotifyNewRequest(new EarlyAccessNotification(
-                    checkedRequest.Name, checkedRequest.Organisation, checkedRequest.Email, result.RequestedAtUtc));
+                    checkedRequest.Name, checkedRequest.Organisation, checkedRequest.Email, result.RequestedAtUtc, notice));
             }
             catch (Exception ex)
             {

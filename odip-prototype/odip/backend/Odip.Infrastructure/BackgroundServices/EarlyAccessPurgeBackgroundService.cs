@@ -18,6 +18,7 @@ public class EarlyAccessPurgeBackgroundService : BackgroundService
 {
     public const int RetentionMonths = 12;
     public static readonly TimeSpan Interval = TimeSpan.FromHours(1);
+    public static readonly TimeSpan RetryInterval = TimeSpan.FromMinutes(5);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<EarlyAccessPurgeBackgroundService> _logger;
@@ -32,17 +33,25 @@ public class EarlyAccessPurgeBackgroundService : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await PurgeExpiredAsync(DateTime.UtcNow, stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(ex, "Early-access sign-up purge failed");
-            }
-
-            try { await Task.Delay(Interval, stoppingToken); }
+            var wait = await RunOnceAsync(DateTime.UtcNow, stoppingToken);
+            try { await Task.Delay(wait, stoppingToken); }
             catch (OperationCanceledException) { break; }
+        }
+    }
+
+    /// <summary>Runs one purge and returns how long to wait before the next: <see cref="Interval"/>, or <see cref="RetryInterval"/> after a failure.</summary>
+    public async Task<TimeSpan> RunOnceAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        try
+        {
+            await PurgeExpiredAsync(nowUtc, ct);
+            return Interval;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Early-access sign-up purge failed");
+            // A failed run retried an hour later could leave a row past its 12 months by that hour.
+            return RetryInterval;
         }
     }
 
