@@ -38,7 +38,7 @@ const model = (o: Partial<GroupModel> = {}): GroupModel => ({
   rows: [row('a'), row('b')], link: { to: '/rostering/leave', openLabel: 'Open Leave' }, ...o,
 })
 const status = () => screen.getAllByRole('status').find((el) => el.classList.contains('sr-only'))!
-const axiosError = (message: string) => ({ response: { data: { message } } })
+const axiosError = (message: string) => ({ response: { data: { success: false, message } } })
 /** The decision rows: every body row but a detail row (the error or form under a row). */
 const bodyRows = () => screen.queryAllByRole('row').filter((tr) => tr.closest('tbody') && !tr.hasAttribute('data-detail'))
 /** A decision row's row group: its row, and its detail row while it has one. */

@@ -18,7 +18,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 const UPCOMING = '2030-10-15T23:00:00Z'
-const base = { source: 'Phone', createdAt: '2026-09-28T01:10:00Z', participantId: null, timeZoneId: 'Australia/Sydney', email: 'family@example.com' }
+const base = { source: 'Phone', createdAt: '2026-09-28T01:10:00Z', participantId: null, timeZoneId: 'Australia/Sydney', email: 'family@example.com', contactIsParticipant: true, hasAddress: true }
 const booking = { intakeStartsAt: UPCOMING, intakeDurationMinutes: 90, intakeLocation: '12 Smith St', intakeStaffUserId: 'sam', intakeStaffFirstName: 'Sam', intakeStaffName: 'Sam Lee' }
 const rows = [
   { ...base, id: 'empty', firstName: 'Noah', lastName: 'Fitzgerald' },
@@ -148,7 +148,7 @@ describe('the phone menu', () => {
 
     expect(mocks.cancelVisit).toHaveBeenCalledWith('sent')
     expect(await screen.findByText('Intake visit cancelled, email not sent')).toBeInTheDocument()
-    expect(screen.getByText("Email isn't set up yet, so Priya Nair wasn't told. Let them know another way.")).toBeInTheDocument()
+    expect(screen.getByText("Email isn't set up yet, so Priya wasn't told. Let them know another way.")).toBeInTheDocument()
   })
 })
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -32,10 +33,10 @@ public class RosterRegularTests
             Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = status, ShiftPatternId = patternId,
         }).Entity;
 
-    private static async Task<ActionResult<ApiResponse<ShiftPatternDto>>> SetRegularAsync(string dbName, Guid patternId, Guid? staffId)
+    private static async Task<ActionResult<ApiResponse<ShiftPatternDto>>> SetRegularAsync(string dbName, Guid patternId, Guid shiftId, Guid? staffId)
     {
         using var db = TestDb.ForTenant(dbName, TenantA);
-        return await Controller(db, TenantOf(TenantA)).SetRegular(patternId, new SetRegularDto { StaffId = staffId }, default);
+        return await Controller(db, TenantOf(TenantA)).SetRegular(patternId, new SetRegularDto { ShiftId = shiftId, StaffId = staffId }, default);
     }
 
     private static Shift Stored(string dbName, Guid shiftId)
@@ -60,24 +61,29 @@ public class RosterRegularTests
             kimId = Worker(db, "Kim").Id;
             var mia = Person(db, "Mia");
             patternId = Pattern(db, mia.Id, DayOfWeek.Monday).Id;
-            shiftId = ShiftOf(db, mia.Id, null, Monday, patternId).Id;
+            shiftId = ShiftOf(db, mia.Id, kimId, Monday, patternId).Id;
         });
 
-        var dto = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, patternId, kimId)).Result).Value).Data!;
+        var dto = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, patternId, shiftId, kimId)).Result).Value).Data!;
 
         Assert.Equal(kimId, dto.DefaultStaffId);
         using var check = TestDb.Create(dbName);
         Assert.Equal(kimId, check.ShiftPatterns.Single(p => p.Id == patternId).DefaultUserId);
-        Assert.Null(Stored(dbName, shiftId).UserId);
+        Assert.Equal(kimId, Stored(dbName, shiftId).UserId);
     }
 
     [Fact]
     public async Task SetRegular_Null_ClearsIt()
     {
-        Guid patternId = default;
-        var dbName = NewDatabase(db => patternId = Pattern(db, Person(db, "Mia").Id, DayOfWeek.Monday, Worker(db, "Kim").Id).Id);
+        Guid patternId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday, Worker(db, "Kim").Id).Id;
+            shiftId = ShiftOf(db, mia.Id, null, Monday, patternId).Id;
+        });
 
-        Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, patternId, null)).Result);
+        Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, patternId, shiftId, null)).Result);
         using var check = TestDb.Create(dbName);
         Assert.Null(check.ShiftPatterns.Single(p => p.Id == patternId).DefaultUserId);
     }
@@ -87,26 +93,156 @@ public class RosterRegularTests
     {
         Guid patternId = default, kimId = default;
         var dbName = NewDatabase(db => { kimId = Worker(db, "Kim").Id; patternId = Pattern(db, Person(db, "Bo", TenantB).Id, DayOfWeek.Monday, tenantId: TenantB).Id; });
-        Assert.IsType<NotFoundObjectResult>((await SetRegularAsync(dbName, patternId, kimId)).Result);
+        Assert.IsType<NotFoundObjectResult>((await SetRegularAsync(dbName, patternId, Guid.NewGuid(), kimId)).Result);
     }
 
     [Fact]
     public async Task SetRegular_AnInactiveWorker_IsRefused()
     {
-        Guid patternId = default, kimId = default;
-        var dbName = NewDatabase(db => { var kim = Worker(db, "Kim"); kim.IsActive = false; kimId = kim.Id; patternId = Pattern(db, Person(db, "Mia").Id, DayOfWeek.Monday).Id; });
+        Guid patternId = default, kimId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            var kim = Worker(db, "Kim"); kim.IsActive = false; kimId = kim.Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday).Id;
+            shiftId = ShiftOf(db, mia.Id, kimId, Monday, patternId).Id;
+        });
 
-        var refused = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<BadRequestObjectResult>((await SetRegularAsync(dbName, patternId, kimId)).Result).Value);
+        var refused = Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<BadRequestObjectResult>((await SetRegularAsync(dbName, patternId, shiftId, kimId)).Result).Value);
         Assert.Equal("Staff member not found.", Assert.Single(refused.Errors!));
+    }
+
+    private const string BoardChanged = "This shift changed after the board was loaded. Refresh the board and try again.";
+
+    private static async Task<(ConflictObjectResult Conflict, ApiResponse<ShiftPatternDto> Body)> RefusedAsync(string dbName, Guid patternId, Guid shiftId, Guid? staffId)
+    {
+        var conflict = Assert.IsType<ConflictObjectResult>((await SetRegularAsync(dbName, patternId, shiftId, staffId)).Result);
+        return (conflict, Assert.IsType<ApiResponse<ShiftPatternDto>>(conflict.Value));
+    }
+
+    [Theory]   // REV274 #1: an edited occurrence keeps its pattern link, so the server compares the shown shift with the pattern's own slot
+    [InlineData("day")]
+    [InlineData("participant")]
+    [InlineData("start")]
+    [InlineData("end")]
+    [InlineData("endsNextDay")]
+    public async Task SetRegular_ShiftEditedAwayFromTheSlot_IsRefused409_PatternUnchanged(string edited)
+    {
+        Guid kimId = default, patternId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            kimId = Worker(db, "Kim").Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday).Id;
+            var shift = ShiftOf(db, edited == "participant" ? Person(db, "Bo").Id : mia.Id, kimId, edited == "day" ? Monday.AddDays(1) : Monday, patternId,
+                from: edited == "start" ? 14 : 9, to: edited == "end" ? 20 : 13);
+            shift.EndsNextDay = edited == "endsNextDay";
+            shiftId = shift.Id;
+        });
+
+        var (_, body) = await RefusedAsync(dbName, patternId, shiftId, kimId);
+
+        Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+        using var check = TestDb.Create(dbName);
+        Assert.Null(check.ShiftPatterns.Single(p => p.Id == patternId).DefaultUserId);
+    }
+
+    [Fact]
+    public async Task SetRegular_ShiftOfAnotherPattern_IsRefused()
+    {
+        Guid kimId = default, patternId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            kimId = Worker(db, "Kim").Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday).Id;
+            shiftId = ShiftOf(db, mia.Id, kimId, Monday, Pattern(db, mia.Id, DayOfWeek.Monday).Id).Id;
+        });
+
+        var (_, body) = await RefusedAsync(dbName, patternId, shiftId, kimId);
+        Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+    }
+
+    [Fact]
+    public async Task SetRegular_AMissingShift_IsRefused()
+    {
+        Guid kimId = default, patternId = default;
+        var dbName = NewDatabase(db => { kimId = Worker(db, "Kim").Id; patternId = Pattern(db, Person(db, "Mia").Id, DayOfWeek.Monday).Id; });
+
+        var (_, body) = await RefusedAsync(dbName, patternId, Guid.NewGuid(), kimId);
+        Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+    }
+
+    [Fact]
+    public async Task SetRegular_MakeForSomeoneNotOnTheShift_IsRefused_ButStopNeedsNoStaff()
+    {
+        Guid kimId = default, leeId = default, patternId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            kimId = Worker(db, "Kim").Id;
+            leeId = Worker(db, "Lee").Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday, kimId).Id;
+            shiftId = ShiftOf(db, mia.Id, kimId, Monday, patternId).Id;
+        });
+
+        var (_, body) = await RefusedAsync(dbName, patternId, shiftId, leeId);
+        Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+        Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, patternId, shiftId, null)).Result);
+    }
+
+    [Theory]   // REV274 #1: Start no longer generates from an ended pattern, so its regular is meaningless
+    [InlineData(false, true)]    // EffectiveTo yesterday (provider date is 2026-10-14)
+    [InlineData(true, false)]    // switched off
+    public async Task SetRegular_EndedPattern_IsRefused409_WithItsCode(bool ended, bool switchedOff)
+    {
+        Guid kimId = default, patternId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            kimId = Worker(db, "Kim").Id;
+            var mia = Person(db, "Mia");
+            var pattern = Pattern(db, mia.Id, DayOfWeek.Monday, effectiveTo: ended ? new DateOnly(2026, 10, 13) : null);
+            pattern.IsActive = !switchedOff;
+            patternId = pattern.Id;
+            shiftId = ShiftOf(db, mia.Id, kimId, Monday, patternId).Id;
+        });
+
+        var (conflict, body) = await RefusedAsync(dbName, patternId, shiftId, kimId);
+
+        Assert.Equal("This shift's agreement pattern has ended, so it has no regular to change.", Assert.Single(body.Errors!));
+        Assert.Equal(RosteringController.PatternEndedCode, body.Code);
+        using var check = TestDb.Create(dbName);
+        Assert.Null(check.ShiftPatterns.Single(p => p.Id == patternId).DefaultUserId);
+    }
+
+    [Fact]
+    public async Task SetRegular_PatternEndingToday_IsStillLive()
+    {
+        Guid kimId = default, patternId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            kimId = Worker(db, "Kim").Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday, effectiveTo: new DateOnly(2026, 10, 14)).Id;
+            shiftId = ShiftOf(db, mia.Id, kimId, Monday, patternId).Id;
+        });
+
+        Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, patternId, shiftId, kimId)).Result);
     }
 
     [Fact]
     public async Task TheNextStart_AssignsTheRegular()
     {
-        Guid kimId = default, patternId = default;
-        var dbName = NewDatabase(db => { kimId = Worker(db, "Kim").Id; patternId = Pattern(db, Person(db, "Mia").Id, DayOfWeek.Monday).Id; });
+        Guid kimId = default, patternId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            kimId = Worker(db, "Kim").Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday).Id;
+            shiftId = ShiftOf(db, mia.Id, kimId, Monday.AddDays(-7), patternId).Id;   // last week's occurrence of the slot, the one the coordinator was looking at
+        });
 
-        await SetRegularAsync(dbName, patternId, kimId);
+        await SetRegularAsync(dbName, patternId, shiftId, kimId);
         Ok(await StartAsync(dbName, Monday));
 
         using var check = TestDb.Create(dbName);
@@ -205,7 +341,7 @@ public class RosterRegularTests
             flagged.RegularUserId = kim.Id;
             flagged.RegularAwayReason = "on approved leave";
             flaggedId = flagged.Id;
-            leesId = ShiftOf(db, mia.Id, lee.Id, Monday, patternId, from: 11, to: 12).Id;
+            leesId = ShiftOf(db, mia.Id, lee.Id, Monday, patternId).Id;
         });
 
         string Chip(RosterBoardDto board, Guid id) => JsonSerializer.Serialize(board.ParticipantRows!.SelectMany(r => r.Shifts).Single(s => s.Id == id), ApiJson);
@@ -219,7 +355,7 @@ public class RosterRegularTests
         Assert.DoesNotContain("regularAwayReason", Chip(before, kimsId));
         Assert.DoesNotContain("regularAwayReason", Chip(before, leesId));
 
-        await SetRegularAsync(dbName, patternId, leeId);
+        await SetRegularAsync(dbName, patternId, leesId, leeId);
 
         var after = await BoardAsync(dbName);
         foreach (var id in new[] { kimsId, flaggedId, leesId }) Assert.Contains($"\"regularUserId\":\"{leeId}\"", Chip(after, id));
@@ -230,7 +366,7 @@ public class RosterRegularTests
     [Fact]
     public async Task TheBoard_DropsTheAwayReason_OnceTheSlotHasAnotherRegular_OrNone()   // DEEP-S3: the reason describes who was away, not whoever is the regular now
     {
-        Guid leeId = default, patternId = default, flaggedId = default;
+        Guid leeId = default, patternId = default, flaggedId = default, leesId = default;
         var dbName = NewDatabase(db =>
         {
             var kim = Worker(db, "Kim");
@@ -241,12 +377,13 @@ public class RosterRegularTests
             flagged.RegularUserId = kim.Id;
             flagged.RegularAwayReason = "on approved leave";
             flaggedId = flagged.Id;
+            leesId = ShiftOf(db, mia.Id, leeId, Monday, patternId).Id;
         });
         string Chip(RosterBoardDto board) => JsonSerializer.Serialize(board.ParticipantRows!.SelectMany(r => r.Shifts).Single(s => s.Id == flaggedId), ApiJson);
 
-        await SetRegularAsync(dbName, patternId, leeId);
+        await SetRegularAsync(dbName, patternId, leesId, leeId);
         var afterChange = Chip(await BoardAsync(dbName));
-        await SetRegularAsync(dbName, patternId, null);
+        await SetRegularAsync(dbName, patternId, leesId, null);
         var afterClear = Chip(await BoardAsync(dbName));
 
         Assert.Contains($"\"regularUserId\":\"{leeId}\"", afterChange);

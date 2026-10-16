@@ -1,4 +1,6 @@
-import { useApproveCompletion, useApproveCompletionsBatch, useCompletions, useReturnCompletion, type CompletionQueueItemDto } from '@/api/hooks'
+import { useQueryClient } from '@tanstack/react-query'
+import { apiGet } from '@/api/client'
+import { refreshBudgetFigures, useAllCompletions, useApproveCompletion, useApproveCompletionsBatch, useReturnCompletion, type CompletionQueueItemDto } from '@/api/hooks'
 import { formatDayMonth } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 import type { Tone } from '@/lib/tone'
@@ -22,10 +24,10 @@ export const isClean = (item: CompletionQueueItemDto) => item.incidentCount === 
 
 /** The Shift completions group (SHAPE §5): the review queue's first five, approved or returned with the Completions page's own hooks. */
 export function useCompletionsGroup(enabled: boolean): GroupModel {
-  // The whole pending queue in one read (the server's page maximum, PagingParams.MaxPageSize), so Complete all counts the clean rows of the whole tab
-  // (decision-bulk DECISIONS 1); five are shown. Its own entry beside the nav badge's 1-row one; every approve hook invalidates ['rostering-completions'].
-  // shortcut: past 200 pending, the rows after the first 200 are neither counted nor sent; page the read if a provider ever queues that many.
-  const queue = useCompletions({ status: 'PendingReview' }, 1, 200, { enabled })
+  // The whole pending queue, every page, so Complete all counts the clean rows of the whole tab (decision-bulk DECISIONS 1); five are shown. Its own
+  // entry beside the nav badge's 1-row one; every approve hook invalidates ['rostering-completions'].
+  const queue = useAllCompletions({ status: 'PendingReview' }, { enabled })
+  const qc = useQueryClient()
   // Clean only: a flag that appeared since this read (an incident filed after Finish) refuses on the server rather than approves (deep M2).
   const approve = useApproveCompletion({ requireClean: true })
   const approveBatch = useApproveCompletionsBatch({ cleanOnly: true })
@@ -74,6 +76,25 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
     columns: [{ header: 'Participant', long: true }, { header: 'Shift' }, { header: 'Variance' }],
     phase: groupPhase(queue),
     refetch: () => { void queue.refetch() },
+    readAt: queue.dataUpdatedAt,
+    reread: async (sent) => {
+      try {
+        const listed = (await queue.refetch({ throwOnError: true })).data!.items.map((item) => item.shiftId)
+        // Absent from the list is no proof a row left: it is read page by page while others decide rows. Ask the server what became of each one missing.
+        const missing = sent.filter((id) => !listed.includes(id))
+        if (!missing.length) return listed
+        const query = missing.map((id) => `shiftIds=${encodeURIComponent(id)}`).join('&')
+        const statuses = await apiGet<Array<{ shiftId: string; status: string }>>(`/rostering/completions/statuses?${query}`)
+        return [...listed, ...statuses.filter((s) => s.status === 'PendingReview').map((s) => s.shiftId)]
+      } finally {
+        // A batch with no reply never ran its onSuccess, and may have committed: refresh what it would have (useApproveCompletionsBatch).
+        void qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
+        void qc.invalidateQueries({ queryKey: ['roster-board'] })
+        // The nav badge's own entry (the group's "all" read was just refetched).
+        void qc.invalidateQueries({ queryKey: ['rostering-completions'], predicate: (q) => q.queryKey[2] !== 'all' })
+        refreshBudgetFigures(qc)
+      }
+    },
     count: queue.data?.totalCount ?? 0,
     rows,
     link: { to: '/rostering/completions', openLabel: 'Open Completions' },

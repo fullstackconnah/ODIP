@@ -300,6 +300,47 @@ describe('Start rostering', () => {
     expect(screen.getByRole('button', { name: 'Next week' })).toHaveFocus()
   })
 
+  it("a Start still out for another week does not re-enable this week's card when it settles", async () => {
+    const user = userEvent.setup()
+    const a = deferred<typeof RESULT>()
+    const b = deferred<typeof RESULT>()
+    h.start.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise)
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: START }))
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    await user.click(screen.getByRole('button', { name: START }))
+    expect(h.start).toHaveBeenLastCalledWith('2026-08-24')
+    await act(async () => { a.resolve(RESULT) })
+
+    const busy = screen.getByRole('button', { name: 'Starting…' })
+    expect(busy).toHaveAttribute('aria-disabled', 'true')
+    await user.click(busy)
+    expect(h.start).toHaveBeenCalledTimes(2)
+
+    showBoard(STARTED)
+    await act(async () => { b.resolve({ ...RESULT, created: 2 }) })
+    expect(await screen.findByText('Started 17–23 Aug: 2 shifts added')).toBeInTheDocument()
+  })
+
+  it('returning to a week with a Start still out shows it as starting', async () => {
+    const user = userEvent.setup()
+    const a = deferred<typeof RESULT>()
+    h.start.mockReturnValueOnce(a.promise)
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: START }))
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    expect(screen.getByRole('button', { name: START })).not.toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByRole('button', { name: 'Previous week' }))
+
+    const busy = screen.getByRole('button', { name: 'Starting…' })
+    expect(busy).toHaveAttribute('aria-disabled', 'true')
+    await user.click(busy)
+    expect(h.start).toHaveBeenCalledTimes(1)
+    await act(async () => { a.resolve(RESULT) })
+  })
+
   it("a week's notices go with it: Dismiss clears them, and so does a move to another week", async () => {
     const user = userEvent.setup()
     h.start.mockImplementation(async () => { showBoard(STARTED); return RESULT })
@@ -425,7 +466,7 @@ describe('Make or Stop the regular', () => {
     expect(dialog).toHaveTextContent("Sam goes on Mia Chen's Wednesday 9am–3pm shift in every week you start from now on, unless they're away. Weeks already started don't change, this one included.")
     await user.click(within(dialog).getByRole('button', { name: 'Make Sam the regular' }))
 
-    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', staffId: 'staff-2' })
+    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', shiftId: 'sam-wed', staffId: 'staff-2' })
     expect((await screen.findByText("Sam is now the regular for Mia Chen's Wednesday shift.")).closest('[role="status"]')).not.toBeNull()
     await waitFor(() => expect(samMenu()).toHaveFocus())
   })
@@ -452,7 +493,7 @@ describe('Make or Stop the regular', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Stop Sam being the regular?' })
     expect(dialog).toHaveTextContent("From the next week you start, Mia Chen's Wednesday 9am–3pm shift is made open, with nobody on it. Weeks already started keep Sam.")
     await user.click(within(dialog).getByRole('button', { name: 'Stop being the regular' }))
-    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', staffId: null })
+    expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', shiftId: 'sam-wed', staffId: null })
     expect(await screen.findByText("Mia Chen's Wednesday shift has no regular now.")).toBeInTheDocument()
   })
 
@@ -472,6 +513,17 @@ describe('Make or Stop the regular', () => {
     await choose(user, 'Make Sam the regular')
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Make Sam the regular' }))
     expect((await screen.findByText('Staff member not found.')).closest('[role="alert"]')).not.toBeNull()
+    expect(screen.queryByText(/is now the regular/)).not.toBeInTheDocument()
+  })
+
+  it("a 409 from Make shows the server's words in the error notice, and no 'is now the regular' notice", async () => {
+    const user = userEvent.setup()
+    const words = 'This shift changed after the board was loaded. Refresh the board and try again.'
+    h.setRegular.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: [words] } } })
+    renderPage()
+    await choose(user, 'Make Sam the regular')
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Make Sam the regular' }))
+    expect((await screen.findByText(words)).closest('[role="alert"]')).not.toBeNull()
     expect(screen.queryByText(/is now the regular/)).not.toBeInTheDocument()
   })
 

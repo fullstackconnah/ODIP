@@ -1087,10 +1087,19 @@ public class RosteringController : ControllerBase
     [HttpGet("completions")]
     public async Task<ActionResult<ApiResponse<PagedResult<CompletionQueueItemDto>>>> GetCompletions(
         [FromQuery] ShiftStatus? status, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default, [FromQuery] string? after = null)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
         var statusFilter = status ?? ShiftStatus.PendingReview;
+        // Keyset paging (the dashboard reads the whole queue while others decide rows): `after` is the last row's sort key, so a row decided between two
+        // page requests cannot move another across the page edge the way OFFSET does. `page` is ignored when it is given.
+        CompletionCursor? cursor = null;
+        if (after is not null)
+        {
+            if (!CompletionCursor.TryParse(after, out var parsed))
+                return BadRequest(ApiResponse<PagedResult<CompletionQueueItemDto>>.Fail("The cursor was not valid."));
+            cursor = parsed;
+        }
         var thresholdMinutes = VarianceReviewMinutes;
 
         // Only shifts with a current active completion (inner join, not a dictionary lookup after
@@ -1109,21 +1118,37 @@ public class RosteringController : ControllerBase
         // nullable column is involved here (VarianceMinutesStart/End are non-nullable ints), so
         // the Postgres-vs-EF-InMemory null-ordering trap the hardening PR hit elsewhere
         // (GetShiftCompletions' SubmittedAt sort) doesn't apply to this key.
-        var ordered = joined
-            .OrderByDescending(x => Math.Abs(x.Completion.VarianceMinutesStart) > thresholdMinutes || Math.Abs(x.Completion.VarianceMinutesEnd) > thresholdMinutes)
+        var keyed = joined.Select(x => new
+        {
+            x.Shift, x.Completion,
+            Outlier = Math.Abs(x.Completion.VarianceMinutesStart) > thresholdMinutes || Math.Abs(x.Completion.VarianceMinutesEnd) > thresholdMinutes,
+        });
+        // The whole queue, counted before the cursor window on purpose: the client wants the queue size, not the rest after the cursor.
+        var totalCount = await keyed.CountAsync(ct);
+        var windowed = keyed;
+        if (cursor is { } cur)
+        {
+            var (cOutlier, cDate, cStart, cId) = (cur.Outlier, cur.ServiceDate, cur.StartTime, cur.ShiftId);
+            // Outliers sort first: after an outlier row come later outliers by the date, start and id keys, then every non-outlier; after a non-outlier only later non-outliers.
+            windowed = keyed.Where(x => (cOutlier && !x.Outlier)
+                || (x.Outlier == cOutlier && (x.Shift.ServiceDate > cDate
+                    || (x.Shift.ServiceDate == cDate && (x.Shift.StartTime > cStart
+                        || (x.Shift.StartTime == cStart && x.Shift.Id.CompareTo(cId) > 0))))));
+        }
+        var ordered = windowed
+            .OrderByDescending(x => x.Outlier)
             .ThenBy(x => x.Shift.ServiceDate)
-            .ThenBy(x => x.Shift.StartTime);
-
-        var totalCount = await ordered.CountAsync(ct);
+            .ThenBy(x => x.Shift.StartTime)
+            .ThenBy(x => x.Shift.Id);   // unique: tied rows must page in one order, or a row at a page edge is repeated and another never read
 
         // Narrow projection (critique P2 — "hydrates full graphs") applied AFTER Skip/Take, so
         // only the requested page's rows are ever materialised.
         var pageRows = await ordered
-            .Skip((page - 1) * pageSize)
+            .Skip(cursor is null ? (page - 1) * pageSize : 0)
             .Take(pageSize)
             .Select(x => new
             {
-                x.Shift.Id, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount, x.Shift.ParticipantId,
+                x.Outlier, x.Shift.Id, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount, x.Shift.ParticipantId,
                 ParticipantName = x.Shift.Participant != null ? x.Shift.Participant.FullName : string.Empty,
                 StaffName = x.Shift.User != null ? x.Shift.User.FullName : string.Empty,
                 CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
@@ -1157,7 +1182,43 @@ public class RosteringController : ControllerBase
         }).ToList();
 
         return Ok(ApiResponse<PagedResult<CompletionQueueItemDto>>.Ok(
-            new PagedResult<CompletionQueueItemDto> { Items = items, Page = page, PageSize = pageSize, TotalCount = totalCount }));
+            new PagedResult<CompletionQueueItemDto>
+            {
+                Items = items, Page = page, PageSize = pageSize, TotalCount = totalCount,
+                NextCursor = pageRows.Count == 0 ? null : new CompletionCursor(pageRows[^1].Outlier, pageRows[^1].ServiceDate, pageRows[^1].StartTime, pageRows[^1].Id).ToString(),
+            }));
+    }
+
+    /// <summary>The sort key of one queue row (outlier first, then date, start time and shift id), as the opaque `after` token of GetCompletions.</summary>
+    private readonly record struct CompletionCursor(bool Outlier, DateOnly ServiceDate, TimeOnly StartTime, Guid ShiftId)
+    {
+        public override string ToString() => string.Join('|', Outlier ? "1" : "0", ServiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            StartTime.ToString("HH:mm:ss.fffffff", CultureInfo.InvariantCulture), ShiftId);
+
+        public static bool TryParse(string value, out CompletionCursor cursor)
+        {
+            cursor = default;
+            var parts = value.Split('|');
+            if (parts.Length != 4 || parts[0] is not ("0" or "1")
+                || !DateOnly.TryParseExact(parts[1], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+                || !TimeOnly.TryParseExact(parts[2], "HH:mm:ss.fffffff", CultureInfo.InvariantCulture, DateTimeStyles.None, out var start)
+                || !Guid.TryParse(parts[3], out var id)) return false;
+            cursor = new CompletionCursor(parts[0] == "1", date, start, id);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// What became of the shifts a bulk run sent: their review status, for the dashboard to tell a row that was decided from one the paged queue read
+    /// merely skipped. Tenant-scoped through the Shift query filter, like the queue; an id that is not the caller's is simply absent.
+    /// </summary>
+    [HttpGet("completions/statuses")]
+    public async Task<ActionResult<ApiResponse<List<CompletionStatusDto>>>> GetCompletionStatuses([FromQuery] Guid[] shiftIds, CancellationToken ct = default)
+    {
+        if (shiftIds.Length > PagingParams.MaxPageSize)
+            return BadRequest(ApiResponse<List<CompletionStatusDto>>.Fail($"Ask for at most {PagingParams.MaxPageSize} shifts at a time."));
+        var rows = await _db.Shifts.Where(s => shiftIds.Contains(s.Id)).Select(s => new CompletionStatusDto(s.Id, s.Status)).ToListAsync(ct);
+        return Ok(ApiResponse<List<CompletionStatusDto>>.Ok(rows));
     }
 
     /// <summary>
@@ -1843,12 +1904,21 @@ public class RosteringController : ControllerBase
     /// <summary>
     /// Start rostering (2026-10-16, L2): makes <c>StaffId</c> the regular of the pattern's slot (its default worker), or clears it with null. No shift changes: it applies from the next generated week.
     /// An agreement's pattern takes it too, as its default staff is the coordinator's own (UpdatePattern).
+    /// REV274: <c>ShiftId</c> is the shift the coordinator was shown. An edited occurrence keeps its pattern link while its day, times or participant differ from the pattern's slot, so the server compares the
+    /// two itself and refuses a stale board (409); a Make also needs that shift's own worker; an ended pattern has no regular to change (409 pattern-ended).
     /// </summary>
     [HttpPut("patterns/{id:guid}/regular")]
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> SetRegular(Guid id, [FromBody] SetRegularDto dto, CancellationToken ct)
     {
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
+        var shown = await _db.Shifts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dto.ShiftId, ct);
+        if (shown is null || shown.ShiftPatternId != id || shown.ParticipantId != pattern.ParticipantId || shown.ServiceDate.DayOfWeek != pattern.DayOfWeek
+            || shown.StartTime != pattern.StartTime || shown.EndTime != pattern.EndTime || shown.EndsNextDay != pattern.EndsNextDay
+            || (dto.StaffId.HasValue && shown.UserId != dto.StaffId))
+            return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage));
+        if (!pattern.IsActive || pattern.EffectiveTo < await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct))
+            return Conflict(ApiResponse<ShiftPatternDto>.Fail("This shift's agreement pattern has ended, so it has no regular to change.", PatternEndedCode));
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
         pattern.DefaultUserId = dto.StaffId;
@@ -2099,6 +2169,9 @@ public class RosteringController : ControllerBase
 
     /// <summary>The code of Start's 409 for a week already started (L4): not "busy", so the board and the e2e helper can tell them apart.</summary>
     public const string RosterWeekStartedCode = "roster-week-started";
+
+    /// <summary>The code of SetRegular's 409 for a pattern that has ended (REV274): the pattern no longer generates, so it has no regular to change.</summary>
+    public const string PatternEndedCode = "pattern-ended";
 
     private ConflictObjectResult WeekAlreadyStarted() => Conflict(ApiResponse<StartWeekResultDto>.Fail("This week has already been started.", RosterWeekStartedCode));
 

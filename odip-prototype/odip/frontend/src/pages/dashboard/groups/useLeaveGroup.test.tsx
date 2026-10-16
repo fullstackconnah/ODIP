@@ -77,8 +77,9 @@ describe('Leave group — your own request', () => {
 
 describe('Leave group — Approve', () => {
   it('approves through useApproveLeave, takes the row away and announces it', async () => {
-    answer([leave()])
-    apiPost.mockResolvedValue({ leave: leave({ status: 'Approved' }), overlaps: [], overlapShifts: [] })
+    const leaves = [leave()]
+    answer(leaves)
+    apiPost.mockImplementation(async () => { leaves.splice(0, 1); return { leave: leave({ status: 'Approved' }), overlaps: [], overlapShifts: [] } })   // decided: the next read does not list it
     renderGroup(() => useLeaveGroup(true, 'u-viewer'))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve leave: Sam Lee, 20–24 Oct 2026' }))
@@ -172,13 +173,18 @@ describe('Leave group — unavailability', () => {
 
 describe('Leave group — Complete all (decision-bulk)', () => {
   it("approves every request but the viewer's own, one at a time through each row's own endpoint, and rolls the overlaps into one notice", async () => {
-    answer(
-      [leave(), leave({ id: 'l-own', userId: 'u-viewer', userFullName: 'Dev Admin', startDate: '2026-10-19' })],
-      [rule()],
-    )
-    apiPost.mockImplementation((url: string) => Promise.resolve(url === '/leave/l1/approve'
-      ? { leave: leave({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP'), finding('TRIP_OVERLAP')], overlapShifts: [shift('2026-10-22')] }
-      : { unavailability: rule({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP')], overlapShifts: [shift('2026-10-27')] }))
+    // The server drops a request from the pending lists once it is approved, so a read after the approval does not list it.
+    const leaves = [leave(), leave({ id: 'l-own', userId: 'u-viewer', userFullName: 'Dev Admin', startDate: '2026-10-19' })]
+    const rules = [rule()]
+    answer(leaves, rules)
+    apiPost.mockImplementation((url: string) => {
+      if (url === '/leave/l1/approve') {
+        leaves.splice(0, 1)
+        return Promise.resolve({ leave: leave({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP'), finding('TRIP_OVERLAP')], overlapShifts: [shift('2026-10-22')] })
+      }
+      rules.splice(0, 1)
+      return Promise.resolve({ unavailability: rule({ status: 'Approved' }), overlaps: [finding('SHIFT_OVERLAP')], overlapShifts: [shift('2026-10-27')] })
+    })
     renderGroup(() => useLeaveGroup(true, 'u-viewer'))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 leave requests' }))
@@ -192,6 +198,27 @@ describe('Leave group — Complete all (decision-bulk)', () => {
     // One notice for the run, not one per overlapping approval.
     expect(screen.queryByText(/^Leave approved\./)).toBeNull()
     expect(subjects()).toEqual(['Dev Admin'])
+  })
+
+  it('re-reads after a row gets no answer: one that left goes uncredited, one still pending stays for a retry (review #266 F1)', async () => {
+    let pending = [leave(), leave({ id: 'l2', userFullName: 'Ana Ruiz' }), leave({ id: 'l3', userFullName: 'Bo Chan' })]
+    apiGetWithDefault.mockImplementation((url: string) => Promise.resolve(url === '/leave' ? pending : []))
+    const lost = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', request: {} })
+    apiPost.mockImplementation(async (url: string) => {
+      if (url === '/leave/l1/approve') { pending = pending.filter((r) => r.id !== 'l1'); return { leave: leave({ status: 'Approved' }), overlaps: [], overlapShifts: [] } }
+      // l2 commits, then its reply is lost; l3 never reaches the server.
+      if (url === '/leave/l2/approve') pending = pending.filter((r) => r.id !== 'l2')
+      throw lost()
+    })
+    renderGroup(() => useLeaveGroup(true, 'u-viewer'))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 3 leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3' }))
+
+    await waitFor(() => expect(screen.getByText('Approved 1 leave request')).toBeInTheDocument())
+    expect(document.querySelector('[data-quick-group] [role="status"] [data-tone]')).toHaveTextContent("1 has left the list: approved here, or decided by someone else. 1 wasn't approved: it's still here to try again.")
+    expect(subjects()).toEqual(['Bo Chan'])
+    expect(screen.getByRole('button', { name: /^Approve leave: Bo Chan/ })).not.toHaveAttribute('aria-disabled')
   })
 })
 

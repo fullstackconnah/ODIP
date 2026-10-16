@@ -27,6 +27,17 @@ type TapAction = Extract<RowAction, { kind: 'tap' }>
 /** A row's one-tap decision: what makes it safe to tick and to Complete all (SHAPE §3). */
 const tapOf = (row: QuickRow) => row.actions.find((a): a is TapAction => a.kind === 'tap')
 const statusOf = (err: unknown) => (err as { response?: { status?: number } } | undefined)?.response?.status
+/**
+ * No answer from ODIP itself, so the server may have committed and the outcome is unknown, not failed. ODIP answers with its ApiResponse envelope (every
+ * handled and unhandled error: ExceptionHandlingMiddleware), or on a 4xx with a problem body. Anything else is a proxy or a dropped connection: no response,
+ * an HTML page or no body (a 500, a Cloudflare 520 or 524), or a gateway's 502/503/504 whatever it carries.
+ */
+const noAnswer = (err: unknown) => {
+  const response = (err as { response?: { status?: number; data?: { success?: unknown; status?: unknown } | string | null } } | undefined)?.response
+  const { status = 0, data } = response ?? {}
+  if (!response || !data || typeof data !== 'object' || status === 502 || status === 503 || status === 504) return true
+  return !(data.success === false || (status >= 400 && status < 500 && typeof data.status === 'number'))
+}
 
 /**
  * Where focus goes when the row that holds it leaves (SHAPE §5), read BEFORE it leaves: the next row's first control, else this tab's link while the tab
@@ -191,13 +202,15 @@ const LAST_TRACK = 'xl:col-[-2/-1]'
  * One decision row (SHAPE §4, §6): its own row group, so its error line and form (the detail row) stay with it. From xl a table row of --row-h with the
  * buttons at the right edge; below xl the same elements reflow into the house phone card: the subject and its flags, the facts line, the buttons under them.
  */
-function QuickRowView({ row, columns, box, inRun, onOccupied, onDone, onRefused }: {
+function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDone, onRefused }: {
   row: QuickRow
   columns: FactColumn[]
   /** The bulk box column (SHAPE §3): absent on a tab without it; null for a row with nothing to tick (its cell stays, empty). */
   box?: { checked: boolean; locked: boolean; onChange: (checked: boolean) => void } | null
   /** In a bulk run: its buttons are held, as a tap in flight holds them. */
   inRun: boolean
+  /** Sent with no answer and not yet re-read: the row says why its buttons are held, for as long as they are. */
+  unconfirmed: boolean
   /** Tells the group while a form is open or a tap is in flight here: its box is unticked and disabled, and Complete all leaves it out. */
   onOccupied: (rowId: string, occupied: boolean) => void
   onDone: (outcome: ActionOutcome, rowEl: HTMLElement) => void
@@ -275,6 +288,7 @@ function QuickRowView({ row, columns, box, inRun, onOccupied, onDone, onRefused 
             {row.flags.slice(0, 2).map((flag) => (
               <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
             ))}
+            {unconfirmed && <StatusBadge tone="neutral" label="Not confirmed yet" className="shrink-0 whitespace-nowrap" />}
           </div>
         </td>
         {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} />)}
@@ -347,6 +361,12 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const [occupied, setOccupied] = useState<ReadonlySet<string>>(() => new Set())
   const [confirm, setConfirm] = useState<'all' | 'selected' | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number; ids: ReadonlySet<string> } | null>(null)
+  // Sent with no answer, and the re-read failed too: each held (no retry) with when the group was last read, until a later read succeeds (review #266 F1).
+  const [held, setHeld] = useState<ReadonlyMap<string, number>>(() => new Map())
+  const readAt = model.readAt ?? 0
+  const readAtRef = useRef(readAt)
+  useEffect(() => { readAtRef.current = readAt })
+  const unsure: ReadonlySet<string> = new Set([...held].filter(([, at]) => at >= readAt).map(([id]) => id))
   const onOccupied = useCallback((rowId: string, on: boolean) => setOccupied((prev) => {
     if (prev.has(rowId) === on) return prev
     const next = new Set(prev)
@@ -355,10 +375,10 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     return next
   }), [])
   const safe = ready ? rows.filter((row) => tapOf(row)) : []
-  const free = safe.filter((row) => !occupied.has(row.id))
-  const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id))
+  const free = safe.filter((row) => !occupied.has(row.id) && !unsure.has(row.id))
+  const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id) && !unsure.has(row.id))
   const ticked = tickable.filter((row) => selected.has(row.id))
-  const bar = !!bulkKey && (safe.length > 0 || !!progress)
+  const bar = !!bulkKey && (safe.some((row) => !unsure.has(row.id)) || !!progress)
   const lead = bar ? 1 : 0
   const mode = ticked.length > 0 ? 'selected' : 'all'
   const count = mode === 'selected' ? ticked.length : free.length
@@ -410,6 +430,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       of: model.approveBatch && picked.length > BATCH_MAX ? picked.length : undefined,
     }
     const leaving: string[] = []
+    const unanswered: QuickRow[] = []
+    let unchecked: string[] = []
     state.setRunning(model.key, true)
     setProgress({ done: 0, total: list.length, ids: new Set(list.map((row) => row.id)) })
     // Once, as it starts (the button's count is the progress; no announcement per row).
@@ -426,9 +448,10 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
           else if (answer?.code === 'SHIFT_NEEDS_REVIEW') result.skipped++
           else result.failed.push({ ref: rowRef(tapOf(row)!.name), message: answer?.message ?? '' })
         }
-      } catch {
-        // One SaveChanges on the server: a failed request approved nothing.
-        result.wholeFailed = true
+      } catch (err) {
+        // One SaveChanges on the server: a request ODIP refused approved nothing. With no answer, it may have committed.
+        if (noAnswer(err)) unanswered.push(...list)
+        else result.wholeFailed = true
       }
     } else {
       for (const [i, row] of list.entries()) {
@@ -445,8 +468,22 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         } catch (err) {
           const status = statusOf(err)
           if (status === 404 || status === 409) result.stale++
+          else if (noAnswer(err)) unanswered.push(row)
           else result.failed.push({ ref: rowRef(tap.name), message: extractErrorMessage(err, '') })
         }
+      }
+    }
+    // Unknown is never reported as approved or as failed: a fresh read says which rows have left the list and which still wait.
+    if (unanswered.length) {
+      try {
+        const pending = new Set(await model.reread!(unanswered.map((row) => row.id)))
+        for (const row of unanswered) {
+          if (pending.has(row.id)) result.waiting = (result.waiting ?? 0) + 1
+          else { result.left = (result.left ?? 0) + 1; leaving.push(row.id) }
+        }
+      } catch {
+        result.unchecked = unanswered.length
+        unchecked = unanswered.map((row) => row.id)
       }
     }
     const notice = resultNotice(bulkKey, result)
@@ -456,6 +493,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       state.setRunning(model.key, false)
       setProgress(null)
       setSelected(new Set())
+      if (unchecked.length) setHeld((prev) => new Map([...prev, ...unchecked.map((id): [string, number] => [id, readAtRef.current])]))
     })
     if (result.stale) model.refetch()
     // Onto the run's notice (newest first), unless the viewer has gone to another tab or elsewhere.
@@ -553,10 +591,11 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
                 box={!bar ? undefined : tapOf(row) ? {
                   checked: selected.has(row.id),
                   // A run holds every box: its selection was taken at Confirm.
-                  locked: !!progress,
+                  locked: !!progress || unsure.has(row.id),
                   onChange: (checked) => setSelected((prev) => { const next = new Set(prev); if (checked) next.add(row.id); else next.delete(row.id); return next }),
                 } : null}
-                inRun={!!progress?.ids.has(row.id)}
+                inRun={!!progress?.ids.has(row.id) || unsure.has(row.id)}
+                unconfirmed={unsure.has(row.id)}
                 onOccupied={onOccupied}
                 onDone={(outcome, rowEl) => finish(row, outcome, rowEl)}
                 onRefused={refused}

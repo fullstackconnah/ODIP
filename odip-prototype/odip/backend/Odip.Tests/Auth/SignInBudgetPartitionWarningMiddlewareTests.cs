@@ -27,6 +27,8 @@ namespace Odip.Tests.Auth;
 /// </summary>
 public class SignInBudgetPartitionWarningMiddlewareTests
 {
+    public SignInBudgetPartitionWarningMiddlewareTests() => SignInBudgetPartitionWarningMiddleware.ResetForTests();
+
     /// <summary>The peer docker-proxy leaves behind: nginx's $remote_addr for EVERY caller.</summary>
     private const string BridgeGateway = "172.31.0.1";
 
@@ -228,12 +230,22 @@ public class SignInBudgetPartitionWarningMiddlewareTests
     }
 
     [Fact]
-    public async Task The_warning_appears_once_per_request_and_never_as_an_error()
+    public async Task The_warning_appears_once_per_process_and_never_as_an_error()
     {
-        var entries = await RunAsync(ProxiedContext(BridgeGateway));
+        var all = new List<(string Category, LogLevel Level, string Message)>();
+        for (var i = 0; i < 5; i++)
+            all.AddRange(await RunAsync(ProxiedContext(BridgeGateway)));
 
-        Assert.Single(Warnings(entries));
-        Assert.DoesNotContain(entries, e => e.Level == LogLevel.Error);
+        Assert.Single(Warnings(all));
+        Assert.DoesNotContain(all, e => e.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task A_client_address_request_logs_no_warning_and_does_not_use_up_the_once()
+    {
+        Assert.Empty(Warnings(await RunAsync(ProxiedContext(GenuineClient))));
+
+        Assert.Single(Warnings(await RunAsync(ProxiedContext(BridgeGateway))));
     }
 
     [Fact]

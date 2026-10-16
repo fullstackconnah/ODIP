@@ -2450,6 +2450,22 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AddressPostcode")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("AddressState")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("AddressStreet")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("AddressSuburb")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("CloseNote")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -2463,8 +2479,29 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid?>("ClosedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ContactFirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("ContactIsParticipant")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ContactLastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ContactRelationship")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("ContactRole")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date");
 
                     b.Property<string>("Email")
                         .HasMaxLength(200)
@@ -2515,9 +2552,12 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("LastName")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NdisNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid?>("ParticipantId")
                         .HasColumnType("uuid");
@@ -2525,6 +2565,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("Phone")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateOnly?>("PlanEndDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("PlanStartDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("PlanType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Provenance")
                         .HasMaxLength(2000)

@@ -1,29 +1,27 @@
 import { useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
 import { Plus, Trash2 } from 'lucide-react'
 import { CONTACT_ROLE_TYPE_LABELS } from '@/api/types/contacts'
+import type { PlanType } from '@/api/types/enums'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { FormField } from '@/components/FormField'
 import { formGrid, span } from '@/lib/formGrid'
-import { PENDING_ROLES, blankContact, enquirerContact, type ContactField, type ContactFieldErrors, type ContactRow } from '@/lib/inquiryContacts'
+import { blankContact, pendingRoleOptions, type ContactField, type ContactFieldErrors, type ContactRow } from '@/lib/inquiryContacts'
 
 const MUTED = 'text-[13px] text-[var(--color-muted-foreground)]'
 
 /**
- * The enquiry form's Contacts card (SHAPE.md section 5): family, guardians and anyone else to keep in touch with, noted before intake. Rows are
- * house fields with no native `required`, so Save reaches the form's own check ("Add their last name.") and blank rows can be dropped.
- * Presentational: the form owns the rows and their errors.
+ * The enquiry form's Other contacts card (SHAPE.md section 6, 2026-10-16 redesign): anyone besides the main contact to keep in touch with, noted
+ * before intake. Rows are house fields with no native `required`, so Save reaches the form's own check ("Add their last name.") and blank rows can
+ * be dropped. Each row's Role follows the enquiry's plan type and date of birth (`gate`). Presentational: the form owns the rows and their errors.
  */
-export function InquiryContactsCard({ rows, errors, listError, enquirer, converted, onChange }: {
+export function InquiryContactsCard({ rows, errors, listError, gate, onChange }: {
   rows: ContactRow[]
   errors: ContactFieldErrors
   /** A refusal of the list itself (more than 20, or intake has started). */
   listError?: string
-  /** The enquiry's phone and email as typed above. */
-  enquirer: { phone: string; email: string }
-  /** Set once intake has started: the contacts are on the participant's record. */
-  converted: { participantId: string; firstName: string } | null
+  /** The enquiry's details the contact rules read, as typed. */
+  gate: { planType: PlanType | null; dateOfBirth: string | null }
   onChange: (rows: ContactRow[], changed?: { key: string; field: ContactField }) => void
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -35,21 +33,6 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
     focusNext.current = null
     bodyRef.current?.querySelector<HTMLElement>(target)?.focus()
   })
-
-  if (converted) {
-    return (
-      <Card title="Contacts">
-        <p className="text-sm">
-          Contacts are on {converted.firstName}'s intake now.{' '}
-          <Link to={`/participants/${converted.participantId}/intake`} className="font-medium text-[var(--color-primary)] underline underline-offset-2">Open the intake</Link>
-        </p>
-      </Card>
-    )
-  }
-
-  const phone = enquirer.phone.trim(), email = enquirer.email.trim()
-  // One-shot copy, offered while there is something to copy that no row holds yet (lead decision 1).
-  const offerEnquirer = (!!phone || !!email) && !rows.some(r => (!!phone && r.phone.trim() === phone) || (!!email && r.email.trim() === email))
 
   const add = (row: ContactRow) => {
     focusNext.current = `#contact-${row.key}-firstName`
@@ -77,11 +60,11 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
   )
 
   return (
-    <Card title="Contacts">
+    <Card title="Other contacts">
       <div ref={bodyRef} className="flex flex-col gap-[var(--field-gap-y)]">
-        <p className={MUTED}>Family, guardians and anyone else to keep in touch with. They move to the participant's record when intake starts, and are deleted if the enquiry is closed.</p>
+        <p className={MUTED}>Anyone else to keep in touch with, like family or a support coordinator. They move to the participant's record when intake starts, and are deleted if the enquiry is closed.</p>
         {listError && <p className="text-[13px] text-[var(--color-destructive)]">{listError}</p>}
-        {rows.length === 0 && <p className={MUTED}>No contacts yet.</p>}
+        {rows.length === 0 && <p className={MUTED}>No other contacts yet.</p>}
         {rows.map((row, index) => {
           const name = `${row.firstName} ${row.lastName}`.trim()
           // Below md the row drops its inset box for a divider, so the fields get the card's full width and Role shows its longest label whole.
@@ -95,7 +78,7 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
                   {field(row, index, 'lastName', 'Last name', span.short, 'text', true)}
                   <FormField label="Role" required error={errors[row.key]?.role} className={span.medium}>
                     <select id={`contact-${row.key}-role`} value={row.role} onChange={e => set(index, 'role', e.target.value)}>
-                      {PENDING_ROLES.map(role => <option key={role} value={role}>{CONTACT_ROLE_TYPE_LABELS[role]}</option>)}
+                      {pendingRoleOptions(gate.planType, gate.dateOfBirth, row.role).map(role => <option key={role} value={role}>{CONTACT_ROLE_TYPE_LABELS[role]}</option>)}
                     </select>
                   </FormField>
                   {field(row, index, 'relationship', 'Relationship', span.short)}
@@ -109,12 +92,8 @@ export function InquiryContactsCard({ rows, errors, listError, enquirer, convert
             </fieldset>
           )
         })}
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" data-add-contact onClick={() => add(blankContact())}><Plus className="w-4 h-4" aria-hidden />Add contact</Button>
-            {offerEnquirer && <Button variant="ghost" onClick={() => add(enquirerContact({ phone, email }))}>Add the enquirer as a contact</Button>}
-          </div>
-          {offerEnquirer && <p className={MUTED}>Copies the phone and email above. Add the caller's name.</p>}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" data-add-contact onClick={() => add(blankContact())}><Plus className="w-4 h-4" aria-hidden />Add contact</Button>
         </div>
       </div>
     </Card>

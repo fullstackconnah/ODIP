@@ -6,6 +6,7 @@ import { SelectField } from '@/components/SelectField'
 import { TextAreaField } from '@/components/TextAreaField'
 import { CLOSE_OUTCOME_OPTIONS, closeConsequences } from '@/lib/inquiryClose'
 import { refusalOf } from '@/lib/intakeBooking'
+import { fullName } from '@/lib/inquiryDetails'
 
 /**
  * "Close Ana Lopez's enquiry?" (SHAPE.md section 11): why (required), an optional note, and what closing will do. Renders nothing while `row` is
@@ -47,7 +48,7 @@ export function CloseInquiryDialog({ row, unsaved = false, onCancel, onDone }: {
       open
       onCancel={() => { setError(null); onCancel() }}
       onConfirm={confirm}
-      title={`Close ${row.firstName} ${row.lastName}'s enquiry?`}
+      title={`Close ${fullName(row.firstName, row.lastName)}'s enquiry?`}
       confirmLabel="Close enquiry"
       cancelLabel="Keep it open"
       variant="danger"

@@ -481,7 +481,7 @@ public static class ParticipantPatchApplier
 
     /// <summary>INTAKE-06: AU postcode is exactly 4 digits when supplied (optional field, so blank is fine).</summary>
     public static string? ValidateAddressPostcode(CreateParticipantDto dto) =>
-        !string.IsNullOrWhiteSpace(dto.AddressPostcode) && !System.Text.RegularExpressions.Regex.IsMatch(dto.AddressPostcode, @"^\d{4}$")
+        !string.IsNullOrWhiteSpace(dto.AddressPostcode) && !System.Text.RegularExpressions.Regex.IsMatch(dto.AddressPostcode, @"^[0-9]{4}$")
             ? "Postcode must be exactly 4 digits."
             : null;
 
