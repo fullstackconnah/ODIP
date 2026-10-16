@@ -227,7 +227,8 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
       let saved: ParticipantInquiryDto
       try {
         const body = toPayload(form, converted ? undefined : contactsPayload(contacts))
-        saved = row ? await update.mutateAsync({ id: row.id, data: body }) : await create.mutateAsync(body)
+        // The version this form holds goes back with the edit, so a save since then makes this one a 409 rather than overwrite it (deep review S2).
+        saved = row ? await update.mutateAsync({ id: row.id, data: row.updatedAt ? { ...body, expectedUpdatedAt: row.updatedAt } : body }) : await create.mutateAsync(body)
       } catch (err) {
         refuseEnquiry(err)
         return

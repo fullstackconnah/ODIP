@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261016004226_AddInquiryContacts")]
+    [Migration("20261016023701_AddInquiryContacts")]
     partial class AddInquiryContacts
     {
         /// <inheritdoc />
@@ -2468,6 +2468,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");

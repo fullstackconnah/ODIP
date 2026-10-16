@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Application.Common;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
@@ -103,6 +105,92 @@ public class InquiryContactsPostgresTests : IClassFixture<PostgresFixture>
             db.ChangeTracker.Clear();
             Assert.Equal(new[] { "Maria", "Tom" }, await db.ParticipantContactRoles.Where(r => r.TenantId == tenantId).Select(r => r.Person!.FirstName).OrderBy(n => n).ToListAsync());
             Assert.Equal(0, await db.InquiryContacts.CountAsync(c => c.InquiryId == inquiry.Id));
+        }
+    }
+
+    private (OdipDbContext Db, ParticipantInquiriesController Controller) Request(Guid tenantId, params IInterceptor[] interceptors)
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString).AddInterceptors(interceptors).Options, tenant.Object);
+        return (db, new ParticipantInquiriesController(db, tenant.Object));
+    }
+
+    private static UpdateParticipantInquiryDto Form(DateTime? expected, params (ContactRoleType Role, string First)[] contacts) => new()
+    {
+        FirstName = "Ana", LastName = "Lopez", Source = "Phone", ExpectedUpdatedAt = expected,
+        Contacts = contacts.Select(c => new InquiryContactDto { Role = c.Role, FirstName = c.First, LastName = "Lopez" }).ToList(),
+    };
+
+    // Deep review S2: two coordinators have the enquiry open; the second save must not bring back a contact the first removed.
+    [SkippableFact]
+    public async Task Two_forms_on_one_enquiry_the_second_save_is_a_409_and_a_removed_contact_never_comes_back()
+    {
+        RequirePostgres();
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone" };
+        await using (seed)
+        {
+            seed.ParticipantInquiries.Add(inquiry);
+            seed.InquiryContacts.Add(new InquiryContact { Id = Guid.NewGuid(), TenantId = tenantId, InquiryId = inquiry.Id, Role = ContactRoleType.NextOfKin, FirstName = "Dad", LastName = "Lopez" });
+            await seed.SaveChangesAsync();
+        }
+        DateTime loadedA, loadedB;
+        { var (db, c) = Request(tenantId); await using var _ = db; loadedA = Assert.IsType<ApiResponse<Odip.Application.DTOs.ParticipantInquiryDetailDto>>(Assert.IsType<OkObjectResult>((await c.Get(inquiry.Id, CancellationToken.None)).Result).Value).Data!.UpdatedAt; }
+        { var (db, c) = Request(tenantId); await using var _ = db; loadedB = Assert.IsType<ApiResponse<Odip.Application.DTOs.ParticipantInquiryDetailDto>>(Assert.IsType<OkObjectResult>((await c.Get(inquiry.Id, CancellationToken.None)).Result).Value).Data!.UpdatedAt; }
+
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Update(inquiry.Id, Form(loadedA, (ContactRoleType.Guardian, "Mei")), CancellationToken.None)).Result); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Update(inquiry.Id, Form(loadedB, (ContactRoleType.NextOfKin, "Dad")), CancellationToken.None)).Result); }
+
+        var (check, _c) = Request(tenantId);
+        await using (check)
+            Assert.Equal(new[] { "Mei" }, await check.InquiryContacts.Where(x => x.InquiryId == inquiry.Id).Select(x => x.FirstName).ToListAsync());
+    }
+
+    /// <summary>Runs <paramref name="other"/> once, just before this context's save sends its first command: another request committing in between.</summary>
+    private sealed class Interleave(Func<Task> other) : DbCommandInterceptor
+    {
+        private bool _done;
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand c, CommandEventData d, InterceptionResult<DbDataReader> r, CancellationToken ct = default)
+        {
+            if (!_done && (c.CommandText.Contains("INSERT INTO \"InquiryContacts\"", StringComparison.Ordinal) || c.CommandText.Contains("UPDATE \"ParticipantInquiries\"", StringComparison.Ordinal)))
+            {
+                _done = true;
+                await other();
+            }
+            return r;
+        }
+    }
+
+    // Deep review S1: a contacts save that loaded the enquiry before Start intake committed must not leave pending rows on a converted enquiry.
+    [SkippableFact]
+    public async Task A_contacts_save_racing_Start_intake_loses_and_strands_nothing()
+    {
+        RequirePostgres();
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone" };
+        await using (seed)
+        {
+            seed.ParticipantInquiries.Add(inquiry);
+            await seed.SaveChangesAsync();
+        }
+        var converted = false;
+        var (db, controller) = Request(tenantId, new Interleave(async () =>
+        {
+            var (other, convert) = Request(tenantId);
+            await using var _ = other;
+            converted = (await convert.Convert(inquiry.Id, new(), CancellationToken.None)).Result is OkObjectResult;
+        }));
+        await using (db)
+            Assert.IsType<ConflictObjectResult>((await controller.Update(inquiry.Id, Form(null, (ContactRoleType.Guardian, "Mei")), CancellationToken.None)).Result);
+
+        Assert.True(converted);
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            Assert.NotNull((await check.ParticipantInquiries.SingleAsync(x => x.Id == inquiry.Id)).ParticipantId);
+            Assert.Equal(0, await check.InquiryContacts.CountAsync(x => x.InquiryId == inquiry.Id));
         }
     }
 }

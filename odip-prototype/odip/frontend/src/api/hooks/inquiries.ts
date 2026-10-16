@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiDeleteRaw, apiGet, apiPost, apiPut } from '../client'
-import type { CancelIntakeBookingResultDto, CreateParticipantInquiryDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, SetIntakeBookingDto } from '../types/inquiries'
+import type { CancelIntakeBookingResultDto, CreateParticipantInquiryDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, SetIntakeBookingDto, UpdateParticipantInquiryDto } from '../types/inquiries'
 
 export function useParticipantInquiries() {
   return useQuery({ queryKey: ['participant-inquiries'], queryFn: () => apiGet<ParticipantInquiryDto[]>('/inquiries') })
@@ -24,7 +24,7 @@ export function useCreateParticipantInquiry() {
 
 export function useUpdateParticipantInquiry() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: ({ id, data }: { id: string; data: CreateParticipantInquiryDto }) => apiPut<ParticipantInquiryDto>(`/inquiries/${id}`, data), onSuccess: () => qc.invalidateQueries({ queryKey: ['participant-inquiries'] }) })
+  return useMutation({ mutationFn: ({ id, data }: { id: string; data: UpdateParticipantInquiryDto }) => apiPut<ParticipantInquiryDto>(`/inquiries/${id}`, data), onSuccess: () => qc.invalidateQueries({ queryKey: ['participant-inquiries'] }) })
 }
 
 export function useConvertParticipantInquiry() {

@@ -14,6 +14,8 @@ public record ParticipantInquiryDto
     public string Source { get; init; } = string.Empty;
     public string? Provenance { get; init; }
     public DateTime CreatedAt { get; init; }
+    /// <summary>The enquiry's version: an edit form sends back the one it loaded as UpdateParticipantInquiryDto.ExpectedUpdatedAt.</summary>
+    public DateTime UpdatedAt { get; init; }
     // The linked participant's lifecycle state, so the Enquiries tab can tell an open enquiry ("New": no participant; "Draft intake":
     // intake started, not complete) from one that has moved on, which it does not list: intake complete (the Onboarding tab) or finalised
     // (Active participants). All three are null while the enquiry has no participant.
@@ -88,7 +90,11 @@ public record ParticipantInquiryDetailDto : ParticipantInquiryDto
     public List<InquiryContactDto> Contacts { get; init; } = [];
 }
 
-public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto;
+public record UpdateParticipantInquiryDto : CreateParticipantInquiryDto
+{
+    /// <summary>The UpdatedAt the form loaded. Another save since then makes this one a 409, enforced in the UPDATE itself (deep review S2). Null skips the check.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
 public record ConvertParticipantInquiryDto { public Guid? ParticipantId { get; init; } }
 
 public record SetIntakeBookingDto

@@ -18,7 +18,13 @@ public class ParticipantInquiry : ITenantEntity
     public string Source { get; set; } = "Phone";
     public string? Provenance { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>
+    /// The enquiry's version as well as its last change: a concurrency token (OdipDbContext). Held in whole microseconds, as PostgreSQL stores it, so the
+    /// value an answer carries, sent back by the form, still matches the stored one.
+    /// </summary>
+    public DateTime UpdatedAt { get => _updatedAt; set => _updatedAt = Micro(value); }
+    private DateTime _updatedAt = Micro(DateTime.UtcNow);
+    private static DateTime Micro(DateTime value) => new(value.Ticks - value.Ticks % 10, value.Kind);
     // The intake visit booked for this enquiry (owner decisions 2026-10-14): one current booking, every column empty when there is none.
     // IntakeStartsAt is a UTC instant; the visit is entered and shown in the provider's zone. IntakeInviteSentAt is when an invite last went out
     // for this UID; IntakeInviteError is the latest send's failure ("NotConfigured", "Failed"), cleared by a send that works. IntakeUid and

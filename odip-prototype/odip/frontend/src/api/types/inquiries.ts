@@ -13,6 +13,8 @@ export interface ParticipantInquiryDto {
   source: InquirySource | ''
   provenance?: string | null
   createdAt: string
+  /** The enquiry's version: the edit form sends it back as `expectedUpdatedAt`. */
+  updatedAt?: string
   /**
    * Where the participant this enquiry became has got to: all three are null (or absent) while the enquiry has no participant, so the
    * Enquiries tab can tell "New" (no participant), "Draft intake" (intake open) from an enquiry that has moved on (intake complete: the
@@ -88,6 +90,9 @@ export interface CreateParticipantInquiryDto {
   /** Pending contacts, saved in the enquiry's own save. On PUT a list replaces the stored ones; left out means unchanged. */
   contacts?: InquiryContactDto[]
 }
+
+/** PUT /inquiries/{id}: `expectedUpdatedAt` is the version the form loaded; another save since then makes this one a 409. */
+export type UpdateParticipantInquiryDto = CreateParticipantInquiryDto & { expectedUpdatedAt?: string }
 
 /** A contact noted on an enquiry before intake (spec 2026-10-16, D3). Start intake moves it onto the participant. */
 export interface InquiryContactDto {

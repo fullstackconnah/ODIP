@@ -340,6 +340,28 @@ public class InquiryContactsTests
         Assert.Equal("Australia/Sydney", dto.TimeZoneId);
     }
 
+    // ── Fix round 1 (deep review S1/S2): the enquiry's UpdatedAt is a version the UPDATE enforces ──
+
+    [Fact]
+    public async Task A_save_from_a_form_loaded_before_another_save_is_a_409_and_changes_nothing()
+    {
+        var inquiry = SeedInquiry();
+        SeedContacts(inquiry, new InquiryContact { Role = ContactRoleType.NextOfKin, FirstName = "Dad", LastName = "Lopez" });
+        var loaded = Data<ParticipantInquiryDetailDto>((await Controller().Get(inquiry.Id, CancellationToken.None)).Result);
+        _db.ChangeTracker.Clear();
+
+        var first = Data<ParticipantInquiryDto>((await Controller().Update(inquiry.Id, UpdateBody([Contact(ContactRoleType.Guardian, "Mei", "Lopez")]) with { ExpectedUpdatedAt = loaded.UpdatedAt }, CancellationToken.None)).Result);
+        Assert.NotEqual(loaded.UpdatedAt, first.UpdatedAt);
+        _db.ChangeTracker.Clear();
+
+        var stale = await Controller().Update(inquiry.Id, UpdateBody([Contact(ContactRoleType.NextOfKin, "Dad", "Lopez")], "Changed") with { ExpectedUpdatedAt = loaded.UpdatedAt }, CancellationToken.None);
+
+        Assert.Equal("Someone else just changed this enquiry. Reload and try again.", Assert.Single(Assert.IsType<ApiResponse<ParticipantInquiryDto>>(Assert.IsType<ConflictObjectResult>(stale.Result).Value).Errors!));
+        // InMemory has no transactions, so whether the contacts rolled back is the PostgreSQL test's to show (InquiryContactsPostgresTests).
+        _db.ChangeTracker.Clear();
+        Assert.Equal("Ana", _db.ParticipantInquiries.AsNoTracking().Single(x => x.Id == inquiry.Id).FirstName);
+    }
+
     [Fact]
     public async Task Convert_adds_pending_rows_that_are_the_same_contact_once()
     {

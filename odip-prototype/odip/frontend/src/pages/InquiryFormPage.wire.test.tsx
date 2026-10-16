@@ -293,7 +293,8 @@ describe('InquiryFormPage (wire) — contacts', () => {
   })
 
   it('editing loads the stored contacts; removing one PUTs the list without it', async () => {
-    serve({ '/inquiries/i1': detail({ contacts: [maria, tom] }) })
+    // updatedAt is the version the PUT sends back, so a save from a form loaded before another save is refused (deep review S2).
+    serve({ '/inquiries/i1': detail({ contacts: [maria, tom], updatedAt: '2026-10-16T01:02:03.456789Z' }) })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
     const mariaRow = await screen.findByRole('group', { name: 'Contact 1' })
@@ -308,6 +309,7 @@ describe('InquiryFormPage (wire) — contacts', () => {
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', {
       firstName: 'Rowan', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web', provenance: 'Referred by Dr Patel, Brisbane',
       contacts: [{ role: 'EmergencyContact', firstName: 'Tom', lastName: 'Ng', relationship: null, phone: null, email: null, notes: null }],
+      expectedUpdatedAt: '2026-10-16T01:02:03.456789Z',
     })
   })
 

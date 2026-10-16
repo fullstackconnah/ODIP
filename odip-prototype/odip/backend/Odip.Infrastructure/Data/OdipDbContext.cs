@@ -1579,6 +1579,9 @@ public class OdipDbContext : DbContext
             // each other cannot interleave into a booked row with no UID; the loser gets a 409 or drops its write.
             entity.Property(e => e.IntakeIcsSequence).IsConcurrencyToken();
             entity.Property(e => e.IntakeUid).IsConcurrencyToken();
+            // The enquiry's version (deep review S1/S2): every write bumps it, so an edit from a form loaded before another save, or a contacts save racing
+            // Start intake, matches no row and gets a 409. The entity keeps it in whole microseconds, as PostgreSQL stores it.
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
             // Restrict: a staff member booked for a visit is never deleted out from under it (ImportUntouched.StaffBlockersAsync lists it).
             entity.HasOne(e => e.IntakeStaffUser).WithMany().HasForeignKey(e => e.IntakeStaffUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.IntakeBookedByUser).WithMany().HasForeignKey(e => e.IntakeBookedByUserId).OnDelete(DeleteBehavior.Restrict);
