@@ -20,7 +20,7 @@ import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useDelete
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode } from '@/api/types'
 import {
-  WeekToolbar, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementNotice,
+  WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementNotice,
   type ShiftSlideOverTarget,
 } from './components'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan } from './lib/roster'
@@ -29,6 +29,7 @@ import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
 } from './lib/rosterDrag'
+import { bannerBlockedLine, bannerTitle, isBlocked } from './lib/rosterWeek'
 
 /** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
 type Send = (overrideReason: string | null, acknowledgedFindingCodes: string[]) => Promise<unknown>
@@ -187,11 +188,6 @@ export default function RosterBoardPage() {
     ? (board.pendingAgreements ?? []).filter(p => !participantFilter || p.participantId === participantFilter).sort((a, b) => a.displayName.localeCompare(b.displayName))
     : []), [board, participantFilter])
   const hasNotice = waiting.length > 0
-  // The height of what stands above the board (the waiting notice and the error notice, in one wrapper), for the board frame (finish review fix 5): with them above it, strip and grid still share one screen.
-  // shortcut: measured when either changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
-  const noticeRef = useRef<HTMLDivElement>(null)
-  const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
-  useLayoutEffect(() => { setNoticeHeight(assignError || hasNotice ? noticeRef.current?.offsetHeight ?? 0 : null) }, [assignError, hasNotice, waiting])
 
   // Decisions 1 and 10: drag and drop is the Participant view's, for writers, from md up; the Staff view and phones keep click and the menus.
   const dragOn = canWrite && groupBy === 'participant' && !belowMd
@@ -209,10 +205,24 @@ export default function RosterBoardPage() {
   const [publishOpen, setPublishOpen] = useState(false)
   // Counted from the raw board, all participants (the brief, section 8); the server publishes the same week for every participant the board shows.
   const drafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft'), [boardShifts])
+  // Only an explicit false is unstarted: a board without the field (old fixtures) reads as started.
+  const unstarted = board?.weekStarted === false
+  const blocked = useMemo(() => drafts.filter(isBlocked), [drafts])
+  const publishable = useMemo(() => drafts.filter(s => !isBlocked(s)), [drafts])
+  // The banner (the brief, 3.1): a started week with drafts, for writers and readers.
+  const showBanner = !unstarted && drafts.length > 0
+  const noticesShown = showBanner || hasNotice || !!assignError
+  // The height of what stands above the board (the banner, the notices and the error, in one wrapper), for the board frame (finish review fix 5): with them above it, strip and grid still share one screen.
+  // shortcut: measured when any of them changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
+  const noticeRef = useRef<HTMLDivElement>(null)
+  const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
+  useLayoutEffect(() => { setNoticeHeight(noticesShown ? noticeRef.current?.offsetHeight ?? 0 : null) }, [noticesShown, assignError, waiting, drafts.length, blocked.length])
 
   async function handlePublishWeek() {
     try {
       setAnnouncement(publishedSentence(await publishWeek.mutateAsync(weekStart)))
+      // The banner's button is about to go (nothing left to publish) or to hide (only blocked drafts left): focus goes to the week heading, never to body (the brief, 3.4).
+      requestAnimationFrame(() => document.getElementById(WEEK_HEADING_ID)?.focus())
     } catch (err: unknown) {
       setAssignError(extractErrorMessage(err, 'Something went wrong publishing this week. Please try again.'))
     } finally {
@@ -455,14 +465,27 @@ export default function RosterBoardPage() {
           onOpenExceptions={() => setExceptionsOpen(true)}
           canWrite={canWrite}
           onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
-          draftCount={board && !weekHasNoShifts ? drafts.length : null}
-          onPublishWeek={() => setPublishOpen(true)}
+          allPublished={!!board && !unstarted && !weekHasNoShifts && drafts.length === 0}
+          newShiftSecondary={publishable.length > 0}
         />
       </div>
 
-      {/* The standing notice first, then the error, in ONE wrapper measured for the board frame: the notice never jumps when an error comes and goes (the brief, section 6). */}
-      {(hasNotice || assignError) && (
+      {/* The banner, the standing notice, then the error, in ONE wrapper measured for the board frame: the notice never jumps when an error comes and goes (the brief, section 6). */}
+      {noticesShown && (
         <div ref={noticeRef} className="flex flex-col gap-[var(--section-gap)]">
+          {showBanner && (
+            <Callout
+              tone="warning"
+              // A standing state, not news: as role="alert" it would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence.
+              announce={false}
+              title={bannerTitle(drafts.length)}
+              // One line beside a 32px button: centred, or the 19px title sits at the top (the brief, 3.2).
+              className={blocked.length === 0 ? 'items-center!' : undefined}
+              actions={canWrite && publishable.length > 0 ? <Button size="md" onClick={() => setPublishOpen(true)}>Publish week</Button> : undefined}
+            >
+              {bannerBlockedLine(drafts.length, blocked.length)}
+            </Callout>
+          )}
           {hasNotice && <PendingAgreementNotice waiting={waiting} />}
           {assignError && (
             <Callout
@@ -609,8 +632,8 @@ export default function RosterBoardPage() {
         onCancel={() => setPublishOpen(false)}
         onConfirm={handlePublishWeek}
         title={`Publish ${formatWeekSpan(days)}?`}
-        message={<p>{publishWeekMessage(drafts)}</p>}
-        confirmLabel={`Publish ${plural(drafts.length, 'shift')}`}
+        message={<p>{publishWeekMessage(publishable)}</p>}
+        confirmLabel={`Publish ${plural(publishable.length, 'shift')}`}
         loading={publishWeek.isPending}
       />
 
