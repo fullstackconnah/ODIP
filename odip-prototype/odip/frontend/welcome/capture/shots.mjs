@@ -1,169 +1,240 @@
 /**
- * Shot definitions for capture.mjs. See the registry comment there for the shape.
- * `run` receives { page, goto, settle, fulfil, unionRect, BASE_URL } and returns { locator | rect, pad? }.
+ * Shot definitions for capture.mjs (the registry comment there has the shape), in page order: the 11 screens of
+ * SHAPE section 5, then the 7 narrow "-m" crops. `run` receives { page, goto, settle, fulfil, unionRect, ratio, BASE_URL }
+ * and returns { rect }. Each base shot's `area` finds the region that shows its state; `run` fits that region to the
+ * frame's ratio, and a variant fits the same region, shot at a 640px app viewport, to 4:5.
  */
-import { myShiftsWeek, pendingWitnessRequests, graceAlerts } from './fixtures.mjs'
+import { myShiftsWeek, pendingWitnessRequests, routeStaffBoard } from './fixtures.mjs'
 import { driveIncidentToDetails } from './drivers.mjs'
 
-const LOCAL = []
+const NOW = '2026-10-16T09:30:00+10:00' // the mock's completions, bookings and claims fall in the weeks around it
 
-// ---- Stage 1: PLAN ------------------------------------------------------------------------------
-LOCAL.push({
-  name: 'plan-trip-glance',
-  stage: 'plan',
-  priority: 'P1',
-  route: '/trips/t-0001',
-  cropTarget: 'Trip detail header: title row (status, destination, trip code, dates), the four-segment at-a-glance figure bar and the tab strip',
-  fixture: false,
-  alt: 'Trip detail for Sunshine Coast Beach Escape, SCB-2608, Caloundra QLD, 14 to 17 August 2026: status Confirmed, with an at-a-glance bar of participants and staff, outstanding tasks, high support and overnight counts, and insurance confirmations, above the tab strip.',
-  notes: 'Mock data, no fixtures. Clock pinned to 2026-08-04.',
-  async run({ page, goto }) {
-    await goto('/trips/t-0001')
-    await page.getByRole('heading', { level: 1, name: 'Sunshine Coast Beach Escape' }).waitFor()
-    const header = page.locator('main h1').locator('xpath=../../..')
-    const tabs = page.getByRole('tablist', { name: 'Trip detail sections' })
-    return { locator: [header, tabs], pad: 8 }
+/**
+ * Fit a region to w:h at its own width. A region taller than that is cut at the bottom; a shorter one is centred in the
+ * frame, but never reaches above the app's sticky top bar (its search placeholder and the sidebar are not part of a crop).
+ */
+async function fit({ page, ratio }, r, w, h) {
+  const out = ratio(r, w, h)
+  if (out.height <= r.height) return out
+  const bar = await page.locator('header').first().evaluate((el) => el.getBoundingClientRect().bottom + window.scrollY).catch(() => 0)
+  return { ...out, y: Math.max(bar + 8, r.y - (out.height - r.height) / 2) }
+}
+
+/** Grow the viewport to the whole page first, as capture.mjs does before it shoots, so sticky footers are measured where they will be. */
+async function grow(page) {
+  const vp = page.viewportSize()
+  const h = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body.scrollHeight))
+  if (h > vp.height) await page.setViewportSize({ width: vp.width, height: h })
+}
+
+/** A region w:h whose bottom sits `below` px under the region: for a block whose neighbour underneath must stay out of the frame. */
+const upFrom = (r, w, h, below = 16) => {
+  const height = (r.width * h) / w
+  return { ...r, y: r.y + r.height + below - height, height }
+}
+
+const phone = { x: 0, y: 0, width: 390, height: 844 } // the whole first screen; the bottom nav sits at the foot of the grown page
+
+const BASE = [
+  {
+    name: 'decisions', stage: 't0830', route: '/', viewport: { width: 1200, height: 900 }, w: 16, h: 10,
+    cropTarget: "Dashboard Needs your decision: the group tabs, the Completions group with two rows ticked and the bulk bar's count and action",
+    alt: "The dashboard's decision queue on its Completions tab as cards: four finished shifts with staff, participant, times and variance, two of them ticked under a bar reading 2 selected, with an Approve 2 button.",
+    async area({ page, goto, settle, unionRect }, w, h) {
+      await goto('/')
+      await page.getByRole('tab', { name: /^Completions/ }).click()
+      const panel = page.getByRole('tabpanel')
+      // Each row's box sits under its tap-area label, which takes the click.
+      for (const i of [1, 2]) await panel.getByRole('checkbox').nth(i).locator('xpath=..').click()
+      await page.getByText('2 selected').waitFor()
+      await settle()
+      // Upcoming trips sits under the queue, so a frame taller than the queue grows upward from it, never down.
+      const r = await unionRect([page.locator('#dashboard-decisions').locator('xpath=..')], { x: 12, y: 12 })
+      return r.height >= (r.width * h) / w ? r : upFrom(r, w, h)
+    },
   },
-})
-
-// ---- Stage 6: REPORT ON TIME ---------------------------------------------------------------------
-LOCAL.push({
-  name: 'report-overdue',
-  stage: 'report-on-time',
-  priority: 'P1',
-  route: '/incidents',
-  cropTarget: 'Red QSC banner ("1 incident requires QSC reporting: 24-hour deadline exceeded") plus the incident table with the solid OVERDUE badge in the QSC column',
-  fixture: false,
-  alt: 'Incident Reports list with a red banner reading "1 incident requires QSC reporting: 24-hour deadline exceeded" and a "View overdue incidents" link above a table of three incidents; the escalation incident for Grace Palmer-Hughes carries a solid red OVERDUE badge in the QSC column.',
-  notes: 'Mock data, no fixtures. Clock pinned to 2026-08-04 so the 30 Jul incident is past its 24-hour QSC deadline. The banner description is truncated with an ellipsis by the app itself at this width.',
-  viewport: process.env.OVERDUE_VW ? { width: Number(process.env.OVERDUE_VW), height: 900 } : undefined,
-  async run({ page, goto }) {
-    await goto('/incidents')
-    const banner = page.getByRole('alert').filter({ hasText: 'QSC reporting' })
-    await banner.waitFor()
-    await page.getByText('OVERDUE', { exact: true }).waitFor()
-    const table = page.locator('main table').first().locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')
-    return { locator: [banner, table], pad: 8 }
+  {
+    name: 'roster-board', stage: 't1000', route: '/rostering', fixture: true, now: '2026-08-10T08:00:00+10:00', viewport: { width: 1390, height: 900 }, w: 16, h: 10,
+    cropTarget: 'Roster board, By staff: the week toolbar, the Unfilled lane with one shift, five staff rows with shift chips and hours',
+    alt: "A week of the roster laid out by staff, 10 to 16 August: one shift for Dylan Marchetti waits in the Unfilled lane on Tuesday, five support workers have their shifts by day and their hours out of 38, and Tom Beattie is on leave.",
+    notes: 'Fixture: the mock answers every board request with the participant view and ignores groupBy, so GET rostering/board?groupBy=staff is fed a By staff week (10-16 Aug 2026) built from mock staff and participants and Tom Beattie\'s mock annual leave. 1390px viewport: about the narrowest width where all seven day columns fit.',
+    setup: routeStaffBoard,
+    async area({ page, goto, settle, unionRect }) {
+      await goto('/rostering')
+      await page.getByRole('radio', { name: 'By staff' }).click()
+      await page.getByRole('link', { name: 'Callum Radford' }).first().waitFor()
+      await settle()
+      const frame = page.locator('main .overflow-auto').filter({ hasText: 'Unfilled' }).first()
+      return unionRect([page.getByRole('heading', { level: 1, name: 'Roster board' }), page.getByRole('button', { name: /New shift/ }), frame], { x: 12, y: 10 })
+    },
   },
-})
-
-LOCAL.push({
-  name: 'report-incident-wizard',
-  stage: 'report-on-time',
-  priority: 'P1',
-  route: '/incidents/new',
-  cropTarget: 'Report New Incident wizard on the Incident Details step: step rail, the details card and the Injuries card with the front/back body map',
-  fixture: false,
-  now: '2026-07-11T15:00:00+10:00',
-  // 1000px is just under the 1024px lg breakpoint, so the step rail renders as the horizontal pill row instead of the
-  // vertical list (which draws stray centred connector ticks at desktop width). The crop has no sidebar either way.
-  viewport: { width: 1000, height: 900 },
-  alt: 'Report New Incident wizard on step 2 of 4, Incident Details: date, location, description and immediate actions filled in, then an Injuries card with region buttons, a front and back body map with the left forearm marked, and one recorded injury (Left forearm, Abrasion, small graze cleaned and dressed on site).',
-  notes: 'Mock data; the form is filled in through the real UI (fictional sample text, participant and trip from the mock). No fixtures. Shot at a 1000px-wide viewport (just under the 1024px lg breakpoint) so the step rail is the horizontal pill row; at 1280px the same rail is a vertical list with stray centred connector ticks. App quirks visible: the current step has no highlighted pill and the Add injury button has dark text on dark green (both come from src, not editable here).',
-  async run({ page, goto, settle }) {
-    await driveIncidentToDetails(page, goto, { addInjury: true })
-    await settle(page)
-    const top = page.getByRole('heading', { level: 1, name: 'Report New Incident' })
-    const injuries = page.getByRole('heading', { name: 'Injuries' }).locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')
-    return { locator: [top, injuries], pad: 8 }
+  {
+    name: 'enquiries', stage: 't1130', route: '/participants?tab=enquiries', viewport: { width: 1440, height: 900 }, w: 16, h: 10,
+    cropTarget: 'Participants, Enquiries tab: the open enquiries table with Start intake on each new enquiry',
+    alt: "The open enquiries table: seven people with their contact, source and status, intake visits booked for some with confirmation badges, and Start intake, Resume intake and Edit enquiry buttons on the rows.",
+    async area({ page, goto, settle, unionRect }) {
+      await goto('/participants?tab=enquiries')
+      await page.getByRole('button', { name: /^Start intake/ }).first().waitFor()
+      await settle()
+      return unionRect([page.getByRole('heading', { level: 1, name: 'Participants' }), page.locator('main table').first()], { x: 4, y: 10 })
+    },
   },
-})
-
-// ---- Stage 4: CARE -------------------------------------------------------------------------------
-LOCAL.push({
-  name: 'care-my-shifts-phone',
-  stage: 'care',
-  priority: 'P1',
-  route: '/portal',
-  cropTarget: 'My Shifts page content on a phone (title, leave and witness-approval buttons, week switcher, day-grouped shift cards); top bar and bottom nav excluded',
-  fixture: true,
-  now: '2026-09-11T12:00:00+10:00',
-  mobile: true,
-  alt: 'My Shifts on a phone for the week 7 to 13 September: shifts grouped by day, each a card with the participant, time range and a status badge, including an overnight active-night shift shown as +1 day and a Witness approvals button with a count of 1.',
-  notes: 'Fixture: the mock has no GET portal/my-shifts, so it is fed the mock portal shifts (shift-0001/2/3, same dates and participants) plus one extra day shift, and one pending witness request for the badge. iPhone-sized viewport 390x844, shot at 3x and downscaled (2x file = 780 px wide).',
-  async setup(page) {
-    await page.route(/\/api\/v1\/portal\/my-shifts(\?.*)?$/, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: myShiftsWeek, message: null, errors: null }) }))
-    await page.route(/\/api\/v1\/portal\/witness-requests(\?.*)?$/, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: pendingWitnessRequests, message: null, errors: null }) }))
+  {
+    name: 'intake-booking', stage: 't1130', route: '/participants?tab=enquiries', viewport: { width: 1920, height: 900 }, w: 4, h: 3,
+    cropTarget: "The intake visit panel for a new enquiry: date, start time, length, where and who's going filled in, above the Send invite button",
+    alt: "The intake visit panel for Noah Fitzgerald, open over the dimmed enquiries list: his email, 22 October at 10:00 for an hour and a half at his home, and Callum Radford as the one going.",
+    async area({ page, goto, settle, unionRect }) {
+      await goto('/participants?tab=enquiries')
+      await page.getByRole('button', { name: 'Book intake for Noah Fitzgerald' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.waitFor()
+      await dialog.getByLabel(/email/).fill('noah.fitzgerald@example.org')
+      await dialog.getByLabel(/^Date/).fill('2026-10-22')
+      await dialog.getByLabel(/^Start time/).fill('10:00')
+      await dialog.getByLabel(/^Where/).fill("Noah's home")
+      await page.getByLabel(/^Who's going/).first().click()
+      await page.getByRole('listbox').last().getByRole('option').first().click()
+      await settle()
+      await grow(page)
+      // The panel is narrow and tall: the frame widens leftward over the dimmed enquiries behind it, starting clear of the app's
+      // search box (its placeholder reads "Search trips, participants"), and takes the 4:3 height that width gives.
+      const r = await unionRect([dialog], 0)
+      const search = await unionRect([page.getByPlaceholder(/^Search trips/)], 0)
+      const x = search.x + search.width + 32
+      const width = r.x + r.width - x
+      return { x, y: r.y, width, height: Math.min(r.height, (width * 3) / 4) }
+    },
   },
-  async run({ page, goto }) {
-    await goto('/portal')
-    await page.getByRole('heading', { level: 1, name: 'My Shifts' }).waitFor()
-    await page.getByText('Aisha Rahimi').waitFor()
-    const root = page.locator('main > div').first()
-    const r = await root.evaluate((el) => {
-      const b = el.getBoundingClientRect()
-      return { top: b.top + window.scrollY, bottom: b.bottom + window.scrollY }
-    })
-    // Full phone width; from the top of <main> (just under the top bar) to a little below the last card.
-    return { rect: { x: 0, y: r.top - 16, width: 390, height: r.bottom - r.top + 32 } }
+  {
+    name: 'agreement-draft', stage: 't1300', route: '/participants/p-0004/agreement-draft', w: 16, h: 10,
+    cropTarget: 'Service agreement draft at the Week step: the step rail, the week pattern lines and the running total in the footer',
+    alt: "Grace Palmer-Hughes's draft service agreement on its Week step: personal care, community access and group activity shifts from Tuesday to Sunday, and a footer with the weekly and agreement totals and an over-budget warning.",
+    async area({ page, goto, settle, unionRect }, w, h) {
+      await goto('/participants/p-0004/agreement-draft')
+      await page.getByRole('button', { name: 'Next' }).click()
+      await page.getByText('Step 2 of 4').waitFor()
+      await settle()
+      await grow(page)
+      // The week runs long; the crop ends at the footer, so the running total beside Next is in it.
+      const r = await unionRect([page.getByRole('heading', { level: 1 }), page.getByText('Step 2 of 4'), page.getByRole('button', { name: 'Next' })], { x: 16, y: 12 })
+      return r.height > (r.width * h) / w ? upFrom(r, w, h, 0) : r
+    },
   },
-})
-
-LOCAL.push({
-  name: 'care-risk-alerts',
-  stage: 'care',
-  priority: 'P1',
-  route: '/participants/p-0004',
-  cropTarget: 'The ranked risk-alert stack starting at the red Critical alert, the participant tab strip and the top of the first Identity card (cut below the Date of Birth row); the page header and its status line are not included',
-  fixture: true,
-  alt: 'A stack of risk alerts on a participant page: a red Critical alert that a QSC report is overdue for the escalation incident, then Warning alerts for an open High incident and an overdue restrictive practice review, and a note of one more alert; below are the participant tabs (Details, Contacts, Bookings and more) and the start of an Identity card for Grace Palmer-Hughes.',
-  notes: 'Fixture: the mock returns no alerts, so GET participants/p-0004/alerts is fed alerts worded like the backend ParticipantAlertsService, based on the mock incident inc-0003 (open High, QSC overdue). The plan end date and practice review date are fixture values.',
-  async setup(page) {
-    await page.route(/\/api\/v1\/participants\/p-0004\/alerts(\?.*)?$/, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: graceAlerts, message: null, errors: null }) }))
+  {
+    name: 'incident-body-map', stage: 't1430', route: '/incidents/new', viewport: { width: 1000, height: 900 }, w: 4, h: 3,
+    cropTarget: 'Report incident at the Incident details step: the Injuries card with the front and back body map, the left forearm selected, the injury type and description',
+    alt: "The injuries part of a new incident report: region buttons grouped by body area with Left forearm selected, front and back figures with the left forearm shaded green, Abrasion as the injury type and a short description.",
+    async area({ page, goto, settle, unionRect }) {
+      await driveIncidentToDetails(page, goto)
+      await page.getByText('Selected region:').waitFor()
+      await settle()
+      const card = page.getByRole('heading', { name: 'Injuries' }).locator('xpath=ancestor::div[contains(@class,"rounded")][1]')
+      return unionRect([card], { x: 8, y: 0 })
+    },
   },
-  async run({ page, goto, unionRect }) {
-    await goto('/participants/p-0004')
-    await page.getByRole('heading', { level: 1 }).first().waitFor()
-    const banner = page.locator('[aria-label="Participant risk alerts"]')
-    await banner.waitFor()
-    const head = page.locator('main h1').first()
-    const firstAction = page.getByText('Intake Form PDF').first()
-    const more = page.getByRole('button', { name: /more alert/ })
-    const tabs = page.getByRole('tablist', { name: 'Participant detail sections' })
-    const dob = page.getByText('Date of Birth', { exact: true }).first()
-    await dob.waitFor()
-    // Round 2: start at the first (red) alert so the header line (region, plan type, support ratio) is not in the crop; then the
-    // alert stack, the tab strip and the top of the first details card, cut just below its Date of Birth row.
-    const top = await unionRect([banner, more, tabs], { x: 8, y: 4 })
-    const dobBox = await unionRect([dob])
-    const nextBox = await unionRect([page.getByText('Gender', { exact: true }).first()])
-    const cutY = (dobBox.y + dobBox.height + nextBox.y) / 2 // midway between the two rows, so no row is sliced
-    return { rect: { x: top.x, y: top.y, width: top.width, height: cutY - top.y } }
+  {
+    name: 'credentials', stage: 't1430', route: '/qualifications', now: '2026-08-08T10:00:00+10:00', viewport: { width: 1100, height: 900 }, w: 16, h: 10,
+    cropTarget: 'Qualifications: the issue tabs and the two staff groups opened, one credential expired and one expiring inside the 30-day window',
+    alt: "Qualifications with two issues across two active staff: Jack O'Sullivan's first aid due in 12 days and Tom Beattie's first aid expired on 1 July, each listed with their current credentials and an Edit link.",
+    async area({ page, goto, settle, unionRect }) {
+      await goto('/qualifications')
+      await page.getByRole('button', { name: "Jack O'Sullivan" }).first().click()
+      await page.getByRole('button', { name: 'Tom Beattie' }).first().click()
+      await settle()
+      const lastGroup = page.getByRole('button', { name: 'Tom Beattie' }).first().locator('xpath=ancestor::div[contains(@class,"overflow-hidden")][1]')
+      return unionRect([page.getByRole('heading', { level: 1, name: /Qualifications/ }), lastGroup], { x: 8, y: 10 })
+    },
   },
-})
+  {
+    name: 'completions', stage: 't1600', route: '/rostering/completions', viewport: { width: 1280, height: 900 }, w: 16, h: 10,
+    cropTarget: 'Completions review queue: four finished shifts, three ticked, with Approve selected (3) in the toolbar',
+    alt: "The completions queue with four finished shifts pending review, each with rostered against actual times and the variance; three are ticked and an Approve selected (3) button sits above the filters.",
+    async area({ page, goto, settle, unionRect }) {
+      await goto('/rostering/completions')
+      const rows = page.locator('main table tbody').getByRole('checkbox')
+      for (const i of [1, 2, 3]) await rows.nth(i).check()
+      await page.getByRole('button', { name: /Approve selected \(3\)/ }).waitFor()
+      await settle()
+      return unionRect([page.getByRole('heading', { level: 1, name: 'Completions' }), page.locator('main table').first()], { x: 4, y: 10 })
+    },
+  },
+  {
+    name: 'claim-preview', stage: 't1600', route: '/participants/p-0001?tab=claims', viewport: { width: 1440, height: 1000 }, w: 4, h: 3,
+    cropTarget: 'The Generate claim from shifts dialog at its preview: claim lines from approved shifts before anything is generated',
+    alt: "A claim preview for Liam Okafor's approved shifts: two weekday lines with item codes, hours and unit prices, the total at the top, a note that one sleepover shift is left out, and Back, Cancel and Confirm buttons.",
+    async area({ page, goto, settle, unionRect }) {
+      await goto('/participants/p-0001?tab=claims')
+      await page.getByRole('button', { name: 'Generate from shifts' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByLabel(/^From/).fill('2026-09-01')
+      await dialog.getByLabel(/^To/).fill('2026-10-16')
+      await dialog.getByRole('button', { name: /Preview/ }).click()
+      await dialog.getByText('Claim preview').first().waitFor()
+      await settle()
+      return unionRect([dialog], 24) // the dialog with an even band of the dimmed page round it
+    },
+  },
+  {
+    name: 'myshifts-week', stage: 'onshift', role: 'SupportWorker', route: '/portal', mobile: true, fixture: true, now: '2026-09-13T08:30:00+10:00',
+    cropTarget: "My shifts on a phone: the week of 7 to 13 September, today's shift and the rest of the week",
+    alt: "A support worker's week on a phone, 7 to 13 September: today's shift with Sienna Whitfield from 9am, starting in 30 minutes, with an Open shift button, then the earlier shifts on Friday, Thursday and Tuesday.",
+    notes: "Fixture: GET portal/my-shifts is fed the mock's three portal shifts plus one more day shift, so the week reads like a real roster; no witness requests.",
+    async setup(page) {
+      const json = (data) => JSON.stringify({ success: true, data, message: null, errors: null })
+      await page.route(/\/api\/v1\/portal\/my-shifts(\?.*)?$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: json(myShiftsWeek) }))
+      await page.route(/\/api\/v1\/portal\/witness-requests(\?.*)?$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: json(pendingWitnessRequests) }))
+    },
+    async area({ page, goto, settle }) {
+      await goto('/portal')
+      await page.getByText('Sienna Whitfield').first().waitFor()
+      await settle()
+      return phone
+    },
+  },
+  {
+    name: 'myshifts-during', stage: 'onshift', role: 'SupportWorker', route: '/portal/shifts/shift-0003', mobile: true, now: '2026-09-13T09:05:00+10:00',
+    cropTarget: 'A shift in progress on a phone: the shift started, the During view with the dose sheet and a dose due',
+    alt: "Sienna Whitfield's shift in progress on a phone: the handover note from the last worker, her anaphylaxis and epilepsy flags, and the During the shift list with an overdue Levetiracetam dose and a Record button.",
+    async area({ page, goto, settle, unionRect }) {
+      await goto('/portal/shifts/shift-0003')
+      await page.getByRole('button', { name: 'Start shift' }).click()
+      await page.getByText('During the shift').waitFor()
+      await settle()
+      const back = await unionRect([page.getByText('Back', { exact: true }).first()], 0)
+      return { ...phone, y: back.y - 16 } // from Back down, so the dose sheet is in the frame
+    },
+  },
+]
 
-// ---- Assemble: every shot module, ordered plan > stay > crew > care > fund-and-claim > report-on-time ----------
-import { shots as crewShots } from './shots-crew.mjs'
-import { shots as stayShots } from './shots-stay.mjs'
-import { shots as fundShots } from './shots-fund.mjs'
-import { shots as reportShots } from './shots-report.mjs'
-import { shots as careShots } from './shots-care.mjs'
-import { shots as planShots } from './shots-plan.mjs'
+const ALT_M = {
+  "decisions": "On a narrow screen, the decision queue's Completions tab as stacked cards: four finished shifts, two ticked, under the 2 selected bar with its Approve 2 button.",
+  "roster-board": "On a narrow screen, the roster by staff from Monday to Wednesday: the Unfilled lane with one Tuesday shift, five staff rows with shift chips and hours, and Tom Beattie on leave.",
+  "enquiries": "On a narrow screen, open enquiries as stacked cards with name, contact, source and status: Noah Fitzgerald with Book intake and Start intake, then Priya Nair and Tomas Becker with Resume intake.",
+  "agreement-draft": "On a narrow screen, the agreement draft's Week step: the shifts for each day from Monday to Sunday, then the weekly and agreement totals with an over-budget warning and the Next button.",
+  "incident-body-map": "On a narrow screen, the incident report's injuries section: body area buttons with Left forearm selected above the front and back figures, the left forearm shaded on both.",
+  "credentials": "On a narrow screen, Qualifications with both staff groups open: Jack O'Sullivan's first aid due in 12 days and Tom Beattie's expired first aid among their current credentials, each with an Edit link.",
+  "completions": "On a narrow screen, the completions queue as stacked cards with rostered and actual times and the variance; three of the four are ticked under an Approve selected (3) button."
+}
 
-const STAGE_ORDER = ['plan', 'stay', 'crew', 'care', 'fund-and-claim', 'report-on-time']
-const BASE = [...LOCAL, ...planShots, ...crewShots, ...stayShots, ...fundShots, ...reportShots, ...careShots]
+const NARROW = ['decisions', 'roster-board', 'enquiries', 'agreement-draft', 'incident-body-map', 'credentials', 'completions']
 
-// Narrow "-m" variants (round 2): the base shot's fixtures and clock, a 640px viewport by default, per-variant overrides.
-import { variantSpecs } from './variants.mjs'
-const VARIANTS = Object.entries(variantSpecs).map(([baseName, spec]) => {
-  const base = BASE.find((s) => s.name === baseName)
-  if (!base) throw new Error(`variants.mjs: no base shot named ${baseName}`)
-  const { run: specRun, ...overrides } = spec
-  return {
+const shot = (s) => ({ role: 'Admin', fixture: false, notes: '', now: NOW, ...s, run: async (ctx) => {
+  const r = await s.area(ctx, s.w, s.h)
+  return { rect: s.mobile ? r : await fit(ctx, r, s.w, s.h) }
+} })
+
+const VARIANTS = NARROW.map((name) => {
+  const base = BASE.find((s) => s.name === name)
+  return shot({
     ...base,
-    ...overrides,
-    name: `${baseName}-m`,
-    variantOf: baseName,
-    viewport: spec.viewport || { width: 640, height: 900 },
-    run: specRun ? (ctx) => specRun(ctx, () => base.run(ctx)) : base.run,
-  }
+    name: `${name}-m`,
+    variantOf: name,
+    viewport: { width: 640, height: 900 },
+    w: 4,
+    h: 5,
+    cropTarget: `${base.cropTarget}, at a 640px app width`,
+    alt: ALT_M[name],
+  })
 })
 
-const ALL = [...BASE, ...VARIANTS]
-export const SHOTS = ALL
-  .map((s, i) => [s, i])
-  .sort((a, b) => STAGE_ORDER.indexOf(a[0].stage) - STAGE_ORDER.indexOf(b[0].stage) || a[1] - b[1])
-  .map(([s]) => s)
+export const SHOTS = [...BASE.map(shot), ...VARIANTS]

@@ -1,10 +1,10 @@
 /**
  * Realistic API JSON for screens the mock API has no data for (see the `fixture: true` shots).
  * Shapes follow the real response DTOs under frontend/src/api/types. Names, codes and dates are the mock's
- * fictional sample set (mock-api/server.js): trips t-0001..t-0004, participants p-0001..p-0006, staff s-0001..s-0005.
+ * fictional sample set (mock-api/server.js): participants p-0001..p-0006, staff s-0001..s-0005.
  */
 
-// ---- Portal: My Shifts (GET portal/my-shifts) + pending witness requests (GET portal/witness-requests) -------------
+// ---- Portal: My shifts (GET portal/my-shifts) + pending witness requests (GET portal/witness-requests) -------------
 // Week Mon 7 - Sun 13 Sep 2026. shift-0001/0002/0003 are the mock's own portal shifts (same dates, times, participants);
 // shift-0004 is an extra day shift so the week reads like a real roster. Statuses follow the shift-completion flow:
 // Completed (finished and approved) -> Published (upcoming).
@@ -35,33 +35,99 @@ export const myShiftsWeek = {
   timeZoneId: 'Australia/Sydney',
 }
 
-export const pendingWitnessRequests = [
-  {
-    id: 'wr-0001', sourceType: 'Incident', participantId: 'p-0001', participantName: 'Liam Okafor',
-    medicationId: null, medicationName: null, strength: null, doseDescription: null, doseGiven: null,
-    incidentReportId: 'inc-0001', incidentTitle: 'Minor graze from beach walk slip', incidentType: 'Injury',
-    incidentSeverity: 'Low', recordedByName: 'Priya Nadarajah', administeredAt: null, administeredAtTimeZone: null,
-    incidentDateTime: '2026-07-11T10:30:00', witnessStatus: 'Pending', witnessRespondedAt: null,
-    createdAt: '2026-09-10T16:20:00Z',
-  },
-]
+export const pendingWitnessRequests = []
 
-// ---- Participant risk alerts (GET participants/{id}/alerts) -----------------------------------------------------
-// Grace Palmer-Hughes (p-0004): the mock's inc-0003 is her open High incident with an overdue QSC report; the mock
-// profile also records an authorised environmental restrictive practice. Wording follows ParticipantAlertsService
-// (backend), ranked Critical first. The plan end date and the practice review date are not in the mock: they are
-// fixture values chosen to fall relative to the pinned clock (2026-08-04).
-export const graceAlerts = {
-  participantId: 'p-0004',
-  participantName: 'Gracie Palmer-Hughes',
-  isActive: true,
-  alerts: [
-    { type: 'qsc-report-overdue', severity: 'Critical', message: 'QSC report overdue: Escalation during pre-trip meet and greet', deepLinkTab: 'history', linkTo: '/incidents/inc-0003' },
-    { type: 'open-serious-incident', severity: 'Warning', message: 'Open High incident: Escalation during pre-trip meet and greet (29 Jul)', deepLinkTab: 'history', linkTo: '/incidents/inc-0003' },
-    { type: 'restrictive-practice-review-overdue', severity: 'Warning', message: 'Environmental restrictive practice review was due 2026-07-15 and is overdue', deepLinkTab: 'restrictive-practices', linkTo: null },
-    { type: 'plan-expiring-soon', severity: 'Warning', message: 'NDIS plan ends 2026-08-21', deepLinkTab: 'details', linkTo: null },
+// ---- Roster board, By staff (GET rostering/board?groupBy=staff) --------------------------------------------------
+// The mock always answers with the participant-grouped shape (and ignores groupBy), so the By staff view is fed this
+// week instead: Mon 10 - Sun 16 Aug 2026. Staff, participants and Tom's leave (mock schedule: annual leave 10-21 Aug)
+// come from the mock; hours are the sum of the shifts shown; the 38 h target is the backend default. Tom's first aid
+// expiry (1 Jul 2026) is the mock's own staff record. One shift sits in the Unfilled lane.
+const hh = (t) => Number(t.slice(0, 2)) + Number(t.slice(3, 5)) / 60
+
+function shift(id, participantId, participantName, staffId, staffName, serviceDate, startTime, endTime, extra = {}) {
+  const endsNextDay = endTime <= startTime
+  const durationHours = endsNextDay ? 24 - hh(startTime) + hh(endTime) : hh(endTime) - hh(startTime)
+  return {
+    id, participantId, participantName, ...(staffId ? { staffId, staffName } : {}), serviceDate, startTime, endTime, endsNextDay, durationHours,
+    ratio: 'OneToOne', nightType: 'None', status: 'Published', shiftPatternId: null, notes: null, overrideReason: null,
+    findings: [], assigneeOnApprovedLeave: false, ...extra,
+  }
+}
+
+const LIAM = ['p-0001', 'Liam Okafor']
+const SIENNA = ['p-0002', 'Sienna Whitfield']
+const MARCUS = ['p-0003', 'Marcus Tran']
+const GRACE = ['p-0004', 'Grace Palmer-Hughes']
+const DYLAN = ['p-0005', 'Dylan Marchetti']
+const CALLUM = ['s-0001', 'Callum Radford']
+const PRIYA = ['s-0002', 'Priya Nadarajah']
+const JACK = ['s-0003', "Jack O'Sullivan"]
+const MEI = ['s-0004', 'Mei Zhang']
+const TOM = ['s-0005', 'Tom Beattie']
+
+// Wording follows RosterConflictService (backend).
+const ratioShortfall = {
+  code: 'RATIO_SHORTFALL', severity: 'Warning', requiresReason: false,
+  message: "Grace Palmer-Hughes's 2:1 shift on 11 Aug 2026 has only 1 of 2 support workers rostered.",
+}
+const night = { ratio: 'TwoToOne', nightType: 'ActiveNight' }
+
+const staffShifts = {
+  callum: [
+    shift('rs-0001', ...LIAM, ...CALLUM, '2026-08-10', '09:00:00', '15:00:00'),
+    shift('rs-0002', ...MARCUS, ...CALLUM, '2026-08-12', '10:00:00', '14:00:00'),
+    shift('rs-0003', ...LIAM, ...CALLUM, '2026-08-13', '09:00:00', '15:00:00'),
   ],
-  criticalCount: 1,
-  warningCount: 3,
-  infoCount: 0,
+  priya: [
+    shift('rs-0004', ...SIENNA, ...PRIYA, '2026-08-10', '09:00:00', '17:00:00'),
+    shift('rs-0005', ...SIENNA, ...PRIYA, '2026-08-11', '09:00:00', '17:00:00'),
+    shift('rs-0006', ...GRACE, ...PRIYA, '2026-08-12', '19:00:00', '07:00:00', night),
+    shift('rs-0016', ...SIENNA, ...PRIYA, '2026-08-14', '09:00:00', '15:00:00'),
+  ],
+  jack: [
+    shift('rs-0007', ...LIAM, ...JACK, '2026-08-10', '08:00:00', '17:00:00'),
+    shift('rs-0008', ...MARCUS, ...JACK, '2026-08-11', '09:00:00', '15:00:00'),
+    shift('rs-0009', ...GRACE, ...JACK, '2026-08-12', '19:00:00', '07:00:00', night),
+    shift('rs-0017', ...MARCUS, ...JACK, '2026-08-14', '10:00:00', '16:00:00'),
+  ],
+  mei: [
+    shift('rs-0010', ...DYLAN, ...MEI, '2026-08-10', '10:00:00', '15:00:00'),
+    shift('rs-0011', ...GRACE, ...MEI, '2026-08-11', '19:00:00', '07:00:00', { ...night, findings: [ratioShortfall] }),
+    shift('rs-0012', ...DYLAN, ...MEI, '2026-08-13', '10:00:00', '15:00:00'),
+  ],
+  tom: [],
+}
+
+const totalHours = (shifts) => Math.round(shifts.reduce((n, s) => n + s.durationHours, 0) * 10) / 10
+
+const staffRow = (staff, role, shifts, compliance = 'Ok', complianceNotes = [], leave = []) => ({
+  staffId: staff[0], fullName: staff[1], role, compliance, complianceNotes,
+  rosteredHours: totalHours(shifts), targetHours: 38, shifts, tripBars: [], leave,
+})
+
+export const rosterBoardStaffWeek = {
+  groupBy: 'Staff',
+  weekStart: '2026-08-10',
+  days: ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14', '2026-08-15', '2026-08-16'],
+  staffRows: [
+    staffRow(CALLUM, 'Coordinator', staffShifts.callum),
+    staffRow(PRIYA, 'TeamLeader', staffShifts.priya),
+    staffRow(JACK, 'SupportWorker', staffShifts.jack),
+    staffRow(MEI, 'SeniorSupportWorker', staffShifts.mei),
+    staffRow(TOM, 'SupportWorker', staffShifts.tom, 'Warning', ['First aid expired 1 Jul'], [
+      { startDate: '2026-08-10', endDate: '2026-08-21', availabilityType: 'Leave', notes: 'Annual leave', kind: 'Legacy', startTime: null, endTime: null },
+    ]),
+  ],
+  unfilled: [shift('rs-0014', ...DYLAN, null, null, '2026-08-11', '09:00:00', '13:00:00')],
+  exceptions: [{ shiftId: 'rs-0011', participantName: 'Grace Palmer-Hughes', serviceDate: '2026-08-11', finding: ratioShortfall }],
+  weekStarted: true,
+}
+
+/** Serve the By staff board for groupBy=staff; every other board request falls through to the mock. */
+export async function routeStaffBoard(page) {
+  await page.route(/\/api\/v1\/rostering\/board(\?.*)?$/, (route) => {
+    const url = new URL(route.request().url())
+    if (url.searchParams.get('groupBy') !== 'staff') return route.fallback()
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: rosterBoardStaffWeek, message: null, errors: null }) })
+  })
 }
