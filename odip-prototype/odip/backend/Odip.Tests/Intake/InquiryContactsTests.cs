@@ -236,6 +236,96 @@ public class InquiryContactsTests
         foreach (var leaked in new[] { "Zelda", "0499 111 222", "zelda@example.com", "\"contacts\"" }) Assert.DoesNotContain(leaked, json);
     }
 
+    private static readonly InquiryContact[] MariaAndTom =
+    [
+        new() { Role = ContactRoleType.Guardian, FirstName = "Maria", LastName = "Lopez", Phone = "0412 345 678", Email = "maria@example.com", Relationship = "Mother", Notes = "Works nights" },
+        new() { Role = ContactRoleType.EmergencyContact, FirstName = "Tom", LastName = "Ng" },
+    ];
+
+    private List<ParticipantContactRole> RolesOf(Guid participantId) =>
+        _db.ParticipantContactRoles.AsNoTracking().Include(r => r.Person).Where(r => r.ParticipantId == participantId).OrderBy(r => r.Person!.FirstName).ToList();
+
+    [Fact]
+    public async Task Convert_moves_each_pending_contact_onto_the_new_participant_and_deletes_it()
+    {
+        var inquiry = SeedInquiry();
+        SeedContacts(inquiry, MariaAndTom.Select(c => new InquiryContact { Role = c.Role, FirstName = c.FirstName, LastName = c.LastName, Phone = c.Phone, Email = c.Email, Relationship = c.Relationship, Notes = c.Notes }).ToArray());
+
+        var dto = Data<ParticipantInquiryDto>((await Controller().Convert(inquiry.Id, new(), CancellationToken.None)).Result);
+
+        var roles = RolesOf(dto.ParticipantId!.Value);
+        Assert.Equal(2, roles.Count);
+        var (maria, tom) = (roles[0], roles[1]);
+        Assert.Equal(("Maria", "Lopez", "0412 345 678", "maria@example.com", _tenantId), (maria.Person!.FirstName, maria.Person.LastName, maria.Person.Phone, maria.Person.Email, maria.Person.TenantId));
+        Assert.Equal((ContactRoleType.Guardian, "Mother", "Works nights", false, ContactRoleStatus.Active, _tenantId), (maria.RoleType, maria.RelationshipToParticipant, maria.Notes, maria.IsPrimary, maria.Status, maria.TenantId));
+        Assert.Equal(("Tom", "Ng", (string?)null, ContactRoleType.EmergencyContact, false, ContactRoleStatus.Active), (tom.Person!.FirstName, tom.Person.LastName, tom.Person.Phone, tom.RoleType, tom.IsPrimary, tom.Status));
+        Assert.Equal(2, _db.People.AsNoTracking().Count());
+        Assert.Empty(Stored());
+    }
+
+    [Fact]
+    public async Task Convert_onto_an_existing_participant_moves_them_onto_that_one_and_does_not_add_one_it_already_has()
+    {
+        var existing = new Participant { Id = Guid.NewGuid(), TenantId = _tenantId, FirstName = "Ana", LastName = "Lopez", PlanType = PlanType.PlanManaged };
+        var tomPerson = new Person { Id = Guid.NewGuid(), TenantId = _tenantId, FirstName = "Tom", LastName = "Ng" };
+        _db.Participants.Add(existing);
+        _db.People.Add(tomPerson);
+        _db.ParticipantContactRoles.Add(new ParticipantContactRole { Id = Guid.NewGuid(), TenantId = _tenantId, ParticipantId = existing.Id, PersonId = tomPerson.Id, RoleType = ContactRoleType.EmergencyContact });
+        var inquiry = SeedInquiry();
+        SeedContacts(inquiry,
+            new InquiryContact { Role = ContactRoleType.Guardian, FirstName = "Maria", LastName = "Lopez" },
+            new InquiryContact { Role = ContactRoleType.EmergencyContact, FirstName = " tom ", LastName = "NG" });
+
+        var dto = Data<ParticipantInquiryDto>((await Controller().Convert(inquiry.Id, new() { ParticipantId = existing.Id }, CancellationToken.None)).Result);
+
+        Assert.Equal(existing.Id, dto.ParticipantId);
+        Assert.Equal(new[] { "Maria", "Tom" }, RolesOf(existing.Id).Select(r => r.Person!.FirstName));
+        Assert.Empty(Stored());
+    }
+
+    [Fact]
+    public async Task Convert_onto_an_existing_participant_refuses_a_contact_its_rules_do_not_allow_and_moves_nothing()
+    {
+        // Plan check S1: a pending Plan Nominee on an under-18 participant must not bypass ContactRoleRules.
+        var child = new Participant { Id = Guid.NewGuid(), TenantId = _tenantId, FirstName = "Kai", LastName = "Lopez", DateOfBirth = new DateOnly(2016, 3, 1) };
+        _db.Participants.Add(child);
+        var inquiry = SeedInquiry();
+        SeedContacts(inquiry, new InquiryContact { Role = ContactRoleType.PlanNominee, FirstName = "Maria", LastName = "Lopez" });
+
+        var result = (await Controller().Convert(inquiry.Id, new() { ParticipantId = child.Id }, CancellationToken.None)).Result;
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal("Maria Lopez can't be added as this participant's contact: Plan Nominee is not available for a participant under 18 — use Child Representative instead.",
+            Assert.Single(Assert.IsType<ApiResponse<ParticipantInquiryDto>>(conflict.Value).Errors!));
+        _db.ChangeTracker.Clear();
+        Assert.Null(_db.ParticipantInquiries.AsNoTracking().Single(x => x.Id == inquiry.Id).ParticipantId);
+        Assert.Empty(RolesOf(child.Id));
+        Assert.Single(Stored());
+    }
+
+    [Fact]
+    public async Task Converting_again_moves_nothing_twice()
+    {
+        var inquiry = SeedInquiry();
+        SeedContacts(inquiry, MariaAndTom.Select(c => new InquiryContact { Role = c.Role, FirstName = c.FirstName, LastName = c.LastName }).ToArray());
+
+        var first = Data<ParticipantInquiryDto>((await Controller().Convert(inquiry.Id, new(), CancellationToken.None)).Result);
+        _db.ChangeTracker.Clear();
+        var again = Data<ParticipantInquiryDto>((await Controller().Convert(inquiry.Id, new(), CancellationToken.None)).Result);
+
+        Assert.Equal(first.ParticipantId, again.ParticipantId);
+        Assert.Equal(2, _db.ParticipantContactRoles.AsNoTracking().Count());
+        Assert.Equal(2, _db.People.AsNoTracking().Count());
+    }
+
+    [Fact]
+    public void Every_role_a_pending_contact_may_have_passes_the_contact_gate_for_a_new_draft()
+    {
+        Assert.Equal(PlanType.SelfManaged, new Participant().PlanType);
+        foreach (var role in Enum.GetValues<ContactRoleType>().Where(r => r != ContactRoleType.PlanManager))
+            Assert.Null(ContactRoleRules.Validate(role, PlanType.SelfManaged, null, null));
+    }
+
     [Fact]
     public async Task Update_answers_with_the_booked_staff_members_names()
     {

@@ -167,10 +167,43 @@ public class ParticipantInquiriesController : ControllerBase
             else { participant = new Participant { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = inquiry.FirstName, LastName = inquiry.LastName, Phone = inquiry.Phone, Email = inquiry.Email, IsActive = false, IsDraft = true }; _db.Participants.Add(participant); }
             inquiry.ParticipantId = participant.Id; inquiry.UpdatedAt = DateTime.UtcNow;
             if (!await _db.ParticipantOnboardings.AnyAsync(x => x.ParticipantId == participant.Id, ct)) _db.ParticipantOnboardings.Add(new ParticipantOnboarding { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, ParticipantId = participant.Id });
+            if (await MovePendingContactsAsync(inquiry, participant, ct) is string refused) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(refused));
             if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
         }
         else if (dto.ParticipantId is Guid requested && requested != inquiry.ParticipantId) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry has already been converted."));
         return Ok(ApiResponse<ParticipantInquiryDto>.Ok(ToDto(inquiry)));
+    }
+
+    /// <summary>
+    /// D3: the enquiry's pending contacts become the participant's in Convert's one save (one transaction), each a Person and an Active, non-primary
+    /// contact role, and stop being pending. The participant's own contact rules apply (plan check S1): a new draft is SelfManaged with no date of birth,
+    /// which every pending role passes (PlanManager is never pending), but an existing participant's plan type or age can refuse one, and then nothing is
+    /// saved and the reason comes back. A contact the participant already has (same role and name, as the intake save's IsSameContact) is not added twice.
+    /// The tenant is set explicitly: a context with no tenant (a SuperAdmin) stamps none. Returns the refusal, or null.
+    /// </summary>
+    private async Task<string?> MovePendingContactsAsync(ParticipantInquiry inquiry, Participant participant, CancellationToken ct)
+    {
+        var pending = await _db.InquiryContacts.Where(c => c.InquiryId == inquiry.Id && c.TenantId == inquiry.TenantId).OrderBy(c => c.SortOrder).ToListAsync(ct);
+        if (pending.Count == 0) return null;
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, inquiry.TenantId, _clock, ct);
+        var recorded = await _db.ParticipantContactRoles.Where(r => r.ParticipantId == participant.Id && r.TenantId == inquiry.TenantId && r.Status == ContactRoleStatus.Active)
+            .Select(r => new { r.RoleType, r.Person!.FirstName, r.Person.LastName }).ToListAsync(ct);
+        static bool Same(string a, string b) => string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
+        foreach (var c in pending)
+        {
+            if (ContactRoleRules.Validate(c.Role, participant.PlanType, participant.DateOfBirth, null, today) is string gate)
+                return $"{c.FirstName} {c.LastName} can't be added as this participant's contact: {gate}";
+            _db.InquiryContacts.Remove(c);
+            if (recorded.Any(r => r.RoleType == c.Role && Same(r.FirstName, c.FirstName) && Same(r.LastName, c.LastName))) continue;
+            var person = new Person { Id = Guid.NewGuid(), TenantId = inquiry.TenantId, FirstName = c.FirstName, LastName = c.LastName, Phone = c.Phone, Email = c.Email };
+            _db.People.Add(person);
+            _db.ParticipantContactRoles.Add(new ParticipantContactRole
+            {
+                Id = Guid.NewGuid(), TenantId = inquiry.TenantId, ParticipantId = participant.Id, PersonId = person.Id,
+                RoleType = c.Role, RelationshipToParticipant = c.Relationship, Notes = c.Notes,
+            });
+        }
+        return null;
     }
 
     [HttpGet("{id:guid}/onboarding")]
