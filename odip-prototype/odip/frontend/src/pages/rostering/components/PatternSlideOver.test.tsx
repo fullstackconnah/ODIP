@@ -74,8 +74,9 @@ describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01
       />,
     )
 
-    const field = screen.getByRole('combobox', { name: 'Default staff' })
+    const field = screen.getByRole('combobox', { name: 'Regular' })
     expect(field).toHaveValue('Alex Rivera')
+    expect(screen.getByText('Goes on every shift this pattern makes. Leave unassigned to make open shifts.')).toBeInTheDocument()
   })
 
   it('shows "Unassigned" as the first option and current value when no default staff is set', async () => {
@@ -90,7 +91,7 @@ describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01
       />,
     )
 
-    const field = screen.getByRole('combobox', { name: 'Default staff' })
+    const field = screen.getByRole('combobox', { name: 'Regular' })
     expect(field).toHaveValue('Unassigned')
 
     await user.click(field)
@@ -111,7 +112,7 @@ describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01
       />,
     )
 
-    const field = screen.getByRole('combobox', { name: 'Default staff' })
+    const field = screen.getByRole('combobox', { name: 'Regular' })
     await user.click(field)
     await user.type(field, 'bianca')
 
@@ -134,7 +135,7 @@ describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01
       />,
     )
 
-    const field = screen.getByRole('combobox', { name: 'Default staff' })
+    const field = screen.getByRole('combobox', { name: 'Regular' })
     await user.click(field)
     await user.click(screen.getByRole('option', { name: 'Jordan Smith' }))
 
@@ -160,7 +161,7 @@ describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01
       />,
     )
 
-    const field = screen.getByRole('combobox', { name: 'Default staff' })
+    const field = screen.getByRole('combobox', { name: 'Regular' })
     await user.click(field)
     // Unassigned, Alex Rivera, Jordan Smith, Bianca Novak — three ArrowDowns lands on Jordan Smith.
     await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}')
@@ -181,7 +182,7 @@ describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01
       />,
     )
 
-    const field = screen.getByRole('combobox', { name: 'Default staff' })
+    const field = screen.getByRole('combobox', { name: 'Regular' })
     expect(field).toHaveValue('Alex Rivera')
 
     await user.click(field)
@@ -205,7 +206,7 @@ describe('PatternSlideOver Default staff field — SearchableSelect (DS-01/UX-01
       />,
     )
 
-    expect(screen.getByRole('combobox', { name: 'Default staff' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Regular' })).toBeDisabled()
   })
 })
 
@@ -414,11 +415,11 @@ describe('PatternSlideOver — a pattern an agreement made', () => {
   it('says where a new default staff is saved when it is changed with the times, and says nothing when only the times change', async () => {
     const user = userEvent.setup()
     open(agreementPattern())
-    const line = 'Default staff is saved on the current pattern now. After approval, set it on the changed pattern.'
+    const line = 'The regular is saved on the current pattern now. After approval, set it on the changed pattern.'
 
     startLater()
     expect(screen.queryByText(line)).not.toBeInTheDocument()
-    await user.click(screen.getByRole('combobox', { name: 'Default staff' }))
+    await user.click(screen.getByRole('combobox', { name: 'Regular' }))
     await user.click(screen.getByRole('option', { name: 'Jordan Smith' }))
 
     expect(screen.getByText(line)).toBeInTheDocument()

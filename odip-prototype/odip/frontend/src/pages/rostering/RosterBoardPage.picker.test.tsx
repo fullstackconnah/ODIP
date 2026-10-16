@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { useEffect, useReducer } from 'react'
+import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RosterBoardPage from './RosterBoardPage'
 import { makeFinding, makeParticipantBoard, makeParticipantRow, makeShift, makeStaffBoard, makeStaffRow, makeUnfilledShift } from './test-fixtures'
@@ -62,10 +63,16 @@ const TUE_PLUS = 'Assign someone to Tuesday 9am to 3pm for Mia'
 
 function renderPage(entry = '/rostering?date=2026-08-17') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const tree = () => <QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[entry]}><RosterBoardPage /></MemoryRouter></QueryClientProvider>
-  const result = render(tree())
-  // A new element tree, so the page renders again and reads the board hook again (a refetch).
-  return { ...result, refetch: () => result.rerender(tree()) }
+  const handle = { bump: () => {} }
+  // Renders the page again, so it reads the board hook again: a refetch. Rerendering a RouterProvider alone doesn't, since the route's element is the same object.
+  function Page() {
+    const [, bump] = useReducer((n: number) => n + 1, 0)
+    useEffect(() => { handle.bump = bump })
+    return <RosterBoardPage />
+  }
+  const router = createMemoryRouter([{ path: '/rostering', element: <Page /> }], { initialEntries: [entry] })
+  const result = render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
+  return { ...result, router, refetch: () => act(() => handle.bump()) }
 }
 const picker = () => screen.getByRole('dialog', { name: TUE_PLUS })
 const option = (name: RegExp) => within(picker()).getByRole('option', { name })

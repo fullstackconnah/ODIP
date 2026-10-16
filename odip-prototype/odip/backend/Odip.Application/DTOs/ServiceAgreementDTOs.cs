@@ -195,12 +195,10 @@ public record DraftApprovalDto
     public int PatternsEnded { get; init; }
     /// <summary>The open shifts it generated at once (none for a participant who is not active yet).</summary>
     public int ShiftsCreated { get; init; }
-    /// <summary>The last day shifts were generated to; absent when none were (the participant was not active yet).</summary>
+    /// <summary>The last day of the started weeks it fills; absent when it filled none (no week started yet, or the participant was not active yet).</summary>
     public DateOnly? HorizonEnd { get; init; }
     /// <summary>The first day it made a shift for; absent when it made none.</summary>
     public DateOnly? FirstShiftDate { get; init; }
-    /// <summary>Whether the daily top-up is on (<c>RosterTopUp:Enabled</c>, read when the answer is made, not stored with the approval). While it is, shifts keep being added each day as the agreement's dates come near; when it is off the shifts made at approval, and the Generate button, are all there will be, and the screen must not promise more.</summary>
-    public bool TopUpEnabled { get; init; } = true;
 }
 
 /// <summary>
@@ -281,15 +279,13 @@ public record DraftApprovalPreviewDto
     public int? EndsFromVersion { get; init; }
     /// <summary>The day they would end: the day before this revision starts.</summary>
     public DateOnly? EndsOn { get; init; }
-    /// <summary>The open shifts approval would generate at once: none while the participant is not active, and then <see cref="ShiftsNote"/> says why.</summary>
+    /// <summary>The open shifts approval would generate at once, in the weeks already started on the roster: none while the participant is not active, and then <see cref="ShiftsNote"/> says why.</summary>
     public int ShiftsToCreate { get; init; }
     public string? ShiftsNote { get; init; }
     public OldShiftsRemainingDto OldShiftsRemaining { get; init; } = new();
     public List<OverlappingPatternDto> OverlappingPatterns { get; init; } = [];
-    /// <summary>The provider's today plus the horizon (56 days), held to the end of the agreement.</summary>
+    /// <summary>The last day of the started weeks it fills, held to the end of the agreement; absent when it fills none.</summary>
     public DateOnly? HorizonEnd { get; init; }
-    /// <summary>Whether the daily top-up is on (<c>RosterTopUp:Enabled</c>): the confirm screen says shifts are added each day after the horizon only while it is.</summary>
-    public bool TopUpEnabled { get; init; } = true;
     /// <summary>
     /// Where the shifts approval would make take a pool past its funding for a period (budget phase 3), one entry for each pool and period. A warning only, in every mode: approving is never refused for a
     /// budget. Omitted when nothing is past its funding, no shifts would be made, or the participant has no budget recorded.

@@ -238,11 +238,6 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odi
 builder.Services.AddScoped<Odip.Infrastructure.Notifications.IntakeInviteSender>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
-// ── Roster top-up (plan builder phase D) ──────────────────────────
-// Keeps RosterTopUp:HorizonDays (56) days of open shifts generated for the patterns an approved agreement made, once for each organisation's provider day. RosterTopUp:Enabled (default true)
-// switches it off; hand-made and demo patterns are never touched. Reads the clock the rest of the API reads (TimeProvider.System, registered above).
-builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.RosterTopUpBackgroundService>();
-
 // ── Employment Hero Payroll (Settings → Integrations) ────────────────
 // The key store reads Integrations:MasterKey, else INTEGRATIONS_MASTER_KEY (32 bytes, base64). With neither, connecting is refused and the rest of ODIP runs.
 builder.Services.AddSingleton<Odip.Infrastructure.Integrations.IntegrationKeyProtector>();
@@ -553,6 +548,21 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
         var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)); // 2s, 4s, 8s, 16s
         Console.WriteLine($"[Startup] DB connection attempt {attempt}/{maxRetries} failed: {ex.Message}. Retrying in {delay.TotalSeconds}s...");
         await Task.Delay(delay);
+    }
+}
+
+// Start rostering one-off (2026-10-16, L7): clears untouched future weeks and marks the kept ones started. On only through deploy/compose.yaml for the deploy that ships it;
+// the next PR deletes this call with RosterWeekClear. It never stops startup (S2): a failure is logged, and the next start tries again.
+if (app.Configuration.GetValue<bool>("RosterWeekClear:Enabled"))
+{
+    try
+    {
+        using var clearScope = app.Services.CreateScope();
+        await Odip.Infrastructure.Rostering.RosterWeekClear.RunAsync(clearScope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>(), TimeProvider.System, app.Logger, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Roster week clear could not run; startup carries on and the next start tries again");
     }
 }
 

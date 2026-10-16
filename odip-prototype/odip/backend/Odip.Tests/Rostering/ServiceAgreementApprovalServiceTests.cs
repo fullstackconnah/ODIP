@@ -527,7 +527,7 @@ public class ServiceAgreementApprovalServiceTests
         Assert.Equal(later.Select(s => s.Id), moved.Select(s => s.Id));
         Assert.Equal((staff, ShiftStatus.Published), (moved[0].UserId!.Value, moved[0].Status));
         Assert.Equal(ShiftStatus.Cancelled, moved[1].Status);                                               // a cancelled day stays cancelled: it is not made again
-        Assert.All(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).ToListAsync(), p => Assert.Equal(new DateOnly(2026, 12, 5), p.GeneratedThrough));   // the top-up carries on after the horizon
+        Assert.All(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).ToListAsync(), p => Assert.Equal(HorizonEnd, p.GeneratedThrough));   // the last started week the approval filled
     }
 
 
@@ -720,7 +720,7 @@ public class ServiceAgreementApprovalServiceTests
         var preview = (await PreviewAsync(f, draft)).Preview!;
         var outcome = await ApproveAsync(f, draft);
 
-        Assert.Equal((true, 5, 0, "Unfilled shifts are created once Jordan is active."), (preview.CanApprove, preview.PatternsToCreate, preview.ShiftsToCreate, preview.ShiftsNote));
+        Assert.Equal((true, 5, 0, "No shifts are made now, because Jordan is not active yet. Once they are, each week started on the roster includes them; use Generate on their shift patterns for weeks already started."), (preview.CanApprove, preview.PatternsToCreate, preview.ShiftsToCreate, preview.ShiftsNote));
         Assert.Equal(ApprovalStatus.Approved, outcome.Status);
         Assert.Equal((5, 0, (DateOnly?)null, (DateOnly?)null), (outcome.Approval!.PatternsCreated, outcome.Approval.ShiftsCreated, outcome.Approval.FirstShiftDate, outcome.Approval.HorizonEnd));
         Assert.Equal(5, await f.Db.ShiftPatterns.CountAsync());
@@ -728,26 +728,15 @@ public class ServiceAgreementApprovalServiceTests
     }
 
     [Fact]
-    public async Task With_the_daily_top_up_switched_off_the_note_for_a_participant_who_is_not_active_promises_nothing_and_says_what_to_do_and_the_preview_says_the_top_up_is_off()
+    public async Task The_note_for_a_participant_who_is_not_active_says_to_use_Generate_and_promises_no_daily_top_up()
     {
         await using var f = await SetUpAsync(active: false, firstName: "Jordan");
-        f.SwitchTopUpOff();
         var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
 
-        var preview = (await PreviewAsync(f, draft)).Preview!;
+        var note = (await PreviewAsync(f, draft)).Preview!.ShiftsNote;
 
-        Assert.False(preview.TopUpEnabled);
-        Assert.Equal("No shifts are made now, because Jordan is not active yet. The daily top-up is off, so make them with Generate on their shift patterns once they are.", preview.ShiftsNote);
-        Assert.DoesNotContain("created once", preview.ShiftsNote);                              // nothing creates them once the participant is active: the job that would is off
-    }
-
-    [Fact]
-    public async Task The_preview_says_the_top_up_is_on_by_default()
-    {
-        await using var f = await SetUpAsync();
-        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-
-        Assert.True((await PreviewAsync(f, draft)).Preview!.TopUpEnabled);
+        Assert.Contains("Generate", note);
+        Assert.DoesNotContain("daily", note);
     }
 
     // ── The dates ─────────────────────────────────────────────────────────────────

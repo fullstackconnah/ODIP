@@ -59,24 +59,16 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
-  it('names the version, says what it makes and up to when, that it keeps adding shifts, that it is not signing, and that it cannot be undone', () => {
+  it('names the version, says what it makes and up to when, how later weeks get theirs, that it is not signing, and that it cannot be undone', () => {
     setUp()
 
     const dialog = screen.getByRole('dialog', { name: 'Approve this agreement for rostering?' })
     // A short line for each fact, so it scans: the patterns, the shifts, (below) what ends.
     expect(within(dialog).getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
-    expect(within(dialog).getByText('Makes 40 unfilled shifts up to Sat 5 Dec 2026. After that, unfilled shifts are added each day until the agreement ends.')).toBeInTheDocument()
+    expect(within(dialog).getByText('Makes 40 unfilled shifts up to Sat 5 Dec 2026. Later weeks get theirs when each week is started on the roster.')).toBeInTheDocument()
     expect(within(dialog).getByText(/separate from signing: nothing is signed or sent/)).toBeInTheDocument()
     expect(within(dialog).getByText("You can't undo an approval. To change the roster later, save a new revision and approve that.")).toBeInTheDocument()
     expect(previewCall).toHaveBeenCalledWith('p-1', 'd-2', true)
-  })
-
-  it('does not promise later shifts when the agreement ends inside the horizon: everything is made now', () => {
-    ready(preview({ horizonEnd: '2027-03-31' }))
-    setUp()
-
-    expect(screen.getByText('Makes 40 unfilled shifts up to Wed 31 Mar 2027.')).toBeInTheDocument()
-    expect(screen.queryByText(/After that/)).not.toBeInTheDocument()
   })
 
   it('says each fact on a line of its own: what it creates, the shifts it makes, and what ends', () => {
@@ -86,31 +78,30 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     const lines = screen.getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.').parentElement!
     expect([...lines.children].map(line => line.textContent)).toEqual([
       'Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.',
-      'Makes 40 unfilled shifts up to Sat 5 Dec 2026. After that, unfilled shifts are added each day until the agreement ends.',
+      'Makes 40 unfilled shifts up to Sat 5 Dec 2026. Later weeks get theirs when each week is started on the roster.',
       'Ends 5 patterns from the agreement it replaces the day before Mon 2 Nov 2026.',
     ])
   })
 
-  // "Added each day" is the daily top-up's work: RosterTopUp:Enabled=false stops the job, and an approval then makes what it makes and nothing more.
-  it('promises nothing past the horizon when the daily top-up is off, and says no shifts are made when there are none to make', () => {
-    ready(preview({ topUpEnabled: false }))
+  it('promises nothing past the agreement, and says how weeks get their shifts when none are made', () => {
+    ready(preview({ horizonEnd: '2027-03-31' }))
     const { unmount } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
 
-    expect(screen.getByText('Makes 40 unfilled shifts up to Sat 5 Dec 2026.')).toBeInTheDocument()
+    expect(screen.getByText('Makes 40 unfilled shifts up to Wed 31 Mar 2027.')).toBeInTheDocument()
+    expect(screen.queryByText(/Later weeks/)).not.toBeInTheDocument()
     expect(screen.queryByText(/added each day/)).not.toBeInTheDocument()
     unmount()
 
-    ready(preview({ topUpEnabled: false, shiftsToCreate: 0, horizonEnd: undefined }))
+    ready(preview({ shiftsToCreate: 0, horizonEnd: undefined }))
     render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
-    expect(screen.getByText('No unfilled shifts are made now.')).toBeInTheDocument()
+    expect(screen.getByText('No unfilled shifts are made now. Each week gets its shifts when it is started on the roster.')).toBeInTheDocument()
     expect(screen.queryByText(/added each day/)).not.toBeInTheDocument()
   })
 
-  it('reads a server that does not say whether the top-up is on as on, which it was', () => {
-    ready(preview({ topUpEnabled: undefined }))
+  it('never mentions a daily top-up', () => {
     setUp()
 
-    expect(screen.getByText(/After that, unfilled shifts are added each day until the agreement ends\./)).toBeInTheDocument()
+    expect(screen.queryByText(/added each day|daily/)).not.toBeInTheDocument()
   })
 
   it('says how many patterns of the revision before it end, and the day before this one starts', () => {
@@ -233,7 +224,7 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     ready(preview({ shiftsToCreate: 0, horizonEnd: undefined }))
     setUp()
 
-    expect(screen.getByText("No unfilled shifts yet. They are added each day as the agreement's dates come near.")).toBeInTheDocument()
+    expect(screen.getByText('No unfilled shifts are made now. Each week gets its shifts when it is started on the roster.')).toBeInTheDocument()
     expect(screen.queryByText(/weeks/)).not.toBeInTheDocument()
   })
 })

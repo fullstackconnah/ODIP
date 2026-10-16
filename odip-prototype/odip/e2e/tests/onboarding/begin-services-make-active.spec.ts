@@ -1,5 +1,6 @@
 import { test, expect, call } from '../../support/fixtures';
 import { expectStatus } from '../../support/api';
+import { startWeek } from '../../support/data';
 import { addDays, sydneyToday } from '../../support/dates';
 
 // Owner decisions 2026-10-13, end to end on the real API and PostgreSQL: a participant whose intake is complete is in onboarding; the checklist
@@ -31,6 +32,8 @@ test('a participant in onboarding begins services, is rostered, and is made acti
   await expect(page.getByText(/^Services started \d/)).toBeVisible();
 
   // 4. On the rostering board, tagged as still onboarding.
+  // The current week reads as unstarted until Start rostering (2026-10-16): the grid would sit, hidden, under the Start card.
+  await startWeek(session, sydneyToday());
   await page.goto('/rostering');
   const row = page.getByRole('link', { name }).locator('xpath=ancestor::div[contains(@class,"sticky")][1]');
   await expect(row).toBeVisible();

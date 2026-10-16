@@ -113,3 +113,54 @@ describe('useUnsavedChangesWarning: browser Back and closing the tab', () => {
     expect(cleanClose.defaultPrevented).toBe(false)
   })
 })
+
+describe('useUnsavedChangesWarning with leaveCopy', () => {
+  const leaveCopy = { title: 'Leave without publishing?', message: 'They stay saved as drafts.', confirmLabel: 'Leave without publishing', stayLabel: 'Stay' }
+
+  function Roster() {
+    const { dialog } = useUnsavedChangesWarning(true, { leaveCopy, blockIf: (current, next) => sectionOf(current.search) !== sectionOf(next.search) })
+    return (
+      <>
+        {dialog}
+        <Link to="/settings?section=organisation">Organisation profile</Link>
+        <Link to="/elsewhere">Elsewhere</Link>
+      </>
+    )
+  }
+
+  function renderRoster() {
+    const router = createMemoryRouter(
+      [{ path: '/settings', element: <Roster /> }, { path: '/elsewhere', element: <p>Elsewhere page</p> }],
+      { initialEntries: ['/settings?section=billing'] },
+    )
+    render(<RouterProvider router={router} />)
+    return router
+  }
+
+  it('asks in the given words before leaving the page, with Stay first and a primary, not red, confirm', async () => {
+    const user = userEvent.setup()
+    const router = renderRoster()
+
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Leave without publishing?' })
+    expect(dialog).toHaveTextContent('They stay saved as drafts.')
+    expect(screen.getByRole('button', { name: 'Stay' })).toHaveFocus()
+    const confirm = screen.getByRole('button', { name: 'Leave without publishing' })
+    expect(confirm.className).toContain('bg-[var(--color-primary)]')
+    expect(confirm.className).not.toContain('bg-[var(--color-destructive)]')
+
+    await user.click(screen.getByRole('button', { name: 'Stay' }))
+    expect(router.state.location.pathname).toBe('/settings')
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    await user.click(screen.getByRole('button', { name: 'Leave without publishing' }))
+    expect(router.state.location.pathname).toBe('/elsewhere')
+  })
+
+  it('uses the same words for a same-page move its blockIf asks about', async () => {
+    const user = userEvent.setup()
+    renderRoster()
+
+    await user.click(screen.getByRole('link', { name: 'Organisation profile' }))
+    expect(screen.getByRole('alertdialog', { name: 'Leave without publishing?' })).toBeInTheDocument()
+  })
+})

@@ -13,6 +13,8 @@ export type RosterGridProps = {
   onOpenShift: (shift: ShiftDto) => void
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
+  /** Make or Stop the regular, from the chip menu (2026-10-16): on a pattern shift with a worker, for writers. Threaded like onUnassign. */
+  onSetRegular?: (shift: ShiftDto) => void
   onDeleteShift: (shift: ShiftDto) => void
   onAddParticipantShift: (participantId: string, participantName: string, day: string) => void
   onAddStaffShift: (staffId: string, day: string) => void
@@ -76,7 +78,7 @@ const HEADER_BG_TODAY = 'bg-[color-mix(in_srgb,var(--color-primary)_6%,var(--col
  * Never swap this out for an empty state; guidance for a first-time/empty week belongs in a
  * dismissible hint the caller renders above this component.
  */
-export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable }: RosterGridProps) {
+export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onSetRegular, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable }: RosterGridProps) {
   const { days } = board
 
   return (
@@ -107,6 +109,7 @@ export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onO
               onOpen={onOpenShift}
               onAssignTo={onAssignTo}
               onUnassign={onUnassign}
+              onSetRegular={onSetRegular}
               onDelete={onDeleteShift}
               onAddShift={onAddParticipantShift}
               hideCoverageBadge={weekHasNoShifts}
@@ -134,6 +137,7 @@ export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onO
                 onOpen={onOpenShift}
                 onAssignTo={onAssignTo}
                 onUnassign={onUnassign}
+                onSetRegular={onSetRegular}
                 onDelete={onDeleteShift}
                 onAddShift={onAddStaffShift}
               />
