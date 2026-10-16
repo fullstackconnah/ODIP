@@ -212,3 +212,45 @@ export function withVisits<S extends { startTime: string }>(shifts: S[], visits:
     ...visits.map(visit => ({ at: localStart(visit).slice(11, 16), entry: { kind: 'visit' as const, visit } })),
   ].sort((a, b) => a.at.localeCompare(b.at)).map(x => x.entry)
 }
+
+export type EnquiryNotice = { tone: 'success' | 'danger'; title: string; message: string; subject: string }
+
+/** The Enquiries tab's notice after the enquiry form saved (SHAPE.md section 6): only the sentences that apply. */
+export function enquirySavedNotice(s: {
+  created: boolean
+  /** The latest stored copy: the visit's or the resend's answer when there was one. */
+  enquiry: ParticipantInquiryDto
+  /** A booking PUT that emailed; a notes-only change is null. */
+  visit: 'booked' | 'moved' | null
+  resent: boolean
+  /** Rows sent with the enquiry; null when none were sent (a converted enquiry). */
+  contacts: number | null
+}): EnquiryNotice {
+  const e = s.enquiry
+  const when = e.intakeStartsAt ? visitWhen(e.intakeStartsAt, e.timeZoneId || FALLBACK_ZONE) : ''
+  const sentences: string[] = []
+  let failed = false
+  if (s.visit && e.intakeInviteError) {
+    failed = true
+    sentences.push(`The intake visit is ${s.visit === 'booked' ? 'booked for' : 'moved to'} ${when}, but ${notSentReason(e.intakeInviteError)}, so ${e.firstName} wasn't told. Let them know another way.`)
+  } else if (s.visit === 'booked') {
+    sentences.push(`Intake visit booked for ${when}${e.intakeStaffName ? ` with ${e.intakeStaffName}` : ''}.`, `Invite sent to ${e.email}.`)
+  } else if (s.visit === 'moved') {
+    sentences.push(`Intake visit moved to ${when}.`, `Updated invite sent to ${e.email}.`)
+  }
+  if (s.resent && e.intakeInviteError) {
+    failed = true
+    sentences.push(`The invite wasn't sent again: ${notSentReason(e.intakeInviteError)}.`)
+  } else if (s.resent) {
+    sentences.push(`Invite sent again to ${e.email}.`)
+  }
+  const name = `${e.firstName} ${e.lastName}`
+  if (sentences.length === 0) sentences.push(s.created ? `${name} is on the Enquiries list.` : `${name}'s changes are saved.`)
+  if (s.contacts) sentences.push(s.contacts === 1 ? '1 contact saved.' : `${s.contacts} contacts saved.`)
+  return {
+    tone: failed ? 'danger' : 'success',
+    title: failed ? 'Enquiry saved, invite not sent' : s.created ? 'Enquiry captured' : 'Enquiry saved',
+    message: sentences.join(' '),
+    subject: e.id,
+  }
+}

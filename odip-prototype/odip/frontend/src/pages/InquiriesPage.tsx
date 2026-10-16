@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ClipboardPlus, MoreVertical, Search } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -16,7 +16,7 @@ import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase } from '@/lib/queryPhase'
-import { cancelNotice, DEFAULT_DURATION, isPastVisit } from '@/lib/intakeBooking'
+import { cancelNotice, DEFAULT_DURATION, isPastVisit, type EnquiryNotice } from '@/lib/intakeBooking'
 import { IntakeBookingPanel } from './inquiries/IntakeBookingPanel'
 import { IntakeCell } from './inquiries/IntakeCell'
 import { IntakeCancelDialog } from './inquiries/IntakeCancelDialog'
@@ -71,6 +71,17 @@ function useInquiriesScreen() {
   const [search, setSearch] = useState('')
   const confirmVisit = useConfirmIntakeBooking()
   const { notices, notify, dismiss } = useNotices()
+  const location = useLocation()
+  // The enquiry form's summary of what its save did (SHAPE.md section 6), shown once: the ref survives StrictMode's second effect run, and the
+  // state is cleared so a reload or Back does not show it again.
+  const shownFor = useRef<string | null>(null)
+  useEffect(() => {
+    const notice = (location.state as { enquiryNotice?: EnquiryNotice } | null)?.enquiryNotice
+    if (!notice || shownFor.current === location.key) return
+    shownFor.current = location.key
+    notify(notice.tone, notice.title, notice.message, notice.subject)
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location, navigate, notify])
   const [booking, setBooking] = useState<{ id: string; focusDate: boolean } | null>(null)
   const [cancelling, setCancelling] = useState<ParticipantInquiryDto | null>(null)
   const intakeControl = (id: string) => document.querySelector<HTMLElement>(`[data-intake-control="${id}"]`)

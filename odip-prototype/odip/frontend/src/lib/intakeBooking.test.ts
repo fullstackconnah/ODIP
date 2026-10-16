@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bookingBody, bookingFormOf, cancelNotice, visitsByDay, visitStage, withVisits, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, staffOptions, visitTimes, visitWhen,
-  NO_CONNECTION, refusalOf, serverBookingErrors,
+  NO_CONNECTION, enquirySavedNotice, refusalOf, serverBookingErrors,
 } from './intakeBooking'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 
@@ -171,5 +171,41 @@ describe('the shared refusal helpers (the slide-over and the enquiry form)', () 
 
   it('bookingFormOf an enquiry with no visit: the empty form at 1 hour 30 min', () => {
     expect(bookingFormOf({}, '')).toEqual({ email: '', date: '', time: '', duration: '90', location: '', staffUserId: '', notes: '' })
+  })
+})
+
+describe("the enquiry form's save summary (SHAPE.md section 6)", () => {
+  // 2030, so visitWhen shows the year whenever the test runs. 23:00Z is 10:00 am on Wed 16 Oct 2030 in Sydney.
+  const ana = row({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: 'ana@example.com', timeZoneId: 'Australia/Sydney' })
+  const booked = { ...ana, intakeStartsAt: '2030-10-15T23:00:00Z', intakeDurationMinutes: 90, intakeStaffName: 'Dana Smith', intakeInviteSentAt: '2030-10-01T00:00:00Z', intakeInviteError: null }
+  const base = { created: true, enquiry: ana, visit: null, resent: false, contacts: null } as const
+
+  it('booked and sent, with a contact', () => {
+    expect(enquirySavedNotice({ ...base, enquiry: booked, visit: 'booked', contacts: 1 })).toEqual({
+      tone: 'success', title: 'Enquiry captured', subject: 'inq-9',
+      message: 'Intake visit booked for Wed 16 Oct 2030, 10:00 am with Dana Smith. Invite sent to ana@example.com. 1 contact saved.',
+    })
+  })
+
+  it('booked but the invite was not sent: danger, and says to tell them another way', () => {
+    expect(enquirySavedNotice({ ...base, enquiry: { ...booked, intakeInviteSentAt: null, intakeInviteError: 'NotConfigured' }, visit: 'booked' })).toEqual({
+      tone: 'danger', title: 'Enquiry saved, invite not sent', subject: 'inq-9',
+      message: "The intake visit is booked for Wed 16 Oct 2030, 10:00 am, but email isn't set up yet, so Ana wasn't told. Let them know another way.",
+    })
+  })
+
+  it('moved, resent, and the resend that failed', () => {
+    expect(enquirySavedNotice({ ...base, created: false, enquiry: booked, visit: 'moved' }).message)
+      .toBe('Intake visit moved to Wed 16 Oct 2030, 10:00 am. Updated invite sent to ana@example.com.')
+    expect(enquirySavedNotice({ ...base, created: false, enquiry: { ...booked, email: 'new@example.com' }, resent: true }).message).toBe('Invite sent again to new@example.com.')
+    const failed = enquirySavedNotice({ ...base, created: false, enquiry: { ...booked, intakeInviteError: 'NotConfigured' }, resent: true })
+    expect(failed.tone).toBe('danger')
+    expect(failed.message).toBe("The invite wasn't sent again: email isn't set up yet.")
+  })
+
+  it('contacts are counted; with nothing else to say, it names the enquiry', () => {
+    expect(enquirySavedNotice({ ...base, contacts: 2 }).message).toBe('Ana Lopez is on the Enquiries list. 2 contacts saved.')
+    expect(enquirySavedNotice(base)).toEqual({ tone: 'success', title: 'Enquiry captured', message: 'Ana Lopez is on the Enquiries list.', subject: 'inq-9' })
+    expect(enquirySavedNotice({ ...base, created: false, contacts: 0 })).toEqual({ tone: 'success', title: 'Enquiry saved', message: "Ana Lopez's changes are saved.", subject: 'inq-9' })
   })
 })

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import InquiryFormPage from './InquiryFormPage'
 
@@ -38,13 +38,19 @@ const tom = { role: 'EmergencyContact', firstName: 'Tom', lastName: 'Ng', phone:
 const firstName = () => screen.getByLabelText(/^First name/, { selector: '#inquiry-first-name' })
 const lastName = () => screen.getByLabelText(/^Last name/, { selector: '#inquiry-last-name' })
 
+/** The Enquiries tab, as far as the form can see: where it went, and the summary it carried there as router state. */
+function TabProbe() {
+  const state = useLocation().state as { enquiryNotice?: { title: string; message: string } } | null
+  return <><p>Enquiries tab destination</p><p data-testid="notice">{state?.enquiryNotice ? `${state.enquiryNotice.title}: ${state.enquiryNotice.message}` : ''}</p></>
+}
+
 function renderForm(path = '/participants/new-inquiry', queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/participants/new-inquiry" element={<InquiryFormPage />} />
-          <Route path="/participants" element={<p>Enquiries tab destination</p>} />
+          <Route path="/participants" element={<TabProbe />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -77,8 +83,9 @@ describe('InquiryFormPage (wire) — capturing an enquiry', () => {
     expect(mockApiPost).toHaveBeenCalledWith('/inquiries', {
       firstName: 'Ava', lastName: 'Ng', phone: null, email: null, source: 'Phone', provenance: null, contacts: [],
     })
-    // Kept from the old InquiryFormPage.test.tsx (plan check S6): a plain success goes back to the Enquiries tab.
+    // Kept from the old InquiryFormPage.test.tsx (plan check S6): a plain success goes back to the Enquiries tab, with its summary.
     expect(await screen.findByText('Enquiries tab destination')).toBeInTheDocument()
+    expect(screen.getByTestId('notice')).toHaveTextContent('Enquiry captured: Rowan Blake is on the Enquiries list.')
   })
 
   it('has a provenance / referral notes field, and sends what is typed in it, trimmed', async () => {
@@ -169,6 +176,7 @@ describe('InquiryFormPage (wire) — editing an enquiry opened cold', () => {
       firstName: 'Ro', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web',
       provenance: 'Referred by Dr Patel, Brisbane', contacts: [],
     })
+    expect(await screen.findByTestId('notice')).toHaveTextContent("Enquiry saved: Rowan Blake's changes are saved.")
   })
 
   it('shows loading, not "Enquiry not found", while the browser reports offline and the request has not run (review F-1)', async () => {

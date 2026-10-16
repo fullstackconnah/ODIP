@@ -15,6 +15,7 @@ import { fieldErrors } from '@/lib/fieldErrors'
 import { formGrid, span } from '@/lib/formGrid'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { contactRowErrors, contactRowOf, contactsPayload, serverContactErrors, type ContactFieldErrors, type ContactRow } from '@/lib/inquiryContacts'
+import { enquirySavedNotice, type EnquiryNotice } from '@/lib/intakeBooking'
 import { extractErrorMessage } from '@/lib/utils'
 import { InquiryContactsCard } from './inquiries/InquiryContactsCard'
 
@@ -93,7 +94,7 @@ export default function InquiryFormPage() {
         initial={loadId ? existing! : null}
         onCreated={id => { setCreatedHere(id); setSearchParams({ id }, { replace: true }) }}
         onCancel={() => navigate('/participants?tab=enquiries')}
-        onDone={() => navigate('/participants?tab=enquiries')}
+        onDone={enquiryNotice => navigate('/participants?tab=enquiries', { state: { enquiryNotice } })}
       />
     )
   }
@@ -110,7 +111,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
   initial: ParticipantInquiryDetailDto | null
   onCreated: (id: string) => void
   onCancel: () => void
-  onDone: () => void
+  onDone: (notice: EnquiryNotice) => void
 }) {
   // The stored copy (null until the first save), apart from what is being typed.
   const [row, setRow] = useState<ParticipantInquiryDto | null>(initial)
@@ -175,7 +176,7 @@ function InquiryFormBody({ initial, onCreated, onCancel, onDone }: {
       }
       if (!row) onCreated(saved.id)
       setRow(saved)
-      onDone()
+      onDone(enquirySavedNotice({ created: !row, enquiry: saved, visit: null, resent: false, contacts: converted ? null : contactsPayload(contacts).length }))
     } finally {
       inFlight.current = false
       setBusy(null)
