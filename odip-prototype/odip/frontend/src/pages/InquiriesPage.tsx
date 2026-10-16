@@ -47,7 +47,9 @@ const isOpen = (stage: Stage) => stage === 'new' || stage === 'draftintake'
 const sourceLabel = (row: ParticipantInquiryDto) => (row.isDirectIntake ? 'Direct intake' : row.source)
 
 const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
-const REASON_LINK = 'self-start text-xs text-[var(--color-muted-foreground)] underline underline-offset-2 hover:text-[var(--color-primary)]'
+// Wraps at 15rem, so the longest reason never sets the Actions column's width (SHAPE numeric check 5); on a coarse pointer its own box is 44px tall,
+// so the cell's tap pad never reaches over the buttons above it.
+const REASON_LINK = 'self-start max-w-[15rem] md:whitespace-normal text-xs text-[var(--color-muted-foreground)] underline underline-offset-2 hover:text-[var(--color-primary)] pointer-coarse:py-3.5'
 
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
@@ -244,7 +246,8 @@ function useInquiriesScreen() {
   }
 
   const columns: Column<ParticipantInquiryDto>[] = [
-    { key: 'firstName', header: 'Participant', sortable: true, render: row => nameOf(row) },
+    // wrap: a long name (W) takes two lines rather than widening the table past its box at 1440.
+    { key: 'firstName', header: 'Participant', sortable: true, wrap: true, render: row => nameOf(row) },
     { key: 'phone', header: 'Contact', render: row => <ContactCell row={row} /> },
     { key: 'source', header: 'Source', sortable: true, render: sourceLabel },
     {
