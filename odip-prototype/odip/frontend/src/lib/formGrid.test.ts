@@ -41,27 +41,39 @@ function openingTagEnd(src: string, start: number): number {
   return src.length
 }
 
+/** The span.short elements in one source whose own element holds a date or date-time input, as "line label". */
+function shortDateOffenders(src: string): string[] {
+  const offenders: string[] = []
+  for (const m of src.matchAll(/span\.short/g)) {
+    const start = src.lastIndexOf('<', m.index)
+    const tag = /^[A-Za-z]+/.exec(src.slice(start + 1))?.[0] ?? ''
+    const open = openingTagEnd(src, start)
+    // A self-closing element is only its own tag: scanning on would flag the next field (a Postcode just above a Date of birth).
+    let end = src[open - 1] === '/' ? open : src.indexOf(`</${tag}>`, m.index)
+    if (end < 0 || end - start > 1500) end = Math.min(src.length, start + 600)
+    const window = src.slice(start, end)
+    if (/type=["'](date|datetime-local)["']/.test(window)) offenders.push(`${src.slice(0, m.index).split('\n').length} ${/label="([^"]+)"/.exec(window)?.[1] ?? tag}`)
+  }
+  return offenders
+}
+
 describe('date controls never sit in a span.short cell', () => {
   // R3 F-05: `short` (3 of 12 columns) is narrower than a native date or date-time control, so the year or the AM/PM segment
   // was cut off (measured at 1280-1536). Every FormField that wraps one takes `span.date`. jsdom does no layout, so this scans
   // the source for the pairing that caused it: a `span.short` element whose own subtree holds a date / datetime-local input.
   it('no element with span.short wraps <input type="date"> or type="datetime-local"', () => {
-    const offenders: string[] = []
-    for (const [file, src] of sourceFiles()) {
-      for (const m of src.matchAll(/span\.short/g)) {
-        const start = src.lastIndexOf('<', m.index)
-        const tag = /^[A-Za-z]+/.exec(src.slice(start + 1))?.[0] ?? ''
-        const open = openingTagEnd(src, start)
-        // A self-closing element is only its own tag: scanning on would flag the next field (a Postcode just above a Date of birth).
-        let end = src[open - 1] === '/' ? open : src.indexOf(`</${tag}>`, m.index)
-        if (end < 0 || end - start > 1500) end = Math.min(src.length, start + 600)
-        const window = src.slice(start, end)
-        if (/type=["'](date|datetime-local)["']/.test(window)) {
-          offenders.push(`${file}:${src.slice(0, m.index).split('\n').length} ${/label="([^"]+)"/.exec(window)?.[1] ?? tag}`)
-        }
-      }
-    }
+    const offenders = sourceFiles().flatMap(([file, src]) => shortDateOffenders(src).map((o) => `${file}:${o}`))
     expect(offenders).toEqual([])
+  })
+
+  it('reads a self-closing span.short field as itself, not the date field after it; a span.short that wraps a date is still caught', () => {
+    const neighbours = [
+      '<TextField id="postcode" className={span.short} label="Postcode" onChange={(e) => set(e.target.value)} />',
+      '<TextField id="dob" className={span.date} label="Date of birth" type="date" />',
+    ].join('\n')
+    expect(shortDateOffenders(neighbours)).toEqual([])
+    const wrapped = '<FormField className={span.short} label="Start">\n  <input type="date" />\n</FormField>'
+    expect(shortDateOffenders(wrapped)).toEqual(['1 Start'])
   })
 
   it('the scan sees the date fields it protects (so it cannot pass vacuously)', () => {
