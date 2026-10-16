@@ -1,6 +1,7 @@
 using System.Net.Mail;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
@@ -31,6 +32,7 @@ public class IntakeBookingsController : ControllerBase
 {
     private const string LifecycleRoles = "Admin,Coordinator,SuperAdmin";
     private const int DefaultDuration = 90;
+    public const string StaffBusyCode = "intake-staff-busy";
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
     private readonly IntakeInviteSender _sender;
@@ -90,6 +92,12 @@ public class IntakeBookingsController : ControllerBase
         else if (sends && !IsSendable(email!))
             errors["contactEmail"] = [inquiry.Email is null ? "Enter a full email address, like name@example.com." : "The enquiry's email can't be used. Edit the enquiry to fix it."];
         if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
+        // D4: whoever goes must be free. Checked only when the visit's time, length or person changes, so notes or a new place still save after a shift
+        // has been rostered over the visit.
+        if ((timeChanged || inquiry.IntakeDurationMinutes != dto.DurationMinutes || previousStaffId != dto.StaffUserId)
+            && await ClashAsync(inquiry, staff!, startsAt, dto.DurationMinutes, ct) is string clash)
+            return Conflict(new ValidationProblemDetails(new Dictionary<string, string[]> { ["staffUserId"] = [clash] })
+                { Status = StatusCodes.Status409Conflict, Extensions = { ["code"] = StaffBusyCode } });
 
         // The email given in the panel is saved in the SAME save as the booking: never an email without a booking, or the reverse.
         if (givenEmail is not null) inquiry.Email = givenEmail;
@@ -350,6 +358,36 @@ public class IntakeBookingsController : ControllerBase
     }
 
     // An address the SMTP channel takes as written: MailAddress reads "Ann <a@b.c>" or "a b@c.d" as a display name plus an address, which is not what was typed.
+    /// <summary>
+    /// Why <paramref name="staff"/> can't do a visit at [start, start + minutes), or null when they're free (spec 2026-10-16, D4): a shift of theirs that isn't
+    /// cancelled (its rostered times, in the provider's wall clock as the roster stores them), or another enquiry's visit. Back to back is free: windows must
+    /// overlap, not touch. Both reads are keyed on the enquiry's organisation (a SuperAdmin's context has no filter).
+    /// shortcut: two bookings saved at the same moment can both pass; lock the staff member's row if double bookings are ever seen.
+    /// </summary>
+    private async Task<string?> ClashAsync(ParticipantInquiry inquiry, User staff, DateTime startUtc, int minutes, CancellationToken ct)
+    {
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, inquiry.TenantId, ct)).Zone;
+        var endUtc = startUtc.AddMinutes(minutes);
+        var (from, to) = (ProviderLocalTime.UtcToLocal(startUtc, zone), ProviderLocalTime.UtcToLocal(endUtc, zone));
+        // A shift that ends the next day began the day before: one day back finds it.
+        var (firstDay, lastDay) = (DateOnly.FromDateTime(from).AddDays(-1), DateOnly.FromDateTime(to));
+        var shifts = await _db.Shifts.IgnoreQueryFilters()
+            .Where(s => s.TenantId == inquiry.TenantId && s.UserId == staff.Id && s.Status != ShiftStatus.Cancelled && s.ServiceDate >= firstDay && s.ServiceDate <= lastDay)
+            .ToListAsync(ct);
+        var shift = shifts.Select(ProviderLocalTime.RosteredWindowLocal).Where(w => w.StartLocal < to && from < w.EndLocal).OrderBy(w => w.StartLocal).FirstOrDefault();
+        if (shift != default) return $"{staff.FullName} is on a shift {IntakeWording.Span(shift.StartLocal, shift.EndLocal)} on {IntakeWording.ShortDay(shift.StartLocal)}.";
+
+        // A visit is at most 8 hours long (Set's own limit), so one that overlaps began less than 8 hours before this one. The overlap is worked out here, not in SQL.
+        var visits = await _db.ParticipantInquiries.IgnoreQueryFilters()
+            .Where(x => x.TenantId == inquiry.TenantId && x.Id != inquiry.Id && x.IntakeStaffUserId == staff.Id && x.IntakeStartsAt > startUtc.AddMinutes(-480) && x.IntakeStartsAt < endUtc)
+            .Select(x => new { x.IntakeStartsAt, x.IntakeDurationMinutes }).ToListAsync(ct);
+        var visit = visits.Select(v => (Start: ProviderLocalTime.AsUtc(v.IntakeStartsAt!.Value), End: ProviderLocalTime.AsUtc(v.IntakeStartsAt!.Value).AddMinutes(v.IntakeDurationMinutes ?? DefaultDuration)))
+            .Where(v => v.End > startUtc).OrderBy(v => v.Start).FirstOrDefault();
+        if (visit == default) return null;
+        var (visitFrom, visitTo) = (ProviderLocalTime.UtcToLocal(visit.Start, zone), ProviderLocalTime.UtcToLocal(visit.End, zone));
+        return $"{staff.FullName} has another intake visit {IntakeWording.Span(visitFrom, visitTo)} on {IntakeWording.ShortDay(visitFrom)}.";
+    }
+
     internal static bool IsSendable(string email) => email.Length <= 200 && MailAddress.TryCreate(email, out var parsed) && parsed.Address == email;
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

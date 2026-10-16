@@ -15,6 +15,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Tests.Support;
@@ -104,6 +105,17 @@ public class IntakeBookingsControllerTests
 
         public ParticipantInquiry Row() => Db.ParticipantInquiries.AsNoTracking().Single(x => x.Id == Noah.Id);
         public List<NotificationOutbox> Outbox() => Db.NotificationOutbox.AsNoTracking().OrderBy(o => o.CreatedAt).ToList();
+
+        /// <summary>A rostered shift for Sam (or <paramref name="userId"/>), in the provider's wall clock. InMemory checks no foreign keys, so the participant is made up.</summary>
+        public void Shift(DateOnly day, TimeOnly start, TimeOnly end, bool nextDay = false, ShiftStatus status = ShiftStatus.Published, Guid? userId = null)
+        {
+            Db.Shifts.Add(new Shift
+            {
+                Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = Guid.NewGuid(), UserId = userId ?? Sam.Id, ServiceDate = day, StartTime = start, EndTime = end,
+                EndsNextDay = nextDay, Status = status,
+            });
+            Db.SaveChanges();
+        }
     }
 
     internal static T Ok<T>(IActionResult result) => Assert.IsType<ApiResponse<T>>(Assert.IsType<OkObjectResult>(result).Value).Data!;
@@ -731,5 +743,121 @@ public class IntakeBookingsControllerTests
         var roles = typeof(IntakeBookingsController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()!.Roles;
 
         Assert.Equal("Admin,Coordinator,SuperAdmin", roles);
+    }
+
+    // ── Staff busy (spec 2026-10-16, D4): a 409 naming the shift or visit, keyed staffUserId ──
+
+    private static readonly DateOnly Oct16 = new(2026, 10, 16);
+
+    private static void AssertBusy(IActionResult? result, string sentence)
+    {
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        var problem = Assert.IsType<ValidationProblemDetails>(conflict.Value);
+        Assert.Equal([sentence], problem.Errors["staffUserId"]);
+        Assert.Equal("intake-staff-busy", problem.Extensions["code"]);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.Status);
+    }
+
+    [Fact]
+    public async Task A_shift_that_overlaps_the_visit_is_a_409_naming_it_and_nothing_is_saved_or_sent()
+    {
+        var f = new Fixture();
+        f.Shift(Oct16, new TimeOnly(9, 0), new TimeOnly(10, 30));
+
+        AssertBusy((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result, "Sam Lee is on a shift 9:00 – 10:30 am on Fri 16 Oct.");
+
+        Assert.Null(f.Row().IntakeStartsAt);
+        Assert.Empty(f.Channel.Sent);
+        Assert.Empty(f.Outbox());
+    }
+
+    [Theory]
+    [InlineData(8, 0, 10, 0)]
+    [InlineData(11, 30, 14, 0)]
+    public async Task A_shift_that_ends_as_the_visit_starts_or_starts_as_it_ends_is_back_to_back_and_free(int fromH, int fromM, int toH, int toM)
+    {
+        var f = new Fixture();
+        f.Shift(Oct16, new TimeOnly(fromH, fromM), new TimeOnly(toH, toM));
+
+        await f.BookAsync();
+
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task An_overnight_shift_from_the_night_before_that_runs_into_the_visit_refuses_it()
+    {
+        var f = new Fixture();
+        f.Shift(new DateOnly(2026, 10, 15), new TimeOnly(22, 0), new TimeOnly(10, 30), nextDay: true);
+
+        AssertBusy((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result, "Sam Lee is on a shift 10:00 pm – 10:30 am on Thu 15 Oct.");
+    }
+
+    [Fact]
+    public async Task A_cancelled_shift_or_someone_elses_shift_does_not_refuse_it()
+    {
+        var f = new Fixture();
+        f.Shift(Oct16, new TimeOnly(9, 0), new TimeOnly(12, 0), status: ShiftStatus.Cancelled);
+        f.Shift(Oct16, new TimeOnly(9, 0), new TimeOnly(12, 0), userId: f.Dana.Id);
+
+        await f.BookAsync();
+
+        Assert.Equal(f.Sam.Id, f.Row().IntakeStaffUserId);
+    }
+
+    [Fact]
+    public async Task Another_enquirys_visit_for_the_same_person_refuses_it_but_back_to_back_is_free()
+    {
+        var f = new Fixture();
+        var ivy = new ParticipantInquiry
+        {
+            Id = Guid.NewGuid(), TenantId = f.TenantId, FirstName = "Ivy", LastName = "Tran", Source = "Phone", Email = "ivy@example.com",
+            IntakeStartsAt = Start.AddMinutes(60), IntakeDurationMinutes = 90, IntakeLocation = "Home", IntakeStaffUserId = f.Sam.Id, IntakeUid = $"{Guid.NewGuid():N}@odip",
+        };
+        f.Db.ParticipantInquiries.Add(ivy);
+        f.Db.SaveChanges();
+
+        AssertBusy((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result, "Sam Lee has another intake visit 11:00 am – 12:30 pm on Fri 16 Oct.");
+
+        ivy.IntakeStartsAt = Start.AddMinutes(90);
+        f.Db.SaveChanges();
+        await f.BookAsync();
+        Assert.Equal(Start, f.Row().IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task Rescheduling_a_visit_over_its_own_old_time_is_not_a_clash()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+
+        var moved = await f.BookAsync(f.Body() with { StartsAt = Start.AddMinutes(30) });
+
+        Assert.Equal(Start.AddMinutes(30), moved.IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task A_notes_or_place_change_is_not_checked_so_it_saves_after_a_shift_is_rostered_over_the_visit()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        f.Shift(Oct16, new TimeOnly(9, 0), new TimeOnly(12, 0));
+
+        Assert.Equal("Gate code", (await f.BookAsync(f.Body() with { Notes = "Gate code" })).IntakeNotes);
+        Assert.Single(f.Channel.Sent);
+        Assert.Equal("Library", (await f.BookAsync(f.Body() with { Notes = "Gate code", Location = "Library" })).IntakeLocation);
+        Assert.Equal(2, f.Channel.Sent.Count);
+    }
+
+    [Fact]
+    public async Task Changing_who_goes_to_someone_busy_is_refused_and_the_booking_stands()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        f.Shift(Oct16, new TimeOnly(10, 0), new TimeOnly(11, 0), userId: f.Dana.Id);
+
+        AssertBusy((await f.Controller().Set(f.Noah.Id, f.Body(f.Dana.Id), CancellationToken.None)).Result, "Dana Smith is on a shift 10:00 – 11:00 am on Fri 16 Oct.");
+
+        Assert.Equal(f.Sam.Id, f.Row().IntakeStaffUserId);
     }
 }
