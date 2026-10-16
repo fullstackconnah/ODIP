@@ -343,7 +343,7 @@ public class IntakeBookingsController : ControllerBase
             .Select(p => new { p.Id, p.IsDraft, p.IntakeCompletedAt }).ToDictionaryAsync(p => p.Id, ct);
         var staffIds = rows.Select(r => r.IntakeStaffUserId!.Value).Distinct().ToList();
         var names = await _db.Users.IgnoreQueryFilters().Where(u => staffIds.Contains(u.Id) && u.TenantId == tenantId)
-            .ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct);
+            .ToDictionaryAsync(u => u.Id, u => (u.FirstName + " " + u.LastName).Trim(), ct);
 
         return Ok(ApiResponse<List<IntakeVisitDto>>.Ok(rows.Select(r =>
         {

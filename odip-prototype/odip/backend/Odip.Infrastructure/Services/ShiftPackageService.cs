@@ -354,10 +354,10 @@ public sealed class ShiftPackageService
         routines.AddRange(await OrphanTickRoutinesAsync(shift, routines, routineChecks, ct));
 
         var participantName = shift.Participant?.FullName
-            ?? await _db.Participants.Where(p => p.Id == shift.ParticipantId).Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct)
+            ?? await _db.Participants.Where(p => p.Id == shift.ParticipantId).Select(p => (p.FirstName + " " + p.LastName).Trim()).FirstOrDefaultAsync(ct)
             ?? string.Empty;
         var staffName = await _db.Users.Where(u => u.Id == completion.SubmittedByUserId)
-            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? string.Empty;
+            .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? string.Empty;
 
         return new ShiftCompletionReviewDto(
             completionDto, participantName, staffName, shift.ServiceDate, provider.Id,

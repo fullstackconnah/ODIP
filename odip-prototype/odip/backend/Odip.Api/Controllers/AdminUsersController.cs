@@ -87,7 +87,7 @@ public class AdminUsersController : ControllerBase
             .Select(u => new AdminUserDto
             {
                 Id = u.Id, FirstName = u.FirstName, LastName = u.LastName,
-                FullName = u.FirstName + " " + u.LastName, Email = u.Email, Username = u.Username,
+                FullName = (u.FirstName + " " + u.LastName).Trim(), Email = u.Email, Username = u.Username,
                 Role = u.Role.ToString(), TenantId = u.TenantId,
                 TenantName = u.Tenant != null ? u.Tenant.Name : "",
                 IsActive = u.IsActive, CreatedAt = u.CreatedAt, LastLoginAt = u.LastLoginAt,
@@ -199,7 +199,7 @@ public class AdminUsersController : ControllerBase
         try
         {
             firebaseUid = await _firebaseUserService.CreateUserAsync(
-                email, $"{dto.FirstName} {dto.LastName}", password, ct);
+                email, $"{dto.FirstName} {dto.LastName}".Trim(), password, ct);
             createdFirebaseUser = true;
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.EmailAlreadyExists)
@@ -346,7 +346,7 @@ public class AdminUsersController : ControllerBase
         try
         {
             await _firebaseUserService.UpdateUserByEmailAsync(
-                originalEmail, $"{dto.FirstName} {dto.LastName}", !dto.IsActive, ct);
+                originalEmail, $"{dto.FirstName} {dto.LastName}".Trim(), !dto.IsActive, ct);
             firebaseSynced = true;
         }
         catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)

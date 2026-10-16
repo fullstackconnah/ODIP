@@ -88,7 +88,7 @@ public sealed class DemoRun
     public void StampAudit(Guid entityId, DateTime whenUtc, string? actorUserKey = null)
     {
         var actor = actorUserKey is null ? null : Directory.Staff(actorUserKey);
-        Audit.Set(entityId, whenUtc, actor?.Id, actor is null ? null : $"{actor.FirstName} {actor.LastName}".Trim());
+        Audit.Set(entityId, whenUtc, actor?.Id, actor is null ? null : $"{actor.FirstName} {actor.LastName}".Trim().Trim());
     }
 
     /// <summary>The audit row the next save writes for <paramref name="entityId"/> says <paramref name="whenUtc"/> and that <paramref name="actor"/> did it.</summary>
