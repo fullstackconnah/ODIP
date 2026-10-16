@@ -30,6 +30,8 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     { id: 'inq-0102', participantId: null, firstName: 'Grace', lastName: 'Liu', phone: null, email: 'grace.liu@example.com.au', source: 'Web', provenance: 'Website form, asked for a call back after 3 pm on weekdays because of school pick-up', createdAt: '2026-10-02T01:00:00Z' },
     { id: 'inq-0103', participantId: null, firstName: 'Omar', lastName: 'Haddad', phone: '0412 555 063', email: 'omar.haddad@example.com.au', source: 'Email', provenance: null, createdAt: '2026-09-30T01:00:00Z' },
     { id: 'inq-0104', participantId: null, firstName: 'Ruby', lastName: 'Chen', phone: '0412 555 064', email: 'ruby.chen@example.com.au', source: 'Phone', provenance: 'GP referral', createdAt: '2026-10-03T01:00:00Z' },
+    // The Closed view's sample (spec addendum E4).
+    { id: 'inq-0105', participantId: null, firstName: 'Ivy', lastName: 'Park', phone: '0412 555 065', email: 'ivy.park@example.com.au', source: 'Phone', provenance: null, createdAt: '2026-09-29T01:00:00Z' },
   ]
   const bookings = {
     'inq-0002': booked(1, '10:00', { intakeInviteSentAt: sentAt }),
@@ -38,7 +40,9 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     'inq-0103': booked(-3, '11:00', { intakeInviteSentAt: sydneyInstant(-6, '15:00') }),
   }
   const rows = () => [...enquiryFeed, ...extraEnquiries]
-  const withBooking = (row) => ({ ...row, timeZoneId: ZONE, ...(bookings[row.id] ?? {}) })
+  // Close and reopen (spec addendum): why and when, by enquiry id. withBooking spreads it, so every answer and the feed carry it.
+  const closed = { 'inq-0105': { closedAt: sydneyInstant(-2, '11:00'), closeOutcome: 'NotGoingAhead', closeNote: 'Family chose a provider closer to home.' } }
+  const withBooking = (row) => ({ ...row, timeZoneId: ZONE, ...(bookings[row.id] ?? {}), ...(closed[row.id] ?? {}) })
   const find = (id) => rows().find((r) => r.id === id)
   // The browsed range, as the API reads it: provider-local dates, inclusive at both ends.
   const sydneyDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: ZONE }).format(new Date(iso))
@@ -50,6 +54,8 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   const saveContacts = (id, list) => { if (Array.isArray(list)) contacts[id] = list }
   const fields = (body) => ({ firstName: body.firstName, lastName: body.lastName, phone: body.phone ?? null, email: body.email ?? null, source: body.source, provenance: body.provenance ?? null })
   const notFound = () => respond(404, failEnvelope(null, ['Inquiry not found']))
+  const refuse409 = (sentence, code) => respond(409, { ...failEnvelope(null, [sentence]), code })
+  const closedRefusal = () => refuse409('This enquiry is closed. Reopen it first.', 'inquiry-closed')
 
   const get = [
     ['intake-visits', (params) => Object.entries(bookings)
@@ -77,6 +83,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     ['inquiries/:id/intake-booking', (id, body) => {
       const row = find(id)
       if (!row) return respond(404, failEnvelope(null, ['Inquiry not found']))
+      if (closed[id]) return closedRefusal()
       // The capture's refused state: the 400 the server gives for a staff member who cannot do intakes, keyed by field.
       if ((body.location ?? '').trim().toLowerCase() === 'refuse') {
         return respond(400, { title: 'One or more validation errors occurred.', status: 400, errors: { staffUserId: ["Callum can't do intakes. Choose an active coordinator or admin."] } })
@@ -95,10 +102,30 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       return withBooking(row)
     }],
     // Its 2 segments never match .../intake-booking.
-    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); Object.assign(row, fields(body)); saveContacts(id, body.contacts); return withBooking(row) }],
+    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); Object.assign(row, fields(body)); saveContacts(id, body.contacts); return withBooking(row) }],
   ]
 
   const post = [
+    ['inquiries/:id/close', (id, body) => {
+      const row = find(id)
+      if (!row) return notFound()
+      if (closed[id]) return refuse409('This enquiry is already closed.', 'inquiry-closed')
+      if (row.participantId) return refuse409(`Intake has started for ${row.firstName}, so this enquiry can't be closed.`, 'inquiry-converted')
+      if (!body?.outcome) return respond(400, { title: 'One or more validation errors occurred.', status: 400, errors: { outcome: ["Choose why it's closing."] } })
+      const booking = bookings[id]
+      const cancellationEmail = !booking ? 'NoVisit' : booking.intakeInviteSentAt ? 'NotConfigured' : 'NoInvite'
+      delete bookings[id]
+      delete contacts[id]
+      closed[id] = { closedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), closeOutcome: body.outcome, closeNote: body.note ?? null }
+      return { inquiry: withBooking(row), cancellationEmail }
+    }],
+    ['inquiries/:id/reopen', (id) => {
+      const row = find(id)
+      if (!row) return notFound()
+      if (!closed[id]) return refuse409('This enquiry is already open.', 'inquiry-open')
+      delete closed[id]
+      return withBooking(row)
+    }],
     ['inquiries', (body) => { const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return withBooking(row) }],
     ['inquiries/:id/intake-booking/confirm', (id, body) => {
       if (!bookings[id]) return notBooked()
@@ -119,7 +146,10 @@ function create({ respond, failEnvelope, enquiryFeed }) {
 
   const detail = [['inquiries/:id', (id) => { const row = find(id); return row ? { ...withBooking(row), contacts: contacts[id] ?? [] } : notFound() }]]
 
-  return { feed: () => rows().map(withBooking), get, put, post, delete: del, detail }
+  // view=closed: the closed ones only; otherwise the open ones, as the API lists them.
+  const feed = (params) => rows().filter((r) => (params?.get('view') === 'closed') === !!closed[r.id]).map(withBooking)
+
+  return { feed, get, put, post, delete: del, detail }
 }
 
 module.exports = { create }

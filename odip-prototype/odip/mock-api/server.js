@@ -2442,7 +2442,7 @@ const routes = [
   // Honours the filters the Active participants tab sends (Active = isActive=true, Archived = isActive=false, both isDraft=false); the fixtures here have no drafts.
   ['participants', (searchParams) => paged(participants.filter((p) =>
     flagMatches(searchParams, 'isActive', p.isActive) && flagMatches(searchParams, 'isDraft', !!p.isDraft)))],
-  ['inquiries', () => intake.feed()],
+  ['inquiries', (params) => intake.feed(params)],
   ['inquiries/onboarding-worklist', () => onboardingWorklist],
   ...intake.detail,
   ['inquiries/:id/onboarding', (id) => {
