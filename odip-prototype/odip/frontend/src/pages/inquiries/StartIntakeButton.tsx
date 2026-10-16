@@ -53,7 +53,7 @@ export function StartIntakeButton({ visit, size = 'md' }: { visit: IntakeVisitDt
         {convert.isPending ? 'Starting…' : stage === 'draftintake' ? 'Resume intake' : 'Start intake'}<span className="sr-only"> for {name}</span>
       </Button>
       {reason && (
-        <p id={reasonId} className="mt-1.5 text-sm text-[var(--color-muted-foreground)]">
+        <p id={reasonId} className="mt-1.5 max-w-[18rem] text-sm text-[var(--color-muted-foreground)]">
           {reason.address ? `Start intake needs ${visit.firstName}'s full address.` : "Start intake needs the main contact's name."}{' '}
           <Link to={reason.to} className="underline underline-offset-2 hover:text-[var(--color-primary)]">{reason.text}</Link>
         </p>
