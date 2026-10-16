@@ -103,6 +103,12 @@ describe('AppLayout — skip link and labelled landmarks (I-4)', () => {
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Mobile' })).toBeInTheDocument()
   })
+
+  it('heads the sidebar with the Bunya Support wordmark, and no old Odip name', () => {
+    renderAt('/trips')
+    expect(screen.getByText('Bunya Support')).toBeInTheDocument()
+    expect(screen.queryByText('Odip')).toBeNull()
+  })
 })
 
 describe('AppLayout — Leave nav entry (leave-2)', () => {

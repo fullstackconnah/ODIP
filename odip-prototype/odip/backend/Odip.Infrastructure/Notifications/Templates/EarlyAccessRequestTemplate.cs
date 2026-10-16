@@ -12,17 +12,17 @@ public record EarlyAccessRequestPayload(
 
 public static class EarlyAccessRequestTemplate
 {
-    public const string Subject = "New Odip early-access request";
+    public const string Subject = "New Bunya Support early-access request";
 
     public static NotificationMessage Render(EarlyAccessRequestPayload p) => new(
         RecipientAddress: p.RecipientEmail,
         Subject: Subject,
-        PlainTextBody: "Someone asked for early access to Odip.\n\n" +
+        PlainTextBody: "Someone asked for early access to Bunya Support.\n\n" +
                        $"Name: {p.Name}\n" +
                        $"Organisation: {p.Organisation}\n" +
                        $"Email: {p.Email}\n" +
                        $"Requested: {Html.DateTime(p.RequestedAtUtc)} UTC",
-        HtmlBody: "<p>Someone asked for early access to Odip.</p>" +
+        HtmlBody: "<p>Someone asked for early access to Bunya Support.</p>" +
                   "<table>" +
                   $"<tr><th align=\"left\">Name</th><td>{Html.E(p.Name)}</td></tr>" +
                   $"<tr><th align=\"left\">Organisation</th><td>{Html.E(p.Organisation)}</td></tr>" +

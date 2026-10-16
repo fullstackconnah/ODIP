@@ -98,11 +98,11 @@ export function describeSignInRefusal(refusal: SignInRefusal, email: string, ver
       }
       return { sentence: "Your email address isn't verified yet, and we couldn't send the verification link just now.", nextStep: 'Wait a minute, then use Send it again.' }
     case 'NoOdipAccount':
-      return { sentence: `${email} isn't set up in ODIP. Ask your administrator to add you.` }
+      return { sentence: `${email} isn't set up in Bunya Support. Ask your administrator to add you.` }
     case 'TenantInactive':
-      return { sentence: "Your organisation's ODIP account is inactive.", nextStep: 'Ask your administrator to reactivate it.' }
+      return { sentence: "Your organisation's Bunya Support account is inactive.", nextStep: 'Ask your administrator to reactivate it.' }
     case 'ProviderNotAllowed':
-      return { sentence: "That sign-in method isn't enabled for ODIP. Use your email and password." }
+      return { sentence: "That sign-in method isn't enabled for Bunya Support. Use your email and password." }
     case 'Ambiguous':
       // No more than to ask the administrator: that other accounts share the address is for the server log and the runbook.
       return { sentence: `We can't sign you in with ${email} yet.`, nextStep: 'Ask your administrator to check your account.' }

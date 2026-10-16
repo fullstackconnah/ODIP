@@ -80,9 +80,9 @@ public class AdminNotificationsController : ControllerBase
         var emailChannel = _channels.First(c => c.Kind == NotificationChannelKind.Email);
         var message = new NotificationMessage(
             RecipientAddress: dto!.To,
-            Subject: "ODIP test email",
-            PlainTextBody: "This is a test email from ODIP to confirm SMTP configuration is working.",
-            HtmlBody: "<p>This is a test email from ODIP to confirm SMTP configuration is working.</p>");
+            Subject: "Bunya Support test email",
+            PlainTextBody: "This is a test email from Bunya Support to confirm SMTP configuration is working.",
+            HtmlBody: "<p>This is a test email from Bunya Support to confirm SMTP configuration is working.</p>");
 
         var result = await emailChannel.SendAsync(message, ct);
         // Not a 500 — a failed test is the endpoint's expected outcome, not a server error.

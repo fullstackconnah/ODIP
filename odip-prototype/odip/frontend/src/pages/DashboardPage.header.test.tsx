@@ -124,7 +124,7 @@ describe('DashboardPage — header (a greeting, the date and the summary line)',
     asRole('Coordinator', 'Sarah Mitchell')
     renderPage()
 
-    expect(document.title).toBe('Management Dashboard — Odip')
+    expect(document.title).toBe('Bunya Support · Management Dashboard')
     expect(heading()).toHaveTextContent('Good morning, Sarah')
   })
 
@@ -139,7 +139,7 @@ describe('DashboardPage — header (a greeting, the date and the summary line)',
       vi.advanceTimersByTime(60_000)
     })
     expect(heading()).toHaveTextContent('Good afternoon, Sarah Friday 2 October')
-    expect(document.title).toBe('Management Dashboard — Odip')
+    expect(document.title).toBe('Bunya Support · Management Dashboard')
 
     act(() => {
       vi.advanceTimersByTime(12 * 60 * 60_000) // past midnight
@@ -245,7 +245,7 @@ describe('DashboardPage — loading and error keep their behaviour', () => {
     expect(h1s).toHaveLength(1)
     expect(h1s[0]).toHaveTextContent('Good morning, Sarah Friday 2 October')
     expect(h1s[0]).toHaveClass('text-display')
-    expect(document.title).toBe('Management Dashboard — Odip')
+    expect(document.title).toBe('Bunya Support · Management Dashboard')
     // The counts are data: no line of them, and no band, until the summary arrives.
     expect(screen.queryByText(/upcoming trip/)).not.toBeInTheDocument()
     expect(screen.queryByText(/active participant/)).not.toBeInTheDocument()
