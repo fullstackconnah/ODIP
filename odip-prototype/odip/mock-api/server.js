@@ -1839,6 +1839,7 @@ function rosterBoard(searchParams) {
   // Daniel's services have begun while he is still onboarding: he has a row every week, tagged as onboarding (the real board lists everyone who can receive services).
   board.participantRows.push({ participantId: 'p-0104', fullName: 'Daniel Osei', supportRatio: 'SharedSupport', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: true, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 })
   board.weekStart = monday
+  board.weekStarted = startedWeeks.has(monday)
   board.days = days
   for (const shift of rosterShifts.filter((s) => s.serviceDate >= days[0] && s.serviceDate <= days[6])) {
     let row = board.participantRows.find((r) => r.participantId === shift.participantId)
@@ -2268,7 +2269,8 @@ const rosterPatterns = [
 ]
 const rosterShifts = []
 let rosterCounter = 0
-const approvalStore = { drafts: serviceAgreementDrafts, patterns: rosterPatterns, shifts: rosterShifts, participants, newId: (prefix) => `${prefix}-mock-${++rosterCounter}` }
+const startedWeeks = new Set([BOARD_FIXTURE_WEEK])   // the fixture week reads as started; others show the Start overlay
+const approvalStore = { drafts: serviceAgreementDrafts, patterns: rosterPatterns, shifts: rosterShifts, participants, startedWeeks, newId: (prefix) => `${prefix}-mock-${++rosterCounter}` }
 
 function draftDto(participantId, version, body, quoteResult, lines) {
   return {
@@ -2393,7 +2395,7 @@ function agreementsEnding() {
   const endedLines = planPricing.groupLines(endedQuote._lines, charged.map((entry) => entry.block))
   delete endedQuote._lines
   serviceAgreementDrafts['p-0001'] = [{ ...draftDto('p-0001', 1, ended, endedQuote, endedLines), approval: {
-    approvedAt: `${planApproval.addDays(today, -60)}T01:00:00Z`, approvedByName: 'Callum Radford', patternsCreated: 7, patternsEnded: 0, shiftsCreated: 0, topUpEnabled: true,
+    approvedAt: `${planApproval.addDays(today, -60)}T01:00:00Z`, approvedByName: 'Callum Radford', patternsCreated: 7, patternsEnded: 0, shiftsCreated: 0,
   } }]
 })()
 
@@ -2751,6 +2753,14 @@ const postRoutes = [
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
     return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
+  }],
+  // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers.
+  ['rostering/weeks/:weekStart/start', (weekStart) => {
+    const monday = planApproval.mondayOf(weekStart)
+    if (startedWeeks.has(monday)) return respond(409, failEnvelope(null, ['This week has already been started.'], 'roster-week-started'))
+    startedWeeks.add(monday)
+    const made = planApproval.generateWeek(approvalStore, monday)
+    return { weekStart: monday, created: made.length, assignedToRegulars: made.filter((s) => s.staffId).length, regularAway: 0, skipped: [] }
   }],
   ...packageRoutesPost,
   ['staff-assignments/check', () => []],

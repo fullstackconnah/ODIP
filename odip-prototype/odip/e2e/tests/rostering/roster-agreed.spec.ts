@@ -1,6 +1,6 @@
 import { Locator, Page } from '@playwright/test';
 import { test, expect, call } from '../../support/fixtures';
-import { approveDraft, assignShift, ensureProviderSettings, makeParticipant, makeShift, makeStaff, saveBlocksDraft } from '../../support/data';
+import { approveDraft, assignShift, ensureProviderSettings, makeParticipant, makeShift, makeStaff, saveBlocksDraft, startWeek } from '../../support/data';
 import { addDays, mondayOf, nextWednesday, sydneyToday } from '../../support/dates';
 
 // Roster agreed shifts, the plus picker and ad-hoc shifts (spec 2026-10-15), on the real API and PostgreSQL. An agreement saved from blocks waits for approval (the board says so),
@@ -51,6 +51,7 @@ test('agreed shifts wait for approval, then fill from the plus, and a person dro
   expect(await shiftsOf(participant.id)).toEqual([]);
 
   // 2. Approved: Wednesday and Thursday hold Agreed Needs staff shifts, and the notice has gone.
+  await startWeek(session, wednesday);
   await approveDraft(session, participant.id, draft.id);
   const agreed = await shiftsOf(participant.id);
   const wedId = agreed.find(s => s.serviceDate === wednesday && s.fromAgreement)!.id;
