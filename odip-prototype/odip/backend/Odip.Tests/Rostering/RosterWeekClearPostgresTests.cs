@@ -43,8 +43,10 @@ public class RosterWeekClearPostgresTests : IClassFixture<PostgresFixture>
                 Role = UserRole.Coordinator, Position = Position.SupportWorker, IsActive = true,
             }).Entity;
             var mia = db.Participants.Add(new Participant { Id = Guid.NewGuid(), FirstName = "Mia", LastName = "Test", IsActive = true }).Entity;
+            var revision = db.ServiceAgreementDrafts.Add(ApprovalTestSupport.BuildRevision(tenantId, mia.Id, 1, new[] { ApprovalTestSupport.WeekdayBlock() })).Entity;
             var pattern = db.ShiftPatterns.Add(new ShiftPattern
             {
+                SourceDraftId = revision.Id, SourceBlockKey = "weekdays", WorkerSlot = 1,   // an agreement pattern: only its shifts are ever cleared
                 Id = Guid.NewGuid(), ParticipantId = mia.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
                 Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true,
             }).Entity;

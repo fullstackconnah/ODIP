@@ -13,7 +13,7 @@ public sealed record RosterWeekClearRun(int Organisations, int AlreadyDone, int 
 
 /// <summary>
 /// Start rostering's one-off (2026-10-16, L7). For each organisation with shifts, in one transaction under its board lock:
-/// - logs what it will do, then removes every week after the provider's current week whose shifts are all untouched (an open Draft a pattern made that nobody wrote on or recorded against);
+/// - logs what it will do, then removes every week after the provider's current week whose shifts are all untouched (an open Draft an agreement pattern made that nobody edited, wrote on or recorded against);
 /// - marks every week that still holds a shift as started (a RosterWeek row), past and current weeks included, and always the current week.
 /// It removes through EF, so each removed shift gets its audit row. An organisation that already has a RosterWeek row is skipped: it was done, or Start ran there, and a week Start made is never cleared.
 /// </summary>
@@ -65,6 +65,8 @@ public static class RosterWeekClear
             s.Id, s.ServiceDate,
             // shortcut: an edit within a second of the shift's creation counts as untouched (CreatedAt and UpdatedAt are separate UtcNow reads); add an edited flag if that ever matters.
             Untouched = s.Status == ShiftStatus.Draft && s.UserId == null && s.ShiftPatternId != null && s.ReturnCount == 0 && s.UpdatedAt <= s.CreatedAt.AddSeconds(1)
+                // DEEP-S1: only an agreement pattern's shift: Start makes those again, never a hand-made pattern's.
+                && db.ShiftPatterns.IgnoreQueryFilters().Any(p => p.Id == s.ShiftPatternId && p.SourceDraftId != null)
                 && (s.Notes == null || s.Notes == "") && (s.OverrideReason == null || s.OverrideReason == "") && (s.AcknowledgedFindingCodes == null || s.AcknowledgedFindingCodes == "")
                 && !db.ShiftNotes.IgnoreQueryFilters().Any(n => n.ShiftId == s.Id) && !db.ShiftCompletions.IgnoreQueryFilters().Any(c => c.ShiftId == s.Id)
                 && !db.HandoverAcknowledgements.IgnoreQueryFilters().Any(a => a.ShiftId == s.Id) && !db.ClaimLineItems.IgnoreQueryFilters().Any(c => c.ShiftId == s.Id)

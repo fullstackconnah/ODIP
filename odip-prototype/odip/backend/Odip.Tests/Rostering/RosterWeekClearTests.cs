@@ -37,11 +37,18 @@ public class RosterWeekClearTests
         db.SaveChanges();
     }
 
-    private static Shift Untouched(OdipDbContext db, DateOnly day, Guid? tenantId = null) => db.Shifts.Add(new Shift
+    /// <summary>An open Draft an agreement pattern made (DEEP-S1: only those are cleared, as Start makes them again).</summary>
+    private static Shift Untouched(OdipDbContext db, DateOnly day, Guid? tenantId = null, bool fromAgreement = true) => db.Shifts.Add(new Shift
     {
-        Id = Guid.NewGuid(), TenantId = tenantId ?? TenantA, ParticipantId = Guid.NewGuid(), ShiftPatternId = Guid.NewGuid(), ServiceDate = day,
+        Id = Guid.NewGuid(), TenantId = tenantId ?? TenantA, ParticipantId = Guid.NewGuid(), ShiftPatternId = PatternOf(db, tenantId ?? TenantA, fromAgreement), ServiceDate = day,
         StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft,
     }).Entity;
+
+    private static Guid PatternOf(OdipDbContext db, Guid tenantId, bool fromAgreement) => db.ShiftPatterns.Add(new ShiftPattern
+    {
+        Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = Guid.NewGuid(), DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+        Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 1, 1), SourceDraftId = fromAgreement ? Guid.NewGuid() : null,
+    }).Entity.Id;
 
     private static DbContextOptions<OdipDbContext> NewSet(Action<OdipDbContext> seed)
     {
@@ -89,6 +96,7 @@ public class RosterWeekClearTests
     [InlineData("returned")]
     [InlineData("edited")]
     [InlineData("one-off")]
+    [InlineData("hand-made-pattern")]
     [InlineData("note-row")]
     [InlineData("completion-row")]
     [InlineData("handover-row")]
@@ -112,6 +120,7 @@ public class RosterWeekClearTests
                 case "returned": touched.ReturnCount = 1; break;
                 case "edited": touched.UpdatedAt = touched.CreatedAt.AddMinutes(5); break;   // a coordinator changed its times or ratio, nothing else
                 case "one-off": touched.ShiftPatternId = null; break;
+                case "hand-made-pattern": touched.ShiftPatternId = PatternOf(db, TenantA, fromAgreement: false); break;   // DEEP-S1: Start never makes these again
                 case "note-row": db.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), TenantId = TenantA, ShiftId = touched.Id, AuthorUserId = Guid.NewGuid(), AuthorName = "Sam Hill", Body = "Note" }); break;
                 case "completion-row":
                     db.ShiftCompletions.Add(new ShiftCompletion { Id = Guid.NewGuid(), TenantId = TenantA, ShiftId = touched.Id, ActualStart = DateTime.UtcNow, TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(), StartedAt = DateTime.UtcNow, IsActive = true });
