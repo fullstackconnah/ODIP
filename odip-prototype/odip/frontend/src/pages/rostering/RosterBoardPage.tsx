@@ -1,24 +1,27 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor, TouchSensor, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent, type Modifier,
 } from '@dnd-kit/core'
-import { CalendarClock, X } from 'lucide-react'
+import { CalendarClock, CalendarPlus, X } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { Card } from '@/components/Card'
+import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
+import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { plural } from '@/lib/format'
-import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
+import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
-import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode } from '@/api/types'
+import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode, StartWeekResultDto } from '@/api/types'
 import {
   WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementNotice,
   type ShiftSlideOverTarget,
@@ -29,13 +32,17 @@ import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
 } from './lib/rosterDrag'
-import { bannerBlockedLine, bannerTitle, isBlocked } from './lib/rosterWeek'
+import {
+  ALREADY_STARTED, START_FAILED, alreadyInWeekLine, bannerBlockedLine, bannerTitle, isBlocked, startBudgetWarnings, startResultBody, startResultTitle,
+} from './lib/rosterWeek'
 
 /** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
 type Send = (overrideReason: string | null, acknowledgedFindingCodes: string[]) => Promise<unknown>
 type PendingAssign = { findings: RosterFindingDto[]; retry: (overrideReason: string, codes: string[]) => Promise<boolean> }
 type PendingBlocked = { findings: RosterFindingDto[] }
 type DropPrompt = { carry: DragCarry; shift: ShiftDto; canSwap: boolean }
+/** What Start said about the week on screen: what it made, or that someone else had started it. */
+type StartNotice = { kind: 'started'; result: StartWeekResultDto } | { kind: 'already' }
 
 /** The carried puck rides one coarse row (48px, --row-h under pointer: coarse) above a finger, so its outcome line is not under the thumb. A mouse or keyboard drag is left alone. */
 const liftAboveFinger: Modifier = ({ transform, activatorEvent }) => (activatorEvent?.type === 'touchstart' ? { ...transform, y: transform.y - 48 } : transform)
@@ -61,11 +68,13 @@ export default function RosterBoardPage() {
   const [searchParams] = useSearchParams()
   const dateParam = searchParams.get('date')
   const [weekStart, setWeekStart] = useState(() => weekStartFromDateParam(dateParam))
+  // Declared above the ?date= block, which clears it: a week's notices belong to that week (the brief, 2.3).
+  const [startNotice, setStartNotice] = useState<StartNotice | null>(null)
   // React's "adjust state when a prop changes" pattern: compare the param during render, no effect. A missing param never resets the week.
   const [seenDateParam, setSeenDateParam] = useState(dateParam)
   if (seenDateParam !== dateParam) {
     setSeenDateParam(dateParam)
-    if (dateParam !== null) setWeekStart(weekStartFromDateParam(dateParam))
+    if (dateParam !== null) { setWeekStart(weekStartFromDateParam(dateParam)); setStartNotice(null) }
   }
   const [groupBy, setGroupBy] = useBoardViewMode()
   // `?participant=<id>` and `?unfilled=1` (plan builder phase D: the links an approval and its confirm dialog give) open the board already filtered to that participant, and to open shifts, through the same
@@ -190,7 +199,7 @@ export default function RosterBoardPage() {
   const hasNotice = waiting.length > 0
 
   // Decisions 1 and 10: drag and drop is the Participant view's, for writers, from md up; the Staff view and phones keep click and the menus.
-  const dragOn = canWrite && groupBy === 'participant' && !belowMd
+  const dragOn = canWrite && groupBy === 'participant' && !belowMd && board?.weekStarted !== false
   const boardShifts = useMemo(() => allBoardShifts(board), [board])
   const hours = useMemo(() => staffWeekHours(boardShifts), [boardShifts])
   // The picker's shift as the board has it now: a refetch that filled, removed or locked it closes the picker (Review Focus 2). React's adjust-state-in-render pattern, as for `?date=` above.
@@ -211,12 +220,50 @@ export default function RosterBoardPage() {
   const publishable = useMemo(() => drafts.filter(s => !isBlocked(s)), [drafts])
   // The banner (the brief, 3.1): a started week with drafts, for writers and readers.
   const showBanner = !unstarted && drafts.length > 0
-  const noticesShown = showBanner || hasNotice || !!assignError
+  const noticesShown = showBanner || hasNotice || !!assignError || !!startNotice
   // The height of what stands above the board (the banner, the notices and the error, in one wrapper), for the board frame (finish review fix 5): with them above it, strip and grid still share one screen.
   // shortcut: measured when any of them changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
   const noticeRef = useRef<HTMLDivElement>(null)
   const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
-  useLayoutEffect(() => { setNoticeHeight(noticesShown ? noticeRef.current?.offsetHeight ?? 0 : null) }, [noticesShown, assignError, waiting, drafts.length, blocked.length])
+  useLayoutEffect(() => { setNoticeHeight(noticesShown ? noticeRef.current?.offsetHeight ?? 0 : null) }, [noticesShown, assignError, waiting, drafts.length, blocked.length, startNotice])
+
+  const startWeek = useStartWeek()
+  // Keyed to its week: a Start still out for a week no longer shown never says "Starting…" on this week's card.
+  const [startingWeek, setStartingWeek] = useState<string | null>(null)
+  const starting = startingWeek === weekStart
+  const startNoticeRef = useRef<HTMLDivElement>(null)
+  // The week on screen now, for an answer that comes back after a week move (the brief, 2.4).
+  const shownWeek = useRef(weekStart)
+  useLayoutEffect(() => { shownWeek.current = weekStart }, [weekStart])
+  // The card has gone (the board says started) by the time a notice is set, so focus goes to the notice, never to body.
+  useEffect(() => { if (startNotice) startNoticeRef.current?.focus() }, [startNotice])
+
+  /** Moves the board to another week. Its notices (Start's result, a regular's change) belong to the week they were about (the brief, 2.3 and 5.2). */
+  function showWeek(target: string) {
+    setWeekStart(target)
+    setStartNotice(null)
+  }
+
+  async function handleStartWeek() {
+    const week = weekStart
+    const span = formatWeekSpan(days)
+    setAssignError(null)
+    setStartingWeek(week)
+    try {
+      const result = await startWeek.mutateAsync(week)
+      if (shownWeek.current !== week) { setAnnouncement(startResultTitle(span, result)); return }
+      setStartNotice({ kind: 'started', result })
+    } catch (err: unknown) {
+      // Lead decision 4: PR 1's code says "already started" (two coordinators at once); anything else, busy included, is an error in the server's words.
+      const already = apiErrorStatus(err) === 409 && apiErrorCode(err) === 'roster-week-started'
+      const words = already ? ALREADY_STARTED : extractErrorMessage(err, START_FAILED)
+      if (shownWeek.current !== week) { setAnnouncement(words); return }
+      if (already) setStartNotice({ kind: 'already' })
+      else setAssignError(words)
+    } finally {
+      setStartingWeek(null)
+    }
+  }
 
   async function handlePublishWeek() {
     try {
@@ -416,6 +463,12 @@ export default function RosterBoardPage() {
       : board.staffRows.every(r => r.shifts.length === 0) && board.unfilled.length === 0
   )
 
+  const dismissNotice = (onClick: () => void) => (
+    <Button variant="ghost" size="sm" iconOnly onClick={onClick} aria-label="Dismiss notice">
+      <X className="h-4 w-4" />
+    </Button>
+  )
+
   const grid = filteredBoard && (
     <RosterGrid
       board={filteredBoard}
@@ -448,9 +501,9 @@ export default function RosterBoardPage() {
 
         <WeekToolbar
           days={days}
-          onPrevWeek={() => setWeekStart(w => shiftWeek(w, -1))}
-          onThisWeek={() => setWeekStart(weekStartOf(new Date()))}
-          onNextWeek={() => setWeekStart(w => shiftWeek(w, 1))}
+          onPrevWeek={() => showWeek(shiftWeek(weekStart, -1))}
+          onThisWeek={() => showWeek(weekStartOf(new Date()))}
+          onNextWeek={() => showWeek(shiftWeek(weekStart, 1))}
           groupBy={groupBy}
           onGroupByChange={setGroupBy}
           participantOptions={participantOptions}
@@ -466,7 +519,7 @@ export default function RosterBoardPage() {
           canWrite={canWrite}
           onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
           allPublished={!!board && !unstarted && !weekHasNoShifts && drafts.length === 0}
-          newShiftSecondary={publishable.length > 0}
+          newShiftSecondary={unstarted || publishable.length > 0}
         />
       </div>
 
@@ -487,6 +540,28 @@ export default function RosterBoardPage() {
             </Callout>
           )}
           {hasNotice && <PendingAgreementNotice waiting={waiting} />}
+          {startNotice && (
+            // Focus lands here after Start (the brief, 2.4), so neither Callout announces itself as well.
+            <div ref={startNoticeRef} tabIndex={-1} className="flex flex-col gap-[var(--section-gap)] outline-none">
+              {startNotice.kind === 'started' ? (
+                <>
+                  <Callout tone="success" announce={false} title={startResultTitle(formatWeekSpan(days), startNotice.result)} actions={dismissNotice(() => setStartNotice(null))}>
+                    {startResultBody(startNotice.result)}
+                  </Callout>
+                  <BudgetWarnings
+                    warnings={startBudgetWarnings(startNotice.result)}
+                    note="This is a warning only. The shifts were made."
+                    announce={false}
+                    onDismiss={() => setStartNotice({ kind: 'started', result: { ...startNotice.result, budgetWarnings: undefined } })}
+                  />
+                </>
+              ) : (
+                <Callout tone="info" announce={false} title={ALREADY_STARTED} actions={dismissNotice(() => setStartNotice(null))}>
+                  Someone started it a moment ago, so nothing was added twice. The board shows what's on the roster now.
+                </Callout>
+              )}
+            </div>
+          )}
           {assignError && (
             <Callout
               tone="error"
@@ -524,7 +599,7 @@ export default function RosterBoardPage() {
       {/* The grid always renders, even for a week with zero shifts — that empty grid is the
           add-a-shift affordance. Guidance for a first-time/empty week is this dismissible hint
           above the grid, never a replacement for it. */}
-      {!isLoading && !isError && filteredBoard && weekHasNoShifts && !hintDismissed && !hasNotice && (
+      {!isLoading && !isError && filteredBoard && weekHasNoShifts && !hintDismissed && !hasNotice && !unstarted && (
         <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface-container-low p-[var(--card-pad)]">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
@@ -549,7 +624,40 @@ export default function RosterBoardPage() {
         </div>
       )}
 
-      {!isLoading && !isError && grid && (
+      {!isLoading && !isError && grid && (unstarted ? (
+        // The brief, 2.2: one grid cell, two layers. Below, the week's grid, faded, inert (no pointer, no Tab, no drop target) and hidden from assistive tech;
+        // above it, outside the scrolling frame so it never scrolls away sideways, the card. No scrim and no blur: the faded grid reads as dormant paper.
+        <div className="grid grid-cols-[minmax(0,1fr)]">
+          <div inert aria-hidden="true" className="col-start-1 row-start-1 min-w-0 opacity-40">{grid}</div>
+          <div className="col-start-1 row-start-1 flex min-w-0 items-start justify-center pt-12 pb-6 md:items-center md:py-6">
+            <section aria-labelledby="start-week-heading" aria-busy={starting || undefined} className="w-[min(24rem,calc(100%_-_2*var(--card-pad)))]">
+              <Card className="p-[calc(2*var(--card-pad))]! shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)]">
+                <div className="flex items-center gap-2">
+                  <CalendarPlus className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <h3 id="start-week-heading" className="font-display text-base font-semibold text-foreground">This week hasn't been started</h3>
+                </div>
+                {canWrite ? (
+                  <>
+                    <p className="mt-2 text-sm text-muted-foreground">Adds the week's scheduled shifts from approved agreements, with the regular on each one where they're free. Staff see nothing until you publish.</p>
+                    {boardShifts.length > 0 && <p className="mt-2 text-sm text-muted-foreground">{alreadyInWeekLine(boardShifts.length)}</p>}
+                    {/* aria-disabled, not disabled, while it runs: a disabled button drops focus to body, and a failure must leave focus here (the brief, 2.4). */}
+                    <Button
+                      size="lg"
+                      className="mt-4 w-full md:w-auto aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                      aria-disabled={starting || undefined}
+                      onClick={() => { if (!starting) void handleStartWeek() }}
+                    >
+                      {starting ? 'Starting…' : `Start rostering ${formatWeekSpan(days)}`}
+                    </Button>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">A coordinator starts each week's rostering.</p>
+                )}
+              </Card>
+            </section>
+          </div>
+        </div>
+      ) : (
         // In every mode, not only while drag is on: the plus, and a pick's pending look, reach phones and the Staff view too (SHAPE departure 15). The DndContext stays drag-only.
         <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
           {dragOn ? (
@@ -576,7 +684,7 @@ export default function RosterBoardPage() {
             </DndContext>
           ) : grid}
         </DropStateContext.Provider>
-      )}
+      ))}
 
       <ShiftSlideOver
         key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `shift-${slideOverTarget.shift.id}` : 'shift-new') : 'shift-closed'}
