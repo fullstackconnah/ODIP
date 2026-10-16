@@ -422,7 +422,7 @@ describe('Shift completions group — the queue changes while it is read (lil du
   }
 
   it('keeps a clean row visible and actionable when a page-one row is decided between page requests', async () => {
-    let rows: Array<Record<string, unknown>> = [
+    let rows: Array<ReturnType<typeof item>> = [
       ...Array.from({ length: 200 }, (_, i) => item({ shiftId: `f${i}`, staffName: `Flagged ${i}`, isOutlierVariance: true })),
       item({ shiftId: 'x', staffName: 'Xavier Reed' }),
     ]
