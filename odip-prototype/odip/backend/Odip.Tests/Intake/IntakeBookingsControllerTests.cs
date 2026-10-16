@@ -501,6 +501,27 @@ public class IntakeBookingsControllerTests
     }
 
     [Fact]
+    public async Task A_converted_enquirys_email_that_cant_take_the_invite_books_without_one_and_Resend_stays_refused()
+    {
+        // D7 makes a converted enquiry's email read-only, so the coordinator can't fix it: it books as no email (the staff notice, no invite).
+        var f = new Fixture(contactEmail: "a b@c.d");
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).ParticipantId = Guid.NewGuid();
+        f.Db.SaveChanges();
+
+        var booked = Ok<ParticipantInquiryDto>((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result!);
+
+        Assert.Equal(Start, booked.IntakeStartsAt);
+        Assert.Empty(f.Channel.Sent);
+        var row = f.Row();
+        Assert.Equal(((DateTime?)null, (string?)null), (row.IntakeInviteSentAt, row.IntakeInviteError));
+        Assert.Equal("a b@c.d", row.Email);
+        Assert.Single(f.Outbox());
+
+        var resend = await f.Controller().Resend(f.Noah.Id, CancellationToken.None);
+        Assert.Equal(new[] { "Add the main contact's email to send the invite." }, Problems(resend.Result!)["contactEmail"]);
+    }
+
+    [Fact]
     public async Task A_converted_enquirys_booking_never_changes_its_email()
     {
         var f = new Fixture(contactEmail: null);

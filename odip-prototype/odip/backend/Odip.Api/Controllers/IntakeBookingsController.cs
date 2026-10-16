@@ -95,7 +95,8 @@ public class IntakeBookingsController : ControllerBase
             errors["staffUserId"] = [$"{staff.FirstName} can't do intakes. Choose an active coordinator or admin."];
         var email = inquiry.Email ?? givenEmail;
         // L7: no email books the visit without an invite. An address that can't take one is still refused, on the field that holds it.
-        if (sends && email is not null && !IsSendable(email))
+        // A converted enquiry's email is read-only (D7), so one that can't take the invite books as no email instead of leaving the visit stuck.
+        if (sends && email is not null && !IsSendable(email) && inquiry.ParticipantId is null)
             errors["contactEmail"] = [inquiry.Email is null ? "Enter a full email address, like name@example.com." : "This email can't take the invite. Check it on the enquiry, or clear it there to book without one."];
         if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
         // D4: whoever goes must be free. Checked only when the visit's time, length or person changes, so notes or a new place still save after a shift
@@ -142,7 +143,7 @@ public class IntakeBookingsController : ControllerBase
         if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
 
         // With no email nothing is sent and nothing recorded: the last send's time and error stay as they were (null on a new booking).
-        if (from is not null && inquiry.Email is not null)
+        if (from is not null && inquiry.Email is not null && IsSendable(inquiry.Email))
         {
             // Saved first, then sent, so an invite never goes out for a booking that failed to save. The send and the stored outcome do not take the
             // request's token: a browser that goes away mid-send must not abort an invite the saved booking promises (the sender bounds it at 30 s).
