@@ -186,26 +186,34 @@ public class RosterWeekClearTests
     }
 
     [Fact]
-    public async Task AnOrganisationWithOnlyUntouchedFutureWeeks_IsMarkedDone_SoASecondRunSkipsIt()
+    public async Task AnOrganisationWithOnlyUntouchedFutureWeeks_IsCleared_AndGetsNoRow_SoItsCurrentWeekCanStillBeStarted()   // DEEP-S2: no forced current-week row
     {
         var options = NewSet(db => Untouched(db, Next));
 
-        var first = await RunAsync(options);
-        Assert.Equal((1, 1), (first.ShiftsRemoved, first.WeeksCleared));
-        Assert.Equal(new[] { Current }, Rows(options));
+        var run = await RunAsync(options);
 
-        Guid generated = default;
-        Seed(options, db =>
+        Assert.Equal((1, 1, 0), (run.ShiftsRemoved, run.WeeksCleared, run.WeeksMarked));
+        Assert.Empty(Rows(options));
+    }
+
+    [Theory]
+    [InlineData("one-off")]
+    [InlineData("cancelled-pattern-shift")]
+    public async Task AWeekHoldingNoLivePatternShift_IsKept_ButNotMarkedStarted(string holds)   // DEEP-S2: the backfill follows the StartedWeeks rule
+    {
+        var week = new DateOnly(2026, 10, 26);
+        var options = NewSet(db =>
         {
-            Untouched(db, new DateOnly(2026, 10, 27)).ShiftPatternId = null;   // a one-off typed later
-            generated = Untouched(db, new DateOnly(2026, 11, 2)).Id;            // a Generate whose row was lost
+            var shift = Untouched(db, week);
+            if (holds == "one-off") { shift.ShiftPatternId = null; shift.Status = ShiftStatus.Published; }
+            else shift.Status = ShiftStatus.Cancelled;
         });
 
-        var second = await RunAsync(options);
+        var run = await RunAsync(options);
 
-        Assert.Equal(1, second.AlreadyDone);
-        Assert.Equal(new[] { Current }, Rows(options));
-        Assert.Contains(generated, ShiftIds(options));
+        Assert.Equal(0, run.ShiftsRemoved);
+        Assert.Single(ShiftIds(options));
+        Assert.Empty(Rows(options));
     }
 
     [Fact]

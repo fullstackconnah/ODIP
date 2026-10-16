@@ -14,7 +14,7 @@ public sealed record RosterWeekClearRun(int Organisations, int AlreadyDone, int 
 /// <summary>
 /// Start rostering's one-off (2026-10-16, L7). For each organisation with shifts, in one transaction under its board lock:
 /// - logs what it will do, then removes every week after the provider's current week whose shifts are all untouched (an open Draft an agreement pattern made that nobody edited, wrote on or recorded against);
-/// - marks every week that still holds a shift as started (a RosterWeek row), past and current weeks included, and always the current week.
+/// - marks every week that still holds a live pattern shift as started (a RosterWeek row, the StartedWeeks rule), past and current weeks included.
 /// It removes through EF, so each removed shift gets its audit row. An organisation that already has a RosterWeek row is skipped: it was done, or Start ran there, and a week Start made is never cleared.
 /// </summary>
 // shortcut: runs at startup while RosterWeekClear:Enabled is true; delete this class, its tests, its Program.cs call and its compose line in the PR after the deploy that ran it.
@@ -63,6 +63,8 @@ public static class RosterWeekClear
         var shifts = await db.Shifts.IgnoreQueryFilters().AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => new
         {
             s.Id, s.ServiceDate,
+            // DEEP-S2: the StartedWeeks rule, so the backfill marks only weeks the board already reads as started.
+            Started = s.ShiftPatternId != null && s.Status != ShiftStatus.Cancelled,
             // shortcut: an edit within a second of the shift's creation counts as untouched (CreatedAt and UpdatedAt are separate UtcNow reads); add an edited flag if that ever matters.
             Untouched = s.Status == ShiftStatus.Draft && s.UserId == null && s.ShiftPatternId != null && s.ReturnCount == 0 && s.UpdatedAt <= s.CreatedAt.AddSeconds(1)
                 // DEEP-S1: only an agreement pattern's shift: Start makes those again, never a hand-made pattern's.
@@ -75,8 +77,9 @@ public static class RosterWeekClear
 
         var weeks = shifts.GroupBy(s => RosterWeek.MondayOf(s.ServiceDate)).ToList();
         var clear = weeks.Where(w => w.Key >= firstClearable && w.All(s => s.Untouched)).ToList();
-        // M3: the current week always gets its row (it is never cleared), so every organisation processed is skipped by the R5 guard at every later start.
-        var keep = weeks.Except(clear).Select(w => w.Key).Append(currentMonday).Distinct().OrderBy(w => w).ToList();
+        // A week with no live pattern shift (one-offs only, or Cancelled only, or empty) gets no row, so Start still works there. A re-run is then guarded by the rows Start and
+        // Generate write; an organisation left with no row is judged again, which only matters while the flag stays on.
+        var keep = weeks.Except(clear).Where(w => w.Any(s => s.Started)).Select(w => w.Key).OrderBy(w => w).ToList();
         var ids = clear.SelectMany(w => w.Select(s => s.Id)).ToList();
         logger.LogInformation("Roster week clear, organisation {TenantId}: removing {Shifts} untouched shifts in {Weeks} weeks ({Mondays}); marking {Kept} weeks started",
             tenantId, ids.Count, clear.Count, string.Join(", ", clear.Select(w => w.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))), keep.Count);

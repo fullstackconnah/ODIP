@@ -98,7 +98,7 @@ public class RosterWeekClearPostgresTests : IClassFixture<PostgresFixture>
         Assert.True(await read.ShiftNotes.AnyAsync(n => n.Id == noteId));
         Assert.Equal(w3, (await read.BookingTasks.SingleAsync(t => t.Id == taskId)).ShiftId);
         Assert.Equal(w4, (await read.IncidentReports.SingleAsync(i => i.Id == incidentId)).ShiftId);
-        Assert.Equal(new[] { Current, W2, W3, W4 }, await read.RosterWeeks.Where(w => w.TenantId == org.TenantId).Select(w => w.WeekStart).OrderBy(d => d).ToListAsync());
+        Assert.Equal(new[] { W2, W3, W4 }, await read.RosterWeeks.Where(w => w.TenantId == org.TenantId).Select(w => w.WeekStart).OrderBy(d => d).ToListAsync());
         var deleted = await read.AuditLogs.Where(a => a.Action == AuditAction.Deleted && a.ChangedByName == RosterWeekClear.ActorName).Select(a => a.EntityId).ToListAsync();
         Assert.Equal(new[] { w1a, w1b }.OrderBy(id => id), deleted.OrderBy(id => id));
     }
