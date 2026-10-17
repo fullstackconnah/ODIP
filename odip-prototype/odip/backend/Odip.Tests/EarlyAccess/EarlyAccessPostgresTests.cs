@@ -643,6 +643,21 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task ARunAt28Feb2028_2300_TakesAll28Feb2027_AndKeeps1Mar2027()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        // Fixed dates, no cutoff helper: the call site must hand the purge the 29 Feb bound (a year back from 2028-02-29 is 28 Feb 2027, all of it).
+        var late28Feb = await SeedRowAsync("late-28-feb", new DateTime(2027, 2, 28, 23, 30, 0, DateTimeKind.Utc), new DateTime(2027, 2, 28, 23, 30, 0, DateTimeKind.Utc));
+        var due1Mar = await SeedRowAsync("due-1-mar", new DateTime(2027, 3, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2027, 3, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        await Purger().PurgeExpiredAsync(new DateTime(2028, 2, 28, 23, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        Assert.False(await check.EarlyAccessRequests.AnyAsync(e => e.Id == late28Feb.Id), "due 2028-02-28 23:30, so gone by the 23:00 run");
+        Assert.True(await check.EarlyAccessRequests.AnyAsync(e => e.Id == due1Mar.Id), "due 2028-03-01, so kept");
+    }
+
+    [SkippableFact]
     public async Task ThePurge_RunsWhenTheServiceStarts()
     {
         Skip.IfNot(_pg.Available, _pg.UnavailableReason);

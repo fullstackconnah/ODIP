@@ -36,13 +36,17 @@ public class EarlyAccessRetentionCutoffTests
         Assert.True(created > EarlyAccessPurgeBackgroundService.RetentionCutoff(due - Interval - TimeSpan.FromDays(1) - TimeSpan.FromMinutes(1)));
     }
 
-    [Fact]
-    public void EveryDayOf2024AtSeveralTimes_IsNeverKeptPastItsAnniversary_AndNeverDeletedMoreThanADayEarly()
+    // 2023 and 2027 are the years before a leap year (their 28 Feb is due on a bound that lands on 29 Feb); 2024 holds the 29 Feb rows.
+    [Theory]
+    [InlineData(2023)]
+    [InlineData(2024)]
+    [InlineData(2027)]
+    public void EveryDayOfTheYearAtSeveralTimes_IsNeverKeptPastItsAnniversary_AndNeverDeletedMoreThanADayEarly(int year)
     {
-        foreach (var day in Enumerable.Range(0, 366))
-            foreach (var time in new[] { TimeSpan.Zero, TimeSpan.FromHours(12), new TimeSpan(23, 59, 59) })
+        foreach (var day in Enumerable.Range(0, DateTime.IsLeapYear(year) ? 366 : 365))
+            foreach (var time in new[] { TimeSpan.Zero, TimeSpan.FromHours(12), new TimeSpan(23, 30, 0), new TimeSpan(23, 59, 59) })
             {
-                var created = Utc(2024, 1, 1).AddDays(day) + time;
+                var created = Utc(year, 1, 1).AddDays(day) + time;
                 var due = created.AddMonths(12);
                 // The run that lands on the due instant, and any later one, has it in range.
                 Assert.True(created <= EarlyAccessPurgeBackgroundService.RetentionCutoff(due), $"{created:u} survived its anniversary");
@@ -50,5 +54,17 @@ public class EarlyAccessRetentionCutoffTests
                 var tooEarly = due - Interval - TimeSpan.FromDays(1) - TimeSpan.FromSeconds(1);
                 Assert.True(created > EarlyAccessPurgeBackgroundService.RetentionCutoff(tooEarly), $"{created:u} deleted more than a day early");
             }
+    }
+
+    [Fact]
+    public void ARunOn29FebInALeapYear_TakesEveryPreviousYear28Feb_AndNothingFrom1Mar()
+    {
+        // The start-up run after the API was down over the evening of 28 Feb 2028: no run saw the 23:00 bound that reaches 29 Feb.
+        foreach (var run in new[] { Utc(2028, 2, 29, 0), Utc(2028, 2, 29, 12), Utc(2028, 2, 29, 22, 59) })
+        {
+            var cutoff = EarlyAccessPurgeBackgroundService.RetentionCutoff(run);
+            Assert.True(Utc(2027, 2, 28, 23, 59) <= cutoff, $"run {run:u} missed 28 Feb 2027 23:59");
+            Assert.True(Utc(2027, 3, 1) > cutoff, $"run {run:u} took 1 Mar 2027");
+        }
     }
 }

@@ -4,7 +4,7 @@ The landing page tells people: "We keep them until the alpha ends, for 12 months
 
 ## What the system does on its own
 
-- `EarlyAccessPurgeBackgroundService` runs once when the API starts and then every hour. It deletes each sign-up whose first send (`CreatedAtUtc`) is 12 months ago or longer. The cutoff is one interval (1 hour) early, and it is computed as the inverse of `CreatedAtUtc.AddMonths(12)` (a 29 Feb sign-up is due 28 Feb the next year), so a row is gone at least an hour before its 12 months, never after, and at most a day early around 28 Feb.
+- `EarlyAccessPurgeBackgroundService` runs once when the API starts and then every hour. It deletes each sign-up whose first send (`CreatedAtUtc`) is 12 months ago or longer. The cutoff is one interval (1 hour) early, and it is computed as the inverse of `CreatedAtUtc.AddMonths(12)` (a 29 Feb sign-up is due 28 Feb the next year), so a row is gone at least an hour before its 12 months, never after, and about a day early around 28 Feb.
 - A repeat sign-up does not restart the 12 months, and it never overwrites the stored answers. One whose answers differ is kept as a later submission (up to 10 per sign-up). After those 10, only the newest further repeat is kept, in one over-limit row that each new one replaces, with a count of how many there were. All of it is deleted with the sign-up, by the purge and by a SuperAdmin's Delete.
 - It writes no audit rows for the purge. The log line "Deleted N early-access sign-ups ..." gives a count only.
 
