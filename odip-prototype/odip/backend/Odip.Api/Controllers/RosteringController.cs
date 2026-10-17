@@ -1596,7 +1596,9 @@ public class RosteringController : ControllerBase
         if (pattern.SourceDraftId is { } source) return AgreementPatternConflict(source, AgreementPatternDeleteMessage);
 
         _db.ShiftPatterns.Remove(pattern);
-        await _db.SaveChangesAsync(ct);
+        // The regular is a concurrency token, so a SetRegular that commits between the load and the delete makes this a 409 (reload and delete again), not a 500.
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<bool>.Fail(PatternChangedMessage)); }
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
@@ -1609,7 +1611,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<GeneratePatternResultDto>>> GeneratePattern(
         Guid id, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
     {
-        var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
+        // Not tracked: the generator takes the participant lock and then loads the pattern tracked, and a tracked copy read here would be returned to it stale (a SetRegular committing in between would make its save a concurrency 500).
+        var pattern = await _db.ShiftPatterns.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<GeneratePatternResultDto>.Fail("Pattern not found."));
         if (!(await ParticipantReadiness.CheckAsync(_db, pattern.ParticipantId, ct)).Allowed)
             return BadRequest(ApiResponse<GeneratePatternResultDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
@@ -1938,6 +1941,7 @@ public class RosteringController : ControllerBase
             return Conflict(ApiResponse<ShiftPatternDto>.Fail("This shift's agreement pattern has ended, so it has no regular to change.", PatternEndedCode));
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
+        // shortcut: a client that omits ExpectedRegularId (a tab opened before this deploy) skips this check and can still send a stale Stop; the token below only catches a change between our load and save. Such tabs are protected after one reload; upgrade by requiring the field once old tabs are gone.
         // REV281B: the regular the coordinator was shown must still be the live one. DefaultUserId is also a concurrency token, so a change between this load and the save is refused at the UPDATE.
         if (dto.ExpectedRegularId is { } seen && (seen == Guid.Empty ? null : seen) != pattern.DefaultUserId)
             return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage));
@@ -2102,8 +2106,10 @@ public class RosteringController : ControllerBase
     private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
     private const string ShiftLockedForParticipantMessage = "This shift has started, finished or been cancelled, so its participant can't be changed here.";
 
-    /// <summary>What a drop made on an out-of-date board is refused with (409): /assign with ExpectedStaffId, and move-staff.</summary>
+    /// <summary>What a pattern edit or delete made on an out-of-date page is refused with (409): UpdatePattern and DeletePattern when the regular changed under them.</summary>
     private const string PatternChangedMessage = "This pattern changed after you opened it. Reload and try again.";
+
+    /// <summary>What a drop made on an out-of-date board is refused with (409): /assign with ExpectedStaffId, and move-staff.</summary>
     private const string BoardChangedMessage = "This shift changed after the board was loaded. Refresh the board and try again.";
 
     /// <summary>The shift as it would be with <paramref name="userId"/> on it: the candidate the roster check judges.</summary>

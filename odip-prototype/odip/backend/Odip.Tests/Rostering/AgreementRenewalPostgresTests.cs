@@ -237,4 +237,38 @@ public class AgreementRenewalPostgresTests : IClassFixture<PostgresFixture>
             ParticipantId = participantId, DefaultStaffId = null, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Ratio = SupportRatio.OneToOne,
             NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true,
         }, default));
+
+    /// <summary>REV281B fix round 2: the opposite order. Generate reads the pattern, then waits for the participant lock; a SetRegular commits while it waits. The pattern Generate works on must be the committed
+    /// one: a copy read before the lock and kept tracked would carry the old regular into the shifts and make the save a concurrency error (a 500).</summary>
+    [SkippableFact]
+    public async Task GeneratePattern_ARegularChangeCommitsWhileItWaitsForTheLock_UsesTheNewRegular()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId, _, alexId, patternId, _) = await SeedRegularAsync();
+        await using (var setup = Open(cs, tenantId))                                        // the week Generate starts records who started it
+        {
+            setup.Users.Add(new User { Id = RosterStartWeekTests.CoordinatorId, TenantId = tenantId, FirstName = "Co", LastName = "Ordinator", Username = "co", Email = "co@example.com", Role = UserRole.Coordinator, Position = Position.SupportWorker, IsActive = true });
+            await setup.SaveChangesAsync();
+        }
+        await using var other = Open(cs, tenantId);
+        await using var held = await RosterGenerationLock.AcquireAsync(other, participantId, default, TimeSpan.FromSeconds(20));
+        Assert.True(held.Held);
+
+        await using var generating = Open(cs, tenantId);
+        var generation = RosterStartWeekTests.Controller(generating, Mock.Of<ICurrentTenant>(t => t.TenantId == tenantId))
+            .GeneratePattern(patternId, new DateOnly(2026, 10, 1), new DateOnly(2026, 11, 1), default);   // from the pattern's start, so it joins on and records GeneratedThrough (the save the token guards)
+        await Task.Delay(750);
+        Assert.False(generation.IsCompleted);                                               // past its preload, waiting for the lock
+
+        await using (var change = Open(cs, tenantId))                                       // a SetRegular commits in between
+        {
+            (await change.ShiftPatterns.SingleAsync(p => p.Id == patternId)).DefaultUserId = alexId;
+            await change.SaveChangesAsync();
+        }
+        await held.CommitAsync(default);
+
+        Assert.IsType<OkObjectResult>((await generation).Result);
+        await using var check = Open(cs, tenantId);
+        Assert.Equal(alexId, Assert.Single(await check.Shifts.AsNoTracking().Where(s => s.ShiftPatternId == patternId && s.ServiceDate == new DateOnly(2026, 10, 26)).ToListAsync()).UserId);
+    }
 }

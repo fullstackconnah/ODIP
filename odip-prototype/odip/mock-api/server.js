@@ -2989,10 +2989,11 @@ const putRoutes = [
       return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
     const regular = body && body.staffId ? staff.find((s) => s.id === body.staffId) : null
     if (body && body.staffId && !regular) return respond(400, failEnvelope(null, ['Staff member not found.']))
-    // REV281B: a renewal's later same-support patterns take it too, as the server does.
-    const slot = (p) => [p.participantId, p.dayOfWeek, p.startTime, p.endTime, !!p.endsNextDay, p.workerSlot, p.ratio, p.nightType].join('|')
+    // REV281B: a renewal's later same-support patterns take it too, as the server does: only those whose regular is still the replaced one (a regular chosen on the renewal stays). The asks of a worker are part of the slot (SameSupport).
+    const slot = (p) => [p.participantId, p.dayOfWeek, p.startTime, p.endTime, !!p.endsNextDay, p.workerSlot, p.ratio, p.nightType, JSON.stringify(p.requirements ?? {})].join('|')
+    const was = pattern.defaultStaffId || null
     for (const next of rosterPatterns) {
-      if (next.id !== pattern.id && next.isActive && pattern.effectiveTo && next.effectiveFrom > pattern.effectiveTo && slot(next) === slot(pattern)) {
+      if (next.id !== pattern.id && next.isActive && pattern.effectiveTo && next.effectiveFrom > pattern.effectiveTo && (next.defaultStaffId || null) === was && slot(next) === slot(pattern)) {
         next.defaultStaffId = regular ? regular.id : null
         next.defaultStaffName = regular ? regular.fullName : null
       }
