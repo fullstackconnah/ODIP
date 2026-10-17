@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Odip.Api.Controllers;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Xunit;
 using static Odip.Tests.Security.CrossTenant;
@@ -61,5 +62,42 @@ public class ArchiveRestoreTests
 
         Assert.IsType<NotFoundObjectResult>((await new AccommodationController(db).Restore(p.Id, CancellationToken.None)).Result);
         Assert.IsType<NotFoundObjectResult>((await new VehiclesController(db).Restore(v.Id, CancellationToken.None)).Result);
+    }
+
+    // An edit form loaded before someone else archived (or restored) the row sends the flag it loaded; only Archive and Restore may change it.
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task AccommodationEdit_LeavesIsActiveAlone(bool storedActive, bool bodyActive)
+    {
+        using var db = Db();
+        var p = new AccommodationProperty { Id = Guid.NewGuid(), TenantId = A, PropertyName = "Beach house", IsActive = storedActive };
+        db.AccommodationProperties.Add(p);
+        db.SaveChanges();
+
+        var result = await new AccommodationController(db).Update(p.Id, new UpdateAccommodationDto { PropertyName = "Renamed", IsActive = bodyActive }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var after = db.AccommodationProperties.Single(x => x.Id == p.Id);
+        Assert.Equal("Renamed", after.PropertyName);
+        Assert.Equal(storedActive, after.IsActive);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task VehicleEdit_LeavesIsActiveAlone(bool storedActive, bool bodyActive)
+    {
+        using var db = Db();
+        var v = new Vehicle { Id = Guid.NewGuid(), TenantId = A, VehicleName = "Bus", IsActive = storedActive };
+        db.Vehicles.Add(v);
+        db.SaveChanges();
+
+        var result = await new VehiclesController(db).Update(v.Id, new UpdateVehicleDto { VehicleName = "Renamed", IsActive = bodyActive }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var after = db.Vehicles.Single(x => x.Id == v.Id);
+        Assert.Equal("Renamed", after.VehicleName);
+        Assert.Equal(storedActive, after.IsActive);
     }
 }

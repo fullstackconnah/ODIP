@@ -124,11 +124,11 @@ describe('AccommodationCreatePage — editing a record that has not loaded', () 
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 
-  it('saves the loaded isActive, so an inactive record stays inactive', async () => {
+  it('does not send isActive: only Archive and Restore change it', async () => {
     mockUpdateMutateAsync.mockResolvedValue({ success: true })
     mockUseAccommodationDetail.mockReturnValue({ data: property, isLoading: false, isError: false, refetch: vi.fn() })
     renderEditPage()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
-    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'a1', data: expect.objectContaining({ propertyName: 'Sea View', isActive: false }) })
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).not.toHaveProperty('isActive')
   })
 })

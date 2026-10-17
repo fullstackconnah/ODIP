@@ -89,7 +89,7 @@ export default function VehicleCreatePage() {
     }
     try {
       if (isEdit) {
-        const res = await updateVehicle.mutateAsync({ id, data: { ...payload, isActive: existing!.isActive } })
+        const res = await updateVehicle.mutateAsync({ id, data: payload })
         if (res.success) {
           flushSync(() => reset(data))
           navigate('/vehicles')

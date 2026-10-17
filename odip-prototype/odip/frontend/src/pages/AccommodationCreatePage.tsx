@@ -107,7 +107,7 @@ export default function AccommodationCreatePage() {
     }
     try {
       if (isEdit) {
-        const res = await updateAccommodation.mutateAsync({ id, data: { ...payload, isActive: existing!.isActive } })
+        const res = await updateAccommodation.mutateAsync({ id, data: payload })
         if (res.success) {
           flushSync(() => reset(data))
           navigate(`/accommodation/${id}`)
