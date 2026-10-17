@@ -9,7 +9,7 @@ namespace Odip.Application.EarlyAccess;
 /// Field rules for the public early-access form's seven fields, and the normalisation the stored values rely on:
 /// every value is trimmed, and the email is lower-cased with the invariant culture so
 /// the unique index on <c>EarlyAccessRequests.Email</c> matches the same person however they type it.
-/// Organisation size, role, phone and message are optional (blank is null). The two free-text rules differ on
+/// Role, phone and message are optional (blank is null); the organisation size is required. The two free-text rules differ on
 /// purpose: a control or bidi character in the one-line role is refused, while the message is cleaned of them.
 ///
 /// Error keys are the camelCase JSON property names of <see cref="EarlyAccessRequestDto"/>; the
@@ -79,8 +79,9 @@ public static class EarlyAccessRequestValidator
         }
 
         var organisationSize = Optional(request?.OrganisationSize);
-        // Optional in PR 1 (expand): the live /welcome form sends none. PR 2 makes it required, with the form that asks for it.
-        if (organisationSize is not null && !OrganisationSizes.Contains(organisationSize, StringComparer.Ordinal))
+        if (organisationSize is null)
+            errors[OrganisationSizeField] = new[] { "Choose your organisation's size." };
+        else if (!OrganisationSizes.Contains(organisationSize, StringComparer.Ordinal))
             errors[OrganisationSizeField] = new[] { "Choose one of the listed sizes." };
 
         var message = CleanMessage(request?.Message);
