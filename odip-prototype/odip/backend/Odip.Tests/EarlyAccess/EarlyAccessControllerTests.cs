@@ -493,8 +493,8 @@ public class EarlyAccessControllerTests
             await MakeController(db, notifier.Object).Submit(
                 new EarlyAccessRequestDto { Name = " Jane ", Organisation = "Org", Email = "JANE@Example.com", OrganisationSize = "under-10" }, CancellationToken.None);
         using (var db = CreateDb(dbName))
-            await MakeController(db, notifier.Object).Submit(
-                new EarlyAccessRequestDto { Name = "Jane", Organisation = "Org", Email = "jane@example.com" }, CancellationToken.None);
+            AssertReceived(await MakeController(db, notifier.Object).Submit(
+                new EarlyAccessRequestDto { Name = "Jane", Organisation = "Org", Email = "jane@example.com", OrganisationSize = "under-10" }, CancellationToken.None));
 
         notifier.Verify(n => n.NotifyNewRequest(It.Is<EarlyAccessNotification>(x =>
             x.Name == "Jane" && x.Organisation == "Org" && x.Email == "jane@example.com"
