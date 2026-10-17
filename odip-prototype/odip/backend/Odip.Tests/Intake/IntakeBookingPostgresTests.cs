@@ -330,17 +330,17 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
     {
         RequirePostgres();
         var (tenantId, sam, admin, x, y) = await BookableAsync();
-        ActionResult<ApiResponse<ParticipantInquiryDto>>? during = null;
+        IActionResult? during = null;
         var (dbB, b) = SuperAdminViewing(tenantId, admin.Id, lockWait: TimeSpan.FromMilliseconds(200));
         await using var _b = dbB;
-        var channel = new SendingChannel(async () => during = await b.Set(y.Id, Body(sam, IntakeBookingsControllerTests.Start.AddHours(3)), CancellationToken.None));
+        var channel = new SendingChannel(async () => during = (await b.Set(y.Id, Body(sam, IntakeBookingsControllerTests.Start.AddHours(3)), CancellationToken.None)).Result);
         var (dbA, a) = SuperAdminViewing(tenantId, admin.Id, channel: channel);
         await using var _a = dbA;
 
         Assert.IsType<OkObjectResult>((await a.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None)).Result);
 
         Assert.NotNull(during);
-        Assert.IsType<OkObjectResult>(during!.Value.Result);
+        Assert.IsType<OkObjectResult>(during);
     }
 
     private sealed class SendingChannel(Func<Task> whileSending) : INotificationChannel
