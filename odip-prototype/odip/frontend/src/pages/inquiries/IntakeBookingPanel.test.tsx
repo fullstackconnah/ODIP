@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntakeBookingPanel } from './IntakeBookingPanel'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 
@@ -29,11 +30,14 @@ const bookedRow = (overrides: Partial<ParticipantInquiryDto> = {}) => newRow({
   intakeStaffName: 'Sam Lee', intakeNotes: 'Gate code', intakeInviteSentAt: '2026-10-14T03:05:00Z', intakeInviteError: null, ...overrides,
 })
 
+// The page hands the panel the list's row; a rerender with a newer row is the list refetching after a refused write.
 function panel(row: ParticipantInquiryDto) {
   const onClose = vi.fn()
   const onRequestCancel = vi.fn()
-  render(<IntakeBookingPanel row={row} onClose={onClose} onRequestCancel={onRequestCancel} />)
-  return { onClose, onRequestCancel }
+  const client = new QueryClient()
+  const ui = (r: ParticipantInquiryDto) => <QueryClientProvider client={client}><IntakeBookingPanel row={r} onClose={onClose} onRequestCancel={onRequestCancel} /></QueryClientProvider>
+  const { rerender } = render(ui(row))
+  return { onClose, onRequestCancel, client, refreshTo: (r: ParticipantInquiryDto) => rerender(ui(r)) }
 }
 
 async function fillNewBooking(user: ReturnType<typeof userEvent.setup>) {
@@ -322,6 +326,86 @@ describe('IntakeBookingPanel: the booked view', () => {
       const alert = await screen.findByText('Someone else just changed this visit. Reload and try again.')
       expect(alert.closest('[tabindex="-1"]')).toHaveFocus()
       expect(screen.getByLabelText(/^Where/)).toHaveValue('Library')
+    })
+
+    it.each([
+      ['Send updated invite', 'save', "Couldn't save the changes"],
+      ['Send again', 'resend', "The invite wasn't sent"],
+      ['Mark confirmed', 'confirm', "The visit wasn't changed"],
+    ] as const)('titles the refusal for %s by what it was', async (button, action, title) => {
+      const user = userEvent.setup()
+      mocks[action].mockRejectedValue(changed)
+      panel(bookedRow({ intakeInviteError: 'Failed' }))
+      await user.type(screen.getByLabelText(/^Where/), ' Library')
+
+      await user.click(screen.getByRole('button', { name: button }))
+
+      expect(await screen.findByText(title)).toBeInTheDocument()
+    })
+
+    it('Reload takes the new version and booking, keeps what was typed, and the next Save sends the new version', async () => {
+      const user = userEvent.setup()
+      mocks.save.mockRejectedValueOnce(changed)
+      const { refreshTo } = panel(bookedRow())
+      await user.clear(screen.getByLabelText(/^Notes for your team/))
+      await user.type(screen.getByLabelText(/^Notes for your team/), 'Gate code 4321')
+      await user.click(screen.getByRole('button', { name: 'Save notes' }))
+      await screen.findByText('Someone else just changed this visit. Reload and try again.')
+
+      // The colleague moved the visit to 11:00 and the list refetched.
+      refreshTo(bookedRow({ updatedAt: 'v9', intakeStartsAt: '2030-10-16T00:00:00Z' }))
+      mocks.save.mockResolvedValue(bookedRow({ updatedAt: 'v10', intakeStartsAt: '2030-10-16T00:00:00Z', intakeNotes: 'Gate code 4321' }))
+      await user.click(screen.getByRole('button', { name: 'Reload' }))
+
+      expect(screen.queryByText('Someone else just changed this visit. Reload and try again.')).not.toBeInTheDocument()
+      expect(screen.getByLabelText(/^Start time/)).toHaveValue('11:00')
+      expect(screen.getByLabelText(/^Notes for your team/)).toHaveValue('Gate code 4321')
+      expect(screen.getByRole('button', { name: 'Save notes' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Save notes' }))
+
+      expect(mocks.save).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ expectedUpdatedAt: 'v9', notes: 'Gate code 4321' }) }))
+      expect(await screen.findByText('Notes saved.')).toBeInTheDocument()
+    })
+
+    it('Reload after a refused Send again shows the new visit and the next Send again sends its version', async () => {
+      const user = userEvent.setup()
+      mocks.resend.mockRejectedValueOnce(changed)
+      const { refreshTo } = panel(bookedRow({ intakeInviteError: 'Failed' }))
+      await user.click(screen.getByRole('button', { name: 'Send again' }))
+      await screen.findByText("The invite wasn't sent")
+
+      refreshTo(bookedRow({ updatedAt: 'v9', intakeLocation: 'Library', intakeInviteError: 'Failed' }))
+      mocks.resend.mockResolvedValue(bookedRow({ updatedAt: 'v10', intakeLocation: 'Library' }))
+      await user.click(screen.getByRole('button', { name: 'Reload' }))
+      expect(screen.getByLabelText(/^Where/)).toHaveValue('Library') // nothing was typed, so the form shows the colleague's visit
+      await user.click(screen.getByRole('button', { name: 'Send again' }))
+
+      expect(mocks.resend).toHaveBeenLastCalledWith({ id: 'inq-1', expectedUpdatedAt: 'v9' })
+    })
+
+    it('Reload waits while the list is still refetching', async () => {
+      const user = userEvent.setup()
+      mocks.confirm.mockRejectedValueOnce(changed)
+      const { client } = panel(bookedRow())
+      const pending = client.fetchQuery({ queryKey: ['participant-inquiries'], queryFn: () => new Promise(() => {}) })
+      void pending.catch(() => {})
+      await user.click(screen.getByRole('button', { name: 'Mark confirmed' }))
+
+      const reload = await screen.findByRole('button', { name: 'Reload' })
+      expect(reload).toHaveAttribute('aria-disabled', 'true')
+      await user.click(reload)
+      expect(screen.getByText('Someone else just changed this visit. Reload and try again.')).toBeInTheDocument()
+    })
+
+    it('a busy staff member (a 409 with a field reason) is shown on its field, with no Reload', async () => {
+      const user = userEvent.setup()
+      mocks.save.mockRejectedValue({ isAxiosError: true, response: { status: 409, data: { success: false, errors: { staffUserId: ['Sam is busy then.'] } } } })
+      panel(bookedRow())
+      await user.type(screen.getByLabelText(/^Where/), ' Library')
+      await user.click(screen.getByRole('button', { name: 'Send updated invite' }))
+
+      expect((await screen.findAllByText('Sam is busy then.')).length).toBeGreaterThan(0)
+      expect(screen.queryByRole('button', { name: 'Reload' })).not.toBeInTheDocument()
     })
   })
 

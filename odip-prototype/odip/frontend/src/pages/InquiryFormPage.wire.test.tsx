@@ -356,7 +356,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     Object.assign(new Error(`Request failed with status code ${status}`), { isAxiosError: true, response: { status, data: { status, errors } } })
   const booked = {
     intakeStartsAt: START, intakeDurationMinutes: 90, intakeLocation: '12 Smith St', intakeStaffUserId: 'sam', intakeStaffName: 'Sam Lee', intakeStaffFirstName: 'Sam',
-    intakeNotes: 'Gate code', intakeInviteSentAt: '2026-10-14T03:05:00Z',
+    intakeNotes: 'Gate code', intakeInviteSentAt: '2026-10-14T03:05:00Z', updatedAt: 'v-booked',
   }
 
   async function fillNewVisit(user: ReturnType<typeof userEvent.setup>) {
@@ -370,7 +370,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
   }
 
   it('a refused booking: the enquiry is saved once, the page is in edit mode with every entry and the reason, and the retry PUTs (one POST in all)', async () => {
-    const saved = detail({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: 'ana@example.com', phone: null, provenance: null, source: 'Phone' })
+    const saved = detail({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: 'ana@example.com', phone: null, provenance: null, source: 'Phone', updatedAt: 'v-new' })
     mockApiPost.mockResolvedValue(saved)
     mockApiPut.mockImplementation(async (url: string) => {
       if (url.endsWith('/intake-booking')) throw problem(409, { staffUserId: ['Dana Smith is on a shift 9:00 – 10:30 am on Wed 16 Oct.'] })
@@ -383,7 +383,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
 
     expect(await screen.findByText("Enquiry saved. The visit isn't booked yet.")).toBeInTheDocument()
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/inq-9/intake-booking',
-      { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null })
+      { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, expectedUpdatedAt: 'v-new' })
     const whoField = screen.getByText('Dana Smith is on a shift 9:00 – 10:30 am on Wed 16 Oct.').closest('[data-field="staffUserId"]')!
     await waitFor(() => expect(whoField.contains(document.activeElement)).toBe(true))   // SHAPE 4: focus on Who's going
     expect(screen.getByLabelText(/^Where/)).toHaveValue('Library')
@@ -402,7 +402,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
   })
 
   it('books the visit after capturing: POST, then the booking PUT with the instant and the signed-in coordinator going, then back to the tab', async () => {
-    const saved = detail({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: 'ana@example.com', provenance: null, source: 'Phone' })
+    const saved = detail({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: 'ana@example.com', provenance: null, source: 'Phone', updatedAt: 'v-new' })
     mockApiPost.mockResolvedValue(saved)
     mockApiPut.mockResolvedValue({ ...saved, intakeStartsAt: START, intakeStaffName: 'Dana Smith', intakeInviteError: 'NotConfigured' })
     const user = userEvent.setup()
@@ -414,13 +414,13 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     await screen.findByText('Enquiries tab destination')
     expect(mockApiPost).toHaveBeenCalledTimes(1)
     expect(mockApiPut).toHaveBeenCalledTimes(1)
-    expect(mockApiPut).toHaveBeenCalledWith('/inquiries/inq-9/intake-booking', { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null })
+    expect(mockApiPut).toHaveBeenCalledWith('/inquiries/inq-9/intake-booking', { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, expectedUpdatedAt: 'v-new' })
     expect(mockApiPut.mock.calls[0][1]).not.toHaveProperty('contactEmail')
     expect(screen.getByTestId('notice')).toHaveTextContent('Enquiry saved, invite not sent:')
   })
 
   it('a booking with no email PUTs the booking with no contactEmail; the notice says "No invite sent: the main contact has no email."', async () => {
-    const saved = detail({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: null, phone: null, provenance: null, source: 'Phone' })
+    const saved = detail({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: null, phone: null, provenance: null, source: 'Phone', updatedAt: 'v-new' })
     mockApiPost.mockResolvedValue(saved)
     mockApiPut.mockResolvedValue({ ...saved, intakeStartsAt: START, intakeStaffName: 'Dana Smith', intakeInviteSentAt: null, intakeInviteError: null })
     const user = userEvent.setup()
@@ -435,7 +435,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
 
     await screen.findByText('Enquiries tab destination')
-    expect(mockApiPut).toHaveBeenCalledWith('/inquiries/inq-9/intake-booking', { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, expectedUpdatedAt: undefined })
+    expect(mockApiPut).toHaveBeenCalledWith('/inquiries/inq-9/intake-booking', { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, expectedUpdatedAt: 'v-new' })
     expect(mockApiPut.mock.calls[0][1]).not.toHaveProperty('contactEmail')
     expect(screen.getByTestId('notice')).toHaveTextContent('Enquiry captured: Intake visit booked for Wed 16 Oct 2030, 10:00 am with Dana Smith. No invite sent: the main contact has no email.')
   })
@@ -452,7 +452,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
 
   it('booked and never sent, with an email typed: "Send the invite to x" is offered; ticked, resend runs after the PUTs', async () => {
     serve({ '/inquiries/i1': detail({ ...booked, email: null, intakeInviteSentAt: null, intakeInviteError: null }) })
-    mockApiPut.mockResolvedValue(detail({ ...booked, email: 'sarah@example.com', intakeInviteSentAt: null }))
+    mockApiPut.mockResolvedValue(detail({ ...booked, email: 'sarah@example.com', intakeInviteSentAt: null, updatedAt: 'v-saved' }))
     mockApiPost.mockResolvedValue(detail({ ...booked, email: 'sarah@example.com', intakeInviteSentAt: '2030-10-02T00:00:00Z' }))
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
@@ -468,7 +468,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
 
     await screen.findByText('Enquiries tab destination')
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', expect.objectContaining({ email: 'sarah@example.com' }))
-    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/intake-booking/send')
+    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/intake-booking/send', { expectedUpdatedAt: 'v-saved' })
     expect(mockApiPut.mock.invocationCallOrder[0]).toBeLessThan(mockApiPost.mock.invocationCallOrder[0])
   })
 
@@ -517,7 +517,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
 
     await screen.findByText('Enquiries tab destination')
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1/intake-booking',
-      { startsAt: START, durationMinutes: 90, location: '12 Smith St', staffUserId: 'sam', notes: 'Gate code 4321' })
+      { startsAt: START, durationMinutes: 90, location: '12 Smith St', staffUserId: 'sam', notes: 'Gate code 4321', expectedUpdatedAt: 'v-booked' })
   })
 
   it('a time change says the save emails an updated invite', async () => {
@@ -540,7 +540,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: 'Cancel visit' }))
 
-    expect(mockApiDeleteRaw).toHaveBeenCalledWith('/inquiries/i1/intake-booking')
+    expect(mockApiDeleteRaw).toHaveBeenCalledWith('/inquiries/i1/intake-booking?expectedUpdatedAt=v-booked')
     const notice = await screen.findByText("We've emailed Sarah a cancellation.")
     expect(screen.getByText('Intake visit cancelled')).toBeInTheDocument()
     await waitFor(() => expect(document.activeElement?.contains(notice)).toBe(true))
@@ -550,7 +550,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
 
   it('Send again: a changed email on a visit whose invite went out offers the box; ticked, Save PUTs and then resends', async () => {
     serve({ '/inquiries/i1': detail(booked) })
-    mockApiPut.mockResolvedValue(detail({ ...booked, email: 'new@example.com' }))
+    mockApiPut.mockResolvedValue(detail({ ...booked, email: 'new@example.com', updatedAt: 'v-saved' }))
     mockApiPost.mockResolvedValue(detail({ ...booked, email: 'new@example.com', intakeInviteSentAt: '2030-10-02T00:00:00Z' }))
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
@@ -566,7 +566,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     await screen.findByText('Enquiries tab destination')
     expect(mockApiPut).toHaveBeenCalledTimes(1)
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', expect.objectContaining({ email: 'new@example.com' }))
-    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/intake-booking/send')
+    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/intake-booking/send', { expectedUpdatedAt: 'v-saved' })
     expect(mockApiPut.mock.invocationCallOrder[0]).toBeLessThan(mockApiPost.mock.invocationCallOrder[0])
     expect(screen.getByTestId('notice')).toHaveTextContent('Invite sent again to new@example.com.')
   })

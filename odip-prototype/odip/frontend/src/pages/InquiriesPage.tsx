@@ -18,7 +18,7 @@ import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase } from '@/lib/queryPhase'
-import { cancelNotice, DEFAULT_DURATION, FALLBACK_ZONE, invitee, isPastVisit, visitDay, type EnquiryNotice } from '@/lib/intakeBooking'
+import { cancelNotice, DEFAULT_DURATION, FALLBACK_ZONE, invitee, isPastVisit, refusalOf, visitDay, type EnquiryNotice } from '@/lib/intakeBooking'
 import { convertRefusal, fullName, startIntakeReason } from '@/lib/inquiryDetails'
 import { CLOSE_OUTCOME_LABELS, closedNotice, reopenedNotice } from '@/lib/inquiryClose'
 import { CloseInquiryDialog } from './inquiries/CloseInquiryDialog'
@@ -133,8 +133,8 @@ function useInquiriesScreen() {
       await confirmVisit.mutateAsync({ id: row.id, confirmed, expectedUpdatedAt: row.updatedAt })
       notify('success', confirmed ? 'Visit confirmed' : 'Marked not confirmed',
         confirmed ? `${nameOf(row)}'s intake visit is marked confirmed.` : `${nameOf(row)}'s intake visit is no longer marked confirmed.`, row.id)
-    } catch {
-      notify('danger', "Couldn't update the visit", `${nameOf(row)}'s visit wasn't changed. Try again.`, row.id)
+    } catch (error) {
+      notify('danger', "Couldn't update the visit", refusalOf(error, `${nameOf(row)}'s visit wasn't changed. Try again.`), row.id)
     }
   }
   const onCancelled = (row: ParticipantInquiryDto, email: CancelIntakeBookingResultDto['cancellationEmail']) => {
@@ -370,7 +370,7 @@ function useInquiriesScreen() {
           ? <DataTable data={filtered} columns={closedColumns} keyField="id" loading={isLoading} sortable emptyMessage="No closed enquiries." onRowClick={canManageParticipantLifecycle ? editExisting : undefined} />
           : <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={canManageParticipantLifecycle ? openRow : undefined} />)}
       <IntakeBookingPanel row={bookingRow} focusDate={booking?.focusDate} onClose={closeBooking} onRequestCancel={setCancelling} />
-      <IntakeCancelDialog row={cancelling} onCancel={() => setCancelling(null)} onDone={onCancelled} />
+      <IntakeCancelDialog row={cancelling && (inquiries.find(r => r.id === cancelling.id) ?? cancelling)} onCancel={() => setCancelling(null)} onDone={onCancelled} />
       {closing && <CloseInquiryDialog row={closing} onCancel={() => setClosing(null)} onDone={onClosed} />}
       {reopening && <ReopenInquiryDialog row={reopening} onCancel={() => setReopening(null)} onDone={onReopened} />}
     </>

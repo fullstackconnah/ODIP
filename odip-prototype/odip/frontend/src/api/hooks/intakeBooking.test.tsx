@@ -62,6 +62,19 @@ describe('intake booking hooks', () => {
     expect(rows[1]).toMatchObject({ id: 'inq-2', intakeStartsAt: '2030-10-16T23:00:00Z' })
   })
 
+  // Book intake, pressed straight after a cancel, opens the panel from this row: it must hold the version the cancel produced.
+  it('takes the new version from the cancel into the cancelled row', async () => {
+    const qc = new QueryClient()
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    qc.setQueryData(['participant-inquiries'], [{ id: 'inq-1', updatedAt: 'v1', intakeStartsAt: '2030-10-15T23:00:00Z' }])
+    vi.mocked(apiDeleteRaw).mockResolvedValueOnce({ success: true, data: { inquiry: { id: 'inq-1', updatedAt: 'v2' }, cancellationEmail: 'NoInvite' } } as never)
+    const { result } = renderHook(() => useCancelIntakeBooking(), { wrapper })
+
+    await result.current.mutateAsync({ id: 'inq-1', expectedUpdatedAt: 'v1' })
+
+    expect(qc.getQueryData<Record<string, unknown>[]>(['participant-inquiries'])![0]).toMatchObject({ updatedAt: 'v2', intakeStartsAt: null })
+  })
+
   it('marks confirmed and sends again with POSTs', async () => {
     const { spy, wrapper } = setup()
     const confirm = renderHook(() => useConfirmIntakeBooking(), { wrapper }).result
