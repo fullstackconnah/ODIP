@@ -9,7 +9,7 @@ namespace Odip.Application.EarlyAccess;
 /// Field rules for the public early-access form's seven fields, and the normalisation the stored values rely on:
 /// every value is trimmed, and the email is lower-cased with the invariant culture so
 /// the unique index on <c>EarlyAccessRequests.Email</c> matches the same person however they type it.
-/// Organisation size, role, phone and message are optional (blank is null). The two free-text rules differ on
+/// Role, phone and message are optional (blank is null); the organisation size is required. The two free-text rules differ on
 /// purpose: a control or bidi character in the one-line role is refused, while the message is cleaned of them.
 ///
 /// Error keys are the camelCase JSON property names of <see cref="EarlyAccessRequestDto"/>; the
@@ -74,11 +74,14 @@ public static class EarlyAccessRequestValidator
                 errors[PhoneField] = new[] { $"Phone must be {MaxPhoneLength.ToString(CultureInfo.InvariantCulture)} characters or fewer." };
             else if (!phone.All(IsPhoneCharacter))
                 errors[PhoneField] = new[] { "Use digits, spaces and + ( ) - only." };
+            else if (!HasPhoneDigits(phone))
+                errors[PhoneField] = new[] { "Enter a phone number with 8 to 15 digits." };
         }
 
         var organisationSize = Optional(request?.OrganisationSize);
-        // Optional in PR 1 (expand): the live /welcome form sends none. PR 2 makes it required, with the form that asks for it.
-        if (organisationSize is not null && !OrganisationSizes.Contains(organisationSize, StringComparer.Ordinal))
+        if (organisationSize is null)
+            errors[OrganisationSizeField] = new[] { "Choose your organisation's size." };
+        else if (!OrganisationSizes.Contains(organisationSize, StringComparer.Ordinal))
             errors[OrganisationSizeField] = new[] { "Choose one of the listed sizes." };
 
         var message = CleanMessage(request?.Message);
@@ -92,6 +95,9 @@ public static class EarlyAccessRequestValidator
     private static string Clean(string? value) => (value ?? string.Empty).Trim();
 
     private static string? Optional(string? value) => Clean(value) is { Length: > 0 } v ? v : null;
+
+    /// <summary>8 to 15 digits (E.164 allows 15), and a + only as the first character: "---" and "1+2345678" are not numbers.</summary>
+    private static bool HasPhoneDigits(string phone) => phone.LastIndexOf('+') <= 0 && phone.Count(char.IsAsciiDigit) is >= 8 and <= 15;
 
     // ASCII only: char.IsDigit also accepts Arabic-Indic, fullwidth and other scripts' digits.
     private static bool IsPhoneCharacter(char c) => c is (>= '0' and <= '9') or ' ' or '+' or '(' or ')' or '-';

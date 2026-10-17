@@ -669,6 +669,51 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("Contacts");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessLaterSubmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EarlyAccessRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Organisation")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("OrganisationSize")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EarlyAccessRequestId");
+
+                    b.ToTable("EarlyAccessLaterSubmissions");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6057,6 +6102,17 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("TripClaim");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessLaterSubmission", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.EarlyAccessRequest", "EarlyAccessRequest")
+                        .WithMany("LaterSubmissions")
+                        .HasForeignKey("EarlyAccessRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EarlyAccessRequest");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ElectronicSigningEvidence", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.ElectronicSigningSnapshot", "Snapshot")
@@ -7154,6 +7210,11 @@ namespace Odip.Infrastructure.Migrations
             modelBuilder.Entity("Odip.Domain.Entities.Contact", b =>
                 {
                     b.Navigation("ParticipantContacts");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessRequest", b =>
+                {
+                    b.Navigation("LaterSubmissions");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ElectronicSigningSnapshot", b =>
