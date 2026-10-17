@@ -159,7 +159,7 @@ public static class ImportParticipantRows
 
         // "N/A", "TBC" or "-" are not numbers: keying on them would make every such row a repeat of the first, or match a stored "TBC".
         var ndisKey = NdisKey(ndis);
-        if (ndis.Length > 0 && !IsNdisNumber(ndisKey)) warnings.Add("NDIS number isn't 9 digits, so it wasn't used to match anyone.");
+        if (ndis.Length > 0 && !IsNdisNumber(ndisKey)) warnings.Add("The NDIS number isn't 9 digits, so this row isn't checked against existing participants. Check the number.");
         var plan = new ImportRowPlan
         {
             RowNumber = rowNumber, Name = $"{first} {last}".Trim(), Participant = dto,

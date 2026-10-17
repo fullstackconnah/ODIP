@@ -122,7 +122,7 @@ public class ImportParticipantRowsTests
         {
             Assert.Equal(ImportRowStatus.Ready, p.Status);
             Assert.Null(p.DuplicateKey);
-            Assert.Equal("NDIS number isn't 9 digits, so it wasn't used to match anyone.", Assert.Single(p.Warnings));
+            Assert.Equal("The NDIS number isn't 9 digits, so this row isn't checked against existing participants. Check the number.", Assert.Single(p.Warnings));
         });
         Assert.Equal("N/A", plans[0].Participant!.NdisNumber);
     }
