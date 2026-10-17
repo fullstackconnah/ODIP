@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
@@ -54,7 +56,7 @@ public class InvoiceService
 
         var participant = booking.Participant;
         var invoiceNumber = $"INV-{claim.ClaimReference}-{booking.Id.ToString("N")[..8].ToUpper()}";
-        var invoiceDate = DateTime.UtcNow;
+        var (invoiceTitle, invoiceDate) = Heading(settings.GSTRegistered, claim, settings.State);
 
         // Bill-to details
         string billToName;
@@ -99,7 +101,7 @@ public class InvoiceService
                         });
                         row.ConstantItem(120).AlignRight().Column(c =>
                         {
-                            c.Item().Text("TAX INVOICE").Bold().FontSize(14);
+                            c.Item().Text(invoiceTitle).Bold().FontSize(14);
                             c.Item().Text(invoiceNumber).FontSize(9);
                             c.Item().Text(invoiceDate.ToString("dd MMM yyyy")).FontSize(9);
                         });
@@ -195,6 +197,11 @@ public class InvoiceService
         var fileName = $"{invoiceNumber}.pdf";
         return (pdfBytes, fileName);
     }
+
+    /// <summary>"TAX INVOICE" only for a GST-registered provider; the date is the claim's own (submitted, else created) in the provider's zone, so a re-download never moves it.</summary>
+    public static (string Title, DateOnly Date) Heading(bool gstRegistered, TripClaim claim, string? state) =>
+        (gstRegistered ? "TAX INVOICE" : "INVOICE",
+         ProviderLocalTime.TodayIn(claim.SubmittedDate ?? claim.CreatedAt, ProviderTimeZoneResolver.FromState(state).Zone));
 
     /// <summary>
     /// GST on the invoice: 10% of the lines coded P1 (tax claimable), rounded to the cent. P2 (GST-free), P5 (out of scope) and the

@@ -50,7 +50,7 @@ public class BprCsvService(OdipDbContext db)
             // Quantity (col 7) blank — Hours (col 8) carries duration per NDIS spec
             // AuthorisedBy, ParticipantApproved, InKindFundingProgram (cols 11-13) are legacy — always blank
             // ABNofSupportProvider (col 16) always blank for agency-managed bookings
-            sb.AppendLine($"{settings.RegistrationNumber},{ndisNumber},{fromDate},{toDate},{item.SupportItemCode},{rowRef},,{hours},{unitPrice},{gstCode},,,{claimType},{cancellationReason},");
+            sb.AppendLine($"{CsvEscape(settings.RegistrationNumber)},{CsvEscape(ndisNumber)},{fromDate},{toDate},{CsvEscape(item.SupportItemCode)},{rowRef},,{hours},{unitPrice},{gstCode},,,,{claimType},{cancellationReason},");
         }
 
         var fileName = $"BPR-{claim.ClaimReference}-{DateTime.UtcNow:yyyyMMdd}.csv";
