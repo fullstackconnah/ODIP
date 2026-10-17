@@ -293,7 +293,7 @@ export default function MedicationFormPage() {
   if (isEdit && !existing) {
     if (!isExistingError) return <PageState kind="loading" noun="medication" />
     return isNotFoundError(existingError)
-      ? <PageState kind="not-found" noun="medication" backTo="/participants" backLabel="participants" />
+      ? <PageState kind="not-found" noun="medication" backTo="/medications" backLabel="medications" />
       : <PageState kind="error" noun="medication" onRetry={() => refetchExisting()} />
   }
   if (!isEdit && !participantIdParam) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">A participant is required to add a medication. Go to a participant's Medications tab to add one.</div>

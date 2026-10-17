@@ -299,6 +299,7 @@ describe('MedicationFormPage — editing a record that has not loaded', () => {
     mockUseMedication.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
     renderEditPage('med-1')
     expect(screen.getByText('Medication not found')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to medications' })).toHaveAttribute('href', '/medications')
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 })
