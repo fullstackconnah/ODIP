@@ -16,6 +16,7 @@ using Odip.Api.Controllers;
 using Odip.Api.Middleware;
 using Odip.Api.Serialization;
 using Odip.Api.Services;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.BackgroundServices;
@@ -64,11 +65,21 @@ public class EarlyAccessAuditWiringTests
         Assert.Equal(3, overItem.GetProperty("overLimitCount").GetInt32());
         Assert.Contains("zq-over-9", overItem.GetProperty("firstOverLimit").GetProperty("message").GetString());
         Assert.NotEqual(JsonValueKind.Null, overItem.GetProperty("lastOverLimitAtUtc").ValueKind);
+        Assert.True(overItem.GetProperty("followUpNeeded").GetBoolean());
+
+        // Marking it followed up (the SuperAdmin's call) clears the marker; a new distinct over-limit repeat from the public form sets it again.
+        Assert.Equal(HttpStatusCode.OK, (await host.AdminAsync(HttpMethod.Post, $"/{id}/followed-up", new { overLimitCount = 3 })).StatusCode);
+        Assert.False(await host.FollowUpNeededAsync());
+        Assert.Equal(HttpStatusCode.Accepted, (await host.PostSignupAsync(LaterPhone, "Over the limit zq-over-again")).StatusCode);
+        Assert.True(await host.FollowUpNeededAsync());
 
         Assert.Equal(HttpStatusCode.OK, (await host.AdminAsync(HttpMethod.Delete, "/" + id)).StatusCode);
 
         var audit = await host.AuditRowsAsync();
-        var delete = Assert.Single(audit); // the sign-ups themselves wrote nothing; only the Delete's own row exists
+        // The sign-ups themselves wrote nothing; only the SuperAdmin's two calls did, and each row names who and when but no answers.
+        Assert.Equal(new[] { AuditAction.Updated, AuditAction.Deleted }, audit.OrderBy(a => a.ChangedAt).Select(a => a.Action));
+        Assert.All(audit, a => Assert.Equal(id, a.EntityId));
+        var delete = audit.Single(a => a.Action == AuditAction.Deleted);
         Assert.Equal("EarlyAccessRequest", delete.EntityType);
         Assert.Equal(id, delete.EntityId);
         // Every column of every audit row, as text: none of the details may appear in any of them.
@@ -76,6 +87,31 @@ public class EarlyAccessAuditWiringTests
         foreach (var detail in new[] { Email, "Audit Person", "Audit Care", Phone, LaterPhone, Role, "zq-4471", "zq-9902", "Second note", "zq-over" })
             Assert.DoesNotContain(detail, everything, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, await host.SignupRowsAsync()); // and the details really are gone from the tables
+    }
+
+    [Fact]
+    public async Task AMarkFollowedUpFromBeforeANewOverLimitRepeat_IsRefused_AndTheMarkerStaysSet()
+    {
+        await using var host = await StartAsync();
+        Assert.Equal(HttpStatusCode.Accepted, (await host.PostSignupAsync(Phone, Message)).StatusCode);
+        for (var i = 0; i < 12; i++)
+            Assert.Equal(HttpStatusCode.Accepted, (await host.PostSignupAsync(LaterPhone, $"Note {i}")).StatusCode); // 10 kept, 2 over the limit
+        using var list = JsonDocument.Parse(await (await host.AdminAsync(HttpMethod.Get, "")).Content.ReadAsStringAsync());
+        var item = list.RootElement.GetProperty("data").GetProperty("items").EnumerateArray().Single();
+        var id = item.GetProperty("id").GetGuid();
+        Assert.Equal(2, item.GetProperty("overLimitCount").GetInt32());
+
+        // The SuperAdmin has the record open at count 2; a 13th arrives (count 3). The Mark followed up from the old view is refused.
+        Assert.Equal(HttpStatusCode.Accepted, (await host.PostSignupAsync(LaterPhone, "A new one after the page loaded")).StatusCode);
+        var stale = await host.AdminAsync(HttpMethod.Post, $"/{id}/followed-up", new { overLimitCount = 2 });
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Contains("A new submission arrived after you opened this. Reload to see it.", await stale.Content.ReadAsStringAsync());
+        Assert.True(await host.FollowUpNeededAsync());
+        Assert.Empty(await host.AuditRowsAsync());
+
+        // A fresh one with the count now on screen clears it.
+        Assert.Equal(HttpStatusCode.OK, (await host.AdminAsync(HttpMethod.Post, $"/{id}/followed-up", new { overLimitCount = 3 })).StatusCode);
+        Assert.False(await host.FollowUpNeededAsync());
     }
 
     private static async Task<AuditHost> StartAsync()
@@ -142,9 +178,16 @@ public class EarlyAccessAuditWiringTests
                 name = "Audit Person", organisation = "Audit Care", email = Email, role = Role, phone, message, website = "",
             }), Encoding.UTF8, "application/json"));
 
-        public Task<HttpResponseMessage> AdminAsync(HttpMethod method, string suffix)
+        public async Task<bool> FollowUpNeededAsync()
+        {
+            using var scope = app.Services.CreateScope();
+            return (await scope.ServiceProvider.GetRequiredService<OdipDbContext>().EarlyAccessRequests.AsNoTracking().SingleAsync()).FollowUpNeeded;
+        }
+
+        public Task<HttpResponseMessage> AdminAsync(HttpMethod method, string suffix, object? body = null)
         {
             var request = new HttpRequestMessage(method, "/api/v1/admin/early-access" + suffix);
+            if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
             request.Headers.Add("X-Test-SuperAdmin", "1");
             return client.SendAsync(request);
         }

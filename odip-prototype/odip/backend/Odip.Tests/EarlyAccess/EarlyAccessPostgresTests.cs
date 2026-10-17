@@ -155,6 +155,8 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         {
             "CreatedAtUtc|timestamp without time zone||NO",
             "Email|character varying|254|NO",
+            "FollowUpClearedAtUtc|timestamp without time zone||YES",
+            "FollowUpNeeded|boolean||NO",
             "Id|uuid||NO",
             "LastOverLimitAtUtc|timestamp without time zone||YES",
             "LastRequestedAtUtc|timestamp without time zone||NO",
@@ -455,6 +457,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         {
             var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
             Assert.Equal(2, row.OverLimitCount);
+            Assert.True(row.FollowUpNeeded);
             var over = await check.EarlyAccessLaterSubmissions.AsNoTracking().SingleAsync(l => l.EarlyAccessRequestId == row.Id && l.IsOverLimit);
             Assert.Equal("Jane", over.Name);
             Assert.Equal("Please remove me", over.Message);
@@ -468,6 +471,124 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         await using var after = _pg.CreateContext();
         Assert.False(await after.EarlyAccessRequests.AnyAsync(e => e.Email == email));
         Assert.False(await after.EarlyAccessLaterSubmissions.AnyAsync(l => l.Message == "Please remove me"));
+    }
+
+    [SkippableFact]
+    public async Task FollowUpNeeded_IsSetByEveryOverLimitRepeat_ClearedOnlyByTheSuperAdmin_AndSetAgainByANewOne()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("followup");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        for (var i = 1; i <= 10; i++)
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: $"0400 000 {i:000}"), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 011"), CancellationToken.None);
+        // The 12th, the removal request, is not kept; the marker is what says it exists.
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 011", message: "Please remove me"), CancellationToken.None);
+        // A public repeat identical to the original changes nothing.
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+
+        var id = await IdOf(email);
+        await using (var check = _pg.CreateContext())
+        {
+            var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
+            Assert.True(row.FollowUpNeeded);
+            Assert.Equal(2, row.OverLimitCount);
+            Assert.Null(row.FollowUpClearedAtUtc);
+        }
+
+        Assert.IsType<OkObjectResult>((await MarkFollowedUpAsync(id, 2)).Result);
+        await using (var check = _pg.CreateContext())
+        {
+            var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
+            Assert.False(row.FollowUpNeeded);
+            Assert.NotNull(row.FollowUpClearedAtUtc);
+            Assert.Equal(1, await check.AuditLogs.CountAsync(a => a.EntityId == id));
+        }
+
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 013"), CancellationToken.None);
+        await using (var check = _pg.CreateContext())
+        {
+            var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
+            Assert.True(row.FollowUpNeeded);
+            Assert.Equal(3, row.OverLimitCount);
+            Assert.NotNull(row.FollowUpClearedAtUtc);
+        }
+
+        // 12 months on, the purge takes the sign-up whatever its marker says.
+        await using (var db = _pg.CreateContext())
+            await db.EarlyAccessRequests.Where(e => e.Id == id).ExecuteUpdateAsync(s => s.SetProperty(e => e.CreatedAtUtc, DateTime.UtcNow.AddMonths(-13)));
+        await Purger().PurgeExpiredAsync(DateTime.UtcNow, CancellationToken.None);
+        await using var after = _pg.CreateContext();
+        Assert.False(await after.EarlyAccessRequests.AnyAsync(e => e.Id == id));
+        Assert.False(await after.EarlyAccessLaterSubmissions.AnyAsync(l => l.EarlyAccessRequestId == id));
+    }
+
+    [SkippableFact]
+    public async Task MarkFollowedUp_ThatRacesAnOverLimitRepeat_IsRefused_NotClearedOverIt()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var row = Row(NewEmail("followup-race"));
+        row.RequestCount = 13;
+        row.OverLimitCount = 2;
+        row.FollowUpNeeded = true;
+        await using (var db = _pg.CreateContext())
+        {
+            db.EarlyAccessRequests.Add(row);
+            await db.SaveChangesAsync();
+        }
+
+        // The SuperAdmin's page shows 2; a third arrives (the repeat's own UPDATE) between the controller's read and its save.
+        var result = await MarkFollowedUpAsync(row.Id, 2,
+            "UPDATE \"EarlyAccessRequests\" SET \"RequestCount\" = \"RequestCount\" + 1, \"OverLimitCount\" = \"OverLimitCount\" + 1 WHERE \"Id\" = @id");
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        await using var check = _pg.CreateContext();
+        var after = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == row.Id);
+        Assert.True(after.FollowUpNeeded);
+        Assert.Equal(3, after.OverLimitCount);
+        Assert.Equal(0, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
+    }
+
+    private async Task<Guid> IdOf(string email)
+    {
+        await using var db = _pg.CreateContext();
+        return await db.EarlyAccessRequests.Where(e => e.Email == email).Select(e => e.Id).SingleAsync();
+    }
+
+    /// <summary>A SuperAdmin's Mark followed up, with <paramref name="sql"/> (if any) run on another connection just before its first save.</summary>
+    private async Task<ActionResult<Odip.Application.Common.ApiResponse<bool>>> MarkFollowedUpAsync(Guid id, int seenCount, string? sql = null)
+    {
+        var interfere = new BeforeFirstSave(async () =>
+        {
+            if (sql is null) return;
+            await using var connection = _pg.OpenConnection();
+            await using var command = new NpgsqlCommand(sql, connection);
+            command.Parameters.AddWithValue("id", id);
+            await command.ExecuteNonQueryAsync();
+        });
+        await using var db = _pg.CreateContext(interfere);
+        var controller = new AdminEarlyAccessController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, "SuperAdmin"),
+                        new Claim("fullName", "Jordan Lee"),
+                    }, "Test")),
+                },
+            },
+        };
+        return await controller.MarkFollowedUp(id, new MarkFollowedUpDto { OverLimitCount = seenCount }, CancellationToken.None);
     }
 
     [SkippableFact]

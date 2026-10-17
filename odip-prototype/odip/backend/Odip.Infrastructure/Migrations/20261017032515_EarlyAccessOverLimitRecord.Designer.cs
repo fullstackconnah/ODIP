@@ -734,6 +734,12 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(254)
                         .HasColumnType("character varying(254)");
 
+                    b.Property<DateTime?>("FollowUpClearedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("FollowUpNeeded")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("LastOverLimitAtUtc")
                         .HasColumnType("timestamp without time zone");
 

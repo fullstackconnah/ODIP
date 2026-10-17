@@ -63,4 +63,14 @@ public class EarlyAccessRequest
 
     /// <summary>When the most recent over-limit repeat arrived; null until there is one.</summary>
     public DateTime? LastOverLimitAtUtc { get; set; }
+
+    /// <summary>
+    /// True from the first over-limit repeat until a SuperAdmin marks the sign-up followed up. Set by EVERY distinct over-limit repeat, and
+    /// no public submission ever clears it: only the first such repeat is shown, so a later one (a removal request, say) must never be
+    /// taken as handled while nobody has looked. A new over-limit repeat after it was cleared sets it again.
+    /// </summary>
+    public bool FollowUpNeeded { get; set; }
+
+    /// <summary>When a SuperAdmin last marked the over-limit repeats followed up; null if never. Kept after a new repeat sets <see cref="FollowUpNeeded"/> again.</summary>
+    public DateTime? FollowUpClearedAtUtc { get; set; }
 }

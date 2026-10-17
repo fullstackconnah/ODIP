@@ -19,6 +19,10 @@ export interface EarlyAccessSignupDto {
   /** When the latest of those arrived; absent when there were none. */
   lastOverLimitAtUtc?: string
   firstOverLimit?: EarlyAccessLaterSubmissionDto
+  /** True while over-limit repeats have not been followed up by a person. Every one sets it; only "Mark followed up" clears it, never a public submission. */
+  followUpNeeded: boolean
+  /** When it was last marked followed up; absent if never. */
+  followUpClearedAtUtc?: string
 }
 
 /** What a repeat sign-up said. The stored sign-up keeps its first answers; the tab shows only the fields here that differ from them. */

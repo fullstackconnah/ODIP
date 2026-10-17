@@ -101,6 +101,9 @@ public sealed class EarlyAccessService
                     {
                         existing.OverLimitCount += 1;
                         existing.LastOverLimitAtUtc = now;
+                        // Every distinct over-limit repeat needs a person: only the first is kept, so a later removal request would otherwise look handled.
+                        // Nothing a visitor sends ever clears this; only the SuperAdmin's Mark followed up does.
+                        existing.FollowUpNeeded = true;
                     }
                     // Past the cap the FIRST repeat is stored, in the one over-limit row, so it survives a lost email notice and no later
                     // anonymous repeat can replace it (a removal request in it would be lost); further ones only count.

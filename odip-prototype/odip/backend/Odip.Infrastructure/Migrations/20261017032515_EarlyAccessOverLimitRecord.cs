@@ -24,6 +24,19 @@ namespace Odip.Infrastructure.Migrations
                 nullable: true);
 
             migrationBuilder.AddColumn<bool>(
+                name: "FollowUpNeeded",
+                table: "EarlyAccessRequests",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<DateTime>(
+                name: "FollowUpClearedAtUtc",
+                table: "EarlyAccessRequests",
+                type: "timestamp without time zone",
+                nullable: true);
+
+            migrationBuilder.AddColumn<bool>(
                 name: "IsOverLimit",
                 table: "EarlyAccessLaterSubmissions",
                 type: "boolean",
@@ -40,6 +53,14 @@ namespace Odip.Infrastructure.Migrations
 
             migrationBuilder.DropColumn(
                 name: "LastOverLimitAtUtc",
+                table: "EarlyAccessRequests");
+
+            migrationBuilder.DropColumn(
+                name: "FollowUpNeeded",
+                table: "EarlyAccessRequests");
+
+            migrationBuilder.DropColumn(
+                name: "FollowUpClearedAtUtc",
                 table: "EarlyAccessRequests");
 
             migrationBuilder.DropColumn(

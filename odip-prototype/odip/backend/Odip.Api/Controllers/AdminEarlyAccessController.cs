@@ -21,7 +21,7 @@ namespace Odip.Api.Controllers;
 [Route("api/v1/admin/early-access")]
 public class AdminEarlyAccessController : ControllerBase
 {
-    private const int DeleteAttempts = 3;
+    private const int SaveAttempts = 3;
     private readonly OdipDbContext _db;
 
     public AdminEarlyAccessController(OdipDbContext db) => _db = db;
@@ -41,6 +41,8 @@ public class AdminEarlyAccessController : ControllerBase
                 LastRequestedAtUtc = e.LastRequestedAtUtc, RequestCount = e.RequestCount,
                 OverLimitCount = e.OverLimitCount,
                 LastOverLimitAtUtc = e.LastOverLimitAtUtc,
+                FollowUpNeeded = e.FollowUpNeeded,
+                FollowUpClearedAtUtc = e.FollowUpClearedAtUtc,
                 FirstOverLimit = e.LaterSubmissions.Where(l => l.IsOverLimit).Select(l => new EarlyAccessLaterSubmissionDto
                 {
                     Id = l.Id, ReceivedAtUtc = l.ReceivedAtUtc, Name = l.Name, Organisation = l.Organisation, Role = l.Role, Phone = l.Phone,
@@ -56,8 +58,47 @@ public class AdminEarlyAccessController : ControllerBase
             await PagedResult<EarlyAccessSignupDto>.CreateAsync(query, page, pageSize, ct)));
     }
 
-    // DELETE api/v1/admin/early-access/{id} — a hard delete, plus an audit row that names who and when but holds none of the
-    // person's details (EarlyAccessRequest and EarlyAccessLaterSubmission are deliberately not in AuditedEntities, which would copy every column into AuditLog).
+    // POST api/v1/admin/early-access/{id}/followed-up — a person has read the over-limit repeats and followed up, so the "Follow up needed" marker goes.
+    // Only this clears it; a public submission never does. The body carries the over-limit count the SuperAdmin was looking at: if more have arrived since
+    // (a 409), they have not been read and must not be marked as handled. Audited with who and when only, no answers.
+    [HttpPost("{id:guid}/followed-up")]
+    public async Task<ActionResult<ApiResponse<bool>>> MarkFollowedUp(Guid id, [FromBody] MarkFollowedUpDto body, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var row = await _db.EarlyAccessRequests.SingleOrDefaultAsync(e => e.Id == id, ct);
+            if (row is null) return NotFound(ApiResponse<bool>.Fail("Sign-up not found."));
+            if (row.OverLimitCount != body.OverLimitCount)
+                return Conflict(ApiResponse<bool>.Fail("A new submission arrived after you opened this. Reload to see it."));
+            if (!row.FollowUpNeeded) return Ok(ApiResponse<bool>.Ok(true)); // already done, from another tab: nothing to change or audit
+
+            row.FollowUpNeeded = false;
+            row.FollowUpClearedAtUtc = DateTime.UtcNow;
+            _db.AuditLogs.Add(AuditRow(id, AuditAction.Updated));
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                return Ok(ApiResponse<bool>.Ok(true));
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < SaveAttempts)
+            {
+                // RequestCount is a concurrency token: a repeat arrived after the read. Read again; if it was an over-limit one the count now differs and this refuses.
+                _db.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    // An audit row that names who and when but holds none of the person's details (EarlyAccessRequest and EarlyAccessLaterSubmission are deliberately
+    // not in AuditedEntities, which would copy every column into AuditLog).
+    private AuditLog AuditRow(Guid id, AuditAction action) => new()
+    {
+        Id = Guid.NewGuid(), EntityType = nameof(EarlyAccessRequest), EntityId = id, Action = action,
+        ChangedAt = DateTimeOffset.UtcNow,
+        ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null,
+        ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name),
+    };
+
+    // DELETE api/v1/admin/early-access/{id} — a hard delete, plus an audit row that names who and when but holds none of the person's details.
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
@@ -68,19 +109,13 @@ public class AdminEarlyAccessController : ControllerBase
             if (row is null) return NotFound(ApiResponse<bool>.Fail("Sign-up not found."));
 
             _db.EarlyAccessRequests.Remove(row);
-            _db.AuditLogs.Add(new AuditLog
-            {
-                Id = Guid.NewGuid(), EntityType = nameof(EarlyAccessRequest), EntityId = id, Action = AuditAction.Deleted,
-                ChangedAt = DateTimeOffset.UtcNow,
-                ChangedById = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : null,
-                ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name),
-            });
+            _db.AuditLogs.Add(AuditRow(id, AuditAction.Deleted));
             try
             {
                 await _db.SaveChangesAsync(ct); // one transaction: the row goes and its audit row arrives together
                 return Ok(ApiResponse<bool>.Ok(true));
             }
-            catch (DbUpdateConcurrencyException) when (attempt < DeleteAttempts)
+            catch (DbUpdateConcurrencyException) when (attempt < SaveAttempts)
             {
                 // RequestCount is a concurrency token: a repeat sign-up (or the purge) changed the row after it was read. Read it again.
                 _db.ChangeTracker.Clear();
