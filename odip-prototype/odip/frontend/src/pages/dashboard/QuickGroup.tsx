@@ -11,7 +11,7 @@ import { ROW_ACTIONS_CARD, TAP_AREA, TAP_FLOOR } from '@/components/tapArea'
 import { formatRatio } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import { useIsBelowXl } from '@/hooks/useIsBelowXl'
-import { isPresent, pageRows, rowKey, shownCount, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
+import { PAGE_SIZE, isPresent, pageCount, pageRows, rowKey, shownCount, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 import { BATCH_MAX, actionLabel, bannerCopy, confirmCopy, isBulkKey, resultNotice, rowRef, runningLabel, selectName, type BulkResult } from './bulkCopy'
 
@@ -34,18 +34,6 @@ const noAnswer = (err: unknown) => {
   const { status = 0, data } = response ?? {}
   if (!response || !data || typeof data !== 'object' || status === 502 || status === 503 || status === 504) return true
   return !(data.success === false || (status >= 400 && status < 500 && typeof data.status === 'number'))
-}
-
-/**
- * Where focus goes when the row that holds it leaves (SHAPE §5), read BEFORE it leaves: the next row's first control, else this tab's link while the tab
- * stays. Null when focus is not in the row, so nothing is moved for somebody working elsewhere (a tap that finishes in a tab the viewer has left).
- */
-function focusTargets(rowEl: HTMLElement): Array<HTMLElement | null | undefined> | null {
-  if (!rowEl.contains(document.activeElement)) return null
-  return [
-    rowEl.nextElementSibling?.querySelector<HTMLElement>('a, button'),
-    rowEl.closest('[data-quick-group]')?.querySelector<HTMLElement>('[data-group-link]'),
-  ]
 }
 
 /** When the tab itself has gone, looked up after it went: the newly opened tab, else the section's heading, else the All clear field. Never the top of the page. */
@@ -136,6 +124,37 @@ function Reserve({ shown, also }: { shown: string; also: string[] }) {
 }
 
 /**
+ * The house pager, DataTable's footer copied (SHAPE §6): the list box's footer row in the side column, after the cards in place. Previous and Next are
+ * aria-disabled at the ends or while `held`, never disabled, so focus stays on the pressed one. "Page N of M" goes sr-only in a list under 30rem.
+ * shortcut: two copies of the pager (DataTable.tsx), extract one when a third appears
+ */
+function Pager({ page, pages, total, held, onPage }: { page: number; pages: number; total: number; held: boolean; onPage: (to: number) => void }) {
+  const control = (label: 'Previous' | 'Next', to: number, off: boolean) => (
+    <button
+      type="button"
+      onClick={() => { if (!off) onPage(to) }}
+      aria-disabled={off || undefined}
+      aria-label={`${label} page`}
+      className={`h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors ${off ? 'opacity-40 cursor-not-allowed' : ''}`}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div className="flex min-h-[var(--row-h)] items-center justify-between gap-2 text-sm max-xl:mt-3 xl:border-t xl:border-[var(--color-border)] xl:px-[var(--card-pad)]">
+      <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
+        Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, total)} of {total}
+      </span>
+      <div className="flex items-center gap-2">
+        <span className="text-[var(--color-muted-foreground)] @max-[30rem]:sr-only" aria-current="page">Page {page} of {pages}</span>
+        {control('Previous', page - 1, page <= 1 || held)}
+        {control('Next', page + 1, page >= pages || held)}
+      </div>
+    </div>
+  )
+}
+
+/**
  * A fact cell (SHAPE §4): one plain value, left out when empty. Below xl the card wraps it as today; from xl it joins line 2's muted run, a middle dot after
  * it when a later fact follows (so a wrapped line never starts with one), and free text takes one line with its full text in the tooltip.
  */
@@ -216,7 +235,7 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
   const flagged = row.flags.length > 0 || unconfirmed
   const filled = row.facts.map(Boolean)
   return (
-    <tbody ref={rowRef} role="rowgroup" className="block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4 xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)]">
+    <tbody ref={rowRef} role="rowgroup" data-row-id={row.id} className="block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4 xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)]">
       {/* One flex row, two looks: the card's lines below xl, the list row's two lines from xl (buttons on line 1 by `order`, the ::after breaks to line 2). Every
           line-1 item and line-2 item carries the 4px between lines itself (gap-y-0), so the break adds nothing; below xl the row's -mt-1 takes back line 1's. */}
       <tr role="row" className={`relative flex flex-wrap gap-y-0 after:order-2 after:h-0 after:basis-full after:content-[''] max-xl:-mt-1 max-xl:items-center max-xl:gap-x-3 xl:items-start xl:gap-x-2 xl:px-[var(--card-pad)] xl:py-2 ${box !== undefined ? 'xl:pl-[calc(var(--card-pad)+1.5rem)]' : ''}`}>
@@ -305,8 +324,21 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const rows = visibleRows(model, state.gone)
   // Rows only once every request has answered: a group whose other list is still waiting or failed shows its one line, not half its rows (SHAPE §6).
   const ready = model.phase === 'ready'
-  const shown = ready ? pageRows(rows, 1) : []
-  const cut = ready && shownCount(model, state.gone) > shown.length
+  // Ten a page (SHAPE §6). The page clamps as it is drawn, never stored clamped, so rows that come back or leave re-slice the pages where they are.
+  const [page, setPage] = useState(1)
+  const pages = pageCount(rows)
+  const current = Math.min(page, pages)
+  const shown = ready ? pageRows(rows, current) : []
+  // "See all": the server holds more than this group fetched (rows on another page are one Next away).
+  const cut = ready && shownCount(model, state.gone) > rows.length
+  // In the side column the list keeps the outgoing page's height, so a short last page never pulls the pager up under the pointer. Kept for this row count
+  // only; a resize drops it.
+  const [minHold, setMinHold] = useState<{ px: number; count: number } | null>(null)
+  useEffect(() => {
+    const drop = () => setMinHold(null)
+    window.addEventListener('resize', drop)
+    return () => window.removeEventListener('resize', drop)
+  }, [])
   const notices = state.notices.filter((notice) => notice.subject === model.key)
 
   // Bulk: safe = a row with a one-tap decision, anywhere in the tab; the ticks are only the rows on screen.
@@ -360,14 +392,23 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     if (outcome.notice) state.notify('success', outcome.notice.title, outcome.notice.message, model.key, outcome.notice.link)
     else if (outcome.announce) state.announce(outcome.announce)
     if (outcome.keep) return
-    const targets = focusTargets(rowEl)
+    // Where focus goes, read BEFORE the row leaves (SHAPE §6): the row that takes its place, else the row before it (the page clamps back to it), else the
+    // tab's link. Only when focus is in the row, so nothing moves for somebody working elsewhere (a tap that finishes in a tab the viewer has left).
+    const inRow = rowEl.contains(document.activeElement)
+    const at = rows.findIndex((r) => r.id === row.id)
+    const rest = rows.filter((r) => r.id !== row.id)
+    const nextId = (rest[at] ?? rest[at - 1])?.id
     // Commit the row's leaving now (finish runs after an await, outside React's batching), so focus lands on what is on the page after it, the newly
     // opened tab included (NeedsYourDecision picks it in the same render). A ticked row drops out of the selection with it.
     flushSync(() => {
       state.markGone(rowKey(model.key, row.id))
       setSelected((prev) => { const next = new Set(prev); next.delete(row.id); return next })
     })
-    if (targets) (targets.find((el) => el?.isConnected) ?? afterTabLeft())?.focus()
+    if (!inRow) return
+    const group = groupRef.current
+    const nextRow = [...(group?.querySelectorAll<HTMLElement>('[data-row-id]') ?? [])].find((el) => el.dataset.rowId === nextId)
+    const target = [nextRow?.querySelector<HTMLElement>('a, button'), group?.querySelector<HTMLElement>('[data-group-link]')].find((el) => el?.isConnected)
+    ;(target ?? afterTabLeft())?.focus()
   }
 
   // Dismissing the last thing a tab holds takes the tab, and its NoticesRegion (which would place focus) with it: place focus once that has committed.
@@ -495,6 +536,24 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     state.announce(banner.b2)
   }
 
+  /** Previous and Next (SHAPE §6). Held while a row on the page is busy: paging would unmount a half-typed reason or strand a tap in flight. */
+  function go(to: number) {
+    if (to < 1 || to > pages || occupied.size > 0) return
+    const table = tableRef.current
+    flushSync(() => {
+      setPage(to)
+      // A hidden tick on another page, acted on by "Approve 5", is a trap; tab-wide is a mode, so it pages with the list.
+      if (!wide) setSelected(new Set())
+      setMinHold(!belowXl && table ? { px: table.offsetHeight, count: rows.length } : null)
+    })
+    if (belowXl && table) {
+      // In place the pager is a screen or more below the rows: bring the list's top under the 3rem app header, then focus its first card.
+      window.scrollTo({ top: window.scrollY + table.getBoundingClientRect().top - 48, behavior: 'instant' })
+      // A held box (a busy or unconfirmed row) would swallow focus.
+      table.querySelector('tbody')?.querySelector<HTMLElement>('input:not(:disabled), a, button')?.focus({ preventScroll: true })
+    }
+  }
+
   const copy = bulkKey && confirm && confirmCopy(bulkKey, confirm, count, rows.length - safe.length)
   return (
     <div
@@ -521,7 +580,9 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
           <table
             ref={tableRef}
             role="table"
-            className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:block xl:divide-y xl:divide-[var(--color-border)] xl:[&>tbody:last-of-type]:rounded-b-[calc(var(--radius-md)-1px)]"
+            style={minHold && minHold.count === rows.length ? { minHeight: minHold.px } : undefined}
+            // With no pager the last row rounds the box's bottom corners, so its hover tint never squares them; with one, the pager is the bottom row.
+            className={`w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:block xl:divide-y xl:divide-[var(--color-border)] ${pages > 1 ? '' : 'xl:[&>tbody:last-of-type]:rounded-b-[calc(var(--radius-md)-1px)]'}`}
           >
             {/* A bulk tab's header row is its bulk control (SHAPE §5): Select all in the first cell, the one bulk action in the last, the column labels sr-only
                 between. It sticks under the app header inside its own table, so it never leaves its tab. Below xl it is a Mist band on an opaque strip of
@@ -620,6 +681,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
               />
             ))}
           </table>
+          {ready && pages > 1 && <Pager page={current} pages={pages} total={rows.length} held={occupied.size > 0} onPage={go} />}
         </div>
       )}
       <div className="mt-2 flex justify-end first:mt-0">

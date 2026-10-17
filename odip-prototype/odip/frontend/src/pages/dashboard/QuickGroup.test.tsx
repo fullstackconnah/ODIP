@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -113,14 +113,6 @@ describe('QuickGroup — the row (SHAPE §4)', () => {
     expect(screen.getByRole('table').parentElement).toHaveClass('@container', 'xl:rounded-md', 'xl:border')
     expect(rowOf('Person a').querySelector('td[data-flags]')).toHaveClass('hidden')
     for (const el of group.querySelectorAll('*')) expect(String(el.className)).not.toMatch(/overflow-(x-|y-)?(auto|scroll|hidden)/)
-  })
-
-  it('shows ten rows and says "See all" (no number) when the server counts more, naming the group for a screen reader', () => {
-    render(<Harness model={model({ count: 30, rows: Array.from({ length: 12 }, (_, i) => row(String(i))) })} />)
-
-    expect(bodyRows()).toHaveLength(10)
-    const link = screen.getByRole('link', { name: 'See all leave requests' })
-    expect(link.textContent).toBe('See all')
   })
 
   it('opens the full page by name when every row is shown, with a touch floor', () => {
@@ -695,5 +687,177 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     await waitFor(() => expect(notice()).toHaveTextContent('Approved 1 leave request'))
     expect(notice()).toHaveTextContent('1 was already decided by someone else.')
     expect(refetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('QuickGroup — 10 a page (SHAPE §6)', () => {
+  const ok = (id: string) => vi.fn(async (): Promise<ActionOutcome> => ({ announce: `Approved Person ${id}.` }))
+  const tapRow = (id: string, run: () => Promise<ActionOutcome> = ok(id)) => row(id, { actions: [decline(id), approve(id, run)] })
+  const many = (n: number, make: (id: string) => QuickRow = (id) => row(id)) => Array.from({ length: n }, (_, i) => make(String(i)))
+  // The side column: matchMedia says the viewport is xl or wider.
+  const side = () => vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(min-width: 80rem)', addEventListener() {}, removeEventListener() {} }))
+  // jsdom has no scrolling: a page change in place scrolls the window.
+  beforeEach(() => { vi.spyOn(window, 'scrollTo').mockImplementation(() => {}) })
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+  const next = () => screen.getByRole('button', { name: 'Next page' })
+  const previous = () => screen.getByRole('button', { name: 'Previous page' })
+  const subjectsShown = () => bodyRows().map((tr) => tr.querySelector('td[data-subject] span')!.textContent)
+  const stubHeight = (px: number) => Object.defineProperty(screen.getByRole('table'), 'offsetHeight', { configurable: true, get: () => px })
+  const bulkName = () => document.querySelector('[data-bulk-action]')!.getAttribute('aria-label')
+
+  it('pages 23 rows ten at a time', () => {
+    render(<Harness model={model({ count: 23, rows: many(23) })} />)
+
+    expect(bodyRows()).toHaveLength(10)
+    expect(screen.getByText('Showing 1-10 of 23')).toBeInTheDocument()
+    expect(screen.getByText('Page 1 of 3')).toHaveAttribute('aria-current', 'page')
+    expect(previous()).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(next())
+    expect(subjectsShown()).toEqual(Array.from({ length: 10 }, (_, i) => `Person ${i + 10}`))
+    expect(screen.getByText('Showing 11-20 of 23')).toBeInTheDocument()
+  })
+
+  it('draws no pager at 10 rows or fewer', () => {
+    render(<Harness model={model({ count: 10, rows: many(10) })} />)
+
+    expect(bodyRows()).toHaveLength(10)
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+  })
+
+  it('holds Next on the last page and keeps focus there, in the side column', () => {
+    side()
+    render(<Harness model={model({ count: 23, rows: many(23) })} />)
+    fireEvent.click(next())
+    fireEvent.click(next())
+
+    expect(next()).toHaveAttribute('aria-disabled', 'true')
+    expect(next()).not.toBeDisabled()
+    next().focus()
+    fireEvent.click(next())
+    expect(document.activeElement).toBe(next())
+    expect(subjectsShown()).toEqual(['Person 20', 'Person 21', 'Person 22'])
+  })
+
+  it("moves focus to the first row's first control after a page change, in place", () => {
+    const scrollTo = vi.mocked(window.scrollTo)
+    render(<Harness model={model({ count: 23, rows: many(23, (id) => tapRow(id)) })} />)
+
+    fireEvent.click(next())
+    expect(bodyRows()[0].closest('tbody')!.contains(document.activeElement)).toBe(true)
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'instant' }))
+  })
+
+  it("holds the outgoing page's height on a short last page, in the side column", () => {
+    side()
+    render(<Harness model={model({ count: 23, rows: many(23) })} />)
+    fireEvent.click(next())
+    stubHeight(640)
+    fireEvent.click(next())
+
+    expect(screen.getByRole('table').style.minHeight).toBe('640px')
+  })
+
+  it('a resize drops the held height', () => {
+    side()
+    render(<Harness model={model({ count: 23, rows: many(23) })} />)
+    stubHeight(640)
+    fireEvent.click(next())
+    expect(screen.getByRole('table').style.minHeight).toBe('640px')
+
+    act(() => { window.dispatchEvent(new Event('resize')) })
+    expect(screen.getByRole('table').style.minHeight).toBe('')
+  })
+
+  it('a returning row keeps the page and resets the hold', () => {
+    side()
+    const twenty = many(20)
+    const { rerender } = render(<Harness model={model({ count: 20, rows: twenty })} />)
+    stubHeight(640)
+    fireEvent.click(next())
+    expect(screen.getByRole('table').style.minHeight).toBe('640px')
+
+    rerender(<Harness model={model({ count: 21, rows: [...twenty, row('20')] })} />)
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument()
+    expect(screen.getByRole('table').style.minHeight).toBe('')
+  })
+
+  it('paging is held while a row is busy', () => {
+    render(<Harness model={model({ count: 23, rows: many(23, (id) => tapRow(id)) })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Decline leave: Person 0' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } })
+
+    expect(next()).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(next())
+    expect(screen.getByText('Showing 1-10 of 23')).toBeInTheDocument()
+    expect(screen.getByRole('textbox')).toHaveValue('x')
+  })
+
+  it('clears a partial selection on a page change, and keeps tab-wide mode', () => {
+    render(<Harness model={model({ count: 23, rows: many(23, (id) => tapRow(id)) })} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person 0' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person 1' }))
+    fireEvent.click(next())
+
+    expect(bulkName()).toBe('Approve all 23 leave requests')
+    expect(screen.getAllByRole('checkbox', { name: /^Select leave/ }).some((box) => (box as HTMLInputElement).checked)).toBe(false)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all leave requests on this page' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Select all 23 leave requests' }))
+    fireEvent.click(next())
+    expect(screen.getAllByRole('checkbox', { name: /^Select leave/ }).every((box) => (box as HTMLInputElement).checked)).toBe(true)
+    expect(within(screen.getByRole('table')).getByText('All 23 leave requests are selected.')).toBeInTheDocument()
+  })
+
+  it('a tick that slides off the page is not counted or sent', async () => {
+    const runs = new Map(Array.from({ length: 23 }, (_, i) => [String(i), ok(String(i))]))
+    const all = many(23, (id) => tapRow(id, runs.get(id)))
+    const { rerender } = render(<Harness model={model({ count: 23, rows: all })} />)
+    fireEvent.click(next())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person 10' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person 11' }))
+    expect(bulkName()).toBe('Approve 2 selected leave requests')
+
+    // Person 0 leaves elsewhere: Person 10 moves up to page 1, out of sight.
+    rerender(<Harness model={model({ count: 22, rows: all.slice(1) })} />)
+    expect(bulkName()).toBe('Approve 1 selected leave request')
+    fireEvent.click(document.querySelector('[data-bulk-action]')!)
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+    await waitFor(() => expect(document.querySelector('[data-quick-group] [role="status"] [data-tone]')).toBeTruthy())
+    expect(runs.get('11')).toHaveBeenCalledTimes(1)
+    expect(runs.get('10')).not.toHaveBeenCalled()
+  })
+
+  it("pulls row 11 up when page 1's tenth row is decided, and focuses its first button", async () => {
+    render(<Harness model={model({ count: 23, rows: many(23, (id) => tapRow(id)) })} />)
+    const tenth = screen.getByRole('button', { name: 'Approve leave: Person 9' })
+    tenth.focus()
+
+    fireEvent.click(tenth)
+
+    await waitFor(() => expect(subjectsShown()[9]).toBe('Person 10'))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Decline leave: Person 10' }))
+  })
+
+  it('clamps to the page before when a run empties the last page, with focus in the run\'s notice', async () => {
+    render(<Harness model={model({ count: 11, rows: many(11, (id) => tapRow(id)) })} />)
+    fireEvent.click(next())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all leave requests on this page' }))
+    fireEvent.click(document.querySelector('[data-bulk-action]')!)
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull())
+    expect(bodyRows()).toHaveLength(10)
+    expect(document.activeElement!.closest('[role="status"] [data-tone]')).not.toBeNull()
+  })
+
+  it('says See all only when the server counts more than the group holds', () => {
+    const { unmount } = render(<Harness model={model({ count: 30, rows: many(12) })} />)
+    expect(screen.getByRole('link', { name: 'See all leave requests' })).toHaveTextContent(/^See all$/)
+    unmount()
+
+    render(<Harness model={model({ count: 12, rows: many(12) })} />)
+    expect(screen.getByRole('link', { name: 'Open Leave' })).toBeInTheDocument()
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
   })
 })
