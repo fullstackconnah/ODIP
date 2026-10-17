@@ -244,7 +244,8 @@ a:hover { color: var(--deep); }
 .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px rgb(57 98 0 / 0.25); }
 .field__hint { font-size: 0.875rem; color: var(--muted); }
 .field__error { font-size: 0.875rem; font-weight: 700; color: var(--error); overflow-wrap: anywhere; }
-.field.is-invalid input, .field.is-invalid select, .field.is-invalid textarea { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
+.field input[aria-invalid="true"], .field select[aria-invalid="true"], .field textarea[aria-invalid="true"] { border-color: var(--error); box-shadow: 0 0 0 1px var(--error); }
+.field input[aria-invalid="true"]:focus, .field select[aria-invalid="true"]:focus, .field textarea[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 30%, transparent); }
 .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 .form__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 24px; }
 .form__foot .btn { min-width: min(12rem, 100%); }

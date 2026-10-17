@@ -160,6 +160,15 @@ describe('structure, the form and the CSS guards', () => {
   it('lets the hidden attribute beat every display rule, so the received panel (display: grid) is hidden on load', () => {
     expect(css).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/)
   })
+  it('paints the invalid border off the aria-invalid the form sets on the control (nothing adds an is-invalid class), and keeps a focus ring on it', () => {
+    const rules = css.split('\n').filter((l) => l.includes('[aria-invalid="true"]'))
+    const base = rules.find((l) => !l.includes(':focus'))!
+    const focus = rules.find((l) => l.includes(':focus'))!
+    for (const rule of [base, focus]) for (const el of ['input', 'select', 'textarea']) expect(rule).toContain(`.field ${el}[aria-invalid="true"]`)
+    expect(base).toMatch(/border-color:\s*var\(--error\)/)
+    expect(focus).toMatch(/box-shadow:\s*0 0 0 3px/)
+    expect(css).not.toContain('is-invalid')
+  })
   it('stays inside its weight: index.html 45 KB and welcome.css 26 KB (1 KB = 1,024 bytes, SHAPE section 10 #14)', () => {
     expect(new TextEncoder().encode(indexHtml).length).toBeLessThanOrEqual(45 * 1024)
     expect(new TextEncoder().encode(css).length).toBeLessThanOrEqual(26 * 1024)
