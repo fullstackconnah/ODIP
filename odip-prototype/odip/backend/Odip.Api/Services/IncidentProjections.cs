@@ -26,10 +26,10 @@ public static class IncidentProjections
         Title = i.Title,
         IncidentDateTime = i.IncidentDateTime,
         Location = i.Location,
-        ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+        ReportedByName = (i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName).Trim(),
         InvolvedParticipantId = i.InvolvedParticipantId,
         InvolvedParticipantName = i.InvolvedParticipant != null
-            ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
+            ? (i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName).Trim() : null,
         QscReportingStatus = i.QscReportingStatus,
         IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.CreatedAt, now),
         CreatedAt = i.CreatedAt,

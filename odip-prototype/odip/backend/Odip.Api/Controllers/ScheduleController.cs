@@ -109,7 +109,7 @@ public class ScheduleController : ControllerBase
             VehicleAssignedCount = t.VehicleAssignments.Count(a =>
                 a.Status != VehicleAssignmentStatus.Cancelled && a.Status != VehicleAssignmentStatus.Unavailable),
             LeadCoordinatorName = t.LeadCoordinator != null
-                ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null,
+                ? (t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName).Trim() : null,
             PreferenceMatchCount = prefsByTrip.GetValueOrDefault(t.Id, 0),
         }).ToList();
 
@@ -228,7 +228,7 @@ public class ScheduleController : ControllerBase
                 Id = s.Id,
                 FirstName = s.FirstName,
                 LastName = s.LastName,
-                FullName = s.FirstName + " " + s.LastName,
+                FullName = (s.FirstName + " " + s.LastName).Trim(),
                 Role = s.Position ?? Position.SupportWorker,
                 Region = s.Region,
                 IsDriverEligible = s.IsDriverEligible,

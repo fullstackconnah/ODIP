@@ -42,7 +42,7 @@ public class AdminNotificationsController : ControllerBase
         var recipientIds = rows.Select(o => o.RecipientUserId).Distinct().ToList();
         var names = await _db.Users.IgnoreQueryFilters()
             .Where(u => recipientIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct);
+            .ToDictionaryAsync(u => u.Id, u => (u.FirstName + " " + u.LastName).Trim(), ct);
 
         return Ok(ApiResponse<List<NotificationOutboxDto>>.Ok(
             rows.Select(o => ToDto(o, names.GetValueOrDefault(o.RecipientUserId))).ToList()));
@@ -65,7 +65,7 @@ public class AdminNotificationsController : ControllerBase
 
         var name = await _db.Users.IgnoreQueryFilters()
             .Where(u => u.Id == row.RecipientUserId)
-            .Select(u => u.FirstName + " " + u.LastName)
+            .Select(u => (u.FirstName + " " + u.LastName).Trim())
             .FirstOrDefaultAsync(ct);
         return Ok(ApiResponse<NotificationOutboxDto>.Ok(ToDto(row, name)));
     }

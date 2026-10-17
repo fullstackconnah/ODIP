@@ -112,7 +112,7 @@ public sealed class OnboardingImportService
             .ToDictionary(g => g.Key, g => g.First());
         foreach (var plan in plans)
             if (plan.DuplicateKey is { } key && existing.TryGetValue(key, out var match))
-                plan.Skip($"Already in ODIP as {match.FirstName} {match.LastName}.");
+                plan.Skip($"Already in ODIP as {(match.FirstName + " " + match.LastName).Trim()}.");
 
         ImportRowPlan.MarkFileDuplicates(plans, "NDIS number");
         return plans;
@@ -141,7 +141,7 @@ public sealed class OnboardingImportService
             if (plan.DuplicateKey is not { } email || plan.Status == ImportRowStatus.Skipped) continue;
             if (users.TryGetValue(email, out var user))
             {
-                if (user.TenantId == tenantId) plan.Skip($"Already in ODIP as {user.FirstName} {user.LastName}.");
+                if (user.TenantId == tenantId) plan.Skip($"Already in ODIP as {(user.FirstName + " " + user.LastName).Trim()}.");
                 else plan.Refuse("This email belongs to another organisation.");
                 continue;
             }
@@ -377,12 +377,12 @@ public sealed class OnboardingImportService
             var blockedIds = blockers.Keys.ToList();
             var names = batch.Kind switch
             {
-                ImportKind.Staff => await _db.Users.Where(u => blockedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FirstName + " " + u.LastName, ct),
+                ImportKind.Staff => await _db.Users.Where(u => blockedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => (u.FirstName + " " + u.LastName).Trim(), ct),
                 ImportKind.FundingPlans => (await _db.FundingPlans.Where(f => blockedIds.Contains(f.Id))
                         .Select(f => new { f.Id, f.PlanStart, f.PlanEnd, f.Participant!.FirstName, f.Participant.LastName })
                         .ToListAsync(ct))
-                    .ToDictionary(f => f.Id, f => $"The plan for {f.FirstName} {f.LastName} ({Say(f.PlanStart)} to {Say(f.PlanEnd)})"),
-                _ => await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct),
+                    .ToDictionary(f => f.Id, f => $"The plan for {(f.FirstName + " " + f.LastName).Trim()} ({Say(f.PlanStart)} to {Say(f.PlanEnd)})"),
+                _ => await _db.Participants.Where(p => blockedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => (p.FirstName + " " + p.LastName).Trim(), ct),
             };
             return new ImportUndoOutcome(false, blockers
                 .Select(b => new ImportUndoBlockerDto(b.Key, names.GetValueOrDefault(b.Key, ""), b.Value))

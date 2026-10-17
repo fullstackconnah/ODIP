@@ -257,7 +257,7 @@ public class VehicleAssignmentsController : ControllerBase
             VehicleName = assignment.Vehicle?.VehicleName, Registration = assignment.Vehicle?.Registration,
             Status = assignment.Status, RequestedDate = assignment.RequestedDate, ConfirmedDate = assignment.ConfirmedDate,
             DriverStaffId = assignment.DriverUserId,
-            DriverName = assignment.DriverUser != null ? assignment.DriverUser.FirstName + " " + assignment.DriverUser.LastName : null,
+            DriverName = assignment.DriverUser != null ? (assignment.DriverUser.FirstName + " " + assignment.DriverUser.LastName).Trim() : null,
             SeatRequirement = assignment.SeatRequirement, WheelchairPositionRequirement = assignment.WheelchairPositionRequirement,
             PickupTravelNotes = assignment.PickupTravelNotes, Comments = assignment.Comments,
             HasOverlapConflict = assignment.HasOverlapConflict, HasConflict = assignment.HasConflict,
@@ -310,7 +310,7 @@ public class VehicleAssignmentsController : ControllerBase
             VehicleName = a.Vehicle?.VehicleName, Registration = a.Vehicle?.Registration,
             Status = a.Status, RequestedDate = a.RequestedDate, ConfirmedDate = a.ConfirmedDate,
             DriverStaffId = a.DriverUserId,
-            DriverName = a.DriverUser != null ? a.DriverUser.FirstName + " " + a.DriverUser.LastName : null,
+            DriverName = a.DriverUser != null ? (a.DriverUser.FirstName + " " + a.DriverUser.LastName).Trim() : null,
             SeatRequirement = a.SeatRequirement, WheelchairPositionRequirement = a.WheelchairPositionRequirement,
             PickupTravelNotes = a.PickupTravelNotes, Comments = a.Comments,
             HasOverlapConflict = a.HasOverlapConflict, HasConflict = a.HasConflict,
@@ -389,7 +389,7 @@ public class StaffController : ControllerBase
     private static StaffDetailDto ToStaffDetailDto(User s, DateOnly today) => new()
     {
         Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-        FullName = s.FirstName + " " + s.LastName, Username = s.Username,
+        FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
         Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
         Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
         IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
@@ -440,7 +440,7 @@ public class StaffController : ControllerBase
             .Select(s => new StaffListDto
             {
                 Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-                FullName = s.FirstName + " " + s.LastName, Username = s.Username,
+                FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
                 Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
                 Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
                 IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
@@ -473,7 +473,7 @@ public class StaffController : ControllerBase
         return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-            FullName = s.FirstName + " " + s.LastName, Username = s.Username,
+            FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
             Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
@@ -786,7 +786,7 @@ public class StaffController : ControllerBase
             .Select(s => new StaffListDto
             {
                 Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
-                FullName = s.FirstName + " " + s.LastName, Username = s.Username,
+                FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
                 Role = s.Role, Position = s.Position ?? Position.SupportWorker,
                 IsDriverEligible = s.IsDriverEligible, IsFirstAidQualified = s.IsFirstAidQualified,
                 IsMedicationCompetent = s.IsMedicationCompetent, IsManualHandlingCompetent = s.IsManualHandlingCompetent,
@@ -1014,7 +1014,7 @@ public class StaffAssignmentsController : ControllerBase
         {
             Id = assignment.Id, TripInstanceId = assignment.TripInstanceId, TripName = assignment.TripInstance?.TripName,
             StaffId = assignment.UserId,
-            StaffName = assignment.User != null ? assignment.User.FirstName + " " + assignment.User.LastName : null,
+            StaffName = assignment.User != null ? (assignment.User.FirstName + " " + assignment.User.LastName).Trim() : null,
             AssignmentRole = assignment.AssignmentRole, AssignmentStart = assignment.AssignmentStart, AssignmentEnd = assignment.AssignmentEnd,
             Status = assignment.Status, IsDriver = assignment.IsDriver, SleepoverType = assignment.SleepoverType,
             ShiftNotes = assignment.ShiftNotes, HasConflict = assignment.HasConflict,
@@ -1061,7 +1061,7 @@ public class StaffAssignmentsController : ControllerBase
         return Ok(ApiResponse<StaffAssignmentDto>.Ok(new StaffAssignmentDto
         {
             Id = a.Id, TripInstanceId = a.TripInstanceId, TripName = a.TripInstance?.TripName,
-            StaffId = a.UserId, StaffName = a.User != null ? a.User.FirstName + " " + a.User.LastName : null,
+            StaffId = a.UserId, StaffName = a.User != null ? (a.User.FirstName + " " + a.User.LastName).Trim() : null,
             AssignmentRole = a.AssignmentRole, AssignmentStart = a.AssignmentStart, AssignmentEnd = a.AssignmentEnd,
             Status = a.Status, IsDriver = a.IsDriver, SleepoverType = a.SleepoverType,
             ShiftNotes = a.ShiftNotes, HasConflict = a.HasConflict,
