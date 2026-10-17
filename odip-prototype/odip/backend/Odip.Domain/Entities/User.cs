@@ -18,7 +18,7 @@ public class User : ITenantEntity
     public string Email { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
-    public string FullName => $"{FirstName} {LastName}";
+    public string FullName => $"{FirstName} {LastName}".Trim();
     public UserRole Role { get; set; }
 
     /// <summary>Display-only staff position/title — separate from and unrelated to <see cref="Role"/>.</summary>

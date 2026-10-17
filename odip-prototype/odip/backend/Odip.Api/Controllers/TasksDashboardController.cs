@@ -96,7 +96,7 @@ public class TasksController : ControllerBase
                 LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
                 MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
                 TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
-                OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
+                OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
                 Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
                 CompletedDate = t.CompletedDate, Notes = t.Notes
             }).ToListAsync(ct);
@@ -124,7 +124,7 @@ public class TasksController : ControllerBase
             LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
             MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
             TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
-            OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
+            OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
             Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
             CompletedDate = t.CompletedDate, Notes = t.Notes
         }));
@@ -162,7 +162,7 @@ public class TasksController : ControllerBase
             LinkTo = task.LinkTo, SourceKey = task.SourceKey, ShiftId = task.ShiftId, IncidentReportId = task.IncidentReportId,
             MedicationAdministrationId = task.MedicationAdministrationId, ShiftNoteId = task.ShiftNoteId, LeaveRequestId = task.LeaveRequestId,
             TaskType = task.TaskType, Title = task.Title, OwnerId = task.OwnerId,
-            OwnerName = task.Owner != null ? task.Owner.FirstName + " " + task.Owner.LastName : null,
+            OwnerName = task.Owner != null ? (task.Owner.FirstName + " " + task.Owner.LastName).Trim() : null,
             Priority = task.Priority, DueDate = task.DueDate, Status = task.Status,
             CompletedDate = task.CompletedDate, Notes = task.Notes
         }));
@@ -203,7 +203,7 @@ public class TasksController : ControllerBase
             LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
             MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
             TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
-            OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
+            OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
             Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
             CompletedDate = t.CompletedDate, Notes = t.Notes
         }));
@@ -508,7 +508,7 @@ public class DashboardController : ControllerBase
                 DurationDays = t.DurationDays, Status = t.Status, MaxParticipants = t.MaxParticipants,
                 CurrentParticipantCount = t.Bookings.Count(b => b.BookingStatus == BookingStatus.Confirmed),
                 WaitlistCount = t.Bookings.Count(b => b.BookingStatus == BookingStatus.Waitlist),
-                LeadCoordinatorName = t.LeadCoordinator != null ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null
+                LeadCoordinatorName = t.LeadCoordinator != null ? (t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName).Trim() : null
             }).ToListAsync(ct);
 
         // The Admin's review of an emergency over budget is left out for a role that may not see budget standing, in the list and in the counts (the phase 3 review, C7).
@@ -522,7 +522,7 @@ public class DashboardController : ControllerBase
                 LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
                 MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
                 TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
-                OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
+                OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
                 Priority = t.Priority, DueDate = t.DueDate, Status = t.Status
             }).ToListAsync(ct);
 

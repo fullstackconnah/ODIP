@@ -101,14 +101,14 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
     }
 
     // A SuperAdmin viewing organisation A: the context has NO tenant filter, so only the controller's own TenantId predicates keep B out.
-    private (Odip.Infrastructure.Data.OdipDbContext Db, IntakeBookingsController Controller) SuperAdminViewing(Guid tenantId, Guid userId)
+    private (Odip.Infrastructure.Data.OdipDbContext Db, IntakeBookingsController Controller) SuperAdminViewing(Guid tenantId, Guid userId, TimeSpan? lockWait = null, INotificationChannel? channel = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.SetupGet(t => t.TenantId).Returns(tenantId);
         tenant.SetupGet(t => t.IsSuperAdmin).Returns(true);
         var db = PostgresFixture.NewContext(_pg.ConnectionString, tenant.Object);
-        var sender = new IntakeInviteSender([new IntakeBookingsControllerTests.RecordingChannel(ChannelSendOutcome.Skipped)], NullLogger<IntakeInviteSender>.Instance);
-        var controller = new IntakeBookingsController(db, tenant.Object, sender, new NotificationRaiser(db), new IntakeBookingsControllerTests.FixedClock(IntakeBookingsControllerTests.Now))
+        var sender = new IntakeInviteSender([channel ?? new IntakeBookingsControllerTests.RecordingChannel(ChannelSendOutcome.Skipped)], NullLogger<IntakeInviteSender>.Instance);
+        var controller = new IntakeBookingsController(db, tenant.Object, sender, new NotificationRaiser(db), new IntakeBookingsControllerTests.FixedClock(IntakeBookingsControllerTests.Now), lockWait)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
                 [new Claim(ClaimTypes.NameIdentifier, userId.ToString()), new Claim(ClaimTypes.Role, "SuperAdmin")], "test")) } },
@@ -208,5 +208,169 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         Assert.IsType<OkObjectResult>((await controller.Set(noah.Id, Body(IntakeBookingsControllerTests.Start), CancellationToken.None)).Result);
         var refused = Assert.IsType<ConflictObjectResult>((await controller.Set(nia.Id, Body(IntakeBookingsControllerTests.Start.AddMinutes(30)), CancellationToken.None)).Result);
         Assert.Equal(["Sam Lee has another intake visit 10:00 – 11:30 am on Fri 16 Oct."], Assert.IsType<ValidationProblemDetails>(refused.Value).Errors["staffUserId"]);
+    }
+
+    // ── Two bookings at once for one staff member ───────────────────────────
+
+    private static ParticipantInquiry Unbooked(Guid tenantId)
+    {
+        var x = Booked(tenantId, Guid.Empty, IntakeBookingsControllerTests.Start);
+        x.IntakeStartsAt = null; x.IntakeDurationMinutes = null; x.IntakeLocation = null; x.IntakeStaffUserId = null; x.IntakeUid = null;
+        return x;
+    }
+
+    private static SetIntakeBookingDto Body(User staff, DateTime startsAt) => new() { StartsAt = startsAt, DurationMinutes = 90, Location = "12 Smith St", StaffUserId = staff.Id };
+
+    // One organisation, Sam, an admin to book as, and two enquiries nobody has booked yet.
+    private async Task<(Guid Tenant, User Sam, User Admin, ParticipantInquiry X, ParticipantInquiry Y)> BookableAsync()
+    {
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        var sam = Staff(tenantId);
+        var admin = Staff(tenantId, UserRole.Admin, firstName: "Ada");
+        var (x, y) = (Unbooked(tenantId), Unbooked(tenantId));
+        db.Users.AddRange(sam, admin);
+        db.ParticipantInquiries.AddRange(x, y);
+        await db.SaveChangesAsync();
+        return (tenantId, sam, admin, x, y);
+    }
+
+    private async Task<NpgsqlConnection> OpenAsync()
+    {
+        var connection = new NpgsqlConnection(_pg.ConnectionString);
+        await connection.OpenAsync();
+        return connection;
+    }
+
+    private static async Task<object?> ScalarAsync(NpgsqlConnection connection, string sql, Guid id)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", id);
+        return await command.ExecuteScalarAsync();
+    }
+
+    private const string BookedToStaff = "SELECT COUNT(*) FROM \"ParticipantInquiries\" WHERE \"IntakeStaffUserId\" = @id";
+    // The key RosterGenerationLock builds for scope "intake-staff": hashtext(scope || ':' || staffId).
+    private const string HoldKey = "SELECT pg_advisory_lock(hashtext('intake-staff:' || @id::text))";
+    private const string ReleaseKey = "SELECT pg_advisory_unlock(hashtext('intake-staff:' || @id::text))";
+
+    [SkippableFact]
+    public async Task TwoOverlappingBookings_ForOneStaffMember_AtTheSameMoment_OnlyOneSaves()
+    {
+        RequirePostgres();
+        await using var raw = await OpenAsync();
+        for (var round = 0; round < 8; round++)
+        {
+            var (tenantId, sam, admin, x, y) = await BookableAsync();
+            var (dbA, a) = SuperAdminViewing(tenantId, admin.Id);
+            var (dbB, b) = SuperAdminViewing(tenantId, admin.Id);
+            await using var _a = dbA;
+            await using var _b = dbB;
+            var start = new TaskCompletionSource();
+            var first = Task.Run(async () => { await start.Task; return await a.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None); });
+            var second = Task.Run(async () => { await start.Task; return await b.Set(y.Id, Body(sam, IntakeBookingsControllerTests.Start.AddMinutes(30)), CancellationToken.None); });
+            start.SetResult();
+            var results = (await Task.WhenAll(first, second)).Select(r => r.Result).ToList();
+
+            Assert.Equal(1, results.OfType<OkObjectResult>().Count());
+            var refused = Assert.Single(results.OfType<ConflictObjectResult>());
+            Assert.Equal(IntakeBookingsController.StaffBusyCode, Assert.IsType<ValidationProblemDetails>(refused.Value).Extensions["code"]);
+            Assert.Equal(1L, await ScalarAsync(raw, BookedToStaff, sam.Id));
+        }
+    }
+
+    [SkippableFact]
+    public async Task TheClashCheck_RunsUnderTheLock()
+    {
+        RequirePostgres();
+        var (tenantId, sam, admin, x, y) = await BookableAsync();
+        var (db, controller) = SuperAdminViewing(tenantId, admin.Id);
+        await using var _ = db;
+        await using var raw = await OpenAsync();
+        await ScalarAsync(raw, HoldKey, sam.Id);
+
+        var waiting = Task.Run(() => controller.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None));
+        await Task.Delay(500);
+        Assert.False(waiting.IsCompleted);
+        // While it waits, an overlapping visit lands: the check has to run after the lock, or it would not see this one.
+        var (other, _o) = SuperAdminViewing(tenantId, admin.Id);
+        await using var _other = other;
+        var landed = await other.ParticipantInquiries.SingleAsync(i => i.Id == y.Id);
+        landed.IntakeStartsAt = IntakeBookingsControllerTests.Start.AddMinutes(30); landed.IntakeDurationMinutes = 90; landed.IntakeLocation = "12 Smith St";
+        landed.IntakeStaffUserId = sam.Id; landed.IntakeUid = "y@odip";
+        await other.SaveChangesAsync();
+        await ScalarAsync(raw, ReleaseKey, sam.Id);
+
+        var refused = Assert.IsType<ConflictObjectResult>((await waiting.WaitAsync(TimeSpan.FromSeconds(15))).Result);
+        Assert.Equal(IntakeBookingsController.StaffBusyCode, Assert.IsType<ValidationProblemDetails>(refused.Value).Extensions["code"]);
+        Assert.Equal(1L, await ScalarAsync(raw, BookedToStaff, sam.Id));
+    }
+
+    [SkippableFact]
+    public async Task ALockHeldPastTheWait_AnswersBusy()
+    {
+        RequirePostgres();
+        var (tenantId, sam, admin, x, _) = await BookableAsync();
+        var (db, controller) = SuperAdminViewing(tenantId, admin.Id, lockWait: TimeSpan.FromMilliseconds(200));
+        await using var _db = db;
+        await using var raw = await OpenAsync();
+        await ScalarAsync(raw, HoldKey, sam.Id);
+
+        var result = await controller.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None);
+        await ScalarAsync(raw, ReleaseKey, sam.Id);
+
+        var busy = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(["Another booking for Sam is still being saved. Wait a moment, then try again."], Assert.IsType<ApiResponse<ParticipantInquiryDto>>(busy.Value).Errors);
+        Assert.Equal(0L, await ScalarAsync(raw, BookedToStaff, sam.Id));
+    }
+
+    // D4: notes and a new place still save while another booking holds the staff member's lock, because they take no lock at all.
+    [SkippableFact]
+    public async Task ANotesOnlyOrLocationOnlySave_DoesNotWaitForTheLock()
+    {
+        RequirePostgres();
+        var (tenantId, sam, admin, x, _) = await BookableAsync();
+        var (db, controller) = SuperAdminViewing(tenantId, admin.Id, lockWait: TimeSpan.FromMilliseconds(200));
+        await using var _db = db;
+        var booked = Body(sam, IntakeBookingsControllerTests.Start);
+        Assert.IsType<OkObjectResult>((await controller.Set(x.Id, booked, CancellationToken.None)).Result);
+        await using var raw = await OpenAsync();
+        await ScalarAsync(raw, HoldKey, sam.Id);
+
+        var notes = await controller.Set(x.Id, booked with { Notes = "Bring the forms" }, CancellationToken.None);
+        var place = await controller.Set(x.Id, booked with { Location = "3 Jones Rd" }, CancellationToken.None);
+        await ScalarAsync(raw, ReleaseKey, sam.Id);
+
+        Assert.IsType<OkObjectResult>(notes.Result);
+        Assert.IsType<OkObjectResult>(place.Result);
+    }
+
+    // The invite goes out with the lock already let go: a second booking made while the first one is being emailed is not kept waiting.
+    [SkippableFact]
+    public async Task TheLock_IsReleasedBeforeTheInviteIsSent()
+    {
+        RequirePostgres();
+        var (tenantId, sam, admin, x, y) = await BookableAsync();
+        IActionResult? during = null;
+        var (dbB, b) = SuperAdminViewing(tenantId, admin.Id, lockWait: TimeSpan.FromMilliseconds(200));
+        await using var _b = dbB;
+        var channel = new SendingChannel(async () => during = (await b.Set(y.Id, Body(sam, IntakeBookingsControllerTests.Start.AddHours(3)), CancellationToken.None)).Result);
+        var (dbA, a) = SuperAdminViewing(tenantId, admin.Id, channel: channel);
+        await using var _a = dbA;
+
+        Assert.IsType<OkObjectResult>((await a.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None)).Result);
+
+        Assert.NotNull(during);
+        Assert.IsType<OkObjectResult>(during);
+    }
+
+    private sealed class SendingChannel(Func<Task> whileSending) : INotificationChannel
+    {
+        public NotificationChannelKind Kind => NotificationChannelKind.Email;
+        public async Task<ChannelSendResult> SendAsync(NotificationMessage message, CancellationToken ct)
+        {
+            await whileSending();
+            return new ChannelSendResult(ChannelSendOutcome.Skipped, null, "SMTP is not configured");
+        }
     }
 }
