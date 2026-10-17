@@ -94,6 +94,9 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    # Public access: the homelab Cloudflare tunnel (remotely managed) maps https://bunya.connah.com.au -> http://192.168.4.70:8475.
+    # nginx trusts CF-Connecting-IP from Docker-internal hops only (nginx/default.conf), so the API rate limiter and sign-in lockout
+    # see each visitor, not the bridge gateway. That is safe only while 8475 stays unreachable from the internet (CGNAT, tunnel only).
     ports:
       - "8475:80"
     depends_on:

@@ -116,6 +116,17 @@ public class ClientIpTests
     }
 
     [Fact]
+    public void Two_tunnel_visitors_behind_the_gateway_get_two_keys_from_the_single_address_nginx_forwards()
+    {
+        // Via the Cloudflare tunnel nginx rewrites $remote_addr to CF-Connecting-IP and forwards only that.
+        var a = ClientIp.LoginAttemptKey(Request(BridgeGateway, "203.0.113.20"));
+        var b = ClientIp.LoginAttemptKey(Request(BridgeGateway, "203.0.113.21"));
+
+        Assert.Equal("203.0.113.20", a);
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
     public void A_client_directly_reaching_the_API_with_no_proxy_at_all_is_its_own_key()
     {
         // A non-Docker address is never the proxy hop, whatever the headers claim.
