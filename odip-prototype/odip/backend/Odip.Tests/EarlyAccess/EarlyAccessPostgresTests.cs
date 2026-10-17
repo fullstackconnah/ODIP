@@ -161,6 +161,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             "Name|character varying|100|NO",
             "Organisation|character varying|150|NO",
             "OrganisationSize|character varying|16|YES",
+            "OverLimitCount|integer||NO",
             "Phone|character varying|30|YES",
             "RequestCount|integer||NO",
             "Role|character varying|100|YES",
