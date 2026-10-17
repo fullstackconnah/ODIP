@@ -669,6 +669,51 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("Contacts");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessLaterSubmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EarlyAccessRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Organisation")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("OrganisationSize")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EarlyAccessRequestId");
+
+                    b.ToTable("EarlyAccessLaterSubmissions");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2405,6 +2450,22 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AddressPostcode")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("AddressState")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("AddressStreet")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("AddressSuburb")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("CloseNote")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -2418,8 +2479,29 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid?>("ClosedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ContactFirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("ContactIsParticipant")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ContactLastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ContactRelationship")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("ContactRole")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date");
 
                     b.Property<string>("Email")
                         .HasMaxLength(200)
@@ -2470,9 +2552,12 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("LastName")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NdisNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid?>("ParticipantId")
                         .HasColumnType("uuid");
@@ -2480,6 +2565,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("Phone")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateOnly?>("PlanEndDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("PlanStartDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("PlanType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Provenance")
                         .HasMaxLength(2000)
@@ -6008,6 +6102,17 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("TripClaim");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessLaterSubmission", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.EarlyAccessRequest", "EarlyAccessRequest")
+                        .WithMany("LaterSubmissions")
+                        .HasForeignKey("EarlyAccessRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EarlyAccessRequest");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ElectronicSigningEvidence", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.ElectronicSigningSnapshot", "Snapshot")
@@ -7105,6 +7210,11 @@ namespace Odip.Infrastructure.Migrations
             modelBuilder.Entity("Odip.Domain.Entities.Contact", b =>
                 {
                     b.Navigation("ParticipantContacts");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessRequest", b =>
+                {
+                    b.Navigation("LaterSubmissions");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ElectronicSigningSnapshot", b =>

@@ -17,12 +17,31 @@ const muted = 'text-[var(--color-muted-foreground)]'
 // On a phone the detail labels match the card's own field labels (index.css .mobile-card-table td::before).
 const detailLabel = `text-xs ${muted} max-md:font-semibold max-md:uppercase max-md:tracking-[0.05em]`
 const detailId = (row: EarlyAccessSignupDto) => `alpha-signup-${row.id}-detail`
+// A date line heads its block, so it is full strength where the labels under it are muted.
+const dateLine = 'text-xs font-medium text-[var(--color-foreground)]'
+// Removal requests arrive in a message, which may be in a later submission rather than the original.
+const hasMessage = (row: EarlyAccessSignupDto) => !!row.message || row.laterSubmissions.some(l => !!l.message)
+
+// The answers a repeat can change, in the order the original row shows them after Name and Organisation. The API keeps the first 10 per sign-up.
+const LATER_FIELDS = [
+  { key: 'name', label: 'Name' },
+  { key: 'organisation', label: 'Organisation' },
+  { key: 'role', label: 'Role' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'organisationSize', label: 'Size' },
+  { key: 'message', label: 'Message' },
+] as const
+const LATER_SUBMISSIONS_KEPT = 10
+const displayAnswer = (key: (typeof LATER_FIELDS)[number]['key'], value: string | undefined) =>
+  key === 'organisationSize' && value ? ORGANISATION_SIZE_LABELS[value] ?? value : value
 
 /**
  * Settings › Platform › Alpha sign-ups (SuperAdmin): who asked to join the alpha on the landing page, latest sent first (the server's
  * order, so a repeat carrying a "remove my details" request is on top), with Delete. Six columns from md up, so the table never scrolls
  * sideways; role, phone and the message open under the row from its name (a row disclosure), and a phone card shows them all. The
  * message is shown whole, line breaks kept, because removal requests arrive in it.
+ * A repeat sign-up never overwrites the stored answers; one whose answers differ is listed under the opened row as a later submission, with its date
+ * and only the answers that differ (the server keeps the first 10).
  */
 export default function AlphaSignupsTab() {
   const [page, setPage] = useState(1)
@@ -86,7 +105,7 @@ export default function AlphaSignupsTab() {
       render: row => isBelowMd ? row.name : (
         <button
           type="button"
-          aria-label={row.message ? `${row.name}, has a message` : undefined}
+          aria-label={hasMessage(row) ? `${row.name}, has a message` : undefined}
           aria-expanded={open.has(row.id)}
           aria-controls={open.has(row.id) ? detailId(row) : undefined}
           onClick={() => toggle(row.id)}
@@ -97,7 +116,7 @@ export default function AlphaSignupsTab() {
             : <ChevronRight className={`h-3.5 w-3.5 flex-shrink-0 ${muted}`} aria-hidden="true" />}
           <span className="truncate">{row.name}</span>
           {/* Removal requests arrive in the message, so a closed row says it has one (the text stays in the detail). */}
-          {row.message && <MessageSquareText className={`h-3.5 w-3.5 flex-shrink-0 ${muted}`} aria-hidden="true" />}
+          {hasMessage(row) && <MessageSquareText className={`h-3.5 w-3.5 flex-shrink-0 ${muted}`} aria-hidden="true" />}
         </button>
       ),
     },
@@ -129,6 +148,7 @@ export default function AlphaSignupsTab() {
   // ends with Delete. A stack at the name's indent, so it never looks like columns of the table above.
   const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
     <>
+    {row.laterSubmissions.length > 0 && <p className={`mb-1 md:pl-[1.125rem] ${dateLine}`}>First sent {formatInstantDateAu(row.createdAtUtc)}</p>}
     <dl id={detailId(row)} className="grid grid-cols-2 gap-x-8 gap-y-2 md:flex md:flex-wrap md:gap-x-10 md:pl-[1.125rem]">
       {/* A fixed width from md up, so Phone starts at the same x in every opened row. */}
       <div className="min-w-0 break-words md:w-48">
@@ -144,6 +164,37 @@ export default function AlphaSignupsTab() {
         <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
       </div>
     </dl>
+    {row.laterSubmissions.length > 0 && (
+      <section aria-label="Later submissions" className="mt-3 md:pl-[1.125rem]">
+        <h4 className={detailLabel}>Later submissions</h4>
+        {/* The server keeps the first 10. RequestCount also counts identical repeats, so say this only once the 10 are full. */}
+        {row.laterSubmissions.length >= LATER_SUBMISSIONS_KEPT && row.requestCount - 1 > LATER_SUBMISSIONS_KEPT && (
+          <p className={`mt-1 text-xs ${muted}`}>
+            Only the first {LATER_SUBMISSIONS_KEPT} later submissions are kept. The form was sent {row.requestCount} times in all.
+          </p>
+        )}
+        <ol className="mt-1 space-y-2">
+          {row.laterSubmissions.map(later => (
+            <li key={later.id} className="border-t border-[var(--color-border)] pt-2">
+              <p className={dateLine}>Sent {formatInstantDateAu(later.receivedAtUtc)}</p>
+              {/* The same two tracks as the original answers, so Phone lines up with theirs whichever fields are listed. */}
+              <dl className="mt-1 grid grid-cols-2 gap-x-8 gap-y-2 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-x-10">
+                {LATER_FIELDS.filter(({ key }) => later[key] !== row[key]).map(({ key, label }) => (
+                  <div key={key} className={key === 'message' ? 'col-span-2 min-w-0' : `min-w-0 break-words${key === 'phone' ? ' col-start-2' : ''}`}>
+                    <dt className={detailLabel}>{label}</dt>
+                    <dd>
+                      {!later[key] ? '—' : key === 'message'
+                        ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{later[key]}</p>
+                        : displayAnswer(key, later[key])}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ol>
+      </section>
+    )}
     {isBelowMd && <div className={`mt-2 flex justify-end ${ROW_ACTIONS_CARD}`}>{deleteButton(row)}</div>}
     </>
   ) : null

@@ -9,7 +9,7 @@ namespace Odip.Infrastructure.Notifications.Templates;
 public record IntakeVisitStaffPayload(
     string Kind, string RecipientEmail, string StaffFullName, string PersonFullName, DateTime StartsAtUtc, int DurationMinutes, string TimeZoneId,
     string Location, string? ContactPhone, string? ContactEmail, string? Notes, string BookedByName, string? OrganizerEmail,
-    string ProviderName, string? ManagerName, string? ManagerPhone, string Uid, int Sequence, DateTime StampUtc, string? ReplyTo = null);
+    string ProviderName, string? ManagerName, string? ManagerPhone, string Uid, int Sequence, DateTime StampUtc, string? ReplyTo = null, string? ContactName = null);
 
 public static class IntakeVisitStaffTemplate
 {
@@ -28,7 +28,7 @@ public static class IntakeVisitStaffTemplate
         }
         else
         {
-            var contact = string.Join(" · ", new[] { p.ContactPhone, p.ContactEmail }.Where(v => !string.IsNullOrWhiteSpace(v)));
+            var contact = string.Join(" · ", new[] { p.ContactName, p.ContactPhone, p.ContactEmail }.Where(v => !string.IsNullOrWhiteSpace(v)));
             body.Para($"{IntakeWording.LongDay(start)}, {IntakeWording.Time(start)} to {IntakeWording.Time(end)}", "When")
                 .Para(p.Location, "Where")
                 .Para(contact.Length > 0 ? contact : "No contact details", "Contact")

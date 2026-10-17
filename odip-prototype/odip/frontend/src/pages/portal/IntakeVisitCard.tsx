@@ -1,6 +1,7 @@
 import type { IntakeVisitDto } from '@/api/types/inquiries'
 import { StatusBadge } from '@/components/StatusBadge'
 import { isPastVisit, visitStage, visitTimes } from '@/lib/intakeBooking'
+import { fullName } from '@/lib/inquiryDetails'
 import { StartIntakeButton } from '@/pages/inquiries/StartIntakeButton'
 
 /**
@@ -19,7 +20,7 @@ export function IntakeVisitCard({ visit }: { visit: IntakeVisitDto }) {
         <StatusBadge tone="info" label="Intake visit" />
         {reply}
       </div>
-      <p className="mt-2 font-medium text-[var(--color-foreground)] truncate">{visit.firstName} {visit.lastName}</p>
+      <p className="mt-2 font-medium text-[var(--color-foreground)] truncate">{fullName(visit.firstName, visit.lastName)}</p>
       <p className="text-sm text-[var(--color-muted-foreground)] truncate" title={visit.location}>
         {`${visitTimes(visit.startsAt, visit.durationMinutes, visit.timeZoneId)} · ${visit.location}`}
       </p>

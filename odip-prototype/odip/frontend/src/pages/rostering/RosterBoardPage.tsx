@@ -235,9 +235,10 @@ export default function RosterBoardPage() {
   useLayoutEffect(() => { setNoticeHeight(noticesShown ? noticeRef.current?.offsetHeight ?? 0 : null) }, [noticesShown, assignError, waiting, drafts.length, blocked.length, startNotice, regularNotice])
 
   const startWeek = useStartWeek()
-  // Keyed to its week: a Start still out for a week no longer shown never says "Starting…" on this week's card.
-  const [startingWeek, setStartingWeek] = useState<string | null>(null)
-  const starting = startingWeek === weekStart
+  // Keyed to its week: a Start still out for a week no longer shown never says "Starting…" on this week's card, and one week settling never clears another's.
+  const [startingWeeks, setStartingWeeks] = useState<ReadonlySet<string>>(new Set())
+  const startsInFlight = useRef(new Set<string>())   // the state lags a render, so two clicks in one render both see "not starting"
+  const starting = startingWeeks.has(weekStart)
   const startNoticeRef = useRef<HTMLDivElement>(null)
   // The week on screen now, for an answer that comes back after a week move (the brief, 2.4).
   const shownWeek = useRef(weekStart)
@@ -269,7 +270,7 @@ export default function RosterBoardPage() {
     const shift = regularTarget
     if (!shift?.shiftPatternId) return
     try {
-      await setRegular.mutateAsync({ patternId: shift.shiftPatternId, staffId: shift.isRegular ? null : shift.staffId ?? null })
+      await setRegular.mutateAsync({ patternId: shift.shiftPatternId, shiftId: shift.id, staffId: shift.isRegular ? null : shift.staffId ?? null })
       setRegularNotice(regularDone(shift))
     } catch (err: unknown) {
       setAssignError(extractErrorMessage(err, 'Something went wrong changing the regular. Please try again.'))
@@ -300,9 +301,11 @@ export default function RosterBoardPage() {
 
   async function handleStartWeek() {
     const week = weekStart
+    if (startsInFlight.current.has(week)) return
+    startsInFlight.current.add(week)
     const span = formatWeekSpan(days)
     setAssignError(null)
-    setStartingWeek(week)
+    setStartingWeeks(weeks => new Set(weeks).add(week))
     try {
       const result = await startWeek.mutateAsync(week)
       if (shownWeek.current !== week) { setAnnouncement(startResultTitle(span, result)); return }
@@ -315,7 +318,8 @@ export default function RosterBoardPage() {
       if (already) setStartNotice({ kind: 'already' })
       else setAssignError(words)
     } finally {
-      setStartingWeek(null)
+      startsInFlight.current.delete(week)
+      setStartingWeeks(weeks => { const rest = new Set(weeks); rest.delete(week); return rest })
     }
   }
 

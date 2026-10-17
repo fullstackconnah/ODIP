@@ -142,6 +142,10 @@ public class EarlyAccessControllerTests
             // First submission wins: a repeat cannot overwrite what is on file.
             Assert.Equal("Jane Citizen", row.Name);
             Assert.Equal("Sample Support Co", row.Organisation);
+            // The repeat's different name and organisation are kept as a later submission, not lost and not applied.
+            var later = await db.EarlyAccessLaterSubmissions.SingleAsync();
+            Assert.Equal("Someone Else", later.Name);
+            Assert.Equal("Other Org", later.Organisation);
         }
     }
 
@@ -311,7 +315,7 @@ public class EarlyAccessControllerTests
     }
 
     [Fact]
-    public async Task ARepeat_ReplacesTheFourExtraFields_ClearingBlankOnes_AndKeepsNameAndOrganisation()
+    public async Task ARepeat_NeverOverwritesTheStoredAnswers_ItIsKeptAsALaterSubmission()
     {
         var dbName = Guid.NewGuid().ToString();
         using (var db = CreateDb(dbName))
@@ -337,15 +341,90 @@ public class EarlyAccessControllerTests
 
         using (var db = CreateDb(dbName))
         {
-            var row = await db.EarlyAccessRequests.SingleAsync();
+            var row = await db.EarlyAccessRequests.Include(e => e.LaterSubmissions).SingleAsync();
             Assert.Equal(2, row.RequestCount);
-            Assert.Null(row.Role);
-            Assert.Null(row.Phone);
-            Assert.Equal("50-199", row.OrganisationSize);
-            Assert.Equal("Please remove my details", row.Message);
+            Assert.Equal("Ops", row.Role);
+            Assert.Equal("0491 570 156", row.Phone);
+            Assert.Equal("10-49", row.OrganisationSize);
+            Assert.Equal("Rostering", row.Message);
             Assert.Equal("Jane Citizen", row.Name);
             Assert.Equal("Sample Support Co", row.Organisation);
+
+            var later = Assert.Single(row.LaterSubmissions);
+            Assert.Equal("Someone Else", later.Name);
+            Assert.Equal("Sample Support Co", later.Organisation);
+            Assert.Null(later.Role);
+            Assert.Null(later.Phone);
+            Assert.Equal("50-199", later.OrganisationSize);
+            Assert.Equal("Please remove my details", later.Message);
+            Assert.Equal(row.LastRequestedAtUtc, later.ReceivedAtUtc);
         }
+    }
+
+    [Fact]
+    public async Task ARepeatWithADifferentPhoneAndMessage_LeavesThemUnchanged_AndAddsOneLaterSubmission()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using (var db = CreateDb(dbName))
+        {
+            var first = Valid();
+            first.Phone = "0491 570 156";
+            first.Message = "Rostering";
+            AssertReceived(await MakeController(db).Submit(first, CancellationToken.None));
+        }
+        using (var db = CreateDb(dbName))
+        {
+            var repeat = Valid();
+            repeat.Phone = "0400 000 000";
+            repeat.Message = "Please remove my details";
+            AssertReceived(await MakeController(db).Submit(repeat, CancellationToken.None));
+        }
+
+        using var check = CreateDb(dbName);
+        var row = await check.EarlyAccessRequests.Include(e => e.LaterSubmissions).SingleAsync();
+        Assert.Equal("0491 570 156", row.Phone);
+        Assert.Equal("Rostering", row.Message);
+        var later = Assert.Single(row.LaterSubmissions);
+        Assert.Equal("0400 000 000", later.Phone);
+        Assert.Equal("Please remove my details", later.Message);
+    }
+
+    [Fact]
+    public async Task AnIdenticalRepeat_CountsButStoresNoLaterSubmission()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        EarlyAccessRequestDto Same() { var d = Valid(); d.Role = "Ops"; d.Message = "Rostering"; d.Phone = " "; return d; }
+        for (var i = 0; i < 3; i++)
+        {
+            using var db = CreateDb(dbName);
+            AssertReceived(await MakeController(db).Submit(Same(), CancellationToken.None));
+        }
+
+        using var check = CreateDb(dbName);
+        Assert.Equal(3, (await check.EarlyAccessRequests.SingleAsync()).RequestCount);
+        Assert.Empty(await check.EarlyAccessLaterSubmissions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task OnlyTheFirst10DifferingRepeats_AreStored_ButEveryOneIsCounted()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using (var db = CreateDb(dbName))
+            AssertReceived(await MakeController(db).Submit(Valid(), CancellationToken.None));
+        for (var i = 1; i <= 11; i++)
+        {
+            using var db = CreateDb(dbName);
+            var repeat = Valid();
+            repeat.Message = $"Message {i}";
+            AssertReceived(await MakeController(db).Submit(repeat, CancellationToken.None));
+        }
+
+        using var check = CreateDb(dbName);
+        Assert.Equal(12, (await check.EarlyAccessRequests.SingleAsync()).RequestCount);
+        var kept = await check.EarlyAccessLaterSubmissions.Select(l => l.Message).ToListAsync();
+        Assert.Equal(10, kept.Count);
+        Assert.DoesNotContain("Message 11", kept);
+        Assert.Contains("Message 1", kept);
     }
 
     [Fact]
@@ -414,11 +493,79 @@ public class EarlyAccessControllerTests
             await MakeController(db, notifier.Object).Submit(
                 new EarlyAccessRequestDto { Name = " Jane ", Organisation = "Org", Email = "JANE@Example.com", OrganisationSize = "under-10" }, CancellationToken.None);
         using (var db = CreateDb(dbName))
-            await MakeController(db, notifier.Object).Submit(Valid("jane@example.com"), CancellationToken.None);
+            await MakeController(db, notifier.Object).Submit(
+                new EarlyAccessRequestDto { Name = "Jane", Organisation = "Org", Email = "jane@example.com" }, CancellationToken.None);
 
         notifier.Verify(n => n.NotifyNewRequest(It.Is<EarlyAccessNotification>(x =>
-            x.Name == "Jane" && x.Organisation == "Org" && x.Email == "jane@example.com")), Times.Once);
+            x.Name == "Jane" && x.Organisation == "Org" && x.Email == "jane@example.com"
+            && x.Kind == EarlyAccessNoticeKind.NewRequest)), Times.Once);
         notifier.VerifyNoOtherCalls();
+    }
+
+    private static async Task<List<EarlyAccessNoticeKind>> SendMessages(string dbName, params string?[] messages)
+    {
+        var kinds = new List<EarlyAccessNoticeKind>();
+        var notifier = new Mock<IEarlyAccessNotifier>();
+        notifier.Setup(n => n.NotifyNewRequest(It.IsAny<EarlyAccessNotification>()))
+            .Callback<EarlyAccessNotification>(n => kinds.Add(n.Kind));
+        foreach (var message in messages)
+        {
+            using var db = CreateDb(dbName);
+            var dto = Valid();
+            dto.Message = message;
+            AssertReceived(await MakeController(db, notifier.Object).Submit(dto, CancellationToken.None));
+        }
+        return kinds;
+    }
+
+    [Fact]
+    public async Task AStoredLaterSubmission_QueuesOneNotice_AnIdenticalRepeatQueuesNone()
+    {
+        var kinds = await SendMessages(Guid.NewGuid().ToString(), null, "Please remove my details", null);
+
+        Assert.Equal([EarlyAccessNoticeKind.NewRequest, EarlyAccessNoticeKind.SentAgain], kinds);
+    }
+
+    [Fact]
+    public async Task TheTenthStoredSubmission_SaysItIsTheLastKept_AndTheNextOneSaysItIsOverTheLimit()
+    {
+        var messages = new List<string?> { null };
+        messages.AddRange(Enumerable.Range(1, 11).Select(i => $"Message {i}"));
+
+        var kinds = await SendMessages(Guid.NewGuid().ToString(), messages.ToArray());
+
+        Assert.Equal(EarlyAccessNoticeKind.NewRequest, kinds[0]);
+        Assert.All(kinds.Skip(1).Take(9), k => Assert.Equal(EarlyAccessNoticeKind.SentAgain, k));
+        Assert.Equal(EarlyAccessNoticeKind.SentAgainLastKept, kinds[10]);
+        Assert.Equal(EarlyAccessNoticeKind.SentAgainOverLimit, kinds[11]);
+        Assert.Equal(12, kinds.Count);
+    }
+
+    [Fact]
+    public async Task TheSameDifferingMessageSentTwice_IsStoredOnce_AndNotifiesOnce()
+    {
+        var dbName = Guid.NewGuid().ToString();
+
+        var kinds = await SendMessages(dbName, null, "Please remove my details", "A second note", "Please remove my details");
+
+        Assert.Equal([EarlyAccessNoticeKind.NewRequest, EarlyAccessNoticeKind.SentAgain, EarlyAccessNoticeKind.SentAgain], kinds);
+        using var check = CreateDb(dbName);
+        Assert.Equal(["A second note", "Please remove my details"],
+            (await check.EarlyAccessLaterSubmissions.Select(l => l.Message!).ToListAsync()).Order().ToArray());
+        Assert.Equal(4, (await check.EarlyAccessRequests.SingleAsync()).RequestCount);
+    }
+
+    [Fact]
+    public async Task ADuplicateOfAStoredSubmission_DoesNotFillTheCap()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var messages = new List<string?> { null };
+        messages.AddRange(Enumerable.Repeat<string?>("Same note", 15));
+
+        await SendMessages(dbName, messages.ToArray());
+
+        using var check = CreateDb(dbName);
+        Assert.Single(await check.EarlyAccessLaterSubmissions.ToListAsync());
     }
 
     [Fact]

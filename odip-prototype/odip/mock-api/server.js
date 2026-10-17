@@ -91,7 +91,9 @@ const participants = [
 const enquiryFeed = [
   { id: 'inq-0001', participantId: null, firstName: 'Noah', lastName: 'Fitzgerald', phone: '0412 555 010', email: null, source: 'Phone', provenance: 'GP referral',
     createdAt: '2026-09-28T01:10:00Z', participantIsDraft: null, participantIsActive: null, participantIntakeCompletedAt: null },
+  // E2: Noah above is a legacy row (a phone, no contact name). E5: Priya is converted, with a named main contact.
   { id: 'inq-0002', participantId: 'p-0101', firstName: 'Priya', lastName: 'Nair', phone: null, email: 'priya.nair@example.com.au', source: 'Web', provenance: null,
+    contactFirstName: 'Anika', contactLastName: 'Nair', contactRelationship: 'Mother', contactRole: 'Guardian',
     createdAt: '2026-09-26T04:00:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null },
   // A draft intake started in the Intake wizard with no enquiry behind it: it rides in the same feed, with the participant's id as its id.
   { id: 'p-0102', participantId: 'p-0102', firstName: 'Tomas', lastName: 'Becker', phone: '0433 555 020', email: null, source: '', provenance: null,
@@ -2123,17 +2125,30 @@ function notificationPreferenceGrid() {
 const earlyAccessSignups = [
   { id: 'eas-0001', name: 'Amara Okafor', organisation: 'Riverbend Community Care', email: 'amara.okafor@example.org',
     role: 'Operations manager', phone: '0491 570 156', organisationSize: '10-49',
-    message: "Please remove my details for now. We've signed with another system this year.\nThanks for the chat.",
-    createdAtUtc: '2026-10-02T01:15:00Z', lastRequestedAtUtc: '2026-10-15T22:40:00Z', requestCount: 2 },
+    message: 'We run six houses in the Riverina and would like to try the roster board.',
+    createdAtUtc: '2026-10-02T01:15:00Z', lastRequestedAtUtc: '2026-10-15T22:40:00Z', requestCount: 3,
+    // The stored answers are the first ones. Two repeats changed something: a corrected phone, then a removal request with the role cleared.
+    laterSubmissions: [
+      { id: 'eal-0001', receivedAtUtc: '2026-10-09T03:30:00Z', name: 'Amara Okafor', organisation: 'Riverbend Community Care',
+        role: 'Operations manager', phone: '0491 570 157', organisationSize: '10-49',
+        message: 'We run six houses in the Riverina and would like to try the roster board.' },
+      { id: 'eal-0002', receivedAtUtc: '2026-10-15T22:40:00Z', name: 'Amara Okafor', organisation: 'Riverbend Community Care',
+        phone: '0491 570 157', organisationSize: '10-49',
+        message: "Please remove my details for now. We've signed with another system this year.\nThanks for the chat." },
+    ] },
   { id: 'eas-0002', name: 'Tom Nguyen', organisation: 'Coastal Support Services', email: 'tom.nguyen@example.org',
     role: 'Rostering lead', organisationSize: '50-199',
     message: 'We run 14 SIL houses and about 60 community access shifts a week.\n\nMost of our admin time goes on filling last-minute gaps and chasing shift notes before claims. We would like to try the roster board and the completion review first.',
-    createdAtUtc: '2026-10-14T05:02:00Z', lastRequestedAtUtc: '2026-10-14T05:02:00Z', requestCount: 1 },
+    createdAtUtc: '2026-10-14T05:02:00Z', lastRequestedAtUtc: '2026-10-14T05:02:00Z', requestCount: 1, laterSubmissions: [] },
   { id: 'eas-0003', name: 'Priya Raman', organisation: 'Kin & Co Disability Services', email: 'priya@example.org',
     phone: '+61 2 5550 1234', organisationSize: 'under-10',
-    createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1 },
+    createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1, laterSubmissions: [] },
   { id: 'eas-0004', name: 'Sam Field', organisation: 'Field Health', email: 'sam.field@example.org',
-    createdAtUtc: '2026-09-30T06:00:00Z', lastRequestedAtUtc: '2026-09-30T06:00:00Z', requestCount: 1 },
+    createdAtUtc: '2026-09-30T06:00:00Z', lastRequestedAtUtc: '2026-10-12T04:00:00Z', requestCount: 14,
+    // The cap: the API keeps the first 10 later submissions, so the last four sends were counted and not kept.
+    laterSubmissions: Array.from({ length: 10 }, (_, i) => ({
+      id: `eal-1${String(i).padStart(3, '0')}`, receivedAtUtc: `2026-10-${String(i + 1).padStart(2, '0')}T04:00:00Z`, name: 'Sam Field', organisation: 'Field Health',
+      message: `Follow-up ${i + 1}: still interested.` })) },
 ]
 // DELETE really removes the row for the life of the process, so the list after a Delete shows it gone (as the API does).
 const earlyAccessDelete = [
@@ -2976,6 +2991,12 @@ const putRoutes = [
   ['rostering/patterns/:id/regular', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
     if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    // REV274: the server compares the shown shift with the pattern's own slot and refuses a stale board (409); a Make also needs the shift's own worker; an ended pattern has no regular to change.
+    const shown = rosterShifts.find((s) => s.id === (body && body.shiftId))
+    const slotMatches = shown && shown.shiftPatternId === pattern.id && shown.participantId === pattern.participantId && planApproval.DAYS[planApproval.weekday(shown.serviceDate)] === pattern.dayOfWeek
+      && shown.startTime === pattern.startTime && shown.endTime === pattern.endTime && !!shown.endsNextDay === !!pattern.endsNextDay
+    if (!slotMatches || (body.staffId && shown.staffId !== body.staffId)) return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
+    if (!pattern.isActive || (pattern.effectiveTo && pattern.effectiveTo < providerToday())) return respond(409, failEnvelope(null, ["This shift's agreement pattern has ended, so it has no regular to change."], 'pattern-ended'))
     const regular = body && body.staffId ? staff.find((s) => s.id === body.staffId) : null
     if (body && body.staffId && !regular) return respond(400, failEnvelope(null, ['Staff member not found.']))
     pattern.defaultStaffId = regular ? regular.id : null
@@ -3097,7 +3118,7 @@ function sendResult(res, result) {
 // ValidationProblemDetails whose `errors` are keyed by the 7 fields, name / organisation / email / organisationSize /
 // role / phone / message. Name, organisation, email and organisationSize are required (a missing or blank size is
 // a 400 like any other required field). A body over 8 KB (in BYTES, as the API counts) gets 413.
-// Nothing is stored. (The 429 rate limit is not simulated here.)
+// A valid sign-up is kept for the life of the process, in the admin list (see recordEarlyAccess). (The 429 rate limit is not simulated here.)
 const EARLY_ACCESS_PATH = '/api/public/early-access'
 const EARLY_ACCESS_DELAY_MS = 400
 const EARLY_ACCESS_MAX_BODY = 8192 // bytes, as EarlyAccessController.MaxBodyBytes
@@ -3128,10 +3149,34 @@ function validateEarlyAccess(body) {
   const phone = text(body.phone)
   if (phone.length > 30) errors.phone = ['Phone must be 30 characters or fewer.']
   else if (!/^[0-9 +()-]*$/.test(phone)) errors.phone = ['Use digits, spaces and + ( ) - only.']
+  else if (phone && (phone.lastIndexOf('+') > 0 || !/^(\D*\d){8,15}\D*$/.test(phone))) errors.phone = ['Enter a phone number with 8 to 15 digits.']
   const size = text(body.organisationSize)
   if (!ORGANISATION_SIZES.includes(size)) errors.organisationSize = [size ? 'Choose one of the listed sizes.' : "Choose your organisation's size."]
   if (cleanMessage(body.message).length > 1000) errors.message = ['Message must be 1,000 characters or fewer.']
   return errors
+}
+
+// Stores a valid sign-up in the admin list for the life of the process, as the API does: a new address is a new row; a repeat bumps the count and
+// the last-sent time but never changes the stored answers, and when its answers differ it is kept as a later submission (the first 10 only).
+let earlyAccessSeq = 0
+function recordEarlyAccess(body) {
+  const text = (v) => (typeof v === 'string' ? v.trim() : '') || undefined
+  const answers = {
+    name: text(body.name), organisation: text(body.organisation), role: text(body.role), phone: text(body.phone),
+    organisationSize: text(body.organisationSize), message: cleanMessage(body.message) || undefined,
+  }
+  const email = text(body.email).toLowerCase()
+  const now = new Date().toISOString()
+  const stored = earlyAccessSignups.find(s => s.email === email)
+  if (!stored) {
+    earlyAccessSignups.unshift({ id: `eas-new-${++earlyAccessSeq}`, ...answers, email, createdAtUtc: now, lastRequestedAtUtc: now, requestCount: 1, laterSubmissions: [] })
+    return
+  }
+  stored.lastRequestedAtUtc = now
+  stored.requestCount += 1
+  if (Object.keys(answers).some(k => answers[k] !== stored[k]) && stored.laterSubmissions.length < 10)
+    stored.laterSubmissions.push({ id: `eal-new-${++earlyAccessSeq}`, receivedAtUtc: now, ...answers })
+  earlyAccessSignups.sort((a, b) => b.lastRequestedAtUtc.localeCompare(a.lastRequestedAtUtc))
 }
 
 function handleEarlyAccess(req, res) {
@@ -3174,6 +3219,7 @@ function handleEarlyAccess(req, res) {
         }))
         return
       }
+      if (!honeypotFilled) recordEarlyAccess(body)
       send(res, 202, { status: 'received' })
     }, EARLY_ACCESS_DELAY_MS)
   })

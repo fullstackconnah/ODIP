@@ -227,6 +227,49 @@ public class PortalControllerTests
         Assert.Empty(db.ShiftNotes);
     }
 
+    [Fact]   // REV274 #2: the Draft gate on GET/POST notes also covers a worker's open edit of an older note
+    public async Task UpdateShiftNote_OnceTheShiftIsDraft_IsNotFound_BodyUnchanged()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, me.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = me.Id, AuthorName = "Ben Turner", Body = "Original body." };
+        db.ShiftNotes.Add(note);
+        shift.Status = ShiftStatus.Draft;
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var result = await controller.UpdateShiftNote(note.Id, new UpdateShiftNoteDto { Body = "She had a fall." }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal("Original body.", db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).Body);
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task AcknowledgeShiftNoteFlags_OnceTheShiftIsDraft_IsNotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, me.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = me.Id, AuthorName = "Ben Turner", Body = "She had a fall.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        db.ShiftNotes.Add(note);
+        db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), SourceKey = $"flagged-note:{note.Id}", TaskType = TaskType.FlaggedNoteFollowUp, Title = "Flagged shift note (Falls)",
+            ShiftNoteId = note.Id, ShiftId = shift.Id, Status = TaskItemStatus.NotStarted,
+        });
+        shift.Status = ShiftStatus.Draft;
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var result = await controller.AcknowledgeShiftNoteFlags(note.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Null(db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).FlagsAcknowledgedAt);
+        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync()).Status);
+    }
+
     [Fact]
     public async Task GetMyShifts_ValidUserWithNoShifts_ReturnsEmptyListNotSpecialPayload()
     {

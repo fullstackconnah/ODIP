@@ -45,6 +45,22 @@ public class IntakeVisitsTests
         Assert.Null(noah.ParticipantId);
     }
 
+    // G2: StartIntakeButton reads the two gates from the visit.
+    [Fact]
+    public async Task Intake_visits_say_whether_intake_can_start()
+    {
+        var f = new Fixture();
+        await f.BookAsync();
+        var ava = BookAva(f, f.Dana.Id).WithFullAddress();
+        ava.ContactIsParticipant = true;
+        f.Db.SaveChanges();
+
+        var visits = Visits(await f.Controller().Visits(Oct16, Oct16.AddDays(1), null, CancellationToken.None)).ToDictionary(v => v.FirstName);
+
+        Assert.Equal((false, true), (visits["Noah"].HasAddress, visits["Noah"].ContactNeedsName)); // a phone and an email, no contact name
+        Assert.Equal((true, false), (visits["Ava"].HasAddress, visits["Ava"].ContactNeedsName));
+    }
+
     // Noah's visit is Fri 16 Oct 10:00 am in Sydney, which is still 15 Oct in UTC: the range is in the PROVIDER's dates.
     [Fact]
     public async Task The_range_is_in_the_providers_local_dates_not_utc()

@@ -37,6 +37,13 @@ const maria = { role: 'Guardian', firstName: 'Maria', lastName: 'Lopez', phone: 
 const tom = { role: 'EmergencyContact', firstName: 'Tom', lastName: 'Ng', phone: null, email: null, relationship: null, notes: null }
 const firstName = () => screen.getByLabelText(/^First name/, { selector: '#inquiry-first-name' })
 const lastName = () => screen.getByLabelText(/^Last name/, { selector: '#inquiry-last-name' })
+const byId = (id: string) => document.getElementById(id) as HTMLInputElement
+/** Every field the redesign added, as a body sends it when nothing was typed in them (spec 2026-10-16: blanks go as null, never ""). */
+const NO_DETAILS = {
+  contactIsParticipant: false, contactFirstName: null, contactLastName: null, contactRelationship: null, contactRole: null,
+  dateOfBirth: null, ndisNumber: null, addressStreet: null, addressSuburb: null, addressState: null, addressPostcode: null,
+  planType: null, planStartDate: null, planEndDate: null,
+}
 
 /** The Enquiries tab, as far as the form can see: where it went, and the summary it carried there as router state. */
 function TabProbe() {
@@ -75,13 +82,13 @@ describe('InquiryFormPage (wire) — capturing an enquiry', () => {
     const user = userEvent.setup()
     renderForm()
 
-    await user.type(screen.getByLabelText(/first name/i), 'Ava')
-    await user.type(screen.getByLabelText(/last name/i), 'Ng')
+    await user.type(firstName(), 'Ava')
+    await user.type(lastName(), 'Ng')
     await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
 
     await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
     expect(mockApiPost).toHaveBeenCalledWith('/inquiries', {
-      firstName: 'Ava', lastName: 'Ng', phone: null, email: null, source: 'Phone', provenance: null, contacts: [],
+      firstName: 'Ava', lastName: 'Ng', phone: null, email: null, source: 'Phone', provenance: null, ...NO_DETAILS, contacts: [],
     })
     // Kept from the old InquiryFormPage.test.tsx (plan check S6): a plain success goes back to the Enquiries tab, with its summary.
     expect(await screen.findByText('Enquiries tab destination')).toBeInTheDocument()
@@ -92,8 +99,8 @@ describe('InquiryFormPage (wire) — capturing an enquiry', () => {
     const user = userEvent.setup()
     renderForm()
 
-    await user.type(screen.getByLabelText(/first name/i), 'Ava')
-    await user.type(screen.getByLabelText(/last name/i), 'Ng')
+    await user.type(firstName(), 'Ava')
+    await user.type(lastName(), 'Ng')
     await user.type(screen.getByLabelText(/provenance or referral notes/i), '  Referred by Dr Patel  ')
     await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
 
@@ -101,16 +108,23 @@ describe('InquiryFormPage (wire) — capturing an enquiry', () => {
     expect(mockApiPost.mock.calls[0][1]).toMatchObject({ provenance: 'Referred by Dr Patel' })
   })
 
-  it('does not send an enquiry with no name: the browser stops it, because the name fields really are required', async () => {
+  it('the first name alone saves; a blank first name shows "Add the participant\'s first name." and sends nothing', async () => {
     const user = userEvent.setup()
     renderForm()
 
     await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
 
-    expect(screen.getByLabelText(/first name/i)).toHaveAttribute('required')
-    expect(screen.getByLabelText(/first name/i)).toHaveAttribute('autocomplete', 'given-name')
+    expect(await screen.findByText("Add the participant's first name.")).toBeInTheDocument()
+    expect(firstName()).not.toHaveAttribute('required')   // no browser bubble ahead of the form's own check (SHAPE section 3)
+    expect(firstName()).toHaveAttribute('aria-invalid', 'true')
+    expect(firstName()).toHaveAttribute('autocomplete', 'off')
+    await waitFor(() => expect(firstName()).toHaveFocus())
     expect(screen.getByRole('link', { name: /back to enquiries/i })).toHaveAttribute('href', '/participants?tab=enquiries')
     expect(mockApiPost).not.toHaveBeenCalled()
+
+    await user.type(firstName(), 'Jo')
+    await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/inquiries', expect.objectContaining({ firstName: 'Jo', lastName: null })))
   })
 
   it('shows the server\'s own message when the enquiry is refused, and keeps what was typed', async () => {
@@ -118,12 +132,12 @@ describe('InquiryFormPage (wire) — capturing an enquiry', () => {
     const user = userEvent.setup()
     renderForm()
 
-    await user.type(screen.getByLabelText(/first name/i), 'Ava')
-    await user.type(screen.getByLabelText(/last name/i), 'Ng')
+    await user.type(firstName(), 'Ava')
+    await user.type(lastName(), 'Ng')
     await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('A tenant context is required.')
-    expect(screen.getByLabelText(/first name/i)).toHaveValue('Ava')
+    expect(firstName()).toHaveValue('Ava')
     expect(screen.queryByText('Enquiries tab destination')).not.toBeInTheDocument()
   })
 
@@ -132,8 +146,8 @@ describe('InquiryFormPage (wire) — capturing an enquiry', () => {
     const user = userEvent.setup()
     renderForm()
 
-    await user.type(screen.getByLabelText(/first name/i), 'Ava')
-    await user.type(screen.getByLabelText(/last name/i), 'Ng')
+    await user.type(firstName(), 'Ava')
+    await user.type(lastName(), 'Ng')
     await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not capture this enquiry. Check the details and try again.')
@@ -148,12 +162,12 @@ describe('InquiryFormPage (wire) — editing an enquiry opened cold', () => {
     renderForm('/participants/new-inquiry?id=i1')
 
     expect(screen.getByRole('status')).toHaveTextContent(/loading enquiry/i)
-    expect(screen.queryByLabelText(/first name/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^First name/, { selector: '#inquiry-first-name' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save enquiry' })).not.toBeInTheDocument()
 
     arrive(detail())
-    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Rowan'))
-    expect(screen.getByLabelText(/last name/i)).toHaveValue('Blake')
+    await waitFor(() => expect(firstName()).toHaveValue('Rowan'))
+    expect(lastName()).toHaveValue('Blake')
     expect(screen.getByLabelText('Phone')).toHaveValue('0400 000 999')
     expect(screen.getByLabelText('Email')).toHaveValue('rowan@example.com')
     expect(screen.getByLabelText('Source')).toHaveValue('Web')
@@ -165,7 +179,7 @@ describe('InquiryFormPage (wire) — editing an enquiry opened cold', () => {
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
 
-    const first = await screen.findByLabelText(/first name/i)
+    const first = await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
     await waitFor(() => expect(first).toHaveValue('Rowan'))
     await user.clear(first)
     await user.type(first, 'Ro')
@@ -174,7 +188,7 @@ describe('InquiryFormPage (wire) — editing an enquiry opened cold', () => {
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', {
       firstName: 'Ro', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web',
-      provenance: 'Referred by Dr Patel, Brisbane', contacts: [],
+      provenance: 'Referred by Dr Patel, Brisbane', ...NO_DETAILS, contacts: [],
     })
     expect(await screen.findByTestId('notice')).toHaveTextContent("Enquiry saved: Rowan Blake's changes are saved.")
   })
@@ -192,7 +206,7 @@ describe('InquiryFormPage (wire) — editing an enquiry opened cold', () => {
     renderForm('/participants/new-inquiry?id=i1')
 
     expect(await screen.findByText(/enquiry not found/i)).toBeInTheDocument()
-    expect(screen.queryByLabelText(/first name/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^First name/, { selector: '#inquiry-first-name' })).not.toBeInTheDocument()
   })
 
   it('says the enquiry could not be loaded, with a retry, when the list request fails: not "not found", not a blank form', async () => {
@@ -203,11 +217,11 @@ describe('InquiryFormPage (wire) — editing an enquiry opened cold', () => {
     renderForm('/participants/new-inquiry?id=i1')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't load this enquiry/i)
-    expect(screen.queryByLabelText(/first name/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^First name/, { selector: '#inquiry-first-name' })).not.toBeInTheDocument()
 
     mockApiGet.mockImplementation(served)
     await user.click(screen.getByRole('button', { name: /try again/i }))
-    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Rowan'))
+    await waitFor(() => expect(firstName()).toHaveValue('Rowan'))
   })
 })
 
@@ -228,28 +242,17 @@ describe('InquiryFormPage (wire) — contacts', () => {
 
     await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
     expect(mockApiPost).toHaveBeenCalledWith('/inquiries', {
-      firstName: 'Ana', lastName: 'Lopez', phone: null, email: null, source: 'Phone', provenance: null,
+      firstName: 'Ana', lastName: 'Lopez', phone: null, email: null, source: 'Phone', provenance: null, ...NO_DETAILS,
       contacts: [{ role: 'Guardian', firstName: 'Maria', lastName: 'Lopez', relationship: 'Mother', phone: null, email: null, notes: null }],
     })
   })
 
-  it('Add the enquirer as a contact copies only the phone and email into a new row, focuses its First name, then hides', async () => {
+  it('there is no "Add the enquirer as a contact" (L9): the Main contact card holds who is calling', async () => {
     const user = userEvent.setup()
     renderForm()
-    expect(screen.queryByRole('button', { name: 'Add the enquirer as a contact' })).not.toBeInTheDocument()
-    await user.type(firstName(), 'Kai')
-    await user.type(lastName(), 'Lopez')
-    await user.type(screen.getByLabelText(/^Phone/, { selector: '#inquiry-phone' }), '0412 555 010')
-    await user.type(screen.getByLabelText(/^Email/, { selector: '#inquiry-email' }), 'maria@example.com')
-    await user.click(screen.getByRole('button', { name: 'Add the enquirer as a contact' }))
-
-    const row = screen.getByRole('group', { name: 'Contact 1' })
-    expect(within(row).getByLabelText(/^Phone/)).toHaveValue('0412 555 010')
-    expect(within(row).getByLabelText(/^Email/)).toHaveValue('maria@example.com')
-    expect(within(row).getByLabelText(/^First name/)).toHaveValue('')
-    expect(within(row).getByLabelText(/^Last name/)).toHaveValue('')
-    expect(within(row).getByLabelText(/^First name/)).toHaveFocus()
-    expect(screen.queryByRole('button', { name: 'Add the enquirer as a contact' })).not.toBeInTheDocument()
+    await user.type(byId('inquiry-phone'), '0412 555 010')
+    expect(screen.queryByRole('button', { name: /add the enquirer/i })).not.toBeInTheDocument()
+    expect(screen.getByText('No other contacts yet.')).toBeInTheDocument()
   })
 
   it('a contact with a first name but no last name is stopped here, with its message on that field, and nothing is sent', async () => {
@@ -286,7 +289,7 @@ describe('InquiryFormPage (wire) — contacts', () => {
 
     expect(await within(row).findByText('Enter a phone number, like 0412 345 678.')).toBeInTheDocument()
     expect(within(row).getByLabelText(/^Phone/)).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Could not capture this enquiry. Check the details and try again.')).toBeInTheDocument()
+    expect(screen.getByText('Nothing was saved. Fix the marked fields, then save again.')).toBeInTheDocument()
     expect(within(row).getByLabelText(/^Phone/)).toHaveValue('12ab')
     expect(firstName()).toHaveValue('Ana')
     expect(screen.queryByText('Enquiries tab destination')).not.toBeInTheDocument()
@@ -307,24 +310,27 @@ describe('InquiryFormPage (wire) — contacts', () => {
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', {
-      firstName: 'Rowan', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web', provenance: 'Referred by Dr Patel, Brisbane',
+      firstName: 'Rowan', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web', provenance: 'Referred by Dr Patel, Brisbane', ...NO_DETAILS,
       contacts: [{ role: 'EmergencyContact', firstName: 'Tom', lastName: 'Ng', relationship: null, phone: null, email: null, notes: null }],
       expectedUpdatedAt: '2026-10-16T01:02:03.456789Z',
     })
   })
 
-  it('a converted enquiry says where its contacts are, links there, and its PUT carries no contacts', async () => {
-    serve({ '/inquiries/i1': detail({ participantId: 'p-1' }) })
+  it('a converted enquiry shows its contact and details as one read-only card, links to the intake, and its PUT sends the names, source and provenance only', async () => {
+    serve({ '/inquiries/i1': detail({ participantId: 'p-1', updatedAt: 'v1', contactFirstName: 'Sarah', contactLastName: 'Walsh', contactRelationship: 'Mother', contactRole: 'Guardian', ndisNumber: '430123456' }) })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
 
-    expect(await screen.findByText(/Contacts are on Rowan's intake now\./)).toBeInTheDocument()
+    expect(await screen.findByText(/Intake has started, so Rowan's main contact, details and other contacts are on their record now\./)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Contacts and details' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open the intake' })).toHaveAttribute('href', '/participants/p-1/intake')
+    expect(screen.getByText('Sarah Walsh')).toBeInTheDocument()
+    for (const id of ['inquiry-phone', 'inquiry-email', 'inquiry-contact-first-name', 'inquiry-address-street', 'inquiry-ndis-number']) expect(byId(id)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add contact' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
-    expect(mockApiPut.mock.calls[0][1]).not.toHaveProperty('contacts')
+    expect(Object.keys(mockApiPut.mock.calls[0][1]).sort()).toEqual(['expectedUpdatedAt', 'firstName', 'lastName', 'provenance', 'source'])
   })
 
   it('never mounts from a cached copy: it waits for this visit\'s own load, then shows those contacts (plan check S2)', async () => {
@@ -354,11 +360,11 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
   }
 
   async function fillNewVisit(user: ReturnType<typeof userEvent.setup>) {
-    await user.type(screen.getByLabelText(/^First name/), 'Ana')
-    await user.type(screen.getByLabelText(/^Last name/), 'Lopez')
-    await user.type(screen.getByLabelText(/^Email/), 'ana@example.com')
+    await user.type(firstName(), 'Ana')
+    await user.type(lastName(), 'Lopez')
+    await user.type(byId('inquiry-email'), 'ana@example.com')
     await user.click(screen.getByRole('checkbox', { name: /book the intake visit now/i }))
-    fireEvent.change(screen.getByLabelText(/^Date/), { target: { value: '2030-10-16' } })
+    fireEvent.change(screen.getByLabelText(/^Date(?! of birth)/), { target: { value: '2030-10-16' } })
     fireEvent.change(screen.getByLabelText(/^Start time/), { target: { value: '10:00' } })
     await user.type(screen.getByLabelText(/^Where/), 'Library')
   }
@@ -413,28 +419,65 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     expect(screen.getByTestId('notice')).toHaveTextContent('Enquiry saved, invite not sent:')
   })
 
-  it('while the box is ticked the Email is required', async () => {
+  it('a booking with no email PUTs the booking with no contactEmail; the notice says "No invite sent: the main contact has no email."', async () => {
+    const saved = detail({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: null, phone: null, provenance: null, source: 'Phone' })
+    mockApiPost.mockResolvedValue(saved)
+    mockApiPut.mockResolvedValue({ ...saved, intakeStartsAt: START, intakeStaffName: 'Dana Smith', intakeInviteSentAt: null, intakeInviteError: null })
     const user = userEvent.setup()
     renderForm()
-    await user.type(screen.getByLabelText(/^First name/), 'Ana')
-    await user.type(screen.getByLabelText(/^Last name/), 'Lopez')
+    await user.type(firstName(), 'Ana')
     await user.click(screen.getByRole('checkbox', { name: /book the intake visit now/i }))
-    expect(screen.getByText('Add an email above. The invite goes there.')).toBeInTheDocument()
+    expect(screen.getByText('Saving books the visit without an invite: the main contact has no email.')).toBeInTheDocument()
+    expect(byId('inquiry-email')).not.toHaveAttribute('aria-invalid', 'true')
+    fireEvent.change(screen.getByLabelText(/^Date(?! of birth)/), { target: { value: '2030-10-16' } })
+    fireEvent.change(screen.getByLabelText(/^Start time/), { target: { value: '10:00' } })
+    await user.type(screen.getByLabelText(/^Where/), 'Library')
     await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
 
-    const email = screen.getByLabelText(/^Email/)
-    expect(await screen.findByText('Add an email to send the invite to.')).toBeInTheDocument()
-    expect(email).toHaveAttribute('aria-invalid', 'true')
-    await waitFor(() => expect(email).toHaveFocus())
-    expect(mockApiPost).not.toHaveBeenCalled()
+    await screen.findByText('Enquiries tab destination')
+    expect(mockApiPut).toHaveBeenCalledWith('/inquiries/inq-9/intake-booking', { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, expectedUpdatedAt: undefined })
+    expect(mockApiPut.mock.calls[0][1]).not.toHaveProperty('contactEmail')
+    expect(screen.getByTestId('notice')).toHaveTextContent('Enquiry captured: Intake visit booked for Wed 16 Oct 2030, 10:00 am with Dana Smith. No invite sent: the main contact has no email.')
+  })
+
+  it("a converted enquiry's email that cannot take an invite: the card says why, and Send the invite is not offered (D)", async () => {
+    serve({ '/inquiries/i1': detail({ ...booked, participantId: 'p-1', email: 'a b@c.d', intakeInviteSentAt: null, intakeInviteError: null }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    const user = userEvent.setup()
+    expect(await screen.findByText("No invite sent: the email on file, a b@c.d, can't take an invite. Let the main contact know another way.")).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/^Where/), ' Library')
+    expect(screen.getByText("Saving updates the visit. No invite goes out: the email on file can't take an invite.")).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /Send the invite/ })).not.toBeInTheDocument()
+  })
+
+  it('booked and never sent, with an email typed: "Send the invite to x" is offered; ticked, resend runs after the PUTs', async () => {
+    serve({ '/inquiries/i1': detail({ ...booked, email: null, intakeInviteSentAt: null, intakeInviteError: null }) })
+    mockApiPut.mockResolvedValue(detail({ ...booked, email: 'sarah@example.com', intakeInviteSentAt: null }))
+    mockApiPost.mockResolvedValue(detail({ ...booked, email: 'sarah@example.com', intakeInviteSentAt: '2030-10-02T00:00:00Z' }))
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
+    await user.type(byId('inquiry-email'), 'sarah@example.com')
+    const box = screen.getByRole('checkbox', { name: 'Send the invite to sarah@example.com' })
+    expect(screen.getByText('No invite went out when it was booked.')).toBeInTheDocument()
+    // An address typed since: the result line no longer says the contact has no email (SHAPE 7).
+    expect(screen.getByText('No invite has gone out yet.')).toBeInTheDocument()
+    expect(screen.queryByText(/has no email/)).not.toBeInTheDocument()
+    await user.click(box)
+    await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
+
+    await screen.findByText('Enquiries tab destination')
+    expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', expect.objectContaining({ email: 'sarah@example.com' }))
+    expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/intake-booking/send')
+    expect(mockApiPut.mock.invocationCallOrder[0]).toBeLessThan(mockApiPost.mock.invocationCallOrder[0])
   })
 
   it('a second press while saving sends nothing more', async () => {
     mockApiPost.mockReturnValue(new Promise(() => {}))
     const user = userEvent.setup()
     renderForm()
-    await user.type(screen.getByLabelText(/^First name/), 'Ana')
-    await user.type(screen.getByLabelText(/^Last name/), 'Lopez')
+    await user.type(firstName(), 'Ana')
+    await user.type(lastName(), 'Lopez')
     const save = screen.getByRole('button', { name: 'Capture enquiry' })
     await user.click(save)
     await user.click(save)
@@ -454,7 +497,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     expect(screen.getByRole('button', { name: 'Cancel visit' })).toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: /book the intake visit now/i })).not.toBeInTheDocument()
 
-    await user.type(screen.getByLabelText(/^First name/), 'n')
+    await user.type(firstName(), 'n')
     await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
 
     await screen.findByText('Enquiries tab destination')
@@ -486,11 +529,11 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
   })
 
   it('Cancel visit: the dialog, the DELETE, then the notice in the card, the box unticked, other entries kept', async () => {
-    serve({ '/inquiries/i1': detail(booked) })
+    serve({ '/inquiries/i1': detail({ ...booked, contactFirstName: 'Sarah', contactLastName: 'Blake' }) })
     mockApiDeleteRaw.mockResolvedValue({ success: true, data: { inquiry: detail(), cancellationEmail: 'Sent' } })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
-    const first = await screen.findByLabelText(/^First name/)
+    const first = await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
     await user.clear(first)
     await user.type(first, 'Ro')
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
@@ -498,11 +541,11 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Cancel visit' }))
 
     expect(mockApiDeleteRaw).toHaveBeenCalledWith('/inquiries/i1/intake-booking')
-    const notice = await screen.findByText("We've emailed Rowan Blake a cancellation.")
+    const notice = await screen.findByText("We've emailed Sarah a cancellation.")
     expect(screen.getByText('Intake visit cancelled')).toBeInTheDocument()
     await waitFor(() => expect(document.activeElement?.contains(notice)).toBe(true))
     expect(screen.getByRole('checkbox', { name: /book the intake visit now/i })).not.toBeChecked()
-    expect(screen.getByLabelText(/^First name/)).toHaveValue('Ro')
+    expect(firstName()).toHaveValue('Ro')
   })
 
   it('Send again: a changed email on a visit whose invite went out offers the box; ticked, Save PUTs and then resends', async () => {
@@ -511,7 +554,8 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     mockApiPost.mockResolvedValue(detail({ ...booked, email: 'new@example.com', intakeInviteSentAt: '2030-10-02T00:00:00Z' }))
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
-    const email = await screen.findByLabelText(/^Email/)
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
+    const email = byId('inquiry-email')
     await user.clear(email)
     await user.type(email, 'new@example.com')
     const box = screen.getByRole('checkbox', { name: 'Send the invite again to new@example.com' })
@@ -542,7 +586,7 @@ describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
     mockApiPost.mockResolvedValue({ inquiry: detail({ closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'DeclinedByUs' }), cancellationEmail: 'NoVisit' })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
-    const first = await screen.findByLabelText(/^First name/)
+    const first = await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
     await user.type(first, 'n')
     await user.click(screen.getByRole('button', { name: 'Close enquiry' }))
 
@@ -561,7 +605,7 @@ describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
     serve({ '/inquiries/i1': detail() })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
-    await screen.findByLabelText(/^First name/)
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
     await user.click(screen.getByRole('button', { name: 'Close enquiry' }))
 
     expect(screen.getByRole('alertdialog')).not.toHaveTextContent("Changes you haven't saved")
@@ -578,15 +622,15 @@ describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
     expect(screen.getByText('Chose a closer provider')).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save enquiry' })).not.toBeInTheDocument()
-    expect(screen.getByText('Contacts were deleted when this enquiry closed.')).toBeInTheDocument()
+    expect(screen.getByText('Other contacts were deleted when this enquiry closed.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Reopen enquiry' }))
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Reopen enquiry' }))
 
     expect(mockApiPost).toHaveBeenCalledWith('/inquiries/i1/reopen', { expectedUpdatedAt: '2026-10-16T01:00:00.25Z' })
     expect(await screen.findByRole('heading', { level: 1, name: 'Edit enquiry' })).toBeInTheDocument()
-    expect(screen.getByLabelText(/^First name/)).toHaveValue('Rowan')
-    const reopened = screen.getByText('Reopened. Add the contacts again below.')
+    expect(firstName()).toHaveValue('Rowan')
+    const reopened = screen.getByText('Reopened. Add the other contacts again below.')
     await waitFor(() => expect(document.activeElement?.contains(reopened)).toBe(true))
   })
 
@@ -596,13 +640,29 @@ describe('InquiryFormPage (wire) — close and reopen (spec addendum)', () => {
     cleanup()
     serve({ '/inquiries/i1': detail({ participantId: 'p-1' }) })
     renderForm('/participants/new-inquiry?id=i1')
-    await screen.findByLabelText(/^First name/)
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
     expect(screen.queryByRole('button', { name: 'Close enquiry' })).not.toBeInTheDocument()
   })
 
-  it('the contacts hint says contacts are deleted if the enquiry is closed', () => {
+  it('the other contacts hint says they are deleted if the enquiry is closed', () => {
     renderForm()
-    expect(screen.getByText("Family, guardians and anyone else to keep in touch with. They move to the participant's record when intake starts, and are deleted if the enquiry is closed.")).toBeInTheDocument()
+    expect(screen.getByText("Anyone else to keep in touch with, like family or a support coordinator. They move to the participant's record when intake starts, and are deleted if the enquiry is closed.")).toBeInTheDocument()
+  })
+
+  it('the closed view shows the main contact, a self contact as "Their own contact", and the details only when something is stored', async () => {
+    const closed = { closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'Other' }
+    serve({ '/inquiries/i1': detail({ ...closed, contactFirstName: 'Leo', contactLastName: 'Park', contactRelationship: 'Father', contactRole: 'Guardian', addressStreet: '12 Smith St', addressSuburb: 'Parramatta', addressState: 'NSW', addressPostcode: '2150' }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    expect(await screen.findByRole('heading', { name: 'Main contact' })).toBeInTheDocument()
+    expect(screen.getByText('Leo Park')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Participant details' })).toBeInTheDocument()
+    expect(screen.getByText('12 Smith St, Parramatta NSW 2150')).toBeInTheDocument()
+    cleanup()
+
+    serve({ '/inquiries/i1': detail({ ...closed, contactIsParticipant: true }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    expect(await screen.findByText('Their own contact')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Participant details' })).not.toBeInTheDocument()
   })
 })
 
@@ -614,7 +674,7 @@ describe('InquiryFormPage (wire) — someone else saved first (PR 1 version chec
     }))
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
-    const first = await screen.findByLabelText(/^First name/)
+    const first = await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
     await user.clear(first)
     await user.type(first, 'Ro')
     await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
@@ -623,8 +683,202 @@ describe('InquiryFormPage (wire) — someone else saved first (PR 1 version chec
     await waitFor(() => expect(document.activeElement?.contains(callout)).toBe(true))
     // Above the actions (SHAPE section 6): the Callout comes before the Save button in the page.
     expect(callout.compareDocumentPosition(screen.getByRole('button', { name: 'Save enquiry' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByLabelText(/^First name/)).toHaveValue('Ro')
+    expect(firstName()).toHaveValue('Ro')
     expect(screen.queryByText('Enquiries tab destination')).not.toBeInTheDocument()
+  })
+
+  it('a 409 keeps every new field\'s value and the fold\'s open state (E4)', async () => {
+    serve({ '/inquiries/i1': detail({ updatedAt: 'v1', contactFirstName: 'Sarah', ndisNumber: '430123456' }) })
+    mockApiPut.mockRejectedValue(Object.assign(new Error('Request failed with status code 409'), {
+      isAxiosError: true, response: { status: 409, data: { success: false, errors: ['Someone else just changed this enquiry. Reload and try again.'] } },
+    }))
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
+    await user.type(byId('inquiry-address-suburb'), 'Parramatta')
+    await user.type(byId('inquiry-contact-relationship'), 'Mother')
+    await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
+
+    await screen.findByText('Someone else just changed this enquiry. Reload and try again.')
+    expect(byId('inquiry-address-suburb')).toHaveValue('Parramatta')
+    expect(byId('inquiry-contact-relationship')).toHaveValue('Mother')
+    expect(byId('inquiry-contact-first-name')).toHaveValue('Sarah')
+    expect(byId('inquiry-ndis-number')).toHaveValue('430123456')
+    expect(byId('inquiry-address-suburb').closest('details')).toHaveAttribute('open')
+  })
+})
+
+describe('InquiryFormPage (wire) — the participant, the main contact and the details (spec 2026-10-16 redesign)', () => {
+  const save = () => screen.getByRole('button', { name: /^(Capture|Save) enquiry$/ })
+  const fold = () => byId('inquiry-address-street').closest('details')!
+  const nominee = 'Plan Nominee is not available for a participant under 18 — use Child Representative instead.'
+
+  it('ticking their own contact removes the name, relationship and role fields, sends them null with contactIsParticipant true; unticking shows them again', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(firstName(), 'Grace')
+    await user.type(byId('inquiry-contact-first-name'), 'Sarah')
+    await user.type(byId('inquiry-contact-relationship'), 'Mother')
+    await user.selectOptions(byId('inquiry-contact-role'), 'Guardian')
+    const box = screen.getByRole('checkbox', { name: 'The participant is their own contact' })
+    await user.click(box)
+    for (const id of ['inquiry-contact-first-name', 'inquiry-contact-last-name', 'inquiry-contact-relationship', 'inquiry-contact-role']) expect(byId(id)).toBeNull()
+    expect(box).toHaveFocus()
+    expect(byId('inquiry-phone')).toBeInTheDocument()
+
+    await user.click(box)
+    expect(byId('inquiry-contact-first-name')).toHaveValue('Sarah')
+    await user.click(box)
+    await user.click(save())
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
+    expect(mockApiPost.mock.calls[0][1]).toMatchObject({ contactIsParticipant: true, contactFirstName: null, contactLastName: null, contactRelationship: null, contactRole: null })
+  })
+
+  it('the NDIS number is sent without spaces; "430 123 45" is refused on its field', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(firstName(), 'Ari')
+    await user.click(screen.getByText('Participant details'))
+    await user.type(byId('inquiry-ndis-number'), '430 123 45')
+    await user.click(save())
+    expect(await screen.findByText('Enter the 9-digit NDIS number, like 430 123 456.')).toBeInTheDocument()
+    expect(mockApiPost).not.toHaveBeenCalled()
+
+    await user.type(byId('inquiry-ndis-number'), '6')
+    await user.click(save())
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/inquiries', expect.objectContaining({ ndisNumber: '430123456' })))
+  })
+
+  it('a bad postcode in the closed fold opens it; with a blank first name and a row missing its last name all three are marked and focus is on First name', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    expect(fold()).not.toHaveAttribute('open')
+    fireEvent.change(byId('inquiry-address-postcode'), { target: { value: '215' } })   // typed while the fold was closed (a reload, a ?focus link)
+    await user.click(screen.getByRole('button', { name: 'Add contact' }))
+    await user.type(within(screen.getByRole('group', { name: 'Contact 1' })).getByLabelText(/^First name/), 'Maria')
+    await user.click(save())
+
+    expect(await screen.findByText('Postcode must be exactly 4 digits.')).toBeInTheDocument()
+    expect(fold()).toHaveAttribute('open')
+    expect(byId('inquiry-address-postcode')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText("Add the participant's first name.")).toBeInTheDocument()
+    expect(screen.getByText('Add their last name.')).toBeInTheDocument()
+    await waitFor(() => expect(firstName()).toHaveFocus())
+    expect(mockApiPost).not.toHaveBeenCalled()
+  })
+
+  it('a date of birth tomorrow and a plan end before its start are refused on their fields', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(firstName(), 'Ari')
+    await user.click(screen.getByText('Participant details'))
+    fireEvent.change(byId('inquiry-dob'), { target: { value: '2999-01-01' } })
+    fireEvent.change(byId('inquiry-plan-start'), { target: { value: '2026-07-01' } })
+    fireEvent.change(byId('inquiry-plan-end'), { target: { value: '2026-06-30' } })
+    await user.click(save())
+
+    expect(await screen.findByText("The date of birth can't be in the future.")).toBeInTheDocument()
+    expect(screen.getByText("The plan end can't be before the plan start.")).toBeInTheDocument()
+    expect(byId('inquiry-dob')).toHaveAttribute('aria-invalid', 'true')
+    expect(byId('inquiry-plan-end')).toHaveAttribute('aria-invalid', 'true')
+    expect(mockApiPost).not.toHaveBeenCalled()
+    expect(document.querySelector('form')).toHaveAttribute('novalidate')
+  })
+
+  it('Plan Nominee with a 2014 date of birth marks the main Role and a row\'s Role, and sends nothing', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(firstName(), 'Ari')
+    await user.selectOptions(byId('inquiry-contact-role'), 'PlanNominee')
+    await user.click(screen.getByRole('button', { name: 'Add contact' }))
+    const row = screen.getByRole('group', { name: 'Contact 1' })
+    await user.type(within(row).getByLabelText(/^First name/), 'Tom')
+    await user.type(within(row).getByLabelText(/^Last name/), 'Ng')
+    await user.selectOptions(within(row).getByLabelText(/^Role/), 'PlanNominee')
+    await user.click(screen.getByText('Participant details'))
+    fireEvent.change(byId('inquiry-dob'), { target: { value: '2014-03-12' } })
+    await user.click(save())
+
+    expect(await screen.findAllByText(nominee)).toHaveLength(2)
+    expect(byId('inquiry-contact-role')).toHaveAttribute('aria-invalid', 'true')
+    expect(within(row).getByLabelText(/^Role/)).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(byId('inquiry-contact-role')).toHaveFocus())
+    expect(mockApiPost).not.toHaveBeenCalled()
+  })
+
+  it('a server 400 on contactRole or contacts[0].role lands on that field, with "Nothing was saved. Fix the marked fields, then save again."', async () => {
+    mockApiPost.mockRejectedValue(Object.assign(new Error('Request failed with status code 400'), {
+      isAxiosError: true, response: { status: 400, data: { status: 400, errors: { contactRole: [nominee], 'contacts[0].role': [nominee] } } },
+    }))
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(firstName(), 'Ari')
+    await user.selectOptions(byId('inquiry-contact-role'), 'Guardian')
+    await user.click(screen.getByRole('button', { name: 'Add contact' }))
+    const row = screen.getByRole('group', { name: 'Contact 1' })
+    await user.type(within(row).getByLabelText(/^First name/), 'Tom')
+    await user.type(within(row).getByLabelText(/^Last name/), 'Ng')
+    await user.click(save())
+
+    expect(await screen.findByText('Nothing was saved. Fix the marked fields, then save again.')).toBeInTheDocument()
+    expect(byId('inquiry-contact-role')).toHaveAttribute('aria-invalid', 'true')
+    expect(within(row).getByLabelText(/^Role/)).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(byId('inquiry-contact-role')).toHaveFocus())
+  })
+
+  it('Role options drop Plan Nominee once a child\'s date of birth is typed, but keep it while it is selected', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    const options = () => [...byId('inquiry-contact-role').querySelectorAll('option')].map(o => o.value)
+    expect(options()[0]).toBe('')
+    expect(options()).toContain('PlanNominee')
+    fireEvent.change(byId('inquiry-dob'), { target: { value: '2014-03-12' } })
+    expect(options()).not.toContain('PlanNominee')
+    fireEvent.change(byId('inquiry-dob'), { target: { value: '' } })
+    await user.selectOptions(byId('inquiry-contact-role'), 'PlanNominee')
+    fireEvent.change(byId('inquiry-dob'), { target: { value: '2014-03-12' } })
+    expect(options()).toContain('PlanNominee')
+    expect(byId('inquiry-contact-role')).toHaveValue('PlanNominee')
+  })
+
+  it('edit opens the fold; new keeps it closed; ?focus=address opens it and focuses Street; ?focus=contact focuses the contact First name', async () => {
+    renderForm()
+    expect(fold()).not.toHaveAttribute('open')
+    expect(screen.getByText('Optional · Intake needs the address')).toBeInTheDocument()
+    cleanup()
+
+    serve({ '/inquiries/i1': detail({ addressStreet: '12 Smith St', addressSuburb: 'Parramatta', addressState: 'NSW', addressPostcode: '2150' }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
+    expect(fold()).toHaveAttribute('open')
+    expect(screen.getByText('Optional · Address added')).toBeInTheDocument()
+    cleanup()
+
+    renderForm('/participants/new-inquiry?id=i1&focus=address')
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
+    await waitFor(() => expect(byId('inquiry-address-street')).toHaveFocus())
+    cleanup()
+
+    renderForm('/participants/new-inquiry?id=i1&focus=contact')
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
+    await waitFor(() => expect(byId('inquiry-contact-first-name')).toHaveFocus())
+  })
+
+  it('an unchanged legacy phone saves; the same phone after ticking their own contact is refused', async () => {
+    serve({ '/inquiries/i1': detail({ phone: '0412 555 010 after 3pm', email: null }) })
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry?id=i1')
+    await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
+    expect(screen.getByText("No name yet. Add one to start intake, or tick the box above if these are the participant's own details.")).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: 'The participant is their own contact' }))
+    await user.click(save())
+    expect(await screen.findByText('Enter a phone number, like 0412 345 678.')).toBeInTheDocument()
+    expect(mockApiPut).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('checkbox', { name: 'The participant is their own contact' }))
+    await user.click(save())
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', expect.objectContaining({ phone: '0412 555 010 after 3pm', contactIsParticipant: false })))
   })
 })
 
@@ -641,7 +895,7 @@ describe('InquiryFormPage (wire) — every booking write carries the version the
     mockApiDeleteRaw.mockResolvedValue({ success: true, data: { inquiry: detail({ updatedAt: V2 }), cancellationEmail: 'Sent' } })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
-    const first = await screen.findByLabelText(/^First name/)
+    const first = await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
     await user.clear(first)
     await user.type(first, 'Ro')
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
@@ -649,7 +903,7 @@ describe('InquiryFormPage (wire) — every booking write carries the version the
 
     expect(mockApiDeleteRaw).toHaveBeenCalledWith(`/inquiries/i1/intake-booking?expectedUpdatedAt=${encodeURIComponent(V1)}`)
     await screen.findByText('Intake visit cancelled')
-    expect(screen.getByLabelText(/^First name/)).toHaveValue('Ro')
+    expect(firstName()).toHaveValue('Ro')
     await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
@@ -663,13 +917,13 @@ describe('InquiryFormPage (wire) — every booking write carries the version the
     }))
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
-    const first = await screen.findByLabelText(/^First name/)
+    const first = await screen.findByLabelText(/^First name/, { selector: '#inquiry-first-name' })
     await user.type(first, 'n')
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel visit' }))
 
     expect(await within(screen.getByRole('alertdialog')).findByRole('alert')).toHaveTextContent('Someone else just changed this visit. Reload and try again.')
-    expect(screen.getByLabelText(/^First name/)).toHaveValue('Rowann')
+    expect(firstName()).toHaveValue('Rowann')
     expect(screen.queryByText('Intake visit cancelled')).not.toBeInTheDocument()
   })
 
@@ -697,11 +951,11 @@ describe('InquiryFormPage (wire) — a new enquiry\'s visit is checked in the pr
     serve({ '/inquiries': [{ ...stored({ id: 'other' }), timeZoneId: 'Australia/Perth' }] })
     const user = userEvent.setup()
     renderForm()
-    await user.type(screen.getByLabelText(/^First name/), 'Ana')
-    await user.type(screen.getByLabelText(/^Last name/), 'Lopez')
+    await user.type(firstName(), 'Ana')
+    await user.type(lastName(), 'Lopez')
     await user.type(screen.getByLabelText(/^Email/), 'ana@example.com')
     await user.click(screen.getByRole('checkbox', { name: /book the intake visit now/i }))
-    fireEvent.change(screen.getByLabelText(/^Date/), { target: { value: '2026-10-16' } })
+    fireEvent.change(screen.getByLabelText(/^Date(?! of birth)/), { target: { value: '2026-10-16' } })
     fireEvent.change(screen.getByLabelText(/^Start time/), { target: { value: time } })
     await user.type(screen.getByLabelText(/^Where/), 'Library')
     await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))

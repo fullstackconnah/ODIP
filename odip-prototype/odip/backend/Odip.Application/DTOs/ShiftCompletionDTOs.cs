@@ -176,6 +176,9 @@ public record ReviewPrnDoseDto(
     string DoseDescription,
     PortalDoseOutcomeDto Outcome);
 
+/// <summary>One shift's review status, for confirming what became of a row that is no longer in the queue.</summary>
+public record CompletionStatusDto(Guid ShiftId, ShiftStatus Status);
+
 public record CompletionQueueItemDto(
     Guid ShiftId,
     Guid CompletionId,

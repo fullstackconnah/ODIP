@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  PENDING_ROLES, blankContact, contactRowErrors, contactRowOf, contactsPayload, enquirerContact, isBlankContact, serverContactErrors, type ContactRow,
+  PENDING_ROLES, blankContact, contactRowErrors, contactRowOf, contactsPayload, isBlankContact, pendingRoleOptions, serverContactErrors, type ContactRow,
 } from './inquiryContacts'
 
 const row = (overrides: Partial<ContactRow> = {}): ContactRow => ({ ...blankContact(), ...overrides })
@@ -45,9 +45,22 @@ describe('pending contacts on the enquiry form', () => {
       .toEqual({ [a.key]: { email: 'Enter a full email address, like name@example.com.' } })
   })
 
-  it('enquirerContact copies only the phone and email (the enquiry\'s name is usually the participant\'s)', () => {
-    const copy = enquirerContact({ phone: '0412', email: 'a@b.co' })
-    expect(copy).toMatchObject({ phone: '0412', email: 'a@b.co', firstName: '', lastName: '', role: 'NextOfKin' })
+  // L4: the roles follow the enquiry's details live, and a chosen role the rules now refuse stays chosen (Save refuses it).
+  it('pendingRoleOptions drops Plan Nominee for a child but keeps it while selected, and NDIA-managed drops Provider Contact', () => {
+    expect(pendingRoleOptions(null, '2014-03-12')).not.toContain('PlanNominee')
+    const kept = pendingRoleOptions(null, '2014-03-12', 'PlanNominee')
+    expect(kept).toContain('PlanNominee')
+    expect(kept.indexOf('PlanNominee')).toBe(PENDING_ROLES.indexOf('PlanNominee'))
+    expect(pendingRoleOptions('AgencyManaged', null)).not.toContain('ProviderContact')
+    expect(pendingRoleOptions(null, null)).toEqual(PENDING_ROLES)
+  })
+
+  it('contactRowErrors refuses a role the rules refuse for the enquiry\'s date of birth and plan', () => {
+    const nominee = row({ role: 'PlanNominee', firstName: 'Sarah', lastName: 'Walsh' })
+    expect(contactRowErrors([nominee], { dateOfBirth: '2014-03-12' })).toEqual({
+      [nominee.key]: { role: 'Plan Nominee is not available for a participant under 18 — use Child Representative instead.' },
+    })
+    expect(contactRowErrors([nominee])).toEqual({})
   })
 
   // Live ODIP is plain HTTP on the LAN, which is not a secure context, so crypto.randomUUID is undefined there.
@@ -57,7 +70,7 @@ describe('pending contacts on the enquiry form', () => {
 
     it('creates rows without throwing, each with its own key', () => {
       const dto = { role: 'Guardian' as const, firstName: 'Maria', lastName: 'Lopez', relationship: null, phone: null, email: null, notes: null }
-      const keys = [blankContact().key, contactRowOf(dto).key, enquirerContact({ phone: '', email: '' }).key]
+      const keys = [blankContact().key, contactRowOf(dto).key, blankContact().key]
       expect(new Set(keys).size).toBe(3)
     })
   })

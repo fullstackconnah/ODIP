@@ -159,6 +159,30 @@ public class AuditInterceptorTests
     }
 
     [Fact]
+    public async Task SaveChanges_EarlyAccessLaterSubmission_IsNotAudited_ItHoldsAPersonsDetails()
+    {
+        Assert.DoesNotContain(typeof(EarlyAccessRequest), AuditedEntities.Types);
+        Assert.DoesNotContain(typeof(EarlyAccessLaterSubmission), AuditedEntities.Types);
+
+        using var db = CreateDb(userId: Guid.NewGuid());
+        var now = DateTime.UtcNow;
+        var parent = new EarlyAccessRequest
+        {
+            Id = Guid.NewGuid(), Name = "Jo Visitor", Organisation = "Example Care", Email = "jo@example.com",
+            CreatedAtUtc = now, LastRequestedAtUtc = now, RequestCount = 2,
+        };
+        db.EarlyAccessRequests.Add(parent);
+        db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
+        {
+            Id = Guid.NewGuid(), EarlyAccessRequestId = parent.Id, ReceivedAtUtc = now, Name = "Jo Visitor", Organisation = "Example Care",
+            Phone = "0491 570 156", Message = "Please remove my details",
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Empty(db.AuditLogs.ToList());
+    }
+
+    [Fact]
     public async Task SaveChanges_PublicHoliday_IsAudited_BecauseTheRowsDecideWhichDaysArePricedAtTheHolidayRate()
     {
         // Review M6 (plan builder phase B): the table is global and a row moves every tenant's quotes (+122% on a weekday),

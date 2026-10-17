@@ -5,6 +5,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
 import { DEFAULT_DURATION, FALLBACK_ZONE, inviteLine, isPastVisit, unbroken, visitWhen } from '@/lib/intakeBooking'
 import { TONE } from '@/lib/tone'
+import { fullName } from '@/lib/inquiryDetails'
 
 type IntakeCellProps = { row: ParticipantInquiryDto; canManage: boolean; onOpen: (row: ParticipantInquiryDto) => void; now?: Date }
 
@@ -16,7 +17,7 @@ type IntakeCellProps = { row: ParticipantInquiryDto; canManage: boolean; onOpen:
  * Each control carries `data-intake-control` (the enquiry id): the page focuses it after the panel closes, a cancel, or a dismissed notice.
  */
 export function IntakeCell({ row, canManage, onOpen, now = new Date() }: IntakeCellProps) {
-  const name = `${row.firstName} ${row.lastName}`
+  const name = fullName(row.firstName, row.lastName)
   if (row.isDirectIntake) return <span>—</span>
   if (!row.intakeStartsAt) {
     return canManage ? (
