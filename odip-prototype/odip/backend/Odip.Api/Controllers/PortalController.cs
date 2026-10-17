@@ -609,7 +609,7 @@ public class PortalController : ControllerBase
         // event). Recipients are the tenant's Admin/Coordinator users, same as
         // LeaveRequestSubmitted above.
         var workerName = await _db.Users.Where(u => u.Id == shift.UserId!.Value)
-            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+            .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
         var reviewRecipients = await _db.Users
             .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
             .ToListAsync(ct);
@@ -1333,7 +1333,7 @@ public class PortalController : ControllerBase
         // Admin/Coordinator users (design spec §5). One RaiseAsync call per recipient so each
         // outbox row's payload carries that recipient's own email.
         var requesterName = await _db.Users.Where(u => u.Id == staffId.Value)
-            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+            .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
         var leaveRecipients = await _db.Users
             .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
             .ToListAsync(ct);

@@ -107,6 +107,52 @@ public class EarlyAccessAdminHttpTests
             Assert.False(last.TryGetProperty(key, out _), $"{key} should be omitted when not given");
     }
 
+    private static EarlyAccessLaterSubmission Later(EarlyAccessRequest parent, string message, int receivedDaysAgo) => new()
+    {
+        Id = Guid.NewGuid(),
+        EarlyAccessRequestId = parent.Id,
+        ReceivedAtUtc = DateTime.UtcNow.AddDays(-receivedDaysAgo),
+        Name = parent.Name,
+        Organisation = parent.Organisation,
+        Phone = "0400 000 000",
+        Message = message,
+    };
+
+    [Fact]
+    public async Task SuperAdmin_GetsEachSignupsLaterSubmissions_NewestLast_AndNoneForOthers()
+    {
+        await using var host = await Host.StartAsync();
+        var a = Signup("Amara", 30, 1, count: 3);
+        var b = Signup("Bella", 5, 5);
+        await host.SeedAsync(a, b);
+        await host.SeedLaterAsync(Later(a, "second", 2), Later(a, "first", 9));
+
+        var response = await host.SendAsync(HttpMethod.Get, Path, "SuperAdmin");
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = json.RootElement.GetProperty("data").GetProperty("items").EnumerateArray().ToList();
+        var later = items[0].GetProperty("laterSubmissions").EnumerateArray().ToList();
+        Assert.Equal(new[] { "first", "second" }, later.Select(l => l.GetProperty("message").GetString()));
+        Assert.Equal("0400 000 000", later[0].GetProperty("phone").GetString());
+        Assert.EndsWith("Z", later[0].GetProperty("receivedAtUtc").GetString());
+        Assert.Equal(0, items[1].GetProperty("laterSubmissions").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task SuperAdmin_Delete_RemovesTheLaterSubmissionsWithTheSignup()
+    {
+        await using var host = await Host.StartAsync();
+        var a = Signup("Amara", 30, 1, count: 3);
+        var b = Signup("Bella", 5, 5, count: 2);
+        await host.SeedAsync(a, b);
+        await host.SeedLaterAsync(Later(a, "one", 2), Later(a, "two", 1), Later(b, "kept", 1));
+
+        var response = await host.SendAsync(HttpMethod.Delete, $"{Path}/{a.Id}", "SuperAdmin");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new[] { "kept" }, await host.LaterMessagesAsync());
+    }
+
     [Fact]
     public async Task SuperAdmin_ListIsPaged_AndClamped()
     {
@@ -253,6 +299,20 @@ public class EarlyAccessAdminHttpTests
             var db = scope.ServiceProvider.GetRequiredService<OdipDbContext>();
             db.EarlyAccessRequests.AddRange(rows);
             await db.SaveChangesAsync();
+        }
+
+        public async Task SeedLaterAsync(params EarlyAccessLaterSubmission[] rows)
+        {
+            using var scope = _app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<OdipDbContext>();
+            db.EarlyAccessLaterSubmissions.AddRange(rows);
+            await db.SaveChangesAsync();
+        }
+
+        public async Task<List<string?>> LaterMessagesAsync()
+        {
+            using var scope = _app.Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<OdipDbContext>().EarlyAccessLaterSubmissions.Select(l => l.Message).ToListAsync();
         }
 
         public async Task<int> CountRowsAsync()

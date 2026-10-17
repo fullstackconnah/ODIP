@@ -235,7 +235,7 @@ public class ClaimsController : ControllerBase
             TotalAmount = c.TotalAmount, TotalApprovedAmount = c.TotalApprovedAmount,
             CreatedAt = c.CreatedAt, SubmittedDate = c.SubmittedDate, PaidDate = c.PaidDate, RejectedDate = c.RejectedDate, RejectionCode = c.RejectionCode,
             AuthorisedByStaffId = c.AuthorisedByUserId,
-            AuthorisedByStaffName = c.AuthorisedByUser != null ? $"{c.AuthorisedByUser.FirstName} {c.AuthorisedByUser.LastName}" : null,
+            AuthorisedByStaffName = c.AuthorisedByUser != null ? $"{c.AuthorisedByUser.FirstName} {c.AuthorisedByUser.LastName}".Trim() : null,
             Notes = c.Notes,
             // Nullability audit (shift-completion design spec, delivery PR 3): exactly one of
             // ParticipantBooking/Shift is set per line item — branch on whichever is present

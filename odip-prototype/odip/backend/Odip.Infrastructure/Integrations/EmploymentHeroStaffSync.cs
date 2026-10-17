@@ -416,7 +416,7 @@ public sealed class EmploymentHeroStaffSync
         var holder = await db.Users.IgnoreQueryFilters().Where(u => u.Id != userId && u.Email.ToLower() == email)
             .Select(u => new { u.TenantId, u.FirstName, u.LastName }).FirstOrDefaultAsync(ct);
         if (holder is not null)
-            return holder.TenantId == tenantId ? $"Their email in Employment Hero is already used by {holder.FirstName} {holder.LastName} in ODIP." : OtherOrganisationEmail;
+            return holder.TenantId == tenantId ? $"Their email in Employment Hero is already used by {(holder.FirstName + " " + holder.LastName).Trim()} in ODIP." : OtherOrganisationEmail;
         if (creator.ReservedDomainError(null, email) is { } reserved) return reserved;
         return await creator.OtherOrganisationAddressErrorAsync(null, email, tenantId, ct) is null ? null : OtherOrganisationEmail;
     }

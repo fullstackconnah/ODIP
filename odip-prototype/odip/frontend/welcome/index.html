@@ -1,395 +1,458 @@
-<!--
-THESIS: Odip is where the lived trip becomes the record. A living gum-canopy light field in the app's own greens, with the product appearing as clearings of the app's warm paper. Refuses the screenshot-on-gradient SaaS hero and a landing that looks like another product.
-OWN-WORLD: Forest #0f2000 ground; Olive #396200 and Fern #4d7c0f leaf light; Sprout #bbf37c sun flecks as the one accent; Warm Paper #fbf9f5 clearings ruled #c3c9b5. Plus Jakarta Sans 800, Manrope, small tracked labels; fine grain; hanging gum leaves swaying.
-STORY: A coordinator watches three lived moments (before, during and after a trip) cross into Odip's record, sees the real screens, and requests early access.
-FIRST VIEWPORT: Full-bleed canopy. Left: a two-line headline, sub, Request early access and See it at work. Right: a lit sample-data dashboard readout. Corners: wordmark, Sign in, section index, pause.
-FORM: fused shader-portal challenger; staging: translation gate; seed 89fb77e6.
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
--->
 <!doctype html>
 <html lang="en-AU">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Odip: NDIS trip management for supported holidays</title>
-    <meta name="description" content="Trip management software for NDIS providers that run supported holidays: one record for travellers, accommodation, staff, vehicles and funding, then the claims. Request early access." />
-    <meta name="theme-color" content="#0f2000" />
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bunya Support: NDIS and disability service provider software</title>
+<meta name="description" content="Next-generation NDIS and disability service provider software: approvals, rosters, intake, agreements, incidents and the claims file in one place, so your admin team gets time back. Now in alpha.">
+<meta name="theme-color" content="#ffffff">
     <!-- Same-origin scripts only, no inline script; images from self/data/blob; fonts from Google Fonts; fetch to self.
          Matches the nginx CSP in nginx/default.conf (which additionally allows the Firebase hosts the app needs). -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self';" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234d7c0f'/%3E%3Cpath d='M13 5c7 4 10 12 7 22-6-5-9-13-7-22z' fill='%23bbf37c'/%3E%3C/svg%3E" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- The app's two faces (frontend/index.html). Preload the Latin files the first viewport sets, so the headline
-         swaps in before first paint and nothing shifts. Checked against the live Google Fonts CSS on 2026-10-02. -->
-    <link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/plusjakartasans/v12/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yw.woff2" crossorigin />
-    <link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/manrope/v20/xn7gYHE41ni1AdIRggexSg.woff2" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700..800&amp;family=Manrope:wght@400..700&amp;display=swap" />
-    <link rel="stylesheet" href="./welcome.css" />
-    <script type="module" src="./main.ts"></script>
-  </head>
-  <body>
-    <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
-      <!-- Material Symbols (Apache 2.0): the app's own brand glyph and arrows. -->
-      <symbol id="i-travel-explore" viewBox="0 -960 960 960"><path d="M449-48q-84-6-157.5-42t-128-94Q109-242 78-317.87T47-480q0-89.89 34-168.94Q115-728 174-787t138.06-93q79.05-34 168.94-34 160 0 278.4 100.91Q877.8-712.19 907-560H779q-18.2-68.96-65.62-123.28Q665.97-737.6 597-765v14q0 31.76-23.5 54.38T518.46-674H442v76.7q0 16.3-11.5 27.8T402.7-558H326v76h74v115h-36L181-550q-3 17-5.5 34t-2.5 34q0 119 79 207.5T449-174v126Zm401-12L721-190q-20 9-41.5 15t-44.5 6q-81 0-138.5-57.5T439-365.18q0-81.17 57.5-138Q554-560 635.18-560q81.17 0 138 56.87Q830-446.25 830-365q0 23-6 45t-15 42l130 129-89 89ZM683.99-315.5Q704-336 704-364.99q0-28.98-20.01-49-20.02-20.01-49-20.01-28.99 0-49.49 20.01-20.5 20.02-20.5 49 0 28.99 20.5 49.49Q606-295 634.99-295q28.98 0 49-20.5Z"/></symbol>
-      <symbol id="i-arrow-forward" viewBox="0 -960 960 960"><path d="M592-417H126v-126h466L390-745l90-89 354 354-354 354-90-89 202-202Z"/></symbol>
-      <symbol id="i-login" viewBox="0 -960 960 960"><path d="M472-86v-126h276v-536H472v-126h276q53 0 89.5 36.5T874-748v536q0 53-36.5 89.5T748-86H472ZM361-232l-88-89 96-96H86v-126h283l-96-96 88-89 247 248-247 248Z"/></symbol>
-      <symbol id="i-check-circle" viewBox="0 -960 960 960"><path d="m421-276 297-297-83-84-214 214-102-102-83 84 185 185Zm59 230q-91 0-169.99-34.08-78.98-34.09-137.41-92.52-58.43-58.43-92.52-137.41Q46-389 46-480q0-91 34.08-169.99 34.09-78.98 92.52-137.41 58.43-58.43 137.41-92.52Q389-914 480-914q91 0 169.99 34.08 78.98 34.09 137.41 92.52 58.43 58.43 92.52 137.41Q914-571 914-480q0 91-34.08 169.99-34.09 78.98-92.52 137.41-58.43 58.43-137.41 92.52Q571-46 480-46Z"/></symbol>
-      <!-- Drawn for this page in the same weight. -->
-      <symbol id="i-replay" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 1-8.03 11.3l2.36-.83A6 6 0 1 0 7.9 7.6L10 9.7H3.5V3.2l2.62 2.62A8.47 8.47 0 0 1 12 3.5Z"/></symbol>
-      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6.5 5h3.75v14H6.5zM13.75 5h3.75v14h-3.75z"/></symbol>
-      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.5 4.8v14.4L19 12z"/></symbol>
-    </svg>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Preload the Latin files the first viewport sets (Jakarta 800 for the h1, Manrope 400 for the body); each family serves one
+     variable file for every weight. Checked against the live Google Fonts CSS on 2026-10-17. -->
+<link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/plusjakartasans/v12/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yw.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/manrope/v20/xn7gYHE41ni1AdIRggexSg.woff2" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="./welcome.css">
+<script type="module" src="./main.ts"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
 
-    <!-- The canopy light field: a WebGL canvas over an authored poster of the same field (its first paint and fallback). -->
-    <div class="canopy" data-canopy-light aria-hidden="true"><canvas class="canopy__canvas"></canvas></div>
-
-    <a class="skip" href="#main">Skip to content</a>
-
-    <header class="site-header">
-      <div class="site-header__inner">
-        <a class="brand" href="#top" aria-label="Odip, back to the top">
-          <span class="brand__tile"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-travel-explore" /></svg></span>
-          <span class="brand__name">Odip</span>
-        </a>
-        <nav class="site-nav" aria-label="Site">
-          <a class="signin" href="/login"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-login" /></svg><span>Sign in</span></a>
-          <a class="btn btn--sprout btn--head" href="#early-access" aria-label="Request early access"><span class="cta-long">Request early access</span><span class="cta-short">Early access</span></a>
-        </nav>
-        <button class="light-toggle" type="button" aria-pressed="false" data-light-toggle data-quiet="fixed" hidden>
-          <svg class="ico ico--pause" aria-hidden="true" focusable="false"><use href="#i-pause" /></svg>
-          <svg class="ico ico--play" aria-hidden="true" focusable="false"><use href="#i-play" /></svg>
-          <span class="sr-only">Pause the </span><span class="light-toggle__name">Canopy light</span>
-          <span class="light-toggle__state" aria-hidden="true" data-light-state>Live</span>
-        </button>
-      </div>
-    </header>
-
-    <nav class="sections" aria-label="Sections" data-quiet="fixed">
-      <ol class="sections__list">
-        <li><a href="#before" data-section-link><span class="sections__n" aria-hidden="true">01</span><span class="sections__label">Before<span class="sr-only"> the trip</span></span></a></li>
-        <li><a href="#during" data-section-link><span class="sections__n" aria-hidden="true">02</span><span class="sections__label">During<span class="sr-only"> the trip</span></span></a></li>
-        <li><a href="#after" data-section-link><span class="sections__n" aria-hidden="true">03</span><span class="sections__label">After<span class="sr-only"> the trip</span></span></a></li>
-        <li><a href="#early-access" data-section-link><span class="sections__n" aria-hidden="true">04</span><span class="sections__label">Early access</span></a></li>
-      </ol>
+<header class="site-header">
+  <div class="wrap bar">
+    <a class="brand" href="#top" aria-label="Bunya Support, alpha, back to the top">
+      <span class="wm" aria-hidden="true">bunya<b>support</b><svg viewBox="0 0 16 16" focusable="false"><circle cx="8" cy="8" r="6.5" fill="#bbf37c" stroke="#396200" stroke-width="2"/></svg></span>
+      <span class="alpha-tag" aria-hidden="true">Alpha</span>
+    </a>
+    <nav class="bar__nav" aria-label="Account">
+      <a class="signin" href="/login">Sign in</a>
+      <a class="btn btn--olive" href="#join"><span class="cta-long">Join the alpha</span><span class="cta-short">Join</span></a>
     </nav>
+  </div>
+</header>
 
-    <main id="main">
-      <!-- ============ FIRST VIEWPORT: the full-bleed canopy, the offer, and the dashboard lit in a clearing ============ -->
-      <section class="hero" id="top" aria-labelledby="hero-title" data-canopy>
-        <div class="wrap hero__grid">
-          <h1 class="hero__title" id="hero-title" data-quiet><span class="hero__line">You run the trip.</span> <span class="hero__line">Odip keeps the record.</span></h1>
-          <div class="hero__copy" data-quiet>
-            <p class="hero__sub">Trip management software for NDIS providers that run supported holidays. One record for travellers, accommodation, staff, vehicles and funding, from the first plan to the claims.</p>
-            <div class="hero__actions">
-              <a class="btn btn--sprout btn--lg" href="#early-access">Request early access<svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-forward" /></svg></a>
-              <a class="btn btn--ghost btn--lg" href="#before">See it at work</a>
-            </div>
+<main id="main" tabindex="-1">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap">
+      <h1 id="hero-title">From the first approval to the claims file<span class="pk">,</span> in <em>one place</em><span class="pk">.</span></h1>
+      <div class="hero__row">
+        <div class="hero__copy">
+          <p class="lede">Bunya Support is the next generation of NDIS and disability service provider software. Rosters and shifts, intake, agreements, incidents and the claims file sit in one place, so less of the day goes on admin and your admin team gets time back.</p>
+          <div class="cta-row">
+            <a class="btn btn--olive btn--lg" href="#join">Join the alpha<svg class="ico" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M592-417H126v-126h466L390-745l90-89 354 354-354 354-90-89 202-202Z"/></svg></a>
+            <a class="btn btn--quiet btn--lg" href="#t0830">Follow the day</a>
           </div>
-          <figure class="readout on-paper" data-pool>
-            <figcaption class="readout__cap"><span class="tag">Sample data</span> From the Odip dashboard</figcaption>
-            <p class="readout__title">Upcoming trips, next 60 days</p>
-            <dl class="readout__tiles">
-              <div class="readout__tile"><dt>Missing accommodation</dt><dd>1</dd></div>
-              <div class="readout__tile"><dt>Missing vehicles</dt><dd>1</dd></div>
-              <div class="readout__tile"><dt>Missing staff</dt><dd>2</dd></div>
-            </dl>
-            <p class="readout__note">Trips starting in the next 60 days with no accommodation, vehicle or staff assigned yet.</p>
-          </figure>
+          <p class="alpha-line"><span class="alpha-tag">Alpha</span><span>Now in alpha: we're setting up providers who want to try it and help shape it. <a class="nowrap" href="#alpha">What alpha means</a></span></p>
         </div>
-      </section>
-
-      <!-- ============ ACT 1: before they leave ============ -->
-      <section class="act" id="before" aria-labelledby="before-title">
-        <div class="wrap act__head">
-          <div class="act__text" data-quiet data-canopy>
-            <h2 id="before-title">Before they leave</h2>
-            <p class="act__lede">Plan each trip as one record of its travellers, accommodation, staff and vehicles. Odip counts what is still missing, and runs 18 checks when you assign a shift.</p>
-          </div>
-        </div>
-        <div class="wrap">
-          <div class="crossing" data-crossing data-canopy data-arrived="Shift assigned. In Odip, the roster checks ran and this assignment needs a reason.">
-            <div class="crossing__moment" data-quiet>
-              <p class="crossing__when">Rostering, the week before</p>
-              <p class="crossing__text">The coordinator drags Tom Beattie onto Grace Palmer-Hughes' Thursday overnight shift.</p>
-              <button class="replay" type="button" data-replay><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-replay" /></svg>Replay<span class="sr-only"> the shift assignment</span></button>
-            </div>
-            <div class="crossing__gate" data-gate aria-hidden="true">
-              <span class="crossing__seam"></span>
-              <span class="crossing__track"></span>
-              <span class="crossing__carrier">Shift assigned</span>
-            </div>
-            <div class="crossing__record on-paper" data-pool>
-              <figure class="screen screen--fit" style="--w:382px">
-                <div class="screen__view"><div class="screen__frame"><img src="./assets/screens/crew-roster-warning.webp" width="382" height="482" srcset="./assets/screens/crew-roster-warning.webp 1x, ./assets/screens/crew-roster-warning@2x.webp 2x" alt="The Assign with warnings dialog for a shift dropped onto a worker: three plain findings (approved leave, not overnight-eligible, first aid certificate expired), a box for the reason, and an Assign anyway button that stays disabled until a reason is given." loading="lazy" decoding="async" /></div></div>
-                <figcaption><span class="tag">Sample data</span> Assigning a shift runs 18 checks. Expired worker screening and a double-booked vehicle stop it; 4 of the 16 warnings need a reason, and approved leave is one of them.</figcaption>
-              </figure>
-            </div>
-          </div>
-        </div>
-        <div class="wrap">
-          <div class="band on-paper" data-pool>
-            <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/plan-trip-glance-m.webp 1x, ./assets/screens/plan-trip-glance-m@2x.webp 2x" width="616" height="348" /><img src="./assets/screens/plan-trip-glance.webp" width="1024" height="273" srcset="./assets/screens/plan-trip-glance.webp 1x, ./assets/screens/plan-trip-glance@2x.webp 2x" alt="Trip record for Sunshine Coast Beach Escape (SCB-2608, Caloundra, 14 to 17 August 2026) with status Confirmed. A row of four figures shows participants and staff, outstanding tasks needing action, high-support and overnight travellers, and insurance still outstanding, above the trip's tabs." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> A trip record at a glance</figcaption>
-            </figure>
-            <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/plan-dashboard-missing-m.webp 1x, ./assets/screens/plan-dashboard-missing-m@2x.webp 2x" width="616" height="438" /><img src="./assets/screens/plan-dashboard-missing.webp" width="1024" height="180" srcset="./assets/screens/plan-dashboard-missing.webp 1x, ./assets/screens/plan-dashboard-missing@2x.webp 2x" alt="Dashboard count tiles: qualification issues, critical participant alerts, overdue, missing accommodation, missing vehicles, missing staff, open incidents, QSC overdue and pending leave. One trip is missing accommodation, one is missing vehicles and two are missing staff." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> The dashboard counts upcoming trips still missing accommodation, vehicles or staff. QSC is the NDIS Quality and Safeguards Commission.</figcaption>
-            </figure>
-            <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/stay-accommodation-m.webp 1x, ./assets/screens/stay-accommodation-m@2x.webp 2x" width="616" height="695" /><img src="./assets/screens/stay-accommodation.webp" width="1024" height="496" srcset="./assets/screens/stay-accommodation.webp 1x, ./assets/screens/stay-accommodation@2x.webp 2x" alt="Accommodation for a trip: a stay timeline for 14 to 17 August with two bars for Seabreeze Accessible House, then a table of two reservations. The confirmed stay shows bedrooms and beds reserved against what the trip needs; the second, a requested extension that overlaps it, carries a red Conflict flag." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> Accommodation reserved against the beds and bedrooms the trip needs, with a flag when a property is double-booked</figcaption>
-            </figure>
-            <figure class="screen screen--wide" style="--w:1118px;--wm:674px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/crew-roster-board-m.webp 1x, ./assets/screens/crew-roster-board-m@2x.webp 2x" width="674" height="408" /><img src="./assets/screens/crew-roster-board.webp" width="1118" height="448" srcset="./assets/screens/crew-roster-board.webp 1x, ./assets/screens/crew-roster-board@2x.webp 2x" alt="Weekly roster board for 10 to 16 August in the By staff view: an Unfilled lane with three shifts above rows for five staff, each with shift chips, hours against a 38-hour week and trip bars. One exception is flagged, and one worker shows a First aid expired note." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> The weekly roster board: community shifts, trip work and leave in one view</figcaption>
-            </figure>
-            <figure class="screen screen--wide screen--side" style="--w:736px;--wm:616px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/crew-credentials-m.webp 1x, ./assets/screens/crew-credentials-m@2x.webp 2x" width="616" height="764" /><img src="./assets/screens/crew-credentials.webp" width="736" height="525" srcset="./assets/screens/crew-credentials.webp 1x, ./assets/screens/crew-credentials@2x.webp 2x" alt="Staff credentials dashboard: workers with their First Aid, driver licence, manual handling, medication competency and worker screening dates, with expired and expiring chips and tabs for all issues, expired and expiring soon." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> Credential expiry for each worker</figcaption>
-            </figure>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ ACT 2: while they're away ============ -->
-      <section class="act" id="during" aria-labelledby="during-title">
-        <div class="wrap act__head">
-          <div class="act__text" data-quiet data-canopy>
-            <h2 id="during-title">While they're away</h2>
-            <p class="act__lede">Support workers start, finish and write up their shifts on a phone. Incidents go through a guided form, and Odip flags any reportable incident still unreported 24 hours after it was logged.</p>
-          </div>
-        </div>
-        <div class="wrap">
-          <div class="crossing" data-crossing data-canopy data-arrived="Shift note written. In Odip, it prompts an incident report.">
-            <div class="crossing__moment" data-quiet>
-              <p class="crossing__when">On the trip, 9:20 pm</p>
-              <p class="crossing__text">Tom writes up the evening: Sienna bumped her arm transferring into the WAV. A small graze, cleaned and dressed.</p>
-              <button class="replay" type="button" data-replay><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-replay" /></svg>Replay<span class="sr-only"> the shift note</span></button>
-            </div>
-            <div class="crossing__gate" data-gate aria-hidden="true">
-              <span class="crossing__seam"></span>
-              <span class="crossing__track"></span>
-              <span class="crossing__carrier">Shift note</span>
-            </div>
-            <div class="crossing__record on-paper" data-pool>
-              <figure class="screen screen--phone screen--fit">
-                <div class="phone"><img src="./assets/screens/care-shift-notes-phone.webp" width="390" height="512" srcset="./assets/screens/care-shift-notes-phone.webp 1x, ./assets/screens/care-shift-notes-phone@2x.webp 2x" alt="Shift notes on a phone: a note about a bumped arm is flagged with the message that it mentions injury and to consider filing an incident report, with Dismiss and File incident report buttons above a box to add a note." loading="lazy" decoding="async" /></div>
-                <figcaption><span class="tag">Sample data</span> A shift note that mentions an injury prompts an incident report.</figcaption>
-              </figure>
-            </div>
-          </div>
-        </div>
-        <div class="wrap">
-          <div class="band on-paper" data-pool>
-            <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/report-overdue-m.webp 1x, ./assets/screens/report-overdue-m@2x.webp 2x" width="616" height="624" /><img src="./assets/screens/report-overdue.webp" width="1024" height="242" srcset="./assets/screens/report-overdue.webp 1x, ./assets/screens/report-overdue@2x.webp 2x" alt="Incident Reports list with a red banner saying one incident requires reporting to the NDIS Commission and its 24-hour deadline has been exceeded. In the table below, the escalation incident carries a solid red OVERDUE badge in the QSC column." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> An incident still unreported 24 hours after it was logged is flagged overdue</figcaption>
-            </figure>
-            <figure class="screen screen--wide" style="--w:1024px;--wm:548px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/care-risk-alerts-m.webp 1x, ./assets/screens/care-risk-alerts-m@2x.webp 2x" width="548" height="432" /><img src="./assets/screens/care-risk-alerts.webp" width="1024" height="414" srcset="./assets/screens/care-risk-alerts.webp 1x, ./assets/screens/care-risk-alerts@2x.webp 2x" alt="Risk alerts on a participant record: a red Critical alert that a report to the NDIS Commission is overdue and two amber Warnings, with one more alert noted, above the record's tabs and the start of her identity details." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> Risk alerts on a participant record, worked out live from the record</figcaption>
-            </figure>
-            <div class="band__pair">
-              <figure class="screen screen--phone screen--fit">
-                <div class="phone"><img src="./assets/screens/care-shift-detail-phone.webp" width="390" height="778" srcset="./assets/screens/care-shift-detail-phone.webp 1x, ./assets/screens/care-shift-detail-phone@2x.webp 2x" alt="A shift on a phone with a Start shift button and what the participant needs for the shift." loading="lazy" decoding="async" /></div>
-                <figcaption><span class="tag">Sample data</span> A shift on a phone: start, finish and what the participant needs</figcaption>
-              </figure>
-              <figure class="screen screen--wide" style="--w:608px;--wm:608px">
-                <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-                <div class="screen__view"><div class="screen__frame"><img src="./assets/screens/report-body-map-m.webp" width="608" height="400" srcset="./assets/screens/report-body-map-m.webp 1x, ./assets/screens/report-body-map-m@2x.webp 2x" alt="Injuries section of the incident form: a front and back body figure with the left forearm highlighted, the line Selected region: Left forearm, an injury type of Abrasion and an injury description reading Small graze, cleaned and dressed on site." loading="lazy" decoding="async" /></div></div>
-                <figcaption><span class="tag">Sample data</span> The incident form's body map</figcaption>
-              </figure>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ ACT 3: when everyone's home ============ -->
-      <section class="act" id="after" aria-labelledby="after-title">
-        <div class="wrap act__head">
-          <div class="act__text" data-quiet data-canopy>
-            <h2 id="after-title">When everyone's home</h2>
-            <p class="act__lede">Once the trip is complete, Odip builds each traveller's claim lines from the confirmed bookings.</p>
-          </div>
-        </div>
-        <div class="wrap">
-          <div class="crossing" data-crossing data-canopy data-arrived="Trip completed. In Odip, the claim lines are split by funding.">
-            <div class="crossing__moment" data-quiet>
-              <p class="crossing__when">Home from Byron Bay, 4:00 pm</p>
-              <p class="crossing__text">Liam, Sienna and Marcus are home: three travellers, and three different ways their plans are managed.</p>
-              <button class="replay" type="button" data-replay><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-replay" /></svg>Replay<span class="sr-only"> the completed trip</span></button>
-            </div>
-            <div class="crossing__gate" data-gate aria-hidden="true">
-              <span class="crossing__seam"></span>
-              <span class="crossing__track"></span>
-              <span class="crossing__carrier">Trip completed</span>
-            </div>
-            <div class="crossing__record on-paper" data-pool>
-              <figure class="screen screen--wide" style="--w:616px;--wm:616px">
-                <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-                <div class="screen__view"><div class="screen__frame"><img src="./assets/screens/fund-claim-funding-split-m.webp" width="616" height="612" srcset="./assets/screens/fund-claim-funding-split-m.webp 1x, ./assets/screens/fund-claim-funding-split-m@2x.webp 2x" alt="Line Items card of a draft trip claim: three stacked line cards for Liam Okafor (Plan Managed), Sienna Whitfield (NDIA Managed) and Marcus Tran (Self Managed), each with support item, Weekend day type, dates, 24 hours, unit price, total and Draft status, an Invoice link on the plan-managed and self-managed cards only, and a total of $4,224.00 at the foot." loading="lazy" decoding="async" /></div></div>
-                <figcaption><span class="tag">Sample data</span> Claim lines come from the confirmed bookings, split by funding. NDIA-managed lines go into the NDIS bulk payment file; plan-managed and self-managed travellers each get an invoice PDF. Odip exports the files; you upload them.</figcaption>
-              </figure>
-            </div>
-          </div>
-        </div>
-        <div class="wrap">
-          <div class="band on-paper" data-pool>
-            <figure class="screen screen--wide screen--side" style="--w:670px;--wm:670px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><img src="./assets/screens/fund-claim-preview.webp" width="670" height="494" srcset="./assets/screens/fund-claim-preview.webp 1x, ./assets/screens/fund-claim-preview@2x.webp 2x" alt="Claim Preview dialog: an estimated total, the trip's departure and return times and hours per day, then six line items by traveller with day type, dates, hours and amount, and Back, Cancel and Confirm and Generate buttons." loading="lazy" decoding="async" /></div></div>
-              <figcaption><span class="tag">Sample data</span> Preview before you generate: each traveller's lines by day type and state price limit</figcaption>
-            </figure>
-            <figure class="screen screen--wide" style="--w:1024px;--wm:616px">
-              <span class="screen__hint">Swipe sideways to read the whole screen.</span>
-              <div class="screen__view"><div class="screen__frame"><picture><source media="(max-width: 1023px)" srcset="./assets/screens/report-history-m.webp 1x, ./assets/screens/report-history-m@2x.webp 2x" width="616" height="325" /><img src="./assets/screens/report-history.webp" width="1024" height="309" srcset="./assets/screens/report-history.webp 1x, ./assets/screens/report-history@2x.webp 2x" alt="Audit history for a record: each change listed with who made it, when, and what changed." loading="lazy" decoding="async" /></picture></div></div>
-              <figcaption><span class="tag">Sample data</span> Audit history: who changed what, and when</figcaption>
-            </figure>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ PROVENANCE AND NUMBERS: small instrument readouts ============ -->
-      <section class="readings" aria-labelledby="readings-title" data-canopy>
-        <div class="wrap readings__inner" data-quiet>
-          <h2 id="readings-title">Counted from the code</h2>
-          <p class="readings__lede">These figures are counted from Odip itself, not estimated.</p>
-          <p class="provenance">Built with <strong>Oassist</strong>, a registered NDIS provider of supported holidays.</p>
-          <ul class="readings__list">
-            <li class="reading"><span class="reading__n">18</span> <span class="reading__label">roster checks</span> <span class="reading__desc">run when you assign a shift. Expired worker screening and a double-booked vehicle are hard stops; 4 of the 16 warnings need a reason.</span></li>
-            <li class="reading"><span class="reading__n">11</span> <span class="reading__label">incident types</span> <span class="reading__desc">in the guided incident form, with a body map for injuries and restrictive-practice checks.</span></li>
-            <li class="reading"><span class="reading__n">5</span> <span class="reading__label">credentials tracked</span> <span class="reading__desc">for expiry: First Aid, driver licence, manual handling, medication competency and worker screening.</span></li>
-            <li class="reading"><span class="reading__n">3</span> <span class="reading__label">funding types</span> <span class="reading__desc">on one trip: NDIA-managed, plan-managed and self-managed.</span></li>
-            <li class="reading"><span class="reading__n">25</span> <span class="reading__label">audited record types</span> <span class="reading__desc">each change logged with who made it and when.</span></li>
-          </ul>
-        </div>
-      </section>
-
-      <!-- ============ THE EARLY-ACCESS CLEARING: the form on warm paper, lit by a pool of light ============ -->
-      <section class="early" id="early-access" aria-labelledby="ea-title" data-canopy>
-        <div class="wrap early__wrap">
-          <div class="clearing on-paper" data-pool data-form-panel>
-            <h2 id="ea-title">Request early access</h2>
-            <p class="form__intro" data-hide-on-success>Tell us who you are. We will reply by email about early access to Odip.</p>
-            <!-- TODO(release): say what early access is (who it is for, any cost or commitment), who will write and when. State a timeframe only if it will be honoured. -->
-
-            <form id="early-access-form" class="form" novalidate aria-describedby="form-notice">
-              <div class="field">
-                <label for="ea-name">Your name</label>
-                <input id="ea-name" name="name" type="text" autocomplete="name" maxlength="100" required data-field="name" aria-describedby="ea-name-error" />
-                <p class="field__error" id="ea-name-error" data-error="name" hidden></p>
-              </div>
-              <div class="field">
-                <label for="ea-organisation">Organisation</label>
-                <input id="ea-organisation" name="organisation" type="text" autocomplete="organization" maxlength="150" required data-field="organisation" aria-describedby="ea-organisation-error" />
-                <p class="field__error" id="ea-organisation-error" data-error="organisation" hidden></p>
-              </div>
-              <div class="field">
-                <label for="ea-email">Email</label>
-                <input id="ea-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required data-field="email" aria-describedby="ea-email-error" />
-                <p class="field__error" id="ea-email-error" data-error="email" hidden></p>
-              </div>
-              <!-- Honeypot: hidden from people and from assistive tech; a filled value is silently dropped by the API. -->
-              <div class="hp" aria-hidden="true">
-                <label for="ea-website">Website</label>
-                <input id="ea-website" name="website" type="text" tabindex="-1" autocomplete="off" data-field="website" />
-              </div>
-
-              <p class="form__nojs">This form needs JavaScript. Turn it on and reload to request early access.</p>
-              <p class="form__status" role="alert" tabindex="-1" data-status hidden></p>
-              <button class="btn btn--olive submit" type="submit" data-submit disabled>
-                <span data-submit-label>Request early access</span>
-                <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-forward" /></svg>
-              </button>
-              <p class="form__notice" id="form-notice">We will only use these details to reply about early access to Odip.<span data-platform="collector" hidden></span><span data-platform="privacyNotice" hidden> Read our <a href="/legal/privacy">Privacy Policy</a>, which explains how we handle them and how to contact us.</span>
-                <!-- Filled from src/lib/platformInfo.ts (companyName, legalPublished). -->
-              </p>
-            </form>
-
-            <div class="success" data-success tabindex="-1" hidden>
-              <span class="success__icon" aria-hidden="true"><svg class="ico" focusable="false"><use href="#i-check-circle" /></svg></span>
-              <h3>Request received</h3>
-              <p>Thank you. We will email <strong data-success-email>your address</strong> about early access.</p>
-              <p>That is all for now. You do not need to do anything else.</p>
-              <button class="link-btn" type="button" data-reset>Send another request</button>
-            </div>
-          </div>
-          <p class="early__signin" data-quiet>Already use Odip? <a class="signin" href="/login"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-login" /></svg><span>Sign in</span></a></p>
-        </div>
-      </section>
-    </main>
-
-    <footer class="site-footer" data-canopy>
-      <div class="wrap site-footer__inner" data-quiet>
-        <div class="site-footer__ack">
-          <h2>Acknowledgement of Country</h2>
-          <p>We acknowledge the Aboriginal and Torres Strait Islander Traditional Custodians of Country throughout Australia, and recognise their continuing connection to land, sea, culture and community. We pay our respects to Elders past and present.</p>
-        </div>
-        <div class="site-footer__cols">
-          <div class="site-footer__brand">
-            <a class="brand" href="#top" aria-label="Odip, back to the top">
-              <span class="brand__tile"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-travel-explore" /></svg></span>
-              <span class="brand__name">Odip</span>
-            </a>
-            <p>NDIS trip management for supported holidays.</p>
-            <a class="signin" href="/login"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-login" /></svg><span>Sign in</span></a>
-          </div>
-          <div class="site-footer__col">
-            <h2>Product</h2>
-            <ul>
-              <li><a href="#before">Before the trip</a></li>
-              <li><a href="#during">During the trip</a></li>
-              <li><a href="#after">After the trip</a></li>
-              <li><a href="#early-access">Request early access</a></li>
-            </ul>
-          </div>
-          <div class="site-footer__col" data-platform-group hidden>
-            <h2>Company</h2>
-            <ul>
-              <li data-platform="companyName" hidden></li>
-              <li data-platform="abn" hidden></li>
-            </ul>
-          </div>
-          <div class="site-footer__col">
-            <h2>Legal</h2>
-            <ul>
-              <li data-platform="privacy" hidden><a href="/legal/privacy">Privacy Policy</a></li>
-              <li data-platform="terms" hidden><a href="/legal/terms">Terms of Service</a></li>
-              <li><a href="/accessibility">Accessibility</a></li>
-            </ul>
-          </div>
-          <div class="site-footer__col" data-platform-group hidden>
-            <h2>Support</h2>
-            <ul>
-              <li data-platform="supportEmail" hidden><a></a></li>
-              <li data-platform="statusUrl" hidden><a target="_blank" rel="noopener noreferrer">Status<span class="sr-only"> (opens in a new tab)</span></a></li>
-            </ul>
-          </div>
-        </div>
-        <div class="site-footer__notes">
-          <div>
-            <h2>Collection notice</h2>
-            <p>We will only use these details to reply about early access to Odip.<span data-platform="collector" hidden></span><span data-platform="privacyNotice" hidden> Read our <a href="/legal/privacy">Privacy Policy</a>, which explains how we handle them and how to contact us.</span></p>
-            <!-- Filled from src/lib/platformInfo.ts (companyName, legalPublished). -->
-          </div>
-          <div>
-            <h2>Sample data</h2>
-            <p>The screens and moments on this page show sample data. The people, trips and organisations in them are fictional, and some on-screen notes were written for the sample.</p>
-          </div>
-        </div>
-        <p class="site-footer__legal" data-platform="copyright" hidden></p>
+        <nav class="plan" aria-label="An admin day with Bunya Support">
+          <ol>
+            <li><a href="#t0830"><time>8:30 am</time><span>Approvals</span></a></li>
+            <li><a href="#t1000"><time>10:00 am</time><span>A shift goes unfilled</span></a></li>
+            <li><a href="#t1130"><time>11:30 am</time><span>A new enquiry</span></a></li>
+            <li><a href="#t1300"><time>1:00 pm</time><span>An agreement to draft</span></a></li>
+            <li><a href="#t1430"><time>2:30 pm</time><span>An incident on shift</span></a></li>
+            <li><a href="#t1600"><time>4:00 pm</time><span>The claims file</span></a></li>
+            <li><a href="#onshift"><time>On shift</time><span>My shifts on a phone</span></a></li>
+          </ol>
+          <p class="plan__foot">The times are a sample day; your day will run its own way.</p>
+        </nav>
       </div>
-    </footer>
+    </div>
+  </section>
 
-    <p class="sr-only" aria-live="polite" data-crossing-status></p>
-  </body>
+  <div class="day">
+    <div class="wrap day__grid">
+      <div class="rail" aria-hidden="true">
+        <div class="rail__track">
+        <ol class="rail__stops">
+          <li class="is-now" data-for="t0830">8:30 am</li>
+          <li data-for="t1000">10:00 am</li>
+          <li data-for="t1130">11:30 am</li>
+          <li data-for="t1300">1:00 pm</li>
+          <li data-for="t1430">2:30 pm</li>
+          <li data-for="t1600">4:00 pm</li>
+          <li data-for="onshift">On shift</li>
+        </ol>
+        <span class="rail__dot"></span>
+        </div>
+      </div>
+
+      <section class="slot" id="t0830" data-time="8:30 am" data-what="Approvals" aria-labelledby="t0830-title">
+        <div class="slot__before">
+          <h2 id="t0830-title"><span class="t">8:30 am</span>Approvals</h2>
+          <h3><span>Before</span></h3>
+          <p>Timesheets, leave requests and incident follow-ups arrive in different places, and each one is chased on its own.</p>
+        </div>
+        <div class="slot__after">
+          <h3>With Bunya Support</h3>
+          <p class="after__lede">One list of what needs a decision: completions, leave, incidents, tasks and compliance items, grouped, with bulk actions to clear several at once.</p>
+          <div class="shots">
+            <figure class="shot">
+              <picture class="frame">
+                <source media="(max-width: 639px)" srcset="./assets/screens/decisions-m.webp 1x, ./assets/screens/decisions-m@2x.webp 2x" width="624" height="781">
+                <img src="./assets/screens/decisions.webp" srcset="./assets/screens/decisions.webp 1x, ./assets/screens/decisions@2x.webp 2x" width="952" height="596" alt="The dashboard's decision queue on its Completions tab as cards: four finished shifts with staff, participant, times and variance, two of them ticked under a bar reading 2 selected, with an Approve 2 button." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>The decision queue on the dashboard, two items selected for a bulk action.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="slot" id="t1000" data-time="10:00 am" data-what="A shift goes unfilled" aria-labelledby="t1000-title">
+        <div class="slot__before">
+          <h2 id="t1000-title"><span class="t">10:00 am</span>A shift goes unfilled</h2>
+          <h3><span>Before</span></h3>
+          <p>A gap in the roster that nobody spots until the shift is close.</p>
+        </div>
+        <div class="slot__after">
+          <h3>With Bunya Support</h3>
+          <p class="after__lede">The roster board lays out staff by day and keeps unfilled shifts in a lane of their own, where they can't be missed.</p>
+          <ul class="points">
+            <li>Open a shift in a side panel to assign it; checks run as you do, and the serious ones stop it.</li>
+            <li>Save the regular week as shift patterns, and set compatibility rules.</li>
+            <li>Leave requests come in for approval, and availability is recorded for each worker.</li>
+          </ul>
+          <div class="shots">
+            <figure class="shot">
+              <picture class="frame">
+                <source media="(max-width: 639px)" srcset="./assets/screens/roster-board-m.webp 1x, ./assets/screens/roster-board-m@2x.webp 2x" width="624" height="601">
+                <img src="./assets/screens/roster-board.webp" srcset="./assets/screens/roster-board.webp 1x, ./assets/screens/roster-board@2x.webp 2x" width="1142" height="561" alt="A week of the roster laid out by staff, 10 to 16 August: one shift for Dylan Marchetti waits in the Unfilled lane on Tuesday, five support workers have their shifts by day and their hours out of 38, and Tom Beattie is on leave." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>The roster board: staff down the side, the days across, and an unfilled shift in its lane.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="slot" id="t1130" data-time="11:30 am" data-what="A new enquiry" aria-labelledby="t1130-title">
+        <div class="slot__before">
+          <h2 id="t1130-title"><span class="t">11:30 am</span>A new enquiry</h2>
+          <h3><span>Before</span></h3>
+          <p>An enquiry noted during a call, with intake started somewhere else later.</p>
+        </div>
+        <div class="slot__after">
+          <h3>With Bunya Support</h3>
+          <p class="after__lede">Log the enquiry, start intake from it, and book the intake visit with a calendar invite.</p>
+          <ul class="points">
+            <li>The intake wizard takes the participant's details step by step.</li>
+            <li>Carers can fill in a caregiver profile from a link, and their answers wait in a review queue.</li>
+            <li>An onboarding checklist shows what's still to do.</li>
+          </ul>
+          <div class="shots">
+            <figure class="shot">
+              <picture class="frame">
+                <source media="(max-width: 639px)" srcset="./assets/screens/enquiries-m.webp 1x, ./assets/screens/enquiries-m@2x.webp 2x" width="607" height="759">
+                <img src="./assets/screens/enquiries.webp" srcset="./assets/screens/enquiries.webp 1x, ./assets/screens/enquiries@2x.webp 2x" width="1175" height="502" alt="The open enquiries table: seven people with their contact, source and status, intake visits booked for some with confirmation badges, and Start intake, Resume intake and Edit enquiry buttons on the rows." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>Enquiries in one table, each ready to start intake.</figcaption>
+            </figure>
+            <figure class="shot shot--sub">
+              <picture class="frame">
+                <img src="./assets/screens/intake-booking.webp" srcset="./assets/screens/intake-booking.webp 1x, ./assets/screens/intake-booking@2x.webp 2x" width="1143" height="858" alt="The intake visit panel for Noah Fitzgerald, open over the dimmed enquiries list: his email, 22 October at 10:00 for an hour and a half at his home, and Callum Radford as the one going." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>Booking an intake visit, with a calendar invite.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="slot" id="t1300" data-time="1:00 pm" data-what="An agreement to draft" aria-labelledby="t1300-title">
+        <div class="slot__before">
+          <h2 id="t1300-title"><span class="t">1:00 pm</span>An agreement to draft</h2>
+          <h3><span>Before</span></h3>
+          <p>A service agreement written in a document, with the budget worked out separately.</p>
+        </div>
+        <div class="slot__after">
+          <h3>With Bunya Support</h3>
+          <p class="after__lede">Draft the service agreement in steps: set the week pattern and travel, watch the running total, check the draft, then approve it.</p>
+          <ul class="points">
+            <li>Funding plans have their own editor, and the budgets page keeps a ledger.</li>
+            <li>A list shows the agreements ending soon, with a renewal review when one comes up.</li>
+          </ul>
+          <p class="note">Agreements are still being built during the alpha, so expect this part to change most.</p>
+          <div class="shots">
+            <figure class="shot">
+              <picture class="frame">
+                <source media="(max-width: 639px)" srcset="./assets/screens/agreement-draft-m.webp 1x, ./assets/screens/agreement-draft-m@2x.webp 2x" width="608" height="631">
+                <img src="./assets/screens/agreement-draft.webp" srcset="./assets/screens/agreement-draft.webp 1x, ./assets/screens/agreement-draft@2x.webp 2x" width="688" height="587" alt="Grace Palmer-Hughes's draft service agreement on its Week step: personal care, community access and group activity shifts through the week from Monday to Saturday, and a footer with the weekly and agreement totals, within budget." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>An agreement draft at the week-pattern step, with its running total.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="slot slot--deep on-dark" id="t1430" data-time="2:30 pm" data-what="An incident on shift" aria-labelledby="t1430-title">
+        <div class="slot__before">
+          <h2 id="t1430-title"><span class="t">2:30 pm</span>An incident on shift</h2>
+          <h3><span>Before</span></h3>
+          <p>An incident written up on paper or in an email, with the follow-up tracked somewhere else.</p>
+        </div>
+        <div class="slot__after">
+          <h3>With Bunya Support</h3>
+          <p class="after__lede">Built for NDIS compliance work: a stepped incident form with a body map and a restrictive practices step, kept in the same place as the roster.</p>
+          <ul class="points">
+            <li>A reportable incident still unreported 24 hours after its record was created is flagged overdue.</li>
+            <li>Each participant has a restrictive practices register, with an authorisation badge.</li>
+            <li>Medications and doses are kept on a register, and risk entries sit on the participant record.</li>
+            <li>Staff credentials show expiry warnings before they lapse.</li>
+          </ul>
+          <div class="shots">
+            <figure class="shot">
+              <picture class="frame">
+                <source media="(max-width: 639px)" srcset="./assets/screens/incident-body-map-m.webp 1x, ./assets/screens/incident-body-map-m@2x.webp 2x" width="616" height="1020">
+                <img src="./assets/screens/incident-body-map.webp" srcset="./assets/screens/incident-body-map.webp 1x, ./assets/screens/incident-body-map@2x.webp 2x" width="976" height="670" alt="The injuries part of a new incident report: region buttons grouped by body area with Left forearm marked, front and back figures with the left forearm shaded green, and under Add injury a table listing the recorded injury: Left forearm, Abrasion, a short description." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>The incident form at its body map step.</figcaption>
+            </figure>
+            <figure class="shot shot--sub">
+              <picture class="frame">
+                <source media="(max-width: 639px)" srcset="./assets/screens/credentials-m.webp 1x, ./assets/screens/credentials-m@2x.webp 2x" width="616" height="770">
+                <img src="./assets/screens/credentials.webp" srcset="./assets/screens/credentials.webp 1x, ./assets/screens/credentials@2x.webp 2x" width="844" height="528" alt="Qualifications with two issues across two active staff: Jack O'Sullivan's first aid due in 12 days and Tom Beattie's first aid expired on 1 July, each listed with their current credentials and an Edit link." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>Staff credentials, with the ones expiring soon flagged.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="slot" id="t1600" data-time="4:00 pm" data-what="The claims file" aria-labelledby="t1600-title">
+        <div class="slot__before">
+          <h2 id="t1600-title"><span class="t">4:00 pm</span>The claims file</h2>
+          <h3><span>Before</span></h3>
+          <p>Finished shifts checked one by one before a claim can be put together.</p>
+        </div>
+        <div class="slot__after">
+          <h3>With Bunya Support</h3>
+          <p class="after__lede">Review finished shifts, approve or return them, or approve a batch at once. Claims are built from approved shifts, with a preview before anything is generated.</p>
+          <ul class="points">
+            <li>Export the bulk payment request file and upload it yourself, as you do now.</li>
+            <li>A per-booking invoice when you need one.</li>
+          </ul>
+          <div class="shots">
+            <figure class="shot">
+              <picture class="frame">
+                <source media="(max-width: 639px)" srcset="./assets/screens/completions-m.webp 1x, ./assets/screens/completions-m@2x.webp 2x" width="607" height="759">
+                <img src="./assets/screens/completions.webp" srcset="./assets/screens/completions.webp 1x, ./assets/screens/completions@2x.webp 2x" width="1015" height="374" alt="The completions queue with four finished shifts pending review, each with rostered against actual times and the variance; three are ticked and an Approve selected (3) button sits above the filters." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>The completion review queue, three shifts selected for batch approval.</figcaption>
+            </figure>
+            <figure class="shot shot--sub">
+              <picture class="frame">
+                <img src="./assets/screens/claim-preview.webp" srcset="./assets/screens/claim-preview.webp 1x, ./assets/screens/claim-preview@2x.webp 2x" width="720" height="540" alt="A claim preview for Liam Okafor's approved shifts: two weekday lines with item codes, hours and unit prices, the total at the top, a note that one sleepover shift is left out, and Back, Cancel and Confirm buttons." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>A claim preview, line by line, before it's generated.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="slot slot--lime" id="onshift" data-time="On shift" data-what="My shifts on a phone" aria-labelledby="onshift-title">
+        <div class="slot__before">
+          <h2 id="onshift-title"><span class="t">On shift</span>My shifts on a phone</h2>
+          <h3><span>Before</span></h3>
+          <p>Shift details passed on by phone, with notes and medication records kept on paper.</p>
+        </div>
+        <div class="slot__after">
+          <h3>With Bunya Support</h3>
+          <p class="after__lede">Support workers see their week of shifts on their phone and work through each one: before, during and finish.</p>
+          <ul class="points">
+            <li>The medication dose sheet and shift notes are inside the shift.</li>
+            <li>Witness approvals and leave requests are in the same place.</li>
+            <li>A booked intake visit shows up as a card.</li>
+          </ul>
+          <div class="phones">
+            <figure class="shot">
+              <picture class="frame frame--phone">
+                <img src="./assets/screens/myshifts-week.webp" srcset="./assets/screens/myshifts-week.webp 1x, ./assets/screens/myshifts-week@2x.webp 2x" width="390" height="844" alt="A support worker's week on a phone, 7 to 13 September: today's shift with Sienna Whitfield from 9am, starting in 30 minutes, with an Open shift button, then the earlier shifts on Friday, Thursday and Tuesday." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>My shifts: the week on a phone.</figcaption>
+            </figure>
+            <figure class="shot">
+              <picture class="frame frame--phone">
+                <img src="./assets/screens/myshifts-during.webp" srcset="./assets/screens/myshifts-during.webp 1x, ./assets/screens/myshifts-during@2x.webp 2x" width="390" height="844" alt="Sienna Whitfield's shift in progress on a phone: the handover note from the last worker, her anaphylaxis and epilepsy flags, and the During the shift list with an overdue Levetiracetam dose and a Record button." loading="lazy" decoding="async">
+              </picture>
+              <figcaption class="figcap"><span class="tag">Sample data</span>A shift in progress, with the dose sheet.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="section section--surface" id="setup" aria-labelledby="setup-title">
+    <div class="wrap split">
+      <header>
+        <h2 id="setup-title">Before day one<span class="pk">.</span></h2>
+        <p>Setting up, and getting your data out again whenever you need it.</p>
+      </header>
+      <ul class="list">
+        <li>Import participants, staff and funding plans with the import wizard, and undo an import if it goes wrong.</li>
+        <li>Export all of your organisation's data whenever you want it.</li>
+        <li>Syncs staff from Employment Hero, if you use it.</li>
+        <li>In-app notifications, with each person choosing what they hear about.</li>
+        <li>Changes to key records are kept in an audit trail.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="alpha" aria-labelledby="alpha-title">
+    <div class="wrap split">
+      <header>
+        <h2 id="alpha-title">What alpha means<span class="pk">.</span></h2>
+      </header>
+      <dl class="terms">
+        <div><dt>Being built</dt><dd>It works, and it's still being built: screens will change and you'll find rough edges. Agreements are changing most.</dd></div>
+        <div><dt>Setting up</dt><dd>We get in touch, set up your organisation with you, and listen to what slows your day down.</dd></div>
+        <div><dt>Sample data</dt><dd>Every screen on this page uses sample data, with fictional people and organisations.</dd></div>
+        <div><dt>Cost</dt><dd>There's no price list during the alpha, so <a href="#join">talk to us</a> about your organisation.</dd></div>
+        <div><dt>Email</dt><dd>In-app notifications work, but email isn't switched on yet.</dd></div>
+        <div><dt>Who it's for</dt><dd>NDIS and disability service providers who want less admin and will tell us what isn't working.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="join on-dark" id="join" aria-labelledby="join-title">
+    <div class="wrap join__grid">
+      <div class="join__copy">
+        <h2 id="join-title">Join the alpha<span class="pk">.</span></h2>
+        <p class="lede">Tell us about your organisation and what takes up your admin team's day. We'll be in touch to set you up.</p>
+        <h3>What happens next</h3>
+        <ol class="next">
+          <li>We read each sign-up ourselves.</li>
+          <li>We get in touch by email or phone to set you up.</li>
+          <li>No confirmation email is sent, so there's nothing to wait for in your inbox.</li>
+        </ol>
+        <p class="join__signin">Already using Bunya Support? <a href="/login">Sign in</a></p>
+      </div>
+      <div class="panel" data-form-panel>
+        <form class="form" id="alpha-form" action="#" novalidate aria-describedby="form-notice">
+          <div class="form__grid">
+            <div class="field">
+              <label for="f-name">Your name</label>
+              <input id="f-name" name="name" data-field="name" type="text" autocomplete="name" maxlength="100" required aria-describedby="f-name-error">
+              <p class="field__error" id="f-name-error" data-error="name" hidden></p>
+            </div>
+            <div class="field">
+              <label for="f-org">Organisation</label>
+              <input id="f-org" name="organisation" data-field="organisation" type="text" autocomplete="organization" maxlength="150" required aria-describedby="f-org-error">
+              <p class="field__error" id="f-org-error" data-error="organisation" hidden></p>
+            </div>
+            <div class="field">
+              <label for="f-role">Your role <span class="opt">(optional)</span></label>
+              <input id="f-role" name="role" data-field="role" type="text" autocomplete="organization-title" maxlength="100" aria-describedby="f-role-hint f-role-error">
+              <p class="field__hint" id="f-role-hint">For example, operations manager or rostering lead</p>
+              <p class="field__error" id="f-role-error" data-error="role" hidden></p>
+            </div>
+            <div class="field">
+              <label for="f-size">Organisation size</label>
+              <select id="f-size" name="organisationSize" data-field="organisationSize" required aria-describedby="f-size-error">
+                <option value="">Choose a size</option>
+                <option value="under-10">Fewer than 10 staff</option>
+                <option value="10-49">10 to 49 staff</option>
+                <option value="50-199">50 to 199 staff</option>
+                <option value="200-plus">200 staff or more</option>
+              </select>
+              <p class="field__error" id="f-size-error" data-error="organisationSize" hidden></p>
+            </div>
+            <div class="field">
+              <label for="f-email">Email</label>
+              <input id="f-email" name="email" data-field="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required aria-describedby="f-email-error">
+              <p class="field__error" id="f-email-error" data-error="email" hidden></p>
+            </div>
+            <div class="field">
+              <label for="f-phone">Phone <span class="opt">(optional)</span></label>
+              <input id="f-phone" name="phone" data-field="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" aria-describedby="f-phone-hint f-phone-error">
+              <p class="field__hint" id="f-phone-hint">If you'd rather we call</p>
+              <p class="field__error" id="f-phone-error" data-error="phone" hidden></p>
+            </div>
+            <div class="field field--wide">
+              <label for="f-message">What would you most like it to help with? <span class="opt">(optional)</span></label>
+              <textarea id="f-message" name="message" data-field="message" rows="4" maxlength="1000" aria-describedby="f-message-hint f-message-error"></textarea>
+              <p class="field__hint" id="f-message-hint">Up to 1,000 characters.</p>
+              <p class="field__error" id="f-message-error" data-error="message" hidden></p>
+            </div>
+          </div>
+          <div class="hp" aria-hidden="true">
+            <label for="f-website">Website</label>
+            <input id="f-website" name="website" data-field="website" type="text" tabindex="-1" autocomplete="off">
+          </div>
+          <p class="status" data-status role="alert" tabindex="-1" hidden></p>
+          <p class="form__nojs" data-nojs>This form needs JavaScript. Turn it on and reload to join the alpha.</p>
+          <div class="form__foot">
+            <button class="btn btn--olive btn--lg" type="submit" data-submit disabled><span data-submit-label>Join the alpha</span><svg class="ico" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M592-417H126v-126h466L390-745l90-89 354 354-354 354-90-89 202-202Z"/></svg></button>
+            <p>We'll be in touch to set you up. No confirmation email is sent.</p>
+          </div>
+          <div class="notice" id="form-notice">
+            <h3>How we handle these details</h3>
+            <p>Bunya Support<span data-platform="collector" hidden></span> collects the details in this form to contact you about the alpha and set you up. They're stored in the Bunya Support platform, seen only by our team, and used for nothing else.</p>
+            <p>We keep them until the alpha ends, for 12 months at most, or delete them sooner if you ask. To see, change or remove your details, send the form again and say so in the message.<span data-platform="privacyNotice" hidden> Our <a href="/legal/privacy">Privacy Policy</a> has the detail.</span></p>
+          </div>
+        </form>
+        <div class="received" data-success hidden>
+          <h3 data-success-heading tabindex="-1"><svg class="ico" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="m421-276 297-297-83-84-214 214-102-102-83 84 185 185Zm59 230q-91 0-170-34t-137.5-92.5Q114-231 80-310T46-480q0-91 34-170t92.5-137.5Q231-846 310-880t170-34q91 0 170 34t137.5 92.5Q846-729 880-650t34 170q0 91-34 170t-92.5 137.5Q729-114 650-80T480-46Z"/></svg>Thanks, we have your details.</h3>
+          <p>We'll be in touch. No confirmation email is sent, so there's nothing to look out for in your inbox.</p>
+          <button class="link-btn" type="button" data-reset>Send another sign-up</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="ack">
+      <h2>Acknowledgement of Country</h2>
+      <p>We acknowledge the Aboriginal and Torres Strait Islander Traditional Custodians of Country throughout Australia, and recognise their continuing connection to land, sea, culture and community. We pay our respects to Elders past and present.</p>
+    </div>
+    <div class="f-cols">
+      <div class="f-brand">
+        <a class="brand" href="#top" aria-label="Bunya Support, back to the top"><span class="wm" aria-hidden="true">bunya<b>support</b><svg viewBox="0 0 16 16" focusable="false"><circle cx="8" cy="8" r="6.5" fill="#bbf37c" stroke="#396200" stroke-width="2"/></svg></span></a>
+        <p>NDIS and disability service provider software, now in alpha.</p>
+        <a class="signin" href="/login">Sign in</a>
+      </div>
+      <div class="f-col">
+        <h2>Product</h2>
+        <ul>
+          <li><a href="#t0830">Approvals</a></li>
+          <li><a href="#t1000">Rostering</a></li>
+          <li><a href="#t1130">Enquiries and intake</a></li>
+          <li><a href="#t1300">Agreements and budgets</a></li>
+          <li><a href="#t1430">Incidents and compliance work</a></li>
+          <li><a href="#t1600">Claims file</a></li>
+          <li><a href="#onshift">My shifts</a></li>
+        </ul>
+      </div>
+      <div class="f-col" data-platform-group hidden>
+        <h2>Company</h2>
+        <ul><li data-platform="companyName" hidden></li><li data-platform="abn" hidden></li></ul>
+      </div>
+      <div class="f-col">
+        <h2>Legal</h2>
+        <ul>
+          <li data-platform="privacy" hidden><a href="/legal/privacy">Privacy Policy</a></li>
+          <li data-platform="terms" hidden><a href="/legal/terms">Terms of Service</a></li>
+          <li><a href="/accessibility">Accessibility</a></li>
+          <li><a href="#alpha">What alpha means</a></li>
+          <li><a href="#join">Join the alpha</a></li>
+        </ul>
+      </div>
+      <div class="f-col" data-platform-group hidden>
+        <h2>Support</h2>
+        <ul><li data-platform="supportEmail" hidden><a></a></li></ul>
+      </div>
+    </div>
+    <div class="f-notes">
+      <h2>Sample data</h2>
+      <p>The screens on this page show sample data, with fictional people and organisations.</p>
+    </div>
+  </div>
+</footer>
+</body>
 </html>

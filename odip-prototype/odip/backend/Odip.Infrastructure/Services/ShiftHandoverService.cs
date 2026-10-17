@@ -67,7 +67,7 @@ public sealed class ShiftHandoverService
         var userIds = rows.Select(r => r.SubmittedByUserId).Distinct().ToList();
         var names = (await _db.Users.Where(u => userIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.FirstName, u.LastName }).ToListAsync(ct))
-            .ToDictionary(u => u.Id, u => $"{u.FirstName} {u.LastName}");
+            .ToDictionary(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim());
         string NameOf(Guid id) => names.TryGetValue(id, out var n) ? n : string.Empty;
 
         var trail = rows.Select(r => new PortalHandoverTrailEntryDto(r.CompletionId, NameOf(r.SubmittedByUserId), r.ServiceDate)).ToList();

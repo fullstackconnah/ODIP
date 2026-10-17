@@ -178,7 +178,7 @@ public class TenantsController : ControllerBase
             try
             {
                 await _firebaseUserService.CreateUserAsync(
-                    EmailIdentity.Normalise(firebaseIu.Email), $"{firebaseIu.FirstName} {firebaseIu.LastName}",
+                    EmailIdentity.Normalise(firebaseIu.Email), $"{firebaseIu.FirstName} {firebaseIu.LastName}".Trim(),
                     string.IsNullOrEmpty(firebaseIu.Password) ? null : firebaseIu.Password, ct);
                 firebaseAccount = FirebaseAccountStatus.Created;
             }
@@ -243,7 +243,7 @@ public class TenantsController : ControllerBase
             .IgnoreQueryFilters()
             .Where(u => u.TenantId == id)
             .OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
-            .Select(u => new TenantUserDto(u.Id, $"{u.FirstName} {u.LastName}", u.Role.ToString(), u.IsActive))
+            .Select(u => new TenantUserDto(u.Id, $"{u.FirstName} {u.LastName}".Trim(), u.Role.ToString(), u.IsActive))
             .ToListAsync(ct);
         return Ok(ApiResponse<List<TenantUserDto>>.Ok(users));
     }

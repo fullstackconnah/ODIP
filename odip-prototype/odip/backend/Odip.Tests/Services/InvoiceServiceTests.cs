@@ -70,4 +70,24 @@ public class InvoiceServiceTests
             service.GenerateInvoiceAsync(claim.Id, Guid.NewGuid(), CancellationToken.None));
         Assert.Equal("Booking not found in this claim.", ex.Message);
     }
+
+    [Theory]
+    [InlineData(true, "TAX INVOICE")]
+    [InlineData(false, "INVOICE")]
+    public void Heading_TitleFollowsGstRegistration(bool gstRegistered, string title) =>
+        Assert.Equal(title, InvoiceService.Heading(gstRegistered, new TripClaim(), "NSW").Title);
+
+    [Fact]
+    public void Heading_DateIsTheClaimsOwnInProvidersZone_NotToday()
+    {
+        // 2026-09-06 15:00 UTC is already 7 Sep in Sydney; a re-download on any later day gives the same date.
+        var claim = new TripClaim { CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), SubmittedDate = new DateTime(2026, 9, 6, 15, 0, 0, DateTimeKind.Utc) };
+        Assert.Equal(new DateOnly(2026, 9, 7), InvoiceService.Heading(true, claim, "NSW").Date);
+        Assert.Equal(new DateOnly(2026, 9, 7), InvoiceService.Heading(true, claim, "NSW").Date);
+    }
+
+    [Fact]
+    public void Heading_UnsubmittedClaimUsesCreatedAt() =>
+        Assert.Equal(new DateOnly(2026, 1, 2), InvoiceService.Heading(true,
+            new TripClaim { CreatedAt = new DateTime(2026, 1, 1, 14, 0, 0, DateTimeKind.Utc) }, "NSW").Date);
 }

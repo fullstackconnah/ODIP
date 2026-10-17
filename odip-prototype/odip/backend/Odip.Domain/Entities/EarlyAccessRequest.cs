@@ -9,7 +9,7 @@ namespace Odip.Domain.Entities;
 /// <c>OdipDbContext.SaveChangesAsync</c>, and has no global query filter. A tenant claim or a
 /// SuperAdmin <c>X-View-As-Tenant</c>/<c>X-View-As-User</c> header can therefore neither scope
 /// nor hide these rows. A SuperAdmin lists and deletes them through <c>api/v1/admin/early-access</c>
-/// (Settings › Alpha sign-ups), and a daily job deletes each one 12 months after it was first sent
+/// (Settings › Alpha sign-ups), and an hourly job deletes each one 12 months after it was first sent, an hour early
 /// (<c>EarlyAccessPurgeBackgroundService</c>).
 ///
 /// Personal data kept is the minimum the form asks for. No IP address or user agent is stored.
@@ -50,4 +50,7 @@ public class EarlyAccessRequest
 
     /// <summary>How many times this address has submitted the form; starts at 1.</summary>
     public int RequestCount { get; set; }
+
+    /// <summary>Repeat sign-ups whose answers differed from the ones above, oldest first; at most 10. See <see cref="EarlyAccessLaterSubmission"/>.</summary>
+    public List<EarlyAccessLaterSubmission> LaterSubmissions { get; set; } = [];
 }
