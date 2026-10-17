@@ -144,7 +144,7 @@ a:hover { color: var(--deep); }
 .slot__before { grid-column: 1 / 3; align-self: start; position: sticky; top: calc(var(--bar-h) + 8px); padding: var(--slot-pad) clamp(20px, 3vw, 44px) var(--slot-pad) 0; }
 .slot h2 { font-size: clamp(1.75rem, 1.2rem + 1.6vw, 2.625rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; }
 .slot h2 .t { display: block; margin-bottom: 10px; font-size: clamp(1rem, 0.9rem + 0.3vw, 1.125rem); line-height: 1.2; letter-spacing: -0.005em; font-variant-numeric: tabular-nums; color: var(--olive); }
-.slot h3 { font: 700 0.8125rem/1.3 var(--body); letter-spacing: 0.06em; text-transform: uppercase; }
+.slot h3 { font-size: 1.25rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
 .slot__before h3 { margin-top: 28px; color: var(--muted); }
 .slot__before h3 span { position: relative; }
 /* "Before" is struck through as the slot arrives: the old way, crossed out. Visible by default; JS only hides it until then. */
@@ -202,7 +202,10 @@ a:hover { color: var(--deep); }
 
 /* Before day one, and what alpha means */
 .section { padding-block: clamp(72px, 8vw, 128px); }
-.section--surface { background: var(--surface); }
+/* Ground is white everywhere (owner): sections are told apart by a hair rule and their padding, not by tone. */
+.section--surface, .section--surface + .section, .site-footer { border-top: 1px solid var(--hair); }
+/* Optical kern: the comma and period of the display headings carry wide sidebearings that -0.035em tracking leaves reading as a space. */
+.pk { margin-left: -0.09em; }
 .split { display: grid; grid-template-columns: repeat(7, 1fr); align-items: start; }
 .split > header { grid-column: 1 / 4; padding-right: clamp(20px, 3vw, 48px); }
 .split > header h2 { font-size: clamp(1.875rem, 1.2rem + 2.2vw, 3.25rem); font-weight: 800; line-height: 1.04; letter-spacing: -0.03em; }
@@ -261,7 +264,7 @@ a:hover { color: var(--deep); }
 .notice p + p { margin-top: 8px; }
 
 /* Footer */
-.site-footer { background: var(--surface); padding-block: clamp(56px, 6vw, 88px) 40px; font-size: 0.9375rem; }
+.site-footer { padding-block: clamp(56px, 6vw, 88px) 40px; font-size: 0.9375rem; }
 .ack { max-width: 72ch; padding-bottom: 32px; border-bottom: 1px solid var(--rule); }
 .site-footer h2 { font: 700 0.9375rem/1.4 var(--body); color: var(--ink); margin-bottom: 8px; }
 .ack p, .f-notes p { color: var(--muted); }

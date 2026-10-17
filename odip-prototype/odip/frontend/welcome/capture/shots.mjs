@@ -2,9 +2,11 @@
  * Shot definitions for capture.mjs (the registry comment there has the shape), in page order: the 11 screens of
  * SHAPE section 5, then the 7 narrow "-m" crops. `run` receives { page, goto, settle, fulfil, unionRect, ratio, BASE_URL }
  * and returns { rect }. Each base shot's `area` finds the region that shows its state; `run` fits that region to the
- * frame's ratio, and a variant fits the same region, shot at a 640px app viewport, to 4:5.
+ * frame's ratio, and a variant fits the same region, shot at a 640px app viewport, to 4:5. A shot flagged `free` (`freeM` for
+ * its variant) keeps its region's own proportions instead: 16:10 is not a contract, and a short table would otherwise sit above
+ * a band of empty page. The manifest then carries the real width and height.
  */
-import { myShiftsWeek, pendingWitnessRequests, routeStaffBoard } from './fixtures.mjs'
+import { myShiftsWeek, pendingWitnessRequests, routeClaimPreview, routeStaffBoard } from './fixtures.mjs'
 import { driveIncidentToDetails } from './drivers.mjs'
 
 const NOW = '2026-10-16T09:30:00+10:00' // the mock's completions, bookings and claims fall in the weeks around it
@@ -54,7 +56,7 @@ const BASE = [
     },
   },
   {
-    name: 'roster-board', stage: 't1000', route: '/rostering', fixture: true, now: '2026-08-10T08:00:00+10:00', viewport: { width: 1390, height: 900 }, w: 16, h: 10,
+    name: 'roster-board', stage: 't1000', route: '/rostering', fixture: true, free: true, freeM: true, now: '2026-08-10T08:00:00+10:00', viewport: { width: 1390, height: 900 }, w: 16, h: 10,
     cropTarget: 'Roster board, By staff: the week toolbar, the Unfilled lane with one shift, five staff rows with shift chips and hours',
     alt: "A week of the roster laid out by staff, 10 to 16 August: one shift for Dylan Marchetti waits in the Unfilled lane on Tuesday, five support workers have their shifts by day and their hours out of 38, and Tom Beattie is on leave.",
     notes: 'Fixture: the mock answers every board request with the participant view and ignores groupBy, so GET rostering/board?groupBy=staff is fed a By staff week (10-16 Aug 2026) built from mock staff and participants and Tom Beattie\'s mock annual leave. 1390px viewport: about the narrowest width where all seven day columns fit.',
@@ -69,7 +71,7 @@ const BASE = [
     },
   },
   {
-    name: 'enquiries', stage: 't1130', route: '/participants?tab=enquiries', viewport: { width: 1440, height: 900 }, w: 16, h: 10,
+    name: 'enquiries', stage: 't1130', route: '/participants?tab=enquiries', viewport: { width: 1440, height: 900 }, w: 16, h: 10, free: true,
     cropTarget: 'Participants, Enquiries tab: the open enquiries table with Start intake on each new enquiry',
     alt: "The open enquiries table: seven people with their contact, source and status, intake visits booked for some with confirmation badges, and Start intake, Resume intake and Edit enquiry buttons on the rows.",
     async area({ page, goto, settle, unionRect }) {
@@ -106,27 +108,42 @@ const BASE = [
     },
   },
   {
-    name: 'agreement-draft', stage: 't1300', route: '/participants/p-0004/agreement-draft', w: 16, h: 10,
-    cropTarget: 'Service agreement draft at the Week step: the step rail, the week pattern lines and the running total in the footer',
-    alt: "Grace Palmer-Hughes's draft service agreement on its Week step: personal care, community access and group activity shifts from Tuesday to Sunday, and a footer with the weekly and agreement totals and an over-budget warning.",
-    async area({ page, goto, settle, unionRect }, w, h) {
+    name: 'agreement-draft', stage: 't1300', route: '/participants/p-0004/agreement-draft', viewport: { width: 720, height: 900 }, w: 16, h: 10, free: true, freeM: true,
+    cropTarget: 'Service agreement draft at the Week step: the week pattern from the Monday row down and the running total in the footer, within budget',
+    alt: "Grace Palmer-Hughes's draft service agreement on its Week step: personal care, community access and group activity shifts through the week from Monday to Saturday, and a footer with the weekly and agreement totals, within budget.",
+    notes: 'Shot at a 720px app width: below 1024px the shift editor panel drops out of the frame beside the week, so the crop is the week and its footer. The agreement ends 28 Feb 2027 (typed on the Details step). The mock plan\'s Core pool does not cover the full 39 weeks to 30 Jun 2027: that draft shows a red "over by" warning that the caption does not explain.',
+    async area({ page, goto, settle, unionRect }) {
       await goto('/participants/p-0004/agreement-draft')
+      await page.getByLabel('Agreement ends').fill('2027-02-28')
       await page.getByRole('button', { name: 'Next' }).click()
       await page.getByText('Step 2 of 4').waitFor()
+      const total = page.getByRole('status').filter({ hasText: /for the agreement/ }).first()
+      await total.waitFor()
       await settle()
+      const words = await total.innerText()
+      if (/over by/.test(words)) throw new Error('the agreement is over budget, so the frame would carry a warning: ' + words)
       await grow(page)
-      // The week runs long; the crop ends at the footer, so the running total beside Next is in it.
-      const r = await unionRect([page.getByRole('heading', { level: 1 }), page.getByText('Step 2 of 4'), page.getByRole('button', { name: 'Next' })], { x: 16, y: 12 })
-      return r.height > (r.width * h) / w ? upFrom(r, w, h, 0) : r
+      // From the Monday row's card (the first checkbox's) down to the footer, whole width, so the total and both buttons are in it.
+      const card = await page.getByRole('checkbox').first().evaluate((el) => {
+        let n = el.parentElement
+        while (n && !(parseFloat(getComputedStyle(n).borderTopWidth) > 0 && parseFloat(getComputedStyle(n).borderTopLeftRadius) > 0)) n = n.parentElement
+        const r = n.getBoundingClientRect()
+        return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height }
+      })
+      const foot = await unionRect([page.getByRole('button', { name: 'Back' }), total, page.getByRole('button', { name: 'Next' })], 0)
+      const x = Math.min(card.x, foot.x) - 4
+      const y = card.y - 4
+      return { x, y, width: Math.max(card.x + card.width, foot.x + foot.width) + 4 - x, height: foot.y + foot.height + 12 - y }
     },
   },
   {
-    name: 'incident-body-map', stage: 't1430', route: '/incidents/new', viewport: { width: 1000, height: 900 }, w: 4, h: 3,
-    cropTarget: 'Report incident at the Incident details step: the Injuries card with the front and back body map, the left forearm selected, the injury type and description',
-    alt: "The injuries part of a new incident report: region buttons grouped by body area with Left forearm selected, front and back figures with the left forearm shaded green, Abrasion as the injury type and a short description.",
+    name: 'incident-body-map', stage: 't1430', route: '/incidents/new', viewport: { width: 1000, height: 900 }, w: 4, h: 3, free: true, freeM: true,
+    cropTarget: 'Report incident at the Incident details step: the Injuries card with the front and back body map, the left forearm marked, and the recorded injury in the table under Add injury',
+    alt: "The injuries part of a new incident report: region buttons grouped by body area with Left forearm marked, front and back figures with the left forearm shaded green, and under Add injury a table listing the recorded injury: Left forearm, Abrasion, a short description.",
     async area({ page, goto, settle, unionRect }) {
-      await driveIncidentToDetails(page, goto)
-      await page.getByText('Selected region:').waitFor()
+      // The injury is added to the recorded list, so the Injuries card shows its table row as well as the body map.
+      await driveIncidentToDetails(page, goto, { addInjury: true })
+      await page.getByRole('heading', { name: 'Injuries' }).first().waitFor()
       await settle()
       const card = page.getByRole('heading', { name: 'Injuries' }).locator('xpath=ancestor::div[contains(@class,"rounded")][1]')
       return unionRect([card], { x: 8, y: 0 })
@@ -146,7 +163,7 @@ const BASE = [
     },
   },
   {
-    name: 'completions', stage: 't1600', route: '/rostering/completions', viewport: { width: 1280, height: 900 }, w: 16, h: 10,
+    name: 'completions', stage: 't1600', route: '/rostering/completions', viewport: { width: 1280, height: 900 }, w: 16, h: 10, free: true,
     cropTarget: 'Completions review queue: four finished shifts, three ticked, with Approve selected (3) in the toolbar',
     alt: "The completions queue with four finished shifts pending review, each with rostered against actual times and the variance; three are ticked and an Approve selected (3) button sits above the filters.",
     async area({ page, goto, settle, unionRect }) {
@@ -159,9 +176,11 @@ const BASE = [
     },
   },
   {
-    name: 'claim-preview', stage: 't1600', route: '/participants/p-0001?tab=claims', viewport: { width: 1440, height: 1000 }, w: 4, h: 3,
+    name: 'claim-preview', stage: 't1600', route: '/participants/p-0001?tab=claims', fixture: true, viewport: { width: 1440, height: 1000 }, w: 4, h: 3,
     cropTarget: 'The Generate claim from shifts dialog at its preview: claim lines from approved shifts before anything is generated',
     alt: "A claim preview for Liam Okafor's approved shifts: two weekday lines with item codes, hours and unit prices, the total at the top, a note that one sleepover shift is left out, and Back, Cancel and Confirm buttons.",
+    notes: 'Fixture: the mock answers every preview with the same two lines whatever the From and To, the second one carrying the "Evening and night rates are not applied yet" note. POST claims/from-shifts/preview is fed two daytime weekday shifts inside the range typed, with no note, and the same sleepover left out.',
+    setup: routeClaimPreview,
     async area({ page, goto, settle, unionRect }) {
       await goto('/participants/p-0001?tab=claims')
       await page.getByRole('button', { name: 'Generate from shifts' }).click()
@@ -210,8 +229,8 @@ const ALT_M = {
   "decisions": "On a narrow screen, the decision queue's Completions tab as stacked cards: four finished shifts, two ticked, under the 2 selected bar with its Approve 2 button.",
   "roster-board": "On a narrow screen, the roster by staff from Monday to Wednesday: the Unfilled lane with one Tuesday shift, five staff rows with shift chips and hours, and Tom Beattie on leave.",
   "enquiries": "On a narrow screen, open enquiries as stacked cards with name, contact, source and status: Noah Fitzgerald with Book intake and Start intake, then Priya Nair and Tomas Becker with Resume intake.",
-  "agreement-draft": "On a narrow screen, the agreement draft's Week step: the shifts for each day from Monday to Sunday, then the weekly and agreement totals with an over-budget warning and the Next button.",
-  "incident-body-map": "On a narrow screen, the incident report's injuries section: body area buttons with Left forearm selected above the front and back figures, the left forearm shaded on both.",
+  "agreement-draft": "On a narrow screen, the agreement draft's Week step: the shifts for each day from Monday to Sunday, then the weekly and agreement totals, within budget, and the Next button.",
+  "incident-body-map": "On a narrow screen, the incident report's injuries section: body area buttons with Left forearm marked, the front and back figures with the left forearm shaded on both, and the recorded injury listed below: Left forearm, Abrasion, a short description.",
   "credentials": "On a narrow screen, Qualifications with both staff groups open: Jack O'Sullivan's first aid due in 12 days and Tom Beattie's expired first aid among their current credentials, each with an Edit link.",
   "completions": "On a narrow screen, the completions queue as stacked cards with rostered and actual times and the variance; three of the four are ticked under an Approve selected (3) button."
 }
@@ -220,7 +239,7 @@ const NARROW = ['decisions', 'roster-board', 'enquiries', 'agreement-draft', 'in
 
 const shot = (s) => ({ role: 'Admin', fixture: false, notes: '', now: NOW, ...s, run: async (ctx) => {
   const r = await s.area(ctx, s.w, s.h)
-  return { rect: s.mobile ? r : await fit(ctx, r, s.w, s.h) }
+  return { rect: s.mobile || s.free ? r : await fit(ctx, r, s.w, s.h) }
 } })
 
 const VARIANTS = NARROW.map((name) => {
@@ -229,6 +248,7 @@ const VARIANTS = NARROW.map((name) => {
     ...base,
     name: `${name}-m`,
     variantOf: name,
+    free: !!base.freeM,
     viewport: { width: 640, height: 900 },
     w: 4,
     h: 5,

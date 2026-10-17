@@ -131,3 +131,26 @@ export async function routeStaffBoard(page) {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: rosterBoardStaffWeek, message: null, errors: null }) })
   })
 }
+
+// ---- Participant claims: Generate from shifts, at its preview (POST participants/:id/claims/from-shifts/preview) ----------
+// ShiftClaimPreviewResponseDto. The mock answers every preview with the same two lines whatever the range, the second carrying
+// the night-rate note. This one is what the real endpoint returns for p-0001's approved weekday day shifts from 1 Sep to 16 Oct 2026
+// (Tue 8 and Thu 10 Sep, 8 h at $40), with the one sleepover left out as before: no note, because no evening or night rate is involved.
+export const claimPreviewDaytime = {
+  totalAmount: 640,
+  lineItems: [
+    { shiftId: 'sh-mock-1', serviceDate: '2026-09-08', dayTypeLabel: 'Weekday', dayType: 'Weekday', supportItemCode: '01_002_0117_1_1', hours: 8, unitPrice: 40, totalAmount: 320 },
+    { shiftId: 'sh-mock-3', serviceDate: '2026-09-10', dayTypeLabel: 'Weekday', dayType: 'Weekday', supportItemCode: '01_002_0117_1_1', hours: 8, unitPrice: 40, totalAmount: 320 },
+  ],
+  leftOut: [
+    { shiftId: 'sh-mock-2', serviceDate: '2026-09-09', description: 'Shift 22:00–06:00 · 8 h', reason: 'It is a sleepover, which shift claims do not price yet.' },
+  ],
+}
+
+/** Serve the daytime preview for POST claims/from-shifts/preview; every other request falls through to the mock. */
+export async function routeClaimPreview(page) {
+  await page.route(/\/api\/v1\/participants\/[^/]+\/claims\/from-shifts\/preview(\?.*)?$/, (route) => {
+    if (route.request().method() !== 'POST') return route.fallback()
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: claimPreviewDaytime, message: null, errors: null }) })
+  })
+}

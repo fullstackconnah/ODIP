@@ -143,6 +143,12 @@ for (const [n, w, h, mobile] of CTX) {
       await page.waitForTimeout(900)
       await shot(page, `slot-${id}-${w}`)
     }
+    // The two plain sections under the day, whole in the viewport (their ground and rules are judged from these).
+    for (const id of ['setup', 'alpha']) {
+      await page.evaluate((i) => document.getElementById(i).scrollIntoView({ block: 'start', behavior: 'instant' }), id)
+      await page.waitForTimeout(500)
+      await shot(page, `section-${id}-${w}`)
+    }
   }
   if (n === 'd1440') {
     // 8: the rail with 11:30 centred.
