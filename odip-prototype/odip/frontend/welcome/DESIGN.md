@@ -1,56 +1,76 @@
 ---
-name: Odip Landing (Living Canopy Light)
-description: The public /welcome/ page. A living gum-canopy light field in the app's own greens, with the product appearing in it as clearings of the app's warm paper.
+name: Odip Landing (The Admin Day)
+description: The public /welcome/ page. One admin day by the clock on a pure white ground; the old way sits plain beside the same job on an olive field, shown with real captured screens.
 colors:
-  primary: "#396200"
-  primary-container: "#4d7c0f"
-  primary-fixed: "#bbf37c"
-  on-primary-fixed: "#0f2000"
-  background: "#fbf9f5"
-  foreground: "#1b1c1a"
-  muted-foreground: "#43493a"
-  border: "#c3c9b5"
-  input: "#e4e2de"
-  destructive: "#ba1a1a"
-  error-container: "#ffdad6"
-  on-error-container: "#93000a"
-  warning-container: "#fef3c7"
-  on-warning-container: "#92400e"
-  canopy-text: "rgb(251 249 245 / 0.84)"
-  canopy-text-quiet: "rgb(251 249 245 / 0.7)"
-  canopy-hairline: "rgb(187 243 124 / 0.2)"
+  white: "#ffffff"
+  ink: "#1b1c1a"
+  muted: "#43493a"
+  olive: "#396200"
+  lime: "#bbf37c"
+  deep: "#0f2000"
+  slate: "#515f74"
+  surface: "#f5f3ef"
+  hair: "#e4e2de"
+  rule: "#c3c9b5"
+  edge: "#8a9180"
+  error: "#ba1a1a"
+  error-bg: "#ffdad6"
+  on-error: "#93000a"
+  warn-bg: "#fef3c7"
+  on-warn: "#92400e"
+  on-olive-2: "#e3eedb"
+  on-deep-2: "#c8e8a4"
+  on-lime-2: "#2b3f12"
 typography:
   display:
     fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
-    fontSize: "clamp(2.125rem, 1.1rem + 4.4vw, 5.6rem)"
+    fontSize: "clamp(2.5rem, 1.2rem + 4.4vw, 5rem)"
     fontWeight: 800
     lineHeight: 0.98
     letterSpacing: "-0.035em"
-  headline:
+  join-headline:
     fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
-    fontSize: "clamp(2.25rem, 1.2rem + 3vw, 4rem)"
-    fontWeight: 800
-    lineHeight: 1.02
-    letterSpacing: "-0.03em"
-  headline-sm:
-    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
-    fontSize: "clamp(1.75rem, 1.3rem + 1.4vw, 2.25rem)"
-    fontWeight: 800
-    lineHeight: 1.1
-    letterSpacing: "-0.02em"
-  title:
-    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
-    fontSize: "clamp(1.3rem, 0.9rem + 0.9vw, 1.75rem)"
-    fontWeight: 700
-    lineHeight: 1.3
-    letterSpacing: "-0.015em"
-  numeral:
-    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
-    fontSize: "clamp(2.25rem, 1.6rem + 1.6vw, 3rem)"
+    fontSize: "clamp(2.25rem, 1.4rem + 3vw, 4.25rem)"
     fontWeight: 800
     lineHeight: 1
-    letterSpacing: "-0.02em"
+    letterSpacing: "-0.035em"
+  section-headline:
+    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
+    fontSize: "clamp(1.875rem, 1.2rem + 2.2vw, 3.25rem)"
+    fontWeight: 800
+    lineHeight: 1.04
+    letterSpacing: "-0.03em"
+  slot-headline:
+    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
+    fontSize: "clamp(1.75rem, 1.2rem + 1.6vw, 2.625rem)"
+    fontWeight: 800
+    lineHeight: 1.05
+    letterSpacing: "-0.03em"
+  slot-time:
+    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
+    fontSize: "clamp(1rem, 0.9rem + 0.3vw, 1.125rem)"
+    fontWeight: 800
+    lineHeight: 1.2
+    letterSpacing: "-0.005em"
     fontFeature: "tnum"
+  slot-label:
+    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
+    fontSize: "1.25rem"
+    fontWeight: 700
+    lineHeight: 1.25
+    letterSpacing: "-0.01em"
+  term:
+    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
+    fontSize: "1.125rem"
+    fontWeight: 700
+    lineHeight: 1.35
+    letterSpacing: "-0.01em"
+  wordmark:
+    fontFamily: "Plus Jakarta Sans, system-ui, -apple-system, sans-serif"
+    fontSize: "1.375rem"
+    fontWeight: 500
+    lineHeight: 1
+    letterSpacing: "-0.04em"
   lede:
     fontFamily: "Manrope, system-ui, -apple-system, sans-serif"
     fontSize: "clamp(1.0625rem, 0.96rem + 0.35vw, 1.25rem)"
@@ -61,274 +81,274 @@ typography:
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.6
-  caption:
+  small:
     fontFamily: "Manrope, system-ui, -apple-system, sans-serif"
     fontSize: "0.9375rem"
     fontWeight: 400
     lineHeight: 1.5
-  button:
-    fontFamily: "Manrope, system-ui, -apple-system, sans-serif"
-    fontSize: "0.9375rem"
-    fontWeight: 600
-    lineHeight: 1.2
+    letterSpacing: "0.01em"
   label:
     fontFamily: "Manrope, system-ui, -apple-system, sans-serif"
     fontSize: "0.75rem"
-    fontWeight: 600
-    lineHeight: 1.4
-    letterSpacing: "0.16em"
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: "0.04em"
 rounded:
-  sm: "0.375rem"
-  md: "0.5rem"
-  lg: "0.75rem"
+  badge: "4px"
+  md: "8px"
+  lg: "12px"
+  panel: "16px"
+  phone: "28px"
   pill: "999px"
 spacing:
   gutter: "clamp(16px, 4vw, 48px)"
-  act-gap: "clamp(112px, 14vw, 200px)"
-  header: "64px"
-  rail: "136px"
-  pill-bar: "76px"
   wrap: "1200px"
+  bar-h: "64px"
+  slot-pad: "clamp(44px, 5vw, 80px)"
+  section-pad: "clamp(72px, 8vw, 128px)"
 components:
-  button-sprout:
-    backgroundColor: "{colors.primary-fixed}"
-    textColor: "{colors.on-primary-fixed}"
-    typography: "{typography.button}"
-    rounded: "{rounded.sm}"
-    padding: "0 18px"
-    height: "44px"
-  button-sprout-lg:
-    backgroundColor: "{colors.primary-fixed}"
-    textColor: "{colors.on-primary-fixed}"
-    rounded: "{rounded.sm}"
-    padding: "0 24px"
-    height: "52px"
-  button-ghost:
-    backgroundColor: "rgb(15 32 0 / 0.45)"
-    textColor: "{colors.background}"
-    typography: "{typography.button}"
-    rounded: "{rounded.sm}"
-    padding: "0 18px"
-    height: "44px"
-  button-ghost-hover:
-    textColor: "{colors.primary-fixed}"
   button-olive:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.background}"
-    typography: "{typography.button}"
-    rounded: "{rounded.sm}"
-    height: "48px"
-  light-toggle:
-    backgroundColor: "rgb(15 32 0 / 0.78)"
-    textColor: "{colors.canopy-text}"
-    rounded: "{rounded.pill}"
-    padding: "0 16px 0 13px"
-    height: "44px"
-  section-pill-current:
-    backgroundColor: "{colors.primary-fixed}"
-    textColor: "{colors.on-primary-fixed}"
-    rounded: "{rounded.pill}"
-    padding: "0 14px"
-    height: "44px"
-  paper-clearing:
-    backgroundColor: "{colors.background}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.lg}"
-    padding: "clamp(20px, 3.4vw, 48px)"
-  readout-tile:
-    backgroundColor: "{colors.warning-container}"
-    textColor: "{colors.on-warning-container}"
+    backgroundColor: "{colors.olive}"
+    textColor: "{colors.white}"
+    typography: "{typography.small}"
     rounded: "{rounded.md}"
-    padding: "8px 14px"
+    padding: "0 18px"
+    height: "44px"
+  button-olive-hover:
+    backgroundColor: "{colors.deep}"
+  button-quiet:
+    backgroundColor: "{colors.white}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "0 18px"
+    height: "44px"
+  button-large:
     height: "52px"
-  tag-sample-data:
-    backgroundColor: "{colors.input}"
-    textColor: "{colors.muted-foreground}"
-    rounded: "{rounded.pill}"
-    padding: "2px 8px"
-  input-field:
-    backgroundColor: "{colors.input}"
-    textColor: "{colors.foreground}"
-    typography: "{typography.body}"
-    rounded: "{rounded.sm}"
+    padding: "0 24px"
+  signin-link:
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
     padding: "0 12px"
     height: "44px"
-  crossing-carrier-arrived:
-    backgroundColor: "{colors.primary-fixed}"
-    textColor: "{colors.on-primary-fixed}"
+  signin-link-hover:
+    backgroundColor: "{colors.surface}"
+  alpha-tag:
+    backgroundColor: "{colors.lime}"
+    textColor: "{colors.deep}"
+    typography: "{typography.label}"
     rounded: "{rounded.pill}"
-    padding: "8px 14px"
-  crossing-carrier-travelling:
-    backgroundColor: "{colors.on-primary-fixed}"
-    textColor: "{colors.primary-fixed}"
+    padding: "5px 9px 4px"
+  sample-tag:
+    textColor: "{colors.lime}"
+    typography: "{typography.label}"
     rounded: "{rounded.pill}"
-    padding: "8px 14px"
+    padding: "4px 8px 3px"
+  field-olive:
+    backgroundColor: "{colors.olive}"
+    textColor: "{colors.white}"
+    padding: "80px 0 80px 48px"
+  field-deep:
+    backgroundColor: "{colors.deep}"
+    textColor: "{colors.white}"
+  field-lime:
+    backgroundColor: "{colors.lime}"
+    textColor: "{colors.deep}"
+  screen-frame:
+    rounded: "{rounded.lg}"
+  screen-frame-phone:
+    rounded: "{rounded.phone}"
+  join-panel:
+    backgroundColor: "{colors.white}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.panel}"
+    padding: "40px"
+  input-field:
+    backgroundColor: "{colors.white}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "10px 14px"
+    height: "48px"
+  status-error:
+    backgroundColor: "{colors.error-bg}"
+    textColor: "{colors.on-error}"
+    rounded: "{rounded.md}"
+    padding: "12px 14px"
+  status-wait:
+    backgroundColor: "{colors.warn-bg}"
+    textColor: "{colors.on-warn}"
+    rounded: "{rounded.md}"
+    padding: "12px 14px"
 ---
 
-<!-- Recorded from the shipped build (feat/landing-canopy, b25faca8, finish review verdict SHIP), not from the brief.
-     Sources: welcome.css, canopy-shader.ts, canopy.ts, canopy-math.ts, crossing-machine.ts, index.html, and the r3
-     screenshot set. The Tourist Drive world this file used to describe is gone; nothing of it carries over. -->
+# Design System: Odip Landing (The Admin Day)
 
-# Design System: Odip Landing (Living Canopy Light)
+Scope: `welcome/` only, the public page at `/welcome/`. It takes the app's tokens by value (pinned by `tokens.test.ts`) and imports nothing from the app's components. Recorded from the shipped build at b6bf5db3 (welcome.css, index.html, motion.ts, assets/screens/manifest.json), after the finish reviews FINISH.md and FINISH-R2.md.
 
 ## Overview
 
-**Creative North Star: "Clearings in the Canopy"**
+**Creative North Star: "The Admin Day"**
 
-The landing page is the same product as the app, seen from outside. Its ground is a living light field: you look up into a eucalypt canopy at late sun, drawn in the app's own greens by one WebGL fragment shader. The product appears in that field as clearings of the app's warm paper: a dashboard readout in the first viewport, a record at the end of each crossing, and proof bands and the early-access form below. The nature side is the lived trip; the paper side is the record. The page's job is to show one becoming the other.
+The page follows one admin day by the clock. Seven slots (8:30 am to "On shift") each put the old way, plain on white, beside the same job in Bunya Support on a coloured field, so "less admin" is shown by a real captured screen rather than claimed. The ground is pure white everywhere; the only colour fields are the "after" halves, the join band and the lime and deep variants. There are no cards, no icon tiles, no illustration, no photography and no gradient.
 
-There is one canopy and many clearings, and they never blur into each other. Canopy text is warm paper at three strengths on forest, with Sprout as the single lit accent. Paper clearings are the app exactly: Ledger Ink text, Ruled Line borders, Field Grey inputs, the app's warning and error tones, and real screenshots of the app. Density is low on the canopy (big type, generous act gaps) and app-normal inside the clearings.
-
-The page shares the app's tokens by value, not by import: `welcome.css` repeats the app's `@theme` values under the same names, and `welcome/tokens.test.ts` fails if the app changes a green and this page does not follow. This replaces the earlier stance that the landing was a separate world.
+The one authored moment is the "now" dot, the brand's lime dot ringed olive. It drops onto 8:30 in the hero's day plan, then travels a sticky rail beside the slots as each crosses the centre of the viewport. Type is Plus Jakarta Sans 800 for headings with tabular times, Manrope for body. Colour is the app's own green family with white, ink and hairlines.
 
 **Key Characteristics:**
-- One full-bleed, fixed canopy behind everything, with a still poster as first paint and fallback.
-- Sickle-shaped gum leaves hanging in sprays from drooping twigs, in parallax layers, dense along the top edge and thinning downward; one sun, high on the right.
-- Soft, irregular pools of Sprout light dappling the field; no discs, no particles, no tile seams.
-- Paper clearings in the app's exact palette, holding the app's real screens.
-- The translation gate: a moment on the canopy crosses a seam of Sprout light and arrives as a record on paper.
-- Small tracked labels and instrument-style readouts in the margins, carrying Odip's own facts.
+- Pure white ground (#ffffff); sections are told apart by a 1px hair rule and padding, never by tone.
+- Before sits left on white, after sits right on a full-bleed field; this holds in all seven slots.
+- One glass element: the sticky bar (white at 86%, saturate 160%, blur 14px), solid when transparency is reduced, contrast is more, or backdrop-filter is unsupported.
+- Real product captures in plain bordered frames, each tagged "Sample data".
+- Motion is transform and opacity only, on strong ease-out curves, with no overshoot.
 
 ## Colors
 
-The app's olive family and warm neutrals, used in two modes: forest ground with paper-coloured text on the canopy, and the app's own paper surface inside every clearing.
+A white ground, ink text, and one green family in three depths (olive, deep, lime). Values are the app's tokens by value (`--color-*` in `:root`, short aliases such as `--olive` used in rules).
 
 ### Primary
-- **Ledger Olive** (primary): on paper only. The form's submit button, the success icon, link buttons and the focus ring inside clearings, exactly as the app uses it. In the shader it is the mid-tone of lit-through far leaves.
-- **Deep Fern** (primary-container): the wordmark tile behind the brand glyph, and the brighter leaf tone in the shader.
-- **Pale Sprout** (primary-fixed): the one incandescent accent. The primary CTA fill on the canopy, the current section marker, the crossing seam and carrier, the readings' figures and tick marks, the "Live" state word, the canopy focus ring, and the dapples of sunlight in the field. It keeps the app's meaning, "you are here / all clear".
+- **Ledger Olive** (#396200): the primary action, the "after" field, links, focus ring, the strike line, the rail dot's ring and `em` in the h1.
+- **Pale Sprout** (#bbf37c): the "now" dot fill, the "With Bunya Support" label on olive and deep, bullets on olive, the Alpha pill, the On-shift field, `::selection`.
+- **Deep Bunya** (#0f2000): the incident slot field, the join band, button hover, text on lime.
+
+### Secondary
+- **Slate** (#515f74): defined as `--slate` (the app's secondary) and pinned by the token test, but used by no rule in welcome.css.
 
 ### Neutral
-- **Forest** (on-primary-fixed): the canopy ground. The page background, the opaque header, the poster's base, the text on Sprout fills, and the dark ring around the crossing carrier. The browser theme colour.
-- **Warm Paper** (background): every clearing's surface, and the canopy's text colour at full strength (headlines).
-- **Canopy Text** (canopy-text, Warm Paper at 84%): ledes, captions on the canopy, footer copy, inactive pill items.
-- **Canopy Text Quiet** (canopy-text-quiet, Warm Paper at 70%): margin index labels, reading labels, footer headings.
-- **Canopy Hairline** (canopy-hairline, Sprout at 20%): the header's bottom rule, the index rail, the readings' rules, the provenance box, the pause control's border.
-- **Ledger Ink** (foreground): text inside clearings; also the phone frame around phone screenshots.
-- **Moss Ink** (muted-foreground): secondary text in clearings (readout caption and note, form labels and notice).
-- **Ruled Line** (border): screenshot frames, input borders, and the rule between screens in a proof band.
-- **Field Grey** (input): input fills and the "Sample data" tag.
+- **White** (#ffffff): the page ground, the join panel, input fill, the bar's solid fallback.
+- **Ink** (#1b1c1a): body and heading text on white, the quiet button, the first terms rule.
+- **Moss Grey** (#43493a): secondary text, the "Before" text, hints, footer copy.
+- **Hair** (#e4e2de): 1px dividers, bar bottom border, rail line, frame border.
+- **Rule** (#c3c9b5): terms and footer rules, unvisited stop rings.
+- **Edge** (#8a9180): landing-only; input border and quiet-button ring.
+- **Warm Paper** (#f5f3ef, `--surface`): see the open question below.
+- **Second-tone text** on each field: #e3eedb on olive, #c8e8a4 on deep, #2b3f12 on lime (notes and figure captions).
+- Translucent whites and limes in use: white at 0.86 (bar), 0.92 / 0.9 / 0.88 (text on olive and deep), lime at 0.35 / 0.3 (hairlines on olive and deep), ink at 0.2 (frame shadow on a field), olive at 0.25 (input focus ring), deep at 0.3 (frame border on lime).
 
-### Status (on paper, the app's tones)
-- **Amber wash and amber ink** (warning-container, on-warning-container): the hero readout's attention tiles, the no-JS notice and the form's "wait" status.
-- **Error blush, error ink and alarm red** (error-container, on-error-container, destructive): the form's error status, invalid input borders and field errors.
+### States
+- **Error** (#ba1a1a text, #ffdad6 fill, #93000a on fill) and **Wait / no-JS** (#fef3c7 fill, #92400e text), used only by the form.
 
 ### Named Rules
-**The Same Greens Rule.** Every colour on this page is an app token by value, declared under the app's own name in `welcome.css` `:root` and pinned by `tokens.test.ts`. A new colour needs a new app token first. Canopy text and hairlines are alpha mixes of Warm Paper and Sprout, never new hues.
+**The White Ground Rule.** The page ground is #ffffff. The owner said so verbatim ("we dont use the off white background and just use white"). Section breaks are a 1px hair rule plus padding (`.section--surface`, `.section--surface + .section`, `.site-footer`).
 
-**The One Lamp Rule.** Pale Sprout is the only lit thing on the canopy: the primary CTA, the current place, the seam and the sunlight. Never use it for body text, large fills or decoration on paper.
+**The Three Fields Rule.** Olive owns the "after" half of a slot by default. Deep belongs to the incident slot, lime to "On shift", and deep to the join band. A new field colour needs a slot that earns it.
 
-**The Warm Base Rule.** Never pure white and never pure black, on either ground. `tokens.test.ts` fails on `#fff`, `#000`, `white`, `black` or their `rgb()` forms in the stylesheet.
+**The Captured-Warmth Rule.** The warm off-white inside screen captures is the app's own UI and stays. It never becomes a page colour.
+
+**Open owner question (flagged, not decided).** `--surface` (#f5f3ef) still exists as a token and tints exactly two hover states: `.signin:hover` and `.plan a:hover`. The owner has not said whether a hover tint counts as "off-white". Nothing at rest paints it. Until decided, do not add a third use.
 
 ## Typography
 
-**Display Font:** Plus Jakarta Sans 700 to 800 (with system-ui)
-**Body Font:** Manrope 400 to 700 (with system-ui)
+**Display Font:** Plus Jakarta Sans (500, 700, 800), fallback system-ui.
+**Body Font:** Manrope (400 to 700), fallback system-ui.
 
-**Character:** the app's two faces. Plus Jakarta at 800 with tight negative tracking gives the canopy its big, confident statements; Manrope carries everything that is read rather than seen, and the small tracked labels that act as the page's instrument lettering.
+**Character:** Heavy, tightly tracked headings over a calm body, so the times and slot names read like diary headings. Both faces load from Google Fonts with a woff2 preload for each.
 
 ### Hierarchy
-- **Display**: the hero headline only, "You run the trip. / Odip keeps the record." Two lines from 1024px up, three on phones.
-- **Headline**: each act's heading on the canopy. The readings heading is a step smaller (clamp(2rem, 1.2rem + 2.4vw, 3.25rem)), and **Headline-sm** heads the early-access clearing.
-- **Title**: the lived moment in each crossing, held to about 21ch.
-- **Numeral**: the readings' figures, in Sprout with tabular figures. The readout tiles' counts use the same face at 1.75rem.
-- **Lede**: the hero sub and the act ledes, at most 36 to 40rem wide, in Canopy Text.
-- **Body**: 1rem / 1.6, for the form, notices and footer notes (62ch maximum).
-- **Caption**: screenshot captions on paper.
-- **Label**: uppercase, tracked 0.16em, 12px, never smaller. Crossing "when" lines in Sprout; reading labels and footer headings in Canopy Text Quiet. The pause control uses the same treatment at 0.14em.
+- **Display** (800, clamp(2.5rem, 1.2rem + 4.4vw, 5rem), 0.98, -0.035em): the hero h1, two lines, max 19ch, `em` in olive.
+- **Join headline** (800, clamp(2.25rem, 1.4rem + 3vw, 4.25rem), 1, -0.035em): "Join the alpha."
+- **Section headline** (800, clamp(1.875rem, 1.2rem + 2.2vw, 3.25rem), 1.04, -0.03em): "Before day one.", "What alpha means."
+- **Slot headline** (800, clamp(1.75rem, 1.2rem + 1.6vw, 2.625rem), 1.05, -0.03em): the slot name, set in the sticky left column.
+- **Slot time** (800, clamp(1rem, 0.9rem + 0.3vw, 1.125rem), 1.2, tabular, olive): the `.t` span inside each slot h2, on its own line above the name. It is the heading's own text, so it stays.
+- **Slot label** (700, 1.25rem, 1.25, -0.01em, sentence case): the h3s "Before" (Moss Grey, struck) and "With Bunya Support" (lime on olive and deep, olive on lime).
+- **Term** (700, 1.125rem, 1.35): terms list titles.
+- **Lede** (Manrope 400, clamp(1.0625rem, 0.96rem + 0.35vw, 1.25rem), 1.55, 46ch).
+- **Body** (400, 1rem, 1.6). Small text is 0.9375rem or 0.875rem with +0.01em.
+- **Label** (700, 0.75rem, +0.04em): the "Sample data" tag. The Alpha pill is the same size, uppercase, +0.08em.
+- **Wordmark** (500 "bunya" ink, 800 "support" olive, -0.04em, 1.375rem, 1.1875rem under 480px).
 
 ### Named Rules
-**The Twelve Pixel Floor Rule.** No text below 0.75rem (12px), including tags, labels and the pill.
+**The Slot Heading Rule.** Slot labels are real headings: sentence case, 20px, Jakarta 700, no uppercase and no tracking, larger than the paragraph they head. The review round 1 refused 13px tracked uppercase labels (14 of them) as an eyebrow pattern; this is the repair.
 
-**The Small Caps Instrument Rule.** Small tracked uppercase labels are for wayfinding and readouts only (section index, crossing "when", reading labels, the pause control, footer headings). Below 1200px the pill drops the uppercase and tracking so the four items fit.
+**The Punctuation Kern Rule.** A trailing comma or period in a display heading is wrapped alone in `<span class="pk">` with `margin-left: -0.09em`. Jakarta 800's punctuation sidebearings read as a space under -0.035em tracking. `textContent` is unchanged. Used on the h1 comma and period and on the three section h2 periods.
+
+**The Tabular Times Rule.** Times use `font-variant-numeric: tabular-nums` (plan, rail, slot time).
 
 ## Layout
 
-- **Container:** `min(100% - 2 * gutter, 1200px)`, centred, with a fluid gutter of 16 to 48px. From 1200px the page gains a 136px left rail for the section index.
-- **Rhythm:** acts are separated by a large act gap (112 to 200px). More space above headings than below. Inside a proof band, screens are separated by 28 to 40px and a ruled line.
-- **First viewport:** full-height hero. From 1024px a two-column grid: the headline spans both columns, the copy and actions sit left, the paper readout (300 to 400px) right. Below 1024px everything stacks, the readout capped at 440px; below 680px the hero buttons go full width.
-- **Fixed furniture:** the header (64px, opaque forest) on top. From 1200px the section index sits in the left margin, centred vertically, and the "Canopy light · Live" pause control sits bottom right. Below 1200px the index becomes a bottom pill (76px reserved) and the pause control moves into the header, icon only below 900px. Below 640px the pill drops its numbers; below 380px the wordmark text hides; below 360px the header tightens so it stays one line at 320px.
-- **The crossing:** from 1100px a three-column grid (moment 4fr, 64px gate, record 8fr), with a vertical seam, and narrow records set their caption beside them. Below 1100px it stacks, the seam turns horizontal, and moments pass downward.
-- **Proof bands:** one paper surface per act, screens stacked or paired. From 1280px some screens set their caption to the side. Below 680px wide screens scroll sideways inside their frame at natural size (with a hint line), and phones get the app's own art-directed `-m` crops.
-- **Readings:** five columns divided by hairlines; three below 1024px; one below 760px, where each reading becomes a row (figure left, label and description right).
-- **Scroll:** native scroll only. Anchors and focus clear the header and the pill via `scroll-padding`. Smooth scrolling only without reduced motion.
+A 1200px `.wrap` (`min(100% - 2 * gutter, 1200px)`, gutter `clamp(16px, 4vw, 48px)`) on a seven-column grid. The hero is copy over columns 1 to 4 and the day plan over 5 to 7. The day is a grid whose column 1 holds the sticky rail and columns 2 to 7 hold the slots; each slot splits into six columns: before 1 to 2 (sticky at `bar-h + 8px`), after 3 to 6. The after field bleeds to the right edge with `box-shadow: 0 0 0 100vmax` plus `clip-path: inset(0 -100vmax 0 0)`; this is a bleed technique, not a drop shadow. Vertical rhythm: slot padding `clamp(44px, 5vw, 80px)`, section padding `clamp(72px, 8vw, 128px)`. Screens in a field sit in a `.shots` grid; a second screen is 74% wide and right-aligned (86% at 768 to 1023, 100% below 768). The two phones sit in a two-column pair, the second dropped by `clamp(40px, 6vw, 88px)`.
+
+Breakpoints: **1024+** rail visible and the full slot grid. **768 to 1023** rail hidden, slots on a seven-column grid (before 1 to 3, after 4 to 7), lists and form to one column. **Below 768** everything is one column and each after field bleeds both sides. **Below 640** CTAs stack full width and the phone pair tightens. **Below 480** the Alpha pill hides, the wordmark shrinks and "Join the alpha" becomes "Join". Screens swap to `-m` crops below 640px through `<source media>`.
+
+Targets are 44px minimum (48px inputs, 52px large buttons); anchors use `scroll-padding-top: bar-h + 16px`.
 
 ## Elevation & Depth
 
-Depth lives in the canopy, not in shadows. The shader builds it from parallax: four leaf layers (three in low power), far leaves small and lit through like fern-green glass, near leaves large, dark and soft with only their rims lit, under one sun high on the right that sets a real luminance gradient across the field. Scrolling drifts the camera through the layers. Paper clearings sit flat on the canopy, with no shadow; they read as forward because they are the brightest, flattest things on screen and because the field brightens round them ("light finds the work"). The few shadows below are glows and separations, not elevation.
-
-### Shadow Vocabulary
-- **Sprout glow** (`box-shadow: 0 10px 24px -14px rgb(187 243 124 / 0.7)`): under the Sprout CTA only.
-- **Olive glow** (`box-shadow: 0 8px 20px -12px rgb(57 98 0 / 0.75)`): under the olive button on paper.
-- **Pill lift** (`box-shadow: 0 12px 32px -12px rgb(15 32 0 / 0.9)`): the bottom section pill, to separate it from the content it floats over.
-- **Carrier halo** (`box-shadow: 0 0 0 5px rgb(15 32 0 / 0.85)`): a forest ring that cuts the crossing carrier out of the seam and track.
+Flat. Depth comes from the colour fields and hair rules, not shadows. The exceptions are small: a `0 2px 6px rgb(27 28 26 / 0.2)` shadow lifting a screen frame off an olive or deep field (removed on lime, which uses a deep-tinted border instead), a `0 0 0 3px` olive focus ring on inputs, and the rail dot's `0 0 0 4px white` knockout ring. The bar is the only translucent surface.
 
 ### Named Rules
-**The Quiet Zone Rule.** Text on the canopy never sits on moving light without a guaranteed ground. Every canopy text block carries `data-quiet`: live, the shader darkens the field behind it (six content zones plus two fixed ones, for the index and the pause control); on the poster, a soft forest scrim (80%, blurred 24px) does the same and fades out when the live field takes over. Worst sampled contrast at b25faca8 is 5.69:1 over 507 positions.
+**The One Glass Rule.** Only the sticky bar is glass (white 0.86, `saturate(160%) blur(14px)`). It falls back to solid white under `prefers-reduced-transparency`, `prefers-contrast: more`, or no backdrop-filter support. No glass on content.
 
-**The Flat Clearing Rule.** Paper clearings never take a drop shadow. Their depth comes from the light pool the field throws round them (`data-pool`, up to six in view).
+**The No Offset Shadow Rule.** There are no hard offset shadows anywhere on this page.
 
 ## Shapes
 
-The app's radii, unchanged: small (0.375rem) for buttons, inputs, the skip link and the wordmark's focus; medium (0.5rem) for screenshot frames, readout tiles and form statuses; large (0.75rem) for every paper clearing and the wordmark tile. Fully round pills for the pause control, Replay, the crossing carrier, the section pill and the "Sample data" tag. One exception: the phone frame around phone screenshots is 36px with a 27px screen radius, to read as a device. Lines are hairlines (1px) everywhere; the only 2px strokes are the crossing seam, the current section's left bar and the readings' Sprout ticks.
+Soft, small corners: 8px on buttons, inputs, plan rows and status blocks; 12px on screen frames; 28px on phone frames; 16px on the white join panel; pills (999px) for the Alpha tag and Sample-data tags; 2px squares for list bullets; 6px for the numbered steps. Frames are plain: a 1px hair border, no device chrome. The rail and the plan share one geometry: a 2px hair line and 10 to 16px dots, with the first plan stop and the rail dot in lime ringed olive.
 
 ## Components
 
 ### Buttons
-- **Shape:** gently rounded (0.375rem), at least 44px tall; the large hero variant is 52px.
-- **Sprout (primary, on the canopy):** Sprout fill, forest text, Sprout glow. Hover mixes 16% Warm Paper into the fill. Used for "Request early access" in the hero and header (the header shortens it to "Early access" below 640px).
-- **Ghost (on the canopy):** 45% forest fill, 45% paper border, paper text; hover turns border and text Sprout. Used for "See it at work".
-- **Olive (on paper):** the app's primary button for the form's submit, full width, 48px. Disabled at 55% opacity; submitting at 80% with a progress cursor.
-- **Link button (on paper):** olive, underlined 3px below, 44px tall.
-- **Transitions:** background, border and colour over 0.15s ease-out.
+- **Olive** (`.btn--olive`): olive fill, white text, 44px, 8px radius, 700 0.9375rem. Hover to deep. Press `scale(0.97)` over 120ms. The arrow icon slides 3px only under `(hover: hover) and (pointer: fine)`.
+- **Quiet** (`.btn--quiet`): transparent, ink text, a 1px edge ring that thickens to a 2px olive ring on hover.
+- **Large**: 52px, 24px side padding.
+- A button in flight carries `aria-disabled` with a progress cursor; a disabled button is at 0.55 opacity.
 
-### Chips
-- **Sample data tag:** Field Grey pill, Moss Ink text, 12px semibold. One on every figure, with the hero readout counted as a figure.
+### Bar
+Sticky, 64px minimum. Wordmark with Alpha pill on the left; "Sign in" (a text link with a surface hover tint) and the olive "Join the alpha" on the right.
 
-### Cards / Containers
-- **Paper clearing:** Warm Paper, large radius, no border, no shadow, padding 20 to 48px. Variants: the hero readout (20px), the crossing record (28px, 16px on phones), the proof band (screens ruled off from each other), and the early-access clearing (at most 560px).
-- **Screenshot frame:** Ruled Line border, medium radius, the image at 1:1. A right-edge paper fade marks a screen that is cropped.
-- **Readout tiles:** the app's attention tiles in the warning tone, laid as rows: the count at 1.75rem 800, then what is missing.
+### Day plan
+The hero's index: an ordered list of the seven slots as links, a 2px hair line threading 12px dots (the first 16px lime ringed olive, dropped in once), tabular times, a surface hover tint.
 
-### Inputs / Fields
-- **Style:** Field Grey fill, Ruled Line border, small radius, 44px tall, 1rem Manrope; the label is 13px Moss Ink above it.
-- **Focus:** the app's olive ring (2px, 2px offset), because the form is on paper.
-- **Error:** alarm-red border with a 12px semibold alarm-red message below. Status blocks use the error or warning container tones. The form's states (idle, invalid, submitting, success, duplicate, error, no-JS) behave as they did before the redesign.
+### Day rail
+A sticky column at 1024px and up: seven stops on a 2px hair line, the current stop in ink bold, and the lime "now" dot travelling to it.
 
-### Navigation
-- **Header:** opaque forest with a hairline below. The wordmark (Deep Fern tile, Sprout glyph, "Odip" in Plus Jakarta 800), then Sign in (paper, Sprout on hover) and the Sprout CTA. It never wraps, down to 320px.
-- **Section index, wide:** 01 Before, 02 During, 03 After, 04 Early access in the left margin on a hairline rail. Numbers in Plus Jakarta 700, labels as tracked uppercase. The current item turns paper, its number Sprout, with a 2px Sprout bar on the rail.
-- **Section index, below 1200px:** a forest pill at the bottom centre (95% forest, hairline border, pill lift). The current item is a Sprout pill with forest text.
-- **Focus:** a Sprout ring (2px, 3px offset) anywhere on the canopy; the olive ring inside clearings.
+### Slot (before / after)
+Before: time, name, struck "Before" label and one paragraph, on white. After: "With Bunya Support" label, a lede, a bullet list (olive or lime squares), an optional note under a rule, and the screens. The strike is a 2px olive line drawn left to right across "Before" when the slot arrives.
 
-### The canopy field (signature)
-One fixed, aria-hidden canvas behind the page, drawn by a raw WebGL 1 fragment shader (no libraries, no external assets). It renders at 0.5 scale (0.35 in low power, a coarse pointer or below 768px), with the device pixel ratio capped at 2, and is scaled up by CSS. The wind is a slow sway plus gust fronts travelling in from the left; the pointer is a breeze, so nearby leaves flutter and settle with inertia. The canvas fades in over the poster in 0.9s (cubic-bezier(0.16, 1, 0.3, 1)). It rests when paused (the choice is remembered), when the tab is hidden, and when no canopy is on screen. Under reduced motion it is one still frame and ignores the pointer. Without WebGL, or with a lost context, the poster (`assets/canopy-poster.webp`, the shader's own frame at t = 21.5s) is the field.
+### Screen frame
+A `<picture>` in a bordered rounded frame, sized by the manifest's width and height. Always paired with a caption that carries the lime "Sample data" tag. Provenance of each raster is in `assets/screens/manifest.json`: route, role, a `fixture` flag and notes. The manifest holds 18 entries (11 wide screens plus 7 mobile crops). Three screens are fixture-fed (4 entries with the roster-board crop): roster-board (a By staff week built from mock staff, leave and participants, because the mock ignores groupBy), claim-preview (a fixed two-line response, because the mock ignores From and To) and myshifts-week (the mock's portal shifts plus one more day shift). The rest are the mock's own state. Every screen is tagged Sample data.
 
-### The pause control: "Canopy light · Live"
-A forest pill at 78%, hairline border, tracked uppercase 12px label, a Sprout pause glyph and a Sprout "Live" state word ("Paused" in Canopy Text when pressed). Its accessible name stays "Pause the Canopy light" at every width; `aria-pressed` carries the state.
+### Terms list and lists
+A definition list under hair-then-ink rules (Jakarta 700 term, Moss Grey definition) for "Before day one"; a two-column square-bullet list for "What alpha means".
 
-### The translation gate (signature)
-Three crossings, one per act. On the canopy side, a tracked Sprout "when" label, the lived moment as a Title, and a Replay pill. A 2px Sprout seam with a blurred glow divides the scene; a hairline track carries a pill (forest with a Sprout label while travelling, Sprout with forest text on arrival) across to the record. The record is a paper clearing that opens outward from the seam. One crossing lasts 2.6s: the carrier travels over the first half (ease-in-out cubic), the seam flares between 30% and 75%, the record reveals from 42% (ease-out expo), and the caption settles last from 62% (ease-out cubic). Each plays once when its seam reaches mid-screen, can be replayed, and can be dragged with a mouse or pen from 1100px. Under reduced motion it shows the arrived state at once. All text is in the DOM throughout, and a polite live region announces each arrival.
+### Join panel and form
+A white 16px-radius panel on the deep band. Two-column field grid (one under 1024). Inputs are 48px with an edge border, a hover darkening to Moss Grey, and an olive border plus 3px olive ring on focus. Invalid fields take a red border and a bold red message. A honeypot field is parked off-screen. Status blocks use the error and wait colours; after a 202 the form is replaced by a "Received" panel that fades in over 200ms and takes focus.
 
-### Readings
-Provenance and numbers as instrument readouts: a hairline-boxed provenance line with its key phrase in Sprout, then five readings, each with a tracked label, a Sprout numeral and a short description, under a hairline with a 24px Sprout tick.
+### Footer
+Hair rule on top, white ground. Acknowledgement of Country, a brand column and Product, Company, Legal and Support columns (44px link targets), then the Sample-data note.
+
+### Focus
+`outline: 3px solid olive; offset 3px; radius 4px` everywhere; lime on dark fields (`.on-dark`), olive inside the white panel.
+
+### Motion
+Tokens: `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`, `--ease-drawer: cubic-bezier(0.32, 0.72, 0, 1)`; durations press 120ms, hover 150ms, strike 300ms, frame 420ms (delay 80ms, stagger 60ms), dot 420ms, label 200ms, drop 400ms (delay 200ms), fade 200ms. Observers only (`motion.ts`), no scroll handlers, no parallax, no `will-change`, no `transition: all`, no overshoot.
+- **Hero dot** drops 14px onto 8:30 on first load, once. It is not gated on `.js`: the script is deferred and a gate would paint it at rest, hide it, then drop it.
+- **Per-screen arrival.** Each slot arrives once (its "Before" is struck) and each screen arrives once, on its own, when it crosses 88% of the viewport (`rootMargin: 0 0 -12% 0`): opacity 0 to 1 and `translateY(24px) scale(0.98)` to none, 420ms, +60ms for a second screen. A slot's screens sit well below its heading, so arriving with the slot would settle them out of sight. Anything already in view at load, or the deep-link target, arrives before the hidden starts exist, so it never flashes.
+- **Rail dot** moves to the slot in the centre band (`rootMargin: -45% 0 -50% 0`) by a `translateY` set on the dot itself, a 420ms transition, so a fast scroll retargets from where it is. The stop label recolours over 200ms.
+- **Received panel** fades in over 200ms.
+- **Hidden starts exist only under `html.js`**, which `motion.ts` adds last, and only after IntersectionObserver is confirmed. Text never hides; only screens and the strike do. Print and no-JS show everything.
+- **Reduced motion** is gentler, not zero: screens fade over 200ms without the move or scale; the strike fades instead of drawing; the hero dot fades in; button press and arrow movement stop. The rail dot does not fade: it moves to its stop without animating (`transition: none`), a jump.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** take every colour, radius and face from the app's `@theme` by value, under the app's token name, and keep `tokens.test.ts` green.
-- **Do** give every block of text on the canopy a quiet zone (`data-quiet`) and re-run the pixel-sampled contrast check after any shader change: 4.5:1 for body text, 3:1 for large text, at the worst frame.
-- **Do** put the product on paper: real app screens with accurate alt text, one "Sample data" tag per figure.
-- **Do** keep Pale Sprout for the single brightest thing in each view: the CTA, the current place, the seam, the light.
-- **Do** keep every target at least 44px and the header on one line from 320px up.
-- **Do** recapture the poster with `capture/poster.mjs` after any change to `canopy-shader.ts` or `STILL_TIME`, and keep it well under 60 KB.
+- **Do** keep the ground #ffffff and separate sections with a 1px Hair rule and padding.
+- **Do** put the old way on white at the left and the Bunya Support version on a field at the right, with the strike drawing left to right toward it.
+- **Do** keep slot labels as real sentence-case headings at 20px or larger.
+- **Do** show real captures only, at the manifest's sizes, with a Sample data tag, and record route, role and fixture state in the manifest for each new raster.
+- **Do** keep every triggered motion a transition on transform or opacity so it retargets from its live value, and keep hidden starts behind `html.js`.
+- **Do** wrap trailing punctuation of a display heading in `.pk`.
+- **Do** keep focus visible at 3px with a 3px offset, and tap targets at 44px or more.
 
 ### Don't:
-- **Don't** use pure white or pure black anywhere, on either ground.
-- **Don't** add a colour, font or radius that the app does not have.
-- **Don't** set text over moving light without a quiet zone, or animate anything except the field, the crossings, the canvas fade-in and the 0.15s colour changes on controls.
-- **Don't** draw the light as discs, bokeh, particles or fireflies, or the leaves as straight blades; the light is soft pools under a gum canopy, and the leaves are sickle-shaped and hang from petioles.
-- **Don't** clip a leaf or a pool of light at a shader cell edge; no straight edge may appear in the field.
-- **Don't** make the header translucent: copy scrolling under a 95% header ghosts through it.
-- **Don't** scroll-jack, fake a loader, or put a screenshot on a gradient.
-- **Don't** shadow a paper clearing.
+- **Don't** paint any ground, band or section in #f5f3ef. Do not add uses of `--surface`.
+- **Don't** set small tracked uppercase labels above or over headings (the refused eyebrow pattern). The Alpha pill is a status badge, not a precedent for section labels.
+- **Don't** add cards, icon tiles, illustration, gradients, stock or AI-generated photography, carousels, video or chat.
+- **Don't** use glass on content, hard offset shadows, springs, overshoot, `ease-in`, `scale(0)`, `will-change` or scroll-linked motion.
+- **Don't** hide text until JS runs, or gate the hero dot on `.js`.
+- **Don't** ship a capture with an unexplained red warning, a dead band under its content, or a clipped row at its edge.
+- **Don't** import tokens or components from the app, or change a green here without the app's `src/index.css` changing first (the token test pins them).
+
+## Recorded, not canonized
+
+- The class name `.section--surface` is a leftover: it paints nothing and only carries the hair rule. Rename when next touched.
+- `--slate` is defined and unused.
+- The `AccessibilityPage.tsx` line that says reduced motion turns everything into "short fades" is not true of the rail dot; FINISH-R2 carries a one-line copy fix to the owner.
+- Phone-width proof frames (incident and agreement `-m`) show about 7 to 8px app text at 1x; accepted as a ceiling, not a rule.

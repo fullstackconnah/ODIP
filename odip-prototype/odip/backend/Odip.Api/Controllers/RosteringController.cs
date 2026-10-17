@@ -906,7 +906,7 @@ public class RosteringController : ControllerBase
             var participantIds = published.Select(s => s.ParticipantId).Distinct().ToList();
             var toTellIds = toTell.Select(g => g.Key).ToList();
             var participantNames = await _db.Participants.Where(p => participantIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+                .ToDictionaryAsync(p => p.Id, p => (p.FirstName + " " + p.LastName).Trim(), ct);
             var emails = await _db.Users.Where(u => toTellIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Email, ct);
             foreach (var worker in toTell)
             {
@@ -1379,7 +1379,7 @@ public class RosteringController : ControllerBase
         if (returnedWorker is not null)
         {
             var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
-                .Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct) ?? "a participant";
+                .Select(p => (p.FirstName + " " + p.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "a participant";
             await _notificationRaiser.RaiseAsync(
                 Odip.Domain.Notifications.NotificationEventType.ShiftCompletionReturned, "ShiftCompletion", completion.Id,
                 new[] { returnedWorker.Id },
@@ -1991,7 +1991,7 @@ public class RosteringController : ControllerBase
 
         var tasks = await _db.BookingTasks.AsNoTracking()
             .Where(t => t.TaskType == TaskType.BudgetEmergencyReview && t.ShiftId != null && ids.Contains(t.ShiftId.Value))
-            .Select(t => new { ShiftId = t.ShiftId!.Value, t.Title, t.Status, t.SourceKey, t.CreatedAt, t.CompletedDate, OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null })
+            .Select(t => new { ShiftId = t.ShiftId!.Value, t.Title, t.Status, t.SourceKey, t.CreatedAt, t.CompletedDate, OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null })
             .ToListAsync(ct);
         return tasks.GroupBy(t => t.ShiftId).ToDictionary(g => g.Key, g =>
         {
@@ -2109,7 +2109,7 @@ public class RosteringController : ControllerBase
         if (assignedTo is null && takenOff is null) return;
 
         var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
-            .Select(p => p.FirstName + " " + p.LastName).FirstOrDefaultAsync(ct) ?? "a participant";
+            .Select(p => (p.FirstName + " " + p.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "a participant";
         if (assignedTo is { } a && await _db.Users.FirstOrDefaultAsync(u => u.Id == a, ct) is { } assigned)
             await _notificationRaiser.RaiseAsync(
                 Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", shift.Id, new[] { assigned.Id },
@@ -2186,7 +2186,7 @@ public class RosteringController : ControllerBase
     private async Task<StartWeekResultDto> StartWeekResultAsync(DateOnly start, List<Shift> made, List<Guid> skipped, int away, CancellationToken ct)
     {
         var involved = skipped.Concat(made.Select(s => s.ParticipantId)).Distinct().ToList();
-        var names = await _db.Participants.AsNoTracking().Where(p => involved.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.FirstName + " " + p.LastName, ct);
+        var names = await _db.Participants.AsNoTracking().Where(p => involved.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => (p.FirstName + " " + p.LastName).Trim(), ct);
         var budget = new List<StartWeekParticipantDto>();
         foreach (var forParticipant in made.GroupBy(s => s.ParticipantId))
             if (await BudgetWarningsAsync(forParticipant.Key, forParticipant.ToList(), ct) is { } warnings)

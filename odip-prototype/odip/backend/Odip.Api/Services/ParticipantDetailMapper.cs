@@ -49,7 +49,7 @@ internal static class ParticipantDetailMapper
             Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, PreferredName = p.PreferredName,
             InquiryId = inquiry?.Id, InquirySource = inquiry?.Source, InquiryProvenance = inquiry?.Provenance,
             MiddleName = p.MiddleName,
-            FullName = string.IsNullOrEmpty(p.PreferredName) ? p.FirstName + " " + p.LastName : p.PreferredName + " " + p.LastName,
+            FullName = string.IsNullOrEmpty(p.PreferredName) ? (p.FirstName + " " + p.LastName).Trim() : (p.PreferredName + " " + p.LastName).Trim(),
             MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber[^1] : "•••" : null,
             NdisNumber = p.NdisNumber, DateOfBirth = p.DateOfBirth, Gender = p.Gender, GenderSelfDescription = p.GenderSelfDescription,
             PlaceOfBirth = p.PlaceOfBirth, Country = p.Country, Phone = p.Phone, Email = p.Email,
@@ -89,7 +89,7 @@ internal static class ParticipantDetailMapper
             CreatedAt = p.CreatedAt, UpdatedAt = p.UpdatedAt,
             PreferredStaffId = p.PreferredUserId,
             PreferredStaffName = p.PreferredUser != null
-                ? p.PreferredUser.FirstName + " " + p.PreferredUser.LastName
+                ? (p.PreferredUser.FirstName + " " + p.PreferredUser.LastName).Trim()
                 : null,
             IsDraft = p.IsDraft,
             IntakeCompletedAt = p.IntakeCompletedAt,

@@ -60,6 +60,7 @@ public class EarlyAccessControllerTests
         Name = "Jane Citizen",
         Organisation = "Sample Support Co",
         Email = email,
+        OrganisationSize = "under-10",
         Website = "",
     };
 
@@ -83,6 +84,7 @@ public class EarlyAccessControllerTests
             Name = "  Jane Citizen ",
             Organisation = " Sample Support Co",
             Email = "  Jane.Citizen@Example.COM ",
+            OrganisationSize = "under-10",
         }, CancellationToken.None);
 
         AssertReceived(result);
@@ -127,7 +129,7 @@ public class EarlyAccessControllerTests
         // Same address, different case and padding, and a different name/organisation.
         using (var db = CreateDb(dbName))
         {
-            var again = new EarlyAccessRequestDto { Name = "Someone Else", Organisation = "Other Org", Email = "  JANE@Example.com  " };
+            var again = new EarlyAccessRequestDto { Name = "Someone Else", Organisation = "Other Org", Email = "  JANE@Example.com  ", OrganisationSize = "10-49" };
             AssertReceived(await MakeController(db).Submit(again, CancellationToken.None));
         }
 
@@ -245,7 +247,7 @@ public class EarlyAccessControllerTests
             new EarlyAccessRequestDto { Name = " ", Organisation = new string('o', 151), Email = "nope" }, CancellationToken.None);
 
         var problem = AssertValidationProblem(result);
-        Assert.Equal(new[] { "email", "name", "organisation" }, problem.Errors.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        Assert.Equal(new[] { "email", "name", "organisation", "organisationSize" }, problem.Errors.Keys.OrderBy(k => k, StringComparer.Ordinal));
         Assert.All(problem.Errors.Values, messages => Assert.NotEmpty(messages));
         Assert.Empty(db.EarlyAccessRequests);
     }
@@ -287,7 +289,7 @@ public class EarlyAccessControllerTests
 
         var problem = AssertValidationProblem(await MakeController(db).Submit(null, CancellationToken.None));
 
-        Assert.Equal(3, problem.Errors.Count);
+        Assert.Equal(4, problem.Errors.Count);
         Assert.Empty(db.EarlyAccessRequests);
     }
 
@@ -310,23 +312,6 @@ public class EarlyAccessControllerTests
         Assert.Equal("0491 570 156", row.Phone);
         Assert.Equal("50-199", row.OrganisationSize);
         Assert.Equal("Rostering\nand leave", row.Message);
-    }
-
-    // Expand phase (D11): the live /welcome form sends none of the alpha fields and must keep working.
-    [Fact]
-    public async Task ARequestWithoutTheAlphaFields_IsStillAccepted_AndStoresThemAsNull()
-    {
-        using var db = CreateDb();
-
-        AssertReceived(await MakeController(db).Submit(
-            new EarlyAccessRequestDto { Name = "Jane Citizen", Organisation = "Sample Support Co", Email = "jane@example.com", Website = "" },
-            CancellationToken.None));
-
-        var row = await db.EarlyAccessRequests.SingleAsync();
-        Assert.Null(row.OrganisationSize);
-        Assert.Null(row.Role);
-        Assert.Null(row.Phone);
-        Assert.Null(row.Message);
     }
 
     [Fact]
@@ -506,10 +491,10 @@ public class EarlyAccessControllerTests
 
         using (var db = CreateDb(dbName))
             await MakeController(db, notifier.Object).Submit(
-                new EarlyAccessRequestDto { Name = " Jane ", Organisation = "Org", Email = "JANE@Example.com" }, CancellationToken.None);
+                new EarlyAccessRequestDto { Name = " Jane ", Organisation = "Org", Email = "JANE@Example.com", OrganisationSize = "under-10" }, CancellationToken.None);
         using (var db = CreateDb(dbName))
-            await MakeController(db, notifier.Object).Submit(
-                new EarlyAccessRequestDto { Name = "Jane", Organisation = "Org", Email = "jane@example.com" }, CancellationToken.None);
+            AssertReceived(await MakeController(db, notifier.Object).Submit(
+                new EarlyAccessRequestDto { Name = "Jane", Organisation = "Org", Email = "jane@example.com", OrganisationSize = "under-10" }, CancellationToken.None));
 
         notifier.Verify(n => n.NotifyNewRequest(It.Is<EarlyAccessNotification>(x =>
             x.Name == "Jane" && x.Organisation == "Org" && x.Email == "jane@example.com"

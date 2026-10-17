@@ -24,8 +24,8 @@ public class Participant : ITenantEntity
     /// </summary>
     public string? MiddleName { get; set; }
     public string FullName => string.IsNullOrWhiteSpace(PreferredName)
-        ? $"{FirstName} {LastName}"
-        : $"{PreferredName} {LastName}";
+        ? $"{FirstName} {LastName}".Trim()
+        : $"{PreferredName} {LastName}".Trim(); // a blank last name leaves no trailing space
     public DateOnly? DateOfBirth { get; set; }
 
     /// <summary>Participant identity gender (INTAKE-05). Null = not specified.</summary>

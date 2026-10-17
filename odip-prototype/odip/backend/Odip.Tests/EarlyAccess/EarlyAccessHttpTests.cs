@@ -32,7 +32,7 @@ namespace Odip.Tests.EarlyAccess;
 /// </summary>
 public class EarlyAccessHttpTests
 {
-    private const string ValidJson = "{\"name\":\"Jane Citizen\",\"organisation\":\"Sample Support Co\",\"email\":\"jane@example.com\",\"website\":\"\"}";
+    private const string ValidJson = "{\"name\":\"Jane Citizen\",\"organisation\":\"Sample Support Co\",\"email\":\"jane@example.com\",\"organisationSize\":\"under-10\",\"website\":\"\"}";
 
     // ── Success ────────────────────────────────────────────────
 
@@ -51,17 +51,18 @@ public class EarlyAccessHttpTests
         Assert.Equal(1, await host.CountRowsAsync());
     }
 
-    // The live /welcome form's body: name, organisation and email only. Landing PR 1 adds the alpha fields as optional
-    // (expand), so this still gets 202; PR 2 changes this test to expect 400 organisationSize (contract).
+    // The old /welcome form's body (name, organisation and email only): the size is required now the form asks for it.
     [Fact]
-    public async Task TheOldFormsBody_IsStillAccepted_AndStored()
+    public async Task ABodyWithoutTheSize_Returns400_OrganisationSize()
     {
         await using var host = await TestHost.StartAsync();
 
-        var response = await host.PostAsync(ValidJson);
+        var response = await host.PostAsync(ValidJson.Replace("\"organisationSize\":\"under-10\",", ""));
 
-        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        Assert.Equal(1, await host.CountRowsAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(new[] { "organisationSize" }, json.RootElement.GetProperty("errors").EnumerateObject().Select(p => p.Name));
+        Assert.Equal(0, await host.CountRowsAsync());
     }
 
     [Fact]
@@ -128,7 +129,7 @@ public class EarlyAccessHttpTests
     {
         await using var host = await TestHost.StartAsync();
 
-        var response = await host.PostAsync("{\"Name\":\"Jane\",\"ORGANISATION\":\"Org\",\"Email\":\"j@example.com\"}");
+        var response = await host.PostAsync("{\"Name\":\"Jane\",\"ORGANISATION\":\"Org\",\"Email\":\"j@example.com\",\"organisationSize\":\"under-10\"}");
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }
@@ -147,7 +148,7 @@ public class EarlyAccessHttpTests
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal(400, json.RootElement.GetProperty("status").GetInt32());
         var errors = json.RootElement.GetProperty("errors");
-        Assert.Equal(new[] { "email", "name", "organisation" },
+        Assert.Equal(new[] { "email", "name", "organisation", "organisationSize" },
             errors.EnumerateObject().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal));
         Assert.All(errors.EnumerateObject(), p => Assert.NotEmpty(p.Value.EnumerateArray()));
         Assert.Equal(0, await host.CountRowsAsync());
@@ -162,7 +163,7 @@ public class EarlyAccessHttpTests
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal(new[] { "email", "name" },
+        Assert.Equal(new[] { "email", "name", "organisationSize" },
             json.RootElement.GetProperty("errors").EnumerateObject().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal));
     }
 
@@ -175,7 +176,7 @@ public class EarlyAccessHttpTests
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal(3, json.RootElement.GetProperty("errors").EnumerateObject().Count());
+        Assert.Equal(4, json.RootElement.GetProperty("errors").EnumerateObject().Count());
     }
 
     [Theory]
@@ -430,7 +431,7 @@ public class EarlyAccessHttpTests
     /// <summary>A valid JSON body of exactly <paramref name="totalBytes"/> bytes (ASCII), padded with an ignored property.</summary>
     private static string JsonOfExactly(int totalBytes)
     {
-        const string prefix = "{\"name\":\"Jane\",\"organisation\":\"Org\",\"email\":\"j@example.com\",\"pad\":\"";
+        const string prefix = "{\"name\":\"Jane\",\"organisation\":\"Org\",\"email\":\"j@example.com\",\"organisationSize\":\"under-10\",\"pad\":\"";
         const string suffix = "\"}";
         var json = prefix + new string('x', totalBytes - prefix.Length - suffix.Length) + suffix;
         Assert.Equal(totalBytes, Encoding.UTF8.GetByteCount(json));
