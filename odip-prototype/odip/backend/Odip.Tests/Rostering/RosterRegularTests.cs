@@ -152,6 +152,44 @@ public class RosterRegularTests
         Assert.Equal(samId, DefaultOf(dbName, otherPersonId));
     }
 
+    [Fact]   // REV281B deep #3: a successor whose regular someone chose on purpose (Alex) is not the approval's copy of Sam, so a Stop on the old pattern leaves it alone
+    public async Task SetRegular_Stop_LeavesASuccessorWhoseRegularIsSomeoneElse()
+    {
+        Guid samId = default, alexId = default, oldId = default, copiedId = default, chosenId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            samId = Worker(db, "Sam").Id; alexId = Worker(db, "Alex").Id;
+            var mia = Person(db, "Mia");
+            var old = Pattern(db, mia.Id, DayOfWeek.Monday, samId, effectiveTo: Monday.AddDays(6)); oldId = old.Id;
+            copiedId = Successor(db, old, samId).Id;
+            chosenId = Successor(db, old, alexId).Id;
+            shiftId = ShiftOf(db, mia.Id, samId, Monday, oldId).Id;
+        });
+
+        Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, oldId, shiftId, null, expected: samId)).Result);
+
+        Assert.Null(DefaultOf(dbName, oldId));
+        Assert.Null(DefaultOf(dbName, copiedId));
+        Assert.Equal(alexId, DefaultOf(dbName, chosenId));
+    }
+
+    [Fact]   // REV281B deep #2: the board sends the all-zero Guid for a slot with no regular, which is the commonest Make
+    public async Task SetRegular_Make_OnASlotWithNoRegular_ExpectedNone_Works()
+    {
+        Guid alexId = default, patternId = default, shiftId = default;
+        var dbName = NewDatabase(db =>
+        {
+            alexId = Worker(db, "Alex").Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Monday, null).Id;
+            shiftId = ShiftOf(db, mia.Id, alexId, Monday, patternId).Id;
+        });
+
+        Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, patternId, shiftId, alexId, expected: Guid.Empty)).Result);
+
+        Assert.Equal(alexId, DefaultOf(dbName, patternId));
+    }
+
     private static string SeedSamPattern(out Guid samId, out Guid alexId, out Guid patternId, out Guid shiftId)
     {
         Guid sam = default, alex = default, pid = default, sid = default;
@@ -244,7 +282,7 @@ public class RosterRegularTests
 
         var result = await Controller(db, TenantOf(null, superAdmin: true)).UpdatePattern(patternId, pattern, default);
 
-        Assert.Equal(BoardChanged, Assert.Single(Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Errors!));
+        Assert.Equal(PatternChanged, Assert.Single(Assert.IsType<ApiResponse<ShiftPatternDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Errors!));
         Assert.Equal(alexId, DefaultOf(dbName, patternId));
     }
 
@@ -259,6 +297,7 @@ public class RosterRegularTests
         };
     }
 
+    private const string PatternChanged = "This pattern changed after you opened it. Reload and try again.";
     private const string BoardChanged = "This shift changed after the board was loaded. Refresh the board and try again.";
 
     private static async Task<(ConflictObjectResult Conflict, ApiResponse<ShiftPatternDto> Body)> RefusedAsync(string dbName, Guid patternId, Guid shiftId, Guid? staffId, Guid? expected = null)

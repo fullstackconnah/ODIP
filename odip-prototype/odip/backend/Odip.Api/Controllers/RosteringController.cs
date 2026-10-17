@@ -1537,6 +1537,13 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> UpdatePattern(
         Guid id, [FromBody] UpdateShiftPatternDto dto, CancellationToken ct)
     {
+        var participantId = await _db.ShiftPatterns.Where(p => p.Id == id).Select(p => (Guid?)p.ParticipantId).FirstOrDefaultAsync(ct);
+        if (participantId is null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
+        // REV281B: the regular is a concurrency token, so a change must not commit between a generation's load and its save: queue behind the participant's generation lock, as the generators do.
+        RosterGenerationLock lockTaken;
+        try { lockTaken = await RosterGenerationLock.AcquireAsync(_db, participantId.Value, ct, _generator.LockWait); }
+        catch (RosterBusyException busy) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(busy.Message)); }
+        await using var held = lockTaken;
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
 
@@ -1558,7 +1565,8 @@ public class RosteringController : ControllerBase
 
         // DefaultUserId is a concurrency token (REV281B): a regular changed since this load is the stale-board 409, not a silent overwrite.
         try { await _db.SaveChangesAsync(ct); }
-        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage)); }
+        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(PatternChangedMessage)); }
+        await held.CommitAsync(ct);
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
 
@@ -1912,6 +1920,13 @@ public class RosteringController : ControllerBase
     [HttpPut("patterns/{id:guid}/regular")]
     public async Task<ActionResult<ApiResponse<ShiftPatternDto>>> SetRegular(Guid id, [FromBody] SetRegularDto dto, CancellationToken ct)
     {
+        var participantId = await _db.ShiftPatterns.Where(p => p.Id == id).Select(p => (Guid?)p.ParticipantId).FirstOrDefaultAsync(ct);
+        if (participantId is null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
+        // REV281B: queue behind the participant's generation lock (see UpdatePattern), and read the pattern and its successors under it.
+        RosterGenerationLock lockTaken;
+        try { lockTaken = await RosterGenerationLock.AcquireAsync(_db, participantId.Value, ct, _generator.LockWait); }
+        catch (RosterBusyException busy) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(busy.Message)); }
+        await using var held = lockTaken;
         var pattern = await _db.ShiftPatterns.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (pattern == null) return NotFound(ApiResponse<ShiftPatternDto>.Fail("Pattern not found."));
         var shown = await _db.Shifts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == dto.ShiftId, ct);
@@ -1926,14 +1941,16 @@ public class RosteringController : ControllerBase
         // REV281B: the regular the coordinator was shown must still be the live one. DefaultUserId is also a concurrency token, so a change between this load and the save is refused at the UPDATE.
         if (dto.ExpectedRegularId is { } seen && (seen == Guid.Empty ? null : seen) != pattern.DefaultUserId)
             return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage));
+        var was = pattern.DefaultUserId;
         pattern.DefaultUserId = dto.StaffId;
         // REV281B: a renewal's successor starts later and was copied this worker, and the next started week is made from it, so the change has to reach it too (in memory: the asks are jsonb).
         if (pattern.EffectiveTo is { } endsOn)
             foreach (var next in (await _db.ShiftPatterns.Where(p => p.ParticipantId == pattern.ParticipantId && p.IsActive && p.Id != pattern.Id && p.EffectiveFrom > endsOn).ToListAsync(ct))
-                .Where(n => ServiceAgreementApprovalService.SameSupport(pattern, n)))
+                .Where(n => n.DefaultUserId == was && ServiceAgreementApprovalService.SameSupport(pattern, n)))   // only the approval's copy: a regular chosen on the renewal stays
                 next.DefaultUserId = dto.StaffId;
         try { await _db.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage)); }
+        await held.CommitAsync(ct);
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
 
@@ -2086,6 +2103,7 @@ public class RosteringController : ControllerBase
     private const string ShiftLockedForParticipantMessage = "This shift has started, finished or been cancelled, so its participant can't be changed here.";
 
     /// <summary>What a drop made on an out-of-date board is refused with (409): /assign with ExpectedStaffId, and move-staff.</summary>
+    private const string PatternChangedMessage = "This pattern changed after you opened it. Reload and try again.";
     private const string BoardChangedMessage = "This shift changed after the board was loaded. Refresh the board and try again.";
 
     /// <summary>The shift as it would be with <paramref name="userId"/> on it: the candidate the roster check judges.</summary>
