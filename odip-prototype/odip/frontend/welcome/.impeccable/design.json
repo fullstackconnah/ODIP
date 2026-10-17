@@ -1,177 +1,475 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-02T00:00:00Z",
-  "title": "Design System: Odip Landing (Living Canopy Light)",
+  "generatedAt": "2026-10-17T03:32:08.727Z",
+  "title": "Design System: Odip Landing (The Admin Day)",
   "extensions": {
     "colorMeta": {
-      "primary": { "role": "primary", "displayName": "Ledger Olive", "canonical": "#396200", "tonalRamp": ["#050f00", "#162b00", "#2a4a00", "#426b11", "#618c38", "#81ae5a", "#a6d57f", "#d2ffb0"] },
-      "primary-container": { "role": "primary", "displayName": "Deep Fern", "canonical": "#4d7c0f", "tonalRamp": ["#050f00", "#172a01", "#2b4a02", "#416c00", "#5d8e28", "#7eb04d", "#a3d773", "#d3ffaf"] },
-      "primary-fixed": { "role": "primary", "displayName": "Pale Sprout", "canonical": "#bbf37c", "tonalRamp": ["#060e00", "#182a00", "#2e4902", "#456b02", "#5d8e01", "#7db138", "#a2d861", "#d5ffaa"] },
-      "on-primary-fixed": { "role": "neutral", "displayName": "Forest", "canonical": "#0f2000", "tonalRamp": ["#050f00", "#182a07", "#334723", "#516541", "#70855f", "#90a780", "#b5cda4", "#dff8ce"] },
-      "background": { "role": "neutral", "displayName": "Warm Paper", "canonical": "#fbf9f5", "tonalRamp": ["#0c0b09", "#252421", "#413f3c", "#5f5d5a", "#7f7d79", "#a09e9a", "#c6c4c0", "#f0eeea"] },
-      "foreground": { "role": "neutral", "displayName": "Ledger Ink", "canonical": "#1b1c1a", "tonalRamp": ["#0b0b0a", "#232422", "#3f403e", "#5d5e5c", "#7c7e7b", "#9d9f9c", "#c3c5c2", "#edefec"] },
-      "muted-foreground": { "role": "neutral", "displayName": "Moss Ink", "canonical": "#43493a", "tonalRamp": ["#090d03", "#212619", "#3c4234", "#5a6051", "#798070", "#9aa290", "#c0c7b6", "#eaf2df"] },
-      "border": { "role": "neutral", "displayName": "Ruled Line", "canonical": "#c3c9b5", "tonalRamp": ["#090d02", "#222617", "#3d4232", "#5b604f", "#7b806e", "#9ca18e", "#c1c7b3", "#ebf2dd"] },
-      "input": { "role": "neutral", "displayName": "Field Grey", "canonical": "#e4e2de", "tonalRamp": ["#0c0b08", "#252421", "#413f3c", "#5f5d5a", "#7f7d79", "#a09e9a", "#c6c4c0", "#f0eeea"] },
-      "destructive": { "role": "status", "displayName": "Alarm Red", "canonical": "#ba1a1a", "tonalRamp": ["#1f0000", "#4b0002", "#7d0106", "#b10710", "#d83d35", "#ff6458", "#ffaba0", "#ffe9e5"] },
-      "error-container": { "role": "status", "displayName": "Error Blush", "canonical": "#ffdad6", "tonalRamp": ["#190404", "#361c1a", "#543734", "#745552", "#957471", "#b79591", "#debab6", "#fee9e6"] },
-      "on-error-container": { "role": "status", "displayName": "Error Ink", "canonical": "#93000a", "tonalRamp": ["#1f0000", "#4b0002", "#7c0108", "#a92320", "#cf4a41", "#f66d61", "#ffaba1", "#ffe9e6"] },
-      "warning-container": { "role": "status", "displayName": "Amber Wash", "canonical": "#fef3c7", "tonalRamp": ["#0f0b00", "#2c2301", "#493f18", "#675e36", "#887d55", "#a99f75", "#cfc59a", "#faefc3"] },
-      "on-warning-container": { "role": "status", "displayName": "Amber Ink", "canonical": "#92400e", "tonalRamp": ["#190500", "#3f1600", "#692a01", "#944211", "#b86337", "#dd8458", "#ffae87", "#ffeae0"] },
-      "canopy-text": { "role": "neutral", "displayName": "Canopy Text (Warm Paper 84%)", "canonical": "rgb(251 249 245 / 0.84)" },
-      "canopy-text-quiet": { "role": "neutral", "displayName": "Canopy Text Quiet (Warm Paper 70%)", "canonical": "rgb(251 249 245 / 0.7)" },
-      "canopy-hairline": { "role": "neutral", "displayName": "Canopy Hairline (Sprout 20%)", "canonical": "rgb(187 243 124 / 0.2)" }
+      "olive": {
+        "role": "primary",
+        "displayName": "Ledger Olive",
+        "canonical": "#396200",
+        "tonalRamp": [
+          "#152400",
+          "#2a4900",
+          "#446b0e",
+          "#67873b",
+          "#8aa268",
+          "#adbe96",
+          "#d0dac3",
+          "#f3f6f0"
+        ]
+      },
+      "lime": {
+        "role": "primary",
+        "displayName": "Pale Sprout",
+        "canonical": "#bbf37c",
+        "tonalRamp": [
+          "#1a2111",
+          "#334322",
+          "#4d6433",
+          "#678644",
+          "#81a755",
+          "#9ac966",
+          "#b4ea77",
+          "#eafbd6"
+        ]
+      },
+      "deep": {
+        "role": "primary",
+        "displayName": "Deep Bunya",
+        "canonical": "#0f2000",
+        "tonalRamp": [
+          "#142405",
+          "#344227",
+          "#546049",
+          "#747e6b",
+          "#949c8d",
+          "#b4b9af",
+          "#d4d7d2",
+          "#f4f5f4"
+        ]
+      },
+      "slate": {
+        "role": "secondary",
+        "displayName": "Slate",
+        "canonical": "#515f74",
+        "tonalRamp": [
+          "#1a1f26",
+          "#353e4c",
+          "#4f5d72",
+          "#707c8d",
+          "#919aa7",
+          "#b2b8c2",
+          "#d3d7dc",
+          "#f4f5f6"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White Ground",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#1f1f1f",
+          "#3d3d3d",
+          "#5c5c5c",
+          "#7a7a7a",
+          "#999999",
+          "#b8b8b8",
+          "#d6d6d6",
+          "#f5f5f5"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1b1c1a",
+        "tonalRamp": [
+          "#1e1f1d",
+          "#3d3e3c",
+          "#5b5c5b",
+          "#7a7b79",
+          "#999998",
+          "#b7b8b7",
+          "#d6d6d6",
+          "#f5f5f5"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Moss Grey",
+        "canonical": "#43493a",
+        "tonalRamp": [
+          "#1d2019",
+          "#3a3f32",
+          "#595e51",
+          "#787c71",
+          "#979a92",
+          "#b6b9b3",
+          "#d5d7d3",
+          "#f5f5f4"
+        ]
+      },
+      "hair": {
+        "role": "neutral",
+        "displayName": "Hair",
+        "canonical": "#e4e2de",
+        "tonalRamp": [
+          "#1f1f1e",
+          "#3e3d3c",
+          "#5d5c5a",
+          "#7b7a78",
+          "#9a9996",
+          "#b9b7b4",
+          "#d8d6d2",
+          "#f5f5f3"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "#c3c9b5",
+        "tonalRamp": [
+          "#1e1f1c",
+          "#3c3e38",
+          "#5a5d54",
+          "#787c70",
+          "#969b8c",
+          "#b5baa8",
+          "#d4d8ca",
+          "#f4f5f2"
+        ]
+      },
+      "edge": {
+        "role": "neutral",
+        "displayName": "Edge",
+        "canonical": "#8a9180",
+        "tonalRamp": [
+          "#1e1f1c",
+          "#3b3e37",
+          "#595e53",
+          "#777d6e",
+          "#959b8c",
+          "#b5b9af",
+          "#d5d7d1",
+          "#f4f5f4"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Warm Paper (hover tint only, open owner question)",
+        "canonical": "#f5f3ef",
+        "tonalRamp": [
+          "#1f1f1e",
+          "#3e3d3c",
+          "#5d5c5a",
+          "#7b7a78",
+          "#9a9996",
+          "#b9b7b4",
+          "#d8d6d3",
+          "#f6f5f1"
+        ]
+      },
+      "error": {
+        "role": "state",
+        "displayName": "Error",
+        "canonical": "#ba1a1a",
+        "tonalRamp": [
+          "#5f0d0d",
+          "#ba1b1b",
+          "#c53f3f",
+          "#d06363",
+          "#db8787",
+          "#e6abab",
+          "#f1cfcf",
+          "#fbf3f3"
+        ]
+      },
+      "warn-bg": {
+        "role": "state",
+        "displayName": "Wait Amber",
+        "canonical": "#fef3c7",
+        "tonalRamp": [
+          "#201f19",
+          "#403d32",
+          "#605c4b",
+          "#807b65",
+          "#a09a7e",
+          "#c1b897",
+          "#e1d7b0",
+          "#fef5d3"
+        ]
+      }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "The hero headline only: two lines from 1024px, three on phones." },
-      "headline": { "displayName": "Headline", "purpose": "Each act's heading on the canopy; the readings heading is a step smaller." },
-      "headline-sm": { "displayName": "Headline small", "purpose": "The early-access clearing's heading, on paper." },
-      "title": { "displayName": "Title", "purpose": "The lived moment in each crossing, about 21ch wide." },
-      "numeral": { "displayName": "Numeral", "purpose": "The readings' figures, in Sprout, tabular." },
-      "lede": { "displayName": "Lede", "purpose": "The hero sub and act ledes, in Canopy Text." },
-      "body": { "displayName": "Body", "purpose": "Form, notices, footer notes; 62ch maximum." },
-      "caption": { "displayName": "Caption", "purpose": "Screenshot captions on paper." },
-      "button": { "displayName": "Button", "purpose": "Every button and the Sign in link." },
-      "label": { "displayName": "Label", "purpose": "Uppercase, tracked 0.16em: section index, crossing 'when', reading labels, footer headings. Never under 12px." }
+      "display": {
+        "displayName": "Display",
+        "purpose": "The hero h1 only, two lines, \"one place\" in olive."
+      },
+      "join-headline": {
+        "displayName": "Join headline",
+        "purpose": "\"Join the alpha.\" on the deep band."
+      },
+      "section-headline": {
+        "displayName": "Section headline",
+        "purpose": "\"Before day one.\" and \"What alpha means.\""
+      },
+      "slot-headline": {
+        "displayName": "Slot headline",
+        "purpose": "The slot name in the sticky left column."
+      },
+      "slot-time": {
+        "displayName": "Slot time",
+        "purpose": "Olive tabular time above the slot name."
+      },
+      "slot-label": {
+        "displayName": "Slot label",
+        "purpose": "Sentence-case h3s \"Before\" and \"With Bunya Support\"."
+      },
+      "term": {
+        "displayName": "Term",
+        "purpose": "Terms list titles."
+      },
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "bunya 500 ink, support 800 olive."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "Hero and join lede, 46ch."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text."
+      },
+      "small": {
+        "displayName": "Small",
+        "purpose": "Captions, hints, footer, 0.875 to 0.9375rem with +0.01em."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Sample data tag; the Alpha pill uses it uppercase at +0.08em."
+      }
     },
     "shadows": [
-      { "name": "sprout-glow", "value": "0 10px 24px -14px rgb(187 243 124 / 0.7)", "purpose": "Under the Sprout CTA only." },
-      { "name": "olive-glow", "value": "0 8px 20px -12px rgb(57 98 0 / 0.75)", "purpose": "Under the olive button on paper." },
-      { "name": "pill-lift", "value": "0 12px 32px -12px rgb(15 32 0 / 0.9)", "purpose": "The bottom section pill below 1200px." },
-      { "name": "carrier-halo", "value": "0 0 0 5px rgb(15 32 0 / 0.85)", "purpose": "Cuts the crossing carrier out of the seam and track." },
-      { "name": "quiet-scrim", "value": "background: rgb(15 32 0 / 0.8); filter: blur(24px)", "purpose": "Behind canopy text on the poster (no WebGL, or before the first frame); fades out when the field goes live." }
+      {
+        "name": "frame-on-field",
+        "value": "0 2px 6px rgb(27 28 26 / 0.2)",
+        "purpose": "Lifts a screen frame off an olive or deep field. Removed on lime."
+      },
+      {
+        "name": "input-focus-ring",
+        "value": "0 0 0 3px rgb(57 98 0 / 0.25)",
+        "purpose": "Input focus alongside the olive border."
+      },
+      {
+        "name": "dot-knockout",
+        "value": "0 0 0 4px #ffffff",
+        "purpose": "White ring that separates the rail dot from the rail line."
+      },
+      {
+        "name": "field-bleed",
+        "value": "0 0 0 100vmax <field colour>",
+        "purpose": "Not a drop shadow: bleeds an after field to the page edge, clipped by clip-path."
+      }
     ],
     "motion": [
-      { "name": "canvas-fade", "value": "opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "The live canvas fading in over the poster." },
-      { "name": "control-state", "value": "0.15s ease-out", "purpose": "Button background, border and colour changes." },
-      { "name": "crossing", "value": "2.6s", "purpose": "One crossing: carrier ease-in-out cubic over 0-50%, seam flare as a sine hump over 30-75%, record reveal ease-out expo from 42%, caption settle ease-out cubic from 62%." },
-      { "name": "field", "value": "continuous, 0.5 render scale (0.35 low power), DPR cap 2, 4 leaf layers (3 low power)", "purpose": "Sway, travelling gusts, pointer breeze with inertia, scroll-drifted camera. Rests when paused, hidden or off screen; one still frame under reduced motion." },
-      { "name": "reduced-motion", "value": "transition-duration and animation-duration 0.01ms", "purpose": "Crossings arrive at once, the field is still, no smooth scroll." }
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Press, strike, screen arrival, hero dot drop. No overshoot."
+      },
+      {
+        "name": "ease-drawer",
+        "value": "cubic-bezier(0.32, 0.72, 0, 1)",
+        "purpose": "The rail dot travelling between stops."
+      },
+      {
+        "name": "dur-press",
+        "value": "120ms",
+        "purpose": "Button press scale(0.97)."
+      },
+      {
+        "name": "dur-hover",
+        "value": "150ms",
+        "purpose": "Hover colour, ring and arrow."
+      },
+      {
+        "name": "dur-strike",
+        "value": "300ms",
+        "purpose": "The \"Before\" strike drawing left to right."
+      },
+      {
+        "name": "dur-frame",
+        "value": "420ms (delay 80ms, stagger 60ms)",
+        "purpose": "Per-screen arrival, opacity and translateY(24px) scale(0.98) to none."
+      },
+      {
+        "name": "dur-dot",
+        "value": "420ms",
+        "purpose": "Rail dot transition. Under reduced motion: none, the dot jumps."
+      },
+      {
+        "name": "dur-label",
+        "value": "200ms",
+        "purpose": "Rail stop label colour."
+      },
+      {
+        "name": "dur-drop",
+        "value": "400ms (delay 200ms)",
+        "purpose": "Hero dot drops 14px onto 8:30, once."
+      },
+      {
+        "name": "dur-fade",
+        "value": "200ms",
+        "purpose": "Reduced-motion arrivals and the received panel."
+      }
     ],
     "breakpoints": [
-      { "name": "header-tight", "value": "360px" },
-      { "name": "wordmark-text", "value": "380px" },
-      { "name": "short-cta", "value": "640px" },
-      { "name": "phone-screens", "value": "680px" },
-      { "name": "readings-rows", "value": "760px" },
-      { "name": "pause-icon-only", "value": "900px" },
-      { "name": "hero-two-column", "value": "1024px" },
-      { "name": "crossing-vertical-seam", "value": "1100px" },
-      { "name": "margin-index", "value": "1200px" },
-      { "name": "side-captions", "value": "1280px" }
+      {
+        "name": "rail",
+        "value": "1024px"
+      },
+      {
+        "name": "tablet",
+        "value": "768px"
+      },
+      {
+        "name": "stack",
+        "value": "640px"
+      },
+      {
+        "name": "phone",
+        "value": "480px"
+      }
     ]
   },
   "components": [
     {
-      "name": "Sprout Button",
-      "kind": "button",
-      "refersTo": "button-sprout",
-      "description": "The primary action on the canopy: Request early access.",
-      "html": "<div class=\"ds-canopy\"><a class=\"ds-btn-sprout\" href=\"#\">Request early access <svg width=\"18\" height=\"18\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M592-417H126v-126h466L390-745l90-89 354 354-354 354-90-89 202-202Z\"/></svg></a></div>",
-      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-btn-sprout { display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 24px; border: 1px solid transparent; border-radius: 0.375rem; background: #bbf37c; color: #0f2000; font: 600 1rem/1.2 Manrope, system-ui, sans-serif; text-decoration: none; box-shadow: 0 10px 24px -14px rgb(187 243 124 / 0.7); transition: background-color 0.15s ease-out; } .ds-btn-sprout:hover { background: color-mix(in srgb, #bbf37c 84%, #fbf9f5); } .ds-btn-sprout:focus-visible { outline: 2px solid #bbf37c; outline-offset: 3px; }"
-    },
-    {
-      "name": "Ghost Button",
-      "kind": "button",
-      "refersTo": "button-ghost",
-      "description": "The secondary action on the canopy: See it at work.",
-      "html": "<div class=\"ds-canopy\"><a class=\"ds-btn-ghost\" href=\"#\">See it at work</a></div>",
-      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-btn-ghost { display: inline-flex; align-items: center; min-height: 52px; padding: 0 24px; border: 1px solid rgb(251 249 245 / 0.45); border-radius: 0.375rem; background: rgb(15 32 0 / 0.45); color: #fbf9f5; font: 600 1rem/1.2 Manrope, system-ui, sans-serif; text-decoration: none; transition: border-color 0.15s ease-out, color 0.15s ease-out; } .ds-btn-ghost:hover { border-color: #bbf37c; color: #bbf37c; } .ds-btn-ghost:focus-visible { outline: 2px solid #bbf37c; outline-offset: 3px; }"
-    },
-    {
       "name": "Olive Button",
       "kind": "button",
       "refersTo": "button-olive",
-      "description": "The app's primary button, on paper: the form's submit.",
-      "html": "<div class=\"ds-paper\"><button class=\"ds-btn-olive\" type=\"button\">Request early access</button></div>",
-      "css": ".ds-paper { background: #fbf9f5; padding: 24px; border-radius: 0.75rem; } .ds-btn-olive { width: 100%; min-height: 48px; padding: 0 18px; border: 1px solid transparent; border-radius: 0.375rem; background: #396200; color: #fbf9f5; font: 600 0.9375rem/1.2 Manrope, system-ui, sans-serif; cursor: pointer; box-shadow: 0 8px 20px -12px rgb(57 98 0 / 0.75); transition: background-color 0.15s ease-out; } .ds-btn-olive:hover { background: rgb(57 98 0 / 0.9); } .ds-btn-olive:focus-visible { outline: 2px solid #396200; outline-offset: 2px; } .ds-btn-olive[disabled] { opacity: 0.55; cursor: not-allowed; }"
+      "description": "The one primary action: Join the alpha.",
+      "html": "<div class=\"ds-page\"><a class=\"ds-btn ds-olive\" href=\"#\">Join the alpha <svg width=\"20\" height=\"20\" viewBox=\"0 -960 960 960\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M592-417H126v-126h466L390-745l90-89 354 354-354 354-90-89 202-202Z\"/></svg></a></div>",
+      "css": ".ds-page { background: #fff; color: #1b1c1a; font: 400 1rem/1.6 Manrope, system-ui, sans-serif; padding: 24px; } .ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 8px; font: 700 0.9375rem/1.2 Manrope, system-ui, sans-serif; text-decoration: none; cursor: pointer; transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 120ms cubic-bezier(0.23,1,0.32,1); } .ds-btn:active { transform: scale(0.97); } .ds-btn:focus-visible { outline: 3px solid #396200; outline-offset: 3px; border-radius: 4px; } .ds-olive { background: #396200; color: #fff; } .ds-olive:hover { background: #0f2000; color: #fff; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "The secondary action: Follow the day.",
+      "html": "<div class=\"ds-page\"><a class=\"ds-btn ds-quiet\" href=\"#\">Follow the day</a></div>",
+      "css": ".ds-page { background: #fff; color: #1b1c1a; font: 400 1rem/1.6 Manrope, system-ui, sans-serif; padding: 24px; } .ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 8px; font: 700 0.9375rem/1.2 Manrope, system-ui, sans-serif; text-decoration: none; cursor: pointer; transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 120ms cubic-bezier(0.23,1,0.32,1); } .ds-btn:active { transform: scale(0.97); } .ds-btn:focus-visible { outline: 3px solid #396200; outline-offset: 3px; border-radius: 4px; } .ds-quiet { background: transparent; color: #1b1c1a; box-shadow: inset 0 0 0 1px #8a9180; } .ds-quiet:hover { box-shadow: inset 0 0 0 2px #396200; }"
+    },
+    {
+      "name": "Bar",
+      "kind": "nav",
+      "refersTo": "signin-link",
+      "description": "The one glass layer: wordmark, Alpha pill, Sign in and Join.",
+      "html": "<div class=\"ds-bar\"><span class=\"ds-wm\">bunya<b>support</b></span><span class=\"ds-alpha\">Alpha</span><span class=\"ds-grow\"></span><a class=\"ds-signin\" href=\"#\">Sign in</a><a class=\"ds-btn ds-olive\" href=\"#\">Join the alpha</a></div>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 8px; font: 700 0.9375rem/1.2 Manrope, system-ui, sans-serif; text-decoration: none; cursor: pointer; transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease, transform 120ms cubic-bezier(0.23,1,0.32,1); } .ds-btn:active { transform: scale(0.97); } .ds-btn:focus-visible { outline: 3px solid #396200; outline-offset: 3px; border-radius: 4px; } .ds-bar { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 24px; background: rgb(255 255 255 / 0.86); border-bottom: 1px solid #e4e2de; font-family: Manrope, system-ui, sans-serif; } .ds-wm { font: 500 1.375rem/1 \"Plus Jakarta Sans\", system-ui, sans-serif; letter-spacing: -0.04em; color: #1b1c1a; } .ds-wm b { font-weight: 800; color: #396200; margin-left: 0.18em; } .ds-alpha { font: 700 0.75rem/1 Manrope, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #0f2000; background: #bbf37c; border: 1px solid #396200; border-radius: 999px; padding: 5px 9px 4px; } .ds-grow { flex: 1; } .ds-signin { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #1b1c1a; font-weight: 600; text-decoration: none; transition: background-color 150ms ease; } .ds-signin:hover { background: #f5f3ef; } .ds-signin:focus-visible { outline: 3px solid #396200; outline-offset: 3px; } .ds-olive { background: #396200; color: #fff; } .ds-olive:hover { background: #0f2000; }"
+    },
+    {
+      "name": "Day Plan",
+      "kind": "nav",
+      "refersTo": "signin-link",
+      "description": "The hero index: seven times as links, the lime dot on the first.",
+      "html": "<ol class=\"ds-plan\"><li><a href=\"#\"><time>8:30 am</time><span>Approvals</span></a></li><li><a href=\"#\"><time>10:00 am</time><span>A shift goes unfilled</span></a></li><li><a href=\"#\"><time>11:30 am</time><span>A new enquiry</span></a></li></ol>",
+      "css": ".ds-page { background: #fff; color: #1b1c1a; font: 400 1rem/1.6 Manrope, system-ui, sans-serif; padding: 24px; } .ds-plan { list-style: none; padding: 0; margin: 0; position: relative; width: 340px; } .ds-plan::before { content: \"\"; position: absolute; left: 7px; top: 24px; bottom: 24px; width: 2px; background: #e4e2de; } .ds-plan a { position: relative; display: grid; grid-template-columns: 5.5rem 1fr; gap: 12px; align-items: baseline; min-height: 48px; padding: 12px 12px 12px 32px; border-radius: 8px; color: #43493a; text-decoration: none; transition: background-color 150ms ease, color 150ms ease; } .ds-plan a::before { content: \"\"; position: absolute; left: 2px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 2px #c3c9b5; } .ds-plan li:first-child a::before { left: 0; width: 16px; height: 16px; margin-top: -8px; background: #bbf37c; box-shadow: inset 0 0 0 2px #396200; } .ds-plan time { font: 800 0.9375rem/1.3 \"Plus Jakarta Sans\", system-ui, sans-serif; font-variant-numeric: tabular-nums; color: #1b1c1a; } .ds-plan a:hover { background: #f5f3ef; color: #1b1c1a; } .ds-plan a:focus-visible { outline: 3px solid #396200; outline-offset: 3px; border-radius: 4px; }"
+    },
+    {
+      "name": "Slot (before and after)",
+      "kind": "custom",
+      "refersTo": "field-olive",
+      "description": "One slot: the struck old way on white, the same job on an olive field.",
+      "html": "<div class=\"ds-slot\"><div class=\"ds-before\"><h2><span class=\"ds-t\">8:30 am</span>Approvals</h2><h3><span>Before</span></h3><p>Timesheets, leave requests and incident follow-ups arrive in different places.</p></div><div class=\"ds-after\"><h3>With Bunya Support</h3><p class=\"ds-lede\">One list of what needs a decision, with bulk actions to clear several at once.</p><ul><li>Grouped by kind</li><li>Approve several at once</li></ul></div></div>",
+      "css": ".ds-slot { display: grid; grid-template-columns: 1fr 2fr; background: #fff; font-family: Manrope, system-ui, sans-serif; } .ds-before { padding: 44px 24px 44px 0; } .ds-before h2, .ds-after h3 { font-family: \"Plus Jakarta Sans\", system-ui, sans-serif; margin: 0; } .ds-before h2 { font-size: 1.75rem; font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; color: #1b1c1a; } .ds-t { display: block; margin-bottom: 10px; font-size: 1rem; line-height: 1.2; letter-spacing: -0.005em; font-variant-numeric: tabular-nums; color: #396200; } .ds-before h3 { margin: 28px 0 0; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; color: #43493a; } .ds-before h3 span { position: relative; } .ds-before h3 span::after { content: \"\"; position: absolute; left: -3px; right: -3px; top: 50%; height: 2px; margin-top: -1px; background: #396200; } .ds-before p { margin: 8px 0 0; color: #43493a; max-width: 34ch; } .ds-after { padding: 44px 0 44px 32px; background: #396200; color: #fff; } .ds-after h3 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; color: #bbf37c; } .ds-lede { margin: 8px 0 0; max-width: 50ch; line-height: 1.55; } .ds-after ul { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 10px; color: rgb(255 255 255 / 0.92); } .ds-after li { position: relative; padding-left: 22px; } .ds-after li::before { content: \"\"; position: absolute; left: 0; top: 0.55em; width: 9px; height: 9px; border-radius: 2px; background: #bbf37c; }"
+    },
+    {
+      "name": "Screen Frame",
+      "kind": "card",
+      "refersTo": "screen-frame",
+      "description": "A captured product screen with its Sample data caption.",
+      "html": "<figure class=\"ds-shot\"><div class=\"ds-frame\"><div class=\"ds-img\">captured screen</div></div><figcaption><span class=\"ds-tag\">Sample data</span>The decision queue on the dashboard, two items selected for a bulk action.</figcaption></figure>",
+      "css": ".ds-shot { margin: 0; padding: 24px; background: #396200; font-family: Manrope, system-ui, sans-serif; } .ds-frame { overflow: hidden; border: 1px solid transparent; border-radius: 12px; box-shadow: 0 2px 6px rgb(27 28 26 / 0.2); } .ds-img { display: grid; place-items: center; height: 160px; background: #fbf9f5; color: #43493a; } .ds-shot figcaption { margin-top: 14px; max-width: 60ch; font-size: 0.9375rem; line-height: 1.5; letter-spacing: 0.01em; color: #e3eedb; } .ds-tag { display: inline-block; margin-right: 8px; padding: 4px 8px 3px; border: 1px solid currentColor; border-radius: 999px; font: 700 0.75rem/1 Manrope, sans-serif; letter-spacing: 0.04em; vertical-align: 1px; color: #bbf37c; }"
     },
     {
       "name": "Form Field",
       "kind": "input",
       "refersTo": "input-field",
-      "description": "The early-access form's field, on paper, with its error state.",
-      "html": "<div class=\"ds-paper\"><div class=\"ds-field\"><label for=\"ds-email\">Work email</label><input id=\"ds-email\" type=\"email\" placeholder=\"you@provider.org.au\"></div><div class=\"ds-field\"><label for=\"ds-org\">Organisation</label><input id=\"ds-org\" aria-invalid=\"true\"><span class=\"ds-field-error\">Enter your organisation.</span></div></div>",
-      "css": ".ds-paper { display: grid; gap: 18px; background: #fbf9f5; padding: 24px; border-radius: 0.75rem; } .ds-field { display: grid; gap: 4px; } .ds-field label { font: 500 0.8125rem/1.4 Manrope, system-ui, sans-serif; color: #43493a; } .ds-field input { min-height: 44px; padding: 0 12px; border: 1px solid #c3c9b5; border-radius: 0.375rem; background: #e4e2de; color: #1b1c1a; font: 400 1rem/1.4 Manrope, system-ui, sans-serif; } .ds-field input:focus-visible { outline: 2px solid #396200; outline-offset: 2px; } .ds-field input[aria-invalid='true'] { border-color: #ba1a1a; } .ds-field-error { font: 600 0.75rem/1.4 Manrope, system-ui, sans-serif; color: #ba1a1a; }"
-    },
-    {
-      "name": "Section Index",
-      "kind": "nav",
-      "refersTo": "section-pill-current",
-      "description": "The section index as the bottom pill below 1200px; the current act is a Sprout pill.",
-      "html": "<div class=\"ds-canopy\"><nav class=\"ds-pill\" aria-label=\"Sections\"><a href=\"#\" aria-current=\"true\">Before</a><a href=\"#\">During</a><a href=\"#\">After</a><a href=\"#\">Early access</a></nav></div>",
-      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-pill { display: inline-flex; gap: 2px; padding: 4px; border: 1px solid rgb(187 243 124 / 0.2); border-radius: 999px; background: rgb(15 32 0 / 0.95); box-shadow: 0 12px 32px -12px rgb(15 32 0 / 0.9); } .ds-pill a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px; color: rgb(251 249 245 / 0.84); font: 600 0.8125rem/1 Manrope, system-ui, sans-serif; text-decoration: none; white-space: nowrap; } .ds-pill a:hover { color: #fbf9f5; } .ds-pill a[aria-current] { background: #bbf37c; color: #0f2000; } .ds-pill a:focus-visible { outline: 2px solid #bbf37c; outline-offset: 3px; }"
-    },
-    {
-      "name": "Sample Data Tag",
-      "kind": "chip",
-      "refersTo": "tag-sample-data",
-      "description": "The app's neutral badge; one on every figure.",
-      "html": "<div class=\"ds-paper\"><span class=\"ds-tag\">Sample data</span></div>",
-      "css": ".ds-paper { background: #fbf9f5; padding: 24px; } .ds-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: #e4e2de; color: #43493a; font: 600 0.75rem/1.5 Manrope, system-ui, sans-serif; letter-spacing: 0.02em; white-space: nowrap; }"
-    },
-    {
-      "name": "Dashboard Readout",
-      "kind": "card",
-      "refersTo": "paper-clearing",
-      "description": "The hero's paper clearing: a sample-data readout built from the app's attention tiles.",
-      "html": "<div class=\"ds-canopy\"><figure class=\"ds-readout\"><figcaption class=\"ds-readout-cap\"><span class=\"ds-tag\">Sample data</span> From the Odip dashboard</figcaption><p class=\"ds-readout-title\">Upcoming trips, next 60 days</p><dl class=\"ds-tiles\"><div class=\"ds-tile\"><dt>Missing accommodation</dt><dd>1</dd></div><div class=\"ds-tile\"><dt>Missing vehicles</dt><dd>1</dd></div><div class=\"ds-tile\"><dt>Missing staff</dt><dd>2</dd></div></dl></figure></div>",
-      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-readout { max-width: 400px; margin: 0; padding: 20px; border-radius: 0.75rem; background: #fbf9f5; color: #1b1c1a; } .ds-readout-cap { display: flex; align-items: center; gap: 10px; font: 400 0.8125rem/1.4 Manrope, system-ui, sans-serif; color: #43493a; } .ds-tag { padding: 2px 8px; border-radius: 999px; background: #e4e2de; font-weight: 600; font-size: 0.75rem; } .ds-readout-title { margin: 14px 0 0; font: 700 0.9375rem/1.3 'Plus Jakarta Sans', system-ui, sans-serif; } .ds-tiles { display: grid; gap: 6px; margin: 12px 0 0; } .ds-tile { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 14px; min-height: 52px; padding: 8px 14px; border: 1px solid rgb(146 64 14 / 0.2); border-radius: 0.5rem; background: #fef3c7; color: #92400e; } .ds-tile dt { font: 600 0.875rem/1.3 Manrope, system-ui, sans-serif; } .ds-tile dd { margin: 0; min-width: 1.4ch; font: 800 1.75rem/1 'Plus Jakarta Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; }"
-    },
-    {
-      "name": "Canopy Light Toggle",
-      "kind": "custom",
-      "refersTo": "light-toggle",
-      "description": "The field's pause control, 'Canopy light · Live'; bottom right from 1200px, in the header below.",
-      "html": "<div class=\"ds-canopy\"><button class=\"ds-toggle\" type=\"button\" aria-pressed=\"false\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M6.5 5h3.75v14H6.5zM13.75 5h3.75v14h-3.75z\"/></svg><span class=\"ds-sr\">Pause the </span>Canopy light<span class=\"ds-state\" aria-hidden=\"true\">Live</span></button></div>",
-      "css": ".ds-canopy { background: #0f2000; padding: 24px; } .ds-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 13px; border: 1px solid rgb(187 243 124 / 0.2); border-radius: 999px; background: rgb(15 32 0 / 0.78); color: rgb(251 249 245 / 0.84); font: 600 0.75rem/1 Manrope, system-ui, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; } .ds-toggle svg { color: #bbf37c; } .ds-toggle:hover { border-color: #bbf37c; color: #fbf9f5; } .ds-toggle:focus-visible { outline: 2px solid #bbf37c; outline-offset: 3px; } .ds-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } .ds-state { color: #bbf37c; } .ds-state::before { content: '·'; margin-right: 8px; color: rgb(251 249 245 / 0.7); }"
-    },
-    {
-      "name": "Translation Gate",
-      "kind": "custom",
-      "refersTo": "crossing-carrier-arrived",
-      "description": "A crossing at rest: the lived moment on the canopy, the Sprout seam and arrived carrier, the record on paper.",
-      "html": "<div class=\"ds-gate\"><div class=\"ds-moment\"><p class=\"ds-when\">Rostering, the week before</p><p class=\"ds-text\">The coordinator drags a worker onto an overnight shift.</p></div><div class=\"ds-seam\"><span class=\"ds-carrier\">Shift assigned</span></div><div class=\"ds-record\"><span class=\"ds-tag\">Sample data</span><p>Assigning a shift runs 18 checks.</p></div></div>",
-      "css": ".ds-gate { display: grid; grid-template-columns: minmax(0, 4fr) 64px minmax(0, 8fr); align-items: center; gap: 0; padding: 32px 24px; background: #0f2000; } .ds-when { margin: 0; font: 600 0.75rem/1.4 Manrope, system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: #bbf37c; } .ds-text { margin: 14px 0 0; max-width: 21ch; font: 700 1.5rem/1.3 'Plus Jakarta Sans', system-ui, sans-serif; letter-spacing: -0.015em; color: #fbf9f5; } .ds-seam { position: relative; align-self: stretch; min-height: 200px; } .ds-seam::before { content: ''; position: absolute; top: 0; bottom: 0; left: 31px; width: 2px; border-radius: 2px; background: linear-gradient(to bottom, rgb(187 243 124 / 0), #bbf37c 14%, #bbf37c 86%, rgb(187 243 124 / 0)); } .ds-carrier { position: absolute; top: 50%; left: 32px; transform: translate(-50%, -50%); padding: 8px 14px; border-radius: 999px; background: #bbf37c; color: #0f2000; font: 700 0.8125rem/1.2 Manrope, system-ui, sans-serif; white-space: nowrap; box-shadow: 0 0 0 5px rgb(15 32 0 / 0.85); } .ds-record { padding: 28px; border-radius: 0.75rem; background: #fbf9f5; color: #1b1c1a; font: 400 0.9375rem/1.5 Manrope, system-ui, sans-serif; } .ds-tag { padding: 2px 8px; border-radius: 999px; background: #e4e2de; color: #43493a; font: 600 0.75rem/1.5 Manrope, system-ui, sans-serif; }"
+      "description": "The join form input: 48px, edge border, olive focus.",
+      "html": "<div class=\"ds-field\"><label for=\"ds-n\">Name</label><input id=\"ds-n\" value=\"Alex Citizen\"><span class=\"ds-hint\">As you would like us to address you.</span></div>",
+      "css": ".ds-page { background: #fff; color: #1b1c1a; font: 400 1rem/1.6 Manrope, system-ui, sans-serif; padding: 24px; } .ds-field { display: grid; gap: 6px; width: 320px; } .ds-field label { font-weight: 700; font-size: 0.9375rem; line-height: 1.35; } .ds-field input { width: 100%; min-height: 48px; padding: 10px 14px; border: 1px solid #8a9180; border-radius: 8px; background: #fff; color: #1b1c1a; font: 500 1rem/1.4 Manrope, system-ui, sans-serif; transition: border-color 150ms ease, box-shadow 150ms ease; } .ds-field input:hover { border-color: #43493a; } .ds-field input:focus { outline: none; border-color: #396200; box-shadow: 0 0 0 3px rgb(57 98 0 / 0.25); } .ds-hint { font-size: 0.875rem; color: #43493a; }"
     }
   ],
   "narrative": {
-    "northStar": "Clearings in the Canopy",
-    "overview": "The landing page is the same product as the app, seen from outside. Its ground is a living light field: you look up into a eucalypt canopy at late sun, drawn in the app's own greens by one WebGL fragment shader. The product appears in that field as clearings of the app's warm paper: a dashboard readout in the first viewport, a record at the end of each crossing, and proof bands and the early-access form below. The nature side is the lived trip; the paper side is the record. The page's job is to show one becoming the other.\n\nThere is one canopy and many clearings, and they never blur into each other. Canopy text is warm paper at three strengths on forest, with Sprout as the single lit accent. Paper clearings are the app exactly: Ledger Ink text, Ruled Line borders, Field Grey inputs, the app's warning and error tones, and real screenshots of the app. Density is low on the canopy (big type, generous act gaps) and app-normal inside the clearings.\n\nThe page shares the app's tokens by value, not by import: welcome.css repeats the app's @theme values under the same names, and welcome/tokens.test.ts fails if the app changes a green and this page does not follow. This replaces the earlier stance that the landing was a separate world.",
+    "northStar": "The Admin Day",
+    "overview": "The page follows one admin day by the clock. Seven slots (8:30 am to \"On shift\") each put the old way, plain on white, beside the same job in Bunya Support on a coloured field, so \"less admin\" is shown by a real captured screen rather than claimed. The ground is pure white everywhere; the only colour fields are the \"after\" halves, the join band and the lime and deep variants. There are no cards, no icon tiles, no illustration, no photography and no gradient.\n\nThe one authored moment is the \"now\" dot, the brand's lime dot ringed olive. It drops onto 8:30 in the hero's day plan, then travels a sticky rail beside the slots as each crosses the centre of the viewport. Type is Plus Jakarta Sans 800 for headings with tabular times, Manrope for body. Colour is the app's own green family with white, ink and hairlines.",
     "keyCharacteristics": [
-      "One full-bleed, fixed canopy behind everything, with a still poster as first paint and fallback.",
-      "Sickle-shaped gum leaves hanging in sprays from drooping twigs, in parallax layers, dense along the top edge and thinning downward; one sun, high on the right.",
-      "Soft, irregular pools of Sprout light dappling the field; no discs, no particles, no tile seams.",
-      "Paper clearings in the app's exact palette, holding the app's real screens.",
-      "The translation gate: a moment on the canopy crosses a seam of Sprout light and arrives as a record on paper.",
-      "Small tracked labels and instrument-style readouts in the margins, carrying Odip's own facts."
+      "Pure white ground (#ffffff); sections are told apart by a 1px hair rule and padding, never by tone.",
+      "Before sits left on white, after sits right on a full-bleed field; this holds in all seven slots.",
+      "One glass element: the sticky bar (white at 86%, saturate 160%, blur 14px), solid when transparency is reduced, contrast is more, or backdrop-filter is unsupported.",
+      "Real product captures in plain bordered frames, each tagged \"Sample data\".",
+      "Motion is transform and opacity only, on strong ease-out curves, with no overshoot."
     ],
     "rules": [
-      { "name": "The Same Greens Rule", "body": "Every colour on this page is an app token by value, declared under the app's own name in welcome.css :root and pinned by tokens.test.ts. A new colour needs a new app token first. Canopy text and hairlines are alpha mixes of Warm Paper and Sprout, never new hues.", "section": "colors" },
-      { "name": "The One Lamp Rule", "body": "Pale Sprout is the only lit thing on the canopy: the primary CTA, the current place, the seam and the sunlight. Never use it for body text, large fills or decoration on paper.", "section": "colors" },
-      { "name": "The Warm Base Rule", "body": "Never pure white and never pure black, on either ground. tokens.test.ts fails on #fff, #000, white, black or their rgb() forms in the stylesheet.", "section": "colors" },
-      { "name": "The Twelve Pixel Floor Rule", "body": "No text below 0.75rem (12px), including tags, labels and the pill.", "section": "typography" },
-      { "name": "The Small Caps Instrument Rule", "body": "Small tracked uppercase labels are for wayfinding and readouts only (section index, crossing 'when', reading labels, the pause control, footer headings). Below 1200px the pill drops the uppercase and tracking so the four items fit.", "section": "typography" },
-      { "name": "The Quiet Zone Rule", "body": "Text on the canopy never sits on moving light without a guaranteed ground. Every canopy text block carries data-quiet: live, the shader darkens the field behind it (six content zones plus two fixed ones, for the index and the pause control); on the poster, a soft forest scrim (80%, blurred 24px) does the same and fades out when the live field takes over. Worst sampled contrast at b25faca8 is 5.69:1 over 507 positions.", "section": "elevation" },
-      { "name": "The Flat Clearing Rule", "body": "Paper clearings never take a drop shadow. Their depth comes from the light pool the field throws round them (data-pool, up to six in view).", "section": "elevation" }
+      {
+        "name": "The White Ground Rule",
+        "body": "The page ground is #ffffff. The owner said so verbatim (\"we dont use the off white background and just use white\"). Section breaks are a 1px hair rule plus padding (`.section--surface`, `.section--surface + .section`, `.site-footer`).",
+        "section": "colors"
+      },
+      {
+        "name": "The Three Fields Rule",
+        "body": "Olive owns the \"after\" half of a slot by default. Deep belongs to the incident slot, lime to \"On shift\", and deep to the join band. A new field colour needs a slot that earns it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Captured-Warmth Rule",
+        "body": "The warm off-white inside screen captures is the app's own UI and stays. It never becomes a page colour.",
+        "section": "colors"
+      },
+      {
+        "name": "The Slot Heading Rule",
+        "body": "Slot labels are real headings: sentence case, 20px, Jakarta 700, no uppercase and no tracking, larger than the paragraph they head. The review round 1 refused 13px tracked uppercase labels (14 of them) as an eyebrow pattern; this is the repair.",
+        "section": "typography"
+      },
+      {
+        "name": "The Punctuation Kern Rule",
+        "body": "A trailing comma or period in a display heading is wrapped alone in `<span class=\"pk\">` with `margin-left: -0.09em`. Jakarta 800's punctuation sidebearings read as a space under -0.035em tracking. `textContent` is unchanged. Used on the h1 comma and period and on the three section h2 periods.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Times Rule",
+        "body": "Times use `font-variant-numeric: tabular-nums` (plan, rail, slot time).",
+        "section": "typography"
+      },
+      {
+        "name": "The One Glass Rule",
+        "body": "Only the sticky bar is glass (white 0.86, `saturate(160%) blur(14px)`). It falls back to solid white under `prefers-reduced-transparency`, `prefers-contrast: more`, or no backdrop-filter support. No glass on content.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No Offset Shadow Rule",
+        "body": "There are no hard offset shadows anywhere on this page.",
+        "section": "elevation"
+      }
     ],
     "dos": [
-      "Do take every colour, radius and face from the app's @theme by value, under the app's token name, and keep tokens.test.ts green.",
-      "Do give every block of text on the canopy a quiet zone (data-quiet) and re-run the pixel-sampled contrast check after any shader change: 4.5:1 for body text, 3:1 for large text, at the worst frame.",
-      "Do put the product on paper: real app screens with accurate alt text, one \"Sample data\" tag per figure.",
-      "Do keep Pale Sprout for the single brightest thing in each view: the CTA, the current place, the seam, the light.",
-      "Do keep every target at least 44px and the header on one line from 320px up.",
-      "Do recapture the poster with capture/poster.mjs after any change to canopy-shader.ts or STILL_TIME, and keep it well under 60 KB."
+      "**Do** keep the ground #ffffff and separate sections with a 1px Hair rule and padding.",
+      "**Do** put the old way on white at the left and the Bunya Support version on a field at the right, with the strike drawing left to right toward it.",
+      "**Do** keep slot labels as real sentence-case headings at 20px or larger.",
+      "**Do** show real captures only, at the manifest's sizes, with a Sample data tag, and record route, role and fixture state in the manifest for each new raster.",
+      "**Do** keep every triggered motion a transition on transform or opacity so it retargets from its live value, and keep hidden starts behind `html.js`.",
+      "**Do** wrap trailing punctuation of a display heading in `.pk`.",
+      "**Do** keep focus visible at 3px with a 3px offset, and tap targets at 44px or more."
     ],
     "donts": [
-      "Don't use pure white or pure black anywhere, on either ground.",
-      "Don't add a colour, font or radius that the app does not have.",
-      "Don't set text over moving light without a quiet zone, or animate anything except the field, the crossings, the canvas fade-in and the 0.15s colour changes on controls.",
-      "Don't draw the light as discs, bokeh, particles or fireflies, or the leaves as straight blades; the light is soft pools under a gum canopy, and the leaves are sickle-shaped and hang from petioles.",
-      "Don't clip a leaf or a pool of light at a shader cell edge; no straight edge may appear in the field.",
-      "Don't make the header translucent: copy scrolling under a 95% header ghosts through it.",
-      "Don't scroll-jack, fake a loader, or put a screenshot on a gradient.",
-      "Don't shadow a paper clearing."
+      "**Don't** paint any ground, band or section in #f5f3ef. Do not add uses of `--surface`.",
+      "**Don't** set small tracked uppercase labels above or over headings (the refused eyebrow pattern). The Alpha pill is a status badge, not a precedent for section labels.",
+      "**Don't** add cards, icon tiles, illustration, gradients, stock or AI-generated photography, carousels, video or chat.",
+      "**Don't** use glass on content, hard offset shadows, springs, overshoot, `ease-in`, `scale(0)`, `will-change` or scroll-linked motion.",
+      "**Don't** hide text until JS runs, or gate the hero dot on `.js`.",
+      "**Don't** ship a capture with an unexplained red warning, a dead band under its content, or a clipped row at its edge.",
+      "**Don't** import tokens or components from the app, or change a green here without the app's `src/index.css` changing first (the token test pins them)."
     ]
   }
 }
