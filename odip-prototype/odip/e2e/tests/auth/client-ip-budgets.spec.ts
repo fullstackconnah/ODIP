@@ -11,13 +11,14 @@ import { BASE_URL } from '../../support/env';
 // is not shaped like a Firebase ID token, so each call is refused (and counted) at once, with no Firebase lookup and no real account.
 //
 // Every source below is a fake address of its own and the tests run serially, so nothing here can throttle another spec: only this spec calls
-// /auth/exchange, and the only shared key is 127.0.0.1 (test 4), which nothing else uses on that endpoint.
+// /auth/exchange, and each test uses its own fake CF-Connecting-IP.
 //
 // What this stack cannot show: every request here arrives from a Docker address (or 127.0.0.1), so "a forged CF-Connecting-IP from a non-Docker
 // LAN source is ignored" is not covered here. That is the conf test (nginxHeaders.test.ts) plus the lead's live measurement (a LAN PC arrives as
 // 192.168.4.119, outside the trusted range).
 
-test.describe.configure({ mode: 'serial' });
+// No retries: a failed attempt leaves its fake source locked out, so a retry would fail for that reason rather than the real one.
+test.describe.configure({ mode: 'serial', retries: 0 });
 
 // The runner puts Playwright in the nginx container's network namespace. 127.0.0.1 is not a trusted hop, but this container's own Docker address is
 // (a connection to it arrives from that same address), standing in for cloudflared's hop. Without one (a stack laid out differently), skip.
@@ -72,15 +73,18 @@ test.describe('per-visitor sign-in budgets', () => {
     const d = await exchange(trustedUrl!, { 'cf-connecting-ip': '203.0.113.13' });
     expect(d.status).toBe(401);
   });
-});
 
-test('a client-supplied X-Forwarded-For does not choose the budget', async () => {
-  // No CF-Connecting-IP: both addresses below must land in the one 127.0.0.1 budget, so the 11th attempt is locked out whichever header it carries.
-  for (let n = 1; n <= MAX_FAILURES; n++) {
-    const r = await exchange(BASE_URL, { 'x-forwarded-for': n % 2 ? '198.51.100.7' : '198.51.100.8' });
-    expect(r.status, `attempt ${n}`).toBe(401);
-  }
-  const r = await exchange(BASE_URL, { 'x-forwarded-for': '198.51.100.9' });
-  expect(r.status).toBe(429);
-  expect(r.lockedOut).toBe(true);
+  test('a client-supplied X-Forwarded-For does not choose the budget', async () => {
+    // One CF-Connecting-IP, alternating X-Forwarded-For values: nginx drops the header, so all of it is one budget and the 11th attempt is locked out.
+    // Driven through the trusted hop like the tests above: the same request from BASE_URL arrives from the Docker gateway in CI (docker-proxy), which the API
+    // deliberately does not count, so it could not show a budget there.
+    const cf = '203.0.113.14';
+    for (let n = 1; n <= MAX_FAILURES; n++) {
+      const r = await exchange(trustedUrl!, { 'cf-connecting-ip': cf, 'x-forwarded-for': n % 2 ? '198.51.100.7' : '198.51.100.8' });
+      expect(r.status, `attempt ${n}`).toBe(401);
+    }
+    const r = await exchange(trustedUrl!, { 'cf-connecting-ip': cf, 'x-forwarded-for': '198.51.100.9' });
+    expect(r.status).toBe(429);
+    expect(r.lockedOut).toBe(true);
+  });
 });
