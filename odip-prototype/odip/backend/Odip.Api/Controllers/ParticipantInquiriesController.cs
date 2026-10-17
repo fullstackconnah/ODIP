@@ -412,9 +412,12 @@ public class ParticipantInquiriesController : ControllerBase
     {
         var converted = stored?.ParticipantId is not null;
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        // N1: Apply leaves these as stored when a tab on the old bundle sends no contactIsParticipant, so the role rules must read the stored values too.
+        var legacy = stored is not null && dto.ContactIsParticipant is null;
         // Convert leaves a null plan at the Participant's default (L5's known limit), so the role rules read it the same way.
-        var plan = dto.PlanType ?? PlanType.SelfManaged;
-        var errors = converted ? new Dictionary<string, string[]>() : ContactErrors(dto.Contacts, plan, dto.DateOfBirth, today);
+        var plan = (legacy ? stored!.PlanType : dto.PlanType) ?? PlanType.SelfManaged;
+        var dob = legacy ? stored!.DateOfBirth : dto.DateOfBirth;
+        var errors = converted ? new Dictionary<string, string[]>() : ContactErrors(dto.Contacts, plan, dob, today);
         if (Blank(dto.FirstName) is null) errors["firstName"] = ["Add the participant's first name."];
         if (converted) return errors;
         var recheck = stored is null || (dto.ContactIsParticipant == true && !stored.ContactIsParticipant);
