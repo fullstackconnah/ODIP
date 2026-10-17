@@ -469,7 +469,7 @@ public class LeaveController : ControllerBase
         if (overlappingShifts.Count == 0) return;
 
         var staffName = await _db.Users.Where(u => u.Id == leave.UserId)
-            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+            .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
 
         foreach (var shift in overlappingShifts)
         {

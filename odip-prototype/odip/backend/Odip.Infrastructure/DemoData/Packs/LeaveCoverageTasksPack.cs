@@ -66,7 +66,7 @@ public sealed class LeaveCoverageTasksPack : IDemoPack
         foreach (var (shift, leave, key) in wanted.Where(w => !existing.Contains(w.Key)))
         {
             var staff = run.Directory.AllUsers.FirstOrDefault(u => u.Id == leave.UserId);
-            var staffName = staff is null ? "A staff member" : $"{staff.FirstName} {staff.LastName}";
+            var staffName = staff is null ? "A staff member" : $"{staff.FirstName} {staff.LastName}".Trim();
             var participantName = shift.Participant?.FullName ?? "a participant";
             var date = shift.ServiceDate;
             await service.EnsureAsync(new ObligationTaskSpec(

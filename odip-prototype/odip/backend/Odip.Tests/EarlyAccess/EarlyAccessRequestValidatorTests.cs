@@ -28,6 +28,7 @@ public class EarlyAccessRequestValidatorTests
             Email = "  jane.citizen@example.com.au ",
             Role = "  Ops lead ",
             Phone = " 0491 570 156 ",
+            OrganisationSize = "under-10",
         });
 
         Assert.True(result.IsValid);
@@ -84,7 +85,7 @@ public class EarlyAccessRequestValidatorTests
         var result = EarlyAccessRequestValidator.Validate(null);
 
         Assert.False(result.IsValid);
-        Assert.Equal(new[] { "email", "name", "organisation" }, result.Errors.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        Assert.Equal(new[] { "email", "name", "organisation", "organisationSize" }, result.Errors.Keys.OrderBy(k => k, StringComparer.Ordinal));
     }
 
     [Theory]
@@ -330,20 +331,19 @@ public class EarlyAccessRequestValidatorTests
         Assert.Equal("10-49", result.OrganisationSize);
     }
 
-    // Expand phase (landing PR 1): the live /welcome form sends no size. PR 2 replaces this with a required-size test.
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
-    public void OrganisationSize_MissingOrBlank_IsAccepted_AndIsNull(string? value)
+    public void OrganisationSize_MissingOrBlank_IsAnOrganisationSizeError(string? value)
     {
         var dto = Valid();
         dto.OrganisationSize = value;
 
         var result = EarlyAccessRequestValidator.Validate(dto);
 
-        Assert.True(result.IsValid);
-        Assert.Null(result.OrganisationSize);
+        Assert.Equal(new[] { "organisationSize" }, result.Errors.Keys);
+        Assert.Equal("Choose your organisation's size.", Assert.Single(result.Errors["organisationSize"]));
     }
 
     [Theory]
@@ -426,6 +426,9 @@ public class EarlyAccessRequestValidatorTests
     [InlineData("+61 2 5550 1234")]
     [InlineData("(02) 5550-1234")]
     [InlineData(" 0491570156 ")]
+    [InlineData("0491 570 156")]
+    [InlineData("+61 491 570 156")]
+    [InlineData("(02) 9876 5432")]
     public void Phone_AcceptsDigitsSpacesPlusParensAndHyphens(string value)
     {
         var dto = Valid();
@@ -453,14 +456,44 @@ public class EarlyAccessRequestValidatorTests
         Assert.Equal("Use digits, spaces and + ( ) - only.", Assert.Single(result.Errors["phone"]));
     }
 
+    // A phone is a number, not just allowed characters: 8 to 15 digits (E.164 allows 15), and a + only as the first character.
+    [Theory]
+    [InlineData("---")]
+    [InlineData("+")]
+    [InlineData("12 34")]
+    [InlineData("1+2345678")]
+    [InlineData("1234567")]
+    [InlineData("1234 5678 9012 3456")]
+    public void Phone_NeedsBetween8And15Digits_AndAPlusOnlyFirst(string value)
+    {
+        var dto = Valid();
+        dto.Phone = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.Equal("Enter a phone number with 8 to 15 digits.", Assert.Single(result.Errors["phone"]));
+    }
+
+    [Theory]
+    [InlineData("12345678")]
+    [InlineData("123456789012345")]
+    public void Phone_AcceptsExactly8And15Digits(string value)
+    {
+        var dto = Valid();
+        dto.Phone = value;
+
+        Assert.True(EarlyAccessRequestValidator.Validate(dto).IsValid);
+    }
+
     [Fact]
     public void Phone_LengthLimit_Is30()
     {
         var dto = Valid();
-        dto.Phone = new string('1', 30);
+        dto.Phone = "(1-1-1-1-1-1-1-1-1-1-1-1-1-1-1"; // 30 characters, 15 digits
+        Assert.Equal(30, dto.Phone.Length);
         Assert.True(EarlyAccessRequestValidator.Validate(dto).IsValid);
 
-        dto.Phone = new string('1', 31);
+        dto.Phone = dto.Phone + "-";
         Assert.Equal("Phone must be 30 characters or fewer.", Assert.Single(EarlyAccessRequestValidator.Validate(dto).Errors["phone"]));
     }
 

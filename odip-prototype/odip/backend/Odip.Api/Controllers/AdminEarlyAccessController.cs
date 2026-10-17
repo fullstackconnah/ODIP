@@ -39,19 +39,25 @@ public class AdminEarlyAccessController : ControllerBase
                 Id = e.Id, Name = e.Name, Organisation = e.Organisation, Email = e.Email, Role = e.Role, Phone = e.Phone,
                 OrganisationSize = e.OrganisationSize, Message = e.Message, CreatedAtUtc = e.CreatedAtUtc,
                 LastRequestedAtUtc = e.LastRequestedAtUtc, RequestCount = e.RequestCount,
+                LaterSubmissions = e.LaterSubmissions.OrderBy(l => l.ReceivedAtUtc).ThenBy(l => l.Id).Select(l => new EarlyAccessLaterSubmissionDto
+                {
+                    Id = l.Id, ReceivedAtUtc = l.ReceivedAtUtc, Name = l.Name, Organisation = l.Organisation, Role = l.Role, Phone = l.Phone,
+                    OrganisationSize = l.OrganisationSize, Message = l.Message,
+                }).ToList(),
             });
         return Ok(ApiResponse<PagedResult<EarlyAccessSignupDto>>.Ok(
             await PagedResult<EarlyAccessSignupDto>.CreateAsync(query, page, pageSize, ct)));
     }
 
     // DELETE api/v1/admin/early-access/{id} — a hard delete, plus an audit row that names who and when but holds none of the
-    // person's details (EarlyAccessRequest is deliberately not in AuditedEntities, which would copy every column into AuditLog).
+    // person's details (EarlyAccessRequest and EarlyAccessLaterSubmission are deliberately not in AuditedEntities, which would copy every column into AuditLog).
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
     {
         for (var attempt = 1; ; attempt++)
         {
-            var row = await _db.EarlyAccessRequests.SingleOrDefaultAsync(e => e.Id == id, ct);
+            // The later submissions are loaded so they go with the row under any provider (PostgreSQL also cascades).
+            var row = await _db.EarlyAccessRequests.Include(e => e.LaterSubmissions).SingleOrDefaultAsync(e => e.Id == id, ct);
             if (row is null) return NotFound(ApiResponse<bool>.Fail("Sign-up not found."));
 
             _db.EarlyAccessRequests.Remove(row);

@@ -122,6 +122,23 @@ public class EarlyAccessNotifierTests
     }
 
     [Fact]
+    public async Task SendAsync_EmailsTheSubjectOfTheNoticeKind_NotAlwaysANewRequest()
+    {
+        var subjects = new List<string>();
+        var email = new RecordingChannel { Respond = m => { subjects.Add(m.Subject); return new ChannelSendResult(ChannelSendOutcome.Sent, null, null); } };
+        var (notifier, _) = Build(Configured(), email);
+
+        foreach (var kind in Enum.GetValues<EarlyAccessNoticeKind>())
+            await notifier.SendAsync(Sample with { Kind = kind }, "ops@example.com", CancellationToken.None);
+
+        Assert.Equal(new[]
+        {
+            EarlyAccessRequestTemplate.Subject, EarlyAccessRequestTemplate.SentAgainSubject,
+            EarlyAccessRequestTemplate.LastKeptSubject, EarlyAccessRequestTemplate.OverLimitSubject,
+        }, subjects);
+    }
+
+    [Fact]
     public async Task Configured_SendsOneEmail_ThroughTheEmailChannel_WithTheFixedSubject()
     {
         var email = new RecordingChannel();
@@ -290,6 +307,35 @@ public class EarlyAccessRequestTemplateTests
 
         Assert.Equal("New Bunya Support early-access request", message.Subject);
         Assert.Equal("ops@example.com", message.RecipientAddress);
+        Assert.DoesNotContain("script", message.Subject);
+    }
+
+    [Fact]
+    public void ASecondSubmission_SaysSoWithoutAnyMessageText_AndPointsAtTheTab()
+    {
+        EarlyAccessRequestPayload Payload_(EarlyAccessNoticeKind kind) =>
+            new("ops@example.com", "Jane", "Org", "jane@example.com", DateTime.UtcNow, kind);
+        var again = EarlyAccessRequestTemplate.Render(Payload_(EarlyAccessNoticeKind.SentAgain));
+        var last = EarlyAccessRequestTemplate.Render(Payload_(EarlyAccessNoticeKind.SentAgainLastKept));
+        var over = EarlyAccessRequestTemplate.Render(Payload_(EarlyAccessNoticeKind.SentAgainOverLimit));
+
+        Assert.Contains("Jane sent the form again", again.PlainTextBody);
+        Assert.Contains("Settings > Alpha sign-ups", again.PlainTextBody);
+        Assert.Contains("last one that will be kept", last.PlainTextBody);
+        Assert.Contains("Settings &gt; Alpha sign-ups", last.HtmlBody);
+        Assert.Contains("Jane sent the form again after the 10-submission limit", over.PlainTextBody);
+        Assert.Contains("contact them by email", over.PlainTextBody);
+        Assert.Equal(3, new[] { again.Subject, last.Subject, over.Subject }.Distinct().Count());
+        Assert.DoesNotContain("early access to Bunya Support.", again.PlainTextBody);
+    }
+
+    [Fact]
+    public void ANoticeAboutASecondSubmission_HtmlEncodesTheName_AndKeepsItOutOfTheSubject()
+    {
+        var message = EarlyAccessRequestTemplate.Render(new EarlyAccessRequestPayload(
+            "ops@example.com", Payload, "Org", "a@example.com", DateTime.UtcNow, EarlyAccessNoticeKind.SentAgain));
+
+        Assert.DoesNotContain("<script>", message.HtmlBody);
         Assert.DoesNotContain("script", message.Subject);
     }
 

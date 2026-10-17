@@ -63,7 +63,7 @@ public static class ImportFundingRows
     {
         // Only real numbers: a participant saved with "-" or "TBC" is never found by it.
         var byNdis = participants.Where(p => p.NdisNumber != null && IsNdisNumber(ImportParticipantRows.NdisKey(p.NdisNumber))).ToLookup(p => ImportParticipantRows.NdisKey(p.NdisNumber!));
-        var byName = participants.Where(p => p.DateOfBirth is not null).ToLookup(p => (NameKey($"{p.FirstName} {p.LastName}"), p.DateOfBirth!.Value));
+        var byName = participants.Where(p => p.DateOfBirth is not null).ToLookup(p => (NameKey($"{p.FirstName} {p.LastName}".Trim()), p.DateOfBirth!.Value));
         foreach (var plan in plans.Where(p => p.Funding != null && p.Status != ImportRowStatus.Skipped))
         {
             var line = plan.Funding!;
@@ -72,7 +72,7 @@ public static class ImportFundingRows
             if (plan.Status != ImportRowStatus.Ready)
             {
                 // A row that can't be imported still says whose plan it belongs to, so Check can keep the rest of that plan out.
-                if (found.Count == 1) plan.Name = $"{found[0].FirstName} {found[0].LastName}";
+                if (found.Count == 1) plan.Name = (found[0].FirstName + " " + found[0].LastName).Trim();
                 if ((found.Count == 1 ? found[0] : Likely(line, participants)) is { } owner) plan.Funding = line with { ParticipantId = owner.Id };
                 continue;
             }
@@ -88,7 +88,7 @@ public static class ImportFundingRows
             else
             {
                 var match = found[0];
-                plan.Name = $"{match.FirstName} {match.LastName}";
+                plan.Name = $"{match.FirstName} {match.LastName}".Trim();
                 plan.Funding = line with { ParticipantId = match.Id };
                 // A known number on a row that names someone else is most likely a typo that hit another real participant, and the preview shows only the
                 // ODIP name: say so (a warning, since the number is the stronger key).
@@ -110,7 +110,7 @@ public static class ImportFundingRows
     {
         var fits = participants.Where(p =>
                 (line.UnreadNdis != null && p.NdisNumber != null && OneOff(line.UnreadNdis, ImportParticipantRows.NdisKey(p.NdisNumber)))
-                || (line.FullName.Contains(' ') && NameKey($"{p.FirstName} {p.LastName}") == NameKey(line.FullName) && (line.DateOfBirth is null || line.DateOfBirth == p.DateOfBirth)))
+                || (line.FullName.Contains(' ') && NameKey($"{p.FirstName} {p.LastName}".Trim()) == NameKey(line.FullName) && (line.DateOfBirth is null || line.DateOfBirth == p.DateOfBirth)))
             .Take(2).ToList();
         return fits.Count == 1 ? fits[0] : null;
     }

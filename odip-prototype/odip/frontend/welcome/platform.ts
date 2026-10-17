@@ -16,7 +16,7 @@ export function initPlatformFacts(root: ParentNode = document, info: PlatformInf
   }
   if (company) {
     show('companyName', (el) => (el.textContent = company))
-    show('collector', (el) => (el.textContent = ` ${company} is collecting these details.`))
+    show('collector', (el) => (el.textContent = ' (' + company + ')'))
   }
   if (abn) show('abn', (el) => (el.textContent = `ABN ${abn}`))
   if (copyright) show('copyright', (el) => (el.textContent = copyright))

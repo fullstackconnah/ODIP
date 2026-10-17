@@ -13,7 +13,7 @@ public static class MedicationMapping
     /// <summary>Preferred name when set, else first name, then last name — the MAR's participant label.</summary>
     public static string ParticipantName(Participant? p) =>
         p == null ? string.Empty
-        : string.IsNullOrEmpty(p.PreferredName) ? p.FirstName + " " + p.LastName : p.PreferredName + " " + p.LastName;
+        : string.IsNullOrEmpty(p.PreferredName) ? (p.FirstName + " " + p.LastName).Trim() : (p.PreferredName + " " + p.LastName).Trim();
 
     public static AdministrationDto ToAdministrationDto(
         MedicationAdministration a, string participantName, string medicationName, string doseDescription, Guid? incidentId = null) => new()
