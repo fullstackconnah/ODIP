@@ -60,4 +60,20 @@ public class EarlyAccessSignupDto
     public DateTime CreatedAtUtc { get; set; }
     public DateTime LastRequestedAtUtc { get; set; }
     public int RequestCount { get; set; }
+
+    /// <summary>Repeat sign-ups whose answers differed from the ones above, newest last; at most 10 (RequestCount - 1 may be higher).</summary>
+    public List<EarlyAccessLaterSubmissionDto> LaterSubmissions { get; set; } = [];
+}
+
+/// <summary>What a repeat sign-up said when it differed from the stored answers; the tab shows only the fields that differ.</summary>
+public class EarlyAccessLaterSubmissionDto
+{
+    public Guid Id { get; set; }
+    public DateTime ReceivedAtUtc { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Organisation { get; set; } = string.Empty;
+    public string? Role { get; set; }
+    public string? Phone { get; set; }
+    public string? OrganisationSize { get; set; }
+    public string? Message { get; set; }
 }
