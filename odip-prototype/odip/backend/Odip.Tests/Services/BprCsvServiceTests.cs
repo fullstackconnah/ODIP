@@ -127,7 +127,19 @@ public class BprCsvServiceTests
         Assert.Equal("40.00", standard["UnitPrice"]);
         Assert.Equal("", standard["CancellationReason"]);
         Assert.Equal("late, notice", canc["CancellationReason"]);
-        Assert.Equal("", canc["ABNofSupportProvider"]);
+        // The three legacy fields and the ABN are blank on every row.
+        Assert.All(byName, r =>
+        {
+            Assert.Equal("", r["AuthorisedBy"]);
+            Assert.Equal("", r["ParticipantApproved"]);
+            Assert.Equal("", r["InKindFundingProgram"]);
+            Assert.Equal("", r["ABNofSupportProvider"]);
+        });
+        // Pin positions independent of the header line (NDIA spec order).
+        Assert.Equal("RegistrationNumber,NDISNumber,SupportsDeliveredFrom,SupportsDeliveredTo,SupportNumber,ClaimReference,Quantity,Hours,UnitPrice,GSTCode,AuthorisedBy,ParticipantApproved,InKindFundingProgram,ClaimType,CancellationReason,ABNofSupportProvider", lines[0]);
+        var cancRow = rows.Single(r => r[13] == "CANC");
+        Assert.Equal("late, notice", cancRow[14]);
+        Assert.Equal("", cancRow[15]);
     }
 
     // RFC 4180 split: commas inside quotes stay, doubled quotes unescape.
