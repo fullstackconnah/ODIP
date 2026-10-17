@@ -212,7 +212,7 @@ export function useCompletions(filters: CompletionFilters = {}, page = 1, pageSi
 }
 
 /** The server's page maximum (PagingParams.MaxPageSize). */
-const MAX_PAGE_SIZE = 200
+export const MAX_PAGE_SIZE = 200
 
 /**
  * The WHOLE queue for one filter, read a page maximum at a time until the server's total: the dashboard's Complete all counts and sends from every

@@ -1,16 +1,18 @@
-import { useIncidents } from '@/api/hooks'
+import { MAX_PAGE_SIZE, useIncidents } from '@/api/hooks'
 import { INCIDENT_STATUS_LABELS, INCIDENT_TYPE_LABELS } from '@/api/types'
 import { toneForStatus } from '@/lib/tone'
 import { formatWallClock } from '@/lib/wallClock'
 import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
 
 /**
- * The Incidents group (SHAPE §5, call 12), links only in PR A: what still needs somebody, QSC-overdue first. The QSC-overdue page fills the rows first, the
- * needsAttention page (open, or QSC overdue even resolved or closed) fills them to five, and its total is the count, so every row is inside the count.
+ * The Incidents group (SHAPE §5, call 12), links only in PR A: what still needs somebody, QSC-overdue first. The QSC-overdue page comes first, then the
+ * needsAttention page (open, or QSC overdue even resolved or closed): every row the server sends, up to 200, and its total is the count, so every row is
+ * inside the count.
  */
 export function useIncidentsGroup(enabled: boolean): GroupModel {
-  const overdueQsc = useIncidents({ isOverdueQsc: 'true', page: '1', pageSize: '5' }, { enabled })
-  const needsAttention = useIncidents({ needsAttention: 'true', page: '1', pageSize: '5' }, { enabled })
+  // The server's MaxPageSize, so the group pages what it holds (dtable SHAPE §6).
+  const overdueQsc = useIncidents({ isOverdueQsc: 'true', page: '1', pageSize: String(MAX_PAGE_SIZE) }, { enabled })
+  const needsAttention = useIncidents({ needsAttention: 'true', page: '1', pageSize: String(MAX_PAGE_SIZE) }, { enabled })
 
   const listed = [...(overdueQsc.data ?? []), ...(needsAttention.data ?? [])]
   const rows = listed.filter((i, n) => listed.findIndex((other) => other.id === i.id) === n).map((i): QuickRow => {
