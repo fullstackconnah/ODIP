@@ -29,8 +29,8 @@ export function renderGroup(useGroup: () => GroupModel) {
 /** The page's AnnouncementRegion in these tests (the NoticesRegion is a status too, but not sr-only). */
 export const announcement = () => document.querySelector('.sr-only[role="status"]')
 
-/** The table's column headers, the empty actions header last (the bulk box column and the flags column are left out: QuickGroup's own tests cover them). */
-export const headers = () => screen.getAllByRole('columnheader').filter((th) => !th.hasAttribute('data-select') && !th.hasAttribute('data-flags')).map((th) => th.textContent)
+/** The table's column headers, the empty actions header last (the bulk box column and the flags column are left out, and the header row's bulk button reads as the empty actions header: QuickGroup's own tests cover them). */
+export const headers = () => screen.getAllByRole('columnheader').filter((th) => !th.hasAttribute('data-select') && !th.hasAttribute('data-flags')).map((th) => (th.querySelector('[data-bulk-action]') ? '' : th.textContent))
 
 /** A decision row's row group (its row, and its detail row while it has one), found by its subject. */
 export const rowOf = (subject: string) => screen.getByText(subject).closest('tbody')!

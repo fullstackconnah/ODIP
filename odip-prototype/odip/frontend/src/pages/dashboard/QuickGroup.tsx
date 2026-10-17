@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
@@ -10,9 +10,10 @@ import { TextField } from '@/components/TextField'
 import { ROW_ACTIONS_CARD, TAP_AREA, TAP_FLOOR } from '@/components/tapArea'
 import { formatRatio } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
+import { useIsBelowXl } from '@/hooks/useIsBelowXl'
 import { isPresent, pageRows, rowKey, shownCount, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
-import { BATCH_MAX, actionLabel, confirmCopy, isBulkKey, resultNotice, rowRef, runningLabel, selectName, type BulkResult } from './bulkCopy'
+import { BATCH_MAX, actionLabel, bannerCopy, confirmCopy, isBulkKey, resultNotice, rowRef, runningLabel, selectName, type BulkResult } from './bulkCopy'
 
 // A busy control is aria-disabled, not disabled: a disabled button drops focus in some browsers, and a refused tap must leave focus where it was (SHAPE §4).
 const HELD = 'opacity-50 cursor-not-allowed'
@@ -118,6 +119,19 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
         </Button>
       </div>
     </form>
+  )
+}
+
+/**
+ * A button's labels in ONE grid cell (SHAPE §4), every one but `shown` invisible and aria-hidden: the button keeps the widest one's width at one line's
+ * height, so a busy or running label never moves it or its neighbours.
+ */
+function Reserve({ shown, also }: { shown: string; also: string[] }) {
+  return (
+    <span className="grid">
+      <span className="[grid-area:1/1]">{shown}</span>
+      {[...new Set(also)].filter((label) => label !== shown).map((label) => <span key={label} aria-hidden className="invisible [grid-area:1/1]">{label}</span>)}
+    </span>
   )
 }
 
@@ -257,11 +271,7 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
                   </Button>
                 ) : (
                   <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined} className={held} onClick={() => tap(action)}>
-                    {/* Both labels in one grid cell, the one not shown invisible: the button keeps the wider one's width at one line's height (SHAPE §4). */}
-                    <span className="grid">
-                      <span aria-hidden={tapping || undefined} className={`[grid-area:1/1] ${tapping ? 'invisible' : ''}`}>{action.label}</span>
-                      <span aria-hidden={!tapping || undefined} className={`[grid-area:1/1] ${tapping ? '' : 'invisible'}`}>{action.busyLabel}</span>
-                    </span>
+                    <Reserve shown={tapping ? action.busyLabel : action.label} also={[action.label, action.busyLabel]} />
                   </Button>
                 ),
               )}
@@ -302,6 +312,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   // Bulk: safe = a row with a one-tap decision, anywhere in the tab; the ticks are only the rows on screen.
   const bulkKey = isBulkKey(model.key) ? model.key : null
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
+  const [tabWide, setTabWide] = useState(false)
+  const belowXl = useIsBelowXl()
   const [occupied, setOccupied] = useState<ReadonlySet<string>>(() => new Set())
   const [confirm, setConfirm] = useState<'all' | 'selected' | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number; ids: ReadonlySet<string> } | null>(null)
@@ -321,11 +333,19 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const safe = ready ? rows.filter((row) => tapOf(row)) : []
   const free = safe.filter((row) => !occupied.has(row.id) && !unsure.has(row.id))
   const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id) && !unsure.has(row.id))
-  const ticked = tickable.filter((row) => selected.has(row.id))
+  // Tab-wide is a mode, not a list (Gmail, SHAPE §5): its count and its run are `free`, read now. Over the batch cap it IS Complete all. It lapses with
+  // nothing left to send (every safe row decided or held), so the banner never reads "All 0" and the mode never comes back on a release.
+  const wide = tabWide && free.length > 0
+  const ticked = wide ? tickable : tickable.filter((row) => selected.has(row.id))
   const bar = !!bulkKey && (safe.some((row) => !unsure.has(row.id)) || !!progress)
-  const mode = ticked.length > 0 ? 'selected' : 'all'
-  const count = mode === 'selected' ? ticked.length : free.length
+  const mode: 'all' | 'selected' = wide ? (model.approveBatch && free.length > BATCH_MAX ? 'all' : 'selected') : ticked.length > 0 ? 'selected' : 'all'
+  const count = mode === 'selected' && !wide ? ticked.length : free.length
   const action = bulkKey && actionLabel(bulkKey, mode, count)
+  // The banner (SHAPE §5): B1 once this page's tickable rows are all ticked and the tab holds more safe rows; B2 while every one in the tab is selected.
+  const banner = bulkKey && bar ? bannerCopy(bulkKey, tickable.length, free.length) : null
+  const bannerShown = !banner ? null : wide ? 'b2' : tickable.length > 0 && ticked.length === tickable.length && free.length > ticked.length ? 'b1' : null
+  // The run's size, for the bulk button's width reserve.
+  const runSize = model.approveBatch ? Math.min(free.length, BATCH_MAX) : free.length
   useEffect(() => { if (allRef.current) allRef.current.indeterminate = ticked.length > 0 && ticked.length < tickable.length })
 
   // Decided or removed elsewhere (409, 404): say so, since the refetch may take the row and its alert line away, and refetch so the row resolves.
@@ -364,7 +384,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   async function run(runMode: 'all' | 'selected') {
     if (!bulkKey) return
     setConfirm(null)
-    const picked = runMode === 'selected' ? ticked : free
+    const picked = runMode === 'selected' && !wide ? ticked : free
     const list = model.approveBatch ? picked.slice(0, BATCH_MAX) : picked
     const result: BulkResult = {
       total: list.length, decided: 0, stale: 0, failed: [], overlaps: [],
@@ -435,6 +455,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       state.setRunning(model.key, false)
       setProgress(null)
       setSelected(new Set())
+      setTabWide(false)
       if (unchecked.length) setHeld((prev) => new Map([...prev, ...unchecked.map((id): [string, number] => [id, readAtRef.current])]))
     })
     if (result.stale) model.refetch()
@@ -445,9 +466,33 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     }
   }
 
-  function clear() {
+  // The header box (Gmail, SHAPE §5): unticked, it ticks this page's tickable rows; mixed or ticked, it clears. Each banner is said once, from its click.
+  function tickPage() {
+    if (progress || !banner) return
+    if (ticked.length === 0) {
+      setSelected(new Set(tickable.map((row) => row.id)))
+      if (free.length > tickable.length) state.announce(banner.b1)
+    } else clearSelection()
+  }
+
+  // Clearing says the empty sentence, so the next tick of the page is said again (the region only prints what it holds).
+  function clearSelection() {
     setSelected(new Set())
-    groupRef.current?.querySelector<HTMLElement>('[data-bulk-action]')?.focus()
+    setTabWide(false)
+    state.announce('')
+  }
+
+  // B1's button selects every safe row in the tab and becomes B2's Clear selection, in the same place; Clear puts focus on the header box.
+  function onBanner() {
+    if (progress || !banner) return
+    if (wide) {
+      clearSelection()
+      allRef.current?.focus()
+      return
+    }
+    flushSync(() => setTabWide(true))
+    groupRef.current?.querySelector<HTMLElement>('[data-banner-action]')?.focus()
+    state.announce(banner.b2)
   }
 
   const copy = bulkKey && confirm && confirmCopy(bulkKey, confirm, count, rows.length - safe.length)
@@ -455,8 +500,10 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     <div
       ref={groupRef}
       data-quick-group={model.key}
-      // Below xl, a control tabbed to never hides under the stuck bar: the header (3rem) and the bar (--control-h and its 1rem padding) above it.
-      className={bar ? 'max-xl:[&_:is(a,button,input,textarea)]:scroll-mt-[calc(3rem+var(--control-h)+1rem)]' : undefined}
+      // A control tabbed to never hides under the stuck header row: the app header (3rem), then the row (below xl the band, its padding and the strip under it;
+      // from xl --table-head-h), plus the banner while it shows (two lines at the narrowest; over-reserving is harmless).
+      className={bar ? '[&_:is(a,button,input,textarea)]:scroll-mt-[calc(3rem+var(--control-h)+1.75rem+var(--banner-h,0px))] xl:[&_:is(a,button,input,textarea)]:scroll-mt-[calc(3rem+var(--table-head-h)+var(--banner-h,0px))]' : undefined}
+      style={bannerShown ? { '--banner-h': 'calc(var(--row-h) * 2)' } as CSSProperties : undefined}
     >
       {model.phase === 'loading' && <p className="text-[13px] text-[var(--color-muted-foreground)]">Loading {model.noun}…</p>}
       {model.phase === 'error' && (
@@ -465,51 +512,10 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
           <Button variant="secondary" size="sm" onClick={() => model.refetch()} aria-label={`Try again: ${model.noun}`}>Try again</Button>
         </div>
       )}
-      {bar && action && (
-        // The panel bar (SHAPE §4): Select all and Complete all at rest; the count, Clear and the selection's action once a box is ticked. Its box lines up
-        // over the row boxes and its button's right edge with the row buttons'. Below xl it sticks under the app header, inside its own panel.
-        <div className="mb-2 flex items-center justify-between gap-3 xl:h-[var(--control-h)] xl:px-[calc(1px+var(--cell-px))] max-xl:sticky max-xl:top-12 max-xl:z-20 max-xl:bg-[var(--color-background)] max-xl:px-[calc(1px+1rem)] max-xl:py-2 max-xl:shadow-[0_24px_32px_-12px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)]">
-          <div className="flex min-w-0 items-center gap-3">
-            {tickable.length > 0 && (
-              // Once ticked, the box alone: the row boxes' size-4 + touch pad, so the count sits where "Select all" was (no jump on a phone).
-              <label className={ticked.length > 0 ? `${TAP_AREA} flex size-4`
-                : 'flex min-h-[var(--control-h)] items-center gap-2 text-[13px] font-medium text-[var(--color-foreground)] pointer-coarse:min-w-[var(--tap-min)]'}>
-                <input
-                  ref={allRef}
-                  type="checkbox"
-                  className={BOX}
-                  aria-label={`Select all shown ${model.noun}`}
-                  checked={ticked.length > 0 && ticked.length === tickable.length}
-                  aria-disabled={progress ? true : undefined}
-                  onChange={(e) => { if (!progress) setSelected(new Set(e.target.checked ? tickable.map((row) => row.id) : [])) }}
-                />
-                <span className={ticked.length > 0 ? 'sr-only' : undefined}>Select all</span>
-              </label>
-            )}
-            {ticked.length > 0 && (
-              <>
-                <span className="whitespace-nowrap text-[13px] tabular-nums text-[var(--color-muted-foreground)]">{ticked.length} selected</span>
-                <Button variant="ghost" aria-disabled={progress ? true : undefined} className={progress ? HELD : undefined} onClick={() => { if (!progress) clear() }}>Clear</Button>
-              </>
-            )}
-          </div>
-          {(count > 0 || progress) && (
-            <Button
-              data-bulk-action
-              // While running, the name is the visible count (label in name, WCAG 2.5.3).
-              aria-label={progress ? undefined : action.name}
-              aria-disabled={progress ? true : undefined}
-              className={`shrink-0 ${progress ? HELD : ''}`}
-              onClick={() => { if (!progress) setConfirm(mode) }}
-            >
-              {progress && bulkKey ? runningLabel(bulkKey, progress.done, progress.total) : action.label}
-            </Button>
-          )}
-        </div>
-      )}
-      {shown.length > 0 && (
-        // The list's box (SHAPE §4): DataTable's from xl, and never a scroll container (no overflow). It is the size container for the row forms and the pager,
-        // never the group root: the bulk ConfirmDialog renders inside the root as `fixed`, and containment would centre it in the group, not the screen.
+      {(shown.length > 0 || (bar && !!progress)) && (
+        // The list's box (SHAPE §4), kept while a run goes with every row gone (its header row holds the count). DataTable's from xl, and never a scroll
+        // container (no overflow). It is the size container for the row forms and the pager, never the group root: the bulk ConfirmDialog renders inside the
+        // root as `fixed`, and containment would centre it in the group, not the screen.
         <div className="@container xl:rounded-md xl:border xl:border-[var(--color-border)] xl:bg-[var(--color-card)]">
           {/* Explicit roles: a table drawn as a list (xl) or as cards (below xl) keeps its table semantics in every browser. */}
           <table
@@ -517,13 +523,74 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
             role="table"
             className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:block xl:divide-y xl:divide-[var(--color-border)] xl:[&>tbody:last-of-type]:rounded-b-[calc(var(--radius-md)-1px)]"
           >
-            <thead role="rowgroup" className="sr-only">
-              <tr role="row" className="flex">
-                {bar && <th role="columnheader" data-select>Select</th>}
-                <th role="columnheader">{model.subjectHeader}</th>
-                <th role="columnheader" data-flags>Flags</th>
-                {[...model.columns.map((column) => column.header), ''].map((header, i) => <th key={i} role="columnheader">{header}</th>)}
+            {/* A bulk tab's header row is its bulk control (SHAPE §5): Select all in the first cell, the one bulk action in the last, the column labels sr-only
+                between. It sticks under the app header inside its own table, so it never leaves its tab. Below xl it is a Mist band on an opaque strip of
+                page paper (the cards slide under it, never through its gap); from xl the list box's Mist head. Any other tab's head is sr-only labels. */}
+            <thead
+              role="rowgroup"
+              className={bar ? 'sticky top-12 z-20 block shadow-[0_24px_32px_-12px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)] max-xl:-mb-3 max-xl:bg-[var(--color-background)] max-xl:pb-3' : 'sr-only'}
+            >
+              <tr role="row" className={bar ? 'flex items-center justify-between gap-3 bg-[var(--color-surface-container)] max-xl:min-h-[calc(var(--control-h)+1rem)] max-xl:rounded-md max-xl:px-[calc(1px+1rem)] max-xl:py-2 xl:h-[var(--table-head-h)] xl:rounded-t-[calc(var(--radius-md)-1px)] xl:px-[var(--card-pad)]' : 'flex'}>
+                {bar && (
+                  <th role="columnheader" data-select className="text-left font-normal">
+                    {tickable.length > 0 ? (
+                      <label className="flex min-h-[var(--tap-min)] items-center gap-2 text-[13px] font-medium text-[var(--color-foreground)]">
+                        <input
+                          ref={allRef}
+                          type="checkbox"
+                          className={BOX}
+                          aria-label={`Select all ${model.noun} on this page`}
+                          checked={ticked.length > 0 && ticked.length === tickable.length}
+                          aria-disabled={progress ? true : undefined}
+                          onChange={tickPage}
+                        />
+                        Select all
+                      </label>
+                    ) : <span className="sr-only">Select</span>}
+                  </th>
+                )}
+                {[model.subjectHeader, 'Flags', ...model.columns.map((column) => column.header)].map((header, i) => (
+                  <th key={i} role="columnheader" data-flags={i === 1 || undefined} className={bar ? 'sr-only' : undefined}>{header}</th>
+                ))}
+                <th role="columnheader" className="font-normal">
+                  {bulkKey && action && (count > 0 || progress) && (
+                    <Button
+                      data-bulk-action
+                      size={belowXl ? 'md' : 'sm'}
+                      // While running, the name is the visible count (label in name, WCAG 2.5.3).
+                      aria-label={progress ? undefined : action.name}
+                      aria-disabled={progress ? true : undefined}
+                      className={`shrink-0 ${progress ? HELD : ''}`}
+                      onClick={() => { if (!progress) setConfirm(mode) }}
+                    >
+                      <Reserve
+                        shown={progress ? runningLabel(bulkKey, progress.done, progress.total) : action.label}
+                        also={[actionLabel(bulkKey, 'all', free.length).label, runningLabel(bulkKey, runSize - 1, runSize)]}
+                      />
+                    </Button>
+                  )}
+                </th>
               </tr>
+              {banner && bannerShown && (
+                <tr role="row" className="flex max-xl:mt-2">
+                  <td
+                    colSpan={model.columns.length + 4}
+                    className="flex min-h-[var(--row-h)] flex-1 flex-wrap items-center gap-x-2 bg-[var(--color-surface-container-low)] px-[var(--card-pad)] py-1 text-[13px] text-[var(--color-foreground)] max-xl:rounded-md max-xl:border max-xl:border-[var(--color-border)]"
+                  >
+                    <span>{bannerShown === 'b1' ? banner.b1 : banner.b2}</span>
+                    <Button
+                      data-banner-action
+                      variant="ghost"
+                      size={belowXl ? 'md' : 'sm'}
+                      aria-disabled={progress ? true : undefined}
+                      className={progress ? HELD : undefined}
+                      onClick={onBanner}
+                    >
+                      {bannerShown === 'b1' ? banner.b1Action : 'Clear selection'}
+                    </Button>
+                  </td>
+                </tr>
+              )}
             </thead>
             {shown.map((row) => (
               <QuickRowView
@@ -531,10 +598,19 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
                 row={row}
                 columns={model.columns}
                 box={!bar ? undefined : tapOf(row) ? {
-                  checked: selected.has(row.id),
+                  // A held row is never in the tab-wide run, so it never shows ticked beside its count.
+                  checked: (wide && !unsure.has(row.id)) || selected.has(row.id),
                   // A run holds every box: its selection was taken at Confirm.
                   locked: !!progress || unsure.has(row.id),
-                  onChange: (checked) => setSelected((prev) => { const next = new Set(prev); if (checked) next.add(row.id); else next.delete(row.id); return next }),
+                  onChange: (checked) => {
+                    // Unticking a row in tab-wide mode leaves the mode and keeps the rest of this page ticked (Gmail).
+                    if (wide && !checked) {
+                      setTabWide(false)
+                      setSelected(new Set(tickable.filter((other) => other.id !== row.id).map((other) => other.id)))
+                      return
+                    }
+                    setSelected((prev) => { const next = new Set(prev); if (checked) next.add(row.id); else next.delete(row.id); return next })
+                  },
                 } : null}
                 inRun={!!progress?.ids.has(row.id) || unsure.has(row.id)}
                 unconfirmed={unsure.has(row.id)}

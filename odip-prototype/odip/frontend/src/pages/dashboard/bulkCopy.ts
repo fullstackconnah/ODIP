@@ -55,6 +55,17 @@ export function actionLabel(key: BulkKey, mode: 'all' | 'selected', n: number): 
   return done ? { label: `Mark ${all}${n} done`, name: `Mark ${all}${n} ${noun(key, n)} done` } : { label: `Approve ${all}${n}`, name: `Approve ${all}${n} ${noun(key, n)}` }
 }
 
+const BANNER: Record<BulkKey, string> = { completions: 'clean completions', leave: 'leave requests', tasks: 'tasks' }
+
+/**
+ * The banner under the header row (dtable SHAPE §5): B1 once this page's tickable rows are all ticked and the tab holds more (so `total` is always plural),
+ * and B2 once every safe row in the tab is selected.
+ */
+export function bannerCopy(key: BulkKey, onPage: number, total: number): { b1: string; b1Action: string; b2: string } {
+  const over = key === 'completions' && total > BATCH_MAX ? ` A run approves the first ${BATCH_MAX}.` : ''
+  return { b1: `All ${onPage} on this page are selected.`, b1Action: `Select all ${total} ${BANNER[key]}`, b2: `All ${total} ${BANNER[key]} are selected.${over}` }
+}
+
 /** The bar's button while a run goes: the row in flight of the total; the batch is one request. */
 export function runningLabel(key: BulkKey, done: number, total: number): string {
   if (key === 'completions') return `Approving ${total}…`
