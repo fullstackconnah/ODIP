@@ -569,7 +569,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
     }
 
     // The purge runs hourly and deletes one interval early, so a row is gone at least an hour before its 12 months and never after.
-    private static DateTime EarlyCutoff(DateTime now) => now.AddMonths(-12) + EarlyAccessPurgeBackgroundService.Interval;
+    private static DateTime EarlyCutoff(DateTime now) => EarlyAccessPurgeBackgroundService.RetentionCutoff(now);
 
     [Fact]
     public void ThePurge_RunsEveryHour()
@@ -623,6 +623,19 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         await Purger().PurgeExpiredAsync(due, CancellationToken.None);
         await using (var after = _pg.CreateContext())
             Assert.False(await after.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id), "gone by the first run at or after T + 12 months - 1 h");
+    }
+
+    [SkippableFact]
+    public async Task A29FebSignUp_IsGoneByTheRunAt28FebNoonTheNextYear()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var created = new DateTime(2024, 2, 29, 12, 0, 0, DateTimeKind.Utc);
+        var row = await SeedRowAsync("leap-day", created, created);
+
+        await Purger().PurgeExpiredAsync(new DateTime(2025, 2, 28, 12, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        Assert.False(await check.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id), "due 28 Feb 2025 12:00, so not kept to 1 Mar");
     }
 
     [SkippableFact]

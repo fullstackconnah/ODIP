@@ -56,7 +56,20 @@ public class EarlyAccessPurgeBackgroundService : BackgroundService
     }
 
     /// <summary>
-    /// Deletes sign-ups first sent at or before <paramref name="nowUtc"/> minus 12 months plus one <see cref="Interval"/>, and returns how many went.
+    /// The latest CreatedAtUtc a run at <paramref name="nowUtc"/> deletes: the newest sign-up whose <c>AddMonths(12)</c> falls at or before
+    /// now plus one <see cref="Interval"/>. AddMonths clamps (29 Feb 2024 + 12 months is 28 Feb 2025), so stepping back 12 months is not
+    /// its inverse and would miss that 29 Feb row until about 1 Mar; when one more day still lands inside the bound, take it. That deletes
+    /// the 28 Feb rows up to a day early ("or delete them sooner" is the promise) and no row is ever kept past its 12 months.
+    /// </summary>
+    public static DateTime RetentionCutoff(DateTime nowUtc)
+    {
+        var bound = nowUtc + Interval;
+        var cutoff = bound.AddMonths(-RetentionMonths);
+        return cutoff.AddDays(1).AddMonths(RetentionMonths) <= bound ? cutoff.AddDays(1) : cutoff;
+    }
+
+    /// <summary>
+    /// Deletes sign-ups first sent at or before <see cref="RetentionCutoff"/>, and returns how many went.
     /// Running hourly with the cutoff an hour early means no row survives its 12 months, whichever minute the run lands on.
     /// </summary>
     public async Task<int> PurgeExpiredAsync(DateTime nowUtc, CancellationToken ct)
@@ -65,7 +78,7 @@ public class EarlyAccessPurgeBackgroundService : BackgroundService
         var dbOptions = scope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>();
         // The table has no tenant filter; the override only satisfies the constructor, as in the bell purge.
         await using var db = new OdipDbContext(dbOptions, new Notifications.ScopedTenantOverride { IsSuperAdmin = true });
-        var cutoff = nowUtc.AddMonths(-RetentionMonths) + Interval;
+        var cutoff = RetentionCutoff(nowUtc);
         // ExecuteDeleteAsync is PostgreSQL-only here (EF InMemory has none), so its tests are PostgreSQL facts.
         // shortcut: no CreatedAtUtc index, so this is an hourly scan of a table of a few hundred rows; add one if it grows large.
         var deleted = await db.EarlyAccessRequests.Where(e => e.CreatedAtUtc <= cutoff).ExecuteDeleteAsync(ct);
