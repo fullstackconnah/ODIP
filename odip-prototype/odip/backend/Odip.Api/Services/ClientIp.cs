@@ -66,11 +66,13 @@ public static class ClientIp
         /// </para>
         ///
         /// <para>
-        /// Why the resolved address is the proxy's in the first place: the published port
-        /// is served by <c>docker-proxy</c>, a userspace proxy
+        /// Why the resolved address is the proxy's in the first place: traffic from
+        /// containers on this host (cloudflared among them) reaches the published port
+        /// through <c>docker-proxy</c>, a userspace proxy
         /// (<c>docker-proxy … -host-port 8475 -container-ip …</c>). It accepts the client's
         /// TCP connection and originates a new one to nginx, so nginx's
-        /// <c>$remote_addr</c> is the Docker bridge gateway for every caller; nginx's
+        /// <c>$remote_addr</c> is the Docker bridge gateway for those callers (LAN devices
+        /// keep their own address, measured 2026-10-17); nginx's
         /// <c>proxy_add_x_forwarded_for</c> appends that gateway, and the middleware
         /// adopts it. The genuine address never reaches this process, so no header and no
         /// application code can recover it: the information was destroyed before the
