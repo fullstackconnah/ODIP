@@ -12,8 +12,9 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class ImportValues
 {
-    private static readonly Regex Slash = new(@"^(\d{1,2})/(\d{1,2})/(\d+)$");
-    private static readonly Regex Iso = new(@"^\d{4}-\d{1,2}-\d{1,2}$");
+    // [0-9], not \d: \d also matches Arabic-Indic and other digits, which int.Parse then throws on.
+    private static readonly Regex Slash = new(@"^([0-9]{1,2})/([0-9]{1,2})/([0-9]+)$");
+    private static readonly Regex Iso = new(@"^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$");
 
     /// <summary>True for d/m/yyyy-shaped text whose second part cannot be a month (04/23/1990): the column it sits in was written month-first.</summary>
     public static bool LooksMonthFirst(string text)
