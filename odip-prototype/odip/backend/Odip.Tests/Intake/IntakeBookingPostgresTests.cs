@@ -324,6 +324,27 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(0L, await ScalarAsync(raw, BookedToStaff, sam.Id));
     }
 
+    // D4: notes and a new place still save while another booking holds the staff member's lock, because they take no lock at all.
+    [SkippableFact]
+    public async Task ANotesOnlyOrLocationOnlySave_DoesNotWaitForTheLock()
+    {
+        RequirePostgres();
+        var (tenantId, sam, admin, x, _) = await BookableAsync();
+        var (db, controller) = SuperAdminViewing(tenantId, admin.Id, lockWait: TimeSpan.FromMilliseconds(200));
+        await using var _db = db;
+        var booked = Body(sam, IntakeBookingsControllerTests.Start);
+        Assert.IsType<OkObjectResult>((await controller.Set(x.Id, booked, CancellationToken.None)).Result);
+        await using var raw = await OpenAsync();
+        await ScalarAsync(raw, HoldKey, sam.Id);
+
+        var notes = await controller.Set(x.Id, booked with { Notes = "Bring the forms" }, CancellationToken.None);
+        var place = await controller.Set(x.Id, booked with { Location = "3 Jones Rd" }, CancellationToken.None);
+        await ScalarAsync(raw, ReleaseKey, sam.Id);
+
+        Assert.IsType<OkObjectResult>(notes.Result);
+        Assert.IsType<OkObjectResult>(place.Result);
+    }
+
     // The invite goes out with the lock already let go: a second booking made while the first one is being emailed is not kept waiting.
     [SkippableFact]
     public async Task TheLock_IsReleasedBeforeTheInviteIsSent()

@@ -158,7 +158,7 @@ public class IntakeBookingsController : ControllerBase
         }
         catch (RosterBusyException)
         {
-            return Conflict(ApiResponse<ParticipantInquiryDto>.Fail($"Another booking for {staff!.FirstName} is still being saved. Wait a moment, then try again."));
+            return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(string.Format(StaffBeingSaved, staff!.FirstName)));
         }
         finally
         {
@@ -441,6 +441,7 @@ public class IntakeBookingsController : ControllerBase
                 from.BookedByName, from.OrganizerEmail, provider.Name, provider.ManagerName, provider.ManagerPhone,
                 x.IntakeUid!, x.IntakeIcsSequence, NowUtc, ReplyTo: from.ReplyTo, ContactName: x.ContactIsParticipant ? "Their own contact" : x.ContactFullName), ct);
 
+    private const string StaffBeingSaved = "Another booking for {0} is still being saved. Wait a moment, then try again.";
     private const string ChangedByOther = "Someone else just changed this visit. Reload and try again.";
     // Close and Reopen change the enquiry, not its visit: they say so as the enquiry's own edit does (ParticipantInquiriesController.ChangedByOther).
     private const string EnquiryChangedByOther = "Someone else just changed this enquiry. Reload and try again.";
