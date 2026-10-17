@@ -492,8 +492,13 @@ export default function RosterBoardPage() {
 
   async function handleConfirmDelete() {
     if (!confirmDeleteTarget) return
-    await deleteShift.mutateAsync(confirmDeleteTarget.id)
-    setConfirmDeleteTarget(null)
+    try {
+      await deleteShift.mutateAsync(confirmDeleteTarget.id)
+    } catch (err: unknown) {
+      setAssignError(extractErrorMessage(err, 'Something went wrong deleting this shift. Please try again.'))
+    } finally {
+      setConfirmDeleteTarget(null)
+    }
   }
 
   function handleAddParticipantShift(participantId: string, _participantName: string, day: string) {

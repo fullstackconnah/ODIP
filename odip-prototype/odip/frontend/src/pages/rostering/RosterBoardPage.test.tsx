@@ -565,3 +565,55 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
     expect(shown('Amy Ng')).toBe(true)
   })
 })
+
+// PT-ROSTER 3: a Delete the server refuses (the started-or-finished 409, busy, a 500) used to reject out of the confirm handler: the dialog stayed open and said nothing.
+describe('RosterBoardPage — a delete the server refuses is shown, and the dialog closes', () => {
+  const NOT_DELETABLE = "This shift has been started or finished, so it can't be deleted."
+
+  async function confirmDeleteOfMiasShift(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: "Actions for Mia Chen's shift" }))
+    await user.click(screen.getByRole('option', { name: 'Delete' }))
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete shift' })).getByRole('button', { name: 'Delete' }))
+  }
+
+  it("shows the server's own sentence in the board's dismissible alert and closes the dialog", async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockDeleteMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: [NOT_DELETABLE] } } })
+    renderPage()
+
+    await confirmDeleteOfMiasShift(user)
+
+    expect(mockDeleteMutateAsync).toHaveBeenCalledWith('shift-1')
+    const message = await screen.findByText(NOT_DELETABLE)
+    expect(message.closest('[role="alert"]')).not.toBeNull()
+    expect(screen.queryByRole('alertdialog', { name: 'Delete shift' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss error' }))
+    expect(screen.queryByText(NOT_DELETABLE)).not.toBeInTheDocument()
+  })
+
+  it('says something plain when the server sent no words (a network error)', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockDeleteMutateAsync.mockRejectedValueOnce(new Error('network'))
+    renderPage()
+
+    await confirmDeleteOfMiasShift(user)
+
+    expect(await screen.findByText('Something went wrong deleting this shift. Please try again.')).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog', { name: 'Delete shift' })).not.toBeInTheDocument()
+  })
+
+  it('shows no alert after a delete that worked', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockDeleteMutateAsync.mockResolvedValueOnce(true)
+    renderPage()
+
+    await confirmDeleteOfMiasShift(user)
+
+    expect(screen.queryByRole('alertdialog', { name: 'Delete shift' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
