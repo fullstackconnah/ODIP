@@ -17,6 +17,12 @@ public class EarlyAccessLaterSubmission
 
     public DateTime ReceivedAtUtc { get; set; }
 
+    /// <summary>
+    /// True for the one row that holds the newest repeat sent after the cap of 10 was reached; each further such repeat overwrites it
+    /// (and moves <see cref="ReceivedAtUtc"/>), and the parent's <c>OverLimitCount</c> says how many there were.
+    /// </summary>
+    public bool IsOverLimit { get; set; }
+
     // Same lengths as the parent's columns.
     public string Name { get; set; } = string.Empty;
 

@@ -427,7 +427,10 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         await using var check = _pg.CreateContext();
         var row = await check.EarlyAccessRequests.SingleAsync(e => e.Email == email);
         Assert.Equal(14, row.RequestCount);
-        Assert.Equal(10, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == row.Id));
+        Assert.Equal(10, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == row.Id && !l.IsOverLimit));
+        // The other 3 went to the single over-limit row, and the count says so even when the races overwrote each other.
+        Assert.Equal(1, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == row.Id && l.IsOverLimit));
+        Assert.Equal(3, row.OverLimitCount);
     }
 
     [SkippableFact]
@@ -531,7 +534,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
                 for (var i = 0; i < 2; i++)
                     db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
                     {
-                        Id = Guid.NewGuid(), EarlyAccessRequestId = parent.Id, ReceivedAtUtc = DateTime.UtcNow, Name = "Jane", Organisation = "Org", Message = $"m{i}",
+                        Id = Guid.NewGuid(), EarlyAccessRequestId = parent.Id, ReceivedAtUtc = DateTime.UtcNow, Name = "Jane", Organisation = "Org", Message = $"m{i}", IsOverLimit = i == 1,
                     });
             await db.SaveChangesAsync();
         }

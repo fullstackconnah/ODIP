@@ -53,4 +53,10 @@ public class EarlyAccessRequest
 
     /// <summary>Repeat sign-ups whose answers differed from the ones above, oldest first; at most 10. See <see cref="EarlyAccessLaterSubmission"/>.</summary>
     public List<EarlyAccessLaterSubmission> LaterSubmissions { get; set; } = [];
+
+    /// <summary>
+    /// Distinct repeats sent after the 10 later submissions were full. Only the newest is kept, in one <see cref="EarlyAccessLaterSubmission"/>
+    /// row with <c>IsOverLimit</c> that each further one overwrites, so a flood cannot grow the sign-up and a lost email notice loses nothing.
+    /// </summary>
+    public int OverLimitCount { get; set; }
 }

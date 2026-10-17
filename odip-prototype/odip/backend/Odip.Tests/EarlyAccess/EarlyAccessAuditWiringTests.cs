@@ -55,6 +55,15 @@ public class EarlyAccessAuditWiringTests
         Assert.Equal(1, item.GetProperty("laterSubmissions").GetArrayLength());
         var id = item.GetProperty("id").GetGuid();
 
+        // Past the cap, the newest answers are kept in the over-limit row; they must stay out of the audit log like the rest.
+        for (var i = 0; i < 12; i++)
+            Assert.Equal(HttpStatusCode.Accepted, (await host.PostSignupAsync(LaterPhone, $"Over the limit zq-over-{i}")).StatusCode);
+        using var full = JsonDocument.Parse(await (await host.AdminAsync(HttpMethod.Get, "")).Content.ReadAsStringAsync());
+        var overItem = full.RootElement.GetProperty("data").GetProperty("items").EnumerateArray().Single();
+        Assert.Equal(10, overItem.GetProperty("laterSubmissions").GetArrayLength());
+        Assert.Equal(3, overItem.GetProperty("overLimitCount").GetInt32());
+        Assert.Contains("zq-over-11", overItem.GetProperty("lastOverLimit").GetProperty("message").GetString());
+
         Assert.Equal(HttpStatusCode.OK, (await host.AdminAsync(HttpMethod.Delete, "/" + id)).StatusCode);
 
         var audit = await host.AuditRowsAsync();
@@ -63,7 +72,7 @@ public class EarlyAccessAuditWiringTests
         Assert.Equal(id, delete.EntityId);
         // Every column of every audit row, as text: none of the details may appear in any of them.
         var everything = JsonSerializer.Serialize(audit);
-        foreach (var detail in new[] { Email, "Audit Person", "Audit Care", Phone, LaterPhone, Role, "zq-4471", "zq-9902", "Second note" })
+        foreach (var detail in new[] { Email, "Audit Person", "Audit Care", Phone, LaterPhone, Role, "zq-4471", "zq-9902", "Second note", "zq-over" })
             Assert.DoesNotContain(detail, everything, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, await host.SignupRowsAsync()); // and the details really are gone from the tables
     }

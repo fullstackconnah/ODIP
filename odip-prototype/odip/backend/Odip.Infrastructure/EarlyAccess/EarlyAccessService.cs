@@ -26,7 +26,7 @@ public sealed record EarlyAccessRecordResult(
 /// the same (already normalised) address bumps <see cref="EarlyAccessRequest.LastRequestedAtUtc"/> and
 /// <see cref="EarlyAccessRequest.RequestCount"/>. The stored answers stay as first given, for good: anyone who knows an address can
 /// post to it, so a repeat must not overwrite or erase them (a removal request in the message, say). A repeat whose answers differ is
-/// stored as an <see cref="EarlyAccessLaterSubmission"/> (the first <see cref="MaxLaterSubmissions"/> per sign-up) for a person to read, which is how
+/// stored as an <see cref="EarlyAccessLaterSubmission"/> (the first <see cref="MaxLaterSubmissions"/> per sign-up, then one over-limit row the newest overwrites) for a person to read, which is how
 /// the landing page's "send the form again and say so" promise to see, change or remove details is kept.
 ///
 /// Two simultaneous requests for the same address are the interesting case, and EF InMemory cannot show
@@ -40,7 +40,7 @@ public sealed class EarlyAccessService
 {
     private const int MaxAttempts = 10;
 
-    // shortcut: the first 10 only, so a flood cannot push out an early removal request or grow a sign-up without bound; raise it if a real person needs more.
+    // shortcut: the first 10 only, plus one over-limit row holding the newest after that, so a flood cannot push out an early removal request or grow a sign-up without bound; raise it if a real person needs more.
     private const int MaxLaterSubmissions = 10;
 
     private readonly OdipDbContext _db;
@@ -91,30 +91,29 @@ public sealed class EarlyAccessService
                 // The stored answers never change. A repeat that says something different is kept beside them, up to the cap. RequestCount
                 // is a concurrency token and every repeat bumps it, so two simultaneous repeats cannot both pass the cap check.
                 // An answer already on file, the original or any stored one, stores and tells no one, so duplicates cannot fill the cap.
-                var stored = await _db.EarlyAccessLaterSubmissions.AsNoTracking()
+                var stored = await _db.EarlyAccessLaterSubmissions
                     .Where(l => l.EarlyAccessRequestId == existing.Id).ToListAsync(ct);
                 if (!SameAnswers(existing, request) && !stored.Any(l => SameAnswers(l, request)))
                 {
-                    if (stored.Count >= MaxLaterSubmissions)
+                    var keptCount = stored.Count(l => !l.IsOverLimit);
+                    var overLimit = keptCount >= MaxLaterSubmissions;
+                    // Past the cap the newest repeat is still stored, in the one over-limit row, so it survives a lost email notice.
+                    var row = overLimit ? stored.SingleOrDefault(l => l.IsOverLimit) : null;
+                    if (row is null)
                     {
-                        notice = EarlyAccessNoticeKind.SentAgainOverLimit;
+                        row = new EarlyAccessLaterSubmission { Id = Guid.NewGuid(), EarlyAccessRequestId = existing.Id, IsOverLimit = overLimit };
+                        _db.EarlyAccessLaterSubmissions.Add(row);
                     }
-                    else
-                    {
-                        notice = stored.Count + 1 == MaxLaterSubmissions ? EarlyAccessNoticeKind.SentAgainLastKept : EarlyAccessNoticeKind.SentAgain;
-                        _db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
-                        {
-                            Id = Guid.NewGuid(),
-                            EarlyAccessRequestId = existing.Id,
-                            ReceivedAtUtc = now,
-                            Name = request.Name,
-                            Organisation = request.Organisation,
-                            Role = request.Role,
-                            Phone = request.Phone,
-                            OrganisationSize = request.OrganisationSize,
-                            Message = request.Message,
-                        });
-                    }
+                    row.ReceivedAtUtc = now;
+                    row.Name = request.Name;
+                    row.Organisation = request.Organisation;
+                    row.Role = request.Role;
+                    row.Phone = request.Phone;
+                    row.OrganisationSize = request.OrganisationSize;
+                    row.Message = request.Message;
+                    if (overLimit) existing.OverLimitCount += 1;
+                    notice = overLimit ? EarlyAccessNoticeKind.SentAgainOverLimit
+                        : keptCount + 1 == MaxLaterSubmissions ? EarlyAccessNoticeKind.SentAgainLastKept : EarlyAccessNoticeKind.SentAgain;
                 }
             }
 

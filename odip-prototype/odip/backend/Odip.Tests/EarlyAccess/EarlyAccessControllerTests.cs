@@ -436,10 +436,11 @@ public class EarlyAccessControllerTests
 
         using var check = CreateDb(dbName);
         Assert.Equal(12, (await check.EarlyAccessRequests.SingleAsync()).RequestCount);
-        var kept = await check.EarlyAccessLaterSubmissions.Select(l => l.Message).ToListAsync();
+        var kept = await check.EarlyAccessLaterSubmissions.Where(l => !l.IsOverLimit).Select(l => l.Message).ToListAsync();
         Assert.Equal(10, kept.Count);
         Assert.DoesNotContain("Message 11", kept);
         Assert.Contains("Message 1", kept);
+        Assert.Equal("Message 11", (await check.EarlyAccessLaterSubmissions.SingleAsync(l => l.IsOverLimit)).Message);
     }
 
     [Fact]
@@ -554,6 +555,59 @@ public class EarlyAccessControllerTests
         Assert.Equal(EarlyAccessNoticeKind.SentAgainLastKept, kinds[10]);
         Assert.Equal(EarlyAccessNoticeKind.SentAgainOverLimit, kinds[11]);
         Assert.Equal(12, kinds.Count);
+    }
+
+    private static string?[] OriginalThenMessages(int count) =>
+        new string?[] { null }.Concat(Enumerable.Range(1, count).Select(i => (string?)$"Message {i}")).ToArray();
+
+    [Fact]
+    public async Task TheEleventhAndTwelfthDistinctRepeats_AreKeptDurably_TheTwelfthReplacingTheEleventh()
+    {
+        var dbName = Guid.NewGuid().ToString();
+
+        await SendMessages(dbName, OriginalThenMessages(12));
+
+        using var check = CreateDb(dbName);
+        var request = await check.EarlyAccessRequests.SingleAsync();
+        Assert.Equal(2, request.OverLimitCount);
+        var all = await check.EarlyAccessLaterSubmissions.ToListAsync();
+        Assert.Equal(10, all.Count(l => !l.IsOverLimit));
+        var over = Assert.Single(all, l => l.IsOverLimit);
+        Assert.Equal("Message 12", over.Message);
+        Assert.DoesNotContain(all.Where(l => !l.IsOverLimit), l => l.Message == "Message 11" || l.Message == "Message 12");
+    }
+
+    [Fact]
+    public async Task AnOverLimitRepeatIsStoredEvenWhenTheNotifierThrows_AndStillGetsThe202()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var notifier = new Mock<IEarlyAccessNotifier>();
+        notifier.Setup(n => n.NotifyNewRequest(It.IsAny<EarlyAccessNotification>())).Throws(new InvalidOperationException("queue full"));
+
+        foreach (var message in OriginalThenMessages(11))
+        {
+            using var db = CreateDb(dbName);
+            var dto = Valid();
+            dto.Message = message;
+            AssertReceived(await MakeController(db, notifier.Object).Submit(dto, CancellationToken.None));
+        }
+
+        using var check = CreateDb(dbName);
+        Assert.Equal(1, (await check.EarlyAccessRequests.SingleAsync()).OverLimitCount);
+        Assert.Equal("Message 11", (await check.EarlyAccessLaterSubmissions.SingleAsync(l => l.IsOverLimit)).Message);
+    }
+
+    [Fact]
+    public async Task ARepeatOfTheStoredOverLimitAnswers_AddsNothing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var messages = OriginalThenMessages(11).Append("Message 11").ToArray();
+
+        var kinds = await SendMessages(dbName, messages);
+
+        using var check = CreateDb(dbName);
+        Assert.Equal(1, (await check.EarlyAccessRequests.SingleAsync()).OverLimitCount);
+        Assert.Equal(12, kinds.Count); // 13 posts: the identical last repeat queued no notice
     }
 
     [Fact]
