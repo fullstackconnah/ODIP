@@ -5,6 +5,7 @@ import {
   ERROR_MESSAGE,
   MESSAGES,
   OFFLINE_MESSAGE,
+  REFUSED_MESSAGE,
   SIZES,
   initEarlyAccessForm,
   invalidMessage,
@@ -63,6 +64,10 @@ describe('alpha form: checks', () => {
     ['email', 'alex@example', 'Enter an email address like name@example.org'],
     ['role', 'r'.repeat(101), 'Keep this to 100 characters or fewer'],
     ['phone', '+61 9876 5432 ext 104', 'Use digits, spaces and + ( ) - only'],
+    ['phone', '123', 'Enter a phone number with 8 to 15 digits'],
+    ['phone', '---', 'Enter a phone number with 8 to 15 digits'],
+    ['phone', '0491+570156', 'Enter a phone number with 8 to 15 digits'],
+    ['phone', '1234567890123456', 'Enter a phone number with 8 to 15 digits'],
     ['message', 'm'.repeat(1001), 'Keep this to 1,000 characters or fewer'],
     ['organisationSize', 'Under-10', "Choose your organisation's size"],
   ] as const)('names each problem in SHAPE\'s words: %s %j', (field, value, message) => {
@@ -77,6 +82,7 @@ describe('alpha form: checks', () => {
     expect(validateField('role', 'r'.repeat(100))).toBeNull()
     expect(validateField('message', 'm'.repeat(1000))).toBeNull()
     expect(validateField('phone', '+61 (02) 9876-5432')).toBeNull()
+    expect(['', ' ', '1234 5678', '123456789012345', '+61491570156'].map((p) => validateField('phone', p))).toEqual([null, null, null, null, null])
     for (const size of SIZES) expect(validateField('organisationSize', size)).toBeNull()
     expect(validate(VALID)).toEqual({})
   })
@@ -267,7 +273,7 @@ describe('alpha form: states in the page', () => {
     controller = m.controller
     m.fill(VALID)
     m.submit()
-    await vi.waitFor(() => expect(m.shown(m.q('[data-status]'))).toBe('Check the field marked below.'))
+    await vi.waitFor(() => expect(m.shown(m.q('[data-status]'))).toBe(REFUSED_MESSAGE))
     expect(document.activeElement).toBe(m.q('[data-status]'))
   })
 

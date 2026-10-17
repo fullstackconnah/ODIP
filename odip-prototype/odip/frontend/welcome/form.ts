@@ -13,10 +13,11 @@ export const LIMITS = { name: 100, organisation: 150, role: 100, email: 254, mes
 export const MESSAGES = {
   name: 'Enter your name', organisation: "Enter your organisation's name", email: 'Enter your email address',
   emailShape: 'Enter an email address like name@example.org', organisationSize: "Choose your organisation's size",
-  phone: 'Use digits, spaces and + ( ) - only', message: 'Keep this to 1,000 characters or fewer',
+  phone: 'Use digits, spaces and + ( ) - only', phoneDigits: 'Enter a phone number with 8 to 15 digits', message: 'Keep this to 1,000 characters or fewer',
   tooLong: (n: number) => `Keep this to ${n} characters or fewer`,
 } as const
 export const OFFLINE_MESSAGE = "We couldn't reach Bunya Support. Check your connection and send again; your details are still in the form."
+export const REFUSED_MESSAGE = 'Something in the form was refused. Check it and send again.'
 export const ERROR_MESSAGE = "Something went wrong on our side and your details weren't saved. Try again in a few minutes."
 
 export type FieldErrors = Partial<Record<FieldName, string>>
@@ -35,6 +36,7 @@ export type SubmitResult =
 // Deliberately lenient: the server does the strict check and answers 400 with field errors.
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE = /^[0-9 +()-]*$/
+const PHONE_DIGITS = /^\d{8,15}$/
 
 export const invalidMessage = (n: number) => (n === 1 ? 'Check the field marked below.' : `Check the ${n} fields marked below.`)
 
@@ -56,7 +58,9 @@ export function validateField(field: FieldName, raw: string): string | null {
     case 'role':
       return v.length > LIMITS.role ? MESSAGES.tooLong(LIMITS.role) : null
     case 'phone':
-      return PHONE.test(v) ? null : MESSAGES.phone
+      // The server's rule (EarlyAccessRequestValidator): 8 to 15 digits, and a + only as the first character; a blank phone is fine.
+      if (!PHONE.test(v)) return MESSAGES.phone
+      return v && !(v.lastIndexOf('+') <= 0 && PHONE_DIGITS.test(v.replace(/\D/g, ''))) ? MESSAGES.phoneDigits : null
     case 'message':
       return v.length > LIMITS.message ? MESSAGES.message : null
   }
@@ -210,7 +214,8 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
   function markInvalid(errors: FieldErrors) {
     for (const field of FIELDS) setFieldError(field, errors[field] ?? null)
     const first = FIELDS.find((f) => errors[f])
-    showStatus(invalidMessage(Object.keys(errors).length || 1), 'error')
+    // A 400 that names no known field has nothing to mark, so the status says so itself.
+    showStatus(first ? invalidMessage(Object.keys(errors).length) : REFUSED_MESSAGE, 'error')
     if (first) inputs[first]?.focus()
     else status?.focus()
   }
