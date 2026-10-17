@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
@@ -10,18 +10,14 @@ import { TextField } from '@/components/TextField'
 import { ROW_ACTIONS_CARD, TAP_AREA, TAP_FLOOR } from '@/components/tapArea'
 import { formatRatio } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
-import { SHOWN_ROWS, isPresent, rowKey, shownCount, trackMinimums, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
+import { isPresent, pageRows, rowKey, shownCount, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 import { BATCH_MAX, actionLabel, confirmCopy, isBulkKey, resultNotice, rowRef, runningLabel, selectName, type BulkResult } from './bulkCopy'
 
 // A busy control is aria-disabled, not disabled: a disabled button drops focus in some browsers, and a refused tap must leave focus where it was (SHAPE §4).
 const HELD = 'opacity-50 cursor-not-allowed'
-// DataTable's cell: --cell-px across, no padding down, centred in the row. Below xl a row is a card and its cells are plain flex items.
-const CELL = 'px-[var(--cell-px)] align-middle max-xl:p-0'
 // DataTable's checkbox, at 16px. Its <label> carries the touch pad (an input takes no pseudo-element), so it is 44 by 44 on touch.
 const BOX = 'm-0 size-4 rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer disabled:cursor-not-allowed'
-// The box track: --cell-px, the box, --cell-px (DataTable's w-10). Fixed, so the columns never shift as rows with a box come and go.
-const BOX_TRACK = 'calc(var(--cell-px) * 2 + 1rem)'
 
 type TapAction = Extract<RowAction, { kind: 'tap' }>
 /** A row's one-tap decision: what makes it safe to tick and to Complete all (SHAPE §3). */
@@ -125,82 +121,24 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
   )
 }
 
-/** A fact cell: one plain value; a dash in the table and nothing on the card when empty. Only free text is cut (in the table) or wrapped (on a card). */
-function FactCell({ column, value }: { column: FactColumn; value: string | null | undefined | false }) {
-  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', !column.long && 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
+/**
+ * A fact cell (SHAPE §4): one plain value, left out when empty. Below xl the card wraps it as today; from xl it joins line 2's muted run, a middle dot after
+ * it when a later fact follows (so a wrapped line never starts with one), and free text takes one line with its full text in the tooltip.
+ */
+function FactCell({ column, value, sep }: { column: FactColumn; value: string | null | undefined | false; sep: boolean }) {
+  const classes = ['order-3 mt-1 text-[13px] text-[var(--color-muted-foreground)] xl:flex', column.long ? 'xl:min-w-0 xl:max-w-full' : 'whitespace-nowrap',
+    !value && 'hidden', column.fromLg && 'max-lg:hidden']
   return (
     <td role="cell" className={classes.filter(Boolean).join(' ')}>
-      {!value ? '—' : column.long ? <span className="block break-words xl:truncate" title={value}>{value}</span> : value}
+      {value && (column.long ? <span className="block break-words xl:min-w-0 xl:truncate" title={value}>{value}</span> : value)}
+      {sep && <span aria-hidden className="ml-1 shrink-0 max-xl:hidden">·</span>}
     </td>
   )
 }
 
 /**
- * The table's columns from xl (SHAPE §4), sized by content: the subject and free text grow up to their full width before anything else gets spare
- * width, so text is cut only when no column has room left. The subject wins over free text: its minimum (--subject-min, set by useSubjectMin) is its
- * full width while the free-text facts can still give way to their floor. Dates and short facts are as wide as they are and never cut. What is left
- * over sits in a gap before the buttons (`minmax(0, 1fr)`), which are as wide as the widest row's own buttons, busy labels included.
- */
-const gridColumns = (columns: FactColumn[], lead: number) => [
-  ...(lead ? [BOX_TRACK] : []), 'minmax(var(--subject-min, 0px), max-content)',
-  ...columns.map((column, i) => (column.long ? `minmax(var(--fact-min-${i + 1 + lead}, 0px), max-content)` : 'max-content')), 'minmax(0, 1fr)', 'max-content',
-].join(' ')
-// How narrow a free-text fact gets before a subject is cut.
-const FACT_FLOOR_REM = 6
-
-/**
- * Sets the table's --subject-min: the subject column's full width (text and flags), less whatever the table lacks once every free-text fact is at its
- * floor (or at its own width, when that is less), and each free-text fact's --fact-min-<track> to that floor (the arithmetic: trackMinimums). CSS grid
- * shares spare width equally between growing tracks, so without this a title is cut while a trip beside it stays whole. Re-measured when the table or a
- * subject changes size (a tab shown, fonts loaded, the window resized), and when the columns or the shown rows change. Its keys are strings, so a
- * render that changes neither does not re-subscribe: `freeText` has one character per fact column ('1' free text, '0' not); `rowIds` names the rows.
- * `lead` is 1 when the bulk box column comes first: every track and cell after it moves one along, and its fixed width counts as fixed.
- */
-function useSubjectMin(tableRef: RefObject<HTMLTableElement | null>, freeText: string, rowIds: string, lead: number) {
-  useLayoutEffect(() => {
-    const table = tableRef.current
-    if (!table || typeof ResizeObserver === 'undefined') return
-    const px = (v: string) => parseFloat(v) || 0
-    const padX = (el: Element) => { const cs = getComputedStyle(el); return px(cs.paddingLeft) + px(cs.paddingRight) }
-    const textWidth = (el: Element) => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect().width }
-    // A cell's full width: a cut span counts at its whole text (scrollWidth).
-    const natural = (td: Element) => { const span = td.querySelector('span[title]'); return (span ? span.scrollWidth : textWidth(td)) + padX(td) }
-    const fit = () => {
-      if (getComputedStyle(table).display !== 'grid') return
-      const rows = [...table.querySelectorAll(':scope > tbody > tr:not([data-detail])')]
-      const tracks = getComputedStyle(table).gridTemplateColumns.split(' ').map(px)
-      const floor = FACT_FLOOR_REM * px(getComputedStyle(document.documentElement).fontSize)
-      const subject = Math.max(0, ...rows.map((tr) => {
-        const line = tr.children[lead].firstElementChild!
-        const [text, ...flags] = [...line.children]
-        const gap = px(getComputedStyle(line).columnGap)
-        return text.scrollWidth + flags.reduce((sum, flag) => sum + gap + flag.getBoundingClientRect().width, 0) + padX(tr.children[lead])
-      }))
-      // Tracks lead+1..n are the facts (lead the subject, 0 the box when there is one; then the gap and the buttons). Free text gives way; everything
-      // else is fixed at its width.
-      const free = [...freeText].flatMap((flag, i) => (flag === '1' ? [i + 1 + lead] : []))
-      const fixed = tracks[tracks.length - 1] + (lead ? tracks[0] : 0) + [...freeText].reduce((sum, flag, i) => sum + (flag === '1' ? 0 : tracks[i + 1 + lead]), 0)
-      const facts = free.map((track) => Math.max(0, ...rows.map((tr) => natural(tr.children[track]))))
-      const mins = trackMinimums({ table: table.clientWidth, fixed, floor, subject, facts })
-      const set = (name: string, value: number) => { const v = `${Math.floor(value)}px`; if (table.style.getPropertyValue(name) !== v) table.style.setProperty(name, v) }
-      free.forEach((track, k) => set(`--fact-min-${track}`, mins.facts[k]))
-      set('--subject-min', mins.subject)
-    }
-    const observer = new ResizeObserver(fit)
-    observer.observe(table)
-    table.querySelectorAll(':scope > tbody > tr > td[data-subject] span[title]').forEach((span) => observer.observe(span))
-    return () => observer.disconnect()
-  }, [tableRef, freeText, rowIds, lead])
-}
-
-// From xl every row group and row is a subgrid of the table's columns, so each row keeps its own box (height, hairline, hover tint).
-const SUBGRID = 'xl:col-span-full xl:grid xl:grid-cols-subgrid'
-// The buttons' track: the last one, past the gap.
-const LAST_TRACK = 'xl:col-[-2/-1]'
-
-/**
- * One decision row (SHAPE §4, §6): its own row group, so its error line and form (the detail row) stay with it. From xl a table row of --row-h with the
- * buttons at the right edge; below xl the same elements reflow into the house phone card: the subject and its flags, the facts line, the buttons under them.
+ * One decision row (dtable SHAPE §4): its own row group, so its error line and form (the detail row) stay with it. Below xl the house phone card: the
+ * subject and its flags, the facts line, the buttons under them. From xl a list row of two lines: the box, the subject and the buttons; then the flags and the facts.
  */
 function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDone, onRefused }: {
   row: QuickRow
@@ -261,13 +199,17 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
 
   const held = busy ? HELD : undefined
   const form = formOpen && formAction
+  const flagged = row.flags.length > 0 || unconfirmed
+  const filled = row.facts.map(Boolean)
   return (
-    <tbody ref={rowRef} role="rowgroup" className={`max-xl:block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4 ${SUBGRID}`}>
-      <tr role="row" className={`max-xl:flex max-xl:flex-wrap max-xl:items-center max-xl:gap-x-3 max-xl:gap-y-1 xl:h-[var(--row-h)] xl:items-center xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)] ${SUBGRID}`}>
+    <tbody ref={rowRef} role="rowgroup" className="block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4 xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)]">
+      {/* One flex row, two looks: the card's lines below xl, the list row's two lines from xl (buttons on line 1 by `order`, the ::after breaks to line 2). Every
+          line-1 item and line-2 item carries the 4px between lines itself (gap-y-0), so the break adds nothing; below xl the row's -mt-1 takes back line 1's. */}
+      <tr role="row" className={`relative flex flex-wrap gap-y-0 after:order-2 after:h-0 after:basis-full after:content-[''] max-xl:-mt-1 max-xl:items-center max-xl:gap-x-3 xl:items-start xl:gap-x-2 xl:px-[var(--card-pad)] xl:py-2 ${box !== undefined ? 'xl:pl-[calc(var(--card-pad)+1.5rem)]' : ''}`}>
         {box !== undefined && (
-          // Below xl the box leads the card's subject line, on its first line (the subject wraps beside it). A row with nothing to tick keeps its empty
-          // cell, in the table and on a card, so every name in the list starts at one edge.
-          <td role="cell" data-select className={`${CELL} max-xl:w-4 max-xl:shrink-0 max-xl:self-start max-xl:pt-0.5`}>
+          // Below xl the box leads the card's subject line. From xl it sits in the row's left padding on the subject's first line, so both lines start at the
+          // subject's x. A row with nothing to tick keeps its empty cell, so every name in the list starts at one edge.
+          <td role="cell" data-select className="max-xl:mt-1 max-xl:w-4 max-xl:shrink-0 max-xl:self-start max-xl:pt-0.5 xl:absolute xl:left-[var(--card-pad)] xl:top-2.5">
             {box && tapAction && (
               <label className={`${TAP_AREA} flex size-4`}>
                 <input
@@ -282,17 +224,18 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
             )}
           </td>
         )}
-        <td role="cell" data-subject className={`${CELL} ${box !== undefined ? 'max-xl:min-w-0 max-xl:basis-[calc(100%-1.75rem)]' : 'max-xl:basis-full'}`}>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 xl:flex-nowrap">
-            <span className="min-w-0 text-sm font-semibold text-[var(--color-foreground)] xl:truncate" title={row.subject}>{row.subject}</span>
-            {row.flags.slice(0, 2).map((flag) => (
-              <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
-            ))}
-            {unconfirmed && <StatusBadge tone="neutral" label="Not confirmed yet" className="shrink-0 whitespace-nowrap" />}
-          </div>
+        <td role="cell" data-subject className={`min-w-0 max-xl:mt-1 xl:flex-1 ${box !== undefined ? 'max-xl:max-w-[calc(100%-1.75rem)]' : 'max-xl:max-w-full'}`}>
+          <span className="text-sm font-semibold text-[var(--color-foreground)] xl:line-clamp-2" title={row.subject}>{row.subject}</span>
         </td>
-        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} />)}
-        <td role="cell" className={`${CELL} whitespace-nowrap max-xl:mt-2 max-xl:basis-full ${LAST_TRACK} ${row.actions.length === 0 ? 'max-xl:hidden' : ''}`}>
+        {/* After the subject on the card's first line (the row's 12px gap less 4: today's 8px), leading line 2 from xl. */}
+        <td role="cell" data-flags className={flagged ? 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 max-xl:-ml-1 xl:order-3' : 'hidden'}>
+          {row.flags.slice(0, 2).map((flag) => (
+            <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
+          ))}
+          {unconfirmed && <StatusBadge tone="neutral" label="Not confirmed yet" className="shrink-0 whitespace-nowrap" />}
+        </td>
+        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} sep={filled[i] && filled.slice(i + 1).some(Boolean)} />)}
+        <td role="cell" className={`order-4 mt-3 basis-full whitespace-nowrap xl:order-1 xl:mt-0 xl:shrink-0 xl:basis-auto ${row.actions.length === 0 ? 'hidden' : ''}`}>
           {row.actions.length > 0 && (
             <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
               {row.actions.map((action) =>
@@ -314,9 +257,10 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
                   </Button>
                 ) : (
                   <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined} className={held} onClick={() => tap(action)}>
-                    {/* An invisible, zero-height copy of the busy label holds the button at the wider of the two, so a tap never moves the columns. */}
-                    <span data-reserve={action.busyLabel} className="grid after:invisible after:h-0 after:content-[attr(data-reserve)]">
-                      {tapping ? action.busyLabel : action.label}
+                    {/* Both labels in one grid cell, the one not shown invisible: the button keeps the wider one's width at one line's height (SHAPE §4). */}
+                    <span className="grid">
+                      <span aria-hidden={tapping || undefined} className={`[grid-area:1/1] ${tapping ? 'invisible' : ''}`}>{action.label}</span>
+                      <span aria-hidden={!tapping || undefined} className={`[grid-area:1/1] ${tapping ? '' : 'invisible'}`}>{action.busyLabel}</span>
                     </span>
                   </Button>
                 ),
@@ -326,8 +270,8 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
         </td>
       </tr>
       {(error || form) && (
-        <tr data-detail role="row" className="block xl:col-span-full">
-          <td role="cell" colSpan={columns.length + 2 + (box === undefined ? 0 : 1)} className="block px-[var(--cell-px)] pb-2 max-xl:p-0 max-xl:pt-3">
+        <tr data-detail role="row" className="block">
+          <td role="cell" colSpan={columns.length + 3 + (box === undefined ? 0 : 1)} className="block max-xl:pt-3 xl:px-[var(--card-pad)] xl:pb-2">
             {error && <p role="alert" className="pb-1 text-xs text-[var(--color-destructive)]">{error}</p>}
             {form && <RowForm id={formId} form={form.form} onClose={closeForm} onBusy={setSubmitting} onDone={done} onRefused={onRefused} />}
           </td>
@@ -351,7 +295,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const rows = visibleRows(model, state.gone)
   // Rows only once every request has answered: a group whose other list is still waiting or failed shows its one line, not half its rows (SHAPE §6).
   const ready = model.phase === 'ready'
-  const shown = ready ? rows.slice(0, SHOWN_ROWS) : []
+  const shown = ready ? pageRows(rows, 1) : []
   const cut = ready && shownCount(model, state.gone) > shown.length
   const notices = state.notices.filter((notice) => notice.subject === model.key)
 
@@ -379,12 +323,10 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id) && !unsure.has(row.id))
   const ticked = tickable.filter((row) => selected.has(row.id))
   const bar = !!bulkKey && (safe.some((row) => !unsure.has(row.id)) || !!progress)
-  const lead = bar ? 1 : 0
   const mode = ticked.length > 0 ? 'selected' : 'all'
   const count = mode === 'selected' ? ticked.length : free.length
   const action = bulkKey && actionLabel(bulkKey, mode, count)
   useEffect(() => { if (allRef.current) allRef.current.indeterminate = ticked.length > 0 && ticked.length < tickable.length })
-  useSubjectMin(tableRef, model.columns.map((column) => (column.long ? '1' : '0')).join(''), shown.map((row) => row.id).join('\n'), lead)
 
   // Decided or removed elsewhere (409, 404): say so, since the refetch may take the row and its alert line away, and refetch so the row resolves.
   function refused(err: unknown, message: string) {
@@ -566,21 +508,21 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         </div>
       )}
       {shown.length > 0 && (
-        <div className="xl:overflow-x-auto xl:rounded-md xl:border xl:border-[var(--color-border)] xl:bg-[var(--color-card)]">
-          {/* Explicit roles: a table drawn as a grid (xl) or as cards (below xl) keeps its table semantics in every browser. */}
+        // The list's box (SHAPE §4): DataTable's from xl, and never a scroll container (no overflow). It is the size container for the row forms and the pager,
+        // never the group root: the bulk ConfirmDialog renders inside the root as `fixed`, and containment would centre it in the group, not the screen.
+        <div className="@container xl:rounded-md xl:border xl:border-[var(--color-border)] xl:bg-[var(--color-card)]">
+          {/* Explicit roles: a table drawn as a list (xl) or as cards (below xl) keeps its table semantics in every browser. */}
           <table
             ref={tableRef}
             role="table"
-            style={{ gridTemplateColumns: gridColumns(model.columns, lead) }}
-            className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:grid xl:divide-y xl:divide-[var(--color-border)]"
+            className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:block xl:divide-y xl:divide-[var(--color-border)] xl:[&>tbody:last-of-type]:rounded-b-[calc(var(--radius-md)-1px)]"
           >
-            <thead role="rowgroup" className={`max-xl:hidden ${SUBGRID}`}>
-              {/* The header band (bolder, SHAPE §2): Mist, so it reads as the table's head and never as a hovered row (that is surface-container-low). */}
-              <tr role="row" className={`h-[var(--table-head-h)] bg-[var(--color-surface-container)] xl:items-center ${SUBGRID}`}>
-                {lead > 0 && <th role="columnheader" data-select className={CELL}><span className="sr-only">Select</span></th>}
-                {[model.subjectHeader, ...model.columns.map((column) => column.header), ''].map((header, i) => (
-                  <th key={i} role="columnheader" className={`${CELL} ${i === model.columns.length + 1 ? LAST_TRACK : ''} whitespace-nowrap text-left text-xs font-semibold text-[var(--color-muted-foreground)]`}>{header}</th>
-                ))}
+            <thead role="rowgroup" className="sr-only">
+              <tr role="row" className="flex">
+                {bar && <th role="columnheader" data-select>Select</th>}
+                <th role="columnheader">{model.subjectHeader}</th>
+                <th role="columnheader" data-flags>Flags</th>
+                {[...model.columns.map((column) => column.header), ''].map((header, i) => <th key={i} role="columnheader">{header}</th>)}
               </tr>
             </thead>
             {shown.map((row) => (

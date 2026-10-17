@@ -44,65 +44,81 @@ const bodyRows = () => screen.queryAllByRole('row').filter((tr) => tr.closest('t
 /** A decision row's row group: its row, and its detail row while it has one. */
 const rowOf = (subject: string) => screen.getByText(subject).closest('tbody')!
 
-describe('QuickGroup — the table', () => {
-  it('heads its columns with the subject, then each fact, then an empty actions header', () => {
+describe('QuickGroup — the row (SHAPE §4)', () => {
+  it('heads every column with an sr-only label', () => {
     render(<Harness model={model()} />)
 
-    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Note', ''])
-    // The header row is the table's look from xl; below xl each row is a card and the header is not shown.
-    expect(screen.getAllByRole('row')[0].closest('thead')).toHaveClass('max-xl:hidden')
+    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Staff', 'Flags', 'Type', 'Dates', 'Note', ''])
+    expect(screen.getAllByRole('row')[0].closest('thead')).toHaveClass('sr-only')
   })
 
-  it('draws one plain value per column, a dash for a missing one, and cuts long text in the table with its full text in the tooltip', () => {
-    render(<Harness model={model({ rows: [row('a', { facts: ['Annual leave', '20–24 Oct 2026, 5 days', 'Family wedding'] }), row('b')] })} />)
+  it('draws the flags in their own cell after the subject, at most two', () => {
+    const flags = [{ label: '1 incident', tone: 'danger' as const }, { label: 'Outlier time', tone: 'warning' as const }, { label: 'Manual start', tone: 'warning' as const }]
+    render(<Harness model={model({ count: 1, rows: [row('a', { flags })] })} />)
 
-    expect(within(rowOf('Person a')).getAllByRole('cell').map((td) => td.textContent)).toEqual(['Person a', 'Annual leave', '20–24 Oct 2026, 5 days', 'Family wedding', ''])
-    expect(within(rowOf('Person b')).getAllByRole('cell')[3]).toHaveTextContent('—')
-    expect(screen.getByText('Family wedding')).toHaveAttribute('title', 'Family wedding')
-    expect(screen.getByText('Family wedding')).toHaveClass('xl:truncate')
+    const cells = within(rowOf('Person a')).getAllByRole('cell')
+    expect(cells.slice(0, 2).map((td) => td.textContent)).toEqual(['Person a', '1 incidentOutlier time'])
+    expect(cells[1]).toHaveAttribute('data-flags')
+    expect(screen.queryByText('Manual start')).not.toBeInTheDocument()
+    expect(screen.getByText('Person a')).toHaveAttribute('title', 'Person a')
+    expect(screen.getByText('Person a')).toHaveClass('xl:line-clamp-2')
   })
 
-  // jsdom has no layout: the sizing rule is pinned as the grid template; the captures measure it (no text cut while any column has spare width).
-  it('sizes its columns by their content from xl: text grows to its full width before the spare goes to a gap ahead of the buttons', () => {
-    render(<Harness model={model()} />)
-
-    const table = screen.getByRole('table')
-    expect(table).toHaveClass('xl:grid')
-    // Subject and free text: no minimum, up to their content. Dates and short facts: their content. Then the spare. Then the buttons, as wide as they are.
-    // The subject's minimum is measured (--subject-min): it keeps its full width until every free-text fact is down to its floor.
-    // A free-text fact's minimum is its floor (--fact-min-<grid track>), so the space left after the subject's minimum is never shared back to the subject.
-    expect(table.style.gridTemplateColumns).toBe('minmax(var(--subject-min, 0px), max-content) max-content max-content minmax(var(--fact-min-3, 0px), max-content) minmax(0, 1fr) max-content')
-    for (const tr of screen.getAllByRole('row')) expect(tr).toHaveClass('xl:grid-cols-subgrid', 'xl:col-span-full')
-    // The buttons sit in the last track, past the spare.
-    expect(within(rowOf('Person a')).getAllByRole('cell').at(-1)).toHaveClass('xl:col-[-2/-1]')
-    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass('xl:col-[-2/-1]')
-  })
-
-  it('reserves the busy label on a one-tap button, so "Approving…" never moves the columns', () => {
-    render(<Harness model={model({ count: 1, rows: [row('a', { actions: [approve('a', vi.fn())] })] })} />)
-
-    const button = screen.getByRole('button', { name: 'Approve leave: Person a' })
-    expect(button).toHaveTextContent(/^Approve$/)
-    expect(button.querySelector('[data-reserve]')).toHaveAttribute('data-reserve', 'Approving…')
-    // A date never breaks or is cut, at any width.
-    expect(within(rowOf('Person a')).getAllByRole('cell')[2]).toHaveClass('whitespace-nowrap')
-  })
-
-  it('leaves a missing fact out of the card (below xl), and a from-lg column off the card below lg', () => {
+  it('leaves an empty fact out at every width, and a from-lg fact off below lg', () => {
     const columns = [{ header: 'Type' }, { header: 'Due' }, { header: 'Trip', long: true, fromLg: true }]
     render(<Harness model={model({ count: 1, columns, rows: [row('a', { facts: [null, '8 Oct', 'Beach Trip'] })] })} />)
 
     const cells = within(rowOf('Person a')).getAllByRole('cell')
-    expect(cells[1]).toHaveTextContent('—')
-    expect(cells[1]).toHaveClass('max-xl:hidden')
-    expect(cells[2]).not.toHaveClass('max-xl:hidden')
-    expect(cells[3]).toHaveClass('max-lg:hidden')
+    expect(cells[2]).toHaveClass('hidden')
+    expect(cells[2]).toHaveTextContent('')
+    expect(cells[3]).not.toHaveClass('hidden')
+    expect(cells[4]).toHaveClass('max-lg:hidden')
+    // A date never breaks or is cut, at any width.
+    expect(cells[3]).toHaveClass('whitespace-nowrap')
   })
 
-  it('shows five rows and says "See all" (no number) when there are more, naming the group for a screen reader', () => {
-    render(<Harness model={model({ count: 7, rows: ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => row(id)) })} />)
+  it('separates the facts with a middle dot, skipping an empty one', () => {
+    render(<Harness model={model({ count: 1, rows: [row('a', { facts: ['Annual leave', null, 'Family wedding'] })] })} />)
 
-    expect(bodyRows()).toHaveLength(5)
+    const dots = rowOf('Person a').querySelectorAll('[aria-hidden="true"]')
+    expect(dots).toHaveLength(1)
+    expect(dots[0]).toHaveTextContent('·')
+    expect(dots[0].closest('td')).toHaveTextContent(/^Annual leave·$/)
+    expect(dots[0].previousSibling?.textContent).toBe('Annual leave')
+    expect(screen.getByText('Family wedding')).toHaveAttribute('title', 'Family wedding')
+    expect(screen.getByText('Family wedding')).toHaveClass('xl:truncate')
+  })
+
+  it("holds a one-tap button's busy label in the same grid cell, hidden, and has no reserve attribute", () => {
+    const { container } = render(<Harness model={model({ count: 1, rows: [row('a', { actions: [approve('a', vi.fn())] })] })} />)
+
+    const button = screen.getByRole('button', { name: 'Approve leave: Person a' })
+    const [label, busy] = within(button).getAllByText(/^Approv/)
+    expect(label).toHaveTextContent('Approve')
+    expect(busy).toHaveTextContent('Approving…')
+    expect(label).toHaveClass('[grid-area:1/1]')
+    expect(busy).toHaveClass('[grid-area:1/1]', 'invisible')
+    expect(busy).toHaveAttribute('aria-hidden', 'true')
+    expect(label).not.toHaveClass('invisible')
+    expect(container.querySelector('[data-reserve]')).toBeNull()
+  })
+
+  // jsdom has no layout, so the responsive contract is pinned as classes; the captures measure it.
+  it('is a house card below xl and a list row from xl, in a box that never scrolls', () => {
+    render(<Harness model={model({ count: 1, rows: [row('a')] })} />)
+
+    expect(rowOf('Person a')).toHaveClass('max-xl:rounded-2xl', 'max-xl:border', 'xl:hover:bg-[var(--color-surface-container-low)]')
+    const group = document.querySelector('[data-quick-group]')!
+    expect(group.className).not.toContain('@container')
+    expect(screen.getByRole('table').parentElement).toHaveClass('@container', 'xl:rounded-md', 'xl:border')
+    expect(rowOf('Person a').querySelector('td[data-flags]')).toHaveClass('hidden')
+    for (const el of group.querySelectorAll('*')) expect(String(el.className)).not.toMatch(/overflow-(x-|y-)?(auto|scroll|hidden)/)
+  })
+
+  it('shows ten rows and says "See all" (no number) when the server counts more, naming the group for a screen reader', () => {
+    render(<Harness model={model({ count: 30, rows: Array.from({ length: 12 }, (_, i) => row(String(i))) })} />)
+
+    expect(bodyRows()).toHaveLength(10)
     const link = screen.getByRole('link', { name: 'See all leave requests' })
     expect(link.textContent).toBe('See all')
   })
@@ -117,31 +133,11 @@ describe('QuickGroup — the table', () => {
 })
 
 describe('QuickGroup — a row', () => {
-  it('draws at most two flags after the subject, each a word, and cuts the subject only in the table', () => {
-    const flags = [{ label: '1 incident', tone: 'danger' as const }, { label: 'Outlier time', tone: 'warning' as const }, { label: 'Manual start', tone: 'warning' as const }]
-    render(<Harness model={model({ count: 1, rows: [row('a', { flags })] })} />)
-
-    expect(screen.getByText('Person a')).toHaveAttribute('title', 'Person a')
-    expect(screen.getByText('Person a')).toHaveClass('xl:truncate')
-    expect(screen.getByText('1 incident')).toBeInTheDocument()
-    expect(screen.getByText('Outlier time')).toBeInTheDocument()
-    expect(screen.queryByText('Manual start')).not.toBeInTheDocument()
-  })
-
-  // jsdom has no layout, so the responsive contract is pinned as classes; the captures measure it.
-  it('is a house phone card below xl (drawn on its row group), and a --row-h table row from xl', () => {
-    render(<Harness model={model({ count: 1, rows: [row('a')] })} />)
-
-    expect(rowOf('Person a').className).toContain('max-xl:rounded-2xl')
-    expect(rowOf('Person a').className).toContain('max-xl:border')
-    expect(screen.getByText('Person a').closest('tr')).toHaveClass('xl:h-[var(--row-h)]')
-  })
-
   it('puts its buttons in the house row-action cluster: 44px on a phone card, a wider gap on touch, the one-tap action last and primary', () => {
     render(<Harness model={model({ count: 1, rows: [row('a', { actions: [decline('a'), approve('a', vi.fn())] })] })} />)
 
     const buttons = within(rowOf('Person a')).getAllByRole('button')
-    expect(buttons.map((b) => b.textContent)).toEqual(['Decline', 'Approve'])
+    expect(buttons.map((b) => b.getAttribute('aria-label')!.split(' ')[0])).toEqual(['Decline', 'Approve'])
     expect(buttons[0].parentElement!.className).toContain(ROW_ACTIONS_CARD)
     expect(buttons[0].parentElement).toHaveClass('gap-1.5', 'pointer-coarse:gap-2')
     expect(buttons[1].className).toContain('bg-[var(--color-primary)]')
@@ -194,7 +190,8 @@ describe('QuickGroup — one tap', () => {
     fireEvent.click(button)
     fireEvent.click(button)
     expect(run).toHaveBeenCalledTimes(1)
-    expect(button).toHaveTextContent('Approving…')
+    expect(within(button).getByText('Approving…')).not.toHaveClass('invisible')
+    expect(within(button).getByText('Approve')).toHaveClass('invisible')
     expect(button).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('button', { name: 'Decline leave: Person a' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('button', { name: 'Approve leave: Person b' })).not.toHaveAttribute('aria-disabled')
@@ -289,7 +286,7 @@ describe('QuickGroup — an action that needs input', () => {
     const form = document.getElementById(opener.getAttribute('aria-controls')!)!
     expect(form.tagName).toBe('FORM')
     expect(rowOf('Person a')).toContainElement(form)
-    expect(form.closest('td')).toHaveAttribute('colspan', '5')
+    expect(form.closest('td')).toHaveAttribute('colspan', '6')
     expect(document.activeElement).toBe(within(form).getByLabelText(/Reason \(optional\)/))
     expect(within(form).getByText('Person sees this.')).toBeInTheDocument()
   })
@@ -433,25 +430,22 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
   it('adds a box column to a bulk tab with a one-tap row: a box on each such row only, named from its action, and Select all in the bar', () => {
     render(<Harness model={model({ rows: [tapRow('a'), row('b', { flags: [{ label: 'Your request', tone: 'neutral' }] })] })} />)
 
-    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Select', 'Staff', 'Type', 'Dates', 'Note', ''])
+    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Select', 'Staff', 'Flags', 'Type', 'Dates', 'Note', ''])
     // A row with nothing to tick keeps its empty box cell on a card too, so every name in the list starts at one edge (finish fix 3).
     const empty = rowOf('Person b').querySelector('td[data-select]')!
     expect(empty).toBeEmptyDOMElement()
     expect(empty).not.toHaveClass('max-xl:hidden')
-    expect(rowOf('Person b').querySelector('td[data-subject]')).toHaveClass('max-xl:basis-[calc(100%-1.75rem)]')
+    expect(rowOf('Person b').querySelector('td[data-subject]')).toHaveClass('max-xl:max-w-[calc(100%-1.75rem)]')
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
     expect(within(rowOf('Person b')).queryByRole('checkbox')).toBeNull()
     expect(screen.getByRole('checkbox', { name: 'Select all shown leave requests' })).not.toBeChecked()
     expect(screen.getByRole('button', { name: 'Approve 1 leave request' })).toHaveTextContent('Approve 1')
-    // The box track is fixed, so the subject's and the free-text fact's minimums move one track along.
-    expect(screen.getByRole('table').style.gridTemplateColumns)
-      .toBe('calc(var(--cell-px) * 2 + 1rem) minmax(var(--subject-min, 0px), max-content) max-content max-content minmax(var(--fact-min-4, 0px), max-content) minmax(0, 1fr) max-content')
   })
 
   it('draws no column and no bar where nothing is safe, or on a tab without a bulk action', () => {
     const { unmount } = render(<Harness model={model()} />)
     expect(screen.queryByRole('checkbox')).toBeNull()
-    expect(screen.getAllByRole('columnheader')).toHaveLength(5)
+    expect(screen.getAllByRole('columnheader')).toHaveLength(6)
     unmount()
 
     render(<Harness model={model({ key: 'incidents', rows: [tapRow('a')] })} />)
@@ -459,11 +453,11 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(screen.queryByRole('button', { name: /^Approve all|^Approve 1 / })).toBeNull()
   })
 
-  it('counts every safe row in the whole tab for Complete all, not only the five shown', () => {
-    render(<Harness model={model({ count: 7, rows: ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => tapRow(id)) })} />)
+  it('counts every safe row in the whole tab for Complete all, not only the ten shown', () => {
+    render(<Harness model={model({ count: 12, rows: Array.from({ length: 12 }, (_, i) => tapRow(String(i))) })} />)
 
-    expect(screen.getAllByRole('checkbox', { name: /^Select leave/ })).toHaveLength(5)
-    expect(screen.getByRole('button', { name: 'Approve all 7 leave requests' })).toHaveTextContent('Approve all 7')
+    expect(screen.getAllByRole('checkbox', { name: /^Select leave/ })).toHaveLength(10)
+    expect(screen.getByRole('button', { name: 'Approve all 12 leave requests' })).toHaveTextContent('Approve all 12')
   })
 
   it("swaps Complete all for the selection's action when a box is ticked: a count, Clear, Select all mixed; Clear puts focus back on the action", () => {

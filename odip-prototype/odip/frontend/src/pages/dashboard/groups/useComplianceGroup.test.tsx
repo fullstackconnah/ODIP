@@ -43,7 +43,7 @@ describe('Staff compliance group — what it lists', () => {
     expect(facts('Sam Lee')).toEqual(['First Aid', '3 Oct'])
     expect(facts('Ben Ito')).toEqual(['First Aid', '30 Oct'])
     // Undated: a dash in the table (and nothing on the card).
-    expect(facts('Cy Moss')).toEqual(['Driver Licence', '—'])
+    expect(facts('Cy Moss')).toEqual(['Driver Licence', ''])
     for (const flag of ['Expired', 'Expires today', '16 days', 'No date set']) expect(screen.getByText(flag)).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Credentials (4)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add expiry: Cy Moss, driver licence' })).toBeInTheDocument()
