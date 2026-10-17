@@ -18,7 +18,7 @@ function providerClock(minutesFromNow: number): { date: string; time: string } {
 test.describe('dashboard quick actions', () => {
   test('a coordinator approves a leave request on the dashboard row', async ({ page, session }) => {
     const staff = await makeStaff(session);
-    // Tomorrow: the group lists pending requests soonest start first, so the soonest start keeps this one on the dashboard's first five.
+    // Tomorrow: the group lists pending requests soonest start first, so the soonest start keeps this one on the dashboard's first page of ten.
     const start = addDays(sydneyToday(), 1);
     // The worker asks (POST /portal/leave is Pending); a coordinator's POST /leave on someone's behalf is approved at once (LeaveController.CreateLeave).
     expect(staff.username, 'the staff-create response names the sign-in user').toBeTruthy();
@@ -27,13 +27,13 @@ test.describe('dashboard quick actions', () => {
       leaveType: 'Annual', startDate: start, endDate: addDays(start, 1), reason: `E2E ${staff.token}`,
     }));
     // The e2e database is shared by every spec (bell.spec.ts leaves a pending request, and cancels it), so check the precondition rather than hope:
-    // the dashboard shows the five soonest-starting pending requests, leave and unavailability merged (useLeaveGroup).
+    // the dashboard shows the ten soonest-starting (page 1) pending requests, leave and unavailability merged (useLeaveGroup).
     const pendingLeave = (await expectStatus('pending leave', 200, await call(session, 'GET', '/leave?status=Pending'))).data as any[];
     const pendingRules = (await expectStatus('pending unavailability', 200, await call(session, 'GET', '/leave/unavailability?status=Pending'))).data as any[];
     const soonest = [...pendingLeave.map((l) => ({ id: l.id, start: l.startDate as string })), ...pendingRules.map((r) => ({ id: r.id, start: r.effectiveFrom as string }))]
       .sort((a, b) => a.start.localeCompare(b.start)).map((r) => r.id);
     const leaveAt = soonest.indexOf(created.data.id);
-    expect(leaveAt >= 0 && leaveAt < 5, `the request is pending row ${leaveAt + 1} by start date: the dashboard shows the first five`).toBe(true);
+    expect(leaveAt >= 0 && leaveAt < 10, `the request is pending row ${leaveAt + 1} by start date: page 1 of the dashboard shows the first ten`).toBe(true);
 
     await page.goto('/');
     // One tab per kind; which opens first depends on what lands first, so pick this one (its name carries its count, or "loading").
@@ -70,10 +70,10 @@ test.describe('dashboard quick actions', () => {
     // Only a clean row is approved in one tap. If this fails, the shift's times or the provider zone are off, not the dashboard.
     expect((queue.data.items as any[]).find((i) => i.shiftId === shift.data.id))
       .toMatchObject({ isOutlierVariance: false, dosesWithoutOutcome: 0, startWasManual: false, incidentCount: 0 });
-    // The dashboard asks the same queue, in the same order (outliers first, then service date, then start), for its first five. Another spec's
+    // The dashboard asks the same queue, in the same order (outliers first, then service date, then start), for its first ten (page 1). Another spec's
     // PendingReview shift ahead of this one would push it off: check it, so a failure names the cause instead of a missing button.
     const shiftAt = (queue.data.items as any[]).findIndex((i) => i.shiftId === shift.data.id);
-    expect(shiftAt >= 0 && shiftAt < 5, `the shift is row ${shiftAt + 1} of the review queue: the dashboard shows the first five`).toBe(true);
+    expect(shiftAt >= 0 && shiftAt < 10, `the shift is row ${shiftAt + 1} of the review queue: page 1 of the dashboard shows the first ten`).toBe(true);
 
     await page.goto('/');
     // One tab per kind; which opens first depends on what lands first, so pick this one (its name carries its count, or "loading").

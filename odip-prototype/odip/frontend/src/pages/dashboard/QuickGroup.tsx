@@ -142,7 +142,7 @@ function Pager({ page, pages, total, held, onPage }: { page: number; pages: numb
   )
   return (
     <div className="flex min-h-[var(--row-h)] items-center justify-between gap-2 text-sm max-xl:mt-3 xl:border-t xl:border-[var(--color-border)] xl:px-[var(--card-pad)]">
-      <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
+      <span className="text-[var(--color-muted-foreground)]">
         Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, total)} of {total}
       </span>
       <div className="flex items-center gap-2">
@@ -155,16 +155,16 @@ function Pager({ page, pages, total, held, onPage }: { page: number; pages: numb
 }
 
 /**
- * A fact cell (SHAPE §4): one plain value, left out when empty. Below xl the card wraps it as today; from xl it joins line 2's muted run, a middle dot after
- * it when a later fact follows (so a wrapped line never starts with one), and free text takes one line with its full text in the tooltip.
+ * A fact cell (SHAPE §4): one plain value, left out when empty. Below xl the card wraps it as today; from xl it joins line 2's muted run, set apart by the
+ * row's 12px gap (no dot, so a wrapped line never ends in one). Free text takes the rest of its line (a 8rem floor, else it wraps to its own) and cuts
+ * there, with its full text in the tooltip.
  */
-function FactCell({ column, value, sep }: { column: FactColumn; value: string | null | undefined | false; sep: boolean }) {
-  const classes = ['order-3 mt-1 text-[13px] text-[var(--color-muted-foreground)] xl:flex', column.long ? 'xl:min-w-0 xl:max-w-full' : 'whitespace-nowrap',
+function FactCell({ column, value }: { column: FactColumn; value: string | null | undefined | false }) {
+  const classes = ['order-3 mt-1 text-[13px] text-[var(--color-muted-foreground)] xl:flex', column.long ? 'xl:min-w-0 xl:basis-32 xl:grow xl:max-w-max' : 'whitespace-nowrap',
     !value && 'hidden', column.fromLg && 'max-lg:hidden']
   return (
     <td role="cell" className={classes.filter(Boolean).join(' ')}>
       {value && (column.long ? <span className="block break-words xl:min-w-0 xl:truncate" title={value}>{value}</span> : value)}
-      {sep && <span aria-hidden className="ml-1 shrink-0 max-xl:hidden">·</span>}
     </td>
   )
 }
@@ -233,12 +233,11 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
   const held = busy ? HELD : undefined
   const form = formOpen && formAction
   const flagged = row.flags.length > 0 || unconfirmed
-  const filled = row.facts.map(Boolean)
   return (
     <tbody ref={rowRef} role="rowgroup" data-row-id={row.id} className="block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4 xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)]">
       {/* One flex row, two looks: the card's lines below xl, the list row's two lines from xl (buttons on line 1 by `order`, the ::after breaks to line 2). Every
           line-1 item and line-2 item carries the 4px between lines itself (gap-y-0), so the break adds nothing; below xl the row's -mt-1 takes back line 1's. */}
-      <tr role="row" className={`relative flex flex-wrap gap-y-0 after:order-2 after:h-0 after:basis-full after:content-[''] max-xl:-mt-1 max-xl:items-center max-xl:gap-x-3 xl:items-start xl:gap-x-2 xl:px-[var(--card-pad)] xl:py-2 ${box !== undefined ? 'xl:pl-[calc(var(--card-pad)+1.5rem)]' : ''}`}>
+      <tr role="row" className={`relative flex flex-wrap gap-y-0 after:order-2 after:h-0 after:basis-full after:content-[''] max-xl:-mt-1 max-xl:items-center max-xl:gap-x-3 xl:items-start xl:gap-x-3 xl:px-[var(--card-pad)] xl:py-2 ${box !== undefined ? 'xl:pl-[calc(var(--card-pad)+1.5rem)]' : ''}`}>
         {box !== undefined && (
           // Below xl the box leads the card's subject line. From xl it sits in the row's left padding on the subject's first line, so both lines start at the
           // subject's x. A row with nothing to tick keeps its empty cell, so every name in the list starts at one edge.
@@ -267,7 +266,7 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
           ))}
           {unconfirmed && <StatusBadge tone="neutral" label="Not confirmed yet" className="shrink-0 whitespace-nowrap" />}
         </td>
-        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} sep={filled[i] && filled.slice(i + 1).some(Boolean)} />)}
+        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} />)}
         <td role="cell" className={`order-4 mt-3 basis-full whitespace-nowrap xl:order-1 xl:mt-0 xl:shrink-0 xl:basis-auto ${row.actions.length === 0 ? 'hidden' : ''}`}>
           {row.actions.length > 0 && (
             <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
@@ -311,10 +310,10 @@ function QuickRowView({ row, columns, box, inRun, unconfirmed, onOccupied, onDon
 }
 
 /**
- * One decision tab's panel (SHAPE §4, §5): its table of up to five rows (DataTable's look from xl, house phone cards below it), the link to the full page
+ * One decision tab's panel (SHAPE §4, §5): its table of rows, ten a page (DataTable's look from xl, house phone cards below it), the link to the full page
  * under it, and the group's notices under that (a notice inserted above would push every row down under a moving finger). A waiting or failed group says
- * so in place of the table and is never clear (`awaitsData`). A tab with a one-tap decision also gets the bulk bar over its table and a box column
- * (decision-bulk SHAPE §3–§6).
+ * so in place of the table and is never clear (`awaitsData`). A tab with a one-tap decision also gets its bulk control in the table's header row and a box
+ * column (decision-bulk SHAPE §3–§6).
  */
 export function QuickGroup({ model, state }: { model: GroupModel; state: DecisionState }) {
   const linkRef = useRef<HTMLAnchorElement>(null)
@@ -347,7 +346,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   const [tabWide, setTabWide] = useState(false)
   const belowXl = useIsBelowXl()
   const [occupied, setOccupied] = useState<ReadonlySet<string>>(() => new Set())
-  const [confirm, setConfirm] = useState<'all' | 'selected' | null>(null)
+  // What the open dialog will send, frozen as it opens: its title, its button and the run all read this, so a refetch meanwhile never relabels it or sweeps in new rows.
+  const [confirm, setConfirm] = useState<{ mode: 'all' | 'selected'; ids: string[]; skipped: number } | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number; ids: ReadonlySet<string> } | null>(null)
   // Sent with no answer, and the re-read failed too: each held (no retry) with when the group was last read, until a later read succeeds (review #266 F1).
   const [held, setHeld] = useState<ReadonlyMap<string, number>>(() => new Map())
@@ -422,14 +422,15 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
    * A confirmed run (SHAPE §6), from a snapshot of its rows taken now: Completions in ONE approve-batch request, Leave and Tasks through each row's own
    * tap, one at a time in row order. No announcement per row; at the end ONE commit adds the run's notice and takes every decided row away together.
    */
-  async function run(runMode: 'all' | 'selected') {
+  async function run({ mode: runMode, ids, skipped }: NonNullable<typeof confirm>) {
     if (!bulkKey) return
     setConfirm(null)
-    const picked = runMode === 'selected' && !wide ? ticked : free
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    const picked = ids.flatMap((id) => byId.get(id) ?? [])
     const list = model.approveBatch ? picked.slice(0, BATCH_MAX) : picked
     const result: BulkResult = {
       total: list.length, decided: 0, stale: 0, failed: [], overlaps: [],
-      skipped: runMode === 'all' ? rows.length - safe.length : 0,
+      skipped: runMode === 'all' ? skipped : 0,
       of: model.approveBatch && picked.length > BATCH_MAX ? picked.length : undefined,
     }
     const leaving: string[] = []
@@ -536,6 +537,11 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     state.announce(banner.b2)
   }
 
+  function openConfirm() {
+    if (progress) return
+    setConfirm({ mode, ids: (mode === 'selected' && !wide ? ticked : free).map((row) => row.id), skipped: rows.length - safe.length })
+  }
+
   /** Previous and Next (SHAPE §6). Held while a row on the page is busy: paging would unmount a half-typed reason or strand a tap in flight. */
   function go(to: number) {
     if (to < 1 || to > pages || occupied.size > 0) return
@@ -546,7 +552,11 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       if (!wide) setSelected(new Set())
       setMinHold(!belowXl && table ? { px: table.offsetHeight, count: rows.length } : null)
     })
-    if (belowXl && table) {
+    if (!belowXl) {
+      // In the side column the pager stays put, so the new page's first row may be above the fold: bring it into view (nothing moves if it is already on screen).
+      const first = table?.querySelector('tbody')
+      if (typeof first?.scrollIntoView === 'function') first.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+    } else if (table) {
       // In place the pager is a screen or more below the rows: bring the list's top under the 3rem app header, then focus its first card.
       window.scrollTo({ top: window.scrollY + table.getBoundingClientRect().top - 48, behavior: 'instant' })
       // A held box (a busy or unconfirmed row) would swallow focus.
@@ -554,14 +564,14 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
     }
   }
 
-  const copy = bulkKey && confirm && confirmCopy(bulkKey, confirm, count, rows.length - safe.length)
+  const copy = bulkKey && confirm && confirmCopy(bulkKey, confirm.mode, confirm.ids.length, confirm.skipped)
   return (
     <div
       ref={groupRef}
       data-quick-group={model.key}
       // A control tabbed to never hides under the stuck header row: the app header (3rem), then the row (below xl the band, its padding and the strip under it;
       // from xl --table-head-h), plus the banner while it shows (two lines at the narrowest; over-reserving is harmless).
-      className={bar ? '[&_:is(a,button,input,textarea)]:scroll-mt-[calc(3rem+var(--control-h)+1.75rem+var(--banner-h,0px))] xl:[&_:is(a,button,input,textarea)]:scroll-mt-[calc(3rem+var(--table-head-h)+var(--banner-h,0px))]' : undefined}
+      className={bar ? '[&_:is(a,button,input,textarea,tbody)]:scroll-mt-[calc(3rem+var(--control-h)+1.75rem+var(--banner-h,0px))] xl:[&_:is(a,button,input,textarea,tbody)]:scroll-mt-[calc(3rem+var(--table-head-h)+var(--banner-h,0px))]' : '[&_tbody]:scroll-mt-12'}
       style={bannerShown ? { '--banner-h': 'calc(var(--row-h) * 2)' } as CSSProperties : undefined}
     >
       {model.phase === 'loading' && <p className="text-[13px] text-[var(--color-muted-foreground)]">Loading {model.noun}…</p>}
@@ -622,7 +632,7 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
                       aria-label={progress ? undefined : action.name}
                       aria-disabled={progress ? true : undefined}
                       className={`shrink-0 ${progress ? HELD : ''}`}
-                      onClick={() => { if (!progress) setConfirm(mode) }}
+                      onClick={openConfirm}
                     >
                       <Reserve
                         shown={progress ? runningLabel(bulkKey, progress.done, progress.total) : action.label}

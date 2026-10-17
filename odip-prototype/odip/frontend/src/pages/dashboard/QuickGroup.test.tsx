@@ -77,14 +77,14 @@ describe('QuickGroup — the row (SHAPE §4)', () => {
     expect(cells[3]).toHaveClass('whitespace-nowrap')
   })
 
-  it('separates the facts with a middle dot, skipping an empty one', () => {
+  it('sets the facts apart by the row gap, with no dot to end a wrapped line, skipping an empty one', () => {
     render(<Harness model={model({ count: 1, rows: [row('a', { facts: ['Annual leave', null, 'Family wedding'] })] })} />)
 
-    const dots = rowOf('Person a').querySelectorAll('[aria-hidden="true"]')
-    expect(dots).toHaveLength(1)
-    expect(dots[0]).toHaveTextContent('·')
-    expect(dots[0].closest('td')).toHaveTextContent(/^Annual leave·$/)
-    expect(dots[0].previousSibling?.textContent).toBe('Annual leave')
+    expect(rowOf('Person a').querySelector('[aria-hidden="true"]')).toBeNull()
+    expect(rowOf('Person a').textContent).not.toContain('·')
+    expect(rowOf('Person a').querySelector('tr')).toHaveClass('xl:gap-x-3')
+    // Free text takes the rest of its line (8rem floor, else it wraps) and cuts there with its full text in the tooltip.
+    expect(screen.getByText('Family wedding').closest('td')).toHaveClass('xl:basis-32', 'xl:grow', 'xl:max-w-max')
     expect(screen.getByText('Family wedding')).toHaveAttribute('title', 'Family wedding')
     expect(screen.getByText('Family wedding')).toHaveClass('xl:truncate')
   })
@@ -494,6 +494,19 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(bulk()).toHaveAccessibleName('Approve all 3 leave requests')
   })
 
+  it('shows the header box mixed with some rows ticked, and ticked only with all of them', () => {
+    render(<Harness model={model({ count: 3, rows: tapRows(3) })} />)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person 0' }))
+    expect(headBox().checked).toBe(false)
+    expect(headBox().indeterminate).toBe(true)
+    // Mixed clears; the next click ticks the page.
+    fireEvent.click(headBox())
+    fireEvent.click(headBox())
+    expect(headBox().checked).toBe(true)
+    expect(headBox().indeterminate).toBe(false)
+  })
+
   it('offers every safe row in the tab once the page is ticked, then says all are selected', () => {
     render(<Harness model={model({ count: 23, rows: tapRows(23) })} />)
 
@@ -517,6 +530,16 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(status()).toHaveTextContent(/^$/)
     fireEvent.click(headBox())
     expect(status()).toHaveTextContent('All 10 on this page are selected.')
+  })
+
+  it('offers nothing more when the page is the whole tab: no banner, nothing said', () => {
+    render(<Harness model={model({ count: 8, rows: tapRows(8) })} />)
+
+    fireEvent.click(headBox())
+    expect(bulk()).toHaveAccessibleName('Approve 8 selected leave requests')
+    expect(within(screen.getByRole('table')).queryByText(/are selected\./)).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Select all \d+ leave requests$/ })).toBeNull()
+    expect(status()).toHaveTextContent(/^$/)
   })
 
   it('runs all 23 in tab-wide mode, in row order', async () => {
@@ -600,6 +623,84 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(lost).toHaveBeenCalledTimes(1)
     expect(within(screen.getByRole('table')).queryByText(/^All 0 /)).toBeNull()
     expect(document.querySelector('[data-bulk-action]')?.textContent ?? '').not.toMatch(/Approve 0/)
+  })
+
+  it('ends tab-wide mode with its run: a refused row stays unticked, with Complete all and no banner', async () => {
+    const refused = vi.fn(async (): Promise<ActionOutcome> => { throw axiosError('Somebody said no.') })
+    render(<Harness model={model({ count: 12, rows: tapRows(12, (i) => (i < 3 ? refused : ok(String(i)))) })} />)
+    fireEvent.click(headBox())
+    fireEvent.click(screen.getByRole('button', { name: 'Select all 12 leave requests' }))
+    fireEvent.click(bulk())
+    confirmRun('Approve 12')
+
+    await waitFor(() => expect(notice()).toHaveTextContent("3 couldn't be approved"))
+    expect(screen.getAllByRole('checkbox', { name: /^Select leave/ }).some((box) => (box as HTMLInputElement).checked)).toBe(false)
+    expect(within(screen.getByRole('table')).queryByText(/are selected\./)).toBeNull()
+    expect(bulk()).toHaveAccessibleName('Approve all 3 leave requests')
+  })
+
+  it('lapses tab-wide mode when no row is left to send: no "All 0" banner', () => {
+    const rows = tapRows(12)
+    const { rerender } = render(<Harness model={model({ count: 12, rows })} />)
+    fireEvent.click(headBox())
+    fireEvent.click(screen.getByRole('button', { name: 'Select all 12 leave requests' }))
+
+    // Every other row is decided elsewhere; the last one's form opens, so nothing is free.
+    rerender(<Harness model={model({ count: 1, rows: rows.slice(0, 1) })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Decline leave: Person 0' }))
+    expect(within(screen.getByRole('table')).queryByText(/are selected\./)).toBeNull()
+    expect(within(screen.getByRole('table')).queryByText(/^All 0 /)).toBeNull()
+  })
+
+  describe('the dialog sends what it showed (deep S1)', () => {
+    it('keeps a ticked row when a refetch pushes it to the next page', async () => {
+      const runs = Array.from({ length: 24 }, (_, i) => ok(String(i)))
+      const all = tapRows(23, (i) => runs[i])
+      const { rerender } = render(<Harness model={model({ count: 23, rows: all })} />)
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person 9' }))
+      fireEvent.click(bulk())
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 1 selected leave request?')
+
+      // A row comes back above it: Person 9 slides to page 2, off the screen.
+      rerender(<Harness model={model({ count: 24, rows: [tapRow('new', runs[23]), ...all] })} />)
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 1 selected leave request?')
+      confirmRun('Approve 1')
+
+      await waitFor(() => expect(notice()).toHaveTextContent('Approved 1 leave request'))
+      expect(runs[9]).toHaveBeenCalledTimes(1)
+      expect(runs.filter((run, i) => i !== 9 && run.mock.calls.length > 0)).toEqual([])
+    })
+
+    it('keeps a tab-wide count when the queue grows past the batch', async () => {
+      const approveBatch = vi.fn(async (ids: string[]) => ids.map((shiftId) => ({ shiftId, approved: true, code: null, message: null })))
+      const props = { key: 'completions' as const, noun: 'shift completions', approveBatch }
+      const { rerender } = render(<Harness model={model({ ...props, count: 95, rows: tapRows(95) })} />)
+      fireEvent.click(headBox('shift completions'))
+      fireEvent.click(screen.getByRole('button', { name: 'Select all 95 clean completions' }))
+      fireEvent.click(bulk())
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 95 selected completions?')
+
+      rerender(<Harness model={model({ ...props, count: 134, rows: tapRows(134) })} />)
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 95 selected completions?')
+      confirmRun('Approve 95')
+
+      await waitFor(() => expect(approveBatch).toHaveBeenCalledTimes(1))
+      expect(approveBatch).toHaveBeenCalledWith(Array.from({ length: 95 }, (_, i) => String(i)))
+    })
+
+    it('never sweeps in rows a refetch adds while Complete all is open', async () => {
+      const runs = Array.from({ length: 5 }, (_, i) => ok(String(i)))
+      const { rerender } = render(<Harness model={model({ count: 3, rows: tapRows(3, (i) => runs[i]) })} />)
+      fireEvent.click(bulk())
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 3 leave requests?')
+
+      rerender(<Harness model={model({ count: 5, rows: tapRows(5, (i) => runs[i]) })} />)
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 3 leave requests?')
+      confirmRun('Approve 3')
+
+      await waitFor(() => expect(notice()).toHaveTextContent('Approved 3 leave requests'))
+      expect(runs.map((run) => run.mock.calls.length)).toEqual([1, 1, 1, 0, 0])
+    })
   })
 
   it('holds the header box, the banner button and the bulk button while a run goes', async () => {
@@ -717,6 +818,12 @@ describe('QuickGroup — 10 a page (SHAPE §6)', () => {
     expect(screen.getByText('Showing 11-20 of 23')).toBeInTheDocument()
   })
 
+  it('does not announce the range: the page change moves focus and the region speaks decisions (deep nit 6)', () => {
+    render(<Harness model={model({ count: 23, rows: many(23) })} />)
+
+    expect(screen.getByText('Showing 1-10 of 23')).not.toHaveAttribute('aria-live')
+  })
+
   it('draws no pager at 10 rows or fewer', () => {
     render(<Harness model={model({ count: 10, rows: many(10) })} />)
 
@@ -746,6 +853,39 @@ describe('QuickGroup — 10 a page (SHAPE §6)', () => {
     expect(bodyRows()[0].closest('tbody')!.contains(document.activeElement)).toBe(true)
     expect(scrollTo).toHaveBeenCalledTimes(1)
     expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'instant' }))
+  })
+
+  it("brings the new page's first row into view in the side column, by the least distance, and scrolls the window nowhere", () => {
+    side()
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      render(<Harness model={model({ count: 23, rows: many(23) })} />)
+      fireEvent.click(next())
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'instant' })
+      expect(scrollIntoView.mock.contexts[0]).toBe(bodyRows()[0].closest('tbody'))
+      expect(window.scrollTo).not.toHaveBeenCalled()
+    } finally {
+      // jsdom has no scrollIntoView of its own: put the prototype back as it was.
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+    }
+  })
+
+  it('skips a held box when focusing the first control of a page, in place', async () => {
+    const lost = vi.fn(async (): Promise<ActionOutcome> => { throw {} })
+    const reread = vi.fn(async (): Promise<string[]> => { throw new Error('offline') })
+    const rows = many(23, (id) => tapRow(id, id === '0' ? lost : ok(id)))
+    render(<Harness model={model({ count: 23, reread, readAt: 1, rows })} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person 0' }))
+    fireEvent.click(document.querySelector('[data-bulk-action]')!)
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Select leave: Person 0' })).toBeDisabled())
+
+    fireEvent.click(next())
+    fireEvent.click(previous())
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Decline leave: Person 0' }))
   })
 
   it("holds the outgoing page's height on a short last page, in the side column", () => {
@@ -801,6 +941,10 @@ describe('QuickGroup — 10 a page (SHAPE §6)', () => {
 
     expect(bulkName()).toBe('Approve all 23 leave requests')
     expect(screen.getAllByRole('checkbox', { name: /^Select leave/ }).some((box) => (box as HTMLInputElement).checked)).toBe(false)
+    // Going back clears too: the two ticks on page 1 do not wait there.
+    fireEvent.click(previous())
+    expect(screen.getAllByRole('checkbox', { name: /^Select leave/ }).some((box) => (box as HTMLInputElement).checked)).toBe(false)
+    expect(bulkName()).toBe('Approve all 23 leave requests')
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all leave requests on this page' }))
     fireEvent.click(screen.getByRole('button', { name: 'Select all 23 leave requests' }))
@@ -840,13 +984,15 @@ describe('QuickGroup — 10 a page (SHAPE §6)', () => {
   })
 
   it('clamps to the page before when a run empties the last page, with focus in the run\'s notice', async () => {
-    render(<Harness model={model({ count: 11, rows: many(11, (id) => tapRow(id)) })} />)
+    render(<Harness model={model({ count: 21, rows: many(21, (id) => tapRow(id)) })} />)
+    fireEvent.click(next())
     fireEvent.click(next())
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all leave requests on this page' }))
     fireEvent.click(document.querySelector('[data-bulk-action]')!)
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull())
+    await waitFor(() => expect(screen.getByText('Page 2 of 2')).toBeInTheDocument())
+    expect(screen.getByText('Showing 11-20 of 20')).toBeInTheDocument()
     expect(bodyRows()).toHaveLength(10)
     expect(document.activeElement!.closest('[role="status"] [data-tone]')).not.toBeNull()
   })
