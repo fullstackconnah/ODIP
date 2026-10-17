@@ -14,6 +14,9 @@ export interface EarlyAccessSignupDto {
   requestCount: number
   /** Repeat sign-ups whose answers differed from the ones above, newest last; the server keeps the first 10. */
   laterSubmissions: EarlyAccessLaterSubmissionDto[]
+  /** Distinct repeats sent after those 10 were full. Only the newest is kept, in lastOverLimit. */
+  overLimitCount: number
+  lastOverLimit?: EarlyAccessLaterSubmissionDto
 }
 
 /** What a repeat sign-up said. The stored sign-up keeps its first answers; the tab shows only the fields here that differ from them. */

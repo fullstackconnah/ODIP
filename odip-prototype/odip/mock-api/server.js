@@ -2126,7 +2126,7 @@ const earlyAccessSignups = [
   { id: 'eas-0001', name: 'Amara Okafor', organisation: 'Riverbend Community Care', email: 'amara.okafor@example.org',
     role: 'Operations manager', phone: '0491 570 156', organisationSize: '10-49',
     message: 'We run six houses in the Riverina and would like to try the roster board.',
-    createdAtUtc: '2026-10-02T01:15:00Z', lastRequestedAtUtc: '2026-10-15T22:40:00Z', requestCount: 3,
+    createdAtUtc: '2026-10-02T01:15:00Z', lastRequestedAtUtc: '2026-10-15T22:40:00Z', requestCount: 3, overLimitCount: 0,
     // The stored answers are the first ones. Two repeats changed something: a corrected phone, then a removal request with the role cleared.
     laterSubmissions: [
       { id: 'eal-0001', receivedAtUtc: '2026-10-09T03:30:00Z', name: 'Amara Okafor', organisation: 'Riverbend Community Care',
@@ -2139,13 +2139,16 @@ const earlyAccessSignups = [
   { id: 'eas-0002', name: 'Tom Nguyen', organisation: 'Coastal Support Services', email: 'tom.nguyen@example.org',
     role: 'Rostering lead', organisationSize: '50-199',
     message: 'We run 14 SIL houses and about 60 community access shifts a week.\n\nMost of our admin time goes on filling last-minute gaps and chasing shift notes before claims. We would like to try the roster board and the completion review first.',
-    createdAtUtc: '2026-10-14T05:02:00Z', lastRequestedAtUtc: '2026-10-14T05:02:00Z', requestCount: 1, laterSubmissions: [] },
+    createdAtUtc: '2026-10-14T05:02:00Z', lastRequestedAtUtc: '2026-10-14T05:02:00Z', requestCount: 1, overLimitCount: 0, laterSubmissions: [] },
   { id: 'eas-0003', name: 'Priya Raman', organisation: 'Kin & Co Disability Services', email: 'priya@example.org',
     phone: '+61 2 5550 1234', organisationSize: 'under-10',
-    createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1, laterSubmissions: [] },
+    createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1, overLimitCount: 0, laterSubmissions: [] },
   { id: 'eas-0004', name: 'Sam Field', organisation: 'Field Health', email: 'sam.field@example.org',
     createdAtUtc: '2026-09-30T06:00:00Z', lastRequestedAtUtc: '2026-10-12T04:00:00Z', requestCount: 14,
-    // The cap: the API keeps the first 10 later submissions, so the last four sends were counted and not kept.
+    // The cap: the API keeps the first 10 later submissions, then only the newest of the rest (three more here).
+    overLimitCount: 3,
+    lastOverLimit: { id: 'eal-1010', receivedAtUtc: '2026-10-12T04:00:00Z', name: 'Sam Field', organisation: 'Field Health',
+      message: 'Please remove my details and stop the follow-ups.' },
     laterSubmissions: Array.from({ length: 10 }, (_, i) => ({
       id: `eal-1${String(i).padStart(3, '0')}`, receivedAtUtc: `2026-10-${String(i + 1).padStart(2, '0')}T04:00:00Z`, name: 'Sam Field', organisation: 'Field Health',
       message: `Follow-up ${i + 1}: still interested.` })) },

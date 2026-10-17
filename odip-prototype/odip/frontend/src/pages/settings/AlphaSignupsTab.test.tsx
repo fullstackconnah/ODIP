@@ -31,6 +31,7 @@ function makeRow(overrides: Partial<EarlyAccessSignupDto> = {}): EarlyAccessSign
     lastRequestedAtUtc: '2026-10-15T22:40:00Z',
     requestCount: 1,
     laterSubmissions: [],
+    overLimitCount: 0,
     ...overrides,
   }
 }
@@ -360,6 +361,42 @@ describe('AlphaSignupsTab', () => {
       expect(screen.getByRole('button', { name: 'Amara Okafor, has a message' })).toBeInTheDocument()
     })
 
+    describe('after the limit', () => {
+      const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
+      const over = makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Please remove my details, ref zq-77' })
+
+      it('says how many more were sent after the limit and when, with the latest message in full', async () => {
+        returns(page([makeRow({ requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimit: over })]))
+        render(<AlphaSignupsTab />)
+
+        await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+
+        expect(screen.getByText('3 more sent after the limit, latest on 16/10/2026')).toBeInTheDocument()
+        expect(screen.getByText('Please remove my details, ref zq-77')).toBeInTheDocument()
+        expect(screen.queryByText(/Only the first 10 later submissions are kept/)).not.toBeInTheDocument()
+      })
+
+      it('says "1 more" for a single one, and shows nothing about the limit when there is none', async () => {
+        returns(page([makeRow({ requestCount: 12, laterSubmissions: ten, overLimitCount: 1, lastOverLimit: over })]))
+        const { unmount } = render(<AlphaSignupsTab />)
+        await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+        expect(screen.getByText('1 more sent after the limit, latest on 16/10/2026')).toBeInTheDocument()
+        unmount()
+
+        returns(page([makeRow({ requestCount: 2, laterSubmissions: [makeLater({ message: 'Second note' })] })]))
+        render(<AlphaSignupsTab />)
+        await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+        expect(screen.queryByText(/after the limit/)).not.toBeInTheDocument()
+      })
+
+      it('marks a closed row whose only message was sent after the limit', () => {
+        returns(page([makeRow({ message: undefined, requestCount: 12, laterSubmissions: ten.map(l => ({ ...l, message: undefined })), overLimitCount: 1, lastOverLimit: over })]))
+        render(<AlphaSignupsTab />)
+
+        expect(screen.getByRole('button', { name: 'Amara Okafor, has a message' })).toBeInTheDocument()
+      })
+    })
+
     it('does not show the cap line while fewer than 10 are stored, however often the form was sent', async () => {
       returns(page([makeRow({ requestCount: 14, laterSubmissions: [makeLater()] })]))
       render(<AlphaSignupsTab />)
@@ -378,6 +415,18 @@ describe('AlphaSignupsTab', () => {
     expect(within(section).getByText('Second note')).toBeInTheDocument()
     const remove = screen.getByRole('button', { name: 'Delete sign-up from Amara Okafor' })
     expect(section.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows what was sent after the limit on a phone card', () => {
+    const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
+    returns(page([makeRow({
+      requestCount: 14, laterSubmissions: ten, overLimitCount: 3,
+      lastOverLimit: makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Remove me, ref zq-77' }),
+    })]))
+    render(<AlphaSignupsTab />)
+
+    expect(screen.getByText('3 more sent after the limit, latest on 16/10/2026')).toBeInTheDocument()
+    expect(screen.getByText('Remove me, ref zq-77')).toBeInTheDocument()
   })
 
   it('puts Delete at the foot of each phone card, after the message, and only once', () => {
