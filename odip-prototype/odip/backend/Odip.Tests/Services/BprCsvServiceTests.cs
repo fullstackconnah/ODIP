@@ -75,4 +75,74 @@ public class BprCsvServiceTests
         Assert.StartsWith("RegistrationNumber,NDISNumber,", lines[0]);
         Assert.Contains(claim.ClaimReference, fileName);
     }
+
+    [Fact]
+    public async Task GenerateBprCsvAsync_AgencyManagedLines_EveryRowHas16FieldsUnderTheRightHeader()
+    {
+        using var db = CreateDb();
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, FirstName = "Amy", LastName = "Ng",
+            NdisNumber = "431,\"00", PlanType = PlanType.AgencyManaged,
+        };
+        var booking = new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = Guid.NewGuid(), ParticipantId = participant.Id,
+            BookingStatus = BookingStatus.Confirmed,
+        };
+        var claim = new TripClaim { Id = Guid.NewGuid(), ClaimReference = "TC-1", PeriodFrom = new DateOnly(2026, 9, 7), PeriodTo = new DateOnly(2026, 9, 7) };
+        db.Participants.Add(participant);
+        db.ParticipantBookings.Add(booking);
+        db.TripClaims.Add(claim);
+        foreach (var (type, reason) in new[] { (ClaimType.Standard, (string?)null), (ClaimType.Cancellation, "late, notice") })
+            db.ClaimLineItems.Add(new ClaimLineItem
+            {
+                Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id,
+                SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
+                SupportsDeliveredFrom = new DateOnly(2026, 9, 7), SupportsDeliveredTo = new DateOnly(2026, 9, 7),
+                Hours = 8.5m, UnitPrice = 40m, TotalAmount = 340m, ClaimType = type, CancellationReason = reason,
+            });
+        db.ProviderSettings.Add(new ProviderSettings
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, RegistrationNumber = "PR1", ABN = "1",
+            OrganisationName = "Org", Address = "1 St", State = "VIC",
+        });
+        await db.SaveChangesAsync();
+
+        var (bytes, _) = await new BprCsvService(db).GenerateBprCsvAsync(claim.Id, CancellationToken.None);
+
+        var lines = Encoding.UTF8.GetString(bytes).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var header = lines[0].Split(',');
+        Assert.Equal(16, header.Length);
+        Assert.Equal(3, lines.Length);
+        var rows = lines.Skip(1).Select(l => Split(l)).ToList();
+        Assert.All(rows, r => Assert.Equal(16, r.Count));
+        var byName = rows.Select(r => header.Zip(r).ToDictionary(x => x.First, x => x.Second)).ToList();
+        var standard = byName.Single(r => r["ClaimType"] == "");
+        var canc = byName.Single(r => r["ClaimType"] == "CANC");
+        Assert.Equal("PR1", standard["RegistrationNumber"]);
+        Assert.Equal("431,\"00", standard["NDISNumber"]); // comma and quote survive the escaping
+        Assert.Equal("04_104_0125_6_1", standard["SupportNumber"]);
+        Assert.Equal("008:30", standard["Hours"]);
+        Assert.Equal("40.00", standard["UnitPrice"]);
+        Assert.Equal("", standard["CancellationReason"]);
+        Assert.Equal("late, notice", canc["CancellationReason"]);
+        Assert.Equal("", canc["ABNofSupportProvider"]);
+    }
+
+    // RFC 4180 split: commas inside quotes stay, doubled quotes unescape.
+    private static List<string> Split(string line)
+    {
+        var fields = new List<string>(); var cur = new StringBuilder(); var q = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (q && c == '"' && i + 1 < line.Length && line[i + 1] == '"') { cur.Append('"'); i++; }
+            else if (c == '"') q = !q;
+            else if (c == ',' && !q) { fields.Add(cur.ToString()); cur.Clear(); }
+            else cur.Append(c);
+        }
+        fields.Add(cur.ToString());
+        return fields;
+    }
 }
