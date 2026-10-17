@@ -452,7 +452,7 @@ const tasks = [
     notes: 'QSC reporting window closes 72h after the incident.',
     linkTo: '/incidents/inc-0002/edit', incidentReportId: 'inc-0002',
   },
-  // The dashboard's Tasks due group: an Admin-only review of an emergency over budget, overdue (the oldest due, so it is among the group's first five
+  // The dashboard's Tasks due group: an Admin-only review of an emergency over budget, overdue (the oldest due, so it is among the group's first ten
   // rows), and a task due today (the provider's day).
   {
     id: 'task-0008', participantBookingId: null, accommodationReservationId: null, vehicleAssignmentId: null, staffAssignmentId: null,

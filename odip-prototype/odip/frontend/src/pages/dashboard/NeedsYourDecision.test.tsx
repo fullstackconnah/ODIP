@@ -63,6 +63,14 @@ describe('NeedsYourDecision — the tabs (SHAPE §3)', () => {
     expect(screen.getByText('Loading leave requests…')).toBeVisible()
   })
 
+  it('wraps the strip instead of scrolling it', () => {
+    render(<Harness groups={[group('completions', { rows: [row('a')] }), group('leave', { rows: [row('b')] })]} />)
+
+    const strip = screen.getByRole('tablist', { name: 'Needs your decision' })
+    expect(strip).toHaveClass('md:flex-wrap')
+    expect(strip.className).not.toContain('scrollbar-width:thin')
+  })
+
   it('mounts one panel per present group, every one but the open one hidden, each labelled by its tab; a muted tab has none', () => {
     render(<Harness groups={[group('completions', { rows: [row('a')] }), group('leave'), group('tasks', { rows: [row('b')] })]} />)
 

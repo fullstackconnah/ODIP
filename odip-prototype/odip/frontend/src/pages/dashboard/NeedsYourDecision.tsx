@@ -17,7 +17,7 @@ function tabLabel(group: GroupModel, count: number, open: boolean) {
   const ready = group.phase === 'ready'
   const name = ready ? `${group.title} (${count})` : `${group.title}${group.phase === 'loading' ? ', loading' : ", couldn't load"}`
   const pill = open ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-surface-container)] text-[var(--color-foreground)]'
-  // `relative`: the sr-only name is absolute, and must sit inside the strip's scroller, not stretch the page sideways from the last tab.
+  // `relative`: the sr-only name is absolute, and must sit inside its tab, not stretch the page sideways from the last tab (the strip wraps from md and scrolls below it).
   return (
     <span className="relative inline-flex items-center">
       <span aria-hidden="true" className="inline-flex items-center gap-2">
@@ -80,7 +80,7 @@ export function NeedsYourDecision({ groups, state }: { groups: GroupModel[]; sta
             <Tabs
               ariaLabel="Needs your decision"
               idPrefix="decisions"
-              overflow="scroll"
+              overflow="wrap"
               active={next.key ?? ''}
               onChange={(key) => setOpen({ key: key as GroupKey, settled: true })}
               tabs={groups.map((group) => ({

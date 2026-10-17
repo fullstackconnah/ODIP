@@ -83,7 +83,7 @@ export interface GroupModel {
   readAt?: number
   /** The server's total. */
   count: number
-  /** Every row the group fetched, in its order. QuickGroup shows the first SHOWN_ROWS still undecided. */
+  /** Every row the group fetched, in its order. QuickGroup pages the ones still undecided, PAGE_SIZE a page. */
   rows: QuickRow[]
   /** The full page: "Open Leave" when every row is shown, "See all" when rows are cut. Never a number (call 13). */
   link: { to: string; openLabel: string }
@@ -91,7 +91,16 @@ export interface GroupModel {
   approveBatch?: (ids: string[]) => Promise<ApproveBatchResultDto[]>
 }
 
-export const SHOWN_ROWS = 5
+/** A decision tab shows its rows ten at a time, with the house pager (SHAPE §6). */
+export const PAGE_SIZE = 10
+
+export const pageCount = (rows: readonly unknown[]) => Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+
+/** Page `page` (1-based) of the rows; a page past either end is the nearest one. */
+export function pageRows<T>(rows: readonly T[], page: number): T[] {
+  const at = Math.min(Math.max(1, page), pageCount(rows))
+  return rows.slice((at - 1) * PAGE_SIZE, at * PAGE_SIZE)
+}
 
 export const rowKey = (group: GroupKey, rowId: string) => `${group}:${rowId}`
 
@@ -121,15 +130,4 @@ export function shownCount(model: GroupModel, gone: ReadonlyMap<string, number>)
 export function isPresent(model: GroupModel, gone: ReadonlyMap<string, number>, notices: number, running = false): boolean {
   // A bulk run keeps its tab: the real server's refetch can empty it mid-run, before the run's notice exists (SHAPE §6).
   return running || model.phase !== 'ready' || visibleRows(model, gone).length > 0 || shownCount(model, gone) > 0 || notices > 0
-}
-
-/**
- * The xl table's measured track minimums (QuickGroup's useSubjectMin), so a title wins over free-text facts: each free-text fact's minimum is its floor,
- * or its own width when shorter; the title's is its full width, unless the table cannot fit that with every free-text fact at its floor. Widths in px;
- * `fixed` is everything that never gives way (dates, short facts, the buttons).
- */
-export function trackMinimums({ table, fixed, floor, subject, facts }: { table: number; fixed: number; floor: number; subject: number; facts: number[] }) {
-  const factMins = facts.map((width) => Math.min(floor, width))
-  const left = table - fixed - factMins.reduce((sum, width) => sum + width, 0)
-  return { subject: Math.max(0, Math.min(subject, left)), facts: factMins }
 }

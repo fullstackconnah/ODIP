@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { mockUseDashboard, mockUseDecisionGroups } from './dashboard/dashboardHookMocks'
-import { asRole, installDashboardDefaults, renderPage, showAll, summaryData, tileLabels } from './dashboard/dashboardTestKit'
+import { mockUseDashboard, mockUseDecisionGroups, mockUseParticipantAlertsAggregate } from './dashboard/dashboardHookMocks'
+import { asRole, criticalAlertFor, installDashboardDefaults, renderPage, showAll, summaryData, tileLabels } from './dashboard/dashboardTestKit'
 import type { GroupKey, GroupModel, QuickRow } from './dashboard/quickGroupModel'
 
 vi.mock('@/api/hooks', async () => (await import('./dashboard/dashboardHookMocks')).hooks)
@@ -266,5 +266,51 @@ describe('DashboardPage — focus when a group leaves the page (SHAPE §10)', ()
     expect(document.activeElement).toBe(document.getElementById('dashboard-alerts'))
     expect(document.activeElement).toContainElement(field)
     expect(document.querySelector('.sr-only[role="status"]')).toHaveTextContent('Approved Person a.')
+  })
+})
+
+describe('DashboardPage — the side column (dtable SHAPE §3)', () => {
+  const root = () => screen.getByRole('heading', { level: 2, name: 'Alerts' }).parentElement!.parentElement!
+
+  it('places Needs your decision in a side column from xl only while a group is present', () => {
+    asRole('Admin')
+    mockUseDecisionGroups.mockReturnValue([group('leave', { count: 1, rows: [row('a')] })])
+    const { unmount } = renderPage()
+
+    expect(root()).toHaveClass('xl:grid', 'xl:grid-cols-[minmax(0,1fr)_clamp(24rem,30%,32rem)]')
+    const item = [...root().children].find((child) => child.contains(screen.getByRole('heading', { level: 2, name: 'Needs your decision' })))!
+    expect(item).toHaveClass('xl:col-start-2', 'xl:row-span-3')
+    expect(h2s()).toEqual(['Alerts', 'Needs your decision', 'Upcoming trips'])
+    unmount()
+
+    // Every group clear, the band not: the section sits in place.
+    mockUseDecisionGroups.mockReturnValue((Object.keys(NOUNS) as GroupKey[]).map((key) => group(key)))
+    mockUseDashboard.mockReturnValue(summaryData({ tripsMissingStaff: 1 }))
+    renderPage()
+    expect(root()).not.toHaveClass('xl:grid')
+  })
+
+  it('adds no empty wrapper for a viewer with no groups', () => {
+    asRole('ReadOnly')
+    mockUseDecisionGroups.mockReturnValue([])
+    mockUseDashboard.mockReturnValue(summaryData({ tripsMissingStaff: 1 }))
+    renderPage()
+
+    const children = [...root().children].filter((child) => !child.matches('.sr-only'))
+    expect(children).toHaveLength(3)
+    expect(children[1]).toContainElement(screen.getByRole('heading', { level: 2, name: 'Alerts' }))
+    expect(children[2]).toContainElement(screen.getByRole('heading', { level: 2, name: 'Upcoming trips' }))
+  })
+
+  it("takes the critical cards' columns from the Alerts block's own width", () => {
+    asRole('Admin')
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false })
+    renderPage()
+
+    const cards = screen.getByText('Jamie Smith').closest('a')!.parentElement!
+    expect(cards).toHaveClass('@min-[36rem]:grid-cols-2', '@min-[56rem]:grid-cols-3')
+    expect(cards).not.toHaveClass('md:grid-cols-2')
+    expect(cards).not.toHaveClass('lg:grid-cols-3')
+    expect(screen.getByRole('heading', { level: 2, name: 'Alerts' }).parentElement).toHaveClass('@container')
   })
 })

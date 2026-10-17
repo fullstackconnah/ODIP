@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { OverlapShiftDto } from '@/api/hooks'
-import { actionLabel, confirmCopy, resultNotice, runningLabel, selectName, type BulkResult } from './bulkCopy'
+import { actionLabel, bannerCopy, confirmCopy, resultNotice, runningLabel, selectName, type BulkResult } from './bulkCopy'
 
 const result = (o: Partial<BulkResult> = {}): BulkResult => ({ total: 0, decided: 0, stale: 0, failed: [], skipped: 0, overlaps: [], ...o })
 const shift = (serviceDate: string, participantId = 'p-1') => ({ serviceDate, participantId }) as OverlapShiftDto
@@ -114,5 +114,18 @@ describe('bulkCopy — a run with no answer (review #266 F1)', () => {
     expect(resultNotice('tasks', result({ total: 3, left: 1, waiting: 2 })).message).toBe("1 has left the list: done here, or changed by someone else. 2 weren't marked done: they're still here to try again.")
     expect(resultNotice('leave', result({ total: 1, waiting: 1 })).message).toBe("1 wasn't approved: it's still here to try again.")
     expect(resultNotice('leave', result({ total: 2, unchecked: 2 })).message).toBe("2 couldn't be checked, so they're held here until the list can be read again. Refresh the page to check now.")
+  })
+})
+
+describe('bulkCopy — the banner (dtable SHAPE §5)', () => {
+  it('offers every safe row in the tab once the page is ticked, then says all are selected', () => {
+    expect(bannerCopy('leave', 10, 23)).toEqual({ b1: 'All 10 on this page are selected.', b1Action: 'Select all 23 leave requests', b2: 'All 23 leave requests are selected.' })
+    expect(bannerCopy('tasks', 9, 19).b1Action).toBe('Select all 19 tasks')
+    expect(bannerCopy('completions', 9, 19)).toEqual({ b1: 'All 9 on this page are selected.', b1Action: 'Select all 19 clean completions', b2: 'All 19 clean completions are selected.' })
+  })
+
+  it('says a run approves the first 100 when the tab holds more clean completions', () => {
+    expect(bannerCopy('completions', 10, 134).b2).toBe('All 134 clean completions are selected. A run approves the first 100.')
+    expect(bannerCopy('completions', 10, 100).b2).toBe('All 100 clean completions are selected.')
   })
 })

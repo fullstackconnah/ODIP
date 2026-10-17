@@ -29,8 +29,8 @@ export function renderGroup(useGroup: () => GroupModel) {
 /** The page's AnnouncementRegion in these tests (the NoticesRegion is a status too, but not sr-only). */
 export const announcement = () => document.querySelector('.sr-only[role="status"]')
 
-/** The table's column headers, the empty actions header last (the bulk box column, when a tab has one, is left out: QuickGroup's own tests cover it). */
-export const headers = () => screen.getAllByRole('columnheader').filter((th) => !th.hasAttribute('data-select')).map((th) => th.textContent)
+/** The table's column headers, the empty actions header last (the bulk box column and the flags column are left out, and the header row's bulk button reads as the empty actions header: QuickGroup's own tests cover them). */
+export const headers = () => screen.getAllByRole('columnheader').filter((th) => !th.hasAttribute('data-select') && !th.hasAttribute('data-flags')).map((th) => (th.querySelector('[data-bulk-action]') ? '' : th.textContent))
 
 /** A decision row's row group (its row, and its detail row while it has one), found by its subject. */
 export const rowOf = (subject: string) => screen.getByText(subject).closest('tbody')!
@@ -38,5 +38,8 @@ export const rowOf = (subject: string) => screen.getByText(subject).closest('tbo
 /** The subjects of the rows, in order. */
 export const subjects = () => [...document.querySelectorAll('tbody > tr:not([data-detail]) > td[data-subject] span:first-child')].map((el) => el.textContent)
 
-/** One row's fact cells, between its subject and its buttons. */
-export const facts = (subject: string) => [...rowOf(subject).querySelectorAll('tr:not([data-detail]) > td:not([data-select])')].slice(1, -1).map((td) => td.textContent)
+/** What a screen reader reads of a cell: its text without the aria-hidden separator dots. */
+const spoken = (el: Element) => { const copy = el.cloneNode(true) as Element; copy.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove()); return copy.textContent }
+
+/** One row's fact cells, between its subject (and flags) and its buttons; an empty one is ''. */
+export const facts = (subject: string) => [...rowOf(subject).querySelectorAll('tr:not([data-detail]) > td:not([data-select]):not([data-flags])')].slice(1, -1).map(spoken)

@@ -26,8 +26,8 @@ describe('Incidents group (links only)', () => {
     renderGroup(() => useIncidentsGroup(true))
 
     await screen.findByText('Incident q1')
-    expect(apiGet).toHaveBeenCalledWith('/incidents', { isOverdueQsc: 'true', page: '1', pageSize: '5' })
-    expect(apiGet).toHaveBeenCalledWith('/incidents', { needsAttention: 'true', page: '1', pageSize: '5' })
+    expect(apiGet).toHaveBeenCalledWith('/incidents', { isOverdueQsc: 'true', page: '1', pageSize: '200' })
+    expect(apiGet).toHaveBeenCalledWith('/incidents', { needsAttention: 'true', page: '1', pageSize: '200' })
     expect(subjects()).toEqual(['Incident q1', 'Incident a1', 'Incident a2'])
     expect(screen.getByRole('tab', { name: 'Incidents (9)' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See all open incidents' })).toHaveAttribute('href', '/incidents')

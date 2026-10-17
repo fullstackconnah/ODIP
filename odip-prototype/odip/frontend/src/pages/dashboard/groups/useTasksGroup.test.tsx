@@ -114,8 +114,8 @@ describe('Tasks due group — the review of an emergency over budget', () => {
     expect(await screen.findByRole('link', { name: 'Open task: Review the emergency booking for Grace' })).toHaveAttribute('href', '/tasks/t9/edit')
     expect(screen.queryByRole('button', { name: /^Done/ })).not.toBeInTheDocument()
     // A neutral flag, never a fact a narrow table cuts.
-    expect(screen.getByText('An admin signs this off').closest('td')).toBe(screen.getByText('Review the emergency booking for Grace').closest('td'))
-    expect(facts('Review the emergency booking for Grace')).toEqual(['Budget emergency review', '10 Oct', 'Urgent', '—'])
+    expect(screen.getByText('An admin signs this off').closest('td')).toHaveAttribute('data-flags')
+    expect(facts('Review the emergency booking for Grace')).toEqual(['Budget emergency review', '10 Oct', 'Urgent', ''])
   })
 })
 

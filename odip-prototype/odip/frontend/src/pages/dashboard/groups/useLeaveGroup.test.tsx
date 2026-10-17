@@ -41,9 +41,9 @@ describe('Leave group — what it reads', () => {
     expect(subjects()).toEqual(['Ana Ruiz', 'Sam Lee', 'Mei Zhang'])
     expect(headers()).toEqual(['Staff', 'Type', 'Dates', 'Note', ''])
     expect(facts('Sam Lee')).toEqual(['Annual leave', '20–24 Oct 2026, 5 days', '“Family wedding”'])
-    expect(facts('Ana Ruiz')).toEqual(['Annual leave', '15 Oct 2026, 1 day', '—'])
+    expect(facts('Ana Ruiz')).toEqual(['Annual leave', '15 Oct 2026, 1 day', ''])
     // The Leave page's word for a rule, and its notes (fetched, not drawn before).
-    expect(facts('Mei Zhang')).toEqual(['Regular unavailability', 'Tuesdays, 9am – 12pm, from 21 Oct', '—'])
+    expect(facts('Mei Zhang')).toEqual(['Regular unavailability', 'Tuesdays, 9am – 12pm, from 21 Oct', ''])
     expect(screen.getByRole('tab', { name: 'Leave (3)' })).toBeInTheDocument()
   })
 
