@@ -555,6 +555,34 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(0, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
     }
 
+    /// <summary>The other order: a Mark followed up that commits inside an over-limit repeat's read-save window must not hide that repeat.</summary>
+    [SkippableFact]
+    public async Task AnAcknowledgementThatLandsInsideARepeatsSave_DoesNotHideTheNewRepeat()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("followup-inside");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        for (var i = 1; i <= 10; i++)
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: $"0400 000 {i:000}"), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 011"), CancellationToken.None);
+        var id = await IdOf(email);
+
+        // The SuperAdmin's page shows 1; the acknowledgement commits after the 12th repeat has read the row and before it saves.
+        var interfere = new BeforeFirstSave(async () =>
+            Assert.IsType<OkObjectResult>((await MarkFollowedUpAsync(id, 1)).Result));
+        await using (var db = _pg.CreateContext(interfere))
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 011", message: "Please remove me"), CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
+        Assert.Equal(2, row.OverLimitCount);
+        Assert.True(row.FollowUpNeeded, "the 12th arrived after the count the SuperAdmin saw, so it must still need follow-up");
+        Assert.Equal(1, await check.AuditLogs.CountAsync(a => a.EntityId == id));
+    }
+
     private async Task<Guid> IdOf(string email)
     {
         await using var db = _pg.CreateContext();
