@@ -618,30 +618,47 @@ mutation hooks to it, so a decision here is the same decision as on the full pag
 - **A tab** reads its title in semibold and its count in the house tab-counter pill (12px bold, rounded-full, at least 20px wide): solid olive with white
   on the open tab, Mist (`surface-container`) with ink on the others, an en dash while waiting or failed. The pill is drawn by the section, not by Tabs'
   `badge`; the visible label is hidden and one sr-only text node names the tab ("Leave (3)", "Leave, loading").
-- **A group** shows its first five rows and a link to the full page: "Open Leave" when every row is shown, "See all" when rows are cut. The link never
-  carries a number; the pill does. A group at zero is a muted tab, named in one All clear row. A group still waiting (`awaitsData`) or failed is never
-  clear: one line ("Loading leave requests…", or "Couldn't load leave requests." with Try again), and no rows until every request it makes has answered.
-- **The table** (from xl; house phone cards below it) is DataTable's box with one exception, this table's only: its header row is a Mist band
-  (`surface-container`, labels 12px/600 muted ink) and its subjects are 14px/600 (bolder, 2026-10-16). Whether DataTable follows is the owner's call.
-- **A row** is `--row-h` tall on one line from xl (subject, flags, facts, then at most two buttons at the right edge). Buttons are `Button size="sm"`,
-  always visible, each named for its row. Olive means one tap decides: only Approve and Done are primary; Return, Decline, Review, Open and Update expiry
-  are secondary.
-- **Bulk** (Completions, Leave, Tasks only; a row is safe when it has its olive one-tap button): a panel bar heads the tab, on the page paper 8px over the
-  table, its box over the row boxes and its button's right edge on the row buttons'. At rest: Select all (the shown safe rows) and **Complete all**
-  (`Button` md primary, one size up from the row buttons) with the true count of safe rows in the whole tab ("Approve all 12 clean", "Approve all 9",
-  "Mark all 7 done"; Completions sends the first 100 through approve-batch and says so). Ticked: the count, Clear and the one action valid for every ticked
-  row. A box column (the first track, 40px) carries a box only on safe rows; a row with its form open or a tap in flight has its box unticked and disabled.
-  Below xl the bar sticks under the app header inside its panel, with the Header Hairline shadow. Every run asks first (`ConfirmDialog`, the count in the
-  title), counts on the bar's button, holds its rows, and ends in ONE notice (success when anything was decided; need review, stale and failures by name;
-  Leave's overlaps rolled up) with focus moved onto it. No bulk Return or Decline: both take a reason.
+- **Placement:** in sequence below xl (header, Alerts, Needs your decision, Upcoming trips, as before). From xl, while any group is present, it is a
+  right-hand side column: the page column becomes `grid-cols-[minmax(0,1fr)_clamp(24rem,30%,32rem)]` with rows `auto auto 1fr`, the header, the Alerts
+  block and Upcoming trips in column 1, the section in column 2 across all three rows. The DOM order never changes. The column is not sticky (a page of ten
+  rows is taller than the screen). With every group clear the section sits in place, and a clear page (the All clear field) is one column. The Critical
+  Participant Alerts cards take their columns from the Alerts block's own width (`@container`, `@min-[36rem]:` 2, `@min-[56rem]:` 3), so the side column
+  narrows them, not the viewport.
+- **A group** shows its rows ten a page, with the house pager (DataTable's footer, copied: "Showing 11-20 of 23", "Page 2 of 3", Previous and Next,
+  aria-disabled at the ends and while a row on the page is busy), and a link to the full page: "See all" when the server holds more than the group fetched,
+  "Open Leave" otherwise. The link never carries a number; the pill does. A group at zero is a muted tab, named in one All clear row. A group still waiting
+  (`awaitsData`) or failed is never clear: one line ("Loading leave requests…", or "Couldn't load leave requests." with Try again), and no rows until every
+  request it makes has answered. A page change in the side column keeps focus on the pressed control and holds the list's outgoing height, so a short last
+  page never pulls the pager up under the pointer; in place it scrolls the list under the app header and focuses the first card.
+- **The list** is cards below xl (house phone cards, 12px apart) and one list box in the side column: DataTable's box (white card, 1px ruled border,
+  radius-md), rows divided by hairlines, `--card-pad` across and 8px down, the hover tint `surface-container-low`. **This list never scrolls:** its box has
+  no `overflow`, the tabs wrap (`overflow="wrap"`; three rows of tabs in the side column are accepted) and busy labels share one grid cell with the label
+  they replace. The wide multi-column table and its JS track sizing are gone.
+- **A row** has two lines in the side column. Line 1: the box, the subject (14px/600, two lines at most, full text in `title`) and at most two
+  `Button size="sm"` at the right edge, top-aligned. Line 2, from the subject's edge: the flags (the first two StatusBadges), then the facts as one muted
+  13px run joined by " · " (the dot trails a fact, so a wrapped line never starts with one). Short facts stay whole; free text takes one line, cut, with its
+  `title`. In the side column on a touch tablet a cut free-text fact has only its `title`, which touch cannot show: its full text is one tap away on the
+  full page. Below xl the card is as before: the subject and its flags, the facts line, the buttons under them. Buttons are always visible, each named for
+  its row. Olive means one tap decides: only Approve and Done are primary; Return, Decline, Review, Open and Update expiry are secondary.
+- **Bulk** (Completions, Leave, Tasks only; a row is safe when it has its olive one-tap button): the list's header row is the bulk control, sticky under the
+  app header inside its own list at every width, with the Header Hairline shadow. Its first cell is "Select all" (13px/500, the house box on the row boxes'
+  x); its last is the ONE bulk action, its right edge on the row buttons' (`sm` in the side column, `md` in place), its width held from rest to running by a
+  reserve of its labels. In the side column it is the box's Mist head (`--table-head-h`); in place a rounded Mist band on an opaque strip of page paper.
+  Selection is Gmail's: the header box ticks this page's safe rows, and clears when mixed or ticked; a page change clears a partial selection. Once the page
+  is ticked and the tab holds more, a banner row under it offers "Select all 19 leave requests" (B1); then "All 19 leave requests are selected." with
+  "Clear selection" (B2), a mode that pages with the list and sends every safe row in the tab (over 100 clean completions it is Complete all: the first 100).
+  At rest the action is **Complete all** with the true count of safe rows in the whole tab ("Approve all 12 clean", "Approve all 9", "Mark all 7 done").
+  There is no "N selected" and no Clear button: the count is in the button. A row with its form open or a tap in flight has its box unticked and disabled.
+  Every run asks first (`ConfirmDialog`, the count in the title), counts on the button, holds its rows, and ends in ONE notice (success when anything was
+  decided; need review, stale and failures by name; Leave's overlaps rolled up) with focus moved onto it. No bulk Return or Decline: both take a reason.
 - **A tap** reads its "-ing" label and holds both buttons of its row (`aria-disabled`, so focus stays). On success the row leaves at once, the pill
-  drops, the page's one `AnnouncementRegion` says what happened, and focus moves to the next row's first button. A consequence the server returns
+  drops, the page's one `AnnouncementRegion` says what happened, and focus moves to the first button of the row now in its place (else the row before it, else the tab's link). A consequence the server returns
   (leave that overlaps shifts) is a success notice with a link button in the group's `NoticesRegion`, under its rows. A refusal stays on the row in the
   server's words (`role="alert"`).
 - **An action that needs input** opens a small form under the row from a disclosure button: the house field, then Cancel and the submit. Checks mirror
   the server's (a return reason is required, 500 characters at most) and a refusal keeps the text.
 - **Who:** the server's gates. ReadOnly has no decisions. A SuperAdmin decides only inside an organisation; without one, one line asks for one.
-- **Page height at 390 (touch):** about 3.8 screens for 19 decision rows (measured 3.79). Below md, flags drop under a long subject and the meta wraps rather than hide a deciding fact (a due or expiry date), since touch has no `title`. SHAPE's 3.0 assumed 60 px phone rows, which its own geometry cannot give: two `sm` buttons with their 44 px floor and the text block's 12rem floor do not fit beside each other in a 390 row. The capture script holds the limit to that row count.
+- **At 390 (touch):** ten cards a page, so the page no longer grows with the queue. Below md, flags drop under a long subject and the meta wraps rather than hide a deciding fact (a due or expiry date), since touch has no `title`; two `sm` buttons with their 44 px floor sit on their own line under the facts.
 
 ### Attention band
 

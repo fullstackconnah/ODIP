@@ -22,9 +22,9 @@ export function completionFlags(item: CompletionQueueItemDto): Array<{ label: st
 /** One-tap approval only for a row with nothing to look at. The incident count must be a known 0: a server that sent none is never clean. */
 export const isClean = (item: CompletionQueueItemDto) => item.incidentCount === 0 && completionFlags(item).length === 0
 
-/** The Shift completions group (SHAPE §5): the review queue's first five, approved or returned with the Completions page's own hooks. */
+/** The Shift completions group (SHAPE §5): the review queue ten a page, approved or returned with the Completions page's own hooks. */
 export function useCompletionsGroup(enabled: boolean): GroupModel {
-  // The whole pending queue, every page, so Complete all counts the clean rows of the whole tab (decision-bulk DECISIONS 1); five are shown. Its own
+  // The whole pending queue, every page, so Complete all counts the clean rows of the whole tab (decision-bulk DECISIONS 1); ten a page are shown. Its own
   // entry beside the nav badge's 1-row one; every approve hook invalidates ['rostering-completions'].
   const queue = useAllCompletions({ status: 'PendingReview' }, { enabled })
   const qc = useQueryClient()
