@@ -17,6 +17,7 @@ using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Infrastructure.Notifications.Templates;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -40,14 +41,16 @@ public class IntakeBookingsController : ControllerBase
     private readonly IntakeInviteSender _sender;
     private readonly INotificationRaiser _raiser;
     private readonly TimeProvider _clock;
+    private readonly TimeSpan _lockWait;
 
-    public IntakeBookingsController(OdipDbContext db, ICurrentTenant tenant, IntakeInviteSender sender, INotificationRaiser raiser, TimeProvider? clock = null)
+    public IntakeBookingsController(OdipDbContext db, ICurrentTenant tenant, IntakeInviteSender sender, INotificationRaiser raiser, TimeProvider? clock = null, TimeSpan? lockWait = null)
     {
         _db = db;
         _tenant = tenant;
         _sender = sender;
         _raiser = raiser;
         _clock = clock ?? TimeProvider.System;
+        _lockWait = lockWait ?? RosterGenerationLock.DefaultWait; // a test shortens it to reach the busy answer
     }
 
     private DateTime NowUtc => _clock.GetUtcNow().UtcDateTime;
