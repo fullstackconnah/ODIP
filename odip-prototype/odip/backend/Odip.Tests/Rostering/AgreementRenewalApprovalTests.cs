@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Domain.Billing.Pricing;
 using Odip.Infrastructure.Services;
 using Xunit;
@@ -171,5 +174,33 @@ public class AgreementRenewalApprovalTests
         var mondays = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId == made[DayOfWeek.Monday].Id).ToListAsync();
         Assert.NotEmpty(mondays);
         Assert.All(mondays, s => Assert.Null(s.UserId));
+    }
+
+    [Fact]   // REV281B #1: Stop through the OLD chip after the renewal is approved must survive into the week the successor makes
+    public async Task Approve_ThenStopViaTheOldChip_ThenStartTheSuccessorWeek_LeavesTheSlotOpen()
+    {
+        await using var f = await SetUpAsync(weeksStarted: false);
+        var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
+        await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        var ben = await UserAsync(f, "Ben", active: true);
+        foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
+        var renewal = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: Nov23, end: Jan3);
+        await f.Service.ApproveAsync(TenantA, f.ParticipantId, renewal.Id, false, Admin, CancellationToken.None);
+        var old = await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Monday);
+        Assert.Equal(ben, (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == renewal.Id && p.DayOfWeek == DayOfWeek.Monday)).DefaultUserId);   // the copy approval made
+        var chip = f.Db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, UserId = ben, ServiceDate = new DateOnly(2026, 11, 16), StartTime = old.StartTime, EndTime = old.EndTime,
+            Ratio = old.Ratio, NightType = old.NightType, Status = ShiftStatus.Draft, ShiftPatternId = old.Id,
+        }).Entity;
+        await f.Db.SaveChangesAsync();
+        var controller = RosterStartWeekTests.Controller(f.Db, RosterStartWeekTests.TenantOf(TenantA));
+
+        Assert.IsType<OkObjectResult>((await controller.SetRegular(old.Id, new SetRegularDto { ShiftId = chip.Id, StaffId = null, ExpectedRegularId = ben }, default)).Result);
+        Assert.IsType<OkObjectResult>((await controller.StartWeek(Nov23, default)).Result);
+
+        var made = await f.Db.Shifts.AsNoTracking().Where(s => s.ServiceDate == Nov23).ToListAsync();
+        Assert.NotEmpty(made);
+        Assert.All(made, s => Assert.Null(s.UserId));
     }
 }

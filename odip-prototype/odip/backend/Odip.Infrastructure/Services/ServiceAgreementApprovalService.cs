@@ -546,12 +546,12 @@ public sealed class ServiceAgreementApprovalService
 
     /// <summary>The same weekly support: the same weekday and worker slot, the same times, ratio and kind of night, and the same asks of a worker. A shift of the one is a shift of the other. The block id is not
     /// compared: the builder renumbers blocks on every save, and two blocks on one day at the same times would overlap, which the engine refuses.</summary>
-    private static bool SameSupport(ShiftPattern a, ShiftPattern b) =>
+    public static bool SameSupport(ShiftPattern a, ShiftPattern b) =>
         a.DayOfWeek == b.DayOfWeek && a.WorkerSlot == b.WorkerSlot && a.StartTime == b.StartTime && a.EndTime == b.EndTime
         && a.EndsNextDay == b.EndsNextDay && a.Ratio == b.Ratio && a.NightType == b.NightType && SameAsks(a.RequirementsJson, b.RequirementsJson);
 
     /// <summary>The same asks of a worker, read as what they mean: PostgreSQL stores them as jsonb, which reads back with its own key order and spacing, so the stored text never equals the mapper's.</summary>
-    private static bool SameAsks(string? a, string? b) =>
+    public static bool SameAsks(string? a, string? b) =>
         a == b || (a is not null && b is not null && DraftJson.Write(DraftJson.ReadRequirements(a)) == DraftJson.Write(DraftJson.ReadRequirements(b)));
 
     /// <summary>
