@@ -254,17 +254,22 @@ export default function DashboardPage() {
   // "Nothing needs you" only when it is true: every group and every alert has data and is at zero, and no consequence notice is waiting (SHAPE §6).
   const groupsClear = groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
   const pageClear = bandClear && groupsClear
+  // From xl, while a group is present, Needs your decision is a right-hand side column beside the rest of the page (dtable SHAPE §3); the DOM order stays.
+  const side = !pageClear && !groupsClear
 
   return (
-    <div className="flex flex-col gap-[var(--section-gap)]">
+    <div className={`flex flex-col gap-[var(--section-gap)] ${side ? 'xl:grid xl:grid-cols-[minmax(0,1fr)_clamp(24rem,30%,32rem)] xl:grid-rows-[auto_auto_1fr] xl:items-start' : ''}`}>
       {/* The greeting and today's date at the display step, the everyday counts as one quiet line in the meta row; then what someone must fix (Alerts: the band and
           the Critical Participant Alerts cards), then what only this viewer can decide ("Needs your decision", one tab per kind), then what is coming
           (Upcoming trips). When the whole page is clear, one Pale Sprout field stands in place of both sections (SHAPE §3, §6). */}
-      <DashboardHeader
-        now={now}
-        fullName={fullName}
-        counts={d && { upcomingTrips: d.upcomingTripCount, activeParticipants: d.activeParticipantCount, outstandingTasks: d.outstandingTaskCount }}
-      />
+      {/* Every child of the page column takes its xl cell explicitly (inert without the side column's grid). */}
+      <div className="xl:col-start-1 xl:row-start-1">
+        <DashboardHeader
+          now={now}
+          fullName={fullName}
+          counts={d && { upcomingTrips: d.upcomingTripCount, activeParticipants: d.activeParticipantCount, outstandingTasks: d.outstandingTaskCount }}
+        />
+      </div>
       {/* Mounted before any group can speak, outside the sections, so it survives the page turning all clear (SHAPE §10). sr-only, so it takes no gap. */}
       {groups.length > 0 && <AnnouncementRegion message={decision.announcement} />}
 
@@ -275,7 +280,8 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="flex flex-col gap-2">
+          {/* A size container: the critical cards take their columns from this block's width, so the side column narrows them, not the viewport. */}
+          <div className="@container flex flex-col gap-2 xl:col-start-1 xl:row-start-2">
             <h2 id="dashboard-alerts" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Alerts</h2>
             {summary.isError ? (
               <PageState kind="error" noun="dashboard summary" onRetry={() => summary.refetch()} />
@@ -299,7 +305,7 @@ export default function DashboardPage() {
                       </Link>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-[var(--section-gap)] md:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-[var(--section-gap)] @min-[36rem]:grid-cols-2 @min-[56rem]:grid-cols-3">
                       {criticalAlertItems.slice(0, 6).map(({ participantId, participantName, alert }) => {
                         const style = ALERT_SEVERITY_STYLES.Critical
                         const Icon = style.icon
@@ -341,20 +347,25 @@ export default function DashboardPage() {
           </div>
 
           {/* The worklist under the Alerts (the owner's order): one tab per kind of decision. */}
-          {gates.needsOrganisation && (
-            <div className="flex flex-col gap-2">
-              <h2 className="text-sm font-semibold">Needs your decision</h2>
-              <p className="text-[13px] text-[var(--color-muted-foreground)]">Choose an organisation to see its approvals.</p>
+          {/* The side column from xl (rows 1 to 3 beside the main column), in place below it. Only when it holds something: an empty flex child would still take a gap. */}
+          {(gates.needsOrganisation || groups.length > 0) && (
+            <div className="flex flex-col gap-[var(--section-gap)] xl:col-start-2 xl:row-span-3 xl:row-start-1">
+              {gates.needsOrganisation && (
+                <div className="flex flex-col gap-2">
+                  <h2 className="text-sm font-semibold">Needs your decision</h2>
+                  <p className="text-[13px] text-[var(--color-muted-foreground)]">Choose an organisation to see its approvals.</p>
+                </div>
+              )}
+              {groups.length > 0 && <NeedsYourDecision groups={groups} state={decision} />}
             </div>
           )}
-          {groups.length > 0 && <NeedsYourDecision groups={groups} state={decision} />}
         </>
       )}
 
       {/* Upcoming trips: the full width (its half-width partner, the Overdue Tasks panel, is gone: the Tasks due group replaced it). The card is its own size
           container, so its rows show their date, destination and pax columns as the card's width allows. */}
       {d && (
-        <Card className="@container">
+        <Card className="@container xl:col-start-1 xl:row-start-3 xl:self-start">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold">Upcoming trips</h2>
             <Link to="/trips" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
