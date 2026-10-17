@@ -36,6 +36,8 @@ public class ImportValuesTests
     [InlineData("1990-02-31", "Date of birth isn't a real date.")]
     [InlineData("March 3 1990", "Date of birth must be a date as dd/mm/yyyy or yyyy-mm-dd.")]
     [InlineData("03-04-1990", "Date of birth must be a date as dd/mm/yyyy or yyyy-mm-dd.")]
+    [InlineData("١٢/٠٣/١٩٩٠", "Date of birth must be a date as dd/mm/yyyy or yyyy-mm-dd.")]
+    [InlineData("١٩٩٠-٠٣-١٢", "Date of birth must be a date as dd/mm/yyyy or yyyy-mm-dd.")]
     public void Date_refuses_short_years_impossible_dates_and_other_shapes(string text, string error) =>
         Assert.Equal(error, ImportValues.Date(text, "Date of birth", false).Error);
 

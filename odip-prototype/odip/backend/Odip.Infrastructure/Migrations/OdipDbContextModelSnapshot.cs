@@ -5761,6 +5761,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<Guid?>("DefaultUserId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid");
 
                     b.Property<DateOnly>("EffectiveFrom")

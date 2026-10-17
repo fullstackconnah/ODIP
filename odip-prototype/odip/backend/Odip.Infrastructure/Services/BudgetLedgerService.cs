@@ -278,7 +278,7 @@ public sealed class BudgetLedgerService
     private sealed record PersonRow(Guid Id, string FirstName, string LastName, string? PreferredName, PlanType PlanType, bool IsIntensive, string? AddressState, string? NdisNumber)
     {
         // The participant's own full name rule (preferred name, else first name, then last).
-        public string Name => string.IsNullOrWhiteSpace(PreferredName) ? $"{FirstName} {LastName}" : $"{PreferredName} {LastName}";
+        public string Name => string.IsNullOrWhiteSpace(PreferredName) ? $"{FirstName} {LastName}".Trim() : $"{PreferredName} {LastName}".Trim();
     }
 
     /// <summary>A claim line that counts, with what the ledger needs of its claim and of the shift or booking it belongs to (see <see cref="ClaimLinesQuery"/>).</summary>

@@ -90,7 +90,7 @@ public class TripsController : ControllerBase
                 DurationDays = t.DurationDays, Status = t.Status, MaxParticipants = t.MaxParticipants,
                 CurrentParticipantCount = t.Bookings.Count(b => b.BookingStatus == BookingStatus.Confirmed),
                 WaitlistCount = t.Bookings.Count(b => b.BookingStatus == BookingStatus.Waitlist),
-                LeadCoordinatorName = t.LeadCoordinator != null ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null
+                LeadCoordinatorName = t.LeadCoordinator != null ? (t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName).Trim() : null
             });
 
         var result = await PagedResult<TripListDto>.CreateAsync(projectedQuery, page, pageSize, ct);
@@ -117,7 +117,7 @@ public class TripsController : ControllerBase
             EventTemplateId = t.EventTemplateId, EventTemplateName = t.EventTemplate?.EventName,
             OopDueDate = t.OopDueDate, BookingCutoffDate = t.BookingCutoffDate,
             LeadCoordinatorId = t.LeadCoordinatorId,
-            LeadCoordinatorName = t.LeadCoordinator != null ? t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName : null,
+            LeadCoordinatorName = t.LeadCoordinator != null ? (t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName).Trim() : null,
             RequiredWheelchairCapacity = t.RequiredWheelchairCapacity, RequiredBeds = t.RequiredBeds,
             RequiredBedrooms = t.RequiredBedrooms, MinStaffRequired = t.MinStaffRequired,
             CalculatedStaffRequired = t.CalculatedStaffRequired, StaffRequired = t.StaffRequired, Notes = t.Notes,
@@ -174,7 +174,7 @@ public class TripsController : ControllerBase
                 EventTemplateId = created.EventTemplateId, EventTemplateName = created.EventTemplate?.EventName,
                 OopDueDate = created.OopDueDate, BookingCutoffDate = created.BookingCutoffDate,
                 LeadCoordinatorId = created.LeadCoordinatorId,
-                LeadCoordinatorName = created.LeadCoordinator != null ? created.LeadCoordinator.FirstName + " " + created.LeadCoordinator.LastName : null,
+                LeadCoordinatorName = created.LeadCoordinator != null ? (created.LeadCoordinator.FirstName + " " + created.LeadCoordinator.LastName).Trim() : null,
                 RequiredWheelchairCapacity = created.RequiredWheelchairCapacity, RequiredBeds = created.RequiredBeds,
                 RequiredBedrooms = created.RequiredBedrooms, MinStaffRequired = created.MinStaffRequired,
                 CalculatedStaffRequired = created.CalculatedStaffRequired, StaffRequired = created.StaffRequired, Notes = created.Notes,
@@ -232,7 +232,7 @@ public class TripsController : ControllerBase
             EventTemplateId = updated.EventTemplateId, EventTemplateName = updated.EventTemplate?.EventName,
             OopDueDate = updated.OopDueDate, BookingCutoffDate = updated.BookingCutoffDate,
             LeadCoordinatorId = updated.LeadCoordinatorId,
-            LeadCoordinatorName = updated.LeadCoordinator != null ? updated.LeadCoordinator.FirstName + " " + updated.LeadCoordinator.LastName : null,
+            LeadCoordinatorName = updated.LeadCoordinator != null ? (updated.LeadCoordinator.FirstName + " " + updated.LeadCoordinator.LastName).Trim() : null,
             RequiredWheelchairCapacity = updated.RequiredWheelchairCapacity, RequiredBeds = updated.RequiredBeds,
             RequiredBedrooms = updated.RequiredBedrooms, MinStaffRequired = updated.MinStaffRequired,
             CalculatedStaffRequired = updated.CalculatedStaffRequired, StaffRequired = updated.StaffRequired, Notes = updated.Notes,
@@ -331,7 +331,7 @@ public class TripsController : ControllerBase
             .Select(b => new BookingListDto
             {
                 Id = b.Id, TripInstanceId = b.TripInstanceId, ParticipantId = b.ParticipantId,
-                ParticipantName = b.Participant.FirstName + " " + b.Participant.LastName,
+                ParticipantName = (b.Participant.FirstName + " " + b.Participant.LastName).Trim(),
                 BookingStatus = b.BookingStatus, BookingDate = b.BookingDate,
                 WheelchairRequired = b.WheelchairRequired, HighSupportRequired = b.HighSupportRequired,
                 NightSupportRequired = b.NightSupportRequired, HasRestrictivePracticeFlag = b.HasRestrictivePracticeFlag,
@@ -371,7 +371,7 @@ public class TripsController : ControllerBase
                 Id = v.Id, TripInstanceId = v.TripInstanceId, VehicleId = v.VehicleId,
                 VehicleName = v.Vehicle.VehicleName, Registration = v.Vehicle.Registration,
                 Status = v.Status, RequestedDate = v.RequestedDate, ConfirmedDate = v.ConfirmedDate,
-                DriverStaffId = v.DriverUserId, DriverName = v.DriverUser != null ? v.DriverUser.FirstName + " " + v.DriverUser.LastName : null,
+                DriverStaffId = v.DriverUserId, DriverName = v.DriverUser != null ? (v.DriverUser.FirstName + " " + v.DriverUser.LastName).Trim() : null,
                 SeatRequirement = v.SeatRequirement, WheelchairPositionRequirement = v.WheelchairPositionRequirement,
                 PickupTravelNotes = v.PickupTravelNotes, Comments = v.Comments, HasOverlapConflict = v.HasOverlapConflict,
                 HasConflict = v.HasConflict, OverrideReason = v.OverrideReason, AcknowledgedFindingCodes = v.AcknowledgedFindingCodes
@@ -388,7 +388,7 @@ public class TripsController : ControllerBase
             .Select(s => new StaffAssignmentDto
             {
                 Id = s.Id, TripInstanceId = s.TripInstanceId, StaffId = s.UserId,
-                StaffName = s.User.FirstName + " " + s.User.LastName, AssignmentRole = s.AssignmentRole,
+                StaffName = (s.User.FirstName + " " + s.User.LastName).Trim(), AssignmentRole = s.AssignmentRole,
                 AssignmentStart = s.AssignmentStart, AssignmentEnd = s.AssignmentEnd,
                 Status = s.Status, IsDriver = s.IsDriver, SleepoverType = s.SleepoverType,
                 ShiftNotes = s.ShiftNotes, HasConflict = s.HasConflict,
@@ -409,7 +409,7 @@ public class TripsController : ControllerBase
                 LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
                 MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
                 TaskType = t.TaskType, Title = t.Title,
-                OwnerId = t.OwnerId, OwnerName = t.Owner != null ? t.Owner.FirstName + " " + t.Owner.LastName : null,
+                OwnerId = t.OwnerId, OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
                 Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
                 CompletedDate = t.CompletedDate, Notes = t.Notes
             }).ToListAsync(ct);
@@ -604,7 +604,7 @@ public class TripsController : ControllerBase
             EndDate = trip.EndDate,
             DurationDays = trip.DurationDays,
             Status = trip.Status,
-            LeadCoordinatorName = trip.LeadCoordinator != null ? $"{trip.LeadCoordinator.FirstName} {trip.LeadCoordinator.LastName}" : null,
+            LeadCoordinatorName = trip.LeadCoordinator != null ? $"{trip.LeadCoordinator.FirstName} {trip.LeadCoordinator.LastName}".Trim() : null,
             Notes = trip.Notes,
             ParticipantCount = bookings.Count,
             StaffCount = staffAssignments.Count,
@@ -612,7 +612,7 @@ public class TripsController : ControllerBase
             Participants = bookings.Select(b => new ItineraryParticipantDto
             {
                 Id = b.ParticipantId,
-                Name = b.Participant.PreferredName ?? $"{b.Participant.FirstName} {b.Participant.LastName}",
+                Name = b.Participant.PreferredName ?? $"{b.Participant.FirstName} {b.Participant.LastName}".Trim(),
                 WheelchairRequired = b.WheelchairRequired,
                 HighSupportRequired = b.HighSupportRequired,
                 NightSupportRequired = b.NightSupportRequired,
@@ -643,13 +643,13 @@ public class TripsController : ControllerBase
                 VehicleType = v.Vehicle.VehicleType,
                 TotalSeats = v.Vehicle.TotalSeats,
                 WheelchairPositions = v.Vehicle.WheelchairPositions,
-                DriverName = v.DriverUser != null ? $"{v.DriverUser.FirstName} {v.DriverUser.LastName}" : null,
+                DriverName = v.DriverUser != null ? $"{v.DriverUser.FirstName} {v.DriverUser.LastName}".Trim() : null,
                 Status = v.Status,
                 PickupTravelNotes = v.PickupTravelNotes
             }).ToList(),
             Staff = staffAssignments.Select(s => new ItineraryStaffDto
             {
-                Name = $"{s.User.FirstName} {s.User.LastName}",
+                Name = $"{s.User.FirstName} {s.User.LastName}".Trim(),
                 Role = s.AssignmentRole ?? (s.User.Position ?? Position.SupportWorker).ToString(),
                 Email = s.User.Email,
                 Mobile = s.User.Mobile,
@@ -686,7 +686,7 @@ public class TripsController : ControllerBase
                     .ToList(),
                 StaffOnDuty = staffAssignments
                     .Where(s => s.AssignmentStart <= d.Date && s.AssignmentEnd >= d.Date)
-                    .Select(s => $"{s.User.FirstName} {s.User.LastName}")
+                    .Select(s => $"{s.User.FirstName} {s.User.LastName}".Trim())
                     .ToList()
             }).ToList()
         };

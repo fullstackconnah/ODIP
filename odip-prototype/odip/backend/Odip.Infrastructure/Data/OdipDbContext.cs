@@ -1116,6 +1116,8 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Notes).HasMaxLength(2000);
+            // The slot's regular: a second coordinator's Stop or Make must not overwrite a change made since the board loaded (REV281B).
+            entity.Property(e => e.DefaultUserId).IsConcurrencyToken();
 
             entity.HasOne(e => e.Participant)
                 .WithMany()

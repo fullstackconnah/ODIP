@@ -275,3 +275,31 @@ describe('MedicationFormPage — Back, Cancel and Save return to where the form 
     expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/participants/participant-1?tab=medications')
   })
 })
+
+// C25: a failed or missing record must never open an empty form that a save would write over the real one.
+describe('MedicationFormPage — editing a record that has not loaded', () => {
+  it('says it is loading while the record loads, with no form', () => {
+    mockUseMedication.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    renderEditPage('med-1')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading medication…')
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('shows the error with Try again when the load fails, and no form', async () => {
+    const refetch = vi.fn()
+    mockUseMedication.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch })
+    renderEditPage('med-1')
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load this medication/i)
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('says not found on a 404, with no form', () => {
+    mockUseMedication.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderEditPage('med-1')
+    expect(screen.getByText('Medication not found')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to medications' })).toHaveAttribute('href', '/medications')
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+})

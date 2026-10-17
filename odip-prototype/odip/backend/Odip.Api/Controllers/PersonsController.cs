@@ -49,7 +49,7 @@ public class PersonsController : ControllerBase
             .OrderBy(p => p.LastName).ThenBy(p => p.FirstName)
             .Select(p => new PersonDto
             {
-                Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FirstName + " " + p.LastName,
+                Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = (p.FirstName + " " + p.LastName).Trim(),
                 Phone = p.Phone, Mobile = p.Mobile, Email = p.Email,
                 AddressLine = p.AddressLine, Suburb = p.Suburb, State = p.State, Postcode = p.Postcode,
                 Organisation = p.Organisation, DateOfBirth = p.DateOfBirth, Notes = p.Notes,

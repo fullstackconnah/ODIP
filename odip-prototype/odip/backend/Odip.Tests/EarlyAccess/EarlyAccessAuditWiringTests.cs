@@ -175,7 +175,7 @@ public class EarlyAccessAuditWiringTests
         public Task<HttpResponseMessage> PostSignupAsync(string phone, string message) =>
             client.PostAsync("/api/public/early-access", new StringContent(JsonSerializer.Serialize(new
             {
-                name = "Audit Person", organisation = "Audit Care", email = Email, role = Role, phone, message, website = "",
+                name = "Audit Person", organisation = "Audit Care", email = Email, role = Role, phone, message, organisationSize = "under-10", website = "",
             }), Encoding.UTF8, "application/json"));
 
         public async Task<bool> FollowUpNeededAsync()

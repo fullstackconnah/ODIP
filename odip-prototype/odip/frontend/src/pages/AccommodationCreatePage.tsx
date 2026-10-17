@@ -14,6 +14,8 @@ import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
 import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 
 const accommodationSchema = z.object({
   propertyName: z.string().min(1, 'Property name is required'),
@@ -49,7 +51,7 @@ export default function AccommodationCreatePage() {
   const isEdit = !!id
   const createAccommodation = useCreateAccommodation()
   const updateAccommodation = useUpdateAccommodation()
-  const { data: existing, isLoading: isLoadingExisting } = useAccommodationDetail(isEdit ? id : undefined)
+  const { data: existing, isError: isExistingError, error: existingError, refetch: refetchExisting } = useAccommodationDetail(isEdit ? id : undefined)
   const mutation = isEdit ? updateAccommodation : createAccommodation
 
   const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm({
@@ -105,7 +107,7 @@ export default function AccommodationCreatePage() {
     }
     try {
       if (isEdit) {
-        const res = await updateAccommodation.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
+        const res = await updateAccommodation.mutateAsync({ id, data: { ...payload, isActive: existing!.isActive } })
         if (res.success) {
           flushSync(() => reset(data))
           navigate(`/accommodation/${id}`)
@@ -124,7 +126,13 @@ export default function AccommodationCreatePage() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
-  if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+  // A record that has not loaded is never a blank form: saving it would overwrite the real one.
+  if (isEdit && !existing) {
+    if (!isExistingError) return <PageState kind="loading" noun="accommodation" />
+    return isNotFoundError(existingError)
+      ? <PageState kind="not-found" noun="accommodation" backTo="/accommodation" backLabel="accommodation" />
+      : <PageState kind="error" noun="accommodation" onRetry={() => refetchExisting()} />
+  }
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">

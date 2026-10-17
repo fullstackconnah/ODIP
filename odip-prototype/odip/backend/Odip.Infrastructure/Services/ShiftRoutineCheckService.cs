@@ -43,7 +43,7 @@ public sealed class ShiftRoutineCheckService
 
         var userIds = rows.Select(r => r.CheckedByUserId).Distinct().ToList();
         var names = (await _db.Users.Where(u => userIds.Contains(u.Id)).Select(u => new { u.Id, u.FirstName, u.LastName }).ToListAsync(ct))
-            .ToDictionary(u => u.Id, u => $"{u.FirstName} {u.LastName}");
+            .ToDictionary(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim());
         return rows
             .Select(r => new RoutineCheckInfo(r.ParticipantRoutineId, r.ScheduledAt, r.CheckedAt, names.GetValueOrDefault(r.CheckedByUserId, string.Empty), r.RoutineTitle))
             .ToList();

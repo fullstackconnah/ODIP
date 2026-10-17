@@ -111,7 +111,7 @@ public class CaregiverSubmissionsController : ControllerBase
             .Select(s => new CaregiverSubmissionListItemDto
             {
                 Id = s.Id, ParticipantId = s.ParticipantId,
-                ParticipantName = s.Participant.FirstName + " " + s.Participant.LastName,
+                ParticipantName = (s.Participant.FirstName + " " + s.Participant.LastName).Trim(),
                 Status = s.Status, CaregiverName = s.CaregiverName,
                 CreatedAt = s.CreatedAt, ExpiresAt = s.ExpiresAt, SubmittedAt = s.SubmittedAt,
             })
@@ -136,7 +136,7 @@ public class CaregiverSubmissionsController : ControllerBase
         var dto = new CaregiverSubmissionDetailDto
         {
             Id = s.Id, ParticipantId = s.ParticipantId,
-            ParticipantName = s.Participant.FirstName + " " + s.Participant.LastName,
+            ParticipantName = (s.Participant.FirstName + " " + s.Participant.LastName).Trim(),
             Status = s.Status, CaregiverName = s.CaregiverName, CaregiverRelationship = s.CaregiverRelationship,
             CreatedAt = s.CreatedAt, ExpiresAt = s.ExpiresAt, SubmittedAt = s.SubmittedAt,
             ReviewedAt = s.ReviewedAt, RejectionNote = s.RejectionNote,

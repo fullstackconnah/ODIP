@@ -135,12 +135,12 @@ export function useStartWeek() {
   })
 }
 
-/** Make or stop being the regular: the pattern slot's default worker (null for none). No shift changes; the board and the patterns refetch before mutateAsync settles. */
+/** Make or stop being the regular: the pattern slot's default worker (null for none). `expectedRegularId` is the regular the board showed (the all-zero Guid for none): another coordinator's change since is a 409. No shift changes; the board and the patterns refetch before mutateAsync settles. */
 export function useSetRegular() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ patternId, shiftId, staffId }: { patternId: string; shiftId: string; staffId: string | null }) =>
-      apiPut<ShiftPatternDto>(`/rostering/patterns/${patternId}/regular`, { shiftId, staffId }),
+    mutationFn: ({ patternId, ...body }: { patternId: string; shiftId: string; staffId: string | null; expectedRegularId: string }) =>
+      apiPut<ShiftPatternDto>(`/rostering/patterns/${patternId}/regular`, body),
     onSuccess: () => Promise.all([
       qc.invalidateQueries({ queryKey: ['roster-board'] }),
       qc.invalidateQueries({ queryKey: ['roster-patterns'] }),

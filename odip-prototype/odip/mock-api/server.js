@@ -3012,8 +3012,20 @@ const putRoutes = [
       && shown.startTime === pattern.startTime && shown.endTime === pattern.endTime && !!shown.endsNextDay === !!pattern.endsNextDay
     if (!slotMatches || (body.staffId && shown.staffId !== body.staffId)) return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
     if (!pattern.isActive || (pattern.effectiveTo && pattern.effectiveTo < providerToday())) return respond(409, failEnvelope(null, ["This shift's agreement pattern has ended, so it has no regular to change."], 'pattern-ended'))
+    // REV281B: the regular the coordinator was shown must still be the live one (null/absent: an old tab, no check; the all-zero Guid: none shown).
+    if (body && typeof body.expectedRegularId === 'string' && (/^0{8}(-0{4}){3}-0{12}$/.test(body.expectedRegularId) ? null : body.expectedRegularId) !== (pattern.defaultStaffId || null))
+      return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
     const regular = body && body.staffId ? staff.find((s) => s.id === body.staffId) : null
     if (body && body.staffId && !regular) return respond(400, failEnvelope(null, ['Staff member not found.']))
+    // REV281B: a renewal's later same-support patterns take it too, as the server does: only those whose regular is still the replaced one (a regular chosen on the renewal stays). The asks of a worker are part of the slot (SameSupport).
+    const slot = (p) => [p.participantId, p.dayOfWeek, p.startTime, p.endTime, !!p.endsNextDay, p.workerSlot, p.ratio, p.nightType, JSON.stringify(p.requirements ?? {})].join('|')
+    const was = pattern.defaultStaffId || null
+    for (const next of rosterPatterns) {
+      if (next.id !== pattern.id && next.isActive && pattern.effectiveTo && next.effectiveFrom > pattern.effectiveTo && (next.defaultStaffId || null) === was && slot(next) === slot(pattern)) {
+        next.defaultStaffId = regular ? regular.id : null
+        next.defaultStaffName = regular ? regular.fullName : null
+      }
+    }
     pattern.defaultStaffId = regular ? regular.id : null
     pattern.defaultStaffName = regular ? regular.fullName : null
     return pattern
@@ -3130,8 +3142,9 @@ function sendResult(res, result) {
 // Mirrors POST /api/public/early-access, which — like the real route — lives OUTSIDE BASE and outside the
 // ApiResponse envelope. Same contract as the API: 202 { status: 'received' } for a valid request after a
 // short delay; a filled honeypot (`website`) gets the same 202 and is dropped; invalid fields get a 400
-// ValidationProblemDetails whose `errors` are keyed name / organisation / email / organisationSize / role / phone /
-// message; a body over 8 KB (in BYTES, as the API counts) gets 413.
+// ValidationProblemDetails whose `errors` are keyed by the 7 fields, name / organisation / email / organisationSize /
+// role / phone / message. Name, organisation, email and organisationSize are required (a missing or blank size is
+// a 400 like any other required field). A body over 8 KB (in BYTES, as the API counts) gets 413.
 // A valid sign-up is kept for the life of the process, in the admin list (see recordEarlyAccess). (The 429 rate limit is not simulated here.)
 const EARLY_ACCESS_PATH = '/api/public/early-access'
 const EARLY_ACCESS_DELAY_MS = 400
@@ -3164,8 +3177,8 @@ function validateEarlyAccess(body) {
   if (phone.length > 30) errors.phone = ['Phone must be 30 characters or fewer.']
   else if (!/^[0-9 +()-]*$/.test(phone)) errors.phone = ['Use digits, spaces and + ( ) - only.']
   else if (phone && (phone.lastIndexOf('+') > 0 || !/^(\D*\d){8,15}\D*$/.test(phone))) errors.phone = ['Enter a phone number with 8 to 15 digits.']
-  const size = text(body.organisationSize) // optional in PR 1 (expand), checked when given; PR 2 makes it required
-  if (size && !ORGANISATION_SIZES.includes(size)) errors.organisationSize = ['Choose one of the listed sizes.']
+  const size = text(body.organisationSize)
+  if (!ORGANISATION_SIZES.includes(size)) errors.organisationSize = [size ? 'Choose one of the listed sizes.' : "Choose your organisation's size."]
   if (cleanMessage(body.message).length > 1000) errors.message = ['Message must be 1,000 characters or fewer.']
   return errors
 }

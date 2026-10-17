@@ -88,7 +88,7 @@ public class BookingsController : ControllerBase
             .Select(b => new BookingListDto
             {
                 Id = b.Id, TripInstanceId = b.TripInstanceId, TripName = b.TripInstance.TripName,
-                ParticipantId = b.ParticipantId, ParticipantName = b.Participant.FirstName + " " + b.Participant.LastName,
+                ParticipantId = b.ParticipantId, ParticipantName = (b.Participant.FirstName + " " + b.Participant.LastName).Trim(),
                 BookingStatus = b.BookingStatus, BookingDate = b.BookingDate,
                 WheelchairRequired = b.WheelchairRequired, HighSupportRequired = b.HighSupportRequired,
                 NightSupportRequired = b.NightSupportRequired, HasRestrictivePracticeFlag = b.HasRestrictivePracticeFlag,
@@ -110,7 +110,7 @@ public class BookingsController : ControllerBase
         return Ok(ApiResponse<BookingDetailDto>.Ok(new BookingDetailDto
         {
             Id = b.Id, TripInstanceId = b.TripInstanceId, TripName = b.TripInstance.TripName,
-            ParticipantId = b.ParticipantId, ParticipantName = b.Participant.FirstName + " " + b.Participant.LastName,
+            ParticipantId = b.ParticipantId, ParticipantName = (b.Participant.FirstName + " " + b.Participant.LastName).Trim(),
             BookingStatus = b.BookingStatus, BookingDate = b.BookingDate,
             WheelchairRequired = b.WheelchairRequired, HighSupportRequired = b.HighSupportRequired,
             NightSupportRequired = b.NightSupportRequired, HasRestrictivePracticeFlag = b.HasRestrictivePracticeFlag,
@@ -171,7 +171,7 @@ public class BookingsController : ControllerBase
                 TripInstanceId = dto.TripInstanceId,
                 ParticipantBookingId = booking.Id,
                 TaskType = TaskType.InsuranceConfirmation,
-                Title = $"Confirm travel insurance for {participant.FirstName} {participant.LastName}",
+                Title = $"Confirm travel insurance for {(participant.FirstName + " " + participant.LastName).Trim()}",
                 Priority = TaskPriority.Medium,
                 Status = dto.InsuranceStatus == InsuranceStatus.Confirmed
                     ? TaskItemStatus.Completed : TaskItemStatus.NotStarted,
@@ -196,7 +196,7 @@ public class BookingsController : ControllerBase
             {
                 Id = booking.Id, TripInstanceId = booking.TripInstanceId, TripName = trip?.TripName,
                 ParticipantId = booking.ParticipantId,
-                ParticipantName = participant != null ? participant.FirstName + " " + participant.LastName : null,
+                ParticipantName = participant != null ? (participant.FirstName + " " + participant.LastName).Trim() : null,
                 BookingStatus = booking.BookingStatus, BookingDate = booking.BookingDate,
                 WheelchairRequired = booking.WheelchairRequired, HighSupportRequired = booking.HighSupportRequired,
                 NightSupportRequired = booking.NightSupportRequired, HasRestrictivePracticeFlag = booking.HasRestrictivePracticeFlag,
@@ -258,7 +258,7 @@ public class BookingsController : ControllerBase
         return Ok(ApiResponse<BookingDetailDto>.Ok(new BookingDetailDto
         {
             Id = b.Id, TripInstanceId = b.TripInstanceId, TripName = b.TripInstance.TripName,
-            ParticipantId = b.ParticipantId, ParticipantName = b.Participant.FirstName + " " + b.Participant.LastName,
+            ParticipantId = b.ParticipantId, ParticipantName = (b.Participant.FirstName + " " + b.Participant.LastName).Trim(),
             BookingStatus = b.BookingStatus, BookingDate = b.BookingDate,
             WheelchairRequired = b.WheelchairRequired, HighSupportRequired = b.HighSupportRequired,
             NightSupportRequired = b.NightSupportRequired, HasRestrictivePracticeFlag = b.HasRestrictivePracticeFlag,
@@ -296,7 +296,7 @@ public class BookingsController : ControllerBase
         return Ok(ApiResponse<BookingDetailDto>.Ok(new BookingDetailDto
         {
             Id = b.Id, TripInstanceId = b.TripInstanceId, TripName = b.TripInstance.TripName,
-            ParticipantId = b.ParticipantId, ParticipantName = b.Participant.FirstName + " " + b.Participant.LastName,
+            ParticipantId = b.ParticipantId, ParticipantName = (b.Participant.FirstName + " " + b.Participant.LastName).Trim(),
             BookingStatus = b.BookingStatus, BookingDate = b.BookingDate,
             WheelchairRequired = b.WheelchairRequired, HighSupportRequired = b.HighSupportRequired,
             NightSupportRequired = b.NightSupportRequired, HasRestrictivePracticeFlag = b.HasRestrictivePracticeFlag,
