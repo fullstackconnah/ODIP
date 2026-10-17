@@ -629,15 +629,17 @@ mutation hooks to it, so a decision here is the same decision as on the full pag
   "Open Leave" otherwise. The link never carries a number; the pill does. A group at zero is a muted tab, named in one All clear row. A group still waiting
   (`awaitsData`) or failed is never clear: one line ("Loading leave requests…", or "Couldn't load leave requests." with Try again), and no rows until every
   request it makes has answered. A page change in the side column keeps focus on the pressed control and holds the list's outgoing height, so a short last
-  page never pulls the pager up under the pointer; in place it scrolls the list under the app header and focuses the first card.
+  page never pulls the pager up under the pointer; if the new first row is then above the viewport, it is scrolled in by the least distance, instantly, under
+  the stuck header (nothing moves when it is already on screen). In place it scrolls the list under the app header and focuses the first card. The pager's
+  "Showing a-b of N" is not a live region: the page change moves focus, and the announcement region speaks decisions.
 - **The list** is cards below xl (house phone cards, 12px apart) and one list box in the side column: DataTable's box (white card, 1px ruled border,
   radius-md), rows divided by hairlines, `--card-pad` across and 8px down, the hover tint `surface-container-low`. **This list never scrolls:** its box has
   no `overflow`, the tabs wrap (`overflow="wrap"`; three rows of tabs in the side column are accepted) and busy labels share one grid cell with the label
   they replace. The wide multi-column table and its JS track sizing are gone.
 - **A row** has two lines in the side column. Line 1: the box, the subject (14px/600, two lines at most, full text in `title`) and at most two
   `Button size="sm"` at the right edge, top-aligned. Line 2, from the subject's edge: the flags (the first two StatusBadges), then the facts as one muted
-  13px run joined by " · " (the dot trails a fact, so a wrapped line never starts with one). Short facts stay whole; free text takes one line, cut, with its
-  `title`. In the side column on a touch tablet a cut free-text fact has only its `title`, which touch cannot show: its full text is one tap away on the
+  13px run set apart by the row's 12px gap, the card's own grammar (no dots, so a wrapped line never ends in one). Short facts stay whole; free text takes
+  the rest of its line (8rem at least, else it wraps to a line of its own), cut there, with its `title`. In the side column on a touch tablet a cut free-text fact has only its `title`, which touch cannot show: its full text is one tap away on the
   full page. Below xl the card is as before: the subject and its flags, the facts line, the buttons under them. Buttons are always visible, each named for
   its row. Olive means one tap decides: only Approve and Done are primary; Return, Decline, Review, Open and Update expiry are secondary.
 - **Bulk** (Completions, Leave, Tasks only; a row is safe when it has its olive one-tap button): the list's header row is the bulk control, sticky under the
