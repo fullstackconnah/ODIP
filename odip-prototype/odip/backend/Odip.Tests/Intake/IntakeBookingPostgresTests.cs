@@ -14,6 +14,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Tests.Postgres;
 using Xunit;
@@ -162,7 +163,7 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         await dbA.SaveChangesAsync();
         var (db, controller) = SuperAdminViewing(a, admin.Id);
         await using var _ = db;
-        var body = new SetIntakeBookingDto { StartsAt = IntakeBookingsControllerTests.Start, DurationMinutes = 90, Location = "Home", StaffUserId = kimB.Id };
+        var body = new SetIntakeBookingDto { StartsAt = IntakeBookingsControllerTests.Start, DurationMinutes = 90, Location = "Home", StaffUserId = kimB.Id, ExpectedUpdatedAt = await VersionAsync(db, noah.Id) };
 
         var refused = await controller.Set(noah.Id, body, CancellationToken.None);
         var booked = await controller.Set(noah.Id, body with { StaffUserId = samA.Id }, CancellationToken.None);
@@ -203,10 +204,10 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
 
         var (db, controller) = SuperAdminViewing(a, admin.Id);
         await using var _ = db;
-        SetIntakeBookingDto Body(DateTime startsAt) => new() { StartsAt = startsAt, DurationMinutes = 90, Location = "12 Smith St", StaffUserId = samA.Id };
+        SetIntakeBookingDto Body(DateTime startsAt, DateTime version) => new() { StartsAt = startsAt, DurationMinutes = 90, Location = "12 Smith St", StaffUserId = samA.Id, ExpectedUpdatedAt = version };
 
-        Assert.IsType<OkObjectResult>((await controller.Set(noah.Id, Body(IntakeBookingsControllerTests.Start), CancellationToken.None)).Result);
-        var refused = Assert.IsType<ConflictObjectResult>((await controller.Set(nia.Id, Body(IntakeBookingsControllerTests.Start.AddMinutes(30)), CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.Set(noah.Id, Body(IntakeBookingsControllerTests.Start, await VersionAsync(db, noah.Id)), CancellationToken.None)).Result);
+        var refused = Assert.IsType<ConflictObjectResult>((await controller.Set(nia.Id, Body(IntakeBookingsControllerTests.Start.AddMinutes(30), await VersionAsync(db, nia.Id)), CancellationToken.None)).Result);
         Assert.Equal(["Sam Lee has another intake visit 10:00 – 11:30 am on Fri 16 Oct."], Assert.IsType<ValidationProblemDetails>(refused.Value).Errors["staffUserId"]);
     }
 
@@ -219,7 +220,12 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         return x;
     }
 
-    private static SetIntakeBookingDto Body(User staff, DateTime startsAt) => new() { StartsAt = startsAt, DurationMinutes = 90, Location = "12 Smith St", StaffUserId = staff.Id };
+    private static SetIntakeBookingDto Body(User staff, DateTime startsAt, DateTime version) =>
+        new() { StartsAt = startsAt, DurationMinutes = 90, Location = "12 Smith St", StaffUserId = staff.Id, ExpectedUpdatedAt = version };
+
+    /// <summary>The version a panel that has just loaded the enquiry holds: read back from the database, which keeps microseconds.</summary>
+    private static Task<DateTime> VersionAsync(OdipDbContext db, Guid inquiryId) =>
+        db.ParticipantInquiries.IgnoreQueryFilters().AsNoTracking().Where(i => i.Id == inquiryId).Select(i => i.UpdatedAt).SingleAsync();
 
     // One organisation, Sam, an admin to book as, and two enquiries nobody has booked yet.
     private async Task<(Guid Tenant, User Sam, User Admin, ParticipantInquiry X, ParticipantInquiry Y)> BookableAsync()
@@ -266,9 +272,10 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
             var (dbB, b) = SuperAdminViewing(tenantId, admin.Id);
             await using var _a = dbA;
             await using var _b = dbB;
+            var (xv, yv) = (await VersionAsync(dbA, x.Id), await VersionAsync(dbB, y.Id));
             var start = new TaskCompletionSource();
-            var first = Task.Run(async () => { await start.Task; return await a.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None); });
-            var second = Task.Run(async () => { await start.Task; return await b.Set(y.Id, Body(sam, IntakeBookingsControllerTests.Start.AddMinutes(30)), CancellationToken.None); });
+            var first = Task.Run(async () => { await start.Task; return await a.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start, xv), CancellationToken.None); });
+            var second = Task.Run(async () => { await start.Task; return await b.Set(y.Id, Body(sam, IntakeBookingsControllerTests.Start.AddMinutes(30), yv), CancellationToken.None); });
             start.SetResult();
             var results = (await Task.WhenAll(first, second)).Select(r => r.Result).ToList();
 
@@ -289,7 +296,8 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         await using var raw = await OpenAsync();
         await ScalarAsync(raw, HoldKey, sam.Id);
 
-        var waiting = Task.Run(() => controller.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None));
+        var version = await VersionAsync(db, x.Id);
+        var waiting = Task.Run(() => controller.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start, version), CancellationToken.None));
         await Task.Delay(500);
         Assert.False(waiting.IsCompleted);
         // While it waits, an overlapping visit lands: the check has to run after the lock, or it would not see this one.
@@ -316,7 +324,7 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         await using var raw = await OpenAsync();
         await ScalarAsync(raw, HoldKey, sam.Id);
 
-        var result = await controller.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None);
+        var result = await controller.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start, await VersionAsync(db, x.Id)), CancellationToken.None);
         await ScalarAsync(raw, ReleaseKey, sam.Id);
 
         var busy = Assert.IsType<ConflictObjectResult>(result.Result);
@@ -332,13 +340,13 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         var (tenantId, sam, admin, x, _) = await BookableAsync();
         var (db, controller) = SuperAdminViewing(tenantId, admin.Id, lockWait: TimeSpan.FromMilliseconds(200));
         await using var _db = db;
-        var booked = Body(sam, IntakeBookingsControllerTests.Start);
+        var booked = Body(sam, IntakeBookingsControllerTests.Start, await VersionAsync(db, x.Id));
         Assert.IsType<OkObjectResult>((await controller.Set(x.Id, booked, CancellationToken.None)).Result);
         await using var raw = await OpenAsync();
         await ScalarAsync(raw, HoldKey, sam.Id);
 
-        var notes = await controller.Set(x.Id, booked with { Notes = "Bring the forms" }, CancellationToken.None);
-        var place = await controller.Set(x.Id, booked with { Location = "3 Jones Rd" }, CancellationToken.None);
+        var notes = await controller.Set(x.Id, booked with { Notes = "Bring the forms", ExpectedUpdatedAt = await VersionAsync(db, x.Id) }, CancellationToken.None);
+        var place = await controller.Set(x.Id, booked with { Location = "3 Jones Rd", ExpectedUpdatedAt = await VersionAsync(db, x.Id) }, CancellationToken.None);
         await ScalarAsync(raw, ReleaseKey, sam.Id);
 
         Assert.IsType<OkObjectResult>(notes.Result);
@@ -354,11 +362,12 @@ public class IntakeBookingPostgresTests : IClassFixture<PostgresFixture>
         IActionResult? during = null;
         var (dbB, b) = SuperAdminViewing(tenantId, admin.Id, lockWait: TimeSpan.FromMilliseconds(200));
         await using var _b = dbB;
-        var channel = new SendingChannel(async () => during = (await b.Set(y.Id, Body(sam, IntakeBookingsControllerTests.Start.AddHours(3)), CancellationToken.None)).Result);
+        var (xv, yv) = (await VersionAsync(dbB, x.Id), await VersionAsync(dbB, y.Id));
+        var channel = new SendingChannel(async () => during = (await b.Set(y.Id, Body(sam, IntakeBookingsControllerTests.Start.AddHours(3), yv), CancellationToken.None)).Result);
         var (dbA, a) = SuperAdminViewing(tenantId, admin.Id, channel: channel);
         await using var _a = dbA;
 
-        Assert.IsType<OkObjectResult>((await a.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start), CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await a.Set(x.Id, Body(sam, IntakeBookingsControllerTests.Start, xv), CancellationToken.None)).Result);
 
         Assert.NotNull(during);
         Assert.IsType<OkObjectResult>(during);

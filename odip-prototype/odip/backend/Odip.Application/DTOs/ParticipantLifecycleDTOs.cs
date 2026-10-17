@@ -154,11 +154,16 @@ public record SetIntakeBookingDto
     public string? Notes { get; init; }
     /// <summary>Sent only when the enquiry has no email: validated and saved to the enquiry in the same save as the booking.</summary>
     public string? ContactEmail { get; init; }
-    /// <summary>The UpdatedAt the form holds (ODIP-REVIEW-268): a save since then makes the booking a 409. Null skips the check (the slide-over).</summary>
+    /// <summary>The UpdatedAt the form holds (ODIP-REVIEW-268): a save since then, or none sent, makes the booking a 409.</summary>
     public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
-public record ConfirmIntakeBookingDto { public bool Confirmed { get; init; } }
+public record ConfirmIntakeBookingDto
+{
+    public bool Confirmed { get; init; }
+    /// <summary>The UpdatedAt the panel holds: required, and a different one makes the write a 409 (nothing saves).</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
+}
 
 /// <summary>POST /inquiries/{id}/close. Note has no [StringLength]: the action checks it after the trim, keyed "note" in SHAPE's words (the column keeps 500).</summary>
 public record CloseInquiryDto
@@ -169,7 +174,7 @@ public record CloseInquiryDto
     public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
-/// <summary>The UpdatedAt the screen holds, as an optional body (POST .../reopen, POST .../intake-booking/send): a save since then makes the write a 409.</summary>
+/// <summary>The UpdatedAt the screen holds, as a body (POST .../reopen: optional; POST .../intake-booking/send: required): a save since then makes the write a 409.</summary>
 public record InquiryVersionDto
 {
     public DateTime? ExpectedUpdatedAt { get; init; }
