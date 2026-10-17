@@ -8,7 +8,7 @@ import { Callout } from '@/components/Callout'
 import { FormField } from '@/components/FormField'
 import { SlideOver } from '@/components/SlideOver'
 import {
-  DEFAULT_DURATION, FALLBACK_ZONE, FIELD_ORDER, bookingBody, bookingFormOf, inviteEmail, invitee, inviteeEmailLabel, isPastVisit, noInviteWhy, notSentReason, refusalOf, resultLine,
+  DEFAULT_DURATION, FALLBACK_ZONE, changedByOther, FIELD_ORDER, bookingBody, bookingFormOf, inviteEmail, invitee, inviteeEmailLabel, isPastVisit, noInviteWhy, notSentReason, refusalOf, resultLine,
   sendsInvite, serverBookingErrors, validateBooking, visitDay,
   type BookingErrors, type BookingField, type BookingForm,
 } from '@/lib/intakeBooking'
@@ -27,9 +27,6 @@ export type IntakeBookingPanelProps = {
 }
 
 const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
-
-/** A 409 with no field reason: a colleague changed the visit (a busy staff member is a 409 too, but it lands on its field). */
-const changedByOther = (error: unknown, mapped: BookingErrors) => (error as { response?: { status?: number } } | null)?.response?.status === 409 && !Object.keys(mapped).length
 
 function savedAnnouncement(kind: 'booked' | 'updated' | 'notes', row: ParticipantInquiryDto): string {
   if (kind === 'notes') return 'Notes saved.'

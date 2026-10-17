@@ -171,6 +171,9 @@ export function noAnswer(error: unknown): boolean {
   return !!e?.isAxiosError && !e.response
 }
 
+/** A 409 with no field reason: a colleague changed the visit (a busy staff member is a 409 too, but it lands on its field). */
+export const changedByOther = (error: unknown, mapped: BookingErrors = {}) => (error as { response?: { status?: number } } | null)?.response?.status === 409 && !Object.keys(mapped).length
+
 /** The booking fields in screen order: where focus goes for the first refused one. */
 export const FIELD_ORDER: BookingField[] = ['email', 'date', 'time', 'duration', 'location', 'staffUserId', 'notes']
 export const NO_CONNECTION = "Couldn't reach ODIP. Check your connection and try again. Your entries are kept."

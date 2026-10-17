@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { useCancelIntakeBooking } from '@/api/hooks'
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { FALLBACK_ZONE, invitee, unbroken, visitWhen } from '@/lib/intakeBooking'
+import { FALLBACK_ZONE, changedByOther, invitee, unbroken, visitWhen } from '@/lib/intakeBooking'
 import { fullName } from '@/lib/inquiryDetails'
 import { extractErrorMessage } from '@/lib/utils'
+
+const CHANGED_COPY = 'Someone else just changed this visit. The details above are now up to date. Cancel the visit again if you still want to.'
 
 type IntakeCancelDialogProps = {
   row: ParticipantInquiryDto | null
@@ -39,7 +41,8 @@ export function IntakeCancelDialog({ row, onCancel, onDone }: IntakeCancelDialog
           setError(null)
           onDone(row, result.cancellationEmail, result.inquiry)
         } catch (failure) {
-          setError(extractErrorMessage(failure, "The visit wasn't cancelled. Try again."))
+          // The page has already swapped in the colleague's row, so the server's "Reload and try again" would point at nothing.
+          setError(changedByOther(failure) ? CHANGED_COPY : extractErrorMessage(failure, "The visit wasn't cancelled. Try again."))
         }
       }}
     />
