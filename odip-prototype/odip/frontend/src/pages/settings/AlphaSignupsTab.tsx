@@ -36,12 +36,13 @@ const LATER_SUBMISSIONS_KEPT = 10
 const displayAnswer = (key: (typeof LATER_FIELDS)[number]['key'], value: string | undefined) =>
   key === 'organisationSize' && value ? ORGANISATION_SIZE_LABELS[value] ?? value : value
 
-// One later entry: a headline, then only the answers that differ from the stored ones. The same two tracks as the original answers,
+// One later entry: a date headline, an optional muted note, then only the answers that differ from the stored ones. The same two tracks as the original answers,
 // so Phone lines up with theirs whichever fields are listed.
-function laterEntry(row: EarlyAccessSignupDto, later: EarlyAccessLaterSubmissionDto, headline: string) {
+function laterEntry(row: EarlyAccessSignupDto, later: EarlyAccessLaterSubmissionDto, note?: string) {
   return (
     <li key={later.id} className="border-t border-[var(--color-border)] pt-2">
-      <p className={dateLine}>{headline}</p>
+      <p className={dateLine}>Sent {formatInstantDateAu(later.receivedAtUtc)}</p>
+      {note && <p className={`text-xs ${muted}`}>{note}</p>}
       <dl className="mt-1 grid grid-cols-2 gap-x-8 gap-y-2 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-x-10">
         {LATER_FIELDS.filter(({ key }) => later[key] !== row[key]).map(({ key, label }) => (
           <div key={key} className={key === 'message' ? 'col-span-2 min-w-0' : `min-w-0 break-words${key === 'phone' ? ' col-start-2' : ''}`}>
@@ -197,9 +198,9 @@ export default function AlphaSignupsTab() {
           </p>
         )}
         <ol className="mt-1 space-y-2">
-          {row.laterSubmissions.map(later => laterEntry(row, later, `Sent ${formatInstantDateAu(later.receivedAtUtc)}`))}
+          {row.laterSubmissions.map(later => laterEntry(row, later))}
           {row.lastOverLimit && laterEntry(row, row.lastOverLimit,
-            `${row.overLimitCount} more sent after the limit, latest on ${formatInstantDateAu(row.lastOverLimit.receivedAtUtc)}`)}
+            `${row.overLimitCount} more sent after the first ${LATER_SUBMISSIONS_KEPT} were kept. Showing ${row.overLimitCount === 1 ? 'it' : 'the latest'}.`)}
         </ol>
       </section>
     )}
