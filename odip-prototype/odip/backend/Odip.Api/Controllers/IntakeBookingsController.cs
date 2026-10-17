@@ -104,46 +104,66 @@ public class IntakeBookingsController : ControllerBase
         if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
         // D4: whoever goes must be free. Checked only when the visit's time, length or person changes, so notes or a new place still save after a shift
         // has been rostered over the visit.
-        if ((timeChanged || inquiry.IntakeDurationMinutes != dto.DurationMinutes || previousStaffId != dto.StaffUserId)
-            && await ClashAsync(inquiry, staff!, startsAt, dto.DurationMinutes, ct) is string clash)
-            return Conflict(new ValidationProblemDetails(new Dictionary<string, string[]> { ["staffUserId"] = [clash] })
-                { Status = StatusCodes.Status409Conflict, Extensions = { ["code"] = StaffBusyCode } });
-
-        // The email given in the panel is saved in the SAME save as the booking: never an email without a booking, or the reverse.
-        if (givenEmail is not null) inquiry.Email = givenEmail;
-        inquiry.IntakeNotes = notes;
-        inquiry.UpdatedAt = now;
-        var provider = await ProviderAsync(inquiry.TenantId, ct);
+        var checksClash = timeChanged || inquiry.IntakeDurationMinutes != dto.DurationMinutes || previousStaffId != dto.StaffUserId;
+        // The check and the save run under one lock per staff member, so two bookings made at the same moment cannot both pass the check. It is let go
+        // (committed) as soon as the booking is saved, before the invite is sent.
+        RosterGenerationLock? held = null;
+        Provider provider;
         InviteFrom? from = null;
-        if (sends)
+        try
         {
-            var caller = await CallerAsync(ct);
-            if (isNew)
+            if (checksClash)
             {
-                inquiry.IntakeUid = $"{Guid.NewGuid():N}@odip";
-                inquiry.IntakeIcsSequence = 0;
-                inquiry.IntakeInviteSentAt = null;
-                inquiry.IntakeInviteError = null;
-                // Whoever books stays the invite's ORGANIZER for every revision (lead decision S2). Only a user of this organisation can be one.
-                inquiry.IntakeBookedByUserId = caller is { } booker && booker.TenantId == inquiry.TenantId ? booker.Id : (Guid?)null;
+                held = await RosterGenerationLock.AcquireAsync(_db, staff!.Id, ct, _lockWait, "intake-staff");
+                if (await ClashAsync(inquiry, staff, startsAt, dto.DurationMinutes, ct) is string clash)
+                    return Conflict(new ValidationProblemDetails(new Dictionary<string, string[]> { ["staffUserId"] = [clash] })
+                        { Status = StatusCodes.Status409Conflict, Extensions = { ["code"] = StaffBusyCode } });
             }
-            else
+
+            // The email given in the panel is saved in the SAME save as the booking: never an email without a booking, or the reverse.
+            if (givenEmail is not null) inquiry.Email = givenEmail;
+            inquiry.IntakeNotes = notes;
+            inquiry.UpdatedAt = now;
+            provider = await ProviderAsync(inquiry.TenantId, ct);
+            if (sends)
             {
-                inquiry.IntakeIcsSequence += 1;
+                var caller = await CallerAsync(ct);
+                if (isNew)
+                {
+                    inquiry.IntakeUid = $"{Guid.NewGuid():N}@odip";
+                    inquiry.IntakeIcsSequence = 0;
+                    inquiry.IntakeInviteSentAt = null;
+                    inquiry.IntakeInviteError = null;
+                    // Whoever books stays the invite's ORGANIZER for every revision (lead decision S2). Only a user of this organisation can be one.
+                    inquiry.IntakeBookedByUserId = caller is { } booker && booker.TenantId == inquiry.TenantId ? booker.Id : (Guid?)null;
+                }
+                else
+                {
+                    inquiry.IntakeIcsSequence += 1;
+                }
+                from = await InviteFromAsync(inquiry, caller, ct);
+                // Someone else is going: the old staff member gets a CANCEL for the details they were sent (the columns still hold them here).
+                if (!isNew && previousStaffId is Guid previous && previous != staff!.Id && await StaffAsync(previous, inquiry.TenantId, ct) is { } previousStaff)
+                    await RaiseStaffAsync(inquiry, previousStaff, IntakeWording.Cancelled, provider, from, ct);
+                // A visit moved to another time needs confirming again.
+                if (timeChanged) inquiry.IntakeConfirmedAt = null;
+                inquiry.IntakeStartsAt = startsAt;
+                inquiry.IntakeDurationMinutes = dto.DurationMinutes;
+                inquiry.IntakeLocation = location;
+                inquiry.IntakeStaffUserId = staff!.Id;
+                await RaiseStaffAsync(inquiry, staff, isNew || previousStaffId != staff.Id ? IntakeWording.Booked : IntakeWording.Changed, provider, from, ct);
             }
-            from = await InviteFromAsync(inquiry, caller, ct);
-            // Someone else is going: the old staff member gets a CANCEL for the details they were sent (the columns still hold them here).
-            if (!isNew && previousStaffId is Guid previous && previous != staff!.Id && await StaffAsync(previous, inquiry.TenantId, ct) is { } previousStaff)
-                await RaiseStaffAsync(inquiry, previousStaff, IntakeWording.Cancelled, provider, from, ct);
-            // A visit moved to another time needs confirming again.
-            if (timeChanged) inquiry.IntakeConfirmedAt = null;
-            inquiry.IntakeStartsAt = startsAt;
-            inquiry.IntakeDurationMinutes = dto.DurationMinutes;
-            inquiry.IntakeLocation = location;
-            inquiry.IntakeStaffUserId = staff!.Id;
-            await RaiseStaffAsync(inquiry, staff, isNew || previousStaffId != staff.Id ? IntakeWording.Booked : IntakeWording.Changed, provider, from, ct);
+            if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
+            if (held is not null) await held.CommitAsync(ct);
         }
-        if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ParticipantInquiryDto>.Fail($"Another booking for {staff!.FirstName} is still being saved. Wait a moment, then try again."));
+        }
+        finally
+        {
+            if (held is not null) await held.DisposeAsync();
+        }
 
         // With no email nothing is sent and nothing recorded: the last send's time and error stay as they were (null on a new booking).
         if (from is not null && inquiry.Email is not null && IsSendable(inquiry.Email))
@@ -457,7 +477,6 @@ public class IntakeBookingsController : ControllerBase
     /// Why <paramref name="staff"/> can't do a visit at [start, start + minutes), or null when they're free (spec 2026-10-16, D4): a shift of theirs that isn't
     /// cancelled (its rostered times, in the provider's wall clock as the roster stores them), or another enquiry's visit. Back to back is free: windows must
     /// overlap, not touch. Both reads are keyed on the enquiry's organisation (a SuperAdmin's context has no filter).
-    /// shortcut: two bookings saved at the same moment can both pass; lock the staff member's row if double bookings are ever seen.
     /// </summary>
     private async Task<string?> ClashAsync(ParticipantInquiry inquiry, User staff, DateTime startUtc, int minutes, CancellationToken ct)
     {
