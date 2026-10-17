@@ -156,6 +156,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             "CreatedAtUtc|timestamp without time zone||NO",
             "Email|character varying|254|NO",
             "Id|uuid||NO",
+            "LastOverLimitAtUtc|timestamp without time zone||YES",
             "LastRequestedAtUtc|timestamp without time zone||NO",
             "Message|character varying|1000|YES",
             "Name|character varying|100|NO",
@@ -432,6 +433,41 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         // The other 3 went to the single over-limit row, and the count says so even when the races overwrote each other.
         Assert.Equal(1, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == row.Id && l.IsOverLimit));
         Assert.Equal(3, row.OverLimitCount);
+    }
+
+    [SkippableFact]
+    public async Task TheFirstOverLimitSubmissionSurvivesAFurtherOne_AndThePurgeStillTakesItAt12Months()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("overfirst");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        for (var i = 1; i <= 10; i++)
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: $"kept {i}"), CancellationToken.None);
+        // The 11th is a removal request; the 12th is an unrelated submission from someone who knows the address.
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: "Please remove me"), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Someone Else", "Other Org", email, phone: "0400 000 000", message: "Hello there"), CancellationToken.None);
+
+        await using (var check = _pg.CreateContext())
+        {
+            var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+            Assert.Equal(2, row.OverLimitCount);
+            var over = await check.EarlyAccessLaterSubmissions.AsNoTracking().SingleAsync(l => l.EarlyAccessRequestId == row.Id && l.IsOverLimit);
+            Assert.Equal("Jane", over.Name);
+            Assert.Equal("Please remove me", over.Message);
+        }
+
+        await using (var db = _pg.CreateContext())
+            await db.EarlyAccessRequests.Where(e => e.Email == email)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.CreatedAtUtc, DateTime.UtcNow.AddMonths(-13)));
+        await Purger().PurgeExpiredAsync(DateTime.UtcNow, CancellationToken.None);
+
+        await using var after = _pg.CreateContext();
+        Assert.False(await after.EarlyAccessRequests.AnyAsync(e => e.Email == email));
+        Assert.False(await after.EarlyAccessLaterSubmissions.AnyAsync(l => l.Message == "Please remove me"));
     }
 
     [SkippableFact]

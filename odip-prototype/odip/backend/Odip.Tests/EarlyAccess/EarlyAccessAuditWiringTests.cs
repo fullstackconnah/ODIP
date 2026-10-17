@@ -55,14 +55,15 @@ public class EarlyAccessAuditWiringTests
         Assert.Equal(1, item.GetProperty("laterSubmissions").GetArrayLength());
         var id = item.GetProperty("id").GetGuid();
 
-        // Past the cap, the newest answers are kept in the over-limit row; they must stay out of the audit log like the rest.
+        // Past the cap, the first over-limit answers are kept in the over-limit row (later ones only count); they must stay out of the audit log like the rest.
         for (var i = 0; i < 12; i++)
             Assert.Equal(HttpStatusCode.Accepted, (await host.PostSignupAsync(LaterPhone, $"Over the limit zq-over-{i}")).StatusCode);
         using var full = JsonDocument.Parse(await (await host.AdminAsync(HttpMethod.Get, "")).Content.ReadAsStringAsync());
         var overItem = full.RootElement.GetProperty("data").GetProperty("items").EnumerateArray().Single();
         Assert.Equal(10, overItem.GetProperty("laterSubmissions").GetArrayLength());
         Assert.Equal(3, overItem.GetProperty("overLimitCount").GetInt32());
-        Assert.Contains("zq-over-11", overItem.GetProperty("lastOverLimit").GetProperty("message").GetString());
+        Assert.Contains("zq-over-9", overItem.GetProperty("firstOverLimit").GetProperty("message").GetString());
+        Assert.NotEqual(JsonValueKind.Null, overItem.GetProperty("lastOverLimitAtUtc").ValueKind);
 
         Assert.Equal(HttpStatusCode.OK, (await host.AdminAsync(HttpMethod.Delete, "/" + id)).StatusCode);
 

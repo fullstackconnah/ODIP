@@ -26,7 +26,7 @@ public sealed record EarlyAccessRecordResult(
 /// the same (already normalised) address bumps <see cref="EarlyAccessRequest.LastRequestedAtUtc"/> and
 /// <see cref="EarlyAccessRequest.RequestCount"/>. The stored answers stay as first given, for good: anyone who knows an address can
 /// post to it, so a repeat must not overwrite or erase them (a removal request in the message, say). A repeat whose answers differ is
-/// stored as an <see cref="EarlyAccessLaterSubmission"/> (the first <see cref="MaxLaterSubmissions"/> per sign-up, then one over-limit row the newest overwrites) for a person to read, which is how
+/// stored as an <see cref="EarlyAccessLaterSubmission"/> (the first <see cref="MaxLaterSubmissions"/> per sign-up, then one over-limit row holding the first after that, which later repeats only count) for a person to read, which is how
 /// the landing page's "send the form again and say so" promise to see, change or remove details is kept.
 ///
 /// Two simultaneous requests for the same address are the interesting case, and EF InMemory cannot show
@@ -40,7 +40,7 @@ public sealed class EarlyAccessService
 {
     private const int MaxAttempts = 10;
 
-    // shortcut: the first 10 only, plus one over-limit row holding the newest after that, so a flood cannot push out an early removal request or grow a sign-up without bound; raise it if a real person needs more.
+    // shortcut: the first 10 only, plus one over-limit row holding the first after that, so a flood cannot push out an early removal request or grow a sign-up without bound; raise it if a real person needs more.
     private const int MaxLaterSubmissions = 10;
 
     private readonly OdipDbContext _db;
@@ -97,21 +97,20 @@ public sealed class EarlyAccessService
                 {
                     var keptCount = stored.Count(l => !l.IsOverLimit);
                     var overLimit = keptCount >= MaxLaterSubmissions;
-                    // Past the cap the newest repeat is still stored, in the one over-limit row, so it survives a lost email notice.
-                    var row = overLimit ? stored.SingleOrDefault(l => l.IsOverLimit) : null;
-                    if (row is null)
+                    if (overLimit)
                     {
-                        row = new EarlyAccessLaterSubmission { Id = Guid.NewGuid(), EarlyAccessRequestId = existing.Id, IsOverLimit = overLimit };
-                        _db.EarlyAccessLaterSubmissions.Add(row);
+                        existing.OverLimitCount += 1;
+                        existing.LastOverLimitAtUtc = now;
                     }
-                    row.ReceivedAtUtc = now;
-                    row.Name = request.Name;
-                    row.Organisation = request.Organisation;
-                    row.Role = request.Role;
-                    row.Phone = request.Phone;
-                    row.OrganisationSize = request.OrganisationSize;
-                    row.Message = request.Message;
-                    if (overLimit) existing.OverLimitCount += 1;
+                    // Past the cap the FIRST repeat is stored, in the one over-limit row, so it survives a lost email notice and no later
+                    // anonymous repeat can replace it (a removal request in it would be lost); further ones only count.
+                    if (!overLimit || !stored.Any(l => l.IsOverLimit))
+                        _db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
+                        {
+                            Id = Guid.NewGuid(), EarlyAccessRequestId = existing.Id, IsOverLimit = overLimit, ReceivedAtUtc = now,
+                            Name = request.Name, Organisation = request.Organisation, Role = request.Role, Phone = request.Phone,
+                            OrganisationSize = request.OrganisationSize, Message = request.Message,
+                        });
                     notice = overLimit ? EarlyAccessNoticeKind.SentAgainOverLimit
                         : keptCount + 1 == MaxLaterSubmissions ? EarlyAccessNoticeKind.SentAgainLastKept : EarlyAccessNoticeKind.SentAgain;
                 }

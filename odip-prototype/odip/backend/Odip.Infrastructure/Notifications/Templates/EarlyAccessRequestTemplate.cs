@@ -28,7 +28,7 @@ public static class EarlyAccessRequestTemplate
             EarlyAccessNoticeKind.SentAgainLastKept =>
                 (LastKeptSubject, $"{p.Name} sent the form again. This is the last one that will be kept for this address. Open Settings > Alpha sign-ups to read it."),
             EarlyAccessNoticeKind.SentAgainOverLimit =>
-                (OverLimitSubject, $"{p.Name} sent the form again after the 10-submission limit. Only the newest one after the limit is kept, so open Settings > Alpha sign-ups to read it."),
+                (OverLimitSubject, $"{p.Name} sent the form again after the 10-submission limit. Only the first one after the limit is kept and the rest are counted, so open Settings > Alpha sign-ups to read the one kept."),
             _ => (Subject, "Someone asked for early access to Bunya Support."),
         };
 

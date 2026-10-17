@@ -324,7 +324,7 @@ public class EarlyAccessRequestTemplateTests
         Assert.Contains("last one that will be kept", last.PlainTextBody);
         Assert.Contains("Settings &gt; Alpha sign-ups", last.HtmlBody);
         Assert.Contains("Jane sent the form again after the 10-submission limit", over.PlainTextBody);
-        Assert.Contains("Only the newest one after the limit is kept", over.PlainTextBody);
+        Assert.Contains("Only the first one after the limit is kept", over.PlainTextBody);
         Assert.Contains("Settings > Alpha sign-ups", over.PlainTextBody);
         Assert.Equal(3, new[] { again.Subject, last.Subject, over.Subject }.Distinct().Count());
         Assert.DoesNotContain("early access to Bunya Support.", again.PlainTextBody);

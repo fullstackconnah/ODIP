@@ -51,12 +51,16 @@ public class EarlyAccessRequest
     /// <summary>How many times this address has submitted the form; starts at 1.</summary>
     public int RequestCount { get; set; }
 
-    /// <summary>Repeat sign-ups whose answers differed from the ones above, oldest first; at most 10. See <see cref="EarlyAccessLaterSubmission"/>.</summary>
+    /// <summary>Repeat sign-ups whose answers differed from the ones above, oldest first; at most 10, plus the first over-limit one. See <see cref="EarlyAccessLaterSubmission"/>.</summary>
     public List<EarlyAccessLaterSubmission> LaterSubmissions { get; set; } = [];
 
     /// <summary>
-    /// Distinct repeats sent after the 10 later submissions were full. Only the newest is kept, in one <see cref="EarlyAccessLaterSubmission"/>
-    /// row with <c>IsOverLimit</c> that each further one overwrites, so a flood cannot grow the sign-up and a lost email notice loses nothing.
+    /// Distinct repeats sent after the 10 later submissions were full. Only the first is kept, in one <see cref="EarlyAccessLaterSubmission"/>
+    /// row with <c>IsOverLimit</c> that no later repeat replaces, so an anonymous repeat cannot erase it and a lost email notice loses nothing;
+    /// the others only add to this count and move <see cref="LastOverLimitAtUtc"/>.
     /// </summary>
     public int OverLimitCount { get; set; }
+
+    /// <summary>When the most recent over-limit repeat arrived; null until there is one.</summary>
+    public DateTime? LastOverLimitAtUtc { get; set; }
 }

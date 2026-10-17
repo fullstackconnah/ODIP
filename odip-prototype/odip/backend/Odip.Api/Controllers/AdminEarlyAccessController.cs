@@ -40,7 +40,8 @@ public class AdminEarlyAccessController : ControllerBase
                 OrganisationSize = e.OrganisationSize, Message = e.Message, CreatedAtUtc = e.CreatedAtUtc,
                 LastRequestedAtUtc = e.LastRequestedAtUtc, RequestCount = e.RequestCount,
                 OverLimitCount = e.OverLimitCount,
-                LastOverLimit = e.LaterSubmissions.Where(l => l.IsOverLimit).Select(l => new EarlyAccessLaterSubmissionDto
+                LastOverLimitAtUtc = e.LastOverLimitAtUtc,
+                FirstOverLimit = e.LaterSubmissions.Where(l => l.IsOverLimit).Select(l => new EarlyAccessLaterSubmissionDto
                 {
                     Id = l.Id, ReceivedAtUtc = l.ReceivedAtUtc, Name = l.Name, Organisation = l.Organisation, Role = l.Role, Phone = l.Phone,
                     OrganisationSize = l.OrganisationSize, Message = l.Message,

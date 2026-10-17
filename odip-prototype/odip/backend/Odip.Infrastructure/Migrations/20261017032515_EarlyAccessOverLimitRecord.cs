@@ -17,6 +17,12 @@ namespace Odip.Infrastructure.Migrations
                 nullable: false,
                 defaultValue: 0);
 
+            migrationBuilder.AddColumn<DateTime>(
+                name: "LastOverLimitAtUtc",
+                table: "EarlyAccessRequests",
+                type: "timestamp without time zone",
+                nullable: true);
+
             migrationBuilder.AddColumn<bool>(
                 name: "IsOverLimit",
                 table: "EarlyAccessLaterSubmissions",
@@ -30,6 +36,10 @@ namespace Odip.Infrastructure.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "OverLimitCount",
+                table: "EarlyAccessRequests");
+
+            migrationBuilder.DropColumn(
+                name: "LastOverLimitAtUtc",
                 table: "EarlyAccessRequests");
 
             migrationBuilder.DropColumn(

@@ -64,10 +64,13 @@ public class EarlyAccessSignupDto
     /// <summary>Repeat sign-ups whose answers differed from the ones above, newest last; at most 10 (RequestCount - 1 may be higher).</summary>
     public List<EarlyAccessLaterSubmissionDto> LaterSubmissions { get; set; } = [];
 
-    /// <summary>Distinct repeats sent after the 10 were full; only the newest is kept, in <see cref="LastOverLimit"/>.</summary>
+    /// <summary>Distinct repeats sent after the 10 were full; only the first is kept, in <see cref="FirstOverLimit"/>, and the rest are counted.</summary>
     public int OverLimitCount { get; set; }
 
-    public EarlyAccessLaterSubmissionDto? LastOverLimit { get; set; }
+    /// <summary>When the latest of those over-limit repeats arrived; null when there were none.</summary>
+    public DateTime? LastOverLimitAtUtc { get; set; }
+
+    public EarlyAccessLaterSubmissionDto? FirstOverLimit { get; set; }
 }
 
 /// <summary>What a repeat sign-up said when it differed from the stored answers; the tab shows only the fields that differ.</summary>

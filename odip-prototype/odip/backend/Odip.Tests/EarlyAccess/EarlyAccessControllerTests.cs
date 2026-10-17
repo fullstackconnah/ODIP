@@ -561,11 +561,19 @@ public class EarlyAccessControllerTests
         new string?[] { null }.Concat(Enumerable.Range(1, count).Select(i => (string?)$"Message {i}")).ToArray();
 
     [Fact]
-    public async Task TheEleventhAndTwelfthDistinctRepeats_AreKeptDurably_TheTwelfthReplacingTheEleventh()
+    public async Task TheFirstOverLimitSubmissionIsKept_AFurtherDistinctOneOnlyCountsIt()
     {
         var dbName = Guid.NewGuid().ToString();
-
-        await SendMessages(dbName, OriginalThenMessages(12));
+        await SendMessages(dbName, OriginalThenMessages(10));
+        // The 11th is a removal request; the 12th is an unrelated submission that differs in every answer, as anyone who knows the email could send.
+        foreach (var (name, message) in new[] { ("Jane Citizen", "Please remove me"), ("Someone Else", "Hello there") })
+        {
+            using var db = CreateDb(dbName);
+            var dto = Valid();
+            dto.Name = name;
+            dto.Message = message;
+            AssertReceived(await MakeController(db).Submit(dto, CancellationToken.None));
+        }
 
         using var check = CreateDb(dbName);
         var request = await check.EarlyAccessRequests.SingleAsync();
@@ -573,8 +581,12 @@ public class EarlyAccessControllerTests
         var all = await check.EarlyAccessLaterSubmissions.ToListAsync();
         Assert.Equal(10, all.Count(l => !l.IsOverLimit));
         var over = Assert.Single(all, l => l.IsOverLimit);
-        Assert.Equal("Message 12", over.Message);
-        Assert.DoesNotContain(all.Where(l => !l.IsOverLimit), l => l.Message == "Message 11" || l.Message == "Message 12");
+        Assert.Equal("Jane Citizen", over.Name);
+        Assert.Equal("Please remove me", over.Message);
+        Assert.DoesNotContain(all, l => l.Message == "Hello there");
+        // The 12th only counted: it is the latest over-limit arrival, and the request's last-sent time moved with it.
+        Assert.True(request.LastOverLimitAtUtc > over.ReceivedAtUtc);
+        Assert.Equal(request.LastRequestedAtUtc, request.LastOverLimitAtUtc);
     }
 
     [Fact]
