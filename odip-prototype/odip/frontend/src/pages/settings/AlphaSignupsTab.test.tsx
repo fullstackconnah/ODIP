@@ -4,10 +4,12 @@ import userEvent from '@testing-library/user-event'
 import AlphaSignupsTab from './AlphaSignupsTab'
 import type { EarlyAccessLaterSubmissionDto, EarlyAccessSignupDto, PagedResult } from '@/api/types'
 
-const { mockUseEarlyAccessSignups, mockUseDeleteEarlyAccessSignup, mockMutateAsync, mockRefetch } = vi.hoisted(() => ({
+const { mockUseEarlyAccessSignups, mockUseDeleteEarlyAccessSignup, mockUseMarkFollowedUp, mockMutateAsync, mockMarkMutateAsync, mockRefetch } = vi.hoisted(() => ({
   mockUseEarlyAccessSignups: vi.fn(),
   mockUseDeleteEarlyAccessSignup: vi.fn(),
+  mockUseMarkFollowedUp: vi.fn(),
   mockMutateAsync: vi.fn(),
+  mockMarkMutateAsync: vi.fn(),
   mockRefetch: vi.fn(),
 }))
 
@@ -15,6 +17,7 @@ vi.mock('@/api/hooks', () => ({
   EARLY_ACCESS_PAGE_SIZE: 50,
   useEarlyAccessSignups: mockUseEarlyAccessSignups,
   useDeleteEarlyAccessSignup: mockUseDeleteEarlyAccessSignup,
+  useMarkEarlyAccessFollowedUp: mockUseMarkFollowedUp,
 }))
 
 function makeRow(overrides: Partial<EarlyAccessSignupDto> = {}): EarlyAccessSignupDto {
@@ -31,6 +34,8 @@ function makeRow(overrides: Partial<EarlyAccessSignupDto> = {}): EarlyAccessSign
     lastRequestedAtUtc: '2026-10-15T22:40:00Z',
     requestCount: 1,
     laterSubmissions: [],
+    overLimitCount: 0,
+    followUpNeeded: false,
     ...overrides,
   }
 }
@@ -62,6 +67,8 @@ beforeEach(() => {
   mockMutateAsync.mockReset()
   mockRefetch.mockReset()
   mockUseDeleteEarlyAccessSignup.mockReset().mockReturnValue({ mutateAsync: mockMutateAsync, isPending: false })
+  mockMarkMutateAsync.mockReset()
+  mockUseMarkFollowedUp.mockReset().mockReturnValue({ mutateAsync: mockMarkMutateAsync })
 })
 
 describe('AlphaSignupsTab', () => {
@@ -360,6 +367,160 @@ describe('AlphaSignupsTab', () => {
       expect(screen.getByRole('button', { name: 'Amara Okafor, has a message' })).toBeInTheDocument()
     })
 
+    describe('after the limit', () => {
+      const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
+      const over = makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Please remove my details, ref zq-77' })
+
+      it('dates the entry, says how many more were sent after the first 10, that the first of them is shown and when the latest arrived, with its message in full', async () => {
+        returns(page([makeRow({ requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimitAtUtc: '2026-10-18T02:00:00Z', firstOverLimit: over })]))
+        render(<AlphaSignupsTab />)
+
+        await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+
+        expect(screen.getByText('Sent 16/10/2026')).toBeInTheDocument()
+        expect(screen.getByText('3 more sent after the first 10 were kept. Showing the first of them; the latest arrived 18/10/2026.')).toBeInTheDocument()
+        expect(screen.getByText('Please remove my details, ref zq-77')).toBeInTheDocument()
+        expect(screen.queryByText(/Only the first 10 later submissions are kept/)).not.toBeInTheDocument()
+      })
+
+      it('says "1 more ... Showing it" for a single one', async () => {
+        returns(page([makeRow({ requestCount: 12, laterSubmissions: ten, overLimitCount: 1, firstOverLimit: over })]))
+        render(<AlphaSignupsTab />)
+        await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+        expect(screen.getByText('1 more sent after the first 10 were kept. Showing it.')).toBeInTheDocument()
+        expect(screen.getByText('Sent 16/10/2026')).toBeInTheDocument()
+        expect(screen.queryByText(/the latest arrived/)).not.toBeInTheDocument()
+      })
+
+      it('drops the latest-arrival clause when the API gives no date for it', async () => {
+        returns(page([makeRow({ requestCount: 13, laterSubmissions: ten, overLimitCount: 2, firstOverLimit: over })]))
+        render(<AlphaSignupsTab />)
+        await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+        expect(screen.getByText('2 more sent after the first 10 were kept. Showing the first of them.')).toBeInTheDocument()
+      })
+
+      const needing = (overrides: Partial<EarlyAccessSignupDto> = {}) =>
+        makeRow({ requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimitAtUtc: '2026-10-18T02:00:00Z', firstOverLimit: over, followUpNeeded: true, ...overrides })
+
+      describe('follow-up', () => {
+        const open = () => userEvent.click(screen.getByRole('button', { name: /^Amara Okafor, has a message/ }))
+
+        it('warns that later ones were sent and only the first is shown, and offers Mark followed up in place of the muted count line', async () => {
+          returns(page([needing()]))
+          render(<AlphaSignupsTab />)
+          await open()
+
+          expect(screen.getByText('Follow up: 3 more sent after the first 10 were kept, the latest on 18/10/2026. Only the first of them is shown; contact this person to check what they asked for.')).toBeInTheDocument()
+          expect(screen.getByRole('button', { name: 'Mark followed up for Amara Okafor' })).toBeEnabled()
+          expect(screen.queryByText(/Showing the first of them/)).not.toBeInTheDocument()
+          expect(screen.getByText('Sent 16/10/2026')).toBeInTheDocument()
+          expect(screen.getByText('Please remove my details, ref zq-77')).toBeInTheDocument()
+          // The Callout is inside the page's own detail, not a second live region on every open.
+          expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        })
+
+        it('words a single one in the singular, with no latest-arrival clause', async () => {
+          returns(page([needing({ overLimitCount: 1, lastOverLimitAtUtc: undefined })]))
+          render(<AlphaSignupsTab />)
+          await open()
+
+          expect(screen.getByText('Follow up: 1 more was sent after the first 10 were kept. It is the one shown; contact this person to check what they asked for.')).toBeInTheDocument()
+        })
+
+        it('drops the latest clause when the API gives no date', async () => {
+          returns(page([needing({ lastOverLimitAtUtc: undefined })]))
+          render(<AlphaSignupsTab />)
+          await open()
+
+          expect(screen.getByText('Follow up: 3 more sent after the first 10 were kept. Only the first of them is shown; contact this person to check what they asked for.')).toBeInTheDocument()
+        })
+
+        it('says on the closed row that it needs a follow-up, and says nothing once followed up', () => {
+          returns(page([needing(), makeRow({ id: 'b', name: 'Sam Field', followUpNeeded: false })]))
+          render(<AlphaSignupsTab />)
+
+          expect(screen.getAllByText('Follow up needed')).toHaveLength(1)
+          expect(screen.getByRole('button', { name: 'Amara Okafor, has a message, follow-up needed' })).toBeInTheDocument()
+          expect(screen.getByRole('button', { name: 'Sam Field, has a message' })).toBeInTheDocument()
+        })
+
+        it('marks it followed up with the count on screen, then says so', async () => {
+          mockMarkMutateAsync.mockResolvedValue(undefined)
+          returns(page([needing()]))
+          render(<AlphaSignupsTab />)
+          await open()
+
+          await userEvent.click(screen.getByRole('button', { name: 'Mark followed up for Amara Okafor' }))
+
+          expect(mockMarkMutateAsync).toHaveBeenCalledWith({ id: 'eas-1', overLimitCount: 3 })
+          expect(await screen.findByText('Marked as followed up.')).toBeInTheDocument()
+        })
+
+        it('disables the button while the request is in flight', async () => {
+          let finish!: () => void
+          mockMarkMutateAsync.mockReturnValue(new Promise<void>(resolve => { finish = resolve }))
+          returns(page([needing()]))
+          render(<AlphaSignupsTab />)
+          await open()
+
+          await userEvent.click(screen.getByRole('button', { name: 'Mark followed up for Amara Okafor' }))
+          expect(screen.getByRole('button', { name: 'Mark followed up for Amara Okafor' })).toBeDisabled()
+          finish()
+          await waitFor(() => expect(screen.getByText('Marked as followed up.')).toBeInTheDocument())
+        })
+
+        it('keeps the warning and says why when more were sent since the list loaded (409)', async () => {
+          mockMarkMutateAsync.mockRejectedValue({ response: { status: 409 } })
+          returns(page([needing()]))
+          render(<AlphaSignupsTab />)
+          await open()
+
+          await userEvent.click(screen.getByRole('button', { name: 'Mark followed up for Amara Okafor' }))
+
+          expect(await screen.findByText('A new submission arrived after you opened this. Reload to see it.')).toBeInTheDocument()
+          expect(screen.getByRole('button', { name: 'Mark followed up for Amara Okafor' })).toBeEnabled()
+          expect(screen.queryByText('Marked as followed up.')).not.toBeInTheDocument()
+        })
+
+        it('says what failed on any other error and leaves the warning', async () => {
+          mockMarkMutateAsync.mockRejectedValue({ response: { status: 500, data: { message: 'Database unavailable' } } })
+          returns(page([needing()]))
+          render(<AlphaSignupsTab />)
+          await open()
+
+          await userEvent.click(screen.getByRole('button', { name: 'Mark followed up for Amara Okafor' }))
+
+          expect(await screen.findByText("Couldn't mark this followed up. Database unavailable")).toBeInTheDocument()
+          expect(screen.getByText(/^Follow up: 3 more sent/)).toBeInTheDocument()
+        })
+
+        it('shows the muted count line with the date it was followed up, and no warning, once cleared', async () => {
+          returns(page([needing({ followUpNeeded: false, followUpClearedAtUtc: '2026-10-19T03:00:00Z' })]))
+          render(<AlphaSignupsTab />)
+          await open()
+
+          expect(screen.getByText('3 more sent after the first 10 were kept. Showing the first of them; the latest arrived 18/10/2026. Followed up 19/10/2026.')).toBeInTheDocument()
+          expect(screen.queryByText(/^Follow up:/)).not.toBeInTheDocument()
+          expect(screen.queryByRole('button', { name: /Mark followed up/ })).not.toBeInTheDocument()
+          expect(screen.queryByText('Follow up needed')).not.toBeInTheDocument()
+        })
+      })
+
+      it('shows nothing about the limit when there is no entry after it', async () => {
+        returns(page([makeRow({ requestCount: 2, laterSubmissions: [makeLater({ message: 'Second note' })] })]))
+        render(<AlphaSignupsTab />)
+        await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+        expect(screen.queryByText(/more sent after/)).not.toBeInTheDocument()
+      })
+
+      it('marks a closed row whose only message was sent after the limit', () => {
+        returns(page([makeRow({ message: undefined, requestCount: 12, laterSubmissions: ten.map(l => ({ ...l, message: undefined })), overLimitCount: 1, firstOverLimit: over })]))
+        render(<AlphaSignupsTab />)
+
+        expect(screen.getByRole('button', { name: 'Amara Okafor, has a message' })).toBeInTheDocument()
+      })
+    })
+
     it('does not show the cap line while fewer than 10 are stored, however often the form was sent', async () => {
       returns(page([makeRow({ requestCount: 14, laterSubmissions: [makeLater()] })]))
       render(<AlphaSignupsTab />)
@@ -378,6 +539,32 @@ describe('AlphaSignupsTab', () => {
     expect(within(section).getByText('Second note')).toBeInTheDocument()
     const remove = screen.getByRole('button', { name: 'Delete sign-up from Amara Okafor' })
     expect(section.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows what was sent after the limit on a phone card', () => {
+    const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
+    returns(page([makeRow({
+      requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimitAtUtc: '2026-10-18T02:00:00Z',
+      firstOverLimit: makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Remove me, ref zq-77' }),
+    })]))
+    render(<AlphaSignupsTab />)
+
+    expect(screen.getByText('3 more sent after the first 10 were kept. Showing the first of them; the latest arrived 18/10/2026.')).toBeInTheDocument()
+    expect(screen.getByText('Remove me, ref zq-77')).toBeInTheDocument()
+  })
+
+  it('shows the follow-up warning and its button on a phone card, before Delete', () => {
+    const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
+    returns(page([makeRow({
+      requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimitAtUtc: '2026-10-18T02:00:00Z', followUpNeeded: true,
+      firstOverLimit: makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Remove me, ref zq-77' }),
+    })]))
+    render(<AlphaSignupsTab />)
+
+    expect(screen.getByText(/^Follow up: 3 more sent after the first 10 were kept/)).toBeInTheDocument()
+    const mark = screen.getByRole('button', { name: 'Mark followed up for Amara Okafor' })
+    const remove = screen.getByRole('button', { name: 'Delete sign-up from Amara Okafor' })
+    expect(mark.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('puts Delete at the foot of each phone card, after the message, and only once', () => {

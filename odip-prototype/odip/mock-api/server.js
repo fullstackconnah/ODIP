@@ -2120,13 +2120,13 @@ function notificationPreferenceGrid() {
   }
 }
 
-// GET and DELETE admin/early-access (Settings › Alpha sign-ups), last sent first as the API orders it: a repeat carrying a removal request,
+// GET, POST .../followed-up and DELETE admin/early-access (Settings › Alpha sign-ups), last sent first as the API orders it: a repeat carrying a removal request,
 // a long message with line breaks, one with nothing optional, and one from before the alpha form (no size).
 const earlyAccessSignups = [
   { id: 'eas-0001', name: 'Amara Okafor', organisation: 'Riverbend Community Care', email: 'amara.okafor@example.org',
     role: 'Operations manager', phone: '0491 570 156', organisationSize: '10-49',
     message: 'We run six houses in the Riverina and would like to try the roster board.',
-    createdAtUtc: '2026-10-02T01:15:00Z', lastRequestedAtUtc: '2026-10-15T22:40:00Z', requestCount: 3,
+    createdAtUtc: '2026-10-02T01:15:00Z', lastRequestedAtUtc: '2026-10-15T22:40:00Z', requestCount: 3, overLimitCount: 0,
     // The stored answers are the first ones. Two repeats changed something: a corrected phone, then a removal request with the role cleared.
     laterSubmissions: [
       { id: 'eal-0001', receivedAtUtc: '2026-10-09T03:30:00Z', name: 'Amara Okafor', organisation: 'Riverbend Community Care',
@@ -2139,16 +2139,30 @@ const earlyAccessSignups = [
   { id: 'eas-0002', name: 'Tom Nguyen', organisation: 'Coastal Support Services', email: 'tom.nguyen@example.org',
     role: 'Rostering lead', organisationSize: '50-199',
     message: 'We run 14 SIL houses and about 60 community access shifts a week.\n\nMost of our admin time goes on filling last-minute gaps and chasing shift notes before claims. We would like to try the roster board and the completion review first.',
-    createdAtUtc: '2026-10-14T05:02:00Z', lastRequestedAtUtc: '2026-10-14T05:02:00Z', requestCount: 1, laterSubmissions: [] },
+    createdAtUtc: '2026-10-14T05:02:00Z', lastRequestedAtUtc: '2026-10-14T05:02:00Z', requestCount: 1, overLimitCount: 0, laterSubmissions: [] },
   { id: 'eas-0003', name: 'Priya Raman', organisation: 'Kin & Co Disability Services', email: 'priya@example.org',
     phone: '+61 2 5550 1234', organisationSize: 'under-10',
-    createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1, laterSubmissions: [] },
+    createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1, overLimitCount: 0, laterSubmissions: [] },
   { id: 'eas-0004', name: 'Sam Field', organisation: 'Field Health', email: 'sam.field@example.org',
     createdAtUtc: '2026-09-30T06:00:00Z', lastRequestedAtUtc: '2026-10-12T04:00:00Z', requestCount: 14,
-    // The cap: the API keeps the first 10 later submissions, so the last four sends were counted and not kept.
+    // The cap: the API keeps the first 10 later submissions, then only the first of the rest (three more here; the others are counted).
+    overLimitCount: 3, lastOverLimitAtUtc: '2026-10-12T04:00:00Z', followUpNeeded: true,
+    firstOverLimit: { id: 'eal-1010', receivedAtUtc: '2026-10-11T04:00:00Z', name: 'Sam Field', organisation: 'Field Health',
+      message: 'Please remove my details and stop the follow-ups.' },
     laterSubmissions: Array.from({ length: 10 }, (_, i) => ({
       id: `eal-1${String(i).padStart(3, '0')}`, receivedAtUtc: `2026-10-${String(i + 1).padStart(2, '0')}T04:00:00Z`, name: 'Sam Field', organisation: 'Field Health',
       message: `Follow-up ${i + 1}: still interested.` })) },
+]
+// POST admin/early-access/:id/followed-up clears the marker for the life of the process, or answers 409 if the count the page showed is stale (as the API does).
+const earlyAccessFollowedUp = [
+  ['admin/early-access/:id/followed-up', (id, body) => {
+    const row = earlyAccessSignups.find(s => s.id === id)
+    if (!row) return { [HTTP]: 404, body: { success: false, data: false, message: 'Sign-up not found.', errors: ['Sign-up not found.'] } }
+    if (body.overLimitCount !== row.overLimitCount) return { [HTTP]: 409, body: { success: false, data: false, message: 'A new submission arrived after you opened this. Reload to see it.', errors: ['A new submission arrived after you opened this. Reload to see it.'] } }
+    row.followUpNeeded = false
+    row.followUpClearedAtUtc = new Date().toISOString()
+    return true
+  }],
 ]
 // DELETE really removes the row for the life of the process, so the list after a Delete shows it gone (as the API does).
 const earlyAccessDelete = [
@@ -2741,6 +2755,7 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ...earlyAccessFollowedUp,
   ...funding.post,
   ...intake.post,
   ['plan-pricing/quote', (body) => {

@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, MessageSquareText, Trash2 } from 'lucide-react'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { ROW_ACTIONS_CARD } from '@/components/tapArea'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { NoticesRegion } from '@/components/NoticesRegion'
+import { StatusBadge } from '@/components/StatusBadge'
 import { useNotices } from '@/hooks/useNotices'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
-import { EARLY_ACCESS_PAGE_SIZE, useDeleteEarlyAccessSignup, useEarlyAccessSignups } from '@/api/hooks'
-import { ORGANISATION_SIZE_LABELS, type EarlyAccessSignupDto } from '@/api/types'
+import { EARLY_ACCESS_PAGE_SIZE, useDeleteEarlyAccessSignup, useEarlyAccessSignups, useMarkEarlyAccessFollowedUp } from '@/api/hooks'
+import { ORGANISATION_SIZE_LABELS, type EarlyAccessLaterSubmissionDto, type EarlyAccessSignupDto } from '@/api/types'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { extractErrorMessage } from '@/lib/utils'
 import { formatInstantDateAu } from '@/lib/format'
@@ -20,7 +22,29 @@ const detailId = (row: EarlyAccessSignupDto) => `alpha-signup-${row.id}-detail`
 // A date line heads its block, so it is full strength where the labels under it are muted.
 const dateLine = 'text-xs font-medium text-[var(--color-foreground)]'
 // Removal requests arrive in a message, which may be in a later submission rather than the original.
-const hasMessage = (row: EarlyAccessSignupDto) => !!row.message || row.laterSubmissions.some(l => !!l.message)
+const hasMessage = (row: EarlyAccessSignupDto) =>
+  !!row.message || row.laterSubmissions.some(l => !!l.message) || !!row.firstOverLimit?.message
+
+// What the entry after the first 10 is: the first of the further repeats, which later ones never replace. They are only counted, so say so
+// and when the newest came, or a reader would take this one for the latest. Once a person has followed up, the date they did says so.
+const overLimitNote = (row: EarlyAccessSignupDto) => {
+  const more = `${row.overLimitCount} more sent after the first ${LATER_SUBMISSIONS_KEPT} were kept.`
+  const followedUp = row.followUpClearedAtUtc ? ` Followed up ${formatInstantDateAu(row.followUpClearedAtUtc)}.` : ''
+  if (row.overLimitCount === 1) return `${more} Showing it.${followedUp}`
+  return `${more} Showing the first of them${row.lastOverLimitAtUtc ? `; the latest arrived ${formatInstantDateAu(row.lastOverLimitAtUtc)}` : ''}.${followedUp}`
+}
+
+// While a person has not followed up: only the first over-limit repeat is shown, so a later one (a removal request) may be unseen.
+const followUpMessage = (row: EarlyAccessSignupDto) => {
+  if (row.overLimitCount === 1) {
+    return `Follow up: 1 more was sent after the first ${LATER_SUBMISSIONS_KEPT} were kept. It is the one shown; contact this person to check what they asked for.`
+  }
+  const latest = row.lastOverLimitAtUtc ? `, the latest on ${formatInstantDateAu(row.lastOverLimitAtUtc)}` : ''
+  return `Follow up: ${row.overLimitCount} more sent after the first ${LATER_SUBMISSIONS_KEPT} were kept${latest}. Only the first of them is shown; contact this person to check what they asked for.`
+}
+
+const nameLabel = (row: EarlyAccessSignupDto) =>
+  [row.name, hasMessage(row) && 'has a message', row.followUpNeeded && 'follow-up needed'].filter(Boolean).join(', ')
 
 // The answers a repeat can change, in the order the original row shows them after Name and Organisation. The API keeps the first 10 per sign-up.
 const LATER_FIELDS = [
@@ -35,19 +59,44 @@ const LATER_SUBMISSIONS_KEPT = 10
 const displayAnswer = (key: (typeof LATER_FIELDS)[number]['key'], value: string | undefined) =>
   key === 'organisationSize' && value ? ORGANISATION_SIZE_LABELS[value] ?? value : value
 
+// One later entry: a date headline, an optional muted note, then only the answers that differ from the stored ones. The same two tracks as the original answers,
+// so Phone lines up with theirs whichever fields are listed.
+function laterEntry(row: EarlyAccessSignupDto, later: EarlyAccessLaterSubmissionDto, note?: ReactNode) {
+  return (
+    <li key={later.id} className="border-t border-[var(--color-border)] pt-2">
+      <p className={dateLine}>Sent {formatInstantDateAu(later.receivedAtUtc)}</p>
+      {note}
+      <dl className="mt-1 grid grid-cols-2 gap-x-8 gap-y-2 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-x-10">
+        {LATER_FIELDS.filter(({ key }) => later[key] !== row[key]).map(({ key, label }) => (
+          <div key={key} className={key === 'message' ? 'col-span-2 min-w-0' : `min-w-0 break-words${key === 'phone' ? ' col-start-2' : ''}`}>
+            <dt className={detailLabel}>{label}</dt>
+            <dd>
+              {!later[key] ? '—' : key === 'message'
+                ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{later[key]}</p>
+                : displayAnswer(key, later[key])}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </li>
+  )
+}
+
 /**
  * Settings › Platform › Alpha sign-ups (SuperAdmin): who asked to join the alpha on the landing page, latest sent first (the server's
  * order, so a repeat carrying a "remove my details" request is on top), with Delete. Six columns from md up, so the table never scrolls
  * sideways; role, phone and the message open under the row from its name (a row disclosure), and a phone card shows them all. The
  * message is shown whole, line breaks kept, because removal requests arrive in it.
  * A repeat sign-up never overwrites the stored answers; one whose answers differ is listed under the opened row as a later submission, with its date
- * and only the answers that differ (the server keeps the first 10).
+ * and only the answers that differ (the server keeps the first 10, then the first of any sent after them, with how many there were and when the latest came).
  */
 export default function AlphaSignupsTab() {
   const [page, setPage] = useState(1)
   const { data, isLoading, isError, refetch } = useEarlyAccessSignups(page)
   const remove = useDeleteEarlyAccessSignup()
+  const markFollowedUp = useMarkEarlyAccessFollowedUp()
   const { notices, notify, dismiss } = useNotices()
+  const [marking, setMarking] = useState<string | null>(null)
   const [pending, setPending] = useState<EarlyAccessSignupDto | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const isBelowMd = useIsBelowMd()
@@ -86,6 +135,37 @@ export default function AlphaSignupsTab() {
     setPending(null)
   }
 
+  // Sends the over-limit count on screen: the server refuses (409) if more arrived since, so a repeat nobody read is never marked as handled.
+  async function confirmFollowedUp(row: EarlyAccessSignupDto) {
+    setMarking(row.id)
+    try {
+      await markFollowedUp.mutateAsync({ id: row.id, overLimitCount: row.overLimitCount })
+      notify('success', row.name, 'Marked as followed up.', row.id)
+    } catch (err) {
+      notify('danger', row.name, apiErrorStatus(err) === 409
+        ? 'A new submission arrived after you opened this. Reload to see it.'
+        : `Couldn't mark this followed up. ${extractErrorMessage(err, 'Check your connection and try again.')}`, row.id)
+    } finally {
+      setMarking(null)
+    }
+  }
+
+  // The one loud thing in the entry. It does not announce itself: many cards render at once, and an opened row is the person's own action.
+  const followUpCallout = (row: EarlyAccessSignupDto) => (
+    <Callout
+      tone="warning"
+      announce={false}
+      className="mt-1"
+      actions={
+        <Button variant="secondary" size="sm" aria-label={`Mark followed up for ${row.name}`} disabled={marking === row.id} onClick={() => confirmFollowedUp(row)}>
+          Mark followed up
+        </Button>
+      }
+    >
+      {followUpMessage(row)}
+    </Callout>
+  )
+
   const deleteButton = (row: EarlyAccessSignupDto) => (
     <Button
       variant="ghost"
@@ -105,7 +185,7 @@ export default function AlphaSignupsTab() {
       render: row => isBelowMd ? row.name : (
         <button
           type="button"
-          aria-label={hasMessage(row) ? `${row.name}, has a message` : undefined}
+          aria-label={hasMessage(row) || row.followUpNeeded ? nameLabel(row) : undefined}
           aria-expanded={open.has(row.id)}
           aria-controls={open.has(row.id) ? detailId(row) : undefined}
           onClick={() => toggle(row.id)}
@@ -134,6 +214,8 @@ export default function AlphaSignupsTab() {
         <span title={`First sent ${formatInstantDateAu(row.createdAtUtc)}`}>
           {formatInstantDateAu(row.lastRequestedAtUtc)}
           {row.requestCount > 1 && <span className={`block text-xs ${muted}`}>Sent {row.requestCount} times</span>}
+          {/* A closed row says it needs a follow-up without being opened: later over-limit repeats are not shown, only counted. */}
+          {row.followUpNeeded && <span className="mt-0.5 block"><StatusBadge tone="warning" label="Follow up needed" /></span>}
         </span>
       ),
     },
@@ -148,7 +230,7 @@ export default function AlphaSignupsTab() {
   // ends with Delete. A stack at the name's indent, so it never looks like columns of the table above.
   const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
     <>
-    {row.laterSubmissions.length > 0 && <p className={`mb-1 md:pl-[1.125rem] ${dateLine}`}>First sent {formatInstantDateAu(row.createdAtUtc)}</p>}
+    {(row.laterSubmissions.length > 0 || row.firstOverLimit) && <p className={`mb-1 md:pl-[1.125rem] ${dateLine}`}>First sent {formatInstantDateAu(row.createdAtUtc)}</p>}
     <dl id={detailId(row)} className="grid grid-cols-2 gap-x-8 gap-y-2 md:flex md:flex-wrap md:gap-x-10 md:pl-[1.125rem]">
       {/* A fixed width from md up, so Phone starts at the same x in every opened row. */}
       <div className="min-w-0 break-words md:w-48">
@@ -164,34 +246,19 @@ export default function AlphaSignupsTab() {
         <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
       </div>
     </dl>
-    {row.laterSubmissions.length > 0 && (
+    {(row.laterSubmissions.length > 0 || row.firstOverLimit) && (
       <section aria-label="Later submissions" className="mt-3 md:pl-[1.125rem]">
         <h4 className={detailLabel}>Later submissions</h4>
         {/* The server keeps the first 10. RequestCount also counts identical repeats, so say this only once the 10 are full. */}
-        {row.laterSubmissions.length >= LATER_SUBMISSIONS_KEPT && row.requestCount - 1 > LATER_SUBMISSIONS_KEPT && (
+        {!row.firstOverLimit && row.laterSubmissions.length >= LATER_SUBMISSIONS_KEPT && row.requestCount - 1 > LATER_SUBMISSIONS_KEPT && (
           <p className={`mt-1 text-xs ${muted}`}>
             Only the first {LATER_SUBMISSIONS_KEPT} later submissions are kept. The form was sent {row.requestCount} times in all.
           </p>
         )}
         <ol className="mt-1 space-y-2">
-          {row.laterSubmissions.map(later => (
-            <li key={later.id} className="border-t border-[var(--color-border)] pt-2">
-              <p className={dateLine}>Sent {formatInstantDateAu(later.receivedAtUtc)}</p>
-              {/* The same two tracks as the original answers, so Phone lines up with theirs whichever fields are listed. */}
-              <dl className="mt-1 grid grid-cols-2 gap-x-8 gap-y-2 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-x-10">
-                {LATER_FIELDS.filter(({ key }) => later[key] !== row[key]).map(({ key, label }) => (
-                  <div key={key} className={key === 'message' ? 'col-span-2 min-w-0' : `min-w-0 break-words${key === 'phone' ? ' col-start-2' : ''}`}>
-                    <dt className={detailLabel}>{label}</dt>
-                    <dd>
-                      {!later[key] ? '—' : key === 'message'
-                        ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{later[key]}</p>
-                        : displayAnswer(key, later[key])}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </li>
-          ))}
+          {row.laterSubmissions.map(later => laterEntry(row, later))}
+          {row.firstOverLimit && laterEntry(row, row.firstOverLimit,
+            row.followUpNeeded ? followUpCallout(row) : <p className={`text-xs ${muted}`}>{overLimitNote(row)}</p>)}
         </ol>
       </section>
     )}

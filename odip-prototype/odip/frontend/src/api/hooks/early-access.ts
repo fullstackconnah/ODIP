@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiDelete, apiGet } from '../client'
+import { apiDelete, apiGet, apiPost } from '../client'
 import type { EarlyAccessSignupDto, PagedResult } from '../types'
 
 export const EARLY_ACCESS_PAGE_SIZE = 50
@@ -10,6 +10,19 @@ export function useEarlyAccessSignups(page: number) {
     queryKey: ['admin-early-access', page],
     queryFn: () => apiGet<PagedResult<EarlyAccessSignupDto>>('/admin/early-access', { page, pageSize: EARLY_ACCESS_PAGE_SIZE }),
     placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Marks a sign-up's over-limit repeats followed up. `overLimitCount` is the count the SuperAdmin was looking at: the server answers 409 and
+ * changes nothing if more have arrived since, so a repeat nobody has read is never marked as handled.
+ */
+export function useMarkEarlyAccessFollowedUp() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, overLimitCount }: { id: string; overLimitCount: number }) =>
+      apiPost<boolean>(`/admin/early-access/${id}/followed-up`, { overLimitCount }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['admin-early-access'] }),
   })
 }
 
