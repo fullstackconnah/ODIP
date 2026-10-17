@@ -188,7 +188,7 @@ describe('when a colleague changed the visit', () => {
 
     // The colleague moved the visit to Thu 17 Oct and the list refetched.
     act(() => { client.setQueryData(['participant-inquiries'], rows.map(r => (r.id === 'sent' ? { ...r, updatedAt: 'v9', intakeStartsAt: '2030-10-16T23:00:00Z' } : r))) })
-    await waitFor(() => expect(screen.getByRole('alertdialog').textContent).toMatch(/17 Oct/))
+    await waitFor(() => expect(screen.getByRole('alertdialog').textContent).toMatch(/17\u00a0Oct/))
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
 
     expect(mocks.cancelVisit).toHaveBeenLastCalledWith({ id: 'sent', expectedUpdatedAt: 'v9' })
