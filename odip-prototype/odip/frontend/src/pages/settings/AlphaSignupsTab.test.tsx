@@ -365,24 +365,32 @@ describe('AlphaSignupsTab', () => {
       const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
       const over = makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Please remove my details, ref zq-77' })
 
-      it('dates the entry, says how many more were sent after the first 10 and that the latest is shown, with its message in full', async () => {
-        returns(page([makeRow({ requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimit: over })]))
+      it('dates the entry, says how many more were sent after the first 10, that the first of them is shown and when the latest arrived, with its message in full', async () => {
+        returns(page([makeRow({ requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimitAtUtc: '2026-10-18T02:00:00Z', firstOverLimit: over })]))
         render(<AlphaSignupsTab />)
 
         await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
 
         expect(screen.getByText('Sent 16/10/2026')).toBeInTheDocument()
-        expect(screen.getByText('3 more sent after the first 10 were kept. Showing the latest.')).toBeInTheDocument()
+        expect(screen.getByText('3 more sent after the first 10 were kept. Showing the first of them; the latest arrived 18/10/2026.')).toBeInTheDocument()
         expect(screen.getByText('Please remove my details, ref zq-77')).toBeInTheDocument()
         expect(screen.queryByText(/Only the first 10 later submissions are kept/)).not.toBeInTheDocument()
       })
 
       it('says "1 more ... Showing it" for a single one', async () => {
-        returns(page([makeRow({ requestCount: 12, laterSubmissions: ten, overLimitCount: 1, lastOverLimit: over })]))
+        returns(page([makeRow({ requestCount: 12, laterSubmissions: ten, overLimitCount: 1, firstOverLimit: over })]))
         render(<AlphaSignupsTab />)
         await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
         expect(screen.getByText('1 more sent after the first 10 were kept. Showing it.')).toBeInTheDocument()
         expect(screen.getByText('Sent 16/10/2026')).toBeInTheDocument()
+        expect(screen.queryByText(/the latest arrived/)).not.toBeInTheDocument()
+      })
+
+      it('drops the latest-arrival clause when the API gives no date for it', async () => {
+        returns(page([makeRow({ requestCount: 13, laterSubmissions: ten, overLimitCount: 2, firstOverLimit: over })]))
+        render(<AlphaSignupsTab />)
+        await userEvent.click(screen.getByRole('button', { name: 'Amara Okafor, has a message' }))
+        expect(screen.getByText('2 more sent after the first 10 were kept. Showing the first of them.')).toBeInTheDocument()
       })
 
       it('shows nothing about the limit when there is no entry after it', async () => {
@@ -393,7 +401,7 @@ describe('AlphaSignupsTab', () => {
       })
 
       it('marks a closed row whose only message was sent after the limit', () => {
-        returns(page([makeRow({ message: undefined, requestCount: 12, laterSubmissions: ten.map(l => ({ ...l, message: undefined })), overLimitCount: 1, lastOverLimit: over })]))
+        returns(page([makeRow({ message: undefined, requestCount: 12, laterSubmissions: ten.map(l => ({ ...l, message: undefined })), overLimitCount: 1, firstOverLimit: over })]))
         render(<AlphaSignupsTab />)
 
         expect(screen.getByRole('button', { name: 'Amara Okafor, has a message' })).toBeInTheDocument()
@@ -423,12 +431,12 @@ describe('AlphaSignupsTab', () => {
   it('shows what was sent after the limit on a phone card', () => {
     const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
     returns(page([makeRow({
-      requestCount: 14, laterSubmissions: ten, overLimitCount: 3,
-      lastOverLimit: makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Remove me, ref zq-77' }),
+      requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimitAtUtc: '2026-10-18T02:00:00Z',
+      firstOverLimit: makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Remove me, ref zq-77' }),
     })]))
     render(<AlphaSignupsTab />)
 
-    expect(screen.getByText('3 more sent after the first 10 were kept. Showing the latest.')).toBeInTheDocument()
+    expect(screen.getByText('3 more sent after the first 10 were kept. Showing the first of them; the latest arrived 18/10/2026.')).toBeInTheDocument()
     expect(screen.getByText('Remove me, ref zq-77')).toBeInTheDocument()
   })
 

@@ -2145,9 +2145,9 @@ const earlyAccessSignups = [
     createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1, overLimitCount: 0, laterSubmissions: [] },
   { id: 'eas-0004', name: 'Sam Field', organisation: 'Field Health', email: 'sam.field@example.org',
     createdAtUtc: '2026-09-30T06:00:00Z', lastRequestedAtUtc: '2026-10-12T04:00:00Z', requestCount: 14,
-    // The cap: the API keeps the first 10 later submissions, then only the newest of the rest (three more here).
-    overLimitCount: 3,
-    lastOverLimit: { id: 'eal-1010', receivedAtUtc: '2026-10-12T04:00:00Z', name: 'Sam Field', organisation: 'Field Health',
+    // The cap: the API keeps the first 10 later submissions, then only the first of the rest (three more here; the others are counted).
+    overLimitCount: 3, lastOverLimitAtUtc: '2026-10-12T04:00:00Z',
+    firstOverLimit: { id: 'eal-1010', receivedAtUtc: '2026-10-11T04:00:00Z', name: 'Sam Field', organisation: 'Field Health',
       message: 'Please remove my details and stop the follow-ups.' },
     laterSubmissions: Array.from({ length: 10 }, (_, i) => ({
       id: `eal-1${String(i).padStart(3, '0')}`, receivedAtUtc: `2026-10-${String(i + 1).padStart(2, '0')}T04:00:00Z`, name: 'Sam Field', organisation: 'Field Health',

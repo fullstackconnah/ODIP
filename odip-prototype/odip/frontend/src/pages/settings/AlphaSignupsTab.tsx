@@ -21,7 +21,15 @@ const detailId = (row: EarlyAccessSignupDto) => `alpha-signup-${row.id}-detail`
 const dateLine = 'text-xs font-medium text-[var(--color-foreground)]'
 // Removal requests arrive in a message, which may be in a later submission rather than the original.
 const hasMessage = (row: EarlyAccessSignupDto) =>
-  !!row.message || row.laterSubmissions.some(l => !!l.message) || !!row.lastOverLimit?.message
+  !!row.message || row.laterSubmissions.some(l => !!l.message) || !!row.firstOverLimit?.message
+
+// What the entry after the first 10 is: the first of the further repeats, which later ones never replace. They are only counted, so say so
+// and when the newest came, or a reader would take this one for the latest.
+const overLimitNote = (row: EarlyAccessSignupDto) => {
+  const more = `${row.overLimitCount} more sent after the first ${LATER_SUBMISSIONS_KEPT} were kept.`
+  if (row.overLimitCount === 1) return `${more} Showing it.`
+  return `${more} Showing the first of them${row.lastOverLimitAtUtc ? `; the latest arrived ${formatInstantDateAu(row.lastOverLimitAtUtc)}` : ''}.`
+}
 
 // The answers a repeat can change, in the order the original row shows them after Name and Organisation. The API keeps the first 10 per sign-up.
 const LATER_FIELDS = [
@@ -65,7 +73,7 @@ function laterEntry(row: EarlyAccessSignupDto, later: EarlyAccessLaterSubmission
  * sideways; role, phone and the message open under the row from its name (a row disclosure), and a phone card shows them all. The
  * message is shown whole, line breaks kept, because removal requests arrive in it.
  * A repeat sign-up never overwrites the stored answers; one whose answers differ is listed under the opened row as a later submission, with its date
- * and only the answers that differ (the server keeps the first 10, then the newest of any sent after them, with how many there were).
+ * and only the answers that differ (the server keeps the first 10, then the first of any sent after them, with how many there were and when the latest came).
  */
 export default function AlphaSignupsTab() {
   const [page, setPage] = useState(1)
@@ -172,7 +180,7 @@ export default function AlphaSignupsTab() {
   // ends with Delete. A stack at the name's indent, so it never looks like columns of the table above.
   const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
     <>
-    {(row.laterSubmissions.length > 0 || row.lastOverLimit) && <p className={`mb-1 md:pl-[1.125rem] ${dateLine}`}>First sent {formatInstantDateAu(row.createdAtUtc)}</p>}
+    {(row.laterSubmissions.length > 0 || row.firstOverLimit) && <p className={`mb-1 md:pl-[1.125rem] ${dateLine}`}>First sent {formatInstantDateAu(row.createdAtUtc)}</p>}
     <dl id={detailId(row)} className="grid grid-cols-2 gap-x-8 gap-y-2 md:flex md:flex-wrap md:gap-x-10 md:pl-[1.125rem]">
       {/* A fixed width from md up, so Phone starts at the same x in every opened row. */}
       <div className="min-w-0 break-words md:w-48">
@@ -188,19 +196,18 @@ export default function AlphaSignupsTab() {
         <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
       </div>
     </dl>
-    {(row.laterSubmissions.length > 0 || row.lastOverLimit) && (
+    {(row.laterSubmissions.length > 0 || row.firstOverLimit) && (
       <section aria-label="Later submissions" className="mt-3 md:pl-[1.125rem]">
         <h4 className={detailLabel}>Later submissions</h4>
         {/* The server keeps the first 10. RequestCount also counts identical repeats, so say this only once the 10 are full. */}
-        {!row.lastOverLimit && row.laterSubmissions.length >= LATER_SUBMISSIONS_KEPT && row.requestCount - 1 > LATER_SUBMISSIONS_KEPT && (
+        {!row.firstOverLimit && row.laterSubmissions.length >= LATER_SUBMISSIONS_KEPT && row.requestCount - 1 > LATER_SUBMISSIONS_KEPT && (
           <p className={`mt-1 text-xs ${muted}`}>
             Only the first {LATER_SUBMISSIONS_KEPT} later submissions are kept. The form was sent {row.requestCount} times in all.
           </p>
         )}
         <ol className="mt-1 space-y-2">
           {row.laterSubmissions.map(later => laterEntry(row, later))}
-          {row.lastOverLimit && laterEntry(row, row.lastOverLimit,
-            `${row.overLimitCount} more sent after the first ${LATER_SUBMISSIONS_KEPT} were kept. Showing ${row.overLimitCount === 1 ? 'it' : 'the latest'}.`)}
+          {row.firstOverLimit && laterEntry(row, row.firstOverLimit, overLimitNote(row))}
         </ol>
       </section>
     )}
