@@ -83,7 +83,7 @@ export interface GroupModel {
   readAt?: number
   /** The server's total. */
   count: number
-  /** Every row the group fetched, in its order. QuickGroup shows the first SHOWN_ROWS still undecided. */
+  /** Every row the group fetched, in its order. QuickGroup pages the ones still undecided, PAGE_SIZE a page. */
   rows: QuickRow[]
   /** The full page: "Open Leave" when every row is shown, "See all" when rows are cut. Never a number (call 13). */
   link: { to: string; openLabel: string }
@@ -92,6 +92,17 @@ export interface GroupModel {
 }
 
 export const SHOWN_ROWS = 5
+
+/** A decision tab shows its rows ten at a time, with the house pager (SHAPE §6). */
+export const PAGE_SIZE = 10
+
+export const pageCount = (rows: readonly unknown[]) => Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+
+/** Page `page` (1-based) of the rows; a page past either end is the nearest one. */
+export function pageRows<T>(rows: readonly T[], page: number): T[] {
+  const at = Math.min(Math.max(1, page), pageCount(rows))
+  return rows.slice((at - 1) * PAGE_SIZE, at * PAGE_SIZE)
+}
 
 export const rowKey = (group: GroupKey, rowId: string) => `${group}:${rowId}`
 
