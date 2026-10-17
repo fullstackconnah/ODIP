@@ -55,6 +55,8 @@ test('a coordinator books an intake visit, sees it on the schedules, and cancels
     await expect(page.getByRole('button', { name: `Book intake for ${name}` })).toBeFocused();
   } finally {
     // A booking left behind (a failed run) would make a retry's own booking a staff-busy 409. After a green run it is already cancelled: a 404.
-    await call(session, 'DELETE', `/inquiries/${created.data.id}/intake-booking`);
+    // The server wants the enquiry's current version on a cancel, as the table's dialog sends it.
+    const now = await call(session, 'GET', `/inquiries/${created.data.id}`);
+    await call(session, 'DELETE', `/inquiries/${created.data.id}/intake-booking?expectedUpdatedAt=${encodeURIComponent(now.data?.updatedAt ?? '')}`);
   }
 });

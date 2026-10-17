@@ -22,7 +22,7 @@ vi.mock('@/api/hooks', () => ({
 const START = '2030-10-15T23:00:00Z'
 const newRow = (overrides: Partial<ParticipantInquiryDto> = {}): ParticipantInquiryDto => ({
   id: 'inq-1', firstName: 'Noah', lastName: 'Fitzgerald', source: 'Phone', createdAt: '2026-09-28T01:10:00Z',
-  email: 'priya.nair@example.com.au', contactFirstName: 'Sarah', contactLastName: 'Walsh', timeZoneId: 'Australia/Sydney', ...overrides,
+  email: 'priya.nair@example.com.au', contactFirstName: 'Sarah', contactLastName: 'Walsh', timeZoneId: 'Australia/Sydney', updatedAt: 'v1', ...overrides,
 })
 const bookedRow = (overrides: Partial<ParticipantInquiryDto> = {}) => newRow({
   intakeStartsAt: START, intakeDurationMinutes: 90, intakeLocation: '12 Smith St', intakeStaffUserId: 'sam', intakeStaffFirstName: 'Sam',
@@ -64,7 +64,7 @@ describe('IntakeBookingPanel: a new booking', () => {
 
     expect(mocks.save).toHaveBeenCalledWith({
       id: 'inq-1',
-      data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null },
+      data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, expectedUpdatedAt: 'v1' },
     })
     expect(await screen.findByText("Invite not sent: email isn't set up yet. The visit is still booked, so let Sarah know another way.")).toBeInTheDocument()
     expect(screen.getByText("Intake visit booked. Invite not sent: email isn't set up yet.")).toBeInTheDocument() // the live region
@@ -121,7 +121,7 @@ describe('IntakeBookingPanel: a new booking', () => {
     await fillNewBooking(user)
 
     await user.click(screen.getByRole('button', { name: 'Book visit' }))
-    expect(mocks.save).toHaveBeenCalledWith({ id: 'inq-1', data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null } })
+    expect(mocks.save).toHaveBeenCalledWith({ id: 'inq-1', data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, expectedUpdatedAt: 'v1' } })
     expect(await screen.findByText('Intake visit booked. No invite sent: Sarah has no email.')).toBeInTheDocument() // the live region
   })
 
@@ -134,7 +134,7 @@ describe('IntakeBookingPanel: a new booking', () => {
     await user.click(screen.getByRole('button', { name: 'Send invite' }))
     expect(mocks.save).toHaveBeenCalledWith({
       id: 'inq-1',
-      data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, contactEmail: 'sarah@example.com' },
+      data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, contactEmail: 'sarah@example.com', expectedUpdatedAt: 'v1' },
     })
   })
 
@@ -156,7 +156,7 @@ describe('IntakeBookingPanel: a new booking', () => {
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
     await fillNewBooking(user)
     await user.click(screen.getByRole('button', { name: 'Book visit' }))
-    expect(mocks.save).toHaveBeenCalledWith({ id: 'inq-1', data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null } })
+    expect(mocks.save).toHaveBeenCalledWith({ id: 'inq-1', data: { startsAt: START, durationMinutes: 90, location: 'Library', staffUserId: 'dana', notes: null, expectedUpdatedAt: 'v1' } })
     expect(await screen.findByText("Intake visit booked. No invite sent: the email on file can't take an invite.")).toBeInTheDocument() // the live region
   })
 
@@ -212,7 +212,7 @@ describe('IntakeBookingPanel: the booked view', () => {
 
     expect(mocks.save).toHaveBeenCalledWith({
       id: 'inq-1',
-      data: { startsAt: START, durationMinutes: 90, location: '12 Smith St', staffUserId: 'sam', notes: 'Gate code 4321' },
+      data: { startsAt: START, durationMinutes: 90, location: '12 Smith St', staffUserId: 'sam', notes: 'Gate code 4321', expectedUpdatedAt: 'v1' },
     })
     expect(await screen.findByText('Notes saved.')).toBeInTheDocument()
   })
@@ -249,7 +249,7 @@ describe('IntakeBookingPanel: the booked view', () => {
 
     expect(mocks.save).toHaveBeenCalledWith({
       id: 'inq-1',
-      data: { startsAt: START, durationMinutes: 90, location: '12 Smith St', staffUserId: 'sam', notes: 'Gate code', contactEmail: 'noah@example.com' },
+      data: { startsAt: START, durationMinutes: 90, location: '12 Smith St', staffUserId: 'sam', notes: 'Gate code', contactEmail: 'noah@example.com', expectedUpdatedAt: 'v1' },
     })
   })
 
@@ -270,20 +270,59 @@ describe('IntakeBookingPanel: the booked view', () => {
 
   it('sends again and marks confirmed, announcing each', async () => {
     const user = userEvent.setup()
-    mocks.resend.mockResolvedValue(bookedRow({ intakeInviteSentAt: '2026-10-14T04:00:00Z' }))
-    mocks.confirm.mockResolvedValue(bookedRow({ intakeConfirmedAt: '2026-10-15T01:00:00Z' }))
+    mocks.resend.mockResolvedValue(bookedRow({ intakeInviteSentAt: '2026-10-14T04:00:00Z', updatedAt: 'v2' }))
+    mocks.confirm.mockResolvedValue(bookedRow({ intakeConfirmedAt: '2026-10-15T01:00:00Z', updatedAt: 'v3' }))
     panel(bookedRow({ intakeInviteError: 'Failed' }))
 
     expect(screen.getByText("Invite not sent: the email couldn't be sent. The visit is still booked.")).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Send again' }))
-    expect(mocks.resend).toHaveBeenCalledWith('inq-1')
+    expect(mocks.resend).toHaveBeenCalledWith({ id: 'inq-1', expectedUpdatedAt: 'v1' })
     expect(await screen.findByText('Invite sent again to priya.nair@example.com.au.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Mark confirmed' }))
-    expect(mocks.confirm).toHaveBeenCalledWith({ id: 'inq-1', confirmed: true })
+    // Chained: each write carries the version the panel was last answered with, not the one it opened on.
+    expect(mocks.confirm).toHaveBeenCalledWith({ id: 'inq-1', confirmed: true, expectedUpdatedAt: 'v2' })
     expect(await screen.findByText('Marked confirmed.')).toBeInTheDocument()
     expect(screen.getByText('Confirmed. Marked on Thu 15 Oct.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mark not confirmed' })).toBeInTheDocument()
+  })
+
+  it('chains the version through a save: the next write after it sends what the save was answered with', async () => {
+    const user = userEvent.setup()
+    mocks.save.mockResolvedValue(bookedRow({ intakeNotes: 'Gate code 4321', updatedAt: 'v2' }))
+    mocks.confirm.mockResolvedValue(bookedRow({ updatedAt: 'v3' }))
+    panel(bookedRow())
+    await user.clear(screen.getByLabelText(/^Notes for your team/))
+    await user.type(screen.getByLabelText(/^Notes for your team/), 'Gate code 4321')
+    await user.click(screen.getByRole('button', { name: 'Save notes' }))
+    await screen.findByText('Notes saved.')
+
+    await user.click(screen.getByRole('button', { name: 'Mark confirmed' }))
+
+    expect(mocks.confirm).toHaveBeenCalledWith({ id: 'inq-1', confirmed: true, expectedUpdatedAt: 'v2' })
+  })
+
+  // A colleague changed the visit after this panel loaded: the server's 409 shows in the panel's refusal alert, the edits stay, and focus moves to it.
+  describe('when a colleague changed the visit', () => {
+    const changed = { isAxiosError: true, response: { status: 409, data: { success: false, errors: ['Someone else just changed this visit. Reload and try again.'] } } }
+
+    it.each([
+      ['Send updated invite', 'save'],
+      ['Send again', 'resend'],
+      ['Mark confirmed', 'confirm'],
+    ] as const)('shows the refusal for %s and keeps what was typed', async (button, action) => {
+      const user = userEvent.setup()
+      mocks[action].mockRejectedValue(changed)
+      panel(bookedRow({ intakeInviteError: 'Failed' }))
+      await user.clear(screen.getByLabelText(/^Where/))
+      await user.type(screen.getByLabelText(/^Where/), 'Library')
+
+      await user.click(screen.getByRole('button', { name: button }))
+
+      const alert = await screen.findByText('Someone else just changed this visit. Reload and try again.')
+      expect(alert.closest('[tabindex="-1"]')).toHaveFocus()
+      expect(screen.getByLabelText(/^Where/)).toHaveValue('Library')
+    })
   })
 
   it('hands Cancel visit to the page, which owns the dialog', async () => {

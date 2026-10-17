@@ -122,7 +122,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
     }
     const kind = !booked ? 'booked' : sends ? 'updated' : 'notes'
     try {
-      const answer = await run('save', () => save.mutateAsync({ id: current.id, data: bookingBody(effective, zone, emailGiven) }))
+      const answer = await run('save', () => save.mutateAsync({ id: current.id, data: { ...bookingBody(effective, zone, emailGiven), expectedUpdatedAt: current.updatedAt } }))
       if (!answer) return
       const next = bookingFormOf(answer, '')
       setCurrent(answer)
@@ -141,24 +141,26 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
 
   async function sendAgain() {
     try {
-      const answer = await run('resend', () => resend.mutateAsync(current.id))
+      const answer = await run('resend', () => resend.mutateAsync({ id: current.id, expectedUpdatedAt: current.updatedAt }))
       if (!answer) return
       setCurrent(answer)
       setAnnouncement(answer.intakeInviteError ? `Invite still not sent: ${notSentReason(answer.intakeInviteError)}.` : `Invite sent again to ${answer.email}.`)
     } catch (error) {
       setRefusal(refusalOf(error, "The invite wasn't sent. Try again."))
+      focusNext.current = 'refusal'
     }
   }
 
   async function toggleConfirmed() {
     const confirmed = !current.intakeConfirmedAt
     try {
-      const answer = await run('confirm', () => confirm.mutateAsync({ id: current.id, confirmed }))
+      const answer = await run('confirm', () => confirm.mutateAsync({ id: current.id, confirmed, expectedUpdatedAt: current.updatedAt }))
       if (!answer) return
       setCurrent(answer)
       setAnnouncement(confirmed ? 'Marked confirmed.' : 'Marked not confirmed.')
     } catch (error) {
       setRefusal(refusalOf(error, "The visit wasn't changed. Try again."))
+      focusNext.current = 'refusal'
     }
   }
 

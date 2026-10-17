@@ -130,7 +130,7 @@ function useInquiriesScreen() {
 
   async function markConfirmed(row: ParticipantInquiryDto, confirmed: boolean) {
     try {
-      await confirmVisit.mutateAsync({ id: row.id, confirmed })
+      await confirmVisit.mutateAsync({ id: row.id, confirmed, expectedUpdatedAt: row.updatedAt })
       notify('success', confirmed ? 'Visit confirmed' : 'Marked not confirmed',
         confirmed ? `${nameOf(row)}'s intake visit is marked confirmed.` : `${nameOf(row)}'s intake visit is no longer marked confirmed.`, row.id)
     } catch {

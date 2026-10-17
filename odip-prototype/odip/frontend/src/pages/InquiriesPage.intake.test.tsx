@@ -22,7 +22,7 @@ const base = { source: 'Phone', createdAt: '2026-09-28T01:10:00Z', participantId
 const booking = { intakeStartsAt: UPCOMING, intakeDurationMinutes: 90, intakeLocation: '12 Smith St', intakeStaffUserId: 'sam', intakeStaffFirstName: 'Sam', intakeStaffName: 'Sam Lee' }
 const rows = [
   { ...base, id: 'empty', firstName: 'Noah', lastName: 'Fitzgerald' },
-  { ...base, ...booking, id: 'sent', firstName: 'Priya', lastName: 'Nair', intakeInviteSentAt: '2026-10-14T03:05:00Z' },
+  { ...base, ...booking, id: 'sent', firstName: 'Priya', lastName: 'Nair', intakeInviteSentAt: '2026-10-14T03:05:00Z', updatedAt: '2026-10-14T03:05:01.123456Z' },
   { ...base, ...booking, id: 'unsent', firstName: 'Mei', lastName: 'Tanaka', intakeInviteError: 'NotConfigured' },
   { ...base, ...booking, id: 'confirmed', firstName: 'Liam', lastName: 'Okafor', intakeInviteSentAt: '2026-10-14T03:05:00Z', intakeConfirmedAt: '2026-10-15T01:00:00Z' },
   { ...base, ...booking, id: 'past', firstName: 'Ava', lastName: 'Ng', intakeStartsAt: '2026-01-05T23:00:00Z', intakeInviteSentAt: '2026-01-01T00:00:00Z' },
@@ -118,7 +118,7 @@ describe('the phone menu', () => {
     await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
     await user.click(screen.getByRole('option', { name: 'Mark confirmed' }))
 
-    expect(mocks.confirmVisit).toHaveBeenCalledWith({ id: 'sent', confirmed: true })
+    expect(mocks.confirmVisit).toHaveBeenCalledWith({ id: 'sent', confirmed: true, expectedUpdatedAt: '2026-10-14T03:05:01.123456Z' })
     expect(await screen.findByText("Priya Nair's intake visit is marked confirmed.")).toBeInTheDocument()
     expect(screen.queryByText('Enquiry form')).not.toBeInTheDocument() // the item's click never reached the row (it would open the form)
   })
@@ -146,7 +146,8 @@ describe('the phone menu', () => {
     expect(dialog.textContent).toContain('10:00\u00a0am')
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
 
-    expect(mocks.cancelVisit).toHaveBeenCalledWith('sent')
+    // The table's Cancel sends the version the row holds, so a stale list is a 409 and nobody is emailed.
+    expect(mocks.cancelVisit).toHaveBeenCalledWith({ id: 'sent', expectedUpdatedAt: '2026-10-14T03:05:01.123456Z' })
     expect(await screen.findByText('Intake visit cancelled, email not sent')).toBeInTheDocument()
     expect(screen.getByText("Email isn't set up yet, so Priya wasn't told. Let them know another way.")).toBeInTheDocument()
   })

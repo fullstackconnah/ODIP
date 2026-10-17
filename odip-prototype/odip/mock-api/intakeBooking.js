@@ -207,6 +207,8 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     ['inquiries', (body) => { const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return listRow(row) }],
     ['inquiries/:id/intake-booking/confirm', (id, body) => {
       if (!bookings[id]) return notBooked()
+      if (stale(find(id), body)) return changedByOther()
+      stamp(find(id))
       bookings[id].intakeConfirmedAt = body.confirmed ? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') : null
       return listRow(find(id))
     }],
