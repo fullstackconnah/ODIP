@@ -5,9 +5,12 @@ using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Catalogue;
 using Odip.Tests.Medications;
@@ -144,5 +147,128 @@ public class AgreementRenewalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal((int?)2, Assert.Single(outcomes, o => o.Draft is null).ConflictVersion);
         await using var read = Open(cs, tenantId);
         Assert.Equal(new[] { 1, 2 }, await read.ServiceAgreementDrafts.AsNoTracking().OrderBy(d => d.Version).Select(d => d.Version).ToListAsync());
+    }
+
+    /// <summary>One participant with Sam as the regular of a Monday pattern, and Sam's shift on it.</summary>
+    private async Task<(string ConnectionString, Guid TenantId, Guid ParticipantId, Guid SamId, Guid AlexId, Guid PatternId, Guid ShiftId)> SeedRegularAsync()
+    {
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        Guid samId = Guid.NewGuid(), alexId = Guid.NewGuid(), patternId = Guid.NewGuid(), shiftId = Guid.NewGuid();
+        var monday = new DateOnly(2026, 10, 19);
+        await using (var setup = Open(cs, tenantId))
+        {
+            foreach (var (id, name) in new[] { (samId, "Sam"), (alexId, "Alex") })
+                setup.Users.Add(new User { Id = id, TenantId = tenantId, FirstName = name, LastName = "Lee", Username = name, Email = $"{name}@example.com", Role = UserRole.SupportWorker, Position = Position.SupportWorker, IsActive = true });
+            setup.ShiftPatterns.Add(new ShiftPattern
+            {
+                Id = patternId, TenantId = tenantId, ParticipantId = participantId, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Ratio = SupportRatio.OneToOne,
+                NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true, DefaultUserId = samId,
+            });
+            setup.Shifts.Add(new Shift
+            {
+                Id = shiftId, TenantId = tenantId, ParticipantId = participantId, UserId = samId, ServiceDate = monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+                Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft, ShiftPatternId = patternId,
+            });
+            await setup.SaveChangesAsync();
+        }
+        return (cs, tenantId, participantId, samId, alexId, patternId, shiftId);
+    }
+
+    [SkippableFact]   // REV281B #2: two coordinators on one pattern; the pre-check alone cannot stop the second, the concurrency token at the UPDATE does
+    public async Task SetRegular_TwoEditors_TheSecondSaveIsRefusedAtTheUpdate()
+    {
+        RequirePostgres();
+        var (cs, tenantId, _, samId, alexId, patternId, shiftId) = await SeedRegularAsync();
+
+        await using var editorB = Open(cs, tenantId);
+        var loadedByB = await editorB.ShiftPatterns.SingleAsync(p => p.Id == patternId);          // B has Sam in hand
+        await using (var editorA = Open(cs, tenantId))
+        {
+            (await editorA.ShiftPatterns.SingleAsync(p => p.Id == patternId)).DefaultUserId = alexId;
+            await editorA.SaveChangesAsync();                                                       // A saves Alex first
+        }
+
+        loadedByB.DefaultUserId = null;                                                              // B's Stop, from its stale load
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => editorB.SaveChangesAsync());
+
+        await using var late = Open(cs, tenantId);                                                   // the same Stop arriving afterwards is the 409 of the pre-check
+        var tenant = Mock.Of<ICurrentTenant>(t => t.TenantId == tenantId);
+        var refused = await RosterStartWeekTests.Controller(late, tenant).SetRegular(patternId, new SetRegularDto { ShiftId = shiftId, StaffId = null, ExpectedRegularId = samId }, default);
+        Assert.IsType<ConflictObjectResult>(refused.Result);
+        await using var check = Open(cs, tenantId);
+        Assert.Equal(alexId, (await check.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == patternId)).DefaultUserId);
+    }
+
+    /// <summary>REV281B deep Must 1: a generation (Start rostering, Generate, an approval) holds the participant lock from its load to its save. A regular change that does not wait for it commits in
+    /// between, and the token then refuses the generation's own save (a 500). The change has to queue behind the lock instead.</summary>
+    private async Task AWriterQueuesBehindAGenerationAsync(Func<RosteringController, Guid, Guid, Guid, Task<ActionResult<ApiResponse<ShiftPatternDto>>>> write)
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId, samId, _, patternId, shiftId) = await SeedRegularAsync();
+        await using var generation = Open(cs, tenantId);
+        await using var held = await RosterGenerationLock.AcquireAsync(generation, participantId, default, TimeSpan.FromSeconds(10));
+        Assert.True(held.Held);
+        var loaded = await generation.ShiftPatterns.SingleAsync(p => p.Id == patternId);   // the generator loads its patterns tracked, under the lock
+
+        await using var writer = Open(cs, tenantId);
+        var writing = write(RosterStartWeekTests.Controller(writer, Mock.Of<ICurrentTenant>(t => t.TenantId == tenantId)), patternId, shiftId, participantId);
+        await Task.Delay(750);
+        Assert.False(writing.IsCompleted);                                                  // waiting for the lock, not committed in between
+
+        loaded.GeneratedThrough = new DateOnly(2026, 11, 1);
+        await generation.SaveChangesAsync();                                                // not refused by the token
+        await held.CommitAsync(default);
+
+        Assert.IsType<OkObjectResult>((await writing).Result);
+        await using var check = Open(cs, tenantId);
+        var stored = await check.ShiftPatterns.AsNoTracking().SingleAsync(p => p.Id == patternId);
+        Assert.Null(stored.DefaultUserId);
+        Assert.Equal(new DateOnly(2026, 11, 1), stored.GeneratedThrough);
+    }
+
+    [SkippableFact]
+    public Task SetRegular_RacingAGeneration_QueuesBehindItsLock_AndNeitherSaveIsRefused() =>
+        AWriterQueuesBehindAGenerationAsync((c, patternId, shiftId, _) => c.SetRegular(patternId, new SetRegularDto { ShiftId = shiftId, StaffId = null }, default));
+
+    [SkippableFact]
+    public Task UpdatePattern_RacingAGeneration_QueuesBehindItsLock_AndNeitherSaveIsRefused() =>
+        AWriterQueuesBehindAGenerationAsync((c, patternId, _, participantId) => c.UpdatePattern(patternId, new UpdateShiftPatternDto
+        {
+            ParticipantId = participantId, DefaultStaffId = null, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Ratio = SupportRatio.OneToOne,
+            NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true,
+        }, default));
+
+    /// <summary>REV281B fix round 2: the opposite order. Generate reads the pattern, then waits for the participant lock; a SetRegular commits while it waits. The pattern Generate works on must be the committed
+    /// one: a copy read before the lock and kept tracked would carry the old regular into the shifts and make the save a concurrency error (a 500).</summary>
+    [SkippableFact]
+    public async Task GeneratePattern_ARegularChangeCommitsWhileItWaitsForTheLock_UsesTheNewRegular()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId, _, alexId, patternId, _) = await SeedRegularAsync();
+        await using (var setup = Open(cs, tenantId))                                        // the week Generate starts records who started it
+        {
+            setup.Users.Add(new User { Id = RosterStartWeekTests.CoordinatorId, TenantId = tenantId, FirstName = "Co", LastName = "Ordinator", Username = "co", Email = "co@example.com", Role = UserRole.Coordinator, Position = Position.SupportWorker, IsActive = true });
+            await setup.SaveChangesAsync();
+        }
+        await using var other = Open(cs, tenantId);
+        await using var held = await RosterGenerationLock.AcquireAsync(other, participantId, default, TimeSpan.FromSeconds(20));
+        Assert.True(held.Held);
+
+        await using var generating = Open(cs, tenantId);
+        var generation = RosterStartWeekTests.Controller(generating, Mock.Of<ICurrentTenant>(t => t.TenantId == tenantId))
+            .GeneratePattern(patternId, new DateOnly(2026, 10, 1), new DateOnly(2026, 11, 1), default);   // from the pattern's start, so it joins on and records GeneratedThrough (the save the token guards)
+        await Task.Delay(750);
+        Assert.False(generation.IsCompleted);                                               // past its preload, waiting for the lock
+
+        await using (var change = Open(cs, tenantId))                                       // a SetRegular commits in between
+        {
+            (await change.ShiftPatterns.SingleAsync(p => p.Id == patternId)).DefaultUserId = alexId;
+            await change.SaveChangesAsync();
+        }
+        await held.CommitAsync(default);
+
+        Assert.IsType<OkObjectResult>((await generation).Result);
+        await using var check = Open(cs, tenantId);
+        Assert.Equal(alexId, Assert.Single(await check.Shifts.AsNoTracking().Where(s => s.ShiftPatternId == patternId && s.ServiceDate == new DateOnly(2026, 10, 26)).ToListAsync()).UserId);
     }
 }
