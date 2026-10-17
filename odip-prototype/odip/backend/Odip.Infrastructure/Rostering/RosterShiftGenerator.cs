@@ -49,7 +49,7 @@ public sealed class RosterShiftGenerator
     /// Generate button): one that starts after a gap past what was already covered does not move <see cref="ShiftPattern.GeneratedThrough"/>, so the top-up can still fill the gap. When nothing was covered yet
     /// (<see cref="ShiftPattern.GeneratedThrough"/> is null) the gap is measured from the first day the top-up would make, the provider's <paramref name="providerToday"/> or the pattern's start when that is later; without it the window is not recorded.
     /// </summary>
-    public async Task<ShiftGeneration> GenerateAsync(OdipDbContext db, Guid participantId, IReadOnlyCollection<Guid> patternIds, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false, DateOnly? providerToday = null)
+    public async Task<ShiftGeneration> GenerateAsync(OdipDbContext db, Guid participantId, IReadOnlyCollection<Guid> patternIds, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false, DateOnly? providerToday = null, RosterAvailability? availability = null)
     {
         if (patternIds.Count == 0) return ShiftGeneration.None;
 
@@ -58,6 +58,8 @@ public sealed class RosterShiftGenerator
         // Tracked: how far generation has reached is kept on the pattern and saved with the shifts.
         var patterns = await db.ShiftPatterns.Where(p => ids.Contains(p.Id) && p.ParticipantId == participantId).ToListAsync(ct);
         var result = await AddAsync(db, patterns, from, to, ct, onlyWhenContiguous, providerToday);
+        // The regular-away rule (L5) over what was just made, inside the participant lock and before the one save, as Start and an approval apply it.
+        if (availability is not null) await availability.MarkRegularsAwayAsync(result.MadeShifts, ct);
         await db.SaveChangesAsync(ct);
         await held.CommitAsync(ct);
         return result;

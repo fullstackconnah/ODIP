@@ -595,4 +595,46 @@ public class RosterRegularTests
         Assert.True(dto.IsRegular);
         Assert.Equal(kimId, dto.RegularUserId);
     }
+
+    [Fact]   // PT-ROSTER 7: the Generate button used to put the shift on a regular who is on approved leave; Start and approval open it with the "regular away" note
+    public async Task Generate_OpensTheShift_WhenTheRegularIsOnApprovedLeave_AndKeepsTheOthers()
+    {
+        Guid kimId = default, patternId = default;
+        var dbName = NewDatabase(db =>
+        {
+            var kim = Worker(db, "Kim"); kimId = kim.Id;
+            var mia = Person(db, "Mia");
+            patternId = Pattern(db, mia.Id, DayOfWeek.Tuesday, kim.Id, fromAgreement: false).Id;
+            Pattern(db, mia.Id, DayOfWeek.Wednesday, kim.Id, fromAgreement: false);
+            RosterStartWeekTests.Leave(db, kim.Id, LeaveStatus.Approved, Monday.AddDays(1));
+        });
+
+        using (var db = TestDb.ForTenant(dbName, TenantA))
+        {
+            var result = await Controller(db, TenantOf(TenantA)).GeneratePattern(patternId, Monday, Monday.AddDays(6), default);
+            Assert.IsType<OkObjectResult>(result.Result);
+        }
+
+        using var check = TestDb.Create(dbName);
+        var tuesday = check.Shifts.AsNoTracking().Single(s => s.ServiceDate == Monday.AddDays(1));
+        Assert.Equal(((Guid?)null, (Guid?)kimId, "on approved leave"), (tuesday.UserId, tuesday.RegularUserId, tuesday.RegularAwayReason));
+    }
+
+    [Fact]   // The Generate button of a pattern whose regular is free keeps the regular on the shift
+    public async Task Generate_KeepsTheRegular_WhenTheyAreFree()
+    {
+        Guid kimId = default, patternId = default;
+        var dbName = NewDatabase(db =>
+        {
+            var kim = Worker(db, "Kim"); kimId = kim.Id;
+            patternId = Pattern(db, Person(db, "Mia").Id, DayOfWeek.Tuesday, kim.Id, fromAgreement: false).Id;
+        });
+
+        using (var db = TestDb.ForTenant(dbName, TenantA))
+            Assert.IsType<OkObjectResult>((await Controller(db, TenantOf(TenantA)).GeneratePattern(patternId, Monday, Monday.AddDays(6), default)).Result);
+
+        using var check = TestDb.Create(dbName);
+        var tuesday = check.Shifts.AsNoTracking().Single();
+        Assert.Equal((kimId, (Guid?)null, (string?)null), (tuesday.UserId!.Value, tuesday.RegularUserId, tuesday.RegularAwayReason));
+    }
 }
