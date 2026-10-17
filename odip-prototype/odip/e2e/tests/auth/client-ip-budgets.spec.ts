@@ -63,12 +63,14 @@ test.describe('per-visitor sign-in budgets', () => {
   test('one visitor flooding is limited, another on the same endpoint is not', async () => {
     const c = { 'cf-connecting-ip': '203.0.113.12' };
     let floodedAt = 0;
+    let flood: Awaited<ReturnType<typeof exchange>> | undefined;
     for (let n = 1; n <= FLOOD_PERMITS + 5 && !floodedAt; n++) {
       const r = await exchange(trustedUrl!, c);
       // The tracker answers 429 LockedOut from the 11th attempt; the flood limiter's refusal is the 429 with no body.
-      if (r.status === 429 && !r.lockedOut) floodedAt = n;
+      if (r.status === 429 && !r.lockedOut) { floodedAt = n; flood = r; }
     }
     expect(floodedAt).toBe(FLOOD_PERMITS + 1);
+    expect(flood?.text).toBe('');
 
     const d = await exchange(trustedUrl!, { 'cf-connecting-ip': '203.0.113.13' });
     expect(d.status).toBe(401);
