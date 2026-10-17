@@ -17,7 +17,7 @@ public static class EarlyAccessRequestTemplate
     public const string Subject = "New Bunya Support early-access request";
     public const string SentAgainSubject = "Bunya Support early-access form sent again";
     public const string LastKeptSubject = "Bunya Support early-access form sent again (last one kept)";
-    public const string OverLimitSubject = "Bunya Support early-access form sent again (not kept)";
+    public const string OverLimitSubject = "Bunya Support early-access form sent again (over the limit)";
 
     public static NotificationMessage Render(EarlyAccessRequestPayload p)
     {
@@ -28,7 +28,7 @@ public static class EarlyAccessRequestTemplate
             EarlyAccessNoticeKind.SentAgainLastKept =>
                 (LastKeptSubject, $"{p.Name} sent the form again. This is the last one that will be kept for this address. Open Settings > Alpha sign-ups to read it."),
             EarlyAccessNoticeKind.SentAgainOverLimit =>
-                (OverLimitSubject, $"{p.Name} sent the form again after the 10-submission limit. It was not kept; contact them by email."),
+                (OverLimitSubject, $"{p.Name} sent the form again after the 10-submission limit. Only the newest one after the limit is kept, so open Settings > Alpha sign-ups to read it."),
             _ => (Subject, "Someone asked for early access to Bunya Support."),
         };
 
