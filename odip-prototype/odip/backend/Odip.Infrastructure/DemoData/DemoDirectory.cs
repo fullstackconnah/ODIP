@@ -64,7 +64,7 @@ public sealed class DemoDirectory
 
         var rows = await DemoQueries.Participants(db).ToListAsync(ct);
         var everyone = rows
-            .Select(p => new DemoParticipant(p.Id, KeyFor(p.NdisNumber), $"{p.FirstName} {p.LastName}".Trim().Trim(), p.IsActive, p.IsDraft))
+            .Select(p => new DemoParticipant(p.Id, KeyFor(p.NdisNumber), $"{p.FirstName} {p.LastName}".Trim(), p.IsActive, p.IsDraft))
             .ToList();
         var participants = new Dictionary<string, DemoParticipant>();
         foreach (var participant in everyone)

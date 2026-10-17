@@ -310,7 +310,7 @@ public class ParticipantAlertsService
             result.Add(new ParticipantAlertsDto
             {
                 ParticipantId = p.Id,
-                ParticipantName = string.IsNullOrEmpty(p.PreferredName) ? $"{p.FirstName} {p.LastName}".Trim() : $"{p.PreferredName} {p.LastName}",
+                ParticipantName = string.IsNullOrEmpty(p.PreferredName) ? $"{p.FirstName} {p.LastName}".Trim() : $"{p.PreferredName} {p.LastName}".Trim(),
                 IsActive = p.IsActive,
                 BudgetInForce = budgetInForce.Contains(p.Id),
                 Alerts = alerts,

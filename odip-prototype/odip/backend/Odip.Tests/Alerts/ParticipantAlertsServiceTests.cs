@@ -438,6 +438,19 @@ public class ParticipantAlertsServiceTests
         Assert.Equal("Sunny Name", result.Single().ParticipantName);
     }
 
+    [Fact]
+    public async Task GetAlertsAsync_ParticipantNameTrimsWhenPreferredNameSetAndLastNameBlank()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db, "Formal", "");
+        participant.PreferredName = "Ally";
+        db.SaveChanges();
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id);
+
+        Assert.Equal("Ally", result.Single().ParticipantName);
+    }
+
     // ── activeOnly (fix round 1 — review finding: aggregate must exclude inactive participants) ──
 
     [Fact]
