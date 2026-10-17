@@ -108,7 +108,9 @@ public sealed class OnboardingImportService
                 .Where(p => p.NdisNumber != null && !undone.Contains(p.Id))
                 .Select(p => new { p.NdisNumber, p.FirstName, p.LastName })
                 .ToListAsync(ct))
-            .GroupBy(p => ImportParticipantRows.NdisKey(p.NdisNumber!))
+            .Select(p => (Key: ImportParticipantRows.NdisKey(p.NdisNumber!), p.FirstName, p.LastName))
+            .Where(p => ImportParticipantRows.IsNdisNumber(p.Key))
+            .GroupBy(p => p.Key)
             .ToDictionary(g => g.Key, g => g.First());
         foreach (var plan in plans)
             if (plan.DuplicateKey is { } key && existing.TryGetValue(key, out var match))

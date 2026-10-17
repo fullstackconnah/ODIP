@@ -60,6 +60,20 @@ public class OnboardingImportPreviewTests
     }
 
     [Fact]
+    public async Task Preview_does_not_match_a_placeholder_NDIS_number_to_anyone()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+        db.Participants.Add(new Participant { Id = Guid.NewGuid(), FirstName = "Old", LastName = "Hand", NdisNumber = "TBC" });
+        await db.SaveChangesAsync();
+
+        var preview = await Preview(db, tenantId, Csv(Header, "Ava,Stone,,TBC", "Ben,Stone,,TBC", "Cy,Stone,,N/A"));
+
+        Assert.Equal(3, preview.ReadyCount);
+        Assert.All(preview.Rows, r => Assert.Single(r.Warnings));
+    }
+
+    [Fact]
     public async Task Preview_flags_repeats_within_the_file()
     {
         var (db, tenantId) = Organisation();

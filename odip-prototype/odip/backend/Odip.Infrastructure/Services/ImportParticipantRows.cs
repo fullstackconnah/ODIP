@@ -46,6 +46,9 @@ public static class ImportParticipantRows
     /// <summary>Letters and digits only, upper-case: "430 000 001" and "430000001" are the same NDIS number.</summary>
     public static string NdisKey(string ndisNumber) => new(ndisNumber.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
 
+    /// <summary>An NDIS number is 9 digits (NdisKey has already dropped the spaces). Only such a value is ever used to match or de-duplicate people.</summary>
+    public static bool IsNdisNumber(string key) => key.Length == 9 && key.All(char.IsAsciiDigit);
+
     private static readonly string[] DateKeys = ["dateOfBirth", "planStartDate", "planEndDate"];
 
     public static List<ImportRowPlan> Build(ImportTable table, IReadOnlyList<string?> mapping, DateOnly asOf)
@@ -154,10 +157,13 @@ public static class ImportParticipantRows
         }.OfType<string>());
         reasons.AddRange(ImportValues.AnnotationErrors(dto, Labels));
 
+        // "N/A", "TBC" or "-" are not numbers: keying on them would make every such row a repeat of the first, or match a stored "TBC".
+        var ndisKey = NdisKey(ndis);
+        if (ndis.Length > 0 && !IsNdisNumber(ndisKey)) warnings.Add("NDIS number isn't 9 digits, so it wasn't used to match anyone.");
         var plan = new ImportRowPlan
         {
             RowNumber = rowNumber, Name = $"{first} {last}".Trim(), Participant = dto,
-            DuplicateKey = ndis.Length == 0 ? null : NdisKey(ndis),
+            DuplicateKey = IsNdisNumber(ndisKey) ? ndisKey : null,
         };
         plan.Warnings.AddRange(warnings);
         if (first == ExampleFirstName && last == ExampleLastName) plan.Skip("This is the template's example row.");
