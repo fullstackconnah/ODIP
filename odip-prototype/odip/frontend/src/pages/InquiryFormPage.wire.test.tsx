@@ -922,7 +922,7 @@ describe('InquiryFormPage (wire) — every booking write carries the version the
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel visit' }))
 
-    expect(await within(screen.getByRole('alertdialog')).findByRole('alert')).toHaveTextContent('Someone else just changed this visit. Reload and try again.')
+    expect(await within(screen.getByRole('alertdialog')).findByRole('alert')).toHaveTextContent('Someone else just changed this visit. The details above are now up to date. Cancel the visit again if you still want to.')
     expect(firstName()).toHaveValue('Rowann')
     expect(screen.queryByText('Intake visit cancelled')).not.toBeInTheDocument()
   })
