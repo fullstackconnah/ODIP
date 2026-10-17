@@ -23,6 +23,7 @@ The public landing page lives at `/welcome/` (its own Vite HTML entry, `welcome/
 
 - [ ] The collection notice under the button is the owner's wording; `page.test.ts` pins it word for word and checks no email address appears anywhere on the page.
 - [ ] The retention promise ("until the alpha ends, for 12 months at most, or delete them sooner if you ask") is kept by PR 1's 12-month purge and the SuperAdmin Delete in Settings, Alpha sign-ups.
+- [ ] When the alpha ends, run the alpha-end cleanup in `docs/runbooks/early-access-alpha-cleanup.md` (what the purge does on its own, and what is left to do by hand).
 - [ ] `legalPublished` in `src/lib/platformInfo.ts` stays false until the owner supplies the Privacy Policy and Terms; it then shows the Legal links and the notice's last sentence.
 - [ ] When a support email exists, it replaces the notice's "send the form again and say so in the message" line, and `supportEmail` shows the footer's Support column.
 
