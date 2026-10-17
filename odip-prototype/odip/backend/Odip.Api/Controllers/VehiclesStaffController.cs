@@ -97,7 +97,7 @@ public class VehiclesController : ControllerBase
         v.VehicleName = dto.VehicleName; v.Registration = dto.Registration; v.VehicleType = dto.VehicleType;
         v.TotalSeats = dto.TotalSeats; v.WheelchairPositions = dto.WheelchairPositions;
         v.RampHoistDetails = dto.RampHoistDetails; v.DriverRequirements = dto.DriverRequirements;
-        v.IsInternal = dto.IsInternal; v.IsActive = dto.IsActive; v.ServiceDueDate = dto.ServiceDueDate;
+        v.IsInternal = dto.IsInternal; v.ServiceDueDate = dto.ServiceDueDate;
         v.RegistrationDueDate = dto.RegistrationDueDate; v.Notes = dto.Notes; v.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);

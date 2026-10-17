@@ -161,11 +161,11 @@ describe('VehicleCreatePage — editing a record that has not loaded', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 
-  it('saves the loaded isActive, so an inactive vehicle stays inactive', async () => {
+  it('does not send isActive: only Archive and Restore change it', async () => {
     mockUpdateMutateAsync.mockResolvedValue({ success: true })
     mockUseVehicleDetail.mockReturnValue({ data: vehicle, isLoading: false, isError: false, refetch: vi.fn() })
     renderEditPage()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
-    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'v1', data: expect.objectContaining({ vehicleName: 'Blue Van 1', isActive: false }) })
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).not.toHaveProperty('isActive')
   })
 })
