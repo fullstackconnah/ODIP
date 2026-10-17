@@ -701,6 +701,51 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
       await waitFor(() => expect(notice()).toHaveTextContent('Approved 3 leave requests'))
       expect(runs.map((run) => run.mock.calls.length)).toEqual([1, 1, 1, 0, 0])
     })
+
+    it('sends only the rows still there and says the rest were already decided (deep R2-S1)', async () => {
+      const runs = Array.from({ length: 3 }, (_, i) => ok(String(i)))
+      const { rerender } = render(<Harness model={model({ count: 3, rows: tapRows(3, (i) => runs[i]) })} />)
+      fireEvent.click(bulk())
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 3 leave requests?')
+
+      // Row 1 is decided elsewhere while the dialog is open.
+      rerender(<Harness model={model({ count: 2, rows: [tapRow('0', runs[0]), tapRow('2', runs[2])] })} />)
+      expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 3 leave requests?')
+      confirmRun('Approve 3')
+
+      await waitFor(() => expect(notice()).toHaveTextContent('Approved 2 leave requests'))
+      expect(notice()).toHaveTextContent('1 was already decided by someone else.')
+      expect(runs.map((run) => run.mock.calls.length)).toEqual([1, 0, 1])
+    })
+
+    it('does not send a row that lost its one-tap action, nor hold it as unconfirmed (deep R2-S1)', async () => {
+      const runs = Array.from({ length: 3 }, (_, i) => ok(String(i)))
+      const { rerender } = render(<Harness model={model({ count: 3, rows: tapRows(3, (i) => runs[i]) })} />)
+      fireEvent.click(bulk())
+
+      // Row 1 stays on the list but now only offers a form (a refetch flagged it).
+      rerender(<Harness model={model({ count: 3, rows: [tapRow('0', runs[0]), row('1', { actions: [decline('1')] }), tapRow('2', runs[2])] })} />)
+      confirmRun('Approve 3')
+
+      await waitFor(() => expect(notice()).toHaveTextContent('Approved 2 leave requests'))
+      expect(notice()).toHaveTextContent('1 was already decided by someone else.')
+      expect(notice()).not.toHaveTextContent("couldn't be checked")
+      expect(runs.map((run) => run.mock.calls.length)).toEqual([1, 0, 1])
+      expect(screen.getByRole('button', { name: 'Decline leave: Person 1' })).toBeEnabled()
+    })
+
+    it('never sends a row that was decided here while the dialog was open', async () => {
+      const runs = Array.from({ length: 3 }, (_, i) => ok(String(i)))
+      render(<Harness model={model({ count: 3, rows: tapRows(3, (i) => runs[i]) })} />)
+      fireEvent.click(bulk())
+
+      fireEvent.click(screen.getByRole('button', { name: 'Approve leave: Person 0', hidden: true }))
+      await waitFor(() => expect(runs[0]).toHaveBeenCalledTimes(1))
+      confirmRun('Approve 3')
+
+      await waitFor(() => expect(notice()).toHaveTextContent('Approved 2 leave requests'))
+      expect(runs.map((run) => run.mock.calls.length)).toEqual([1, 1, 1])
+    })
   })
 
   it('holds the header box, the banner button and the bulk button while a run goes', async () => {

@@ -425,11 +425,12 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   async function run({ mode: runMode, ids, skipped }: NonNullable<typeof confirm>) {
     if (!bulkKey) return
     setConfirm(null)
-    const byId = new Map(rows.map((row) => [row.id, row]))
+    // Only rows still on the page with their one-tap action and not held: one decided or changed meanwhile is counted as already decided, never sent.
+    const byId = new Map(safe.filter((row) => !unsure.has(row.id)).map((row) => [row.id, row]))
     const picked = ids.flatMap((id) => byId.get(id) ?? [])
     const list = model.approveBatch ? picked.slice(0, BATCH_MAX) : picked
     const result: BulkResult = {
-      total: list.length, decided: 0, stale: 0, failed: [], overlaps: [],
+      total: list.length, decided: 0, stale: ids.length - picked.length, failed: [], overlaps: [],
       skipped: runMode === 'all' ? skipped : 0,
       of: model.approveBatch && picked.length > BATCH_MAX ? picked.length : undefined,
     }
