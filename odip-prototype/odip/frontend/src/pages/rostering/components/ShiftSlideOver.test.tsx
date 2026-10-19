@@ -1384,6 +1384,24 @@ describe('ShiftSlideOver as a dialog', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
   })
 
+  it('a Delete the server refuses shows its words in the panel, closes the confirm and keeps the panel open', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    mockDeleteMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ["This shift has been started or finished, so it can't be deleted."] } } })
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift() }} onClose={onClose} />)
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete shift' })).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText("This shift has been started or finished, so it can't be deleted.")).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it.each(['InProgress', 'PendingReview', 'Completed'] as const)('offers no Delete on a %s shift (the server refuses it)', status => {
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift({ status }) }} onClose={noop} />)
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
   it('focus starts on the close button, or on the field named by focusField when the board prefilled the others', () => {
     const { unmount } = render(<ShiftSlideOver {...props} target={{ mode: 'create' }} onClose={noop} />)
     expect(screen.getByRole('button', { name: 'Close panel' })).toHaveFocus()

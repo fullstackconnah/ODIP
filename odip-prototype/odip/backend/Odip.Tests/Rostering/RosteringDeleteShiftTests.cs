@@ -196,4 +196,34 @@ public class RosteringDeleteShiftTests
         Assert.True(await verify.Shifts.AnyAsync(s => s.Id == rows.PublishedShiftId));
         Assert.True(await verify.HandoverAcknowledgements.AnyAsync(a => a.Id == rows.AcknowledgementId));
     }
+
+    [Theory]   // PT-ROSTER 2: a shift that has started or been finished has a completion behind it (a Restrict foreign key), so it is refused with the lock 409, never a 500
+    [InlineData(ShiftStatus.InProgress)]
+    [InlineData(ShiftStatus.PendingReview)]
+    [InlineData(ShiftStatus.Completed)]
+    public async Task DeletingAStartedOrFinishedShift_Is409ShiftStatusLocked_AndKeepsIt(ShiftStatus status)
+    {
+        var world = NewWorld();
+        var rows = SeedAcknowledgedShifts(world, TenantA);
+        using (var seed = world.Seed) { seed.Shifts.Single(s => s.Id == rows.OtherShiftId).Status = status; seed.SaveChanges(); }
+        using var db = world.As(TenantA);
+
+        var result = await Controller(db).DeleteShift(rows.OtherShiftId, default);
+
+        var body = Assert.IsType<ApiResponse<bool>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+        Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, body.Code);
+        using var verify = world.Seed;
+        Assert.True(await verify.Shifts.AnyAsync(s => s.Id == rows.OtherShiftId));
+    }
+
+    [Fact]   // A cancelled shift is not locked against Delete: removing it is how a coordinator tidies the board
+    public async Task DeletingACancelledShift_Works()
+    {
+        var world = NewWorld();
+        var rows = SeedAcknowledgedShifts(world, TenantA);
+        using (var seed = world.Seed) { seed.Shifts.Single(s => s.Id == rows.OtherShiftId).Status = ShiftStatus.Cancelled; seed.SaveChanges(); }
+        using var db = world.As(TenantA);
+
+        Assert.IsType<OkObjectResult>((await Controller(db).DeleteShift(rows.OtherShiftId, default)).Result);
+    }
 }
