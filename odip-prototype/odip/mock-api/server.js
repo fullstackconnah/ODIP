@@ -2174,6 +2174,23 @@ const earlyAccessDelete = [
   }],
 ]
 
+// DELETE rostering/shifts/:id mirrors the API's DeleteShift: a started or finished shift, or one with a timesheet or a note behind it, is refused 409 SHIFT_STATUS_LOCKED and kept;
+// any other shift answers true (a shift made in this process is removed). The fixture week's own shifts are rebuilt per call, so they come back, as every derived fixture here does.
+const rosterShiftDelete = [
+  ['rostering/shifts/:id', (id) => {
+    const shift = [...allFixtureShifts(), ...rosterShifts].find((s) => s.id === id)
+    if (['InProgress', 'PendingReview', 'Completed'].includes(shift?.status)) {
+      return respond(409, failEnvelope(null, ["This shift has been started or finished, so it can't be deleted."], 'SHIFT_STATUS_LOCKED'))
+    }
+    if (shiftCompletions.some((c) => c.shiftId === id) || (shiftNotesByShiftId[id] || []).length) {
+      return respond(409, failEnvelope(null, ["This shift has notes or a timesheet behind it, so it can't be deleted. Cancel it instead."], 'SHIFT_STATUS_LOCKED'))
+    }
+    const index = rosterShifts.findIndex((s) => s.id === id)
+    if (index >= 0) rosterShifts.splice(index, 1)
+    return true
+  }],
+]
+
 // GET admin/notifications fixture — the query string (?status=&from=&to=) isn't read here, same
 // caveat as leave/staff-availability above: always returns the full fixture list, any filtering
 // left to the frontend.
@@ -3367,7 +3384,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete, ...earlyAccessDelete]) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete, ...earlyAccessDelete, ...rosterShiftDelete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           // The query too: Cancel visit sends the form's version as ?expectedUpdatedAt (ODIP-REVIEW-268).

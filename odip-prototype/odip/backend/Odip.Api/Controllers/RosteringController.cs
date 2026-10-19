@@ -523,19 +523,25 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShift(
         [FromBody] CreateShiftDto dto, CancellationToken ct)
     {
-        if (dto.MoveFromShiftId is not { } fromId) return await CreateShiftCoreAsync(dto, null, ct);
-        if (dto.StaffId is null) return BadRequest(ApiResponse<ShiftDto>.Fail("Name the person who is moving."));
+        if (dto.MoveFromShiftId is not null && dto.StaffId is null) return BadRequest(ApiResponse<ShiftDto>.Fail("Name the person who is moving."));
+        // An open shift names nobody, so there is no double-booking for a second create to miss: only a named worker takes the board's lock.
+        if (dto.StaffId is null) return await CreateShiftCoreAsync(dto, null, ct);
         try
         {
-            // An empty-day move (deep review S6): the board's lock order, then the source row, then the read, as move-staff takes them.
+            // The board's lock order: two creates for one worker, or a create and a move, are taken in turn, so the later one reads the earlier one's shift (DOUBLE_BOOKED_SHIFT).
+            // An empty-day move (deep review S6) then locks the source row and reads it, as move-staff does.
             await using var held = await RosterBoardLockAsync(ct);
-            await LockShiftRowsAsync("\"Id\" = {0}", new object[] { fromId }, ct);
-            var from = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == fromId, ct);
-            if (from is null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
-            if (IsLockedForStaffChange(from.Status))
-                return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
-            // The person the page carried is no longer on the shift they left: never clear somebody else by surprise.
-            if (from.UserId != dto.StaffId) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+            Shift? from = null;
+            if (dto.MoveFromShiftId is { } fromId)
+            {
+                await LockShiftRowsAsync("\"Id\" = {0}", new object[] { fromId }, ct);
+                from = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == fromId, ct);
+                if (from is null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+                if (IsLockedForStaffChange(from.Status))
+                    return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
+                // The person the page carried is no longer on the shift they left: never clear somebody else by surprise.
+                if (from.UserId != dto.StaffId) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+            }
             var result = await CreateShiftCoreAsync(dto, from, ct);
             if (result.Result is OkObjectResult) await held.CommitAsync(ct);
             return result;
@@ -724,11 +730,41 @@ public class RosteringController : ControllerBase
     [HttpDelete("shifts/{id:guid}")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteShift(Guid id, CancellationToken ct)
     {
+        try
+        {
+            // The board's lock order, as /assign, move-staff and PUT take it: a Delete is ordered with a Publish week or a move of the organisation and reads the shift as it is now.
+            await using var held = await RosterBoardLockAsync(ct);
+            await LockShiftRowsAsync("\"Id\" = {0}", new object[] { id }, ct);
+            var result = await DeleteShiftLockedAsync(id, ct);
+            if (result.Result is OkObjectResult) await held.CommitAsync(ct);
+            return result;
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<bool>.Fail(RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>The body of <see cref="DeleteShift"/>, run under its locks.</summary>
+    private async Task<ActionResult<ApiResponse<bool>>> DeleteShiftLockedAsync(Guid id, CancellationToken ct)
+    {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<bool>.Fail("Shift not found."));
+        // A started or finished shift has a completion (and notes) behind it, held by a Restrict foreign key: refuse it as the other writes do, never a 500.
+        if (shift.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed)
+            return Conflict(ApiResponse<bool>.Fail(ShiftNotDeletableMessage, ShiftErrorCodes.ShiftStatusLocked));
+        // The Restrict keys are on ROWS, not statuses: a returned shift is Published again with its inactive completion, and a worker can note any non-Draft shift of their own. Under the row lock, so a
+        // note or completion cannot slip in between the check and the delete.
+        if (await _db.ShiftCompletions.AnyAsync(c => c.ShiftId == id, ct) || await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct))
+            return Conflict(ApiResponse<bool>.Fail(ShiftHasRecordsMessage, ShiftErrorCodes.ShiftStatusLocked));
 
         // Item 9: deleting the shift removes whatever coverage gap it represented.
         await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
+
+        // A Published shift's worker is told it is gone: the shift ends with no worker, as an unassign would.
+        var worker = shift.UserId;
+        shift.UserId = null;
+        await NotifyStaffChangeAsync(shift, worker, wasPublished: shift.Status == ShiftStatus.Published, ct);
 
         _db.HandoverAcknowledgements.RemoveRange(await _db.HandoverAcknowledgements.Where(a => a.ShiftId == shift.Id).ToListAsync(ct));
         _db.Shifts.Remove(shift);
@@ -1622,7 +1658,7 @@ public class RosteringController : ControllerBase
             // A person's own window: it only moves how far the pattern has been generated when it joins on to what was covered (or, when nothing was yet, to the first day the top-up would make: the provider's today),
             // so the daily top-up can still fill a gap before it.
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-            var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today);
+            var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today, availability: _availability);
             await MarkWeeksStartedAsync(pattern.TenantId, generated.MadeShifts, ct);
             var warnings = await BudgetWarningsAsync(pattern.ParticipantId, generated.MadeShifts, ct);
             return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped, BudgetWarnings = warnings }));
@@ -2104,6 +2140,8 @@ public class RosteringController : ControllerBase
         status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed or ShiftStatus.Cancelled;
 
     private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
+    private const string ShiftNotDeletableMessage = "This shift has been started or finished, so it can't be deleted.";
+    private const string ShiftHasRecordsMessage = "This shift has notes or a timesheet behind it, so it can't be deleted. Cancel it instead.";
     private const string ShiftLockedForParticipantMessage = "This shift has started, finished or been cancelled, so its participant can't be changed here.";
 
     /// <summary>What a pattern edit or delete made on an out-of-date page is refused with (409): UpdatePattern and DeletePattern when the regular changed under them.</summary>
