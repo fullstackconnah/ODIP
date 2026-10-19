@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Npgsql;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -94,6 +95,94 @@ public class RosterWriteSafetyPostgresTests : IClassFixture<PostgresFixture>
             var result = await Controller(db, tenantId).DeleteShift(shiftId, default);
             var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
             Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, Assert.IsType<ApiResponse<bool>>(conflict.Value).Code);
+        }
+
+        await using var check = Open(tenantId);
+        Assert.True(await check.Shifts.AnyAsync(s => s.Id == shiftId));
+    }
+
+    // Deep review of the PR: the Restrict foreign keys are on ROWS, not statuses. A returned shift is Published again but keeps its (inactive) completion, and a worker can
+    // note any non-Draft shift of their own; both used to be a 500 (23503).
+    [SkippableFact]
+    public async Task DeleteShift_OfAReturnedShift_WhoseCompletionIsInactive_Is409_AndKeepsTheShift()
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid shiftId;
+        await using (var db = Open(tenantId))
+        {
+            var sam = Worker(db, "Sam");
+            var shift = ShiftOf(db, Person(db, "Mia").Id, sam.Id, ShiftStatus.Published, Monday);
+            shift.ReturnCount = 1;
+            shiftId = shift.Id;
+            db.ShiftCompletions.Add(new ShiftCompletion
+            {
+                Id = Guid.NewGuid(), ShiftId = shiftId, ActualStart = new DateTime(2026, 8, 23, 23, 0, 0, DateTimeKind.Utc), TimeZoneId = "Australia/Sydney",
+                SubmittedByUserId = sam.Id, StartedAt = new DateTime(2026, 8, 23, 23, 0, 0, DateTimeKind.Utc), IsActive = false, ReviewOutcome = ReviewOutcome.Returned,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await AssertDeleteIsRefusedAndKeepsAsync(tenantId, shiftId);
+    }
+
+    [SkippableFact]
+    public async Task DeleteShift_OfAPublishedShiftWithAWorkersNote_Is409_AndKeepsTheShift()
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid shiftId;
+        await using (var db = Open(tenantId))
+        {
+            var sam = Worker(db, "Sam");
+            shiftId = ShiftOf(db, Person(db, "Mia").Id, sam.Id, ShiftStatus.Published, Monday).Id;
+            db.ShiftNotes.Add(new ShiftNote { Id = Guid.NewGuid(), ShiftId = shiftId, AuthorUserId = sam.Id, AuthorName = "Sam Test", Body = "Running ten minutes late." });
+            await db.SaveChangesAsync();
+        }
+
+        await AssertDeleteIsRefusedAndKeepsAsync(tenantId, shiftId);
+    }
+
+    private async Task AssertDeleteIsRefusedAndKeepsAsync(Guid tenantId, Guid shiftId)
+    {
+        await using (var db = Open(tenantId))
+        {
+            var result = await Controller(db, tenantId).DeleteShift(shiftId, default);
+            var response = Assert.IsType<ApiResponse<bool>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+            Assert.Equal(ShiftErrorCodes.ShiftStatusLocked, response.Code);
+            Assert.Equal("This shift has notes or a timesheet behind it, so it can't be deleted. Cancel it instead.", Assert.Single(response.Errors!));
+        }
+
+        await using var check = Open(tenantId);
+        Assert.True(await check.Shifts.AnyAsync(s => s.Id == shiftId));
+    }
+
+    [SkippableFact]   // the shift's own row lock, apart from the board lock: another write already holds this shift
+    public async Task DeleteShift_WhileAnotherWriteHoldsTheShiftRow_Is409Busy_AndKeepsTheShift()
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid shiftId;
+        await using (var db = Open(tenantId))
+        {
+            shiftId = ShiftOf(db, Person(db, "Mia").Id, Worker(db, "Sam").Id, ShiftStatus.Draft, Monday).Id;
+            await db.SaveChangesAsync();
+        }
+
+        await using (var raw = new NpgsqlConnection(_pg.ConnectionString))
+        {
+            await raw.OpenAsync();
+            await using var tx = await raw.BeginTransactionAsync();
+            await using (var hold = new NpgsqlCommand("SELECT 1 FROM \"Shifts\" WHERE \"Id\" = @id FOR UPDATE", raw, tx))
+            {
+                hold.Parameters.AddWithValue("id", shiftId);
+                await hold.ExecuteScalarAsync();
+            }
+
+            await using var db = Open(tenantId);
+            var result = await Controller(db, tenantId, TimeSpan.FromMilliseconds(400)).DeleteShift(shiftId, default);
+            var busy = Assert.IsType<ApiResponse<bool>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+            Assert.Equal("Another change to the roster is still running. Wait a moment, then try again.", Assert.Single(busy.Errors!));
         }
 
         await using var check = Open(tenantId);

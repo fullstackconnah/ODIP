@@ -492,6 +492,7 @@ export default function RosterBoardPage() {
 
   async function handleConfirmDelete() {
     if (!confirmDeleteTarget) return
+    setAssignError(null)
     try {
       await deleteShift.mutateAsync(confirmDeleteTarget.id)
     } catch (err: unknown) {

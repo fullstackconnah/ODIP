@@ -753,6 +753,10 @@ public class RosteringController : ControllerBase
         // A started or finished shift has a completion (and notes) behind it, held by a Restrict foreign key: refuse it as the other writes do, never a 500.
         if (shift.Status is ShiftStatus.InProgress or ShiftStatus.PendingReview or ShiftStatus.Completed)
             return Conflict(ApiResponse<bool>.Fail(ShiftNotDeletableMessage, ShiftErrorCodes.ShiftStatusLocked));
+        // The Restrict keys are on ROWS, not statuses: a returned shift is Published again with its inactive completion, and a worker can note any non-Draft shift of their own. Under the row lock, so a
+        // note or completion cannot slip in between the check and the delete.
+        if (await _db.ShiftCompletions.AnyAsync(c => c.ShiftId == id, ct) || await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct))
+            return Conflict(ApiResponse<bool>.Fail(ShiftHasRecordsMessage, ShiftErrorCodes.ShiftStatusLocked));
 
         // Item 9: deleting the shift removes whatever coverage gap it represented.
         await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
@@ -2137,6 +2141,7 @@ public class RosteringController : ControllerBase
 
     private const string ShiftLockedForStaffMessage = "This shift has started, finished or been cancelled, so its worker can't be changed here.";
     private const string ShiftNotDeletableMessage = "This shift has been started or finished, so it can't be deleted.";
+    private const string ShiftHasRecordsMessage = "This shift has notes or a timesheet behind it, so it can't be deleted. Cancel it instead.";
     private const string ShiftLockedForParticipantMessage = "This shift has started, finished or been cancelled, so its participant can't be changed here.";
 
     /// <summary>What a pattern edit or delete made on an out-of-date page is refused with (409): UpdatePattern and DeletePattern when the regular changed under them.</summary>

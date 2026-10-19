@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -603,6 +603,20 @@ describe('RosterBoardPage — a delete the server refuses is shown, and the dial
 
     expect(await screen.findByText('Something went wrong deleting this shift. Please try again.')).toBeInTheDocument()
     expect(screen.queryByRole('alertdialog', { name: 'Delete shift' })).not.toBeInTheDocument()
+  })
+
+  it("clears an earlier failure's alert once a later delete works", async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: makeBoardWithFilledShift(), isLoading: false, isError: false, refetch: vi.fn() })
+    mockDeleteMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: [NOT_DELETABLE] } } })
+    mockDeleteMutateAsync.mockResolvedValueOnce(true)
+    renderPage()
+
+    await confirmDeleteOfMiasShift(user)
+    expect(await screen.findByText(NOT_DELETABLE)).toBeInTheDocument()
+
+    await confirmDeleteOfMiasShift(user)
+    await waitFor(() => expect(screen.queryByText(NOT_DELETABLE)).not.toBeInTheDocument())
   })
 
   it('shows no alert after a delete that worked', async () => {
