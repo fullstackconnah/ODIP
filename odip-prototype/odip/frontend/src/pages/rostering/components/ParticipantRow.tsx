@@ -4,7 +4,7 @@ import type { PendingAgreementDto, RosterParticipantRowDto, ShiftDto } from '@/a
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
-import { barOverlapsWeek, formatDayAccessibleName, RATIO_LABELS, rosterDayColumnsTemplate } from '../lib/roster'
+import { barOverlapsWeek, formatDayAccessibleName, isUnfilledShift, RATIO_LABELS, rosterDayColumnsTemplate } from '../lib/roster'
 import { plural } from '@/lib/format'
 
 export type ParticipantRowProps = {
@@ -18,7 +18,7 @@ export type ParticipantRowProps = {
   onSetRegular?: (shift: ShiftDto) => void
   onDelete: (shift: ShiftDto) => void
   onAddShift: (participantId: string, participantName: string, day: string) => void
-  /** True when the whole board has zero shifts this week — every row would show the same "N days uncovered" badge, which is tautological noise the hint above the grid already covers, so suppress it here rather than repeat it once per row. */
+  /** True when the whole board has zero shifts this week — the hint above the grid already covers this empty state, so suppress the repeated row badge. */
   hideCoverageBadge: boolean
   /** Roster drag and drop (the Participant view, md up, writers): grips, locks and drop targets on this row's pucks, and its empty days as drop targets. */
   draggable?: boolean
@@ -34,9 +34,10 @@ export type ParticipantRowProps = {
  */
 export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, onSetRegular, onDelete, onAddShift, hideCoverageBadge, draggable, pendingAgreement }: ParticipantRowProps) {
   const visibleTripBars = row.tripBars.filter(t => barOverlapsWeek(t.startDate, t.endDate, days))
-  const covered = row.daysWithoutCover === 0
+  const unassignedCount = row.shifts.filter(isUnfilledShift).length
+  const covered = unassignedCount === 0
   const ratioLabel = RATIO_LABELS[row.supportRatio] ?? row.supportRatio
-  const uncoveredLabel = `${plural(row.daysWithoutCover, 'day')} uncovered`
+  const uncoveredLabel = plural(unassignedCount, 'unassigned shift')
 
   return (
     <>
@@ -49,8 +50,8 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         layout exists to surface. A trip bar rendered below can explain an otherwise-empty week without this
         reading as a failure.
 
-        The coverage state is a COUNT BADGE at every column width: a warning icon and the number of uncovered
-        days on the amber tint, or a check when the week is fully covered. The words ("6 days uncovered",
+        The coverage state is a COUNT BADGE at every column width: a warning icon and the number of unassigned
+        shifts on the amber tint, or a check when the week is fully covered. The words ("6 unassigned shifts",
         "Fully covered") are the badge's title and aria-label, not text in the row. They used to be spelled out
         in the wide column, and that is what cost the row its identity: 110px of "6 days uncovered" plus the 31px
         ratio chip and two 8px gaps left 90px of the 247px content box for the name, so "Grace Palmer-Hughes"
@@ -122,7 +123,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
               className="inline-flex h-5 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
             >
               <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-              <span className="tabular-nums">{row.daysWithoutCover}</span>
+              <span className="tabular-nums">{unassignedCount}</span>
             </span>
           )}
         </div>
