@@ -531,26 +531,45 @@ describe('AlphaSignupsTab', () => {
     })
   })
 
-  it('shows later submissions on a phone card, before Delete', () => {
+  it('shows the only later submission as the retained request on a phone card, before Delete', async () => {
     returns(page([makeRow({ requestCount: 2, laterSubmissions: [makeLater({ message: 'Second note' })] })]))
     render(<AlphaSignupsTab />)
-
-    const section = screen.getByRole('region', { name: 'Later submissions' })
-    expect(within(section).getByText('Second note')).toBeInTheDocument()
+    expect(screen.getByText('Second note')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show older submissions' }))
+    expect(screen.getByText('Please remove my details.')).toBeInTheDocument()
     const remove = screen.getByRole('button', { name: 'Delete sign-up from Amara Okafor' })
-    expect(section.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getAllByText('Second note')[0].compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('shows what was sent after the limit on a phone card', () => {
+  it('keeps an older original request available after a later retained request becomes the phone summary', async () => {
+    returns(page([makeRow({ message: 'Original request', requestCount: 2, laterSubmissions: [makeLater({ message: 'Latest request' })] })]))
+    render(<AlphaSignupsTab />)
+    expect(screen.getByText('Latest request')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show older submissions' }))
+    expect(screen.getByText('Original request')).toBeInTheDocument()
+  })
+
+  it('keeps a latest retained submission’s changed details in disclosed history', async () => {
+    returns(page([makeRow({ phone: '111', role: 'Original role', message: 'Original request', requestCount: 2, laterSubmissions: [makeLater({ phone: '222', role: 'Latest role', message: 'Latest request' })] })]))
+    render(<AlphaSignupsTab />)
+    expect(screen.getByText('Latest request')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show older submissions' }))
+    const history = screen.getByRole('region', { name: 'Later submissions' })
+    expect(within(history).getByText('222')).toBeInTheDocument()
+    expect(within(history).getByText('Latest role')).toBeInTheDocument()
+  })
+
+  it('shows the retained over-limit request after disclosure on a phone card', async () => {
     const ten = Array.from({ length: 10 }, (_, i) => makeLater({ id: `l-${i}`, message: `Note ${i}` }))
     returns(page([makeRow({
       requestCount: 14, laterSubmissions: ten, overLimitCount: 3, lastOverLimitAtUtc: '2026-10-18T02:00:00Z',
       firstOverLimit: makeLater({ id: 'l-over', receivedAtUtc: '2026-10-16T02:00:00Z', message: 'Remove me, ref zq-77' }),
     })]))
     render(<AlphaSignupsTab />)
+    await userEvent.click(screen.getByRole('button', { name: 'Show older submissions' }))
 
-    expect(screen.getByText('3 more sent after the first 10 were kept. Showing the first of them; the latest arrived 18/10/2026.')).toBeInTheDocument()
-    expect(screen.getByText('Remove me, ref zq-77')).toBeInTheDocument()
+    expect(screen.getAllByText('3 more sent after the first 10 were kept. Showing the first of them; the latest arrived 18/10/2026.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Remove me, ref zq-77').length).toBeGreaterThan(0)
   })
 
   it('shows the follow-up warning and its button on a phone card, before Delete', () => {

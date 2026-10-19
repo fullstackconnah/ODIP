@@ -46,6 +46,12 @@ const followUpMessage = (row: EarlyAccessSignupDto) => {
 const nameLabel = (row: EarlyAccessSignupDto) =>
   [row.name, hasMessage(row) && 'has a message', row.followUpNeeded && 'follow-up needed'].filter(Boolean).join(', ')
 
+// This is the newest retained message we can show, not a claim about the newest request received.
+const latestRetainedMessage = (row: EarlyAccessSignupDto) =>
+  [row, ...row.laterSubmissions, ...(row.firstOverLimit ? [row.firstOverLimit] : [])]
+    .reverse()
+    .find(entry => !!entry.message)
+
 // The answers a repeat can change, in the order the original row shows them after Name and Organisation. The API keeps the first 10 per sign-up.
 const LATER_FIELDS = [
   { key: 'name', label: 'Name' },
@@ -61,13 +67,13 @@ const displayAnswer = (key: (typeof LATER_FIELDS)[number]['key'], value: string 
 
 // One later entry: a date headline, an optional muted note, then only the answers that differ from the stored ones. The same two tracks as the original answers,
 // so Phone lines up with theirs whichever fields are listed.
-function laterEntry(row: EarlyAccessSignupDto, later: EarlyAccessLaterSubmissionDto, note?: ReactNode) {
+function laterEntry(row: EarlyAccessSignupDto, later: EarlyAccessLaterSubmissionDto, note?: ReactNode, forceMessage = false) {
   return (
     <li key={later.id} className="border-t border-[var(--color-border)] pt-2">
       <p className={dateLine}>Sent {formatInstantDateAu(later.receivedAtUtc)}</p>
       {note}
       <dl className="mt-1 grid grid-cols-2 gap-x-8 gap-y-2 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-x-10">
-        {LATER_FIELDS.filter(({ key }) => later[key] !== row[key]).map(({ key, label }) => (
+        {LATER_FIELDS.filter(({ key }) => later[key] !== row[key] || (forceMessage && key === 'message')).map(({ key, label }) => (
           <div key={key} className={key === 'message' ? 'col-span-2 min-w-0' : `min-w-0 break-words${key === 'phone' ? ' col-start-2' : ''}`}>
             <dt className={detailLabel}>{label}</dt>
             <dd>
@@ -101,7 +107,13 @@ export default function AlphaSignupsTab() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const isBelowMd = useIsBelowMd()
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
+  const [historyOpen, setHistoryOpen] = useState<ReadonlySet<string>>(new Set())
   const toggle = (id: string) => setOpen(current => {
+    const next = new Set(current)
+    if (!next.delete(id)) next.add(id)
+    return next
+  })
+  const toggleHistory = (id: string) => setHistoryOpen(current => {
     const next = new Set(current)
     if (!next.delete(id)) next.add(id)
     return next
@@ -228,7 +240,14 @@ export default function AlphaSignupsTab() {
 
   // Role and phone as a pair, then the whole message: under the row once its name is opened, and always on a phone card, which
   // ends with Delete. A stack at the name's indent, so it never looks like columns of the table above.
-  const rowDetail = (row: EarlyAccessSignupDto) => (isBelowMd || open.has(row.id)) ? (
+  const rowDetail = (row: EarlyAccessSignupDto) => {
+    const retainedRequest = latestRetainedMessage(row)
+    const originalSubmission: EarlyAccessLaterSubmissionDto = { id: `${row.id}-original`, receivedAtUtc: row.createdAtUtc, name: row.name, organisation: row.organisation, role: row.role, phone: row.phone, organisationSize: row.organisationSize, message: row.message }
+    const historyEntries = isBelowMd && retainedRequest && retainedRequest !== row
+      ? [...(row.message && retainedRequest.message !== row.message ? [originalSubmission] : []), ...row.laterSubmissions]
+      : row.laterSubmissions
+    const hasHistory = historyEntries.length > 0 || (!isBelowMd && !!row.firstOverLimit) || (isBelowMd && !!row.firstOverLimit && retainedRequest !== row.firstOverLimit)
+    return (isBelowMd || open.has(row.id)) ? (
     <>
     {(row.laterSubmissions.length > 0 || row.firstOverLimit) && <p className={`mb-1 md:pl-[1.125rem] ${dateLine}`}>First sent {formatInstantDateAu(row.createdAtUtc)}</p>}
     <dl id={detailId(row)} className="grid grid-cols-2 gap-x-8 gap-y-2 md:flex md:flex-wrap md:gap-x-10 md:pl-[1.125rem]">
@@ -242,12 +261,25 @@ export default function AlphaSignupsTab() {
         <dd>{row.phone ?? '—'}</dd>
       </div>
       <div className="col-span-2 min-w-0 md:basis-full">
-        <dt className={detailLabel}>Message</dt>
-        <dd>{row.message ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{row.message}</p> : '—'}</dd>
+        <dt className={detailLabel}>{isBelowMd ? 'Latest retained request' : 'Message'}</dt>
+        <dd>{(isBelowMd ? retainedRequest?.message : row.message) ? <p className="max-w-[65ch] whitespace-pre-wrap break-words">{isBelowMd ? retainedRequest?.message : row.message}</p> : '—'}</dd>
       </div>
     </dl>
-    {(row.laterSubmissions.length > 0 || row.firstOverLimit) && (
-      <section aria-label="Later submissions" className="mt-3 md:pl-[1.125rem]">
+    {isBelowMd && row.followUpNeeded && row.firstOverLimit && followUpCallout(row)}
+    {isBelowMd && row.firstOverLimit && !row.followUpNeeded && <p className={`mt-2 text-xs ${muted}`}>{overLimitNote(row)}</p>}
+    {hasHistory && isBelowMd && (
+      <button
+        type="button"
+        aria-expanded={historyOpen.has(row.id)}
+        aria-controls={`${detailId(row)}-history`}
+        onClick={() => toggleHistory(row.id)}
+        className="mt-3 min-h-11 text-sm font-medium text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
+      >
+        {historyOpen.has(row.id) ? 'Hide older submissions' : 'Show older submissions'}
+      </button>
+    )}
+    {hasHistory && (!isBelowMd || historyOpen.has(row.id)) && (
+      <section id={`${detailId(row)}-history`} aria-label="Later submissions" className="mt-3 md:pl-[1.125rem]">
         <h4 className={detailLabel}>Later submissions</h4>
         {/* The server keeps the first 10. RequestCount also counts identical repeats, so say this only once the 10 are full. */}
         {!row.firstOverLimit && row.laterSubmissions.length >= LATER_SUBMISSIONS_KEPT && row.requestCount - 1 > LATER_SUBMISSIONS_KEPT && (
@@ -256,15 +288,16 @@ export default function AlphaSignupsTab() {
           </p>
         )}
         <ol className="mt-1 space-y-2">
-          {row.laterSubmissions.map(later => laterEntry(row, later))}
+          {historyEntries.map(later => laterEntry(row, later, undefined, later.id === originalSubmission.id))}
           {row.firstOverLimit && laterEntry(row, row.firstOverLimit,
-            row.followUpNeeded ? followUpCallout(row) : <p className={`text-xs ${muted}`}>{overLimitNote(row)}</p>)}
+            !isBelowMd && row.followUpNeeded ? followUpCallout(row) : <p className={`text-xs ${muted}`}>{overLimitNote(row)}</p>)}
         </ol>
       </section>
     )}
     {isBelowMd && <div className={`mt-2 flex justify-end ${ROW_ACTIONS_CARD}`}>{deleteButton(row)}</div>}
     </>
-  ) : null
+    ) : null
+  }
 
   return (
     <div>

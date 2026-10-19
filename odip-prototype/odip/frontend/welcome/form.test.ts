@@ -95,8 +95,8 @@ describe('alpha form: checks', () => {
   })
 
   it('counts the fields in the status line', () => {
-    expect(invalidMessage(1)).toBe('Check the field marked below.')
-    expect(invalidMessage(3)).toBe('Check the 3 fields marked below.')
+    expect(invalidMessage(1)).toBe('Check the highlighted field.')
+    expect(invalidMessage(3)).toBe('Check the 3 highlighted fields.')
   })
 
   it('words the 429 wait from Retry-After: 10 when missing, 1 minute singular, dates in minutes', async () => {
@@ -206,7 +206,7 @@ describe('alpha form: states in the page', () => {
     m.fill({ name: 'Alex Sample', organisation: 'Sample Support Co' })
     m.submit()
     expect(fetchFn).not.toHaveBeenCalled()
-    expect([m.shown(m.q('[data-status]')), m.q('[data-status]').dataset.tone]).toEqual(['Check the 2 fields marked below.', 'error'])
+    expect([m.shown(m.q('[data-status]')), m.q('[data-status]').dataset.tone]).toEqual(['Check the 2 highlighted fields.', 'error'])
     expect([m.shown(m.error('organisationSize')), m.shown(m.error('email'))]).toEqual(["Choose your organisation's size", 'Enter your email address'])
     expect(document.activeElement?.id).toBe('f-size')
   })
@@ -263,7 +263,7 @@ describe('alpha form: states in the page', () => {
     controller = m.controller
     m.fill(VALID)
     m.submit()
-    await vi.waitFor(() => expect(m.shown(m.q('[data-status]'))).toBe('Check the 2 fields marked below.'))
+    await vi.waitFor(() => expect(m.shown(m.q('[data-status]'))).toBe('Check the 2 highlighted fields.'))
     expect([m.shown(m.error('organisationSize')), m.shown(m.error('email'))]).toEqual(['Choose one of the listed sizes.', 'That address was refused.'])
     expect([m.input('email').value, m.input('organisationSize').value, document.activeElement?.id]).toEqual(['alex@example.org', '10-49', 'f-size'])
   })
