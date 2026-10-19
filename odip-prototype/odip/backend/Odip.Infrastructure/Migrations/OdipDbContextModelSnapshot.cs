@@ -678,6 +678,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("EarlyAccessRequestId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("IsOverLimit")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Message")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -728,6 +731,15 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(254)
                         .HasColumnType("character varying(254)");
 
+                    b.Property<DateTime?>("FollowUpClearedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("FollowUpNeeded")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastOverLimitAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<DateTime>("LastRequestedAtUtc")
                         .HasColumnType("timestamp without time zone");
 
@@ -748,6 +760,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("OrganisationSize")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<int>("OverLimitCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Phone")
                         .HasMaxLength(30)

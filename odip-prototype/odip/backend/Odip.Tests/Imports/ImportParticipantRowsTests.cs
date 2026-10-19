@@ -109,6 +109,31 @@ public class ImportParticipantRowsTests
         Assert.Equal((ImportRowStatus.Invalid, "The same NDIS number is on row 2."), (plans[1].Status, plans[1].Reasons.Single()));
     }
 
+    [Fact]
+    public void Placeholder_NDIS_cells_are_not_keys_and_carry_a_warning()
+    {
+        var plans = Build(
+            ["Ava", "Stone", "", "", "N/A", "", "", "", ""],
+            ["Ben", "Stone", "", "", "N/A", "", "", "", ""],
+            ["Cy", "Stone", "", "", "TBC", "", "", "", ""]);
+        ImportRowPlan.MarkFileDuplicates(plans, "NDIS number");
+
+        Assert.All(plans, p =>
+        {
+            Assert.Equal(ImportRowStatus.Ready, p.Status);
+            Assert.Null(p.DuplicateKey);
+            Assert.Equal("The NDIS number isn't 9 digits, so this row isn't checked against existing participants. Check the number.", Assert.Single(p.Warnings));
+        });
+        Assert.Equal("N/A", plans[0].Participant!.NdisNumber);
+    }
+
+    [Fact]
+    public void A_real_NDIS_number_has_no_warning()
+    {
+        var plan = Build(["Ava", "Stone", "", "", "430 000 001", "", "", "", ""]).Single();
+        Assert.Empty(plan.Warnings);
+    }
+
     private static readonly string[] PlanHeaders = ["First name", "Last name", "Plan type", "Plan start", "Plan end", "Contact 1 name", "Contact 1 relationship"];
 
     private static ImportRowPlan BuildOne(string[] headers, string[] cells) =>

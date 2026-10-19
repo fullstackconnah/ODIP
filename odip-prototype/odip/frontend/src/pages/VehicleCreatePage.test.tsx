@@ -127,3 +127,45 @@ describe('VehicleCreatePage — view mode for ReadOnly', () => {
     localStorage.clear()
   })
 })
+
+// C25: a failed or missing record must never open an empty form that a save would write over the real one.
+describe('VehicleCreatePage — editing a record that has not loaded', () => {
+  const vehicle = { id: 'v1', vehicleName: 'Blue Van 1', registration: 'ABC123', vehicleType: 'Van', totalSeats: 8, wheelchairPositions: 1, isInternal: true, isActive: false } as VehicleDetailDto
+
+  function renderEditPage() {
+    const router = createMemoryRouter([{ path: '/vehicles/:id/edit', element: <VehicleCreatePage /> }], { initialEntries: ['/vehicles/v1/edit'] })
+    return render(<RouterProvider router={router} />)
+  }
+
+  it('says it is loading while the record loads, with no form', () => {
+    mockUseVehicleDetail.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+    renderEditPage()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading vehicle…')
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('shows the error with Try again when the load fails, and no form', async () => {
+    const refetch = vi.fn()
+    mockUseVehicleDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 500 } }, refetch })
+    renderEditPage()
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load this vehicle/i)
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('says not found on a 404, with no form', () => {
+    mockUseVehicleDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } }, refetch: vi.fn() })
+    renderEditPage()
+    expect(screen.getByText('Vehicle not found')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('does not send isActive: only Archive and Restore change it', async () => {
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    mockUseVehicleDetail.mockReturnValue({ data: vehicle, isLoading: false, isError: false, refetch: vi.fn() })
+    renderEditPage()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).not.toHaveProperty('isActive')
+  })
+})

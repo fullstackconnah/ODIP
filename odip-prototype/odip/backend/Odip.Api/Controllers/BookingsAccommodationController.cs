@@ -424,7 +424,7 @@ public class AccommodationController : ControllerBase
         a.IsWheelchairAccessible = dto.IsWheelchairAccessible; a.AccessibilityNotes = dto.AccessibilityNotes;
         a.BedroomCount = dto.BedroomCount; a.BedCount = dto.BedCount; a.MaxCapacity = dto.MaxCapacity;
         a.BeddingConfiguration = dto.BeddingConfiguration; a.HoistBathroomNotes = dto.HoistBathroomNotes;
-        a.GeneralNotes = dto.GeneralNotes; a.IsActive = dto.IsActive; a.UpdatedAt = DateTime.UtcNow;
+        a.GeneralNotes = dto.GeneralNotes; a.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<AccommodationDetailDto>.Ok(new AccommodationDetailDto
