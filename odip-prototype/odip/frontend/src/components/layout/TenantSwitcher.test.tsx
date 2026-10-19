@@ -109,3 +109,45 @@ describe('TenantSwitcher — a switch whose reload was cancelled', () => {
     expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
   })
 })
+
+describe("TenantSwitcher dismissal", () => {
+  it.each(["Cancel", "Escape", "Close dialog"])("dismisses via %s once", async (dismiss) => {
+    const user = userEvent.setup();
+    const originalOverflow = document.body.style.overflow;
+    const originalViewing = localStorage.getItem("odip_viewing_tenant");
+
+    render(
+      <header style={{ backdropFilter: "blur(24px)" }}>
+        <TenantSwitcher />
+      </header>
+    );
+
+    const trigger = screen.getByRole("button", { name: /^SA / });
+    await user.click(trigger);
+
+    const acme = screen.getByRole("button", { name: "Acme" });
+    await user.click(acme);
+
+    const dialog = screen.getByRole("alertdialog", { name: "Switch tenant?" });
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.tab({ shift: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    if (dismiss === "Escape") {
+      await user.keyboard("{Escape}");
+    } else {
+      await user.click(screen.getByRole("button", { name: dismiss }));
+    }
+
+    expect(screen.queryByRole("alertdialog", { name: "Switch tenant?" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(document.body.style.overflow).toBe(originalOverflow);
+    expect(localStorage.getItem("odip_viewing_tenant")).toBe(originalViewing);
+  });
+});
