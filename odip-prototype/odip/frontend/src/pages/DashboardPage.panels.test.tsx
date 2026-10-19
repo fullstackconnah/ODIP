@@ -69,8 +69,9 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     })
     renderPage()
 
-    // Appears twice: the metric tile and the list section's heading.
-    expect(screen.getAllByText('Critical Participant Alerts').length).toBe(2)
+    // The summary tile keeps its established label; the compact detail heading now carries the item count.
+    expect(screen.getAllByText('Critical Participant Alerts')).toHaveLength(1)
+    expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
     expect(screen.getByText('Jamie Smith')).toBeInTheDocument()
     expect(screen.getByText('NDIS plan end date has passed')).toBeInTheDocument()
     // Only the Critical-severity alert is surfaced — the Warning-only participant is excluded.
