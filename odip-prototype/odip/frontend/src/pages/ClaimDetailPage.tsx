@@ -52,6 +52,8 @@ export default function ClaimDetailPage() {
   const [noShowTarget, setNoShowTarget] = useState<ClaimLineItemDto | null>(null)
   const [notes, setNotes] = useState('')
   const [notesInit, setNotesInit] = useState(false)
+  const [notesExpanded, setNotesExpanded] = useState(false)
+  const [notesEditorShown, setNotesEditorShown] = useState(false)
   const [saved, setSaved] = useState(false)
   const [statusConfirmTarget, setStatusConfirmTarget] = useState<TripClaimStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
@@ -60,14 +62,19 @@ export default function ClaimDetailPage() {
   // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the page can cancel it: left
   // running it fires setSaved into a tree that is gone.
   const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notesRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     return () => {
       if (savedResetTimer.current) clearTimeout(savedResetTimer.current)
     }
   }, [])
+  useEffect(() => {
+    if (notesExpanded) notesRef.current?.focus()
+  }, [notesExpanded])
 
   if (!notesInit && claim) {
     setNotes(claim.notes || '')
+    setNotesEditorShown(!!claim.notes)
     setNotesInit(true)
   }
 
@@ -239,10 +246,12 @@ export default function ClaimDetailPage() {
       {/* What this claim did to each participant's recorded plan, as of now. Absent when none of them has a plan that has started: no figure, not a zero. */}
       <ClaimBudgetBlock budget={claim.budget} />
 
-      {/* Notes */}
-      <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] space-y-2">
-        <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">Notes</label>
+      {/* Empty notes stay available without taking attention from the claim's line items. */}
+      {(notes || notesExpanded || notesEditorShown) ? <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] space-y-2">
+        <label className="block text-xs font-medium text-[var(--color-muted-foreground)]" htmlFor="claim-notes">Notes</label>
         <textarea
+          id="claim-notes"
+          ref={notesRef}
           value={notes}
           onChange={e => setNotes(e.target.value)}
           rows={3}
@@ -254,7 +263,7 @@ export default function ClaimDetailPage() {
             {saved ? 'Saved!' : 'Save Notes'}
           </Button>
         </div>
-      </div>
+      </div> : <button type="button" onClick={() => setNotesExpanded(true)} className="self-start min-h-11 text-sm font-medium text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded">Add notes</button>}
 
       {/* Line items */}
       <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">

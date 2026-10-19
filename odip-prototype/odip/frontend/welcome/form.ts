@@ -38,7 +38,7 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE = /^[0-9 +()-]*$/
 const PHONE_DIGITS = /^\d{8,15}$/
 
-export const invalidMessage = (n: number) => (n === 1 ? 'Check the field marked below.' : `Check the ${n} fields marked below.`)
+export const invalidMessage = (n: number) => (n === 1 ? 'Check the highlighted field.' : `Check the ${n} highlighted fields.`)
 
 export function waitMessage(retryAfterSeconds: number | null): string {
   const n = retryAfterSeconds === null ? 10 : Math.max(1, Math.ceil(retryAfterSeconds / 60))
