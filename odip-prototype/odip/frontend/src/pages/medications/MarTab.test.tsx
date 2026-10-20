@@ -221,7 +221,7 @@ describe('MarTab — Last dose', () => {
 describe('MarTab — recording a PRN outcome the server refuses', () => {
   it('keeps the modal open, shows the server message and keeps the typed outcome', async () => {
     const refusal = { response: { status: 409, data: { success: false, errors: ['An outcome is already recorded for this dose.'] } } }
-    const mutateAsync = vi.fn().mockRejectedValue(refusal)
+    const mutateAsync = vi.fn().mockRejectedValueOnce(refusal).mockImplementation(() => new Promise(() => {}))
     mockUseMar.mockReturnValue({ data: { entries: [], prnMedications: [prnEntry({ outcomePendingAdministrationId: 'admin-9' })] }, isLoading: false })
     mockUseParticipants.mockReturnValue({ data: [] })
     mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync, isPending: false })
@@ -235,5 +235,16 @@ describe('MarTab — recording a PRN outcome the server refuses', () => {
     expect(await screen.findByText('An outcome is already recorded for this dose.')).toBeInTheDocument()
     expect(mutateAsync).toHaveBeenCalledWith({ id: 'admin-9', prnOutcome: 'Settled within 30 minutes' })
     expect(screen.getByRole('textbox', { name: /outcome/i })).toHaveValue('Settled within 30 minutes')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: /record outcome/i }))
+    expect(screen.queryByText('An outcome is already recorded for this dose.')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /outcome/i })).toHaveValue('')
+    await user.type(screen.getByRole('textbox', { name: /outcome/i }), 'Retry outcome')
+    mutateAsync.mockRejectedValueOnce(refusal)
+    await user.click(screen.getByRole('button', { name: 'Save outcome' }))
+    expect(await screen.findByText('An outcome is already recorded for this dose.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save outcome' }))
+    expect(mutateAsync).toHaveBeenCalledTimes(3)
+    expect(screen.queryByText('An outcome is already recorded for this dose.')).not.toBeInTheDocument()
   })
 })

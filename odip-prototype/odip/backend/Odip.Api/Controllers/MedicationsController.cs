@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -319,6 +320,12 @@ public class MedicationsController : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == id, ct);
         if (admin == null) return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
+        await using var transaction = _db.Database.IsNpgsql() && _db.Database.CurrentTransaction is null
+            && System.Transactions.Transaction.Current is null ? await _db.Database.BeginTransactionAsync(ct) : null;
+        await LockAdministrationForWriteAsync(admin, ct);
+        if (_db.Entry(admin).State == EntityState.Detached)
+            return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
+
         if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A reason is required when a dose is refused, withheld, missed or the wrong medication was given."));
 
@@ -345,6 +352,7 @@ public class MedicationsController : ControllerBase
 
         var med = admin.ParticipantMedication!;
         var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(new[] { admin.Id }, ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
         return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(
             admin, FullName(med.Participant), med.Name, med.DoseDescription, LookupIncidentId(incidentMap, admin.Id))));
     }
@@ -359,6 +367,12 @@ public class MedicationsController : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == id, ct);
         if (admin == null) return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
+        await using var transaction = _db.Database.IsNpgsql() && _db.Database.CurrentTransaction is null
+            && System.Transactions.Transaction.Current is null ? await _db.Database.BeginTransactionAsync(ct) : null;
+        await LockAdministrationForWriteAsync(admin, ct);
+        if (_db.Entry(admin).State == EntityState.Detached)
+            return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
+
         // A support worker records the outcome once, on a PRN dose; a coordinator corrects it through the amend route.
         if (admin.ParticipantMedication?.Type != MedicationType.Prn)
             return BadRequest(ApiResponse<AdministrationDto>.Fail("Outcomes can only be recorded on PRN doses."));
@@ -372,10 +386,22 @@ public class MedicationsController : ControllerBase
 
         var med = admin.ParticipantMedication!;
         var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(new[] { admin.Id }, ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
         return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(
             admin, FullName(med.Participant), med.Name, med.DoseDescription, LookupIncidentId(incidentMap, admin.Id))));
     }
 
+    // Both clinical writers share the lock; reloading after it preserves first-write checks and the SaveChanges audit.
+    private async Task LockAdministrationForWriteAsync(MedicationAdministration admin, CancellationToken ct)
+    {
+        if (!_db.Database.IsNpgsql()) return;
+        var bytes = new byte[23];
+        admin.Id.TryWriteBytes(bytes);
+        "outcome"u8.CopyTo(bytes.AsSpan(16));
+        var key = BitConverter.ToInt64(SHA256.HashData(bytes), 0);
+        await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({key})", ct);
+        await _db.Entry(admin).ReloadAsync(ct);
+    }
     [HttpGet("participants/{participantId:guid}/administrations")]
     public async Task<ActionResult<ApiResponse<List<AdministrationDto>>>> GetParticipantAdministrations(
         Guid participantId, [FromQuery] DateTime? from, [FromQuery] DateTime? to, CancellationToken ct)
@@ -388,8 +414,9 @@ public class MedicationsController : ControllerBase
         // Unpaged, so an omitted from is the last 90 days rather than the whole history.
         var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(from, to, ct);
         fromUtc ??= _slots.UtcNow.AddDays(-90);
-        query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= fromUtc);
-        if (toUtcExclusive.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) < toUtcExclusive);
+        var fromLocal = from?.Date ?? ProviderLocalTime.UtcToLocal(fromUtc.Value, (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone);
+        query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt >= fromUtc : a.ScheduledAt != null ? a.ScheduledAt >= fromLocal : a.CreatedAt >= fromUtc);
+        if (to.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt < toUtcExclusive : a.ScheduledAt != null ? a.ScheduledAt < to.Value.Date.AddDays(1) : a.CreatedAt < toUtcExclusive);
 
         var items = await query.OrderByDescending(a => a.CreatedAt).ToListAsync(ct);
         var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(items.Select(a => a.Id).ToList(), ct);
@@ -423,8 +450,8 @@ public class MedicationsController : ControllerBase
 
         if (participantId.HasValue) query = query.Where(a => a.ParticipantId == participantId.Value);
         var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(from, to, ct);
-        if (fromUtc.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= fromUtc);
-        if (toUtcExclusive.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) < toUtcExclusive);
+        if (from.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt >= fromUtc : a.ScheduledAt != null ? a.ScheduledAt >= from.Value.Date : a.CreatedAt >= fromUtc);
+        if (to.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt < toUtcExclusive : a.ScheduledAt != null ? a.ScheduledAt < to.Value.Date.AddDays(1) : a.CreatedAt < toUtcExclusive);
 
         var ordered = query.OrderByDescending(a => a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt);
 
