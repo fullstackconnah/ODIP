@@ -143,7 +143,7 @@ describe('DashboardPage — groups at zero (SHAPE §6)', () => {
     const foot = within(decisions).getByText('All clear', { selector: 'span.font-semibold' }).closest('p')!
     expect(foot).toHaveTextContent('All clear on leave requests and staff credentials to update')
     expect(screen.getByText('Loading open incidents…')).toBeInTheDocument()
-    expect(screen.getByText("Couldn't load tasks due.")).toBeInTheDocument()
+    expect(screen.getByText("Couldn't load this tasks queue. Check your connection and try again.")).toBeInTheDocument()
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
@@ -208,7 +208,8 @@ describe('DashboardPage — the whole page clear (SHAPE §6)', () => {
     mockUseDecisionGroups.mockReturnValue([...allClearGroups().filter((g) => g.key !== 'leave'), group('leave', { count: 1, rows: [{ ...row('a'), actions: [approve] }] })])
     renderPage()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 leave request' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 selected leave request' }))
     // The real server: the approval's invalidation refetches the list, and it comes back empty while the run is still going.
     mockUseDecisionGroups.mockReturnValue(allClearGroups())
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
@@ -267,4 +268,23 @@ describe('DashboardPage — focus when a group leaves the page (SHAPE §10)', ()
     expect(document.activeElement).toContainElement(field)
     expect(document.querySelector('.sr-only[role="status"]')).toHaveTextContent('Approved Person a.')
   })
+})
+
+
+it('keeps dashboard recovery visible rather than declaring all clear after an uncertain empty read and dismissal', async () => {
+  asRole('Admin')
+  const run = vi.fn(async () => { throw new Error('Reply lost') })
+  const reread = vi.fn(async (): Promise<string[]> => { throw new Error('Status unavailable') })
+  const approve = { kind: 'tap' as const, label: 'Approve', busyLabel: 'Approving.', name: 'Approve completion: Person a', failText: 'No reply.', run }
+  mockUseDecisionGroups.mockReturnValue([group('completions', { count: 1, rows: [{ ...row('a'), actions: [approve] }], reread })])
+  renderPage()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown shift completions' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve 1 selected shift completion' }))
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+  await screen.findByText('Not confirmed yet')
+  mockUseDecisionGroups.mockReturnValue([group('completions', { rows: [], count: 0, reread })])
+  fireEvent.click(screen.getByRole('button', { name: /Dismiss notice/ }))
+  expect(screen.getByRole('button', { name: 'Check latest status' })).toBeVisible()
+  expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
+  expect(run).toHaveBeenCalledTimes(1)
 })

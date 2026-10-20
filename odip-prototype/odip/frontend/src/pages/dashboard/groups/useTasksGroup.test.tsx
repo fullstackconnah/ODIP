@@ -53,7 +53,7 @@ describe('Tasks due group — what it lists', () => {
     // Every task names its priority (a column with gaps reads as missing data); the trip is on a card only from lg.
     expect(facts('Due today medium')).toEqual(['Insurance confirmation', '14 Oct', 'Medium', 'Beach Trip'])
     expect(within(rowOf('Due today medium')).getByText('Due today')).toBeInTheDocument()
-    expect(within(rowOf('Due today medium')).getByText('Beach Trip').closest('td')).toHaveClass('max-lg:hidden')
+    expect(within(rowOf('Due today medium')).getByText('Beach Trip').closest('td')).toHaveAttribute('data-card', 'meta')
   })
 })
 
@@ -194,14 +194,15 @@ describe('Tasks due group — Mark all done (decision-bulk)', () => {
     })
     render()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Mark all 3 tasks done' }))
-    expect(screen.getByRole('alertdialog')).toHaveTextContent("1 stays for you to open: it can't be marked done here.")
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown tasks due' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mark 3 selected tasks done' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('3 selected tasks')
     fireEvent.click(screen.getByRole('button', { name: 'Mark 3 done' }))
 
     await waitFor(() => expect(screen.getByText('Marked 2 tasks done')).toBeInTheDocument())
     expect(apiPutRaw.mock.calls.map(([url]) => url)).toEqual(['/tasks/t1', '/tasks/t2'])
     expect(apiPutRaw).toHaveBeenCalledWith('/tasks/t2', { ...open2, status: 'Completed', completedDate: TODAY })
-    expect(screen.getByText("1 can't be marked done here and stays. 1 was already closed.")).toBeInTheDocument()
+    expect(screen.getByText('1 was already closed.')).toBeInTheDocument()
     expect(subjects()).toEqual(['Cover the shift'])
   })
 
@@ -211,11 +212,48 @@ describe('Tasks due group — Mark all done (decision-bulk)', () => {
     const { client } = render()
     const spy = vi.spyOn(client, 'invalidateQueries')
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Mark 1 task done' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown tasks due' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mark 1 selected task done' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Mark 1 done' }))
 
     await waitFor(() => expect(screen.getByText('No answer for 1 task')).toBeInTheDocument())
     const keys = spy.mock.calls.map(([filters]) => JSON.stringify((filters as { queryKey?: unknown })?.queryKey))
     expect(keys).toEqual(expect.arrayContaining([JSON.stringify(['tasks']), JSON.stringify(['trip-tasks']), JSON.stringify(['dashboard'])]))
+  })
+})
+
+describe('Tasks due group — fresh task eligibility', () => {
+  it.each(['LeaveCoverage', 'BudgetEmergencyReview'])('does not PUT when the fresh task becomes %s outside this viewer\'s quick-action authority', async taskType => {
+    answer([task()], [], { t1: task({ taskType, notes: 'Changed since the list loaded.' }) })
+    render(false)
+    fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/tasks/t1'))
+    expect(apiPutRaw).not.toHaveBeenCalled()
+  })
+})
+
+
+
+describe('Tasks due group - truthful changed eligibility bulk outcome', () => {
+  it.each(['LeaveCoverage', 'BudgetEmergencyReview'])('retains an open task changed to %s without claiming it was closed', async taskType => {
+    const overdue = [task()]
+    const changed = task({ taskType, notes: 'Changed since loading.', status: 'NotStarted' })
+    answer(overdue, [], { t1: changed })
+    const read = apiGet.getMockImplementation()!
+    apiGet.mockImplementation((url: string, params?: Record<string, string>) => {
+      if (url === '/tasks/t1') overdue.splice(0, 1, changed)
+      return read(url, params)
+    })
+    render(false)
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown tasks due' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mark 1 selected task done' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Mark 1 done' }))
+    await screen.findByText("1 can't be marked done here and stays.")
+    expect(apiPutRaw).not.toHaveBeenCalled()
+    expect(subjects()).toEqual(['Chase travel insurance certificate'])
+    expect(screen.queryByText(/already closed/)).not.toBeInTheDocument()
+    const name = taskType === 'LeaveCoverage' ? 'Open roster for: Chase travel insurance certificate' : 'Open task: Chase travel insurance certificate'
+    expect(await screen.findByRole('link', { name })).toHaveAttribute('href', taskType === 'LeaveCoverage' ? '/rostering' : '/tasks/t1/edit')
+    expect(screen.queryByRole('button', { name: /^Done:/ })).not.toBeInTheDocument()
   })
 })

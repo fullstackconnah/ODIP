@@ -37,6 +37,10 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
           void overdue.refetch(); void dueOnToday.refetch()
           return { announce: `Already ${fresh.status.toLowerCase()} by someone else.`, stale: true }
         }
+        if (fresh.taskType === 'LeaveCoverage' || (fresh.taskType === 'BudgetEmergencyReview' && !mayCloseBudgetReview)) {
+          void overdue.refetch(); void dueOnToday.refetch()
+          return { announce: 'Task changed. Open the full task workflow before marking it done.', stale: true, keep: true }
+        }
         await updateTask.mutateAsync({ id: t.id, data: { ...fresh, status: 'Completed', completedDate: today } as UpdateTaskDto })
         return { announce: `Marked done: ${t.title}.` }
       },
