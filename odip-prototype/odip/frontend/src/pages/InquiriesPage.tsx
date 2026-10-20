@@ -13,6 +13,7 @@ import { NoticesRegion } from '@/components/NoticesRegion'
 import { ROW_ACTIONS_CARD } from '@/components/tapArea'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { useNotices } from '@/hooks/useNotices'
+import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { useConfirmIntakeBooking, useConvertParticipantInquiry, useParticipantInquiries } from '@/api/hooks'
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { usePermissions } from '@/lib/permissions'
@@ -72,6 +73,7 @@ export function InquiriesTable() {
 
 function useInquiriesScreen() {
   const navigate = useNavigate()
+  const belowMd = useIsBelowMd()
   const { canManageParticipantLifecycle } = usePermissions()
   // Open | Closed (spec addendum E4, lead decision 6): the house status filter, in the URL beside tab=enquiries.
   const [searchParams, setSearchParams] = useSearchParams()
@@ -185,7 +187,7 @@ function useInquiriesScreen() {
     <div className={className} onClick={e => e.stopPropagation()}>
       <Dropdown
         variant="icon"
-        align="left"
+        align={belowMd ? 'left' : 'right'}
         label={`More actions for ${nameOf(row)}`}
         icon={<MoreVertical className="h-4 w-4" aria-hidden="true" />}
         items={items}
@@ -247,6 +249,7 @@ function useInquiriesScreen() {
     return reason && <Link id={`start-reason-${row.id}`} to={reason.to} className={REASON_LINK}>{reason.text}</Link>
   }
 
+    // At constrained desktop widths the actions take two lines instead of widening the table; phone cards and wide rows keep their existing composition.
   const columns: Column<ParticipantInquiryDto>[] = [
     // wrap: a long name (W) takes two lines rather than widening the table past its box at 1440.
     { key: 'firstName', header: 'Participant', sortable: true, wrap: true, render: row => nameOf(row) },
@@ -280,10 +283,10 @@ function useInquiriesScreen() {
       render: row => <IntakeCell row={row} canManage={canManageParticipantLifecycle} onOpen={r => openBooking(r)} />,
     },
     {
-      key: 'id', header: 'Actions', type: 'custom', pin: 'end',
+      key: 'id', header: 'Actions', type: 'custom', pin: 'end', wrap: true,
       render: row => canManageParticipantLifecycle ? (
         <div className="flex flex-col gap-1">
-          <div className={`flex flex-wrap md:flex-nowrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
+          <div className={`flex flex-wrap whitespace-nowrap md:max-[1400px]:w-40 min-[1400px]:flex-nowrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
             {primaryAction(row)}
             {/* A direct intake has no enquiry record, so there is nothing to edit as one. On a booked row's phone card, Edit enquiry moves into More. */}
             {!row.isDirectIntake && (
