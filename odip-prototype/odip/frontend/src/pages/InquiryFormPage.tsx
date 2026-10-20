@@ -495,8 +495,7 @@ function InquiryFormBody({ initial, focus, onCreated, onCancel, onReopened, onDo
         />
       )}
       <IntakeCancelDialog
-        // Checked against this form's version, so adopting the cleared row's version below is safe (ODIP-REVIEW-268).
-        checkVersion
+        // Sends this form's version, so adopting the cleared row's version below is safe (ODIP-REVIEW-268).
         row={cancelling ? row : null}
         onCancel={() => setCancelling(false)}
         onDone={(cancelledRow, email, cleared) => {

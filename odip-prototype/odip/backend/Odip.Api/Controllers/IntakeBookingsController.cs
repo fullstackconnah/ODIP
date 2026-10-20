@@ -63,8 +63,8 @@ public class IntakeBookingsController : ControllerBase
         var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ClosedRefusal, ClosedCode));
-        // ODIP-REVIEW-268: the version the form holds goes into the UPDATE's WHERE, so a write from a stale form is a 409 and nothing of it saves.
-        if (dto.ExpectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
+        // The version the panel holds is required, and checked before anything is raised, sent or saved: a stale or missing one is a 409.
+        if (IsStale(inquiry.UpdatedAt, dto.ExpectedUpdatedAt)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
 
         var now = NowUtc;
         var startsAt = ProviderLocalTime.AsUtc(dto.StartsAt);
@@ -187,8 +187,7 @@ public class IntakeBookingsController : ControllerBase
         // A visit that has happened stays on the enquiry as its record; it can be rescheduled, not cancelled.
         if (ProviderLocalTime.AsUtc(start).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) <= NowUtc)
             return Conflict(ApiResponse<CancelIntakeBookingResultDto>.Fail("This visit has already happened, so it can't be cancelled."));
-        // ODIP-REVIEW-268: the version the form holds goes into the UPDATE's WHERE, so a write from a stale form is a 409 and nothing of it saves.
-        if (expectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
+        if (IsStale(inquiry.UpdatedAt, expectedUpdatedAt)) return Conflict(ApiResponse<CancelIntakeBookingResultDto>.Fail(ChangedByOther));
 
         var provider = await ProviderAsync(inquiry.TenantId, ct);
         var cancellation = await CancelVisitAsync(inquiry, provider, ct);
@@ -297,6 +296,7 @@ public class IntakeBookingsController : ControllerBase
         if (inquiry is null || inquiry.IntakeStartsAt is null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("No intake visit is booked for this enquiry."));
         // A closed enquiry keeps a past visit as its record; it is not marked confirmed after the fact (verify C2).
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ClosedRefusal, ClosedCode));
+        if (IsStale(inquiry.UpdatedAt, dto.ExpectedUpdatedAt)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
         inquiry.IntakeConfirmedAt = dto.Confirmed ? NowUtc : null;
         inquiry.UpdatedAt = NowUtc;
         if (!await SavedAsync(ct)) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
@@ -316,9 +316,9 @@ public class IntakeBookingsController : ControllerBase
             return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("This visit has already happened, so there's no invite to send."));
         if (inquiry.Email is null || !IsSendable(inquiry.Email))
             return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["contactEmail"] = ["Add the main contact's email to send the invite."] }));
-        // ODIP-REVIEW-268: the email goes before any save, so the version is compared here, before sending: a form that holds an older version (another
-        // address, a moved visit) gets the 409 and nobody is emailed. Two requests at the same instant can still both pass; the outcome save then drops the loser's.
-        if (dto?.ExpectedUpdatedAt is DateTime expected && inquiry.UpdatedAt != new DateTime(expected.Ticks - expected.Ticks % 10, expected.Kind))
+        // The email goes before any save, so the version is compared here, before sending: a panel that holds an older version (another address, a moved
+        // visit) or none gets the 409 and nobody is emailed. Two requests at the same instant can still both pass; the outcome save then drops the loser's.
+        if (IsStale(inquiry.UpdatedAt, dto?.ExpectedUpdatedAt))
             return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ChangedByOther));
 
         var staff = await StaffAsync(inquiry.IntakeStaffUserId, inquiry.TenantId, ct);
@@ -504,6 +504,9 @@ public class IntakeBookingsController : ControllerBase
     }
 
     internal static bool IsSendable(string email) => email.Length <= 200 && MailAddress.TryCreate(email, out var parsed) && parsed.Address == email;
+
+    /// <summary>A write must carry the enquiry's current UpdatedAt (to the microsecond PostgreSQL keeps); none at all counts as stale.</summary>
+    private static bool IsStale(DateTime current, DateTime? expected) => expected is not DateTime e || current.Ticks - current.Ticks % 10 != e.Ticks - e.Ticks % 10;
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

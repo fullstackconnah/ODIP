@@ -104,6 +104,8 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   const closedRefusal = () => refuse409('This enquiry is closed. Reopen it first.', 'inquiry-closed')
   // The version check close and reopen make (verify C1): a stale expectedUpdatedAt is the API's 409. Rows with no version yet skip it.
   const stale = (row, body) => !!body?.expectedUpdatedAt && !!row.updatedAt && body.expectedUpdatedAt !== row.updatedAt
+  // Set, Cancel, Resend and Confirm require the version, as the API does: none sent is stale too.
+  const staleRequired = (row, body) => !!row.updatedAt && body?.expectedUpdatedAt !== row.updatedAt
   const changedByOther = () => respond(409, failEnvelope(null, ['Someone else just changed this visit. Reload and try again.']))
   const enquiryChangedByOther = () => respond(409, failEnvelope(null, ['Someone else just changed this enquiry. Reload and try again.']))
   const stamp = (row) => { row.updatedAt = new Date().toISOString() }
@@ -136,7 +138,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       const row = find(id)
       if (!row) return respond(404, failEnvelope(null, ['Inquiry not found']))
       if (closed[id]) return closedRefusal()
-      if (stale(row, body)) return changedByOther()
+      if (staleRequired(row, body)) return changedByOther()
       // The capture's refused state: the 400 the server gives for a staff member who cannot do intakes, keyed by field.
       if ((body.location ?? '').trim().toLowerCase() === 'refuse') {
         return respond(400, { title: 'One or more validation errors occurred.', status: 400, errors: { staffUserId: ["Callum can't do intakes. Choose an active coordinator or admin."] } })
@@ -207,6 +209,8 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     ['inquiries', (body) => { const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return listRow(row) }],
     ['inquiries/:id/intake-booking/confirm', (id, body) => {
       if (!bookings[id]) return notBooked()
+      if (staleRequired(find(id), body)) return changedByOther()
+      stamp(find(id))
       bookings[id].intakeConfirmedAt = body.confirmed ? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') : null
       return listRow(find(id))
     }],
@@ -214,7 +218,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       if (!bookings[id]) return notBooked()
       const row = find(id)
       if (!row.email) return problem({ contactEmail: ["Add the main contact's email to send the invite."] })
-      if (stale(row, body)) return changedByOther()
+      if (staleRequired(row, body)) return changedByOther()
       stamp(row)
       return listRow(row)
     }],
@@ -224,7 +228,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     ['inquiries/:id/intake-booking', (id, _body, params) => {
       const before = bookings[id]
       if (!before) return notBooked()
-      if (stale(find(id), { expectedUpdatedAt: params?.get('expectedUpdatedAt') })) return changedByOther()
+      if (staleRequired(find(id), { expectedUpdatedAt: params?.get('expectedUpdatedAt') })) return changedByOther()
       stamp(find(id))
       delete bookings[id]
       return { inquiry: listRow(find(id)), cancellationEmail: before.intakeInviteSentAt ? 'NotConfigured' : 'NoInvite' }

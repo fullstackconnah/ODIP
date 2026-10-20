@@ -2,21 +2,21 @@ import { useState } from 'react'
 import { useCancelIntakeBooking } from '@/api/hooks'
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { FALLBACK_ZONE, invitee, unbroken, visitWhen } from '@/lib/intakeBooking'
+import { FALLBACK_ZONE, changedByOther, invitee, unbroken, visitWhen } from '@/lib/intakeBooking'
 import { fullName } from '@/lib/inquiryDetails'
 import { extractErrorMessage } from '@/lib/utils'
+
+const CHANGED_COPY = 'Someone else just changed this visit. Check the visit details before trying again.'
 
 type IntakeCancelDialogProps = {
   row: ParticipantInquiryDto | null
   onCancel: () => void
   /** `cleared` is the server's copy after the cancel (the enquiry form keeps it). */
   onDone: (row: ParticipantInquiryDto, email: CancelIntakeBookingResultDto['cancellationEmail'], cleared: ParticipantInquiryDto) => void
-  /** The enquiry form sends the version it holds, so a cancel from a stale form is a 409 (ODIP-REVIEW-268). The table sends none. */
-  checkVersion?: boolean
 }
 
 /** "Cancel Noah Fitzgerald's intake visit?" The server emails a CANCEL only if an invite had gone out, and the message says which. */
-export function IntakeCancelDialog({ row, onCancel, onDone, checkVersion = false }: IntakeCancelDialogProps) {
+export function IntakeCancelDialog({ row, onCancel, onDone }: IntakeCancelDialogProps) {
   const cancel = useCancelIntakeBooking()
   const [error, setError] = useState<string | null>(null)
   if (!row?.intakeStartsAt) return null
@@ -37,11 +37,12 @@ export function IntakeCancelDialog({ row, onCancel, onDone, checkVersion = false
       onConfirm={async () => {
         if (cancel.isPending) return
         try {
-          const result = await cancel.mutateAsync(checkVersion ? { id: row.id, expectedUpdatedAt: row.updatedAt } : row.id)
+          const result = await cancel.mutateAsync({ id: row.id, expectedUpdatedAt: row.updatedAt })
           setError(null)
           onDone(row, result.cancellationEmail, result.inquiry)
         } catch (failure) {
-          setError(extractErrorMessage(failure, "The visit wasn't cancelled. Try again."))
+          // A list invalidation can still be pending or fail; do not claim these details were refreshed.
+          setError(changedByOther(failure) ? CHANGED_COPY : extractErrorMessage(failure, "The visit wasn't cancelled. Try again."))
         }
       }}
     />

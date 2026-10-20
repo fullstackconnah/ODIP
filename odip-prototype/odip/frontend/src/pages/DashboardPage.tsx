@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
@@ -86,6 +86,7 @@ export default function DashboardPage() {
   const gates = decisionGates(permissions, !!localStorage.getItem('odip_viewing_tenant'))
   const groups = useDecisionGroups(gates, { viewerId: id, today, warningDays, mayCloseBudgetReview: isAdmin || isSuperAdmin, staff })
   const decision = useDecisionState()
+  const [hasRecovery, setHasRecovery] = useState(false)
   // A queue is counted in the band only where its group is not shown (call 6); a viewer with the group reads the same requests there.
   const pendingLeave = usePendingLeaveQueue(canApproveLeave && !gates.leave)
   const pendingCompletions = usePendingCompletionQueue(canReviewCompletions && !gates.completions)
@@ -252,7 +253,7 @@ export default function DashboardPage() {
   // Every item has data and is at zero: the band is clear.
   const bandClear = !!d && attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
   // "Nothing needs you" only when it is true: every group and every alert has data and is at zero, and no consequence notice is waiting (SHAPE §6).
-  const groupsClear = groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
+  const groupsClear = !hasRecovery && groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
   const pageClear = bandClear && groupsClear
 
   return (
@@ -343,7 +344,7 @@ export default function DashboardPage() {
               <p className="text-[13px] text-[var(--color-muted-foreground)]">Choose an organisation to see its approvals.</p>
             </div>
           )}
-          {groups.length > 0 && <NeedsYourDecision groups={groups} state={decision} />}
+          {groups.length > 0 && <NeedsYourDecision groups={groups} state={decision} onRecoveryPresenceChange={setHasRecovery} />}
         </>
       )}
 

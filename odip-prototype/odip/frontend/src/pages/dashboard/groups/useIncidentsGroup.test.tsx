@@ -43,6 +43,6 @@ describe('Incidents group (links only)', () => {
     apiGet.mockRejectedValue(new Error('down'))
     renderGroup(() => useIncidentsGroup(true))
 
-    expect(await screen.findByText("Couldn't load open incidents.")).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't load this incidents queue. Check your connection and try again.")).toBeInTheDocument()
   })
 })

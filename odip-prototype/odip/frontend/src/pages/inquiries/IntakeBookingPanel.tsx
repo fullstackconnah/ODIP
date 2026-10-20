@@ -1,3 +1,5 @@
+import { useIsFetching } from '@tanstack/react-query'
+import { apiGet } from '@/api/client'
 import { useEffect, useRef, useState } from 'react'
 import { useConfirmIntakeBooking, useResendIntakeInvite, useSetIntakeBooking } from '@/api/hooks'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
@@ -7,7 +9,7 @@ import { Callout } from '@/components/Callout'
 import { FormField } from '@/components/FormField'
 import { SlideOver } from '@/components/SlideOver'
 import {
-  DEFAULT_DURATION, FALLBACK_ZONE, FIELD_ORDER, bookingBody, bookingFormOf, inviteEmail, invitee, inviteeEmailLabel, isPastVisit, noInviteWhy, notSentReason, refusalOf, resultLine,
+  DEFAULT_DURATION, FALLBACK_ZONE, changedByOther, FIELD_ORDER, bookingBody, bookingFormOf, inviteEmail, invitee, inviteeEmailLabel, isPastVisit, noInviteWhy, notSentReason, refusalOf, resultLine,
   sendsInvite, serverBookingErrors, validateBooking, visitDay,
   type BookingErrors, type BookingField, type BookingForm,
 } from '@/lib/intakeBooking'
@@ -54,9 +56,13 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
   const [saved, setSaved] = useState<BookingForm>(() => bookingFormOf(row, ''))
   const [form, setForm] = useState<BookingForm>(() => bookingFormOf(row, ''))
   const [errors, setErrors] = useState<BookingErrors>({})
-  const [refusal, setRefusal] = useState<string | null>(null)
+  // `stale`: the refusal is "someone else changed this", which Reload answers.
+  const [refusal, setRefusal] = useState<{ title: string; text: string; stale: boolean } | null>(null)
+  // The write that was refused refetches the lists; Reload waits for that, so it never adopts the row it is replacing.
+  const refetching = useIsFetching({ queryKey: ['participant-inquiries'] }) > 0
   const [announcement, setAnnouncement] = useState('')
-  const [busy, setBusy] = useState<'save' | 'resend' | 'confirm' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'resend' | 'confirm' | 'reload' | null>(null)
+  const [reloadError, setReloadError] = useState<string | null>(null)
   // The click guard: aria-disabled does not stop a click, and a second press before the re-render must not send a second invite.
   const inFlight = useRef(false)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -97,7 +103,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
     setErrors(e => ({ ...e, [field]: undefined }))
   }
 
-  async function run<T>(kind: 'save' | 'resend' | 'confirm', action: () => Promise<T>): Promise<T | undefined> {
+  async function run<T>(kind: 'save' | 'resend' | 'confirm' | 'reload', action: () => Promise<T>): Promise<T | undefined> {
     if (inFlight.current) return undefined
     inFlight.current = true
     setBusy(kind)
@@ -122,7 +128,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
     }
     const kind = !booked ? 'booked' : sends ? 'updated' : 'notes'
     try {
-      const answer = await run('save', () => save.mutateAsync({ id: current.id, data: bookingBody(effective, zone, emailGiven) }))
+      const answer = await run('save', () => save.mutateAsync({ id: current.id, data: { ...bookingBody(effective, zone, emailGiven), expectedUpdatedAt: current.updatedAt } }))
       if (!answer) return
       const next = bookingFormOf(answer, '')
       setCurrent(answer)
@@ -134,34 +140,56 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
     } catch (error) {
       const mapped = serverBookingErrors(error)
       setErrors(mapped)
-      setRefusal(refusalOf(error, "The visit wasn't saved. Try again."))
+      setRefusal({ title: booked ? "Couldn't save the changes" : "Couldn't book the visit", text: refusalOf(error, "The visit wasn't saved. Try again."), stale: changedByOther(error, mapped) })
       focusNext.current = FIELD_ORDER.find(f => mapped[f]) ?? 'refusal'
     }
   }
 
   async function sendAgain() {
     try {
-      const answer = await run('resend', () => resend.mutateAsync(current.id))
+      const answer = await run('resend', () => resend.mutateAsync({ id: current.id, expectedUpdatedAt: current.updatedAt }))
       if (!answer) return
       setCurrent(answer)
       setAnnouncement(answer.intakeInviteError ? `Invite still not sent: ${notSentReason(answer.intakeInviteError)}.` : `Invite sent again to ${answer.email}.`)
     } catch (error) {
-      setRefusal(refusalOf(error, "The invite wasn't sent. Try again."))
+      setRefusal({ title: "The invite wasn't sent", text: refusalOf(error, "The invite wasn't sent. Try again."), stale: changedByOther(error, {}) })
+      focusNext.current = 'refusal'
     }
   }
 
   async function toggleConfirmed() {
     const confirmed = !current.intakeConfirmedAt
     try {
-      const answer = await run('confirm', () => confirm.mutateAsync({ id: current.id, confirmed }))
+      const answer = await run('confirm', () => confirm.mutateAsync({ id: current.id, confirmed, expectedUpdatedAt: current.updatedAt }))
       if (!answer) return
       setCurrent(answer)
       setAnnouncement(confirmed ? 'Marked confirmed.' : 'Marked not confirmed.')
     } catch (error) {
-      setRefusal(refusalOf(error, "The visit wasn't changed. Try again."))
+      setRefusal({ title: "The visit wasn't changed", text: refusalOf(error, "The visit wasn't changed. Try again."), stale: changedByOther(error, {}) })
+      focusNext.current = 'refusal'
     }
   }
 
+  /** Read a fresh version; keep typed fields and only rebase untouched fields after that read succeeds. */
+  async function reload() {
+    if (refetching || inFlight.current) return
+    setReloadError(null)
+    try {
+      const answer = await run('reload', () => apiGet<ParticipantInquiryDto>(`/inquiries/${current.id}`))
+      if (!answer) return
+      const fresh = bookingFormOf(answer, '')
+      setForm(f => Object.fromEntries(Object.entries(fresh).map(([key, value]) => [key, f[key as BookingField] === saved[key as BookingField] ? value : f[key as BookingField]])) as BookingForm)
+      setSaved(fresh)
+      setCurrent(answer)
+      setErrors({})
+      setRefusal(null)
+      setAnnouncement('Reloaded. Showing the latest changes.')
+      focusNext.current = answer.intakeStartsAt ? 'result' : 'date'
+    } catch {
+      setReloadError("Couldn't reload the visit. Try again. Your entries are kept.")
+      focusNext.current = 'refusal'
+    }
+  }
   const footer = (
     <>
       {booked && !past ? <Button variant="ghost-danger" onClick={() => onRequestCancel(current)}>Cancel visit</Button> : <span />}
@@ -194,8 +222,14 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
       <div ref={bodyRef} className="flex flex-col gap-[var(--field-gap-y)]">
         {refusal && (
           <div ref={refusalRef} tabIndex={-1} className="focus:outline-none">
-            <Callout tone="danger" title={booked ? "Couldn't save the changes" : "Couldn't book the visit"}>
-              <span className="break-words">{refusal}</span>
+            <Callout
+              tone="danger"
+              title={refusal.title}
+              actions={refusal.stale ? (
+                <Button variant="secondary" size="sm" onClick={reload} aria-disabled={refetching || busy === 'reload' || undefined} className={DISABLED_LOOK}>{busy === 'reload' ? 'Reloading…' : 'Reload'}</Button>
+              ) : undefined}
+            >
+              <span className="break-words">{refusal.text}</span>{reloadError && <p className="mt-2">{reloadError}</p>}
             </Callout>
           </div>
         )}

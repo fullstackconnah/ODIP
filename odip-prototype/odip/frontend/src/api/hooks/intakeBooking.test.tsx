@@ -41,8 +41,8 @@ describe('intake booking hooks', () => {
     const { wrapper } = setup()
     const { result } = renderHook(() => useCancelIntakeBooking(), { wrapper })
 
-    expect(await result.current.mutateAsync('inq-1')).toEqual({ inquiry: { id: 'inq-1' }, cancellationEmail: 'NoInvite' })
-    expect(apiDeleteRaw).toHaveBeenCalledWith('/inquiries/inq-1/intake-booking')
+    expect(await result.current.mutateAsync({ id: 'inq-1', expectedUpdatedAt: 'v1' })).toEqual({ inquiry: { id: 'inq-1' }, cancellationEmail: 'NoInvite' })
+    expect(apiDeleteRaw).toHaveBeenCalledWith('/inquiries/inq-1/intake-booking?expectedUpdatedAt=v1')
   })
 
   // The page focuses the row's Book intake straight after a cancel; the row must have lost its booking by then, not after the refetch.
@@ -55,11 +55,24 @@ describe('intake booking hooks', () => {
     ])
     const { result } = renderHook(() => useCancelIntakeBooking(), { wrapper })
 
-    await result.current.mutateAsync('inq-1')
+    await result.current.mutateAsync({ id: 'inq-1', expectedUpdatedAt: 'v1' })
 
     const rows = qc.getQueryData<Record<string, unknown>[]>(['participant-inquiries'])!
     expect(rows[0]).toMatchObject({ id: 'inq-1', firstName: 'Noah', participantIsDraft: true, intakeStartsAt: null, intakeStaffFirstName: null, intakeInviteSentAt: null })
     expect(rows[1]).toMatchObject({ id: 'inq-2', intakeStartsAt: '2030-10-16T23:00:00Z' })
+  })
+
+  // Book intake, pressed straight after a cancel, opens the panel from this row: it must hold the version the cancel produced.
+  it('takes the new version from the cancel into the cancelled row', async () => {
+    const qc = new QueryClient()
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    qc.setQueryData(['participant-inquiries'], [{ id: 'inq-1', updatedAt: 'v1', intakeStartsAt: '2030-10-15T23:00:00Z' }])
+    vi.mocked(apiDeleteRaw).mockResolvedValueOnce({ success: true, data: { inquiry: { id: 'inq-1', updatedAt: 'v2' }, cancellationEmail: 'NoInvite' } } as never)
+    const { result } = renderHook(() => useCancelIntakeBooking(), { wrapper })
+
+    await result.current.mutateAsync({ id: 'inq-1', expectedUpdatedAt: 'v1' })
+
+    expect(qc.getQueryData<Record<string, unknown>[]>(['participant-inquiries'])![0]).toMatchObject({ updatedAt: 'v2', intakeStartsAt: null })
   })
 
   it('marks confirmed and sends again with POSTs', async () => {
@@ -67,11 +80,23 @@ describe('intake booking hooks', () => {
     const confirm = renderHook(() => useConfirmIntakeBooking(), { wrapper }).result
     const resend = renderHook(() => useResendIntakeInvite(), { wrapper }).result
 
-    await confirm.current.mutateAsync({ id: 'inq-1', confirmed: true })
-    await resend.current.mutateAsync('inq-1')
+    await confirm.current.mutateAsync({ id: 'inq-1', confirmed: true, expectedUpdatedAt: 'v1' })
+    await resend.current.mutateAsync({ id: 'inq-1', expectedUpdatedAt: 'v1' })
 
-    expect(apiPost).toHaveBeenCalledWith('/inquiries/inq-1/intake-booking/confirm', { confirmed: true })
-    expect(apiPost).toHaveBeenCalledWith('/inquiries/inq-1/intake-booking/send')
+    expect(apiPost).toHaveBeenCalledWith('/inquiries/inq-1/intake-booking/confirm', { confirmed: true, expectedUpdatedAt: 'v1' })
+    expect(apiPost).toHaveBeenCalledWith('/inquiries/inq-1/intake-booking/send', { expectedUpdatedAt: 'v1' })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['intake-visits'] })
+  })
+
+  // A 409 from a stale panel says the list it was opened from is old: the lists reload, so closing and reopening the panel shows the colleague's change.
+  it('refreshes the enquiries and the visits when a write is refused', async () => {
+    const { spy, wrapper } = setup()
+    vi.mocked(apiPut).mockRejectedValueOnce(new Error('409'))
+    const { result } = renderHook(() => useSetIntakeBooking(), { wrapper })
+
+    await expect(result.current.mutateAsync({ id: 'inq-1', data: { startsAt: '2026-10-15T23:00:00Z', durationMinutes: 90, location: 'x', staffUserId: 'sam', notes: null } })).rejects.toThrow('409')
+
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['participant-inquiries'] })
     expect(spy).toHaveBeenCalledWith({ queryKey: ['intake-visits'] })
   })
 

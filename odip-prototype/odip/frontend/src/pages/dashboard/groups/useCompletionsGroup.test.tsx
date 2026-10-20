@@ -143,44 +143,36 @@ describe('Shift completions group — Return needs a reason', () => {
 })
 
 describe('Shift completions group — Complete all (decision-bulk)', () => {
-  it('approves every clean row of the whole queue through the existing batch, never a flagged one, and reports the rest in one notice', async () => {
+  it('sends exactly the five selected shown IDs, not a hidden sixth, and preserves literal per-item partial results', async () => {
     const clean = ['s1', 's2', 's3', 's4', 's5', 's6'].map((shiftId, i) => item({ shiftId, staffName: `Worker ${i + 1}` }))
     apiGet.mockResolvedValue(page([...clean, item({ shiftId: 's7', staffName: 'Flagged Fay', incidentCount: 1 })]))
     apiPost.mockResolvedValue([
-      ...['s1', 's2', 's3', 's4'].map((shiftId) => ({ shiftId, approved: true, code: null, message: null })),
+      { shiftId: 's1', approved: true, code: null, message: null },
+      { shiftId: 's2', approved: true, code: null, message: null },
+      { shiftId: 's3', approved: true, code: null, message: null },
       { shiftId: 's5', approved: false, code: 'SHIFT_NOT_PENDING_REVIEW', message: 'This shift is not awaiting review.' },
-      // s6 has no answer at all: a failure, named. (Not found, by any code, is stale like the single approve's 404.)
     ])
-    const { client } = renderGroup(() => useCompletionsGroup(true))
-    const invalidate = vi.spyOn(client, 'invalidateQueries')
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 6 clean shift completions' }))
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 6 clean completions?')
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('The 1 that needs review stays here.')
-    fireEvent.click(screen.getByRole('button', { name: 'Approve 6' }))
-
-    await waitFor(() => expect(screen.getByText('Approved 4 completions')).toBeInTheDocument())
-    expect(apiPost).toHaveBeenCalledTimes(1)
-    expect(apiPost).toHaveBeenCalledWith('/rostering/completions/approve-batch', { shiftIds: ['s1', 's2', 's3', 's4', 's5', 's6'], cleanOnly: true })
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['rostering-completions'] })
-    expect(screen.getByText(
-      "1 needs review and stays here. 1 was already reviewed. 1 couldn't be approved: Worker 6 with Grace Palmer-Hughes, 14 Oct.")).toBeInTheDocument()
-  })
-
-  it('sends the first 100 clean ids over the cap, and says so', async () => {
-    apiGet.mockResolvedValue(page(Array.from({ length: 134 }, (_, i) => item({ shiftId: `s${i}`, staffName: `Worker ${i}` }))))
-    apiPost.mockImplementation(async (_url: string, body: { shiftIds: string[] }) => body.shiftIds.map((shiftId) => ({ shiftId, approved: true, code: null, message: null })))
     renderGroup(() => useCompletionsGroup(true))
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve the first 100 of 134 clean shift completions' }))
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve the first 100 of 134 clean completions?')
-    fireEvent.click(screen.getByRole('button', { name: 'Approve 100' }))
-
-    await waitFor(() => expect(screen.getByText('Approved 100 of 134')).toBeInTheDocument())
-    expect(apiPost.mock.calls[0][1].shiftIds).toEqual(Array.from({ length: 100 }, (_, i) => `s${i}`))
-    expect(screen.getByText('Run it again for the rest.')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 5 selected shift completions' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 5 selected completions?')
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 5' }))
+    await waitFor(() => expect(screen.getByText('Approved 3 completions')).toBeInTheDocument())
+    expect(apiPost).toHaveBeenCalledTimes(1)
+    expect(apiPost).toHaveBeenCalledWith('/rostering/completions/approve-batch', { shiftIds: ['s1', 's2', 's3', 's4', 's5'], cleanOnly: true })
+    expect(screen.getByText("1 was already reviewed. 1 couldn't be approved: Worker 4 with Grace Palmer-Hughes, 14 Oct.")).toBeInTheDocument()
   })
 
+  it('keeps a large total separate from the five selected shown IDs', async () => {
+    apiGet.mockResolvedValue(page(Array.from({ length: 134 }, (_, i) => item({ shiftId: `s${i}`, staffName: `Worker ${i}` }))))
+    apiPost.mockImplementation(async (_url: string, body: { shiftIds: string[] }) => body.shiftIds.map(shiftId => ({ shiftId, approved: true, code: null, message: null })))
+    renderGroup(() => useCompletionsGroup(true))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 5 selected shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 5' }))
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/rostering/completions/approve-batch', { shiftIds: ['s0', 's1', 's2', 's3', 's4'], cleanOnly: true }))
+    expect(apiPost).toHaveBeenCalledTimes(1)
+  })
   it('counts a shift the server found flagged at approval time as needing review, not as a failure', async () => {
     apiGet.mockResolvedValue(page([item(), item({ shiftId: 's2', staffName: 'Ana Ruiz' })]))
     apiPost.mockResolvedValue([
@@ -189,7 +181,8 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     ])
     renderGroup(() => useCompletionsGroup(true))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2 selected shift completions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
 
     await waitFor(() => expect(screen.getByText('Approved 1 completion')).toBeInTheDocument())
@@ -205,7 +198,8 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     ])
     renderGroup(() => useCompletionsGroup(true))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2 selected shift completions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
 
     await waitFor(() => expect(screen.getByText("Couldn't approve 2 completions")).toBeInTheDocument())
@@ -217,7 +211,8 @@ describe('Shift completions group — Complete all (decision-bulk)', () => {
     apiPost.mockRejectedValue({ response: { status, data: { success: false, message: 'Nope.' } } })
     renderGroup(() => useCompletionsGroup(true))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2 selected shift completions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
 
     await waitFor(() => expect(screen.getByText("Couldn't approve 2 completions")).toBeInTheDocument())
@@ -231,7 +226,8 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
   const networkError = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', request: {} })
   const notice = () => document.querySelector('[data-quick-group] [role="status"] [data-tone]')
   const runAll = async () => {
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2 selected shift completions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
   }
 
@@ -263,7 +259,8 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
     expect(notice()).not.toHaveTextContent('left the list')
     expect(apiGet).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('button', { name: APPROVE })).not.toHaveAttribute('aria-disabled')
-    expect(screen.getByRole('button', { name: 'Approve all 2 clean shift completions' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Approve all/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select all shown shift completions' })).not.toBeChecked()
   })
 
   it('asks for a refresh when the re-read fails too, and holds the rows: no retry until a fresh read', async () => {
@@ -330,19 +327,25 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
   })
 
   it('releases the held rows on the next successful read: the pending one goes live, the gone one leaves', async () => {
-    apiGet.mockResolvedValueOnce(page(two())).mockRejectedValueOnce(networkError()).mockResolvedValue(page([item()]))
+    let readCount = 0
+    apiGet.mockImplementation(async (url: string) => {
+      if (url.startsWith('/rostering/completions/statuses')) return [{ shiftId: 's2', status: 'Completed' }]
+      if (++readCount === 1) return page(two())
+      if (readCount === 2) throw networkError()
+      return page([item()])
+    })
     apiPost.mockRejectedValue(networkError())
-    const { client } = renderGroup(() => useCompletionsGroup(true))
+    renderGroup(() => useCompletionsGroup(true))
     await runAll()
     await waitFor(() => expect(notice()).toHaveTextContent("couldn't be checked"))
     expect(screen.getAllByText("Not confirmed yet")).toHaveLength(2)
 
-    await client.refetchQueries({ queryKey: ['rostering-completions'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Check latest status' }))
 
     await waitFor(() => expect(screen.queryByText("Not confirmed yet")).toBeNull())
     expect(screen.queryByText('Ana Ruiz')).toBeNull()
     expect(screen.getByRole('button', { name: APPROVE })).not.toHaveAttribute('aria-disabled')
-    expect(screen.getByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select all shown shift completions' })).not.toBeChecked()
   })
 
   it('keeps the rows held while later reads keep failing', async () => {
@@ -372,23 +375,17 @@ describe('Shift completions group — a batch with no answer (review #266 F1)', 
 })
 
 describe('Shift completions group — the whole queue past one page (review #266 F2)', () => {
-  it('pages the whole pending queue: 200 flagged first, 50 clean after them, counted and sent', async () => {
+  it('reads all pages for the total without offering hidden clean rows for approval', async () => {
     const flagged = Array.from({ length: 200 }, (_, i) => item({ shiftId: `f${i}`, staffName: `Flagged ${i}`, isOutlierVariance: true }))
     const clean = Array.from({ length: 50 }, (_, i) => item({ shiftId: `c${i}`, staffName: `Clean ${i}` }))
-    apiGet.mockImplementation(async (_url: string, params: { after?: string }) => (params.after ? page(clean, 250) : page(flagged, 250)))
-    apiPost.mockImplementation(async (_url: string, body: { shiftIds: string[] }) => body.shiftIds.map((shiftId) => ({ shiftId, approved: true, code: null, message: null })))
+    apiGet.mockImplementation(async (_url: string, params: { after?: string }) => params.after ? page(clean, 250) : page(flagged, 250))
     renderGroup(() => useCompletionsGroup(true))
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 50 clean shift completions' }))
+    await screen.findByRole('tab', { name: 'Completions (250)' })
     expect(apiGet).toHaveBeenCalledWith('/rostering/completions', { status: 'PendingReview', pageSize: 200, after: 'after-f199' })
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 50 clean completions?')
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('The 200 that need review stay here.')
-    fireEvent.click(screen.getByRole('button', { name: 'Approve 50' }))
-
-    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1))
-    expect(apiPost.mock.calls[0][1].shiftIds).toEqual(clean.map((c) => c.shiftId))
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
+    expect(apiPost).not.toHaveBeenCalled()
   })
-
   it('shows no count until every page has answered', async () => {
     let second!: (v: unknown) => void
     apiGet.mockImplementation((_url: string, params: { after?: string }) => (!params.after
@@ -400,7 +397,8 @@ describe('Shift completions group — the whole queue past one page (review #266
     expect(screen.getByText('Loading shift completions…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull()
     second(page([item({ shiftId: 'c1' })], 201))
-    expect(await screen.findByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
+    await screen.findByRole('tab', { name: /Completions \(20[01]\)/ })
+    expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
   })
 })
 
@@ -421,7 +419,7 @@ describe('Shift completions group — the queue changes while it is read (lil du
     })
   }
 
-  it('keeps a clean row visible and actionable when a page-one row is decided between page requests', async () => {
+  it('keeps the full keyset read complete when a page-one row leaves, without exposing a hidden clean row action', async () => {
     let rows: Array<ReturnType<typeof item>> = [
       ...Array.from({ length: 200 }, (_, i) => item({ shiftId: `f${i}`, staffName: `Flagged ${i}`, isOutlierVariance: true })),
       item({ shiftId: 'x', staffName: 'Xavier Reed' }),
@@ -430,10 +428,12 @@ describe('Shift completions group — the queue changes while it is read (lil du
     keysetServer(() => rows, (n) => { if (n === 1) rows = rows.filter((r) => r.shiftId !== 'f0') })
     const { client } = renderGroup(() => useCompletionsGroup(true))
 
-    // Complete all counts the clean rows of the whole queue: the one clean row after the 200 flagged ones must be in it, after the poll too.
-    expect(await screen.findByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
+    // The hidden row remains in the source cache/total, never in the shown selection.
+    await screen.findByRole('tab', { name: /Completions \(20[01]\)/ })
+    expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
     await client.refetchQueries({ queryKey: ['rostering-completions'] })
-    expect(await screen.findByRole('button', { name: 'Approve 1 clean shift completion' })).toBeInTheDocument()
+    await screen.findByRole('tab', { name: /Completions \(20[01]\)/ })
+    expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
   })
 
   it('does not call a sent row "left" because the paged list lacks it: it asks the server what became of it', async () => {
@@ -445,7 +445,8 @@ describe('Shift completions group — the queue changes while it is read (lil du
     apiPost.mockRejectedValue(networkError())
     renderGroup(() => useCompletionsGroup(true))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2 selected shift completions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
 
     await waitFor(() => expect(notice()).toHaveTextContent('No answer for 2 completions'))
@@ -463,7 +464,8 @@ describe('Shift completions group — the queue changes while it is read (lil du
     apiPost.mockRejectedValue(networkError())
     renderGroup(() => useCompletionsGroup(true))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 clean shift completions' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2 selected shift completions' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
 
     await waitFor(() => expect(notice()).toHaveTextContent("2 couldn't be checked"))
