@@ -493,7 +493,7 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
     }
   })
 
-  it.each([['Admin', 16], ['Coordinator', 10], ['SuperAdmin', 20], ['SuperAdminNoOrg', 9]] as const)('gives %s a rail of %i sections', (role, count) => {
+  it.each([['Admin', 17], ['Coordinator', 10], ['SuperAdmin', 21], ['SuperAdminNoOrg', 9]] as const)('gives %s a rail of %i sections', (role, count) => {
     mockUsePermissions.mockReturnValue(SETTINGS_PERMS[role])
     renderSettingsPage()
     expect(within(rail()).getAllByRole('link')).toHaveLength(count)
@@ -588,5 +588,71 @@ describe('SettingsPage — below md: the list, one section per screen, and Back'
     expect(screen.getByRole('navigation', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
     await waitFor(() => expect(router.state.location.search).toBe(''))
+  })
+})
+
+const setupQueries = vi.hoisted(() => ({ provider: vi.fn(), pricing: vi.fn() }))
+vi.mock('@/api/hooks/catalogue', async importOriginal => ({
+  ...await importOriginal<typeof import('@/api/hooks/catalogue')>(),
+  useProviderSettings: setupQueries.provider,
+}))
+vi.mock('@/api/hooks/plan-pricing', async importOriginal => ({
+  ...await importOriginal<typeof import('@/api/hooks/plan-pricing')>(),
+  usePlanPricingSettings: setupQueries.pricing,
+}))
+
+describe('SettingsPage - optional administrator organisation setup', () => {
+  beforeEach(() => {
+    setupQueries.provider.mockReset().mockReturnValue({ data: null })
+    setupQueries.pricing.mockReset().mockReturnValue({ data: { registrationGroupsConfirmed: false }, refetch: vi.fn() })
+  })
+
+  it('opens bookmarkable guidance with four existing destinations and no Save', () => {
+    renderSettingsPage('/settings?section=setup')
+    expect(screen.getByRole('heading', { level: 2, name: 'Organisation setup' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open organisation profile' })).toHaveAttribute('href', '/settings?section=organisation')
+    expect(screen.getByRole('link', { name: 'Open plan pricing' })).toHaveAttribute('href', '/settings?section=pricing')
+    expect(screen.getByRole('link', { name: 'Open billing details' })).toHaveAttribute('href', '/settings?section=billing')
+    expect(screen.getByRole('link', { name: 'Open safety checks' })).toHaveAttribute('href', '/settings?section=safety')
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Coordinator', 'SupportWorker', 'ReadOnly', 'SuperAdminNoOrg'] as const)('rejects a %s direct link without mounting or querying setup', async role => {
+    const perms = role === 'SupportWorker' || role === 'ReadOnly'
+      ? { ...SETTINGS_PERMS.Coordinator, isCoordinator: false, role, isSupportWorker: role === 'SupportWorker', isReadOnly: role === 'ReadOnly' }
+      : SETTINGS_PERMS[role]
+    mockUsePermissions.mockReturnValue(perms)
+    const { router } = renderSettingsPage('/settings?section=setup')
+    await waitFor(() => expect(router.state.location.search).toBe(''))
+    expect(screen.queryByRole('link', { name: 'Organisation setup' })).not.toBeInTheDocument()
+    expect(setupQueries.provider).not.toHaveBeenCalled()
+    expect(setupQueries.pricing).not.toHaveBeenCalled()
+  })
+
+  it('can leave immediately, return from the mobile list and restore heading and Back focus', async () => {
+    screenSize.belowMd = true
+    const user = userEvent.setup()
+    const { router } = renderSettingsPage()
+    await user.click(screen.getByRole('link', { name: 'Organisation setup' }))
+    expect(screen.getByRole('heading', { name: 'Organisation setup' })).toHaveFocus()
+    await user.click(screen.getByRole('link', { name: 'Back to settings' }))
+    expect(screen.getByRole('link', { name: 'Organisation setup' })).toHaveFocus()
+    await user.click(screen.getByRole('link', { name: 'Organisation setup' }))
+    await user.click(screen.getByRole('link', { name: 'Open plan pricing' }))
+    expect(router.state.location.search).toBe('?section=pricing')
+    expect(screen.getByRole('heading', { level: 2, name: 'Plan pricing' })).toHaveFocus()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('preserves the unsaved form guard when entering setup', async () => {
+    const user = userEvent.setup()
+    renderSettingsPage('/settings?section=alerts')
+    await user.click(screen.getByRole('button', { name: /Staff qualifications/ }))
+    await user.click(await screen.findByRole('option', { name: /60 days/i }))
+    await user.click(screen.getByRole('link', { name: 'Organisation setup' }))
+    expect(screen.getByRole('alertdialog', { name: 'Leave Alert windows without saving?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByRole('button', { name: /Staff qualifications/ })).toHaveTextContent('60 days')
+    expect(setupQueries.provider).not.toHaveBeenCalled()
   })
 })

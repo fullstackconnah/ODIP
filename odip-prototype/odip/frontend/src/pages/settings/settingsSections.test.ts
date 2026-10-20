@@ -27,9 +27,9 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
-    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
+    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
     expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'templates', 'activities', 'holidays'])
-    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups'])
+    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups'])
   })
 
