@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { InquiriesTable } from './InquiriesPage'
@@ -22,7 +23,7 @@ const base = { source: 'Phone', createdAt: '2026-09-28T01:10:00Z', participantId
 const booking = { intakeStartsAt: UPCOMING, intakeDurationMinutes: 90, intakeLocation: '12 Smith St', intakeStaffUserId: 'sam', intakeStaffFirstName: 'Sam', intakeStaffName: 'Sam Lee' }
 const rows = [
   { ...base, id: 'empty', firstName: 'Noah', lastName: 'Fitzgerald' },
-  { ...base, ...booking, id: 'sent', firstName: 'Priya', lastName: 'Nair', intakeInviteSentAt: '2026-10-14T03:05:00Z' },
+  { ...base, ...booking, id: 'sent', firstName: 'Priya', lastName: 'Nair', intakeInviteSentAt: '2026-10-14T03:05:00Z', updatedAt: '2026-10-14T03:05:01.123456Z' },
   { ...base, ...booking, id: 'unsent', firstName: 'Mei', lastName: 'Tanaka', intakeInviteError: 'NotConfigured' },
   { ...base, ...booking, id: 'confirmed', firstName: 'Liam', lastName: 'Okafor', intakeInviteSentAt: '2026-10-14T03:05:00Z', intakeConfirmedAt: '2026-10-15T01:00:00Z' },
   { ...base, ...booking, id: 'past', firstName: 'Ava', lastName: 'Ng', intakeStartsAt: '2026-01-05T23:00:00Z', intakeInviteSentAt: '2026-01-01T00:00:00Z' },
@@ -30,15 +31,21 @@ const rows = [
 ]
 
 function page(entry: string | { pathname: string; state: unknown } = '/inquiries') {
-  return render(
-    <MemoryRouter initialEntries={[entry]}>
-      <Routes>
-        <Route path="/inquiries" element={<InquiriesTable />} />
-        <Route path="/participants/new-inquiry" element={<p>Enquiry form</p>} />
-      </Routes>
-    </MemoryRouter>,
+  const client = new QueryClient()
+  const view = render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/inquiries" element={<InquiriesTable />} />
+          <Route path="/participants/new-inquiry" element={<p>Enquiry form</p>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
+  return { ...view, client }
 }
+
+const changed = { isAxiosError: true, response: { status: 409, data: { success: false, errors: ['Someone else just changed this visit. Reload and try again.'] } } }
 
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', id: 'dana' }))
@@ -118,7 +125,7 @@ describe('the phone menu', () => {
     await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
     await user.click(screen.getByRole('option', { name: 'Mark confirmed' }))
 
-    expect(mocks.confirmVisit).toHaveBeenCalledWith({ id: 'sent', confirmed: true })
+    expect(mocks.confirmVisit).toHaveBeenCalledWith({ id: 'sent', confirmed: true, expectedUpdatedAt: '2026-10-14T03:05:01.123456Z' })
     expect(await screen.findByText("Priya Nair's intake visit is marked confirmed.")).toBeInTheDocument()
     expect(screen.queryByText('Enquiry form')).not.toBeInTheDocument() // the item's click never reached the row (it would open the form)
   })
@@ -146,9 +153,75 @@ describe('the phone menu', () => {
     expect(dialog.textContent).toContain('10:00\u00a0am')
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
 
-    expect(mocks.cancelVisit).toHaveBeenCalledWith('sent')
+    // The table's Cancel sends the version the row holds, so a stale list is a 409 and nobody is emailed.
+    expect(mocks.cancelVisit).toHaveBeenCalledWith({ id: 'sent', expectedUpdatedAt: '2026-10-14T03:05:01.123456Z' })
     expect(await screen.findByText('Intake visit cancelled, email not sent')).toBeInTheDocument()
     expect(screen.getByText("Email isn't set up yet, so Priya wasn't told. Let them know another way.")).toBeInTheDocument()
+  })
+})
+
+describe('when a colleague changed the visit', () => {
+  it("the table's Mark confirmed says why it was refused", async () => {
+    const user = userEvent.setup()
+    mocks.confirmVisit.mockRejectedValue(changed)
+    page()
+
+    await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
+    await user.click(screen.getByRole('option', { name: 'Mark confirmed' }))
+
+    expect(await screen.findByText('Someone else just changed this visit. Reload and try again.')).toBeInTheDocument()
+  })
+
+  it('a refused cancel shows the new visit in the dialog, and the next press sends its version', async () => {
+    const user = userEvent.setup()
+    // The list is a live query, as in the app: a refetch after the refusal changes the row under the open dialog.
+    mocks.inquiries.mockImplementation(() => ({ ...useQuery({ queryKey: ['participant-inquiries'], queryFn: async () => rows, initialData: rows, staleTime: Infinity }), refetch: vi.fn() }))
+    mocks.cancelVisit.mockRejectedValueOnce(changed)
+    mocks.cancelVisit.mockResolvedValue({ inquiry: { ...rows[1], intakeStartsAt: null }, cancellationEmail: 'NoInvite' })
+    const { client } = page()
+
+    await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
+    await user.click(screen.getByRole('option', { name: 'Cancel visit' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
+    await within(screen.getByRole('alertdialog')).findByText('Someone else just changed this visit. Check the visit details before trying again.')
+    expect(mocks.cancelVisit).toHaveBeenLastCalledWith({ id: 'sent', expectedUpdatedAt: '2026-10-14T03:05:01.123456Z' })
+
+    // The colleague moved the visit to Thu 17 Oct and the list refetched.
+    act(() => { client.setQueryData(['participant-inquiries'], rows.map(r => (r.id === 'sent' ? { ...r, updatedAt: 'v9', intakeStartsAt: '2030-10-16T23:00:00Z' } : r))) })
+    await waitFor(() => expect(screen.getByRole('alertdialog').textContent).toMatch(/17\u00a0Oct/))
+    await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
+
+    expect(mocks.cancelVisit).toHaveBeenLastCalledWith({ id: 'sent', expectedUpdatedAt: 'v9' })
+    expect(await screen.findByText('Intake visit cancelled')).toBeInTheDocument()
+  })
+
+  it('never claims freshness when the refused cancel list refetch fails', async () => {
+    const user = userEvent.setup()
+    mocks.inquiries.mockImplementation(() => useQuery({ queryKey: ['participant-inquiries'], queryFn: async () => { throw new Error('offline') }, initialData: rows, staleTime: Infinity, retry: false }))
+    mocks.cancelVisit.mockRejectedValueOnce(changed)
+    const { client } = page()
+    await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
+    await user.click(screen.getByRole('option', { name: 'Cancel visit' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
+    await client.refetchQueries({ queryKey: ['participant-inquiries'] })
+    const dialog = screen.getByRole('alertdialog')
+    expect(await within(dialog).findByText('Someone else just changed this visit. Check the visit details before trying again.')).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent('now up to date')
+    expect(screen.getByRole('button', { name: 'Keep visit' })).toBeEnabled()
+    expect(mocks.cancelVisit).toHaveBeenCalledTimes(1)
+  })
+  it.each([403, 409])('a cancel refused for another reason keeps the server text (HTTP %s)', async (status) => {
+    const user = userEvent.setup()
+    mocks.cancelVisit.mockRejectedValue({ isAxiosError: true, response: { status, data: { success: false, errors: ['You cannot cancel this visit.'] } } })
+    page()
+
+    await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
+    await user.click(screen.getByRole('option', { name: 'Cancel visit' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(await within(dialog).findByText('You cannot cancel this visit.')).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent('details above')
   })
 })
 

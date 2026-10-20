@@ -98,10 +98,15 @@ public class IntakeBookingsControllerTests
         public SetIntakeBookingDto Body(Guid? staffId = null) => new()
         {
             StartsAt = Start, DurationMinutes = 90, Location = "12 Smith St, Parramatta", StaffUserId = staffId ?? Sam.Id, Notes = "Bring the consent forms",
+            ExpectedUpdatedAt = Row().UpdatedAt, // the version the panel loaded: a body built before a later write is stale, as a real panel would be
         };
 
         public async Task<ParticipantInquiryDto> BookAsync(SetIntakeBookingDto? body = null, DateTime? now = null) =>
             Ok<ParticipantInquiryDto>((await Controller(now).Set(Noah.Id, body ?? Body(), CancellationToken.None)).Result!);
+
+        /// <summary>The enquiry's version now: what a panel that has just loaded it would send.</summary>
+        public DateTime Version => Row().UpdatedAt;
+        public InquiryVersionDto Current => new() { ExpectedUpdatedAt = Version };
 
         public ParticipantInquiry Row() => Db.ParticipantInquiries.AsNoTracking().Single(x => x.Id == Noah.Id);
         public List<NotificationOutbox> Outbox() => Db.NotificationOutbox.AsNoTracking().OrderBy(o => o.CreatedAt).ToList();
@@ -295,7 +300,7 @@ public class IntakeBookingsControllerTests
         await f.BookAsync();
         var other = f.OtherDb();
         var raiser = new InterleavingRaiser(new NotificationRaiser(f.Db),
-            async () => Assert.IsType<OkObjectResult>((await f.Controller(db: other).Cancel(f.Noah.Id, CancellationToken.None)).Result));
+            async () => Assert.IsType<OkObjectResult>((await f.Controller(db: other).Cancel(f.Noah.Id, CancellationToken.None, f.Version)).Result));
 
         var result = await f.Controller(raiser: raiser).Set(f.Noah.Id, f.Body() with { StartsAt = Start.AddDays(1) }, CancellationToken.None);
 
@@ -317,7 +322,7 @@ public class IntakeBookingsControllerTests
         slowChannel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {
-                Assert.IsType<OkObjectResult>((await f.Controller(db: other).Cancel(f.Noah.Id, CancellationToken.None)).Result);
+                Assert.IsType<OkObjectResult>((await f.Controller(db: other).Cancel(f.Noah.Id, CancellationToken.None, f.Version)).Result);
                 return new ChannelSendResult(ChannelSendOutcome.Sent, null, null);
             });
 
@@ -517,7 +522,7 @@ public class IntakeBookingsControllerTests
         Assert.Equal("a b@c.d", row.Email);
         Assert.Single(f.Outbox());
 
-        var resend = await f.Controller().Resend(f.Noah.Id, CancellationToken.None);
+        var resend = await f.Controller().Resend(f.Noah.Id, CancellationToken.None, f.Current);
         Assert.Equal(new[] { "Add the main contact's email to send the invite." }, Problems(resend.Result!)["contactEmail"]);
     }
 
@@ -686,7 +691,7 @@ public class IntakeBookingsControllerTests
         await f.BookAsync();
         var uid = f.Row().IntakeUid;
 
-        var result = Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None));
+        var result = Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None, f.Version));
 
         Assert.Equal("Sent", result.CancellationEmail);
         Assert.Null(result.Inquiry.IntakeStartsAt);
@@ -726,7 +731,7 @@ public class IntakeBookingsControllerTests
         using var request = new CancellationTokenSource();
         var aborting = new AbortingChannel(request);
 
-        var result = Cancelled(await f.Controller(channel: aborting).Cancel(f.Noah.Id, request.Token));
+        var result = Cancelled(await f.Controller(channel: aborting).Cancel(f.Noah.Id, request.Token, f.Version));
 
         Assert.Equal("Sent", result.CancellationEmail);
         Assert.Equal("CANCEL", Assert.Single(aborting.Sent).Ics!.Method);
@@ -738,7 +743,7 @@ public class IntakeBookingsControllerTests
         var f = new Fixture(ChannelSendOutcome.Skipped);
         await f.BookAsync();
 
-        var result = Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None));
+        var result = Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None, f.Version));
 
         Assert.Equal("NoInvite", result.CancellationEmail);
         Assert.Single(f.Channel.Sent);
@@ -752,7 +757,7 @@ public class IntakeBookingsControllerTests
         await f.BookAsync();
         f.Channel.Outcome = ChannelSendOutcome.Skipped;
 
-        Assert.Equal("NotConfigured", Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None)).CancellationEmail);
+        Assert.Equal("NotConfigured", Cancelled(await f.Controller().Cancel(f.Noah.Id, CancellationToken.None, f.Version)).CancellationEmail);
     }
 
     // v1 keeps no sent-to address: an update, a cancel or a Send again goes to the enquiry's CURRENT email (lead call 11).
@@ -764,7 +769,7 @@ public class IntakeBookingsControllerTests
         f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).Email = "new.address@example.com";
         f.Db.SaveChanges();
 
-        await f.Controller().Cancel(f.Noah.Id, CancellationToken.None);
+        await f.Controller().Cancel(f.Noah.Id, CancellationToken.None, f.Version);
 
         Assert.Equal("new.address@example.com", f.Channel.Sent[1].RecipientAddress);
     }
@@ -802,8 +807,8 @@ public class IntakeBookingsControllerTests
         var f = new Fixture();
         await f.BookAsync();
 
-        var on = Ok<ParticipantInquiryDto>((await f.Controller().Confirm(f.Noah.Id, new ConfirmIntakeBookingDto { Confirmed = true }, CancellationToken.None)).Result!);
-        var off = Ok<ParticipantInquiryDto>((await f.Controller().Confirm(f.Noah.Id, new ConfirmIntakeBookingDto { Confirmed = false }, CancellationToken.None)).Result!);
+        var on = Ok<ParticipantInquiryDto>((await f.Controller().Confirm(f.Noah.Id, new ConfirmIntakeBookingDto { Confirmed = true, ExpectedUpdatedAt = f.Version }, CancellationToken.None)).Result!);
+        var off = Ok<ParticipantInquiryDto>((await f.Controller().Confirm(f.Noah.Id, new ConfirmIntakeBookingDto { Confirmed = false, ExpectedUpdatedAt = f.Version }, CancellationToken.None)).Result!);
 
         Assert.Equal(Now, on.IntakeConfirmedAt);
         Assert.Null(off.IntakeConfirmedAt);
@@ -817,7 +822,7 @@ public class IntakeBookingsControllerTests
         await f.BookAsync();
         f.Channel.Outcome = ChannelSendOutcome.Sent;
 
-        var dto = Ok<ParticipantInquiryDto>((await f.Controller().Resend(f.Noah.Id, CancellationToken.None)).Result!);
+        var dto = Ok<ParticipantInquiryDto>((await f.Controller().Resend(f.Noah.Id, CancellationToken.None, f.Current)).Result!);
 
         Assert.Equal(Now, dto.IntakeInviteSentAt);
         Assert.Null(dto.IntakeInviteError);

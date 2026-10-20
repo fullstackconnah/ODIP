@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { Tabs } from '@/components/Tabs'
 import { AllClearRow } from './AttentionBand'
 import { QuickGroup } from './QuickGroup'
@@ -45,7 +45,7 @@ export function NeedsYourDecision({ groups, state, onRecoveryPresenceChange }: {
     else next.delete(key)
     return next
   }), [])
-  useEffect(() => { onRecoveryPresenceChange?.(recovering.size > 0) }, [recovering, onRecoveryPresenceChange])
+  useLayoutEffect(() => { onRecoveryPresenceChange?.(recovering.size > 0) }, [recovering, onRecoveryPresenceChange])
   // A fresh read that lists a row marked decided here again says it was not decided after all: show it, and let the next read settle it. Here, not in
   // QuickGroup: a group with every row marked is absent from the page, so it could never see its own rows come back.
   const readStamp = groups.map((group) => group.readAt ?? 0).join()

@@ -68,29 +68,27 @@ export function useSetIntakeBooking() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: SetIntakeBookingDto }) => apiPut<ParticipantInquiryDto>(`/inquiries/${id}/intake-booking`, data),
-    onSuccess: () => refreshIntake(qc),
+    onSettled: () => refreshIntake(qc), // a refused write (409: a colleague changed the visit) reloads the lists too, so reopening the panel shows the change
   })
 }
 
-/** A booking write's target: the enquiry id, or the id with the version the caller holds (the enquiry form's; ODIP-REVIEW-268). */
-type VersionedId = string | { id: string; expectedUpdatedAt?: string }
-const idOf = (v: VersionedId) => (typeof v === 'string' ? v : v.id)
-const versionOf = (v: VersionedId) => (typeof v === 'string' ? undefined : v.expectedUpdatedAt)
+/** A booking write's target: the enquiry id with the version the caller holds. The server refuses a write that sends none or a stale one. */
+type VersionedId = { id: string; expectedUpdatedAt?: string }
 
 export function useCancelIntakeBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (target: VersionedId) => {
-      const version = versionOf(target)
-      const query = version ? `?expectedUpdatedAt=${encodeURIComponent(version)}` : ''
-      return (await apiDeleteRaw<CancelIntakeBookingResultDto>(`/inquiries/${idOf(target)}/intake-booking${query}`)).data as CancelIntakeBookingResultDto
+    mutationFn: async ({ id, expectedUpdatedAt }: VersionedId) => {
+      const query = expectedUpdatedAt ? `?expectedUpdatedAt=${encodeURIComponent(expectedUpdatedAt)}` : ''
+      return (await apiDeleteRaw<CancelIntakeBookingResultDto>(`/inquiries/${id}/intake-booking${query}`)).data as CancelIntakeBookingResultDto
     },
-    onSuccess: (_result, target) => {
-      const id = idOf(target)
+    onError: () => refreshIntake(qc),
+    onSuccess: (result, { id }) => {
       // The row shows Book intake at once, so the page can focus it now rather than the old line 1 the refetch would then remove.
       qc.setQueryData<ParticipantInquiryDto[]>(['participant-inquiries'], rows => rows?.map(r => r.id !== id ? r : {
         ...r, intakeStartsAt: null, intakeDurationMinutes: null, intakeLocation: null, intakeStaffUserId: null, intakeStaffFirstName: null,
         intakeStaffName: null, intakeNotes: null, intakeInviteSentAt: null, intakeInviteError: null, intakeConfirmedAt: null,
+        updatedAt: result.inquiry.updatedAt, // the cancel bumped the version: Book intake, pressed before the refetch lands, must start from it
       }))
       refreshIntake(qc)
     },
@@ -118,8 +116,8 @@ export function useReopenInquiry() {
 export function useConfirmIntakeBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, confirmed }: { id: string; confirmed: boolean }) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/intake-booking/confirm`, { confirmed }),
-    onSuccess: () => refreshIntake(qc),
+    mutationFn: ({ id, confirmed, expectedUpdatedAt }: VersionedId & { confirmed: boolean }) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/intake-booking/confirm`, { confirmed, expectedUpdatedAt }),
+    onSettled: () => refreshIntake(qc),
   })
 }
 
@@ -127,11 +125,8 @@ export function useConfirmIntakeBooking() {
 export function useResendIntakeInvite() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (target: VersionedId) => {
-      const version = versionOf(target)
-      return apiPost<ParticipantInquiryDto>(`/inquiries/${idOf(target)}/intake-booking/send`, ...(version ? [{ expectedUpdatedAt: version }] : []))
-    },
-    onSuccess: () => refreshIntake(qc),
+    mutationFn: ({ id, expectedUpdatedAt }: VersionedId) => apiPost<ParticipantInquiryDto>(`/inquiries/${id}/intake-booking/send`, ...(expectedUpdatedAt ? [{ expectedUpdatedAt }] : [])),
+    onSettled: () => refreshIntake(qc),
   })
 }
 

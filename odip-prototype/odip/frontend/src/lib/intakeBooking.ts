@@ -171,6 +171,10 @@ export function noAnswer(error: unknown): boolean {
   return !!e?.isAxiosError && !e.response
 }
 
+/** Only the known version refusal means a colleague changed the visit; past/closed/staff conflicts keep their own reason. */
+export const changedByOther = (error: unknown, mapped: BookingErrors = {}) => (error as { response?: { status?: number } } | null)?.response?.status === 409 && !Object.keys(mapped).length
+  && extractErrorMessage(error, '') === 'Someone else just changed this visit. Reload and try again.'
+
 /** The booking fields in screen order: where focus goes for the first refused one. */
 export const FIELD_ORDER: BookingField[] = ['email', 'date', 'time', 'duration', 'location', 'staffUserId', 'notes']
 export const NO_CONNECTION = "Couldn't reach ODIP. Check your connection and try again. Your entries are kept."
