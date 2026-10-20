@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { Dropdown } from './Dropdown'
 import { Button } from './Button'
 import { TAP_AREA } from './tapArea'
@@ -89,7 +89,10 @@ describe('Dropdown — which way the panel opens', () => {
     nav.setAttribute('aria-label', 'Mobile')
     nav.getBoundingClientRect = () => ({ top: 776, bottom: 844, height: 68, left: 0, right: 390, width: 390, x: 0, y: 776, toJSON: () => ({}) })
     document.body.appendChild(nav)
-    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
+    // jsdom defines scrollHeight on Element.prototype, so HTMLElement.prototype has no own descriptor of its own:
+    // the old `if (scroll)` restore never ran and the patch leaked into the rest of this file's environment.
+    // Keep the descriptor this test adds and take it back off in the finally block.
+    const hadOwnScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get() { return this.getAttribute('role') === 'listbox' ? 270 : 0 } })
     try {
       render(<Dropdown variant="menu" value="" onChange={() => {}} label="Actions" items={ITEMS} />)
@@ -97,11 +100,14 @@ describe('Dropdown — which way the panel opens', () => {
       trigger.getBoundingClientRect = () => ({ top: 560, bottom: 590, height: 30, left: 300, right: 340, width: 40, x: 300, y: 560, toJSON: () => ({}) })
       trigger.click()
       const panel = await screen.findByRole('listbox')
-      expect(panel.style.bottom).toBe(`${844 - 560 + 8}px`)
+      // The panel is positioned in an effect after it mounts, so the computed style lands in a later commit than
+      // findByRole resolves. Assert on the settled style instead of racing that commit.
+      await waitFor(() => expect(panel.style.bottom).toBe(`${844 - 560 + 8}px`))
       expect(panel.style.top).toBe('')
     } finally {
       nav.remove()
-      if (scroll) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scroll)
+      if (hadOwnScrollHeight) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', hadOwnScrollHeight)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight')
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: restore.h })
     }
   })
