@@ -2522,3 +2522,17 @@ public record SyncResultDto
     public int HolidaysUpdated { get; init; }
     public string[] Errors { get; init; } = [];
 }
+
+public record ModuleVisibilityDto
+{
+    public bool HiddenAccommodation { get; init; }
+    public bool HiddenVehicles { get; init; }
+}
+
+public record UpdateModuleVisibilityDto
+{
+    [System.ComponentModel.DataAnnotations.Required]
+    public bool? HiddenAccommodation { get; init; }
+    [System.ComponentModel.DataAnnotations.Required]
+    public bool? HiddenVehicles { get; init; }
+}

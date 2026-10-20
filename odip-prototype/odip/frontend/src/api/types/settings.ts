@@ -5,3 +5,8 @@ export interface AppSettingsDto {
 export interface UpdateAppSettingsDto {
   qualificationWarningDays: number
 }
+
+export interface ModuleVisibilityDto {
+  hiddenAccommodation: boolean
+  hiddenVehicles: boolean
+}

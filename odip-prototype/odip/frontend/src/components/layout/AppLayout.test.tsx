@@ -13,7 +13,8 @@ import { TAP_AREA } from '@/components/tapArea'
 // still imported transitively) so this suite doesn't need a QueryClientProvider or a real
 // network call, matching how the other hook-backed page tests in this codebase mock
 // '@/api/hooks' rather than provide a live client.
-const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockUseInbox, mockEndSession } = vi.hoisted(() => ({
+const { mockUsePendingLeaveCount, mockUsePendingWitnessRequests, mockUsePendingCompletionCount, mockUseInbox, mockEndSession, mockUseModuleVisibility } = vi.hoisted(() => ({
+  mockUseModuleVisibility: vi.fn(() => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })),
   mockEndSession: vi.fn(),
   mockUsePendingLeaveCount: vi.fn(() => 0),
   mockUsePendingWitnessRequests: vi.fn(() => ({ data: [] as unknown[], isLoading: false })),
@@ -25,6 +26,7 @@ vi.mock('@/api/hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/hooks')>()
   return {
     ...actual,
+    useModuleVisibility: mockUseModuleVisibility,
     usePendingWitnessRequests: mockUsePendingWitnessRequests,
     usePendingLeaveCount: mockUsePendingLeaveCount,
     // Same reason as usePendingLeaveCount above — without this, AppLayout's new Completions nav
@@ -1226,5 +1228,31 @@ describe('AppLayout — the notifications bell is in the header for every role',
     mockUseInbox.mockImplementation(() => ({ data: { items: [], unreadCount: 3, hasMore: false }, isError: false, refetch: vi.fn() }))
     renderAt(path)
     expect(within(screen.getByRole('banner')).getByRole('button', { name: '3 unread, Notifications' })).toBeInTheDocument()
+  })
+})
+
+
+describe('optional workspace recovery', () => {
+  afterEach(() => { mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }); localStorage.clear() })
+  it('moves hidden links into a discoverable disclosure and preserves the active deep link', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true }, isError: false })
+    renderAt('/vehicles/v-1')
+    const nav = screen.getByRole('navigation', { name: 'Main' })
+    const disclosure = within(nav).getByText('Other workspaces').closest('details')!
+    expect(disclosure).toHaveAttribute('open')
+    expect(within(disclosure).getByRole('link', { name: /Vehicles$/ })).toHaveAttribute('href', '/vehicles')
+    expect(within(disclosure).getByRole('link', { name: /Vehicles$/ })).toHaveAttribute('aria-current', 'page')
+    expect(within(disclosure).getByRole('link', { name: /Accommodation$/ })).toHaveAttribute('href', '/accommodation')
+    expect(within(nav).getByRole('link', { name: /Schedule$/ })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: /Tasks$/ })).toBeInTheDocument()
+  })
+  it('fails open on settings errors and never offers a worker forbidden recovery links', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true }, isError: true })
+    renderAt('/portal')
+    expect(screen.queryByText('Other workspaces')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Vehicles$/ })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /Incidents$/ }).length).toBeGreaterThan(0)
   })
 })
