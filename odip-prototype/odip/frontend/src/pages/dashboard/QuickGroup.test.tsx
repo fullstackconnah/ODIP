@@ -587,10 +587,9 @@ describe('QuickGroup — fresh-check and stable detail acceptance', () => {
   it('uses newly read eligibility and flags rather than an old approval closure', async () => {
     const run = vi.fn(async () => { throw axiosError('Refused') })
     const changed = row('a', { flags: [{ label: 'Individual review needed', tone: 'warning' }], actions: [{ kind: 'link', label: 'Review', name: 'Review changed Person a', to: '/rostering/leave' }] })
-    let refresh!: () => void
     const reread = vi.fn(async () => { refresh(); return ['a'] })
     const view = render(<Harness model={model({ count: 1, reread, rows: [row('a', { actions: [approve('a', run)] })] })} />)
-    refresh = () => view.rerender(<Harness model={model({ count: 1, reread, rows: [changed] })} />)
+    const refresh = () => view.rerender(<Harness model={model({ count: 1, reread, rows: [changed] })} />)
     fireEvent.click(screen.getByRole('button', { name: 'Approve leave: Person a' }))
     await screen.findByText('Refused')
     fireEvent.click(screen.getByRole('button', { name: 'Check latest status' }))

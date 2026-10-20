@@ -168,13 +168,15 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
   const safe = ready ? rows.filter((row) => tapOf(row)) : []
   const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id) && !unsure.has(row.id) && !needsCheck.has(row.id))
   const shownEligibility = JSON.stringify(tickable.map(row => row.id))
-  useEffect(() => {
+  const [previousEligibility, setPreviousEligibility] = useState(shownEligibility)
+  if (shownEligibility !== previousEligibility) {
+    setPreviousEligibility(shownEligibility)
     const eligibleIds: string[] = JSON.parse(shownEligibility)
     setSelected(previous => {
       const next = new Set([...previous].filter(id => eligibleIds.includes(id)))
       return next.size === previous.size ? previous : next
     })
-  }, [shownEligibility])
+  }
   const recoveryPending = needsCheck.size > 0 || held.size > 0
   useEffect(() => { onRecoveryChange?.(model.key, recoveryPending) }, [model.key, recoveryPending, onRecoveryChange])
   useEffect(() => () => onRecoveryChange?.(model.key, false), [model.key, onRecoveryChange])
@@ -218,7 +220,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
    * A confirmed run (SHAPE §6), from a snapshot of its rows taken now: Completions in ONE approve-batch request, Leave and Tasks through each row's own
    * tap, one at a time in row order. No announcement per row; at the end ONE commit adds the run's notice and takes every decided row away together.
    */
-  async function run(_runMode: 'selected') {
+  async function run() {
     if (!bulkKey) return
     setConfirm(null)
     const picked = ticked
@@ -476,7 +478,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
       </div>
       <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={() => linkRef.current} className="mt-2 empty:mt-0" />
       {copy && confirm && (
-        <ConfirmDialog open onCancel={() => setConfirm(null)} onConfirm={() => void run(confirm)} title={copy.title} message={copy.message} confirmLabel={copy.confirm} />
+        <ConfirmDialog open onCancel={() => setConfirm(null)} onConfirm={() => void run()} title={copy.title} message={copy.message} confirmLabel={copy.confirm} />
       )}
     </div>
   )
