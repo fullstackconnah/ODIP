@@ -214,6 +214,38 @@ describe('ShiftSlideOver override gate', () => {
   })
 })
 
+describe('ShiftSlideOver at a 200 %-equivalent layout width (R-57 reflow)', () => {
+  // The panel's footer action row was a single unwrapped line: "Cancel" (78px) + a 12px gap +
+  // "Save as emergency" (158px) = 248px, wider than the panel's content box at a 195 CSS px
+  // layout width (186px). The row therefore ran past the panel and the panel's own scrollWidth
+  // exceeded its clientWidth: a 13px overflow, measured.
+  //
+  // The fix is that the footer and its action row may wrap, so the two controls stack instead of
+  // running past the panel. Nothing is clipped and no width is hidden: the buttons keep their own
+  // words on ONE line, because a control whose words break across two lines reads as broken.
+  it('lets the footer and its action row wrap, so the actions cannot run past the panel', () => {
+    const shift = makeShift({ findings: [] })
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    const save = screen.getByRole('button', { name: /^save$/i })
+    const actions = cancel.parentElement
+    expect(actions).toHaveClass('flex-wrap')
+    expect(actions).toHaveClass('justify-end')
+    // Each control keeps its own words on one line.
+    expect(cancel).toHaveClass('whitespace-nowrap')
+    expect(save).toHaveClass('whitespace-nowrap')
+  })
+})
+
 describe('ShiftSlideOver status (PP-8)', () => {
   it('echoes the shift\'s current status back unchanged on save, without the user touching it', async () => {
     const user = userEvent.setup()

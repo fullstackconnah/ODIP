@@ -376,7 +376,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         dirty={dirty}
         initialFocusRef={initialFocusRef}
         bodyClassName="flex flex-col gap-[var(--field-gap-y)]"
-        footerClassName="flex items-center justify-between gap-3"
+        footerClassName="flex flex-wrap items-center justify-between gap-3"
         footer={canWrite ? (
           <>
             {isEdit && existing && canDeleteShift(existing) ? (
@@ -384,11 +384,17 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
                 <Trash2 className="h-4 w-4" /> Delete
               </Button>
             ) : <span />}
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" onClick={onClose}>
+            {/* The action row may wrap: at a 200 %-equivalent layout width the panel's content box is
+                186px and "Save as emergency" alone is 158px, so Cancel and Save cannot share one line.
+                They stack instead — each label stays on ONE line (a control's words broken across two
+                lines reads as broken), and the row stays right-aligned so the actions keep their side
+                of the footer. Without the wrap the row ran past the panel and the panel's own
+                scrollWidth exceeded its clientWidth (13px at 195 CSS px, measured). */}
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Button variant="ghost" onClick={onClose} className="whitespace-nowrap">
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isBusy || saveWithheld} aria-describedby={saveWithheld && refusalShown ? refusalId : undefined}>
+              <Button onClick={handleSave} disabled={isBusy || saveWithheld} aria-describedby={saveWithheld && refusalShown ? refusalId : undefined} className="whitespace-nowrap">
                 {isBusy ? 'Saving…' : emergencyActive ? 'Save as emergency' : reasonRequiredFindings.length > 0 ? 'Save with override' : warningFindings.length > 0 ? 'Save anyway' : 'Save'}
               </Button>
             </div>

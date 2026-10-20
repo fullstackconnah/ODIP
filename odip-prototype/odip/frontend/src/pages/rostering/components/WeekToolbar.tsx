@@ -63,7 +63,15 @@ export function WeekToolbar({
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       {/* On a phone the row wraps between its parts, never inside one: a pill broken over two lines, or "This week" on two, reads as broken (finish review). */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <div className="flex shrink-0 items-center gap-1">
+        {/* The week navigation is three buttons that cannot fit one narrow line: at a 200 %-equivalent
+            layout width the content row is 163px and the three buttons need 195px. `shrink-0` on this
+            group therefore made the whole PAGE wider than its client width (a 16px document overflow at
+            195 CSS px, measured). It may shrink and wrap instead: the row then breaks between the
+            buttons, each of which keeps its own words on one line, and the page no longer overflows.
+            The board itself is untouched — its day columns still keep their floor, and the board's own
+            sideways scroll is what reaches the wider grid (the Column Rule: a table wider than its box
+            scrolls sideways inside its own box, the page never does). */}
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           {/* Prev/next are square Buttons: md height, width pinned to the same token (px-0! beats the
               size's own px-4, which would make a lone chevron 48px wide). */}
           <Button variant="secondary" size="md" onClick={onPrevWeek} aria-label="Previous week" className="w-[var(--control-h)] px-0!">
