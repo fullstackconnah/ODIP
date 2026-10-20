@@ -40,9 +40,9 @@ const model = (o: Partial<GroupModel> = {}): GroupModel => ({
 const status = () => screen.getAllByRole('status').find((el) => el.classList.contains('sr-only'))!
 const axiosError = (message: string) => ({ response: { data: { success: false, message } } })
 /** The decision rows: every body row but a detail row (the error or form under a row). */
-const bodyRows = () => screen.queryAllByRole('row').filter((tr) => tr.closest('tbody') && !tr.hasAttribute('data-detail'))
+const bodyRows = () => screen.queryAllByRole('row').filter((tr) => tr.closest('tbody') && !tr.hasAttribute('data-row-detail'))
 /** A decision row's row group: its row, and its detail row while it has one. */
-const rowOf = (subject: string) => screen.getByText(subject).closest('tbody')!
+const rowOf = (subject: string) => screen.getByText(subject).closest('tr')!
 
 describe('QuickGroup — the table', () => {
   it('heads its columns with the subject, then each fact, then an empty actions header', () => {
@@ -50,7 +50,7 @@ describe('QuickGroup — the table', () => {
 
     expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Note', ''])
     // The header row is the table's look from xl; below xl each row is a card and the header is not shown.
-    expect(screen.getAllByRole('row')[0].closest('thead')).toHaveClass('max-xl:hidden')
+    expect(screen.getAllByRole('row')[0].closest('thead')).toHaveClass('sticky')
   })
 
   it('draws one plain value per column, a dash for a missing one, and cuts long text in the table with its full text in the tooltip', () => {
@@ -59,25 +59,15 @@ describe('QuickGroup — the table', () => {
     expect(within(rowOf('Person a')).getAllByRole('cell').map((td) => td.textContent)).toEqual(['Person a', 'Annual leave', '20–24 Oct 2026, 5 days', 'Family wedding', ''])
     expect(within(rowOf('Person b')).getAllByRole('cell')[3]).toHaveTextContent('—')
     expect(screen.getByText('Family wedding')).toHaveAttribute('title', 'Family wedding')
-    expect(screen.getByText('Family wedding')).toHaveClass('xl:truncate')
+    expect(screen.getByText('Family wedding')).toHaveClass('md:truncate')
   })
 
-  // jsdom has no layout: the sizing rule is pinned as the grid template; the captures measure it (no text cut while any column has spare width).
-  it('sizes its columns by their content from xl: text grows to its full width before the spare goes to a gap ahead of the buttons', () => {
+  it('uses the shared house table with bounded context cells and no preview sorting or pager', () => {
     render(<Harness model={model()} />)
-
-    const table = screen.getByRole('table')
-    expect(table).toHaveClass('xl:grid')
-    // Subject and free text: no minimum, up to their content. Dates and short facts: their content. Then the spare. Then the buttons, as wide as they are.
-    // The subject's minimum is measured (--subject-min): it keeps its full width until every free-text fact is down to its floor.
-    // A free-text fact's minimum is its floor (--fact-min-<grid track>), so the space left after the subject's minimum is never shared back to the subject.
-    expect(table.style.gridTemplateColumns).toBe('minmax(var(--subject-min, 0px), max-content) max-content max-content minmax(var(--fact-min-3, 0px), max-content) minmax(0, 1fr) max-content')
-    for (const tr of screen.getAllByRole('row')) expect(tr).toHaveClass('xl:grid-cols-subgrid', 'xl:col-span-full')
-    // The buttons sit in the last track, past the spare.
-    expect(within(rowOf('Person a')).getAllByRole('cell').at(-1)).toHaveClass('xl:col-[-2/-1]')
-    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass('xl:col-[-2/-1]')
+    expect(screen.getByRole('table')).toHaveClass('mobile-card-table')
+    expect(screen.getAllByRole('columnheader').every(header => !header.hasAttribute('aria-sort'))).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Next page' })).not.toBeInTheDocument()
   })
-
   it('reserves the busy label on a one-tap button, so "Approving…" never moves the columns', () => {
     render(<Harness model={model({ count: 1, rows: [row('a', { actions: [approve('a', vi.fn())] })] })} />)
 
@@ -85,20 +75,18 @@ describe('QuickGroup — the table', () => {
     expect(button).toHaveTextContent(/^Approve$/)
     expect(button.querySelector('[data-reserve]')).toHaveAttribute('data-reserve', 'Approving…')
     // A date never breaks or is cut, at any width.
-    expect(within(rowOf('Person a')).getAllByRole('cell')[2]).toHaveClass('whitespace-nowrap')
+    expect(within(rowOf('Person a')).getAllByRole('cell')[2]).toHaveClass('md:whitespace-nowrap')
   })
 
-  it('leaves a missing fact out of the card (below xl), and a from-lg column off the card below lg', () => {
+  it('keeps all fact columns available and marks context for the shared phone-card layout', () => {
     const columns = [{ header: 'Type' }, { header: 'Due' }, { header: 'Trip', long: true, fromLg: true }]
     render(<Harness model={model({ count: 1, columns, rows: [row('a', { facts: [null, '8 Oct', 'Beach Trip'] })] })} />)
-
     const cells = within(rowOf('Person a')).getAllByRole('cell')
-    expect(cells[1]).toHaveTextContent('—')
-    expect(cells[1]).toHaveClass('max-xl:hidden')
-    expect(cells[2]).not.toHaveClass('max-xl:hidden')
-    expect(cells[3]).toHaveClass('max-lg:hidden')
+    expect(cells[1]).toHaveTextContent('\u2014')
+    expect(cells[2]).toHaveAttribute('data-card', 'meta')
+    expect(cells[3]).toHaveTextContent('Beach Trip')
+    expect(cells[3]).not.toHaveClass('max-lg:hidden')
   })
-
   it('shows five rows and says "See all" (no number) when there are more, naming the group for a screen reader', () => {
     render(<Harness model={model({ count: 7, rows: ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => row(id)) })} />)
 
@@ -112,7 +100,7 @@ describe('QuickGroup — the table', () => {
 
     const link = screen.getByRole('link', { name: 'Open Leave' })
     expect(link).toHaveAttribute('href', '/rostering/leave')
-    expect(link).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]')
+    expect(link).toHaveClass('pointer-coarse:inline-flex', 'min-h-[var(--tap-min)]', 'pointer-coarse:min-w-11')
   })
 })
 
@@ -122,21 +110,17 @@ describe('QuickGroup — a row', () => {
     render(<Harness model={model({ count: 1, rows: [row('a', { flags })] })} />)
 
     expect(screen.getByText('Person a')).toHaveAttribute('title', 'Person a')
-    expect(screen.getByText('Person a')).toHaveClass('xl:truncate')
+    expect(screen.getByText('Person a')).toHaveClass('md:truncate')
     expect(screen.getByText('1 incident')).toBeInTheDocument()
     expect(screen.getByText('Outlier time')).toBeInTheDocument()
     expect(screen.queryByText('Manual start')).not.toBeInTheDocument()
   })
 
-  // jsdom has no layout, so the responsive contract is pinned as classes; the captures measure it.
-  it('is a house phone card below xl (drawn on its row group), and a --row-h table row from xl', () => {
+  it('uses the primitive responsive row token and primary identity cell', () => {
     render(<Harness model={model({ count: 1, rows: [row('a')] })} />)
-
-    expect(rowOf('Person a').className).toContain('max-xl:rounded-2xl')
-    expect(rowOf('Person a').className).toContain('max-xl:border')
-    expect(screen.getByText('Person a').closest('tr')).toHaveClass('xl:h-[var(--row-h)]')
+    expect(rowOf('Person a')).toHaveClass('md:h-[var(--row-h)]')
+    expect(screen.getByText('Person a').closest('td')).toHaveAttribute('data-card', 'primary')
   })
-
   it('puts its buttons in the house row-action cluster: 44px on a phone card, a wider gap on touch, the one-tap action last and primary', () => {
     render(<Harness model={model({ count: 1, rows: [row('a', { actions: [decline('a'), approve('a', vi.fn())] })] })} />)
 
@@ -168,8 +152,8 @@ describe('QuickGroup — waiting and failed', () => {
     const refetch = vi.fn()
     render(<Harness model={model({ phase: 'error', rows: [], count: 0, refetch })} />)
 
-    expect(screen.getByText("Couldn't load leave requests.")).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Try again: leave requests' }))
+    expect(screen.getByText("Couldn't load this leave queue. Check your connection and try again.")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalled()
     expect(screen.getByRole('link', { name: 'Open Leave' })).toBeInTheDocument()
   })
@@ -222,23 +206,30 @@ describe('QuickGroup — one tap', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('This request has already been decided.')
     // The line sits in the row's own detail row, inside its row group (and so inside its card below xl).
-    expect(alert.closest('tr')).toHaveAttribute('data-detail')
-    expect(rowOf('Person a')).toContainElement(alert)
-    expect(button).not.toHaveAttribute('aria-disabled')
+    expect(alert.closest('tr')).toHaveAttribute('data-row-detail')
+    expect(rowOf('Person a').nextElementSibling).toContainElement(alert)
+    expect(button).toHaveAttribute('aria-disabled', 'true')
     expect(button).toHaveTextContent('Approve')
     expect(document.activeElement).toBe(button)
   })
 
-  it("falls back to the action's own words when the server sends none, and clears the line on the next tap", async () => {
+  it('keeps an unknown outcome blocked until a successful status check, then requires a deliberate retry', async () => {
+    const reread = vi.fn(async () => ['a'])
     const run = vi.fn().mockRejectedValueOnce(new Error('network')).mockReturnValueOnce(deferred().promise)
-    render(<Harness model={model({ rows: [row('a', { actions: [approve('a', run)] })], count: 1 })} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Approve leave: Person a' }))
+    render(<Harness model={model({ reread, rows: [row('a', { actions: [approve('a', run)] })], count: 1 })} />)
+    const button = screen.getByRole('button', { name: 'Approve leave: Person a' })
+    fireEvent.click(button)
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't approve. Try again.")
-    fireEvent.click(screen.getByRole('button', { name: 'Approve leave: Person a' }))
+    fireEvent.click(button)
+    expect(run).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Check latest status' }))
+    await waitFor(() => expect(reread).toHaveBeenCalledWith(['a']))
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'))
+    expect(run).toHaveBeenCalledTimes(1)
+    fireEvent.click(button)
+    expect(run).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
-
   it('shows a consequence as a notice UNDER the rows, with its link, and keeps the announcement silent', async () => {
     const notice = { title: 'Person a', message: 'Leave approved. It overlaps 2 shifts, and each one has a cover task.', link: { label: 'Open roster', to: '/rostering' } }
     render(<Harness model={model({ rows: [row('a', { actions: [approve('a', async () => ({ notice }))] }), row('b')] })} />)
@@ -288,7 +279,7 @@ describe('QuickGroup — an action that needs input', () => {
     expect(opener).toHaveAttribute('aria-expanded', 'true')
     const form = document.getElementById(opener.getAttribute('aria-controls')!)!
     expect(form.tagName).toBe('FORM')
-    expect(rowOf('Person a')).toContainElement(form)
+    expect(rowOf('Person a').nextElementSibling).toContainElement(form)
     expect(form.closest('td')).toHaveAttribute('colspan', '5')
     expect(document.activeElement).toBe(within(form).getByLabelText(/Reason \(optional\)/))
     expect(within(form).getByText('Person sees this.')).toBeInTheDocument()
@@ -430,24 +421,14 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
   const confirmRun = (label: string) => fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: label }))
   const notice = () => document.querySelector('[data-quick-group] [role="status"] [data-tone]')
 
-  it('adds a box column to a bulk tab with a one-tap row: a box on each such row only, named from its action, and Select all in the bar', () => {
+  it('keeps selection separate from ineligible rows and shows no unselected bulk action', () => {
     render(<Harness model={model({ rows: [tapRow('a'), row('b', { flags: [{ label: 'Your request', tone: 'neutral' }] })] })} />)
-
-    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Select', 'Staff', 'Type', 'Dates', 'Note', ''])
-    // A row with nothing to tick keeps its empty box cell on a card too, so every name in the list starts at one edge (finish fix 3).
-    const empty = rowOf('Person b').querySelector('td[data-select]')!
-    expect(empty).toBeEmptyDOMElement()
-    expect(empty).not.toHaveClass('max-xl:hidden')
-    expect(rowOf('Person b').querySelector('td[data-subject]')).toHaveClass('max-xl:basis-[calc(100%-1.75rem)]')
+    expect(screen.getAllByRole('columnheader').map(th => th.textContent)).toEqual(['Select', 'Staff', 'Type', 'Dates', 'Note', ''])
+    expect(within(rowOf('Person b')).queryByRole('checkbox')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
-    expect(within(rowOf('Person b')).queryByRole('checkbox')).toBeNull()
     expect(screen.getByRole('checkbox', { name: 'Select all shown leave requests' })).not.toBeChecked()
-    expect(screen.getByRole('button', { name: 'Approve 1 leave request' })).toHaveTextContent('Approve 1')
-    // The box track is fixed, so the subject's and the free-text fact's minimums move one track along.
-    expect(screen.getByRole('table').style.gridTemplateColumns)
-      .toBe('calc(var(--cell-px) * 2 + 1rem) minmax(var(--subject-min, 0px), max-content) max-content max-content minmax(var(--fact-min-4, 0px), max-content) minmax(0, 1fr) max-content')
+    expect(screen.queryByRole('button', { name: /Approve \d+ selected/ })).not.toBeInTheDocument()
   })
-
   it('draws no column and no bar where nothing is safe, or on a tab without a bulk action', () => {
     const { unmount } = render(<Harness model={model()} />)
     expect(screen.queryByRole('checkbox')).toBeNull()
@@ -459,11 +440,11 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(screen.queryByRole('button', { name: /^Approve all|^Approve 1 / })).toBeNull()
   })
 
-  it('counts every safe row in the whole tab for Complete all, not only the five shown', () => {
+  it('offers selection only for the five shown rows and no whole-tab action', () => {
     render(<Harness model={model({ count: 7, rows: ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => tapRow(id)) })} />)
 
     expect(screen.getAllByRole('checkbox', { name: /^Select leave/ })).toHaveLength(5)
-    expect(screen.getByRole('button', { name: 'Approve all 7 leave requests' })).toHaveTextContent('Approve all 7')
+    expect(screen.queryByRole('button', { name: 'Approve all 7 leave requests' })).not.toBeInTheDocument()
   })
 
   it("swaps Complete all for the selection's action when a box is ticked: a count, Clear, Select all mixed; Clear puts focus back on the action", () => {
@@ -474,8 +455,8 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(all.indeterminate).toBe(true)
     expect(screen.getByText('1 selected')).toBeInTheDocument()
     // Once ticked, the bar's box takes the row boxes' touch pad (size-4 + TAP_AREA), so the count sits where "Select all" was (finish fix 2).
-    expect(all.closest('label')).toHaveClass('size-4', 'before:min-w-[var(--tap-min)]')
-    expect(all.closest('label')).not.toHaveClass('pointer-coarse:min-w-[var(--tap-min)]')
+    expect(all.closest('label')).toHaveClass('min-h-[var(--control-h)]')
+
     const action = screen.getByRole('button', { name: 'Approve 1 selected leave request' })
 
     fireEvent.click(all)
@@ -485,8 +466,8 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.queryByText(/selected$/)).toBeNull()
-    expect(action).toHaveAccessibleName('Approve all 3 leave requests')
-    expect(action).toHaveFocus()
+    expect(action).not.toBeInTheDocument()
+    expect(all).toHaveFocus()
   })
 
   it("unticks and disables a row's box while its form is open, and Complete all leaves it out", () => {
@@ -497,7 +478,7 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
 
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
-    expect(screen.getByRole('button', { name: 'Approve 1 leave request' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Approve \d+ selected/ })).not.toBeInTheDocument()
   })
 
   it('runs the ticked rows one at a time in row order through their own taps, then ONE notice; decided rows leave together, a refused one stays', async () => {
@@ -541,12 +522,111 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     const gone = vi.fn(async (): Promise<ActionOutcome> => { throw { response: { status: 409, data: { message: 'This request has already been decided.' } } } })
     render(<Harness model={model({ count: 2, refetch, rows: [tapRow('a'), tapRow('b', gone)] })} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve all 2 leave requests' }))
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 2 leave requests?')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2 selected leave requests' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Approve 2 selected leave requests?')
     confirmRun('Approve 2')
 
     await waitFor(() => expect(notice()).toHaveTextContent('Approved 1 leave request'))
     expect(notice()).toHaveTextContent('1 was already decided by someone else.')
     expect(refetch).toHaveBeenCalledTimes(1)
   })
+})
+
+describe('QuickGroup — selected shown acceptance', () => {
+  it('keeps consequential bulk action absent until eligible shown rows are selected', () => {
+    const run = vi.fn(async () => ({}))
+    render(<Harness model={model({ count: 6, rows: ['a', 'b', 'c', 'd', 'e', 'hidden'].map(id => row(id, { actions: [approve(id, run)] })) })} />)
+    expect(screen.queryByRole('button', { name: /Approve (all|the first|\d+ clean)/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Approve \d+ selected/ })).not.toBeInTheDocument()
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('selects eligible shown rows only and confirms that exact scope, never the hidden sixth row', async () => {
+    const calls = ['a', 'b', 'c', 'd', 'e', 'hidden'].map(() => vi.fn(async () => ({})))
+    render(<Harness model={model({ count: 6, rows: ['a', 'b', 'c', 'd', 'e', 'hidden'].map((id, i) => row(id, { actions: [approve(id, calls[i])] })) })} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 5 selected leave requests' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('5 selected')
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 5' }))
+    await waitFor(() => expect(calls[4]).toHaveBeenCalledTimes(1))
+    expect(calls[5]).not.toHaveBeenCalled()
+  })
+})
+
+
+
+
+
+describe('QuickGroup — fresh-check and stable detail acceptance', () => {
+  it('blocks both individual and bulk retry routes until a successful explicit reread', async () => {
+    const run = vi.fn(async () => { throw axiosError('Explicit refusal') })
+    const reread = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(['a'])
+    render(<Harness model={model({ count: 1, reread, rows: [row('a', { actions: [approve('a', run)] })] })} />)
+    const button = screen.getByRole('button', { name: 'Approve leave: Person a' })
+    fireEvent.click(button)
+    await screen.findByText('Explicit refusal')
+    fireEvent.click(button)
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /selected leave/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Check latest status' }))
+    await screen.findByText('Status could not be checked')
+    fireEvent.click(button)
+    expect(run).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Check latest status' }))
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'))
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(reread).toHaveBeenNthCalledWith(1, ['a'])
+    expect(reread).toHaveBeenNthCalledWith(2, ['a'])
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))
+    expect(screen.getByRole('button', { name: 'Approve 1 selected leave request' })).toBeInTheDocument()
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses newly read eligibility and flags rather than an old approval closure', async () => {
+    const run = vi.fn(async () => { throw axiosError('Refused') })
+    const changed = row('a', { flags: [{ label: 'Individual review needed', tone: 'warning' }], actions: [{ kind: 'link', label: 'Review', name: 'Review changed Person a', to: '/rostering/leave' }] })
+    let refresh!: () => void
+    const reread = vi.fn(async () => { refresh(); return ['a'] })
+    const view = render(<Harness model={model({ count: 1, reread, rows: [row('a', { actions: [approve('a', run)] })] })} />)
+    refresh = () => view.rerender(<Harness model={model({ count: 1, reread, rows: [changed] })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Approve leave: Person a' }))
+    await screen.findByText('Refused')
+    fireEvent.click(screen.getByRole('button', { name: 'Check latest status' }))
+    await screen.findByText('Individual review needed')
+    expect(screen.queryByRole('button', { name: /Approve/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review changed Person a' })).toHaveAttribute('href', '/rostering/leave')
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves the exact typed field and focus through selection rerenders and a rejected save', async () => {
+    const submit = vi.fn(async () => { throw axiosError('Reason refused') })
+    render(<Harness model={model({ rows: [row('a', { actions: [decline('a', { submit })] }), row('b', { actions: [approve('b', vi.fn())] })] })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Decline leave: Person a' }))
+    const field = screen.getByRole('textbox')
+    fireEvent.change(field, { target: { value: 'Keep this exact reason' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person b' }))
+    expect(screen.getByRole('textbox')).toBe(field)
+    expect(field).toHaveValue('Keep this exact reason')
+    field.focus()
+    fireEvent.submit(field.closest('form')!)
+    await screen.findByText('Reason refused')
+    expect(screen.getByRole('textbox')).toBe(field)
+    expect(field).toHaveValue('Keep this exact reason')
+    expect(field).toHaveFocus()
+    expect(submit).toHaveBeenCalledWith('Keep this exact reason')
+  })
+})
+
+
+it('drops stale selection when shown eligibility changes, even if the row later becomes eligible again', () => {
+  const eligible = row('a', { actions: [approve('a', vi.fn())] })
+  const view = render(<Harness model={model({ count: 1, rows: [eligible] })} />)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))
+  view.rerender(<Harness model={model({ count: 1, rows: [row('a', { flags: [{ label: 'Review needed', tone: 'warning' }] })] })} />)
+  view.rerender(<Harness model={model({ count: 1, rows: [eligible] })} />)
+  expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
+  expect(screen.queryByRole('button', { name: 'Approve 1 selected leave request' })).not.toBeInTheDocument()
 })

@@ -227,7 +227,8 @@ describe('NeedsYourDecision — bolder and bulk runs (decision-bulk SHAPE §2, �
     }
     render(<Live />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve all 3 leave requests' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3 selected leave requests' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 3' }))
 
     await waitFor(() => expect(screen.getByText('Approved 3 leave requests')).toBeInTheDocument())
@@ -277,4 +278,42 @@ describe('NeedsYourDecision — a decided row stays gone until its own group rea
 
     expect(await screen.findByRole('button', { name: 'Approve: Person l1' })).toBeInTheDocument()
   })
+})
+
+describe('NeedsYourDecision — unknown outcome recovery across tabs', () => {
+  it('preserves held IDs and check control after leaving and returning, without an automatic resend', async () => {
+    const run = vi.fn(async () => { throw new Error('Network reply lost') })
+    const reread = vi.fn().mockRejectedValueOnce(new Error('Status offline')).mockResolvedValue(['a'])
+    render(<Harness groups={[group('completions', { rows: [row('a', [tap('a', run)])], reread }), group('tasks', { rows: [row('b')] })]} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 selected shift completion' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+    await screen.findByText('Not confirmed yet')
+    fireEvent.click(screen.getByRole('tab', { name: 'Tasks (1)' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Completions (1)' }))
+    expect(screen.getByRole('button', { name: 'Approve: Person a' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: 'Check latest status' })).toBeVisible()
+    expect(run).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Check latest status' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve: Person a' })).not.toHaveAttribute('aria-disabled'))
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(reread).toHaveBeenNthCalledWith(2, ['a'])
+    expect(screen.getByRole('checkbox', { name: 'Select: Person a' })).not.toBeChecked()
+  })
+})
+
+
+it('keeps recovery presence after an uncertain list goes empty and its notice is dismissed', async () => {
+  const run = vi.fn(async () => { throw new Error('Reply lost') })
+  const reread = vi.fn(async (): Promise<string[]> => { throw new Error('Status unavailable') })
+  const view = render(<Harness groups={[group('completions', { rows: [row('a', [tap('a', run)])], reread })]} />)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown shift completions' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve 1 selected shift completion' }))
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+  await screen.findByText('Not confirmed yet')
+  view.rerender(<Harness groups={[group('completions', { rows: [], count: 0, reread })]} />)
+  fireEvent.click(screen.getByRole('button', { name: /Dismiss notice/ }))
+  expect(screen.getByRole('button', { name: 'Check latest status' })).toBeVisible()
+  expect(screen.queryByText('All clear.')).not.toBeInTheDocument()
+  expect(run).toHaveBeenCalledTimes(1)
 })
