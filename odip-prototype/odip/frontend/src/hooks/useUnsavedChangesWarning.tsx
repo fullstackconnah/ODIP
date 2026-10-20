@@ -15,6 +15,11 @@ type UnsavedChangesOptions = {
   blockIf?: (current: Location, next: Location) => boolean
   /** The dialog's words for a move that keeps the pathname. Leaving the page keeps the default words below. */
   stayCopy?: { title: string; message: string; confirmLabel: string }
+  /**
+   * Words for a page where leaving loses nothing (the roster's drafts are saved): they replace the house leave words AND stayCopy for every
+   * blocked move, label the stay button, and draw the confirm as primary, not danger.
+   */
+  leaveCopy?: { title: string; message: string; confirmLabel: string; stayLabel: string }
 }
 
 const LEAVE_COPY = {
@@ -29,6 +34,7 @@ const LEAVE_COPY = {
  * the tab (native beforeunload).
  *
  * Pass `options.blockIf` to also block a move that keeps the pathname (Settings: another `?section=`), and `options.stayCopy` for the words of that dialog.
+ * Pass `options.leaveCopy` where leaving loses nothing: its words win for every blocked move, and the confirm is primary.
  *
  * `when` should track a dirty flag, e.g. react-hook-form's `formState.isDirty`.
  *
@@ -92,7 +98,7 @@ export function useUnsavedChangesWarning(when: boolean, options: UnsavedChangesO
   }, [blocker])
 
   const isOpen = blocker.state === 'blocked'
-  const copy = blocker.state === 'blocked' && blocker.location.pathname === pathname && options.stayCopy ? options.stayCopy : LEAVE_COPY
+  const copy = options.leaveCopy ?? (blocker.state === 'blocked' && blocker.location.pathname === pathname && options.stayCopy ? options.stayCopy : LEAVE_COPY)
 
   // Escape (= keep editing), the Tab trap, scroll lock and focus in / back, shared with Modal and SlideOver. Focus starts on
   // "Keep editing" (the safe answer); `autoFocus` is out because the hook must see the real opener to give focus back to it.
@@ -129,9 +135,9 @@ export function useUnsavedChangesWarning(when: boolean, options: UnsavedChangesO
             onClick={handleCancel}
             className="rounded-lg border border-[var(--color-foreground)]/20 px-4 py-2 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-foreground)]/5"
           >
-            Keep editing
+            {options.leaveCopy?.stayLabel ?? 'Keep editing'}
           </button>
-          <Button variant="danger" onClick={handleConfirm}>
+          <Button variant={options.leaveCopy ? 'primary' : 'danger'} onClick={handleConfirm}>
             {copy.confirmLabel}
           </Button>
         </div>

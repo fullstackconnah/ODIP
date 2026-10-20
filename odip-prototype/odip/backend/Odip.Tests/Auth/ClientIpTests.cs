@@ -16,9 +16,9 @@ namespace Odip.Tests.Auth;
 /// <para>
 /// These pin the deployed shape from supervisor cycle 884, where the budget keyed on
 /// the proxy's address and one caller sending 10 bad tokens locked out every user.
-/// The cause was NOT the lockout code: <c>docker-proxy</c> serves the published port,
-/// so nginx's <c>$remote_addr</c> is the Docker bridge gateway for every caller and the
-/// real address never arrives. See <see cref="ClientIp"/>.
+/// The cause was NOT the lockout code: callers from containers on the host (cloudflared)
+/// reach the published port through <c>docker-proxy</c>, so nginx's <c>$remote_addr</c> is
+/// the Docker bridge gateway and the real address never arrives. See <see cref="ClientIp"/>.
 /// </para>
 /// </summary>
 public class ClientIpTests
@@ -113,6 +113,18 @@ public class ClientIpTests
         Assert.Equal("203.0.113.9", context.Connection.RemoteIpAddress!.ToString());
         Assert.False(ClientIp.IsIndistinguishableFromProxy(context));
         Assert.Equal("203.0.113.9", ClientIp.LoginAttemptKey(context));
+    }
+
+    [Fact]
+    public void Two_tunnel_visitors_behind_nginx_get_two_keys_from_the_single_address_nginx_forwards()
+    {
+        // Pins only the API half of the contract: given the one address nginx forwards, each visitor gets a key. The nginx half
+        // (rewriting $remote_addr from CF-Connecting-IP) is pinned by nginxHeaders.test.ts and a post-deploy probe.
+        var a = ClientIp.LoginAttemptKey(Request(NginxAddress, "203.0.113.20"));
+        var b = ClientIp.LoginAttemptKey(Request(NginxAddress, "203.0.113.21"));
+
+        Assert.Equal("203.0.113.20", a);
+        Assert.NotEqual(a, b);
     }
 
     [Fact]

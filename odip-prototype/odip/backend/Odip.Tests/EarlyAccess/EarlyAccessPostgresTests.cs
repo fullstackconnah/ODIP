@@ -1,9 +1,18 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Odip.Api.Controllers;
+using Odip.Application.DTOs;
+using Odip.Application.EarlyAccess;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.BackgroundServices;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.EarlyAccess;
 using Xunit;
@@ -119,6 +128,13 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
     private EarlyAccessService NewService(OdipDbContext db) => new(db, NullLogger<EarlyAccessService>.Instance);
 
+    private static EarlyAccessValidationResult Checked(
+        string name, string organisation, string email, string size = "under-10", string? role = null, string? phone = null, string? message = null) =>
+        EarlyAccessRequestValidator.Validate(new EarlyAccessRequestDto
+        {
+            Name = name, Organisation = organisation, Email = email, OrganisationSize = size, Role = role, Phone = phone, Message = message,
+        });
+
     [SkippableFact]
     public async Task Migration_CreatesTheTable_WithTheAgreedColumns_AndAUniqueEmailIndex()
     {
@@ -139,11 +155,19 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         {
             "CreatedAtUtc|timestamp without time zone||NO",
             "Email|character varying|254|NO",
+            "FollowUpClearedAtUtc|timestamp without time zone||YES",
+            "FollowUpNeeded|boolean||NO",
             "Id|uuid||NO",
+            "LastOverLimitAtUtc|timestamp without time zone||YES",
             "LastRequestedAtUtc|timestamp without time zone||NO",
+            "Message|character varying|1000|YES",
             "Name|character varying|100|NO",
             "Organisation|character varying|150|NO",
+            "OrganisationSize|character varying|16|YES",
+            "OverLimitCount|integer||NO",
+            "Phone|character varying|30|YES",
             "RequestCount|integer||NO",
+            "Role|character varying|100|YES",
         }, found);
 
         await using var index = new NpgsqlCommand(
@@ -152,6 +176,47 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         Assert.NotNull(definition);
         Assert.Contains("UNIQUE", definition);
         Assert.Contains("(\"Email\")", definition);
+    }
+
+    [SkippableFact]
+    public async Task TheExtraFields_RoundTrip_AtTheirLimits_AndARepeatDoesNotReplaceThem()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("limits");
+        var role = new string('é', 100);
+        var phone = "(1-1-1-1-1-1-1-1-1-1-1-1-1-1-1"; // 30 characters, 15 digits: the most the validator allows
+        var message = new string('€', 1000); // varchar(1000) counts characters, not bytes
+
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "200-plus", role, phone, message), CancellationToken.None);
+
+        await using (var db = _pg.CreateContext())
+        {
+            var row = await db.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+            Assert.Equal("200-plus", row.OrganisationSize);
+            Assert.Equal(role, row.Role);
+            Assert.Equal(phone, row.Phone);
+            Assert.Equal(message, row.Message);
+        }
+
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "under-10"), CancellationToken.None);
+
+        await using (var db = _pg.CreateContext())
+        {
+            // The stored answers are the first ones; the repeat is a later submission.
+            var row = await db.EarlyAccessRequests.AsNoTracking().Include(e => e.LaterSubmissions).SingleAsync(e => e.Email == email);
+            Assert.Equal(2, row.RequestCount);
+            Assert.Equal("200-plus", row.OrganisationSize);
+            Assert.Equal(role, row.Role);
+            Assert.Equal(phone, row.Phone);
+            Assert.Equal(message, row.Message);
+            var later = Assert.Single(row.LaterSubmissions);
+            Assert.Equal("under-10", later.OrganisationSize);
+            Assert.Null(later.Role);
+            Assert.Null(later.Phone);
+            Assert.Null(later.Message);
+        }
     }
 
     [SkippableFact]
@@ -180,9 +245,9 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
         var email = NewEmail("sequence");
 
         EarlyAccessRecordResult first, second, third;
-        await using (var db = _pg.CreateContext()) first = await NewService(db).RecordAsync("Jane", "Org", email, CancellationToken.None);
-        await using (var db = _pg.CreateContext()) second = await NewService(db).RecordAsync("Other", "Other Org", email, CancellationToken.None);
-        await using (var db = _pg.CreateContext()) third = await NewService(db).RecordAsync("Other", "Other Org", email, CancellationToken.None);
+        await using (var db = _pg.CreateContext()) first = await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        await using (var db = _pg.CreateContext()) second = await NewService(db).RecordAsync(Checked("Other", "Other Org", email), CancellationToken.None);
+        await using (var db = _pg.CreateContext()) third = await NewService(db).RecordAsync(Checked("Other", "Other Org", email), CancellationToken.None);
 
         Assert.Equal(EarlyAccessOutcome.Created, first.Outcome);
         Assert.Equal(EarlyAccessOutcome.Repeated, second.Outcome);
@@ -215,7 +280,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, CancellationToken.None);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), CancellationToken.None);
 
         Assert.Equal(1, interfered);
         Assert.Equal(EarlyAccessOutcome.Repeated, result.Outcome);
@@ -253,7 +318,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, CancellationToken.None);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), CancellationToken.None);
 
         Assert.Equal(EarlyAccessOutcome.Repeated, result.Outcome);
         Assert.Equal(3, result.RequestCount); // seed (1) + the rival's bump (1) + this request (1)
@@ -280,7 +345,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
 
         EarlyAccessRecordResult result;
         await using (var db = _pg.CreateContext(interceptor))
-            result = await NewService(db).RecordAsync("Me", "Org", email, cancellation.Token);
+            result = await NewService(db).RecordAsync(Checked("Me", "Org", email), cancellation.Token);
 
         Assert.Equal(EarlyAccessOutcome.Created, result.Outcome);
         await using var check = _pg.CreateContext();
@@ -302,7 +367,7 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             {
                 await gate.Task;
                 await using var db = _pg.CreateContext();
-                return await NewService(db).RecordAsync($"Person {i}", "Org", email, CancellationToken.None);
+                return await NewService(db).RecordAsync(Checked($"Person {i}", "Org", email), CancellationToken.None);
             })).ToArray();
             gate.SetResult();
             var results = await Task.WhenAll(tasks);
@@ -313,6 +378,556 @@ public class EarlyAccessPostgresTests : IClassFixture<PostgresFixture>
             var row = await check.EarlyAccessRequests.SingleAsync(e => e.Email == email);
             Assert.Equal(contenders, row.RequestCount);
         }
+    }
+
+    // ── Later submissions (repeats whose answers differ) ──
+
+    [SkippableFact]
+    public async Task ARepeat_KeepsTheStoredAnswers_AndTheLaterSubmissionRoundTripsAtItsLimits()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("later");
+        var message = new string('€', 1000);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "10-49", "Ops", "0491 570 156", "Rostering"), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "under-10", new string('é', 100), "+61 491 570 156", message), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, "10-49", "Ops", "0491 570 156", "Rostering"), CancellationToken.None); // identical: stores nothing
+
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.AsNoTracking().Include(e => e.LaterSubmissions).SingleAsync(e => e.Email == email);
+        Assert.Equal(3, row.RequestCount);
+        Assert.Equal("Rostering", row.Message);
+        Assert.Equal("0491 570 156", row.Phone);
+        var later = Assert.Single(row.LaterSubmissions);
+        Assert.Equal(message, later.Message);
+        Assert.Equal(new string('é', 100), later.Role);
+        Assert.Equal("under-10", later.OrganisationSize);
+    }
+
+    [SkippableFact]
+    public async Task OnlyTheFirstTenLaterSubmissions_AreKept_EvenWhenManyArriveTogether_AndEveryOneIsCounted()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("cap");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        for (var i = 0; i < 5; i++)
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: $"seq {i}"), CancellationToken.None);
+
+        // 8 more at once, all different: only 5 places are left, so a lost race must recount rather than store a sixth.
+        var gate = new TaskCompletionSource();
+        var tasks = Enumerable.Range(0, 8).Select(i => Task.Run(async () =>
+        {
+            await gate.Task;
+            await using var db = _pg.CreateContext();
+            return await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: $"race {i}"), CancellationToken.None);
+        })).ToArray();
+        gate.SetResult();
+        await Task.WhenAll(tasks);
+
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.SingleAsync(e => e.Email == email);
+        Assert.Equal(14, row.RequestCount);
+        Assert.Equal(10, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == row.Id && !l.IsOverLimit));
+        // The other 3 went to the single over-limit row, and the count says so even when the races overwrote each other.
+        Assert.Equal(1, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == row.Id && l.IsOverLimit));
+        Assert.Equal(3, row.OverLimitCount);
+    }
+
+    [SkippableFact]
+    public async Task TheFirstOverLimitSubmissionSurvivesAFurtherOne_AndThePurgeStillTakesItAt12Months()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("overfirst");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        for (var i = 1; i <= 10; i++)
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: $"kept {i}"), CancellationToken.None);
+        // The 11th is a removal request; the 12th is an unrelated submission from someone who knows the address.
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: "Please remove me"), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Someone Else", "Other Org", email, phone: "0400 000 000", message: "Hello there"), CancellationToken.None);
+
+        await using (var check = _pg.CreateContext())
+        {
+            var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+            Assert.Equal(2, row.OverLimitCount);
+            Assert.True(row.FollowUpNeeded);
+            var over = await check.EarlyAccessLaterSubmissions.AsNoTracking().SingleAsync(l => l.EarlyAccessRequestId == row.Id && l.IsOverLimit);
+            Assert.Equal("Jane", over.Name);
+            Assert.Equal("Please remove me", over.Message);
+        }
+
+        await using (var db = _pg.CreateContext())
+            await db.EarlyAccessRequests.Where(e => e.Email == email)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.CreatedAtUtc, DateTime.UtcNow.AddMonths(-13)));
+        await Purger().PurgeExpiredAsync(DateTime.UtcNow, CancellationToken.None);
+
+        await using var after = _pg.CreateContext();
+        Assert.False(await after.EarlyAccessRequests.AnyAsync(e => e.Email == email));
+        Assert.False(await after.EarlyAccessLaterSubmissions.AnyAsync(l => l.Message == "Please remove me"));
+    }
+
+    [SkippableFact]
+    public async Task FollowUpNeeded_IsSetByEveryOverLimitRepeat_ClearedOnlyByTheSuperAdmin_AndSetAgainByANewOne()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("followup");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        for (var i = 1; i <= 10; i++)
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: $"0400 000 {i:000}"), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 011"), CancellationToken.None);
+        // The 12th, the removal request, is not kept; the marker is what says it exists.
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 011", message: "Please remove me"), CancellationToken.None);
+        // A public repeat identical to the original changes nothing.
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+
+        var id = await IdOf(email);
+        await using (var check = _pg.CreateContext())
+        {
+            var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
+            Assert.True(row.FollowUpNeeded);
+            Assert.Equal(2, row.OverLimitCount);
+            Assert.Null(row.FollowUpClearedAtUtc);
+        }
+
+        Assert.IsType<OkObjectResult>((await MarkFollowedUpAsync(id, 2)).Result);
+        await using (var check = _pg.CreateContext())
+        {
+            var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
+            Assert.False(row.FollowUpNeeded);
+            Assert.NotNull(row.FollowUpClearedAtUtc);
+            Assert.Equal(1, await check.AuditLogs.CountAsync(a => a.EntityId == id));
+        }
+
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 013"), CancellationToken.None);
+        await using (var check = _pg.CreateContext())
+        {
+            var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
+            Assert.True(row.FollowUpNeeded);
+            Assert.Equal(3, row.OverLimitCount);
+            Assert.NotNull(row.FollowUpClearedAtUtc);
+        }
+
+        // 12 months on, the purge takes the sign-up whatever its marker says.
+        await using (var db = _pg.CreateContext())
+            await db.EarlyAccessRequests.Where(e => e.Id == id).ExecuteUpdateAsync(s => s.SetProperty(e => e.CreatedAtUtc, DateTime.UtcNow.AddMonths(-13)));
+        await Purger().PurgeExpiredAsync(DateTime.UtcNow, CancellationToken.None);
+        await using var after = _pg.CreateContext();
+        Assert.False(await after.EarlyAccessRequests.AnyAsync(e => e.Id == id));
+        Assert.False(await after.EarlyAccessLaterSubmissions.AnyAsync(l => l.EarlyAccessRequestId == id));
+    }
+
+    [SkippableFact]
+    public async Task MarkFollowedUp_ThatRacesAnOverLimitRepeat_IsRefused_NotClearedOverIt()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var row = Row(NewEmail("followup-race"));
+        row.RequestCount = 13;
+        row.OverLimitCount = 2;
+        row.FollowUpNeeded = true;
+        await using (var db = _pg.CreateContext())
+        {
+            db.EarlyAccessRequests.Add(row);
+            await db.SaveChangesAsync();
+        }
+
+        // The SuperAdmin's page shows 2; a third arrives (the repeat's own UPDATE) between the controller's read and its save.
+        var result = await MarkFollowedUpAsync(row.Id, 2,
+            "UPDATE \"EarlyAccessRequests\" SET \"RequestCount\" = \"RequestCount\" + 1, \"OverLimitCount\" = \"OverLimitCount\" + 1 WHERE \"Id\" = @id");
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        await using var check = _pg.CreateContext();
+        var after = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == row.Id);
+        Assert.True(after.FollowUpNeeded);
+        Assert.Equal(3, after.OverLimitCount);
+        Assert.Equal(0, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
+    }
+
+    /// <summary>The other order: a Mark followed up that commits inside an over-limit repeat's read-save window must not hide that repeat.</summary>
+    [SkippableFact]
+    public async Task AnAcknowledgementThatLandsInsideARepeatsSave_DoesNotHideTheNewRepeat()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("followup-inside");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email), CancellationToken.None);
+        for (var i = 1; i <= 10; i++)
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: $"0400 000 {i:000}"), CancellationToken.None);
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 011"), CancellationToken.None);
+        var id = await IdOf(email);
+
+        // The SuperAdmin's page shows 1; the acknowledgement commits after the 12th repeat has read the row and before it saves.
+        var interfere = new BeforeFirstSave(async () =>
+            Assert.IsType<OkObjectResult>((await MarkFollowedUpAsync(id, 1)).Result));
+        await using (var db = _pg.CreateContext(interfere))
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, phone: "0400 000 011", message: "Please remove me"), CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
+        Assert.Equal(2, row.OverLimitCount);
+        Assert.True(row.FollowUpNeeded, "the 12th arrived after the count the SuperAdmin saw, so it must still need follow-up");
+        Assert.Equal(1, await check.AuditLogs.CountAsync(a => a.EntityId == id));
+    }
+
+    private async Task<Guid> IdOf(string email)
+    {
+        await using var db = _pg.CreateContext();
+        return await db.EarlyAccessRequests.Where(e => e.Email == email).Select(e => e.Id).SingleAsync();
+    }
+
+    /// <summary>A SuperAdmin's Mark followed up, with <paramref name="sql"/> (if any) run on another connection just before its first save.</summary>
+    private async Task<ActionResult<Odip.Application.Common.ApiResponse<bool>>> MarkFollowedUpAsync(Guid id, int seenCount, string? sql = null)
+    {
+        var interfere = new BeforeFirstSave(async () =>
+        {
+            if (sql is null) return;
+            await using var connection = _pg.OpenConnection();
+            await using var command = new NpgsqlCommand(sql, connection);
+            command.Parameters.AddWithValue("id", id);
+            await command.ExecuteNonQueryAsync();
+        });
+        await using var db = _pg.CreateContext(interfere);
+        var controller = new AdminEarlyAccessController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, "SuperAdmin"),
+                        new Claim("fullName", "Jordan Lee"),
+                    }, "Test")),
+                },
+            },
+        };
+        return await controller.MarkFollowedUp(id, new MarkFollowedUpDto { OverLimitCount = seenCount }, CancellationToken.None);
+    }
+
+    [SkippableFact]
+    public async Task TheSameDifferingMessageSentTwice_IsStoredOnce_AndAnyStoredOneCountsAsADuplicate()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("dupes");
+        foreach (var message in new[] { "base", "note A", "note B", "note A", "note B", "note A" })
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: message), CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.AsNoTracking().Include(e => e.LaterSubmissions).SingleAsync(e => e.Email == email);
+        Assert.Equal(6, row.RequestCount);
+        Assert.Equal(new[] { "note A", "note B" }, row.LaterSubmissions.OrderBy(l => l.ReceivedAtUtc).Select(l => l.Message).ToArray());
+    }
+
+    [SkippableFact]
+    public async Task ARepeatThatRacesTheSuperAdminsDelete_IsRetriedAsAFreshSignup_NotA500()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var email = NewEmail("race-delete");
+        await using (var db = _pg.CreateContext())
+            await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: "first"), CancellationToken.None);
+        var interfere = new BeforeFirstSave(async () =>
+        {
+            await using var connection = _pg.OpenConnection();
+            await using var command = new NpgsqlCommand("DELETE FROM \"EarlyAccessRequests\" WHERE \"Email\" = @email", connection);
+            command.Parameters.AddWithValue("email", email);
+            await command.ExecuteNonQueryAsync();
+        });
+
+        EarlyAccessRecordResult result;
+        await using (var db = _pg.CreateContext(interfere))
+            result = await NewService(db).RecordAsync(Checked("Jane", "Org", email, message: "second"), CancellationToken.None);
+
+        Assert.Equal(EarlyAccessOutcome.Created, result.Outcome);
+        await using var check = _pg.CreateContext();
+        var row = await check.EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Email == email);
+        Assert.Equal("second", row.Message);
+        Assert.Equal(1, row.RequestCount);
+    }
+
+    [SkippableFact]
+    public async Task TheSuperAdminList_LoadsEachSignupsLaterSubmissions_OldestFirst_AcrossMoreThanOneSignup()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var emails = new[] { NewEmail("list-a"), NewEmail("list-b") };
+        foreach (var email in emails)
+        {
+            await using (var db = _pg.CreateContext())
+                await NewService(db).RecordAsync(Checked("Listed " + tag, "Org", email), CancellationToken.None);
+            foreach (var message in new[] { "first", "second", "third" })
+                await using (var db = _pg.CreateContext())
+                    await NewService(db).RecordAsync(Checked("Listed " + tag, "Org", email, message: email + message), CancellationToken.None);
+        }
+
+        await using var read = _pg.CreateContext();
+        var response = await new AdminEarlyAccessController(read).GetAll(page: 1, pageSize: 100, ct: CancellationToken.None);
+        var page = Assert.IsType<OkObjectResult>(response.Result).Value;
+        var items = Assert.IsType<Odip.Application.Common.ApiResponse<Odip.Application.Common.PagedResult<EarlyAccessSignupDto>>>(page).Data!.Items;
+        var rows = items.Where(r => emails.Contains(r.Email)).ToList();
+
+        Assert.Equal(2, rows.Count);
+        foreach (var r in rows)
+            Assert.Equal(new[] { r.Email + "first", r.Email + "second", r.Email + "third" }, r.LaterSubmissions.Select(l => l.Message).ToArray());
+    }
+
+    [Fact]
+    public async Task ThePurge_RetriesInFiveMinutesAfterAFailedRun()
+    {
+        var now = new DateTime(2026, 10, 17, 3, 0, 0, DateTimeKind.Utc);
+        var scopes = new Moq.Mock<IServiceScopeFactory>();
+        scopes.Setup(f => f.CreateScope()).Throws(new InvalidOperationException("database down"));
+        var purger = new EarlyAccessPurgeBackgroundService(scopes.Object, NullLogger<EarlyAccessPurgeBackgroundService>.Instance);
+
+        Assert.Equal(TimeSpan.FromMinutes(5), EarlyAccessPurgeBackgroundService.RetryInterval);
+        Assert.Equal(EarlyAccessPurgeBackgroundService.RetryInterval, await purger.RunOnceAsync(now, CancellationToken.None));
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_WaitsAnHourAfterASuccessfulRun()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var now = new DateTime(2026, 10, 17, 3, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal(EarlyAccessPurgeBackgroundService.Interval, await Purger().RunOnceAsync(now, CancellationToken.None));
+    }
+
+    [SkippableFact]
+    public async Task TheLaterSubmissions_GoWithTheirSignup_WhenTheSuperAdminDeletesIt_AndWhenThePurgeDoes()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var deleted = await SeedRowAsync("cascade-delete", DateTime.UtcNow.AddDays(-2), DateTime.UtcNow.AddDays(-1), count: 3);
+        var purged = await SeedRowAsync("cascade-purge", DateTime.UtcNow.AddMonths(-13), DateTime.UtcNow.AddMonths(-13), count: 3);
+        var kept = await SeedRowAsync("cascade-kept", DateTime.UtcNow.AddDays(-2), DateTime.UtcNow.AddDays(-1), count: 3);
+        await using (var db = _pg.CreateContext())
+        {
+            foreach (var parent in new[] { deleted, purged, kept })
+                for (var i = 0; i < 2; i++)
+                    db.EarlyAccessLaterSubmissions.Add(new EarlyAccessLaterSubmission
+                    {
+                        Id = Guid.NewGuid(), EarlyAccessRequestId = parent.Id, ReceivedAtUtc = DateTime.UtcNow, Name = "Jane", Organisation = "Org", Message = $"m{i}", IsOverLimit = i == 1,
+                    });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await DeleteWhileAsync(deleted.Id, "UPDATE \"EarlyAccessRequests\" SET \"Name\" = \"Name\" WHERE \"Id\" = @id");
+        Assert.IsType<OkObjectResult>(result.Result);
+        await Purger().PurgeExpiredAsync(DateTime.UtcNow, CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        Assert.Equal(0, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == deleted.Id));
+        Assert.Equal(0, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == purged.Id));
+        Assert.Equal(2, await check.EarlyAccessLaterSubmissions.CountAsync(l => l.EarlyAccessRequestId == kept.Id));
+    }
+
+    // ── The 12-month purge (EarlyAccessPurgeBackgroundService) ──
+
+    private EarlyAccessPurgeBackgroundService Purger(CapturingLogger<EarlyAccessPurgeBackgroundService>? log = null)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<OdipDbContext>(o => o.UseNpgsql(_pg.ConnectionString));
+        return new EarlyAccessPurgeBackgroundService(
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), log ?? new CapturingLogger<EarlyAccessPurgeBackgroundService>());
+    }
+
+    private async Task<EarlyAccessRequest> SeedRowAsync(string tag, DateTime createdUtc, DateTime lastSentUtc, int count = 1)
+    {
+        var row = Row(NewEmail(tag), name: "Purge " + tag);
+        row.CreatedAtUtc = createdUtc;
+        row.LastRequestedAtUtc = lastSentUtc;
+        row.RequestCount = count;
+        await using var db = _pg.CreateContext();
+        db.EarlyAccessRequests.Add(row);
+        await db.SaveChangesAsync();
+        return row;
+    }
+
+    // The purge runs hourly and deletes one interval early, so a row is gone at least an hour before its 12 months and never after.
+    private static DateTime EarlyCutoff(DateTime now) => EarlyAccessPurgeBackgroundService.RetentionCutoff(now);
+
+    [Fact]
+    public void ThePurge_RunsEveryHour()
+    {
+        Assert.Equal(TimeSpan.FromHours(1), EarlyAccessPurgeBackgroundService.Interval);
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_DeletesSignupsAtOrBeforeTheEarlyCutoff_EvenIfSentAgainSince_AndKeepsTheRest()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        // PostgreSQL keeps microseconds, so the clock is cut to them and the boundary can be pinned exactly.
+        var now = new DateTime(DateTime.UtcNow.Ticks / 10 * 10, DateTimeKind.Utc);
+        var cutoff = EarlyCutoff(now);
+        var oneMicrosecond = TimeSpan.FromTicks(10);
+        var expired = await SeedRowAsync("expired", cutoff - oneMicrosecond, cutoff - oneMicrosecond);
+        var atTheCutoff = await SeedRowAsync("cutoff", cutoff, cutoff);
+        var justYounger = await SeedRowAsync("younger", cutoff + oneMicrosecond, cutoff + oneMicrosecond);
+        // Anyone can send the form again with someone's address, so a repeat must not extend how long their details are kept.
+        var resent = await SeedRowAsync("resent", now.AddMonths(-24), now.AddDays(-7), count: 2);
+        var recent = await SeedRowAsync("recent", now.AddDays(-30), now.AddDays(-30));
+        var log = new CapturingLogger<EarlyAccessPurgeBackgroundService>();
+
+        var deleted = await Purger(log).PurgeExpiredAsync(now, CancellationToken.None);
+
+        Assert.True(deleted >= 3); // the class shares one database
+        await using var check = _pg.CreateContext();
+        var ids = new[] { expired.Id, atTheCutoff.Id, justYounger.Id, resent.Id, recent.Id };
+        var remaining = await check.EarlyAccessRequests.Where(e => ids.Contains(e.Id)).Select(e => e.Id).ToListAsync();
+        Assert.Equal(new[] { justYounger.Id, recent.Id }.OrderBy(i => i), remaining.OrderBy(i => i));
+
+        var entry = Assert.Single(log.Entries, e => e.Level == LogLevel.Information);
+        Assert.Contains(deleted.ToString(System.Globalization.CultureInfo.InvariantCulture), entry.Message);
+        Assert.DoesNotContain("@", entry.Message);
+        Assert.DoesNotContain(expired.Name, entry.Message);
+        Assert.DoesNotContain(expired.Email, entry.Message);
+    }
+
+    [SkippableFact]
+    public async Task ARowCreatedAtT_IsGoneByTheFirstRunAtOrAfterT_Plus12Months_Minus1Hour_AndNotBefore()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var created = new DateTime(2025, 3, 10, 6, 30, 0, DateTimeKind.Utc);
+        var row = await SeedRowAsync("window", created, created);
+        var due = created.AddMonths(12) - EarlyAccessPurgeBackgroundService.Interval;
+
+        await Purger().PurgeExpiredAsync(due - TimeSpan.FromTicks(10), CancellationToken.None);
+        await using (var before = _pg.CreateContext())
+            Assert.True(await before.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id), "kept until the hour before its 12 months");
+
+        await Purger().PurgeExpiredAsync(due, CancellationToken.None);
+        await using (var after = _pg.CreateContext())
+            Assert.False(await after.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id), "gone by the first run at or after T + 12 months - 1 h");
+    }
+
+    [SkippableFact]
+    public async Task A29FebSignUp_IsGoneByTheRunAt28FebNoonTheNextYear()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var created = new DateTime(2024, 2, 29, 12, 0, 0, DateTimeKind.Utc);
+        var row = await SeedRowAsync("leap-day", created, created);
+
+        await Purger().PurgeExpiredAsync(new DateTime(2025, 2, 28, 12, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        Assert.False(await check.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id), "due 28 Feb 2025 12:00, so not kept to 1 Mar");
+    }
+
+    [SkippableFact]
+    public async Task ARunAt28Feb2028_2300_TakesAll28Feb2027_AndKeeps1Mar2027()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        // Fixed dates, no cutoff helper: the call site must hand the purge the 29 Feb bound (a year back from 2028-02-29 is 28 Feb 2027, all of it).
+        var late28Feb = await SeedRowAsync("late-28-feb", new DateTime(2027, 2, 28, 23, 30, 0, DateTimeKind.Utc), new DateTime(2027, 2, 28, 23, 30, 0, DateTimeKind.Utc));
+        var due1Mar = await SeedRowAsync("due-1-mar", new DateTime(2027, 3, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2027, 3, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        await Purger().PurgeExpiredAsync(new DateTime(2028, 2, 28, 23, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        await using var check = _pg.CreateContext();
+        Assert.False(await check.EarlyAccessRequests.AnyAsync(e => e.Id == late28Feb.Id), "due 2028-02-28 23:30, so gone by the 23:00 run");
+        Assert.True(await check.EarlyAccessRequests.AnyAsync(e => e.Id == due1Mar.Id), "due 2028-03-01, so kept");
+    }
+
+    [SkippableFact]
+    public async Task ThePurge_RunsWhenTheServiceStarts()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var old = DateTime.UtcNow.AddMonths(-13);
+        var expired = await SeedRowAsync("at-start", old, old);
+        var purger = Purger();
+
+        await purger.StartAsync(CancellationToken.None);
+        var gone = false;
+        for (var waited = 0; waited < 10_000 && !gone; waited += 100)
+        {
+            await using var check = _pg.CreateContext();
+            gone = !await check.EarlyAccessRequests.AnyAsync(e => e.Id == expired.Id);
+            if (!gone) await Task.Delay(100);
+        }
+        await purger.StopAsync(CancellationToken.None);
+
+        Assert.True(gone, "the first purge should run at start, not an hour later");
+    }
+
+    // ── SuperAdmin Delete (AdminEarlyAccessController) against the RequestCount concurrency token ──
+
+    [SkippableFact]
+    public async Task Delete_ThatRacesARepeatSignup_StillDeletes_InsteadOf500()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var row = await SeedRowAsync();
+
+        var result = await DeleteWhileAsync(row.Id, "UPDATE \"EarlyAccessRequests\" SET \"RequestCount\" = \"RequestCount\" + 1 WHERE \"Id\" = @id");
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await using var check = _pg.CreateContext();
+        Assert.False(await check.EarlyAccessRequests.AnyAsync(e => e.Id == row.Id));
+        Assert.Equal(1, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
+    }
+
+    [SkippableFact]
+    public async Task Delete_OfARowRemovedMidway_Returns404()
+    {
+        Skip.IfNot(_pg.Available, _pg.UnavailableReason);
+        var row = await SeedRowAsync();
+
+        var result = await DeleteWhileAsync(row.Id, "DELETE FROM \"EarlyAccessRequests\" WHERE \"Id\" = @id");
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        await using var check = _pg.CreateContext();
+        Assert.Equal(0, await check.AuditLogs.CountAsync(a => a.EntityId == row.Id));
+    }
+
+    private async Task<EarlyAccessRequest> SeedRowAsync()
+    {
+        var row = Row(NewEmail("delete"));
+        await using var db = _pg.CreateContext();
+        db.EarlyAccessRequests.Add(row);
+        await db.SaveChangesAsync();
+        return row;
+    }
+
+    /// <summary>A SuperAdmin's Delete, with <paramref name="sql"/> run on another connection just before its first save.</summary>
+    private async Task<ActionResult<Odip.Application.Common.ApiResponse<bool>>> DeleteWhileAsync(Guid id, string sql)
+    {
+        var interfere = new BeforeFirstSave(async () =>
+        {
+            await using var connection = _pg.OpenConnection();
+            await using var command = new NpgsqlCommand(sql, connection);
+            command.Parameters.AddWithValue("id", id);
+            await command.ExecuteNonQueryAsync();
+        });
+        await using var db = _pg.CreateContext(interfere);
+        var controller = new AdminEarlyAccessController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, "SuperAdmin"),
+                        new Claim("fullName", "Jordan Lee"),
+                    }, "Test")),
+                },
+            },
+        };
+        return await controller.Delete(id, CancellationToken.None);
     }
 
     private static EarlyAccessRequest Row(string email, string name = "Jane") => new()

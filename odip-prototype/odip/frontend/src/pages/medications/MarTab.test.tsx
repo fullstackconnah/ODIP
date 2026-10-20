@@ -217,3 +217,35 @@ describe('MarTab — Last dose', () => {
     }
   })
 })
+
+describe('MarTab — PRN outcome context', () => {
+  beforeEach(() => {
+    mockUseParticipants.mockReturnValue({ data: [] })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+  })
+
+  it('shows the selected participant and medicine, and only shows dose timing for the exact pending administration', async () => {
+    const user = userEvent.setup()
+    mockUseMar.mockReturnValue({
+      data: {
+        entries: [administeredEntry('Administered', { administration: undefined })],
+        prnMedications: [prnEntry({ outcomePendingAdministrationId: 'admin-1', lastDoseAt: '2026-09-13T02:00:00Z' })],
+      },
+      isLoading: false,
+    })
+    // Keep a different participant with the same medicine in the loaded list; it must not supply the context.
+    mockUseMar.mockReturnValue({
+      data: {
+        entries: [scheduledEntry({ participantId: 'participant-other', participantName: 'Other person', medicationName: 'Ibuprofen', administration: { id: 'admin-other', administeredAt: '2026-09-13T01:00:00Z', administeredAtTimeZone: 'Australia/Brisbane', doseDescription: '2 tablets' } })],
+        prnMedications: [prnEntry({ outcomePendingAdministrationId: 'admin-1', lastDoseAt: '2026-09-13T02:00:00Z' })],
+      },
+      isLoading: false,
+    })
+    renderTab()
+    await user.click(screen.getByRole('button', { name: 'Record outcome' }))
+
+    expect(screen.getByText('Noah Blake · Ibuprofen 200mg')).toBeInTheDocument()
+    expect(screen.queryByText(/Given/)).not.toBeInTheDocument()
+    expect(screen.queryByText('2 tablets')).not.toBeInTheDocument()
+  })
+})

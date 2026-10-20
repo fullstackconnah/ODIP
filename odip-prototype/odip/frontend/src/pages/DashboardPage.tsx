@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
@@ -86,6 +86,7 @@ export default function DashboardPage() {
   const gates = decisionGates(permissions, !!localStorage.getItem('odip_viewing_tenant'))
   const groups = useDecisionGroups(gates, { viewerId: id, today, warningDays, mayCloseBudgetReview: isAdmin || isSuperAdmin, staff })
   const decision = useDecisionState()
+  const [hasRecovery, setHasRecovery] = useState(false)
   // A queue is counted in the band only where its group is not shown (call 6); a viewer with the group reads the same requests there.
   const pendingLeave = usePendingLeaveQueue(canApproveLeave && !gates.leave)
   const pendingCompletions = usePendingCompletionQueue(canReviewCompletions && !gates.completions)
@@ -252,7 +253,7 @@ export default function DashboardPage() {
   // Every item has data and is at zero: the band is clear.
   const bandClear = !!d && attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
   // "Nothing needs you" only when it is true: every group and every alert has data and is at zero, and no consequence notice is waiting (SHAPE §6).
-  const groupsClear = groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
+  const groupsClear = !hasRecovery && groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
   const pageClear = bandClear && groupsClear
 
   return (
@@ -293,13 +294,13 @@ export default function DashboardPage() {
                 {canViewAlerts && criticalAlertItems.length > 0 && (
                   <div>
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold">Critical Participant Alerts</h3>
+                      <h3 className="text-sm font-semibold">Critical participant alerts ({criticalAlertItems.length})</h3>
                       <Link to="/participants" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
                         View All
                       </Link>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-[var(--section-gap)] md:grid-cols-2 lg:grid-cols-3">
+                    <div className="divide-y divide-[var(--color-border)] rounded-[var(--radius-md)] border border-[var(--color-border)]">
                       {criticalAlertItems.slice(0, 6).map(({ participantId, participantName, alert }) => {
                         const style = ALERT_SEVERITY_STYLES.Critical
                         const Icon = style.icon
@@ -311,25 +312,21 @@ export default function DashboardPage() {
                           <Link
                             key={`${participantId}:${alert.type}:${alert.message}`}
                             to={href}
-                            className={`rounded-[var(--radius-md)] p-[var(--card-pad)] ${style.bg} border border-[var(--color-destructive)]/10 transition-opacity hover:opacity-90`}
+                            className={`flex items-center gap-3 px-[var(--card-pad)] py-3 ${style.bg} transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
                           >
-                            <div className="mb-2 flex items-start justify-between">
-                              <span className={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-bold uppercase tracking-widest ${style.text}`}>
-                                <Icon className="h-3 w-3" /> {style.label}
-                              </span>
-                            </div>
-                            <h5 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-[var(--color-foreground)]">
+                            <span className={`inline-flex shrink-0 items-center gap-1 text-xs font-bold ${style.text}`}><Icon className="h-3 w-3" /> {style.label}</span>
+                            <div className="min-w-0 flex-1">
+                            <h5 className="flex items-center gap-1.5 text-sm font-bold text-[var(--color-foreground)]">
                               <ShieldAlert className="h-4 w-4 opacity-60" /> {participantName}
                             </h5>
                             {typeLabel && (
                               <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">{typeLabel}</p>
                             )}
-                            <p className="mb-2 text-xs text-[var(--color-muted-foreground)]">{alert.message}</p>
-                            <div className="flex items-center justify-end">
-                              <span className="flex items-center gap-1 text-xs font-bold text-[var(--color-primary)]">
-                                View <ChevronRight className="h-3.5 w-3.5" />
-                              </span>
+                            <p className="text-xs text-[var(--color-muted-foreground)]">{alert.message}</p>
                             </div>
+                            <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-[var(--color-primary)]">
+                                View <ChevronRight className="h-3.5 w-3.5" />
+                            </span>
                           </Link>
                         )
                       })}
@@ -347,7 +344,7 @@ export default function DashboardPage() {
               <p className="text-[13px] text-[var(--color-muted-foreground)]">Choose an organisation to see its approvals.</p>
             </div>
           )}
-          {groups.length > 0 && <NeedsYourDecision groups={groups} state={decision} />}
+          {groups.length > 0 && <NeedsYourDecision groups={groups} state={decision} onRecoveryPresenceChange={setHasRecovery} />}
         </>
       )}
 

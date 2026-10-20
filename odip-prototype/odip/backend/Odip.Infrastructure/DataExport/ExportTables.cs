@@ -50,6 +50,7 @@ public static class ExportTables
         [typeof(PublicHoliday)] = "The public holiday calendar, which is the same for every organisation.",
         [typeof(PublicHolidayOverride)] = "Changes to the public holiday calendar, which apply to every organisation.",
         [typeof(EarlyAccessRequest)] = "Early access requests from the ODIP website, which aren't your organisation's records.",
+        [typeof(EarlyAccessLaterSubmission)] = "Repeat early access requests from the ODIP website, which aren't your organisation's records.",
     };
 
     /// <summary>
@@ -194,6 +195,7 @@ public static class ExportTables
 
         // Rostering
         Own<ShiftPattern>("shift-patterns.csv", "Repeating shift patterns."),
+        Own<RosterWeek>("roster-weeks.csv", "The roster weeks that have been started."),
         Own<Shift>("shifts.csv", "Shifts: participant, worker, date, times and status."),
         Own<ShiftNote>("shift-notes.csv", "Notes written on shifts."),
         Own<ShiftCompletion>("shift-completions.csv", "Shift finishes: actual times, what happened, and the review."),

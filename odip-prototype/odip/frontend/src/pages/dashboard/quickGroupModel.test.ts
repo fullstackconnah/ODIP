@@ -26,43 +26,43 @@ describe('groupPhase', () => {
 
 describe('rows decided here', () => {
   it('leave the list at once, and the pill drops by each one the server still lists', () => {
-    const gone = new Set([rowKey('leave', 'b')])
+    const gone = new Map([[rowKey('leave', 'b'), 0]])
     expect(visibleRows(model(), gone).map((r) => r.id)).toEqual(['a', 'c'])
     expect(shownCount(model(), gone)).toBe(2)
   })
 
   it('stop counting twice once the refetch has dropped them', () => {
-    const gone = new Set([rowKey('leave', 'b')])
+    const gone = new Map([[rowKey('leave', 'b'), 0]])
     expect(shownCount(model({ count: 2, rows: [row('a'), row('c')] }), gone)).toBe(2)
   })
 
   it('are keyed by group, so the same id in another group is untouched', () => {
-    expect(visibleRows(model(), new Set([rowKey('tasks', 'a')]))).toHaveLength(3)
+    expect(visibleRows(model(), new Map([[rowKey('tasks', 'a'), 0]]))).toHaveLength(3)
   })
 })
 
 describe('isPresent', () => {
   it('keeps a waiting or failed group on the page, never absent and never clear', () => {
-    expect(isPresent(model({ phase: 'loading', rows: [], count: 0 }), new Set(), 0)).toBe(true)
-    expect(isPresent(model({ phase: 'error', rows: [], count: 0 }), new Set(), 0)).toBe(true)
+    expect(isPresent(model({ phase: 'loading', rows: [], count: 0 }), new Map(), 0)).toBe(true)
+    expect(isPresent(model({ phase: 'error', rows: [], count: 0 }), new Map(), 0)).toBe(true)
   })
 
   it('drops a ready group with no rows left, unless it still holds a notice', () => {
-    const gone = new Set(['a', 'b', 'c'].map((id) => rowKey('leave', id)))
+    const gone = new Map(['a', 'b', 'c'].map((id): [string, number] => [rowKey('leave', id), 0]))
     expect(isPresent(model(), gone, 0)).toBe(false)
     expect(isPresent(model(), gone, 1)).toBe(true)
   })
 
   it('stays while a bulk run is in flight, though the refetch has already emptied it (SHAPE §6)', () => {
-    const gone = new Set(['a', 'b', 'c'].map((id) => rowKey('leave', id)))
-    expect(isPresent(model({ rows: [], count: 0 }), new Set(), 0, true)).toBe(true)
+    const gone = new Map(['a', 'b', 'c'].map((id): [string, number] => [rowKey('leave', id), 0]))
+    expect(isPresent(model({ rows: [], count: 0 }), new Map(), 0, true)).toBe(true)
     expect(isPresent(model(), gone, 0, true)).toBe(true)
   })
 
   it('stays while the server still counts rows beyond the ones decided here: never named clear with work left', () => {
     // 8 waiting, 5 fetched, all 5 decided before the refetch lands (or it is paused offline): 3 still wait.
     const fetched = ['a', 'b', 'c', 'd', 'e']
-    const gone = new Set(fetched.map((id) => rowKey('leave', id)))
+    const gone = new Map(fetched.map((id): [string, number] => [rowKey('leave', id), 0]))
     const eight = model({ count: 8, rows: fetched.map((id) => row(id)) })
 
     expect(shownCount(eight, gone)).toBe(3)

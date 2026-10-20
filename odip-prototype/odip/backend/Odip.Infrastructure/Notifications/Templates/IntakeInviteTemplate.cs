@@ -3,14 +3,15 @@ using Odip.Application.Interfaces;
 namespace Odip.Infrastructure.Notifications.Templates;
 
 /// <summary>
-/// Sent to the enquiry's contact: the invite (Booked), an updated invite (Changed) or a cancellation (Cancelled). The reader may be a family member
-/// using their own inbox, so the greeting has no name and the person is named in the text. Reply-To is the coordinator who booked it.
+/// Sent to the enquiry's main contact (spec 2026-10-16 redesign, L7): the invite (Booked), an updated invite (Changed) or a cancellation (Cancelled).
+/// The greeting names the main contact when there is one (the participant, when they are their own contact), and plain "Hello," otherwise; the
+/// participant is named in the text, and the main contact is the calendar attendee. Reply-To is the coordinator who booked it.
 /// </summary>
 public record IntakeInvitePayload(
     string Kind, string RecipientEmail, string PersonFirstName, string PersonFullName, string ProviderName, string ProviderAddress,
     DateTime StartsAtUtc, int DurationMinutes, string TimeZoneId, string Location, string StaffFullName,
     string? ManagerName, string? ManagerPhone, string? ReplyTo, string? OrganizerName, string Uid, int Sequence, DateTime StampUtc,
-    string? OrganizerEmail = null);
+    string? OrganizerEmail = null, string? RecipientFirstName = null, string? RecipientFullName = null);
 
 public static class IntakeInviteTemplate
 {
@@ -27,7 +28,7 @@ public static class IntakeInviteTemplate
             _ => $"Your intake visit with {p.ProviderName}: {IntakeWording.ShortDay(start)}, {IntakeWording.Time(start)}",
         });
 
-        var body = new EmailBody().Para("Hello,");
+        var body = new EmailBody().Para(p.RecipientFirstName is { Length: > 0 } name ? $"Hello {name}," : "Hello,");
         if (cancelled)
         {
             body.Para($"The intake visit for {p.PersonFullName} on {IntakeWording.LongDayNoYear(start)} at {IntakeWording.Time(start)} is cancelled.")
@@ -57,7 +58,7 @@ public static class IntakeInviteTemplate
 
         var ics = IntakeIcs.Build(cancelled ? IntakeIcs.Cancel : IntakeIcs.Request, IntakeWording.Event(
             p.Uid, p.Sequence, p.StartsAtUtc, p.DurationMinutes, p.PersonFullName, p.Location, p.StaffFullName, p.ProviderName,
-            p.ManagerName, p.ManagerPhone, p.OrganizerName, p.OrganizerEmail, p.PersonFullName, p.RecipientEmail, p.StampUtc));
+            p.ManagerName, p.ManagerPhone, p.OrganizerName, p.OrganizerEmail, p.RecipientFullName ?? p.RecipientEmail, p.RecipientEmail, p.StampUtc));
         return new NotificationMessage(p.RecipientEmail, subject, body.PlainText, body.HtmlText, ics, p.ReplyTo);
     }
 }

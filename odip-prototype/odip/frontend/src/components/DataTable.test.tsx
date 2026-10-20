@@ -1045,3 +1045,20 @@ describe('DataTable — 44px hit area for the links in a cell (coarse pointer)',
     }
   })
 })
+
+describe('DataTable — rowDetail', () => {
+  it('draws the detail as one full-width row under its own row, and nothing for a row whose detail is null', () => {
+    const { container } = render(
+      <DataTable data={rows} columns={columns} keyField="id" rowDetail={row => (row.id === '1' ? <p>More about Bianca</p> : null)} />
+    )
+
+    const bodyRows = [...container.querySelectorAll('tbody tr')]
+    expect(bodyRows).toHaveLength(3)
+    expect(bodyRows[0]).toHaveTextContent('Bianca')
+    const detail = bodyRows[1]
+    expect(detail).toHaveAttribute('data-row-detail')
+    expect(detail).toHaveTextContent('More about Bianca')
+    expect(detail.querySelector('td')).toHaveAttribute('colspan', String(columns.length))
+    expect(bodyRows[2]).toHaveTextContent('Alex')
+  })
+})

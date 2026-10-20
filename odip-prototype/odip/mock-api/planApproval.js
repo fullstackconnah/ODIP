@@ -4,9 +4,8 @@
 //   preview(...)  GET  participants/:id/service-agreement-drafts/:id/approval-preview   what approving would do, nothing done
 //   approve(...)  POST participants/:id/service-agreement-drafts/:id/approve            records it, makes the patterns, ends the old ones, generates unfilled shifts
 //
-// "Today" is the provider's calendar date (Sydney), never the UTC date. The horizon is 56 days.
+// "Today" is the provider's calendar date (Sydney), never the UTC date. An approval makes shifts only in the weeks already started (store.startedWeeks), as the server does.
 
-const HORIZON_DAYS = 56
 const MAX_PATTERNS = 100
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const ZONE_OF_STATE = { VIC: 'Australia/Sydney', NSW: 'Australia/Sydney', ACT: 'Australia/Sydney', TAS: 'Australia/Sydney', QLD: 'Australia/Brisbane', SA: 'Australia/Adelaide', WA: 'Australia/Perth', NT: 'Australia/Darwin' }
@@ -23,8 +22,9 @@ const weekday = (iso) => new Date(`${iso}T00:00:00Z`).getUTCDay()
 const earlier = (a, b) => (a < b ? a : b)
 const later = (a, b) => (a > b ? a : b)
 
-/** Whether the daily top-up is on, as the server reports it (RosterTopUp:Enabled). MOCK_TOP_UP=off switches it off, to see the screens that must not promise shifts "added each day". */
-const topUpEnabled = () => process.env.MOCK_TOP_UP !== 'off'
+const mondayOf = (iso) => addDays(iso, -((weekday(iso) + 6) % 7))
+/** Start rostering (2026-10-16): an approval makes shifts only in weeks already started, as the server does (RosterWeek rows); store.startedWeeks holds their Mondays. */
+const inStartedWeek = (store, date) => store.startedWeeks.has(mondayOf(date))
 
 /** The provider's calendar date now. MOCK_TODAY pins it for a screenshot or a test. */
 function providerToday() {
@@ -156,7 +156,7 @@ function oldShifts(store, draft) {
 function plan(store, participant, draft) {
   const today = providerToday()
   const newest = Math.max(...(store.drafts[draft.participantId] || []).map((d) => d.version))
-  const result = { reasons: [], newPatterns: [], toEnd: [], overlapping: [], shiftsToCreate: 0, shiftsNote: undefined, from: later(today, draft.agreementStartDate), horizonEnd: earlier(draft.agreementEndDate, addDays(today, HORIZON_DAYS)), ready: false }
+  const result = { reasons: [], newPatterns: [], toEnd: [], overlapping: [], shiftsToCreate: 0, shiftsNote: undefined, from: later(today, draft.agreementStartDate), horizonEnd: undefined, ready: false }
   if (draft.approval) { result.reasons.push({ code: 'AlreadyApproved', message: `This revision was approved for rostering by ${draft.approval.approvedByName} on ${draft.approval.approvedAt.slice(0, 10)}.` }); return result }
   if (draft.version < newest) { result.superseded = newest; result.reasons.push({ code: 'Superseded', message: SUPERSEDED }); return result }
   if (!draft.blocks || draft.blocks.length === 0 || !draft.pricing) result.reasons.push({ code: 'HandTyped', message: HAND_TYPED })
@@ -176,15 +176,14 @@ function plan(store, participant, draft) {
   result.endsOn = endsOn
   result.overlapping = store.patterns.filter((p) => p.participantId === draft.participantId && !p.sourceDraftId && p.isActive && result.newPatterns.some((made) => overlaps(p, made)))
   result.oldShifts = oldShifts(store, draft)
+  const lastStarted = [...store.startedWeeks].map((monday) => addDays(monday, 6)).filter((sunday) => sunday >= result.from).sort().pop()
+  result.horizonEnd = lastStarted ? earlier(draft.agreementEndDate, lastStarted) : undefined
   result.ready = !!participant && participant.isActive !== false && !participant.isDraft
   if (!result.ready) {
     const who = participant ? participant.firstName : 'the participant'
-    // As the server says it: "created once active" is the daily top-up's work, so with it off the note promises nothing.
-    result.shiftsNote = topUpEnabled()
-      ? `Unfilled shifts are created once ${who} is active.`
-      : `No shifts are made now, because ${who} is not active yet. The daily top-up is off, so make them with Generate on their shift patterns once they are.`
+    result.shiftsNote = `No shifts are made now, because ${who} is not active yet. Once they are, each week started on the roster includes them; use Generate on their shift patterns for weeks already started.`
   }
-  else if (result.from <= result.horizonEnd) result.shiftsToCreate = countShifts(draft, result.newPatterns, result.from, result.horizonEnd)
+  else if (result.horizonEnd && result.from <= result.horizonEnd) result.shiftsToCreate = countShifts(draft, result.newPatterns, result.from, result.horizonEnd, (date) => inStartedWeek(store, date))
   return result
 }
 
@@ -199,9 +198,9 @@ function datesOf(pattern, from, to) {
   return dates
 }
 
-function countShifts(draft, patterns, from, to) {
+function countShifts(draft, patterns, from, to, keep = () => true) {
   const skipped = skippedDays(draft)
-  return patterns.reduce((sum, pattern) => sum + datesOf(pattern, from, to).filter((date) => !skipped.has(`${pattern.sourceBlockKey}|${date}`)).length, 0)
+  return patterns.reduce((sum, pattern) => sum + datesOf(pattern, from, to).filter(keep).filter((date) => !skipped.has(`${pattern.sourceBlockKey}|${date}`)).length, 0)
 }
 
 // ── Preview ─────────────────────────────────────────────────────────────────
@@ -216,7 +215,7 @@ function previewOf(planned, draft) {
     ...(planned.toEnd.length > 0 ? { endsFromVersion: planned.endsFromVersion, endsOn: planned.endsOn } : {}),
     shiftsToCreate: planned.shiftsToCreate, ...(planned.shiftsNote ? { shiftsNote: planned.shiftsNote } : {}), oldShiftsRemaining: old,
     overlappingPatterns: planned.overlapping.map((p) => ({ id: p.id, dayOfWeek: p.dayOfWeek, startTime: p.startTime, endTime: p.endTime, endsNextDay: p.endsNextDay, effectiveFrom: p.effectiveFrom, ...(p.effectiveTo ? { effectiveTo: p.effectiveTo } : {}), ...(p.notes ? { notes: p.notes } : {}) })),
-    horizonEnd: planned.horizonEnd, topUpEnabled: topUpEnabled(),
+    ...(planned.horizonEnd ? { horizonEnd: planned.horizonEnd } : {}),
   }
 }
 
@@ -254,18 +253,12 @@ function approve(store, participantId, draftId, body, caller) {
   for (let i = store.shifts.length - 1; i >= 0; i--) if (gone.has(store.shifts[i].id)) store.shifts.splice(i, 1)
   store.patterns.push(...made)
   const created = []
-  if (planned.ready && planned.from <= planned.horizonEnd) {
+  if (planned.ready && planned.horizonEnd && planned.from <= planned.horizonEnd) {
     const skipped = skippedDays(draft)
     for (const pattern of made) {
       for (const date of datesOf(pattern, planned.from, planned.horizonEnd)) {
-        if (skipped.has(`${pattern.sourceBlockKey}|${date}`)) continue
-        // As the server sends it: a null member is left out of the JSON (WhenWritingNull), so an unfilled shift has NO staffId and no staffName (not nulls), and no notes or override reason either.
-        // It says which agreement it came from (the pattern's version), so the shift panel needs no pattern read.
-        created.push({
-          id: store.newId('shift'), participantId, participantName: pattern.participantName, serviceDate: date, startTime: pattern.startTime, endTime: pattern.endTime,
-          endsNextDay: pattern.endsNextDay, durationHours: durationOf(pattern), ratio: pattern.ratio, nightType: pattern.nightType, status: 'Draft', shiftPatternId: pattern.id,
-          findings: [], assigneeOnApprovedLeave: false, requirements: pattern.requirements, fromAgreement: true, sourceDraftVersion: pattern.sourceDraftVersion,
-        })
+        if (skipped.has(`${pattern.sourceBlockKey}|${date}`) || !inStartedWeek(store, date)) continue
+        created.push(shiftOf(store, pattern, date))
       }
     }
     store.shifts.push(...created)
@@ -273,9 +266,38 @@ function approve(store, participantId, draftId, body, caller) {
   draft.approval = {
     approvedAt: new Date().toISOString(), approvedByName: (caller && caller.name) || 'Demo Coordinator', patternsCreated: made.length, patternsEnded: planned.toEnd.length, shiftsCreated: created.length,
     ...(created.length > 0 ? { horizonEnd: planned.horizonEnd, firstShiftDate: created.map((s) => s.serviceDate).sort()[0] } : {}),
-    topUpEnabled: topUpEnabled(),
   }
   return { draft, oldShiftsRemaining: planned.oldShifts || { open: 0, assigned: 0, removed: 0, shifts: [] } }
+}
+
+/**
+ * One generated shift. As the server sends it: a null member is left out of the JSON (WhenWritingNull), so an unfilled shift has NO staffId and no staffName (not nulls), and no notes or override
+ * reason either. It says which agreement it came from (the pattern's version), so the shift panel needs no pattern read; the pattern's regular is on it when it has one.
+ */
+function shiftOf(store, pattern, date) {
+  return {
+    id: store.newId('shift'), participantId: pattern.participantId, participantName: pattern.participantName, serviceDate: date, startTime: pattern.startTime, endTime: pattern.endTime,
+    endsNextDay: pattern.endsNextDay, durationHours: durationOf(pattern), ratio: pattern.ratio, nightType: pattern.nightType, status: 'Draft', shiftPatternId: pattern.id,
+    findings: [], assigneeOnApprovedLeave: false, requirements: pattern.requirements, fromAgreement: true, sourceDraftVersion: pattern.sourceDraftVersion,
+    ...(pattern.defaultStaffId ? { staffId: pattern.defaultStaffId, staffName: pattern.defaultStaffName } : {}),
+  }
+}
+
+/** Start rostering in the mock: the week's shifts of every live agreement pattern, made as approve() makes them. shortcut: no regular-away check (the mock keeps no leave for patterns); the server's StartWeek has it. */
+function generateWeek(store, monday) {
+  const sunday = addDays(monday, 6)
+  const drafts = Object.values(store.drafts).flat()
+  const made = []
+  for (const pattern of store.patterns.filter((p) => p.sourceDraftId && p.isActive)) {
+    const draft = drafts.find((d) => d.id === pattern.sourceDraftId)
+    const skipped = draft ? skippedDays(draft) : new Set()
+    for (const date of datesOf(pattern, monday, sunday)) {
+      if (skipped.has(`${pattern.sourceBlockKey}|${date}`) || store.shifts.some((s) => s.shiftPatternId === pattern.id && s.serviceDate === date)) continue
+      made.push(shiftOf(store, pattern, date))
+    }
+  }
+  store.shifts.push(...made)
+  return made
 }
 
 function durationOf(pattern) {
@@ -283,4 +305,4 @@ function durationOf(pattern) {
   return Math.round(((end - start) / 60) * 100) / 100
 }
 
-module.exports = { preview, approve, providerToday, addDays, weekday, durationOf, DAYS, HORIZON_DAYS }
+module.exports = { preview, approve, generateWeek, mondayOf, providerToday, addDays, weekday, durationOf, DAYS }

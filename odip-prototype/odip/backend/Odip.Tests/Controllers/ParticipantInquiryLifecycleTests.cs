@@ -73,13 +73,16 @@ public class ParticipantInquiryLifecycleTests
 
         var created = Ok(await controller.Create(new CreateParticipantInquiryDto
         {
-            FirstName = "Ada", LastName = "Lovelace", Source = "Phone", Email = "", Phone = "  ", Provenance = "",
+            FirstName = "Ada", LastName = " ", Source = "Phone", Email = "", Phone = "  ", Provenance = "",
         }, CancellationToken.None));
+
+        Assert.Equal("", created.LastName); // stored as "" too (rollback safety), sent as "" (G6)
 
         Assert.Null(created.Email);
         Assert.Null(created.Phone);
         Assert.Null(created.Provenance);
         var stored = await db.ParticipantInquiries.SingleAsync();
+        Assert.Equal("", stored.LastName); // a rollback to the previous image reads the column as required
         Assert.Null(stored.Email);
         Assert.Null(stored.Phone);
         Assert.Null(stored.Provenance);

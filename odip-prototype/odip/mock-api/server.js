@@ -91,7 +91,9 @@ const participants = [
 const enquiryFeed = [
   { id: 'inq-0001', participantId: null, firstName: 'Noah', lastName: 'Fitzgerald', phone: '0412 555 010', email: null, source: 'Phone', provenance: 'GP referral',
     createdAt: '2026-09-28T01:10:00Z', participantIsDraft: null, participantIsActive: null, participantIntakeCompletedAt: null },
+  // E2: Noah above is a legacy row (a phone, no contact name). E5: Priya is converted, with a named main contact.
   { id: 'inq-0002', participantId: 'p-0101', firstName: 'Priya', lastName: 'Nair', phone: null, email: 'priya.nair@example.com.au', source: 'Web', provenance: null,
+    contactFirstName: 'Anika', contactLastName: 'Nair', contactRelationship: 'Mother', contactRole: 'Guardian',
     createdAt: '2026-09-26T04:00:00Z', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: null },
   // A draft intake started in the Intake wizard with no enquiry behind it: it rides in the same feed, with the participant's id as its id.
   { id: 'p-0102', participantId: 'p-0102', firstName: 'Tomas', lastName: 'Becker', phone: '0433 555 020', email: null, source: '', provenance: null,
@@ -1839,6 +1841,7 @@ function rosterBoard(searchParams) {
   // Daniel's services have begun while he is still onboarding: he has a row every week, tagged as onboarding (the real board lists everyone who can receive services).
   board.participantRows.push({ participantId: 'p-0104', fullName: 'Daniel Osei', supportRatio: 'SharedSupport', overnightSupport: 'None', hasRestrictivePractice: false, inOnboarding: true, shifts: [], tripBars: [], scheduledHours: 0, daysWithoutCover: 7 })
   board.weekStart = monday
+  board.weekStarted = startedWeeks.has(monday)
   board.days = days
   for (const shift of rosterShifts.filter((s) => s.serviceDate >= days[0] && s.serviceDate <= days[6])) {
     let row = board.participantRows.find((r) => r.participantId === shift.participantId)
@@ -2117,6 +2120,77 @@ function notificationPreferenceGrid() {
   }
 }
 
+// GET, POST .../followed-up and DELETE admin/early-access (Settings › Alpha sign-ups), last sent first as the API orders it: a repeat carrying a removal request,
+// a long message with line breaks, one with nothing optional, and one from before the alpha form (no size).
+const earlyAccessSignups = [
+  { id: 'eas-0001', name: 'Amara Okafor', organisation: 'Riverbend Community Care', email: 'amara.okafor@example.org',
+    role: 'Operations manager', phone: '0491 570 156', organisationSize: '10-49',
+    message: 'We run six houses in the Riverina and would like to try the roster board.',
+    createdAtUtc: '2026-10-02T01:15:00Z', lastRequestedAtUtc: '2026-10-15T22:40:00Z', requestCount: 3, overLimitCount: 0,
+    // The stored answers are the first ones. Two repeats changed something: a corrected phone, then a removal request with the role cleared.
+    laterSubmissions: [
+      { id: 'eal-0001', receivedAtUtc: '2026-10-09T03:30:00Z', name: 'Amara Okafor', organisation: 'Riverbend Community Care',
+        role: 'Operations manager', phone: '0491 570 157', organisationSize: '10-49',
+        message: 'We run six houses in the Riverina and would like to try the roster board.' },
+      { id: 'eal-0002', receivedAtUtc: '2026-10-15T22:40:00Z', name: 'Amara Okafor', organisation: 'Riverbend Community Care',
+        phone: '0491 570 157', organisationSize: '10-49',
+        message: "Please remove my details for now. We've signed with another system this year.\nThanks for the chat." },
+    ] },
+  { id: 'eas-0002', name: 'Tom Nguyen', organisation: 'Coastal Support Services', email: 'tom.nguyen@example.org',
+    role: 'Rostering lead', organisationSize: '50-199',
+    message: 'We run 14 SIL houses and about 60 community access shifts a week.\n\nMost of our admin time goes on filling last-minute gaps and chasing shift notes before claims. We would like to try the roster board and the completion review first.',
+    createdAtUtc: '2026-10-14T05:02:00Z', lastRequestedAtUtc: '2026-10-14T05:02:00Z', requestCount: 1, overLimitCount: 0, laterSubmissions: [] },
+  { id: 'eas-0003', name: 'Priya Raman', organisation: 'Kin & Co Disability Services', email: 'priya@example.org',
+    phone: '+61 2 5550 1234', organisationSize: 'under-10',
+    createdAtUtc: '2026-10-09T23:30:00Z', lastRequestedAtUtc: '2026-10-09T23:30:00Z', requestCount: 1, overLimitCount: 0, laterSubmissions: [] },
+  { id: 'eas-0004', name: 'Sam Field', organisation: 'Field Health', email: 'sam.field@example.org',
+    createdAtUtc: '2026-09-30T06:00:00Z', lastRequestedAtUtc: '2026-10-12T04:00:00Z', requestCount: 14,
+    // The cap: the API keeps the first 10 later submissions, then only the first of the rest (three more here; the others are counted).
+    overLimitCount: 3, lastOverLimitAtUtc: '2026-10-12T04:00:00Z', followUpNeeded: true,
+    firstOverLimit: { id: 'eal-1010', receivedAtUtc: '2026-10-11T04:00:00Z', name: 'Sam Field', organisation: 'Field Health',
+      message: 'Please remove my details and stop the follow-ups.' },
+    laterSubmissions: Array.from({ length: 10 }, (_, i) => ({
+      id: `eal-1${String(i).padStart(3, '0')}`, receivedAtUtc: `2026-10-${String(i + 1).padStart(2, '0')}T04:00:00Z`, name: 'Sam Field', organisation: 'Field Health',
+      message: `Follow-up ${i + 1}: still interested.` })) },
+]
+// POST admin/early-access/:id/followed-up clears the marker for the life of the process, or answers 409 if the count the page showed is stale (as the API does).
+const earlyAccessFollowedUp = [
+  ['admin/early-access/:id/followed-up', (id, body) => {
+    const row = earlyAccessSignups.find(s => s.id === id)
+    if (!row) return { [HTTP]: 404, body: { success: false, data: false, message: 'Sign-up not found.', errors: ['Sign-up not found.'] } }
+    if (body.overLimitCount !== row.overLimitCount) return { [HTTP]: 409, body: { success: false, data: false, message: 'A new submission arrived after you opened this. Reload to see it.', errors: ['A new submission arrived after you opened this. Reload to see it.'] } }
+    row.followUpNeeded = false
+    row.followUpClearedAtUtc = new Date().toISOString()
+    return true
+  }],
+]
+// DELETE really removes the row for the life of the process, so the list after a Delete shows it gone (as the API does).
+const earlyAccessDelete = [
+  ['admin/early-access/:id', (id) => {
+    const index = earlyAccessSignups.findIndex(s => s.id === id)
+    if (index < 0) return { [HTTP]: 404, body: { success: false, data: false, message: 'Sign-up not found.', errors: ['Sign-up not found.'] } }
+    earlyAccessSignups.splice(index, 1)
+    return true
+  }],
+]
+
+// DELETE rostering/shifts/:id mirrors the API's DeleteShift: a started or finished shift, or one with a timesheet or a note behind it, is refused 409 SHIFT_STATUS_LOCKED and kept;
+// any other shift answers true (a shift made in this process is removed). The fixture week's own shifts are rebuilt per call, so they come back, as every derived fixture here does.
+const rosterShiftDelete = [
+  ['rostering/shifts/:id', (id) => {
+    const shift = [...allFixtureShifts(), ...rosterShifts].find((s) => s.id === id)
+    if (['InProgress', 'PendingReview', 'Completed'].includes(shift?.status)) {
+      return respond(409, failEnvelope(null, ["This shift has been started or finished, so it can't be deleted."], 'SHIFT_STATUS_LOCKED'))
+    }
+    if (shiftCompletions.some((c) => c.shiftId === id) || (shiftNotesByShiftId[id] || []).length) {
+      return respond(409, failEnvelope(null, ["This shift has notes or a timesheet behind it, so it can't be deleted. Cancel it instead."], 'SHIFT_STATUS_LOCKED'))
+    }
+    const index = rosterShifts.findIndex((s) => s.id === id)
+    if (index >= 0) rosterShifts.splice(index, 1)
+    return true
+  }],
+]
+
 // GET admin/notifications fixture — the query string (?status=&from=&to=) isn't read here, same
 // caveat as leave/staff-availability above: always returns the full fixture list, any filtering
 // left to the frontend.
@@ -2272,7 +2346,8 @@ const rosterPatterns = [
 ]
 const rosterShifts = []
 let rosterCounter = 0
-const approvalStore = { drafts: serviceAgreementDrafts, patterns: rosterPatterns, shifts: rosterShifts, participants, newId: (prefix) => `${prefix}-mock-${++rosterCounter}` }
+const startedWeeks = new Set([BOARD_FIXTURE_WEEK])   // the fixture week reads as started; others show the Start overlay
+const approvalStore = { drafts: serviceAgreementDrafts, patterns: rosterPatterns, shifts: rosterShifts, participants, startedWeeks, newId: (prefix) => `${prefix}-mock-${++rosterCounter}` }
 
 function draftDto(participantId, version, body, quoteResult, lines) {
   return {
@@ -2397,7 +2472,7 @@ function agreementsEnding() {
   const endedLines = planPricing.groupLines(endedQuote._lines, charged.map((entry) => entry.block))
   delete endedQuote._lines
   serviceAgreementDrafts['p-0001'] = [{ ...draftDto('p-0001', 1, ended, endedQuote, endedLines), approval: {
-    approvedAt: `${planApproval.addDays(today, -60)}T01:00:00Z`, approvedByName: 'Callum Radford', patternsCreated: 7, patternsEnded: 0, shiftsCreated: 0, topUpEnabled: true,
+    approvedAt: `${planApproval.addDays(today, -60)}T01:00:00Z`, approvedByName: 'Callum Radford', patternsCreated: 7, patternsEnded: 0, shiftsCreated: 0,
   } }]
 })()
 
@@ -2687,6 +2762,8 @@ const routes = [
   // is the self-service grid.
   ['notifications/preferences', () => notificationPreferenceGrid()],
   ['admin/notifications', () => notificationOutbox],
+  // Settings › Alpha sign-ups (DELETE: earlyAccessDelete).
+  ['admin/early-access', () => paged(earlyAccessSignups)],
   ['notifications/inbox', () => inAppInboxView()],
 ]
 
@@ -2695,6 +2772,7 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ...earlyAccessFollowedUp,
   ...funding.post,
   ...intake.post,
   ['plan-pricing/quote', (body) => {
@@ -2756,6 +2834,14 @@ const postRoutes = [
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
     return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
+  }],
+  // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers. matchRoute reads only `:id` as a parameter: it is the week start.
+  ['rostering/weeks/:id/start', (weekStart) => {
+    const monday = planApproval.mondayOf(weekStart)
+    if (startedWeeks.has(monday)) return respond(409, failEnvelope(null, ['This week has already been started.'], 'roster-week-started'))
+    startedWeeks.add(monday)
+    const made = planApproval.generateWeek(approvalStore, monday)
+    return { weekStart: monday, created: made.length, assignedToRegulars: made.filter((s) => s.staffId).length, regularAway: 0, skipped: [] }
   }],
   ...packageRoutesPost,
   ['staff-assignments/check', () => []],
@@ -2933,6 +3019,34 @@ const putRoutes = [
     if (code && claim.status === 'Rejected') claim.rejectionCode = code
     return true
   }],
+  // Make or stop being the regular (2026-10-16): the pattern slot's default worker, as the server's SetRegular. No shift changes.
+  ['rostering/patterns/:id/regular', (id, body) => {
+    const pattern = rosterPatterns.find((p) => p.id === id)
+    if (!pattern) return respond(404, failEnvelope(null, ['Pattern not found.']))
+    // REV274: the server compares the shown shift with the pattern's own slot and refuses a stale board (409); a Make also needs the shift's own worker; an ended pattern has no regular to change.
+    const shown = rosterShifts.find((s) => s.id === (body && body.shiftId))
+    const slotMatches = shown && shown.shiftPatternId === pattern.id && shown.participantId === pattern.participantId && planApproval.DAYS[planApproval.weekday(shown.serviceDate)] === pattern.dayOfWeek
+      && shown.startTime === pattern.startTime && shown.endTime === pattern.endTime && !!shown.endsNextDay === !!pattern.endsNextDay
+    if (!slotMatches || (body.staffId && shown.staffId !== body.staffId)) return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
+    if (!pattern.isActive || (pattern.effectiveTo && pattern.effectiveTo < providerToday())) return respond(409, failEnvelope(null, ["This shift's agreement pattern has ended, so it has no regular to change."], 'pattern-ended'))
+    // REV281B: the regular the coordinator was shown must still be the live one (null/absent: an old tab, no check; the all-zero Guid: none shown).
+    if (body && typeof body.expectedRegularId === 'string' && (/^0{8}(-0{4}){3}-0{12}$/.test(body.expectedRegularId) ? null : body.expectedRegularId) !== (pattern.defaultStaffId || null))
+      return respond(409, failEnvelope(null, ['This shift changed after the board was loaded. Refresh the board and try again.']))
+    const regular = body && body.staffId ? staff.find((s) => s.id === body.staffId) : null
+    if (body && body.staffId && !regular) return respond(400, failEnvelope(null, ['Staff member not found.']))
+    // REV281B: a renewal's later same-support patterns take it too, as the server does: only those whose regular is still the replaced one (a regular chosen on the renewal stays). The asks of a worker are part of the slot (SameSupport).
+    const slot = (p) => [p.participantId, p.dayOfWeek, p.startTime, p.endTime, !!p.endsNextDay, p.workerSlot, p.ratio, p.nightType, JSON.stringify(p.requirements ?? {})].join('|')
+    const was = pattern.defaultStaffId || null
+    for (const next of rosterPatterns) {
+      if (next.id !== pattern.id && next.isActive && pattern.effectiveTo && next.effectiveFrom > pattern.effectiveTo && (next.defaultStaffId || null) === was && slot(next) === slot(pattern)) {
+        next.defaultStaffId = regular ? regular.id : null
+        next.defaultStaffName = regular ? regular.fullName : null
+      }
+    }
+    pattern.defaultStaffId = regular ? regular.id : null
+    pattern.defaultStaffName = regular ? regular.fullName : null
+    return pattern
+  }],
   // A pattern edited or switched off on the Patterns page (phase D keeps the patterns an approval made in memory). The fields the real PUT takes; where it came from is never the form's to change.
   ['rostering/patterns/:id', (id, body) => {
     const pattern = rosterPatterns.find((p) => p.id === id)
@@ -3045,11 +3159,20 @@ function sendResult(res, result) {
 // Mirrors POST /api/public/early-access, which — like the real route — lives OUTSIDE BASE and outside the
 // ApiResponse envelope. Same contract as the API: 202 { status: 'received' } for a valid request after a
 // short delay; a filled honeypot (`website`) gets the same 202 and is dropped; invalid fields get a 400
-// ValidationProblemDetails whose `errors` are keyed name / organisation / email; a body over 4 KB gets 413.
-// Nothing is stored. (The 429 rate limit is not simulated here.)
+// ValidationProblemDetails whose `errors` are keyed by the 7 fields, name / organisation / email / organisationSize /
+// role / phone / message. Name, organisation, email and organisationSize are required (a missing or blank size is
+// a 400 like any other required field). A body over 8 KB (in BYTES, as the API counts) gets 413.
+// A valid sign-up is kept for the life of the process, in the admin list (see recordEarlyAccess). (The 429 rate limit is not simulated here.)
 const EARLY_ACCESS_PATH = '/api/public/early-access'
 const EARLY_ACCESS_DELAY_MS = 400
-const EARLY_ACCESS_MAX_BODY = 4096
+const EARLY_ACCESS_MAX_BODY = 8192 // bytes, as EarlyAccessController.MaxBodyBytes
+const ORGANISATION_SIZES = ['under-10', '10-49', '50-199', '200-plus']
+// char.IsControl, the line/paragraph separators and the bidi marks: what the API refuses in one-line fields.
+const ONE_LINE_BAD = /[\u0000-\u001F\u007F-\u009F\u2028\u2029\u202A-\u202E\u2066-\u2069]/
+// The API's message cleaning: line breaks kept as LF, a tab becomes a space, other controls and bidi marks dropped, then trimmed.
+const cleanMessage = (v) => (typeof v === 'string' ? v : '')
+  .replace(/\r\n?|[\u2028\u2029]/g, '\n').replace(/\t/g, ' ')
+  .replace(/[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, '').trim()
 
 function validateEarlyAccess(body) {
   const errors = {}
@@ -3064,7 +3187,40 @@ function validateEarlyAccess(body) {
   if (!email) errors.email = ['Enter your email address.']
   else if (email.length > 254) errors.email = ['Email must be 254 characters or fewer.']
   else if (!/^[^\s@"<>,]+@[^\s@.]+(\.[^\s@.]+)*\.[^\s@.]{2,}$/.test(email)) errors.email = ['Enter a valid email address.']
+  const role = text(body.role)
+  if (role.length > 100) errors.role = ['Role must be 100 characters or fewer.']
+  else if (ONE_LINE_BAD.test(role)) errors.role = ['Role contains characters that are not allowed.']
+  const phone = text(body.phone)
+  if (phone.length > 30) errors.phone = ['Phone must be 30 characters or fewer.']
+  else if (!/^[0-9 +()-]*$/.test(phone)) errors.phone = ['Use digits, spaces and + ( ) - only.']
+  else if (phone && (phone.lastIndexOf('+') > 0 || !/^(\D*\d){8,15}\D*$/.test(phone))) errors.phone = ['Enter a phone number with 8 to 15 digits.']
+  const size = text(body.organisationSize)
+  if (!ORGANISATION_SIZES.includes(size)) errors.organisationSize = [size ? 'Choose one of the listed sizes.' : "Choose your organisation's size."]
+  if (cleanMessage(body.message).length > 1000) errors.message = ['Message must be 1,000 characters or fewer.']
   return errors
+}
+
+// Stores a valid sign-up in the admin list for the life of the process, as the API does: a new address is a new row; a repeat bumps the count and
+// the last-sent time but never changes the stored answers, and when its answers differ it is kept as a later submission (the first 10 only).
+let earlyAccessSeq = 0
+function recordEarlyAccess(body) {
+  const text = (v) => (typeof v === 'string' ? v.trim() : '') || undefined
+  const answers = {
+    name: text(body.name), organisation: text(body.organisation), role: text(body.role), phone: text(body.phone),
+    organisationSize: text(body.organisationSize), message: cleanMessage(body.message) || undefined,
+  }
+  const email = text(body.email).toLowerCase()
+  const now = new Date().toISOString()
+  const stored = earlyAccessSignups.find(s => s.email === email)
+  if (!stored) {
+    earlyAccessSignups.unshift({ id: `eas-new-${++earlyAccessSeq}`, ...answers, email, createdAtUtc: now, lastRequestedAtUtc: now, requestCount: 1, laterSubmissions: [] })
+    return
+  }
+  stored.lastRequestedAtUtc = now
+  stored.requestCount += 1
+  if (Object.keys(answers).some(k => answers[k] !== stored[k]) && stored.laterSubmissions.length < 10)
+    stored.laterSubmissions.push({ id: `eal-new-${++earlyAccessSeq}`, receivedAtUtc: now, ...answers })
+  earlyAccessSignups.sort((a, b) => b.lastRequestedAtUtc.localeCompare(a.lastRequestedAtUtc))
 }
 
 function handleEarlyAccess(req, res) {
@@ -3073,13 +3229,17 @@ function handleEarlyAccess(req, res) {
     res.end()
     return
   }
-  let raw = ''
+  // Buffers, so the cap counts bytes and a multi-byte character split across chunks survives.
+  const chunks = []
+  let bytes = 0
   let tooLarge = false
   req.on('data', (chunk) => {
-    raw += chunk
-    if (raw.length > EARLY_ACCESS_MAX_BODY) tooLarge = true
+    bytes += chunk.length
+    if (bytes > EARLY_ACCESS_MAX_BODY) tooLarge = true
+    else chunks.push(chunk)
   })
   req.on('end', () => {
+    const raw = Buffer.concat(chunks).toString('utf8')
     if (tooLarge) {
       send(res, 413, { success: false, data: null, message: null, errors: ['The request could not be processed. Please check its size and format.'] })
       return
@@ -3103,6 +3263,7 @@ function handleEarlyAccess(req, res) {
         }))
         return
       }
+      if (!honeypotFilled) recordEarlyAccess(body)
       send(res, 202, { status: 'received' })
     }, EARLY_ACCESS_DELAY_MS)
   })
@@ -3223,7 +3384,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete]) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete, ...earlyAccessDelete, ...rosterShiftDelete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           // The query too: Cancel visit sends the form's version as ?expectedUpdatedAt (ODIP-REVIEW-268).

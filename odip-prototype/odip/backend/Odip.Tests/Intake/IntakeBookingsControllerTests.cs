@@ -438,20 +438,135 @@ public class IntakeBookingsControllerTests
     }
 
     [Fact]
-    public async Task A_contact_without_an_email_must_be_given_one_and_it_is_saved_with_the_booking()
+    public async Task A_booking_with_no_email_books_without_an_invite_and_an_email_given_is_saved_and_sent()
     {
         var f = new Fixture(contactEmail: null);
         var controller = f.Controller();
 
-        var missing = await controller.Set(f.Noah.Id, f.Body(), CancellationToken.None);
-        var invalid = await controller.Set(f.Noah.Id, f.Body() with { ContactEmail = "noah at home" }, CancellationToken.None);
-        var dto = Ok<ParticipantInquiryDto>((await controller.Set(f.Noah.Id, f.Body() with { ContactEmail = " noah@example.com " }, CancellationToken.None)).Result!);
+        var booked = Ok<ParticipantInquiryDto>((await controller.Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result!);
 
-        Assert.Equal(new[] { "Add Noah's email to send the invite." }, Problems(missing.Result!)["contactEmail"]);
+        // L7: booked, nobody emailed, nothing recorded as sent or failed; the staff member is still told.
+        Assert.Equal(Start, booked.IntakeStartsAt);
+        Assert.Empty(f.Channel.Sent);
+        var row = f.Row();
+        Assert.Equal(((DateTime?)null, (string?)null), (row.IntakeInviteSentAt, row.IntakeInviteError));
+        Assert.NotNull(row.IntakeUid);
+        Assert.Single(f.Outbox());
+
+        var invalid = await controller.Set(f.Noah.Id, f.Body() with { ContactEmail = "noah at home" }, CancellationToken.None);
         Assert.Equal(new[] { "Enter a full email address, like name@example.com." }, Problems(invalid.Result!)["contactEmail"]);
+
+        var dto = Ok<ParticipantInquiryDto>((await controller.Set(f.Noah.Id, f.Body() with { ContactEmail = " noah@example.com " }, CancellationToken.None)).Result!);
         Assert.Equal("noah@example.com", dto.Email);
         Assert.Equal("noah@example.com", f.Row().Email);
         Assert.Equal("noah@example.com", Assert.Single(f.Channel.Sent).RecipientAddress);
+    }
+
+    [Fact]
+    public async Task A_stored_email_that_cant_take_the_invite_is_refused_in_the_forms_words()
+    {
+        var f = new Fixture(contactEmail: "a b@c.d");
+
+        var result = await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None);
+
+        Assert.Equal(new[] { "This email can't take the invite. Check it on the enquiry, or clear it there to book without one." }, Problems(result.Result!)["contactEmail"]);
+        Assert.Null(f.Row().IntakeStartsAt);
+    }
+
+    [Fact]
+    public async Task A_change_to_a_visit_with_no_email_raises_the_staff_change_and_emails_nobody()
+    {
+        var f = new Fixture(contactEmail: null);
+        await f.BookAsync();
+
+        await f.BookAsync(f.Body() with { StartsAt = Start.AddHours(2) });
+
+        Assert.Equal(1, f.Row().IntakeIcsSequence);
+        Assert.Equal(new[] { "Booked", "Changed" }, f.Outbox().Select(o => Payload(o).GetProperty("Kind").GetString()));
+        Assert.Empty(f.Channel.Sent);
+    }
+
+    // Review Focus 2: the family's first invite must read as an invite, not as "Updated:", though the visit moved before they had an email.
+    [Fact]
+    public async Task The_first_invite_after_a_booking_with_no_email_says_booked_not_updated()
+    {
+        var f = new Fixture(ChannelSendOutcome.Sent, contactEmail: null);
+        await f.BookAsync();
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).Email = "noah@example.com";
+        f.Db.SaveChanges();
+
+        await f.BookAsync(f.Body() with { StartsAt = Start.AddHours(2) });
+
+        Assert.StartsWith("Your intake visit with", Assert.Single(f.Channel.Sent).Subject);
+    }
+
+    [Fact]
+    public async Task A_converted_enquirys_email_that_cant_take_the_invite_books_without_one_and_Resend_stays_refused()
+    {
+        // D7 makes a converted enquiry's email read-only, so the coordinator can't fix it: it books as no email (the staff notice, no invite).
+        var f = new Fixture(contactEmail: "a b@c.d");
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).ParticipantId = Guid.NewGuid();
+        f.Db.SaveChanges();
+
+        var booked = Ok<ParticipantInquiryDto>((await f.Controller().Set(f.Noah.Id, f.Body(), CancellationToken.None)).Result!);
+
+        Assert.Equal(Start, booked.IntakeStartsAt);
+        Assert.Empty(f.Channel.Sent);
+        var row = f.Row();
+        Assert.Equal(((DateTime?)null, (string?)null), (row.IntakeInviteSentAt, row.IntakeInviteError));
+        Assert.Equal("a b@c.d", row.Email);
+        Assert.Single(f.Outbox());
+
+        var resend = await f.Controller().Resend(f.Noah.Id, CancellationToken.None);
+        Assert.Equal(new[] { "Add the main contact's email to send the invite." }, Problems(resend.Result!)["contactEmail"]);
+    }
+
+    [Fact]
+    public async Task A_converted_enquirys_booking_never_changes_its_email()
+    {
+        var f = new Fixture(contactEmail: null);
+        f.Db.ParticipantInquiries.Single(x => x.Id == f.Noah.Id).ParticipantId = Guid.NewGuid();
+        f.Db.SaveChanges();
+
+        await f.BookAsync(f.Body() with { ContactEmail = "noah@example.com" });
+
+        Assert.Null(f.Row().Email);
+        Assert.Empty(f.Channel.Sent);
+    }
+
+    private static void SarahWalsh(Fixture f)
+    {
+        var x = f.Db.ParticipantInquiries.Single(i => i.Id == f.Noah.Id);
+        x.ContactFirstName = "Sarah"; x.ContactLastName = "Walsh";
+        f.Db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task The_invite_greets_the_main_contact_and_makes_them_the_attendee()
+    {
+        var f = new Fixture();
+        SarahWalsh(f);
+        await f.BookAsync();
+        var email = Assert.Single(f.Channel.Sent);
+        Assert.StartsWith("Hello Sarah,", email.PlainTextBody);
+        Assert.Contains(email.Ics!.Content.Replace("\r\n ", "").Split("\r\n"), l => l.StartsWith("ATTENDEE") && l.Contains("CN=\"Sarah Walsh\""));
+
+        var self = new Fixture();
+        self.Db.ParticipantInquiries.Single(i => i.Id == self.Noah.Id).ContactIsParticipant = true;
+        self.Db.SaveChanges();
+        await self.BookAsync();
+        Assert.StartsWith("Hello Noah,", Assert.Single(self.Channel.Sent).PlainTextBody);
+    }
+
+    [Fact]
+    public async Task The_staff_email_names_the_main_contact()
+    {
+        var f = new Fixture();
+        SarahWalsh(f);
+
+        await f.BookAsync();
+
+        Assert.Equal("Sarah Walsh", Payload(Assert.Single(f.Outbox())).GetProperty("ContactName").GetString());
     }
 
     [Fact]
@@ -721,7 +836,7 @@ public class IntakeBookingsControllerTests
 
         var result = await f.Controller().Resend(f.Noah.Id, CancellationToken.None);
 
-        Assert.Equal(new[] { "Add Noah's email to the enquiry to send the invite." }, Problems(result.Result!)["contactEmail"]);
+        Assert.Equal(new[] { "Add the main contact's email to send the invite." }, Problems(result.Result!)["contactEmail"]);
     }
 
     [Fact]

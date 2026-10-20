@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import indexHtml from './index.html?raw'
@@ -9,10 +9,11 @@ import { ACKNOWLEDGEMENT_OF_COUNTRY } from '../src/lib/platformFacts'
 // CSS is read from disk: the test run does not process CSS (vite.config.ts `css: false`).
 const css = readFileSync(join(__dirname, 'welcome.css'), 'utf-8')
 
-// Guards for the landing page's contract: the direction it was built to, the CSP it must satisfy, the claims it must
-// never make (PRODUCT-TRUTH and both finish reviews), and the proof it must show.
+// Guards for the landing page's contract: the CSP it must satisfy, the copy and claims it must keep (SHAPE section 3,
+// spec L4), the form's markup, the footer's bound facts, and the proof it must show.
 const doc = new DOMParser().parseFromString(indexHtml, 'text/html')
-const manifest = JSON.parse(manifestRaw) as Array<{ name: string; file1x: string; width1x: number; height1x: number }>
+const manifest = JSON.parse(manifestRaw) as Array<{ name: string; file1x: string; file2x: string; width1x: number; height1x: number; alt: string }>
+const fileOf = (url: string | null) => (url ?? '').split(' ')[0].split('/').pop()!
 const squash = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim()
 const visibleText = (() => {
   const clone = doc.body.cloneNode(true) as HTMLElement
@@ -20,33 +21,13 @@ const visibleText = (() => {
   return squash(clone.textContent)
 })()
 const altText = Array.from(doc.querySelectorAll('img')).map((i) => i.getAttribute('alt') ?? '').join(' ')
-const attrText = Array.from(doc.querySelectorAll('[aria-label], [title], [data-arrived]'))
-  .map((el) => [el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('data-arrived')].join(' '))
+const attrText = Array.from(doc.querySelectorAll('[aria-label], [title]'))
+  .map((el) => [el.getAttribute('aria-label'), el.getAttribute('title')].join(' '))
   .join(' ')
 const words = `${visibleText} ${altText} ${attrText} ${doc.title} ${doc.querySelector('meta[name="description"]')?.getAttribute('content')}`
-const fileOf = (url: string | null) => (url ?? '').split(' ')[0].split('/').pop()!
-
-describe('direction contract', () => {
-  const comment = indexHtml.match(/^\s*<!--([\s\S]*?)-->/)
-
-  it('opens the file, ahead of the doctype, so it survives the build', () => {
-    expect(comment).not.toBeNull()
-    expect(indexHtml.indexOf('<!--')).toBe(0)
-    expect(indexHtml.indexOf('<!doctype html>')).toBeGreaterThan(indexHtml.indexOf('-->'))
-  })
-
-  it('carries the five blocks in order and closes with the FINISH line verbatim', () => {
-    const body = comment![1].trim()
-    const order = ['THESIS:', 'OWN-WORLD:', 'STORY:', 'FIRST VIEWPORT:', 'FORM:', 'FINISH:'].map((k) => body.indexOf(k))
-    expect(order.every((i) => i >= 0)).toBe(true)
-    expect([...order].sort((a, b) => a - b)).toEqual(order)
-    expect(body).toContain('THESIS: Odip is where the lived trip becomes the record.')
-    expect(body).toContain('FORM: fused shader-portal challenger; staging: translation gate; seed 89fb77e6.')
-    expect(body.split('\n').pop()!.trim()).toBe(
-      'FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md',
-    )
-  })
-})
+const SLOTS = ['t0830', 't1000', 't1130', 't1300', 't1430', 't1600', 'onshift']
+const text = (sel: string) => squash(doc.querySelector(sel)!.textContent)
+const attrs = (sel: string, name: string) => Array.from(doc.querySelectorAll(sel)).map((el) => el.getAttribute(name))
 
 describe('CSP: what the page may load', () => {
   const csp = doc.querySelector('meta[http-equiv="Content-Security-Policy"]')!.getAttribute('content')!
@@ -72,7 +53,7 @@ describe('CSP: what the page may load', () => {
     expect(directive('object-src')).toBe("object-src 'none'")
   })
 
-  it('every image ships with the site, the poster included, and every stylesheet is Google Fonts or local', () => {
+  it('every image ships with the site, the icons are the app\'s own, and every stylesheet is Google Fonts or local', () => {
     for (const img of Array.from(doc.querySelectorAll('img'))) {
       expect(img.getAttribute('src')).not.toMatch(/^(https?:)?\/\//)
       expect(img.getAttribute('srcset') ?? '').not.toMatch(/https?:\/\//)
@@ -80,7 +61,7 @@ describe('CSP: what the page may load', () => {
     for (const link of Array.from(doc.querySelectorAll('link[rel="stylesheet"]'))) {
       expect(link.getAttribute('href')).toMatch(/^(\.\/|https:\/\/fonts\.googleapis\.com\/)/)
     }
-    expect(css).toMatch(/url\('\.\/assets\/canopy-poster\.webp'\)/)
+    expect([attrs('link[rel="icon"]', 'href'), attrs('link[rel="apple-touch-icon"]', 'href')]).toEqual([['/favicon.svg'], ['/apple-touch-icon.png']])
     expect(css).not.toMatch(/url\((['"])?https?:/)
   })
 })
@@ -103,267 +84,168 @@ describe('the app\'s own type: the same two families as the app, critical files 
   })
 })
 
-describe('claims: only what PRODUCT-TRUTH and the finish reviews allow', () => {
-  it('never says "compliant" anywhere in the page, not even in a file name', () => {
-    expect(indexHtml).not.toMatch(/complian/i)
-  })
 
+describe('claims (spec L4)', () => {
+  it('makes no outcome claim, even in a file name; "compliance work" and one Employment Hero line are allowed', () => {
+    expect(indexHtml).not.toMatch(/\bcompliant\b|certif|guarantee/i)
+    expect(visibleText).toContain('Built for NDIS compliance work')
+    expect(visibleText.split('Employment Hero').length - 1).toBe(1)
+    expect(visibleText).toContain('Syncs staff from Employment Hero, if you use it.')
+  })
   it.each([
-    ['third-party integrations', /xero|brevity|employment hero|splose|linxio|budgetly/i],
-    ['connecting to or submitting to PRODA or the Commission', /(connects?|integrat\w*|submits?|syncs?) (with |to )?(proda|the ndis commission|ndia)/i],
-    ['a 5-day rule or live countdown timers', /5[- ]day|five[- ]day|countdown|count-down|live timer/i],
-    ['a complaints register', /complaints? (register|management)/i],
-    ['offline mode or a PWA', /offline|\bpwa\b|installable|install the app/i],
-    ['Australian data hosting or residency', /data residency|hosted in australia|australian[- ]hosted|australian data/i],
-    ['e-signing', /e-?sign/i],
-    ['payment reconciliation', /reconcil/i],
-    ['SMS', /\bsms\b|text message/i],
-    ['per-traveller bed or room allocation', /(allocate|assign)s? (each )?(traveller|participant)s? (to )?(a )?(bed|room)/i],
-    ['customers, testimonials, pricing or ratings', /testimonial|customers? (say|love|trust)|per month|\/month|pricing|\$\d+ ?(\/|per)|rated|five stars?|trusted by/i],
-    ['every change (25 record types are audited, not everything)', /every change/i],
-    ['rooms (the product reserves bed and bedroom counts)', /\brooms?\b/i],
-  ])('does not claim %s', (_label, pattern) => {
-    expect(words).not.toMatch(pattern)
+    /xero|brevity|splose|shiftcare|linxio|budgetly|payroll|family portal|complaints? (register|management)/i,
+    /(connects?|integrat\w*|submits?|syncs?|lodges?) (with |to )?(proda|the ndis commission|ndia)|report\w* to the (ndis )?commission/i,
+    /5[- ]day|five[- ]day|count-?down|live timer|offline|\bpwa\b|installable|install the app|e-?sign|reconcil|\bsms\b|text message/i,
+    /testimonial|customers? (say|love|trust)|per month|\/month|pricing|\$\d|\brated\b|five stars?|trusted by|\bfree\b|every change|\brooms?\b/i,
+    /\bAI\b|AI-powered/,
+  ])('claims nothing matching %s', (pattern) => expect(words).not.toMatch(pattern))
+  it('has no exclamation marks, scarcity or brief vocabulary', () => {
+    expect(visibleText).not.toMatch(/!|limited (spots|places)|hurry|don't miss|only \d+ (spots|places)/i)
+    expect(indexHtml).not.toMatch(/THESIS|OWN-WORLD|FIRST VIEWPORT|seed ee897db1/)
   })
-
-  it('never uses exclamation-mark hype or scarcity language', () => {
-    expect(visibleText).not.toMatch(/!|limited spots|limited places|hurry|don't miss|only \d+ (spots|places)/i)
+})
+describe('first viewport and the day plan (SHAPE section 3)', () => {
+  it('says what it is, for whom, and the offer; no OG or canonical yet (L8)', () => {
+    expect(doc.title).toBe('Bunya Support: NDIS and disability service provider software')
+    expect(attrs('meta[name="description"]', 'content')).toEqual(['Next-generation NDIS and disability service provider software: approvals, rosters, intake, agreements, incidents and the claims file in one place, so your admin team gets time back. Now in alpha.'])
+    expect(text('h1')).toBe('From the first approval to the claims file, in one place.')
+    expect(text('.hero .lede')).toBe('Bunya Support is the next generation of NDIS and disability service provider software. Rosters and shifts, intake, agreements, incidents and the claims file sit in one place, so less of the day goes on admin and your admin team gets time back.')
+    expect(doc.querySelector('meta[property^="og:"], link[rel="canonical"]')).toBeNull()
   })
-
-  it('says what Odip is in the first viewport: software, for NDIS providers that run supported holidays', () => {
-    expect(doc.title).toBe('Odip: NDIS trip management for supported holidays')
-    expect(doc.querySelector('meta[name="description"]')!.getAttribute('content')).toMatch(
-      /^Trip management software for NDIS providers that run supported holidays/,
-    )
-    expect(squash(doc.querySelector('h1')!.textContent)).toBe('You run the trip. Odip keeps the record.')
-    expect(squash(doc.querySelector('.hero__sub')!.textContent)).toBe(
-      'Trip management software for NDIS providers that run supported holidays. One record for travellers, accommodation, staff, vehicles and funding, from the first plan to the claims.',
-    )
+  it('indexes the 7 slots in order; each has Before and With Bunya Support; the rail is hidden', () => {
+    expect(attrs('nav[aria-label="An admin day with Bunya Support"] a', 'href')).toEqual(SLOTS.map((s) => '#' + s))
+    for (const id of SLOTS) expect(Array.from(doc.querySelectorAll(`#${id} h3`)).map((h) => squash(h.textContent))).toEqual(['Before', 'With Bunya Support'])
+    expect([attrs('.rail [data-for]', 'data-for'), attrs('.rail', 'aria-hidden')]).toEqual([SLOTS, ['true']])
   })
-
-  it('words the shift note as the screen shows it (a keyword prompt), never as detection', () => {
-    // ShiftNoteFlagging.cs is advisory: it scans a note for injury words, with false positives and false negatives.
-    const fig = Array.from(doc.querySelectorAll('figure')).find((f) => f.querySelector('img')?.getAttribute('src')?.includes('care-shift-notes-phone'))!
-    expect(squash(fig.querySelector('figcaption')!.textContent)).toBe('Sample data A shift note that mentions an injury prompts an incident report.')
-    expect(visibleText).not.toMatch(/shift notes? (flag|detect)/i)
+  it('marks the alpha in the bar and the hero, and says what happens next', () => {
+    expect(doc.querySelectorAll('.site-header .alpha-tag, .hero .alpha-tag').length).toBe(2)
+    expect(visibleText).toContain('Now in alpha')
+    expect([text('#alpha h2'), text('#join').includes('No confirmation email is sent')]).toEqual(['What alpha means.', true])
   })
-
-  it('names QSC once, by its full name, the NDIS Quality and Safeguards Commission', () => {
-    expect(visibleText.split('QSC is the NDIS Quality and Safeguards Commission').length - 1).toBe(1)
-    expect(visibleText).not.toContain('QSC is the NDIS Commission')
+})
+describe('structure, the form and the CSS guards', () => {
+  it('has one h1, the skip link, Sign in in the bar, the join copy and the footer, and every svg hidden', () => {
+    expect([doc.querySelectorAll('h1').length, attrs('a.skip', 'href')]).toEqual([1, ['#main']])
+    expect(Array.from(doc.querySelectorAll('a[href="/login"]')).map((a) => [squash(a.textContent), a.closest('.site-header, .join, .site-footer')!.classList[0]]))
+      .toEqual([['Sign in', 'site-header'], ['Sign in', 'join'], ['Sign in', 'site-footer']])
+    for (const svg of Array.from(doc.querySelectorAll('svg'))) expect(svg.closest('[aria-hidden="true"]')).not.toBeNull()
   })
-
-  it('states the roster checks as the code does: two hard stops, and 4 of the 16 warnings need a reason', () => {
-    // RosterConflictService.cs: 18 codes; WscExpired and VehicleDoubleBooked block; RequiresReason on four warnings only.
-    expect(visibleText).toContain('4 of the 16 warnings need a reason')
-    expect(visibleText).not.toMatch(/the rest (ask|need)|all (the )?warnings need/i)
-    expect(visibleText).toContain('Expired worker screening and a double-booked vehicle')
+  it.each([
+    ['f-name', 'name', true, '100', 'name', 'f-name-error'],
+    ['f-org', 'organisation', true, '150', 'organization', 'f-org-error'],
+    ['f-role', 'role', false, '100', 'organization-title', 'f-role-hint f-role-error'],
+    ['f-size', 'organisationSize', true, null, null, 'f-size-error'],
+    ['f-email', 'email', true, '254', 'email', 'f-email-error'],
+    ['f-phone', 'phone', false, '30', 'tel', 'f-phone-hint f-phone-error'],
+    ['f-message', 'message', false, '1000', null, 'f-message-hint f-message-error'],
+  ])('labels %s with its name, limit, autocomplete and description', (id, name, required, max, auto, described) => {
+    const el = doc.getElementById(id)!
+    expect([!!doc.querySelector(`label[for="${id}"]`), el.getAttribute('name'), el.getAttribute('data-field'), el.hasAttribute('required'), el.getAttribute('maxlength'), el.getAttribute('autocomplete'), el.getAttribute('aria-describedby')])
+      .toEqual([true, name, name, required, max, auto, described])
+    for (const ref of described.split(' ')) expect(doc.getElementById(ref), ref).not.toBeNull()
+    expect(attrs(`#${id}-error`, 'data-error')).toEqual([name])
   })
-
-  it('times the overdue flag from when the incident was logged, and says Odip exports while the provider uploads', () => {
-    expect(visibleText).toContain('still unreported 24 hours after it was logged')
-    expect(visibleText).toContain('Odip exports the files; you upload them.')
+  it('offers the 4 size codes behind an empty placeholder', () => {
+    expect(attrs('#f-size option', 'value')).toEqual(['', 'under-10', '10-49', '50-199', '200-plus'])
+    expect(Array.from(doc.querySelectorAll('#f-size option')).map((o) => squash(o.textContent))).toEqual(['Choose a size', 'Fewer than 10 staff', '10 to 49 staff', '50 to 199 staff', '200 staff or more'])
   })
-
-  it('counts exactly the numbers in the code, and names Oassist as the provider it was built with', () => {
-    const readings = Array.from(doc.querySelectorAll('.reading')).map((r) => ({
-      n: squash(r.querySelector('.reading__n')!.textContent),
-      label: squash(r.querySelector('.reading__label')!.textContent),
-    }))
-    expect(readings).toEqual([
-      { n: '18', label: 'roster checks' },
-      { n: '11', label: 'incident types' },
-      { n: '5', label: 'credentials tracked' },
-      { n: '3', label: 'funding types' },
-      { n: '25', label: 'audited record types' },
-    ])
-    expect(squash(doc.querySelector('.provenance')!.textContent)).toBe('Built with Oassist, a registered NDIS provider of supported holidays.')
+  it('ships the no-JS guard, the honeypot, and the status and received panel hidden', () => {
+    const has = (sel: string, a: string) => doc.querySelector(sel)!.hasAttribute(a)
+    expect([attrs('#alpha-form', 'aria-describedby')[0], has('#alpha-form', 'novalidate')]).toEqual(['form-notice', true])
+    expect([text('[data-nojs]'), has('[data-nojs]', 'hidden'), has('[data-submit]', 'disabled')]).toEqual(['This form needs JavaScript. Turn it on and reload to join the alpha.', false, true])
+    expect([attrs('.hp', 'aria-hidden')[0], attrs('#f-website', 'tabindex')[0], attrs('#f-website', 'data-field')[0]]).toEqual(['true', '-1', 'website'])
+    expect([attrs('[data-status]', 'role')[0], has('[data-status]', 'hidden'), has('[data-form-panel] [data-success]', 'hidden')]).toEqual(['alert', true, true])
+    expect([text('[data-success-heading]'), text('[data-reset]')]).toEqual(['Thanks, we have your details.', 'Send another sign-up'])
   })
-
-  it('leaves no Tourist Drive vocabulary behind, in the markup or the styles', () => {
-    const tourist = /odometer|tourist drive|route rail|stop signs?\b|concertina|overpass|strip map|sign--|km-plate|data-fold/i
-    expect(indexHtml).not.toMatch(tourist)
-    expect(css).not.toMatch(tourist)
+  it('lets the hidden attribute beat every display rule, so the received panel (display: grid) is hidden on load', () => {
+    expect(css).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/)
+  })
+  it('paints the invalid border off the aria-invalid the form sets on the control (nothing adds an is-invalid class), and keeps a focus ring on it', () => {
+    const rules = css.split('\n').filter((l) => l.includes('[aria-invalid="true"]'))
+    const base = rules.find((l) => !l.includes(':focus'))!
+    const focus = rules.find((l) => l.includes(':focus'))!
+    for (const rule of [base, focus]) for (const el of ['input', 'select', 'textarea']) expect(rule).toContain(`.field ${el}[aria-invalid="true"]`)
+    expect(base).toMatch(/border-color:\s*var\(--error\)/)
+    expect(focus).toMatch(/box-shadow:\s*0 0 0 3px/)
+    expect(css).not.toContain('is-invalid')
+  })
+  it('stays inside its weight: index.html 45 KB and welcome.css 26 KB (1 KB = 1,024 bytes, SHAPE section 10 #14)', () => {
+    expect(new TextEncoder().encode(indexHtml).length).toBeLessThanOrEqual(45 * 1024)
+    expect(new TextEncoder().encode(css).length).toBeLessThanOrEqual(26 * 1024)
+  })
+})
+const NOTICE = "How we handle these details Bunya Support collects the details in this form to contact you about the alpha and set you up. They're stored in the Bunya Support platform, seen only by our team, and used for nothing else. We keep them until the alpha ends, for 12 months at most, or delete them sooner if you ask. To see, change or remove your details, send the form again and say so in the message."
+describe('the collection notice (L6) and the footer (SHAPE section 7)', () => {
+  it('shows the notice once, in the owner words, its bound parts hidden, and no email anywhere', () => {
+    const clone = doc.getElementById('form-notice')!.cloneNode(true) as HTMLElement
+    clone.querySelectorAll('[hidden]').forEach((n) => n.remove())
+    expect(squash(clone.textContent)).toBe(NOTICE)
+    expect(visibleText.split('How we handle these details').length - 1).toBe(1)
+    expect(indexHtml).not.toMatch(/mailto:/)
+  })
+  it('opens with the Acknowledgement, heads four columns, links the 7 slots and always Accessibility', () => {
+    expect(doc.querySelector('.site-footer .wrap')!.firstElementChild!.classList.contains('ack')).toBe(true)
+    expect(text('.site-footer .ack p')).toBe(ACKNOWLEDGEMENT_OF_COUNTRY)
+    expect(Array.from(doc.querySelectorAll('.f-col > h2')).map((h) => squash(h.textContent))).toEqual(['Product', 'Company', 'Legal', 'Support'])
+    expect(Array.from(doc.querySelectorAll('.f-col')[0].querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(SLOTS.map((s) => '#' + s))
+    expect(doc.querySelector('.site-footer a[href="/accessibility"]')!.closest('[hidden]')).toBeNull()
+    expect(text('.f-notes')).toBe('Sample data The screens on this page show sample data, with fictional people and organisations.')
+  })
+  it('ships every bound element hidden and every bound fact empty', () => {
+    expect(attrs('[data-platform]', 'data-platform').sort()).toEqual(['abn', 'collector', 'companyName', 'privacy', 'privacyNotice', 'supportEmail', 'terms'])
+    for (const el of Array.from(doc.querySelectorAll('[data-platform], [data-platform-group]'))) expect(el.hasAttribute('hidden')).toBe(true)
+    for (const key of ['companyName', 'abn', 'collector']) expect(text(`[data-platform="${key}"]`)).toBe('')
+  })
+  it('tags each of the 11 figures once as Sample data (spec L7)', () => {
+    expect(Array.from(doc.querySelectorAll('main figure')).map((f) => Array.from(f.querySelectorAll('.tag')).map((t) => t.textContent))).toEqual(Array(11).fill(['Sample data']))
+    expect(doc.querySelectorAll('.tag').length).toBe(11)
   })
 })
 
-describe('proof: the real product, every figure tagged as sample data', () => {
-  const figures = Array.from(doc.querySelectorAll('figure'))
-
-  it('carries one "Sample data" tag per figure, and no tag outside a figure', () => {
-    const tags = Array.from(doc.querySelectorAll('.tag'))
-    expect(tags.length).toBe(figures.length)
-    for (const tag of tags) expect(tag.textContent).toBe('Sample data')
-    for (const fig of figures) expect(fig.querySelectorAll('.tag').length).toBe(1)
-  })
-
-  it('gives every image real alt text', () => {
-    const imgs = Array.from(doc.querySelectorAll('img'))
-    expect(imgs.length).toBe(14)
-    for (const img of imgs) {
-      expect(img.hasAttribute('alt')).toBe(true)
-      expect(img.getAttribute('alt')!.length).toBeGreaterThan(30)
+const IDS = ['decisions', 'roster-board', 'enquiries', 'intake-booking', 'agreement-draft', 'incident-body-map', 'credentials', 'completions', 'claim-preview', 'myshifts-week', 'myshifts-during']
+const NARROW = ['decisions', 'roster-board', 'enquiries', 'agreement-draft', 'incident-body-map', 'credentials', 'completions']
+const imgs = Array.from(doc.querySelectorAll<HTMLImageElement>('main img'))
+const entry = (file: string) => manifest.find((e) => e.file1x === file)!
+describe('proof: the real product, every figure a captured screen (SHAPE section 5)', () => {
+  it('shows the 11 screens in slot order, each a lazy WebP at 1x and 2x', () => {
+    expect(imgs.map((i) => fileOf(i.getAttribute('src')).replace('.webp', ''))).toEqual(IDS)
+    for (const [n, img] of imgs.entries()) {
+      expect(img.getAttribute('src')).toBe(`./assets/screens/${IDS[n]}.webp`)
+      expect(img.getAttribute('srcset')).toMatch(/^\.\/assets\/screens\/[\w-]+\.webp 1x, \.\/assets\/screens\/[\w-]+@2x\.webp 2x$/)
+      expect([img.getAttribute('loading'), img.getAttribute('decoding')]).toEqual(['lazy', 'async'])
     }
   })
-
-  it('shows all 14 proof screens, each a lazy WebP at 1x and 2x', () => {
-    const names = Array.from(doc.querySelectorAll('img')).map((i) => fileOf(i.getAttribute('src')).replace('.webp', ''))
-    expect(names).toEqual([
-      'crew-roster-warning', 'plan-trip-glance', 'plan-dashboard-missing', 'stay-accommodation', 'crew-roster-board', 'crew-credentials',
-      'care-shift-notes-phone', 'report-overdue', 'care-risk-alerts', 'care-shift-detail-phone', 'report-body-map-m',
-      'fund-claim-funding-split-m', 'fund-claim-preview', 'report-history',
-    ])
-    for (const img of Array.from(doc.querySelectorAll('img'))) {
-      expect(img.getAttribute('src')).toMatch(/\.webp$/)
-      expect(img.getAttribute('srcset')).toMatch(/\.webp 1x, .*@2x\.webp 2x$/)
-      expect(img.getAttribute('loading')).toBe('lazy')
-    }
-  })
-
-  it('serves the art-directed narrow crops below 1024px as 1x/2x WebP sources', () => {
+  it('serves the 7 narrow crops below 640 px', () => {
     const sources = Array.from(doc.querySelectorAll('picture source'))
-    expect(sources.length).toBe(8)
     for (const s of sources) {
-      expect(s.getAttribute('media')).toBe('(max-width: 1023px)')
-      expect(s.getAttribute('srcset')).toMatch(/-m\.webp 1x, .*-m@2x\.webp 2x$/)
+      expect(s.getAttribute('media')).toBe('(max-width: 639px)')
+      expect(s.getAttribute('srcset')).toMatch(/^\.\/assets\/screens\/[\w-]+-m\.webp 1x, \.\/assets\/screens\/[\w-]+-m@2x\.webp 2x$/)
+    }
+    expect(sources.map((s) => fileOf(s.getAttribute('srcset')).replace('-m.webp', ''))).toEqual(NARROW)
+  })
+  it('sizes every image and source by the file it names', () => {
+    for (const el of Array.from(doc.querySelectorAll('main img, picture source'))) {
+      const e = entry(fileOf(el.getAttribute('src') ?? el.getAttribute('srcset')))
+      expect([Number(el.getAttribute('width')), Number(el.getAttribute('height'))], e.name).toEqual([e.width1x, e.height1x])
     }
   })
-
-  it('gives every image and source the pixel size of the file it names, so nothing shifts while it loads', () => {
-    const files = new Map(manifest.map((e) => [e.file1x, e]))
-    const sized = [...Array.from(doc.querySelectorAll('img')), ...Array.from(doc.querySelectorAll('picture source'))]
-    for (const el of sized) {
-      const file = fileOf(el.getAttribute(el.tagName === 'IMG' ? 'src' : 'srcset'))
-      const entry = files.get(file)
-      expect(entry, `${file} is in the manifest`).toBeDefined()
-      expect(Number(el.getAttribute('width')), `${file} width`).toBe(entry!.width1x)
-      expect(Number(el.getAttribute('height')), `${file} height`).toBe(entry!.height1x)
+  it('gives every screen real alt text that is not its caption', () => {
+    for (const img of imgs) {
+      const alt = img.getAttribute('alt')!
+      expect(alt).toBe(entry(fileOf(img.getAttribute('src'))).alt)
+      expect(alt.length).toBeGreaterThanOrEqual(40)
+      expect(squash(alt)).not.toBe(squash(img.closest('figure')!.querySelector('figcaption')!.textContent).replace(/^Sample data\s*/, ''))
     }
   })
-
-  it('tells readers the people are fictional and some notes were written for the sample', () => {
-    expect(visibleText).toContain('The people, trips and organisations in them are fictional, and some on-screen notes were written for the sample.')
-  })
-})
-
-describe('the translation gate: three crossings, all in DOM text', () => {
-  const crossings = Array.from(doc.querySelectorAll('[data-crossing]'))
-
-  it('has one crossing per act, before, during and after, each followed by its proof band', () => {
-    const acts = Array.from(doc.querySelectorAll('section.act')).map((s) => s.id)
-    expect(acts).toEqual(['before', 'during', 'after'])
-    expect(crossings.map((c) => c.closest('section')!.id)).toEqual(acts)
-    for (const id of acts) {
-      const section = doc.getElementById(id)!
-      const order = Array.from(section.querySelectorAll('[data-crossing], .band'))
-      expect(order.map((el) => (el.hasAttribute('data-crossing') ? 'crossing' : 'band'))).toEqual(['crossing', 'band'])
+  it('keeps every file in its WebP budget (1x 90 KB, 2x 260 KB)', () => {
+    expect(manifest).toHaveLength(18)
+    for (const e of manifest) {
+      expect(statSync(join(__dirname, 'assets/screens', e.file1x)).size, e.file1x).toBeLessThanOrEqual(90 * 1024)
+      expect(statSync(join(__dirname, 'assets/screens', e.file2x)).size, e.file2x).toBeLessThanOrEqual(260 * 1024)
     }
   })
-
-  it('puts the lived moment, the replay control and the record in the DOM, with the seam hidden from assistive tech', () => {
-    for (const c of crossings) {
-      expect(squash(c.querySelector('.crossing__text')!.textContent).length).toBeGreaterThan(30)
-      const replay = c.querySelector('button[data-replay]')!
-      expect(replay.getAttribute('type')).toBe('button')
-      expect(squash(replay.textContent)).toMatch(/^Replay /)
-      expect(c.querySelector('[data-gate]')!.getAttribute('aria-hidden')).toBe('true')
-      expect(c.querySelector('.crossing__record figure img')).not.toBeNull()
-      expect(c.getAttribute('data-arrived')!.length).toBeGreaterThan(20)
-    }
-  })
-
-  it('announces arrivals through one polite live region', () => {
-    const live = doc.querySelectorAll('[data-crossing-status]')
-    expect(live.length).toBe(1)
-    expect(live[0].getAttribute('aria-live')).toBe('polite')
-  })
-
-  it('keeps every block of text on the canopy in a quiet zone, and lights every paper clearing', () => {
-    for (const sel of ['.hero__copy', '.act__text', '.crossing__moment', '.readings__inner', '.early__signin', '.site-footer__inner']) {
-      for (const el of Array.from(doc.querySelectorAll(sel))) expect(el.hasAttribute('data-quiet'), sel).toBe(true)
-    }
-    for (const sel of ['.readout', '.crossing__record', '.band', '.clearing']) {
-      for (const el of Array.from(doc.querySelectorAll(sel))) expect(el.hasAttribute('data-pool'), sel).toBe(true)
-    }
-  })
-})
-
-describe('structure, actions and accessibility', () => {
-  it('has one h1, a skip link, and the offer and Sign in in the header', () => {
-    expect(doc.querySelectorAll('h1').length).toBe(1)
-    expect(doc.querySelector('a.skip')!.getAttribute('href')).toBe('#main')
-    const header = doc.querySelector('.site-header')!
-    expect(header.querySelector('a[href="/login"]')).not.toBeNull()
-    const cta = header.querySelector('a[href="#early-access"]')!
-    expect(cta.getAttribute('aria-label')).toBe('Request early access')
-    expect(doc.querySelector('.hero a[href="#early-access"]')!.textContent).toContain('Request early access')
-    expect(doc.querySelector('.hero a[href="#before"]')!.textContent).toBe('See it at work')
-  })
-
-  it('links Sign in to /login in the header, beside the form and in the footer', () => {
-    const links = Array.from(doc.querySelectorAll('a[href="/login"]'))
-    expect(links.length).toBe(3)
-    for (const a of links) expect(squash(a.textContent)).toBe('Sign in')
-  })
-
-  it('indexes the sections in order, one nav, each link pointing at a section that exists', () => {
-    const navs = doc.querySelectorAll('nav.sections')
-    expect(navs.length).toBe(1)
-    const links = Array.from(doc.querySelectorAll('[data-section-link]'))
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['#before', '#during', '#after', '#early-access'])
-    for (const a of links) expect(doc.getElementById(a.getAttribute('href')!.slice(1))).not.toBeNull()
-    expect(links.map((a) => squash(a.querySelector('.sections__label')!.textContent))).toEqual([
-      'Before the trip', 'During the trip', 'After the trip', 'Early access',
-    ])
-  })
-
-  it('hides the canvas from assistive tech and ships the pause control hidden until the field runs', () => {
-    expect(doc.querySelector('[data-canopy-light]')!.getAttribute('aria-hidden')).toBe('true')
-    expect(doc.querySelector('[data-canopy-light] canvas')).not.toBeNull()
-    const toggle = doc.querySelector('[data-light-toggle]')!
-    expect(toggle.tagName).toBe('BUTTON')
-    expect(toggle.getAttribute('aria-pressed')).toBe('false')
-    expect(toggle.hasAttribute('hidden')).toBe(true)
-    expect(squash(toggle.textContent)).toContain('Pause the Canopy light')
-  })
-
-  it('hides every icon from assistive tech', () => {
-    const icons = Array.from(doc.querySelectorAll('svg.ico'))
-    expect(icons.length).toBeGreaterThan(10)
-    for (const svg of icons) {
-      const hidden = svg.getAttribute('aria-hidden') === 'true' || svg.closest('[aria-hidden="true"]') !== null
-      expect(hidden).toBe(true)
-    }
-  })
-
-  it('labels every field, marks the honeypot as hidden, and shows the no-JavaScript note by default', () => {
-    for (const id of ['ea-name', 'ea-organisation', 'ea-email']) {
-      expect(doc.querySelector(`label[for="${id}"]`)).not.toBeNull()
-      expect(doc.getElementById(id)!.hasAttribute('required')).toBe(true)
-    }
-    expect(doc.querySelector('.hp')!.getAttribute('aria-hidden')).toBe('true')
-    expect(doc.getElementById('ea-website')!.getAttribute('tabindex')).toBe('-1')
-    expect(doc.getElementById('early-access-form')!.hasAttribute('novalidate')).toBe(true)
-    expect(doc.querySelector('form noscript')).toBeNull()
-    const note = doc.querySelector('#early-access-form .form__nojs')!
-    expect(note.textContent).toContain('needs JavaScript')
-    expect(note.hasAttribute('hidden')).toBe(false)
-    expect(doc.querySelector('[data-success] [data-success-email]')).not.toBeNull()
-  })
-
-  it('shows the neutral collection notice twice, binds its collector and privacy sentences (hidden by default), and keeps early access a TODO(release)', () => {
-    const notice = 'We will only use these details to reply about early access to Odip.'
-    expect(visibleText.split(notice).length - 1).toBe(2)
-    expect(indexHtml).toMatch(/<!-- TODO\(release\): say what early access is/)
-    expect(indexHtml).not.toMatch(/TODO\(release\): (collection notice|name the collector)/)
-    expect(indexHtml.split('<!-- Filled from src/lib/platformInfo.ts (companyName, legalPublished). -->').length - 1).toBe(2)
-    for (const key of ['collector', 'privacyNotice']) {
-      const sentences = Array.from(doc.querySelectorAll(`[data-platform="${key}"]`))
-      expect(sentences, key).toHaveLength(2)
-      for (const s of sentences) expect(s.hasAttribute('hidden'), key).toBe(true)
-    }
-    // RELEASE-CHECKLIST item 2: the two notices stay identical.
-    expect(squash(doc.querySelector('#form-notice')!.textContent)).toBe(squash(doc.querySelector('.site-footer__notes p')!.textContent))
+  it('leaves no placeholder', () => {
+    expect([doc.querySelectorAll('.ph').length, indexHtml.includes('Screen to capture')]).toEqual([0, false])
   })
 })
 
@@ -374,56 +256,3 @@ describe('the app page (frontend/index.html)', () => {
   })
 })
 
-describe('the footer: the acknowledgement, the columns and the bound facts', () => {
-  const footer = doc.querySelector('.site-footer')!
-
-  it('opens with the Acknowledgement of Country, word for word as the app shows it', () => {
-    const ack = footer.querySelector('.site-footer__ack')!
-    expect(footer.querySelector('.site-footer__inner')!.firstElementChild).toBe(ack)
-    expect(squash(ack.querySelector('h2')!.textContent)).toBe('Acknowledgement of Country')
-    expect(squash(ack.querySelector('p')!.textContent)).toBe(ACKNOWLEDGEMENT_OF_COUNTRY)
-  })
-
-  it('heads each column with an h2 over a list: Product, Company, Legal and Support', () => {
-    const cols = Array.from(footer.querySelectorAll('.site-footer__col'))
-    expect(cols.map((c) => squash(c.querySelector('h2')!.textContent))).toEqual(['Product', 'Company', 'Legal', 'Support'])
-    for (const c of cols) expect(c.querySelector('h2 + ul')).not.toBeNull()
-    expect(Array.from(cols[0].querySelectorAll('a')).map((a) => [a.getAttribute('href'), squash(a.textContent)])).toEqual([
-      ['#before', 'Before the trip'], ['#during', 'During the trip'], ['#after', 'After the trip'], ['#early-access', 'Request early access'],
-    ])
-    expect(footer.querySelector('[data-section-link]')).toBeNull()
-  })
-
-  it('always links Accessibility, ships every bound element hidden and every bound fact empty, so nothing false shows without JavaScript', () => {
-    const accessibility = footer.querySelector('a[href="/accessibility"]')!
-    expect(squash(accessibility.textContent)).toBe('Accessibility')
-    expect(accessibility.closest('[hidden]')).toBeNull()
-    const bound = Array.from(doc.querySelectorAll('[data-platform], [data-platform-group]'))
-    expect(bound.map((el) => el.getAttribute('data-platform')).filter(Boolean).sort()).toEqual([
-      'abn', 'collector', 'collector', 'companyName', 'copyright', 'privacy', 'privacyNotice', 'privacyNotice', 'statusUrl', 'supportEmail', 'terms',
-    ])
-    for (const el of bound) expect(el.hasAttribute('hidden'), el.outerHTML.slice(0, 60)).toBe(true)
-    for (const key of ['companyName', 'abn', 'copyright', 'collector', 'supportEmail']) {
-      for (const el of Array.from(doc.querySelectorAll(`[data-platform="${key}"]`))) expect(squash(el.textContent), key).toBe('')
-    }
-  })
-
-  it('keeps the brand to its own width, so the link columns sit beside it rather than pushed to the far edge', () => {
-    const brand = css.split('\n.site-footer__brand {')[1].split('}')[0]
-    expect(brand).toContain('flex: 0 1 16rem;')
-  })
-
-  it('opens Status in a new tab and says so', () => {
-    const status = footer.querySelector('[data-platform="statusUrl"] a')!
-    expect(status.getAttribute('target')).toBe('_blank')
-    expect(status.getAttribute('rel')).toBe('noopener noreferrer')
-    expect(squash(status.querySelector('.sr-only')!.textContent)).toBe('(opens in a new tab)')
-  })
-})
-
-describe('the fixed header', () => {
-  it('is a hair short of opaque, so a software compositor never culls the canvas foot behind it (the black band)', () => {
-    const header = css.split('\n.site-header {')[1].split('}')[0]
-    expect(header).toContain('background: color-mix(in srgb, var(--forest) 99%, transparent);')
-  })
-})

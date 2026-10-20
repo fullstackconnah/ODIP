@@ -464,6 +464,7 @@ describe('ClaimDetailPage — the "Saved!" reset timer', () => {
     mockUpdateClaim.mockImplementation((_vars, opts) => opts?.onSuccess?.())
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { unmount } = renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Add notes' }))
     const save = () => screen.getByRole('button', { name: /^(Save Notes|Saved!)$/ })
 
     fireEvent.click(save())
@@ -475,6 +476,17 @@ describe('ClaimDetailPage — the "Saved!" reset timer', () => {
 
     unmount()
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('ClaimDetailPage — existing notes', () => {
+  it('keeps the editor available after clearing existing notes so the empty value can be saved', () => {
+    mockUseClaim.mockReturnValue({ data: { ...baseClaim([baseLineItem()]), notes: 'Existing note' }, isLoading: false })
+    renderPage()
+    const notes = screen.getByLabelText('Notes')
+    fireEvent.change(notes, { target: { value: '' } })
+    expect(notes).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Save Notes' })).toBeInTheDocument()
   })
 })
 

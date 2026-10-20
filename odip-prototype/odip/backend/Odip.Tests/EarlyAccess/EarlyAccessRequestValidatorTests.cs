@@ -15,6 +15,7 @@ public class EarlyAccessRequestValidatorTests
         Name = "Jane Citizen",
         Organisation = "Sample Support Co",
         Email = "jane.citizen@example.com.au",
+        OrganisationSize = "under-10",
     };
 
     [Fact]
@@ -25,6 +26,9 @@ public class EarlyAccessRequestValidatorTests
             Name = "  Jane Citizen ",
             Organisation = "\tSample Support Co  ",
             Email = "  jane.citizen@example.com.au ",
+            Role = "  Ops lead ",
+            Phone = " 0491 570 156 ",
+            OrganisationSize = "under-10",
         });
 
         Assert.True(result.IsValid);
@@ -32,6 +36,8 @@ public class EarlyAccessRequestValidatorTests
         Assert.Equal("Jane Citizen", result.Name);
         Assert.Equal("Sample Support Co", result.Organisation);
         Assert.Equal("jane.citizen@example.com.au", result.Email);
+        Assert.Equal("Ops lead", result.Role);
+        Assert.Equal("0491 570 156", result.Phone);
     }
 
     [Fact]
@@ -79,7 +85,7 @@ public class EarlyAccessRequestValidatorTests
         var result = EarlyAccessRequestValidator.Validate(null);
 
         Assert.False(result.IsValid);
-        Assert.Equal(new[] { "email", "name", "organisation" }, result.Errors.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        Assert.Equal(new[] { "email", "name", "organisation", "organisationSize" }, result.Errors.Keys.OrderBy(k => k, StringComparer.Ordinal));
     }
 
     [Theory]
@@ -295,5 +301,263 @@ public class EarlyAccessRequestValidatorTests
 
         Assert.True(result.IsValid);
         Assert.Equal("Brown & Sons <Pty> Ltd", result.Organisation);
+    }
+
+    [Theory]
+    [InlineData("under-10")]
+    [InlineData("10-49")]
+    [InlineData("50-199")]
+    [InlineData("200-plus")]
+    public void OrganisationSize_AcceptsEachOfTheFourCodes(string code)
+    {
+        var dto = Valid();
+        dto.OrganisationSize = code;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.True(result.IsValid);
+        Assert.Equal(code, result.OrganisationSize);
+    }
+
+    [Fact]
+    public void OrganisationSize_IsTrimmed()
+    {
+        var dto = Valid();
+        dto.OrganisationSize = " 10-49 ";
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("10-49", result.OrganisationSize);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void OrganisationSize_MissingOrBlank_IsAnOrganisationSizeError(string? value)
+    {
+        var dto = Valid();
+        dto.OrganisationSize = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.Equal(new[] { "organisationSize" }, result.Errors.Keys);
+        Assert.Equal("Choose your organisation's size.", Assert.Single(result.Errors["organisationSize"]));
+    }
+
+    [Theory]
+    [InlineData("Under-10")]
+    [InlineData("under 10")]
+    [InlineData("200+")]
+    [InlineData("1-9")]
+    [InlineData("huge")]
+    public void OrganisationSize_Unknown_IsAnOrganisationSizeError(string value)
+    {
+        var dto = Valid();
+        dto.OrganisationSize = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.Equal(new[] { "organisationSize" }, result.Errors.Keys);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Role_IsOptional_AndBlankBecomesNull(string? value)
+    {
+        var dto = Valid();
+        dto.Role = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.True(result.IsValid);
+        Assert.Null(result.Role);
+    }
+
+    [Theory]
+    [InlineData(100, true)]
+    [InlineData(101, false)]
+    public void Role_LengthLimit_Is100(int length, bool valid)
+    {
+        var dto = Valid();
+        dto.Role = "  " + new string('r', length) + "  ";
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.Equal(valid, result.IsValid);
+        if (valid)
+            Assert.Equal(length, result.Role!.Length);
+        else
+            Assert.Equal("Role must be 100 characters or fewer.", Assert.Single(result.Errors["role"]));
+    }
+
+    [Theory]
+    [InlineData("Ops\nlead")]
+    [InlineData("Ops\u202Elead")]
+    public void Role_WithAControlOrBidiCharacter_IsRejected(string value)
+    {
+        var dto = Valid();
+        dto.Role = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.Equal("Role contains characters that are not allowed.", Assert.Single(result.Errors["role"]));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Phone_IsOptional_AndBlankBecomesNull(string? value)
+    {
+        var dto = Valid();
+        dto.Phone = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.True(result.IsValid);
+        Assert.Null(result.Phone);
+    }
+
+    [Theory]
+    [InlineData("+61 2 5550 1234")]
+    [InlineData("(02) 5550-1234")]
+    [InlineData(" 0491570156 ")]
+    [InlineData("0491 570 156")]
+    [InlineData("+61 491 570 156")]
+    [InlineData("(02) 9876 5432")]
+    public void Phone_AcceptsDigitsSpacesPlusParensAndHyphens(string value)
+    {
+        var dto = Valid();
+        dto.Phone = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.True(result.IsValid);
+        Assert.Equal(value.Trim(), result.Phone);
+    }
+
+    [Theory]
+    [InlineData("0491 570 156 ext 2")]
+    [InlineData("0491.570.156")]
+    [InlineData("+61#2")]
+    [InlineData("\u0660\u0664\u0669\u0661")] // Arabic-Indic digits
+    [InlineData("\uFF10\uFF14\uFF19\uFF11")] // fullwidth digits
+    public void Phone_RejectsAnyOtherCharacter(string value)
+    {
+        var dto = Valid();
+        dto.Phone = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.Equal("Use digits, spaces and + ( ) - only.", Assert.Single(result.Errors["phone"]));
+    }
+
+    // A phone is a number, not just allowed characters: 8 to 15 digits (E.164 allows 15), and a + only as the first character.
+    [Theory]
+    [InlineData("---")]
+    [InlineData("+")]
+    [InlineData("12 34")]
+    [InlineData("1+2345678")]
+    [InlineData("1234567")]
+    [InlineData("1234 5678 9012 3456")]
+    public void Phone_NeedsBetween8And15Digits_AndAPlusOnlyFirst(string value)
+    {
+        var dto = Valid();
+        dto.Phone = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.Equal("Enter a phone number with 8 to 15 digits.", Assert.Single(result.Errors["phone"]));
+    }
+
+    [Theory]
+    [InlineData("12345678")]
+    [InlineData("123456789012345")]
+    public void Phone_AcceptsExactly8And15Digits(string value)
+    {
+        var dto = Valid();
+        dto.Phone = value;
+
+        Assert.True(EarlyAccessRequestValidator.Validate(dto).IsValid);
+    }
+
+    [Fact]
+    public void Phone_LengthLimit_Is30()
+    {
+        var dto = Valid();
+        dto.Phone = "(1-1-1-1-1-1-1-1-1-1-1-1-1-1-1"; // 30 characters, 15 digits
+        Assert.Equal(30, dto.Phone.Length);
+        Assert.True(EarlyAccessRequestValidator.Validate(dto).IsValid);
+
+        dto.Phone = dto.Phone + "-";
+        Assert.Equal("Phone must be 30 characters or fewer.", Assert.Single(EarlyAccessRequestValidator.Validate(dto).Errors["phone"]));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \n\t ")]
+    public void Message_IsOptional_AndBlankBecomesNull(string? value)
+    {
+        var dto = Valid();
+        dto.Message = value;
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.True(result.IsValid);
+        Assert.Null(result.Message);
+    }
+
+    [Fact]
+    public void Message_KeepsLineBreaks_NormalisesCrLf_AndDropsControlAndBidiCharacters()
+    {
+        var dto = Valid();
+        dto.Message = "Line one\r\nLine two\rLine three\u0007\u202E end\tx";
+
+        var result = EarlyAccessRequestValidator.Validate(dto);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("Line one\nLine two\nLine three end x", result.Message);
+    }
+
+    [Fact]
+    public void Message_LineAndParagraphSeparators_BecomeLineBreaks()
+    {
+        var dto = Valid();
+        dto.Message = "a\u2028b\u2029c";
+
+        Assert.Equal("a\nb\nc", EarlyAccessRequestValidator.Validate(dto).Message);
+    }
+
+    [Fact]
+    public void Message_LengthLimit_Is1000_CountedAfterCleaning()
+    {
+        var dto = Valid();
+        dto.Message = new string('€', 1000);
+        Assert.True(EarlyAccessRequestValidator.Validate(dto).IsValid);
+
+        dto.Message = new string('€', 1001);
+        Assert.Equal("Message must be 1,000 characters or fewer.", Assert.Single(EarlyAccessRequestValidator.Validate(dto).Errors["message"]));
+
+        dto.Message = new string('€', 1000) + new string('\u0007', 5);
+        var cleaned = EarlyAccessRequestValidator.Validate(dto);
+        Assert.True(cleaned.IsValid);
+        Assert.Equal(1000, cleaned.Message!.Length);
+    }
+
+    [Fact]
+    public void Message_CountsUtf16Units_AsTheBrowserDoes()
+    {
+        // The form counts String.length (UTF-16 units); an emoji is two of them on both sides.
+        var dto = Valid();
+        dto.Message = string.Concat(Enumerable.Repeat("😀", 500));
+        Assert.True(EarlyAccessRequestValidator.Validate(dto).IsValid);
+
+        dto.Message = string.Concat(Enumerable.Repeat("😀", 501));
+        Assert.True(EarlyAccessRequestValidator.Validate(dto).Errors.ContainsKey("message"));
     }
 }

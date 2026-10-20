@@ -24,6 +24,8 @@ import { useBackTarget } from '@/hooks/useBackNavigation'
 import { plural } from '@/lib/format'
 import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { isNotFoundError } from '@/lib/httpStatus'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -137,7 +139,7 @@ export default function MedicationFormPage() {
   const viewOnly = isEdit && !canManageMedications
   const createMedication = useCreateMedication()
   const updateMedication = useUpdateMedication()
-  const { data: existing, isLoading: isLoadingExisting } = useMedication(isEdit ? id : undefined)
+  const { data: existing, isError: isExistingError, error: existingError, refetch: refetchExisting } = useMedication(isEdit ? id : undefined)
   const participantId = isEdit ? existing?.participantId : participantIdParam
   // Back, Cancel and Save return to where the form was opened: the /medications register or the participant's Medications tab, which is
   // also the fallback for a deep link.
@@ -287,7 +289,13 @@ export default function MedicationFormPage() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
-  if (isEdit && isLoadingExisting) return <div className="flex items-center justify-center h-64 text-[var(--color-muted-foreground)]">Loading...</div>
+  // A record that has not loaded is never a blank form: saving it would overwrite the real one.
+  if (isEdit && !existing) {
+    if (!isExistingError) return <PageState kind="loading" noun="medication" />
+    return isNotFoundError(existingError)
+      ? <PageState kind="not-found" noun="medication" backTo="/medications" backLabel="medications" />
+      : <PageState kind="error" noun="medication" onRetry={() => refetchExisting()} />
+  }
   if (!isEdit && !participantIdParam) return <div className="text-center py-12 text-[var(--color-muted-foreground)]">A participant is required to add a medication. Go to a participant's Medications tab to add one.</div>
 
   return (

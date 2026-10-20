@@ -173,6 +173,104 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task MyShifts_LeavesOutDrafts()   // L1 (2026-10-16): a Draft is invisible to its worker until it is published
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var participant = SeedParticipant(db);
+        var shown = new List<Guid>();
+        Guid draftId = default;
+        foreach (var status in new[] { ShiftStatus.Draft, ShiftStatus.Published, ShiftStatus.InProgress, ShiftStatus.Completed, ShiftStatus.Cancelled })
+        {
+            var shift = SeedShift(db, participant.Id, me.Id);
+            shift.Status = status;
+            if (status == ShiftStatus.Draft) draftId = shift.Id; else shown.Add(shift.Id);
+        }
+        db.SaveChanges();
+
+        var result = await MakeController(db, tenant.Object, me.Id).GetMyShifts(ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None);
+
+        var ids = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Shifts.Select(s => s.Id).ToList();
+        Assert.Equal(shown.OrderBy(id => id), ids.OrderBy(id => id));
+        Assert.DoesNotContain(draftId, ids);
+    }
+
+    [Fact]
+    public async Task ShiftDetail_OfADraft_IsNotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var participant = SeedParticipant(db);
+        var draft = SeedShift(db, participant.Id, me.Id);
+        draft.Status = ShiftStatus.Draft;
+        var published = SeedShift(db, participant.Id, me.Id);
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>((await controller.GetShiftDetail(draft.Id, CancellationToken.None)).Result);
+        Assert.Equal("Shift not found.", Assert.Single(Assert.IsType<ApiResponse<PortalShiftDetailDto>>(notFound.Value).Errors!));
+        Assert.IsType<OkObjectResult>((await controller.GetShiftDetail(published.Id, CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task ShiftNotes_OfADraft_AreNotFound_ToReadOrWrite()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var draft = SeedShift(db, SeedParticipant(db).Id, me.Id);
+        draft.Status = ShiftStatus.Draft;
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        Assert.IsType<NotFoundObjectResult>((await controller.GetShiftNotes(draft.Id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await controller.CreateShiftNote(draft.Id, new CreateShiftNoteDto { Body = "Hello" }, CancellationToken.None)).Result);
+        Assert.Empty(db.ShiftNotes);
+    }
+
+    [Fact]   // REV274 #2: the Draft gate on GET/POST notes also covers a worker's open edit of an older note
+    public async Task UpdateShiftNote_OnceTheShiftIsDraft_IsNotFound_BodyUnchanged()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, me.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = me.Id, AuthorName = "Ben Turner", Body = "Original body." };
+        db.ShiftNotes.Add(note);
+        shift.Status = ShiftStatus.Draft;
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var result = await controller.UpdateShiftNote(note.Id, new UpdateShiftNoteDto { Body = "She had a fall." }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal("Original body.", db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).Body);
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task AcknowledgeShiftNoteFlags_OnceTheShiftIsDraft_IsNotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, me.Id);
+        var note = new ShiftNote { Id = Guid.NewGuid(), ShiftId = shift.Id, AuthorUserId = me.Id, AuthorName = "Ben Turner", Body = "She had a fall.", FlaggedCategories = ShiftNoteFlagCategory.Falls };
+        db.ShiftNotes.Add(note);
+        db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), SourceKey = $"flagged-note:{note.Id}", TaskType = TaskType.FlaggedNoteFollowUp, Title = "Flagged shift note (Falls)",
+            ShiftNoteId = note.Id, ShiftId = shift.Id, Status = TaskItemStatus.NotStarted,
+        });
+        shift.Status = ShiftStatus.Draft;
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var result = await controller.AcknowledgeShiftNoteFlags(note.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Null(db.ShiftNotes.IgnoreQueryFilters().Single(n => n.Id == note.Id).FlagsAcknowledgedAt);
+        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync()).Status);
+    }
+
+    [Fact]
     public async Task GetMyShifts_ValidUserWithNoShifts_ReturnsEmptyListNotSpecialPayload()
     {
         // Post staff/user unification there is no "not linked" concept any more — a real,

@@ -230,6 +230,24 @@
   .mobile-card-table .divide-y > * + * {
     border-top: none;
   }
+  /* DataTable rowDetail: the detail line is the end of its row's card, not a card of its own. */
+  .mobile-card-table tbody tr:has(+ tr[data-row-detail]) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .mobile-card-table tbody tr[data-row-detail] {
+    margin-top: -0.75rem;
+    border-top: none;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    padding-top: 0;
+  }
+  .mobile-card-table tbody tr[data-row-detail] > td {
+    flex-basis: 100%;
+  }
+  .mobile-card-table tbody tr[data-row-detail] > td::before {
+    content: none;
+  }
 }
 
 /*

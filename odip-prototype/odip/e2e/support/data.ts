@@ -1,5 +1,5 @@
 import { call, expectStatus, login, type ApiResult, Session } from './api';
-import { addDays, ZONE } from './dates';
+import { addDays, mondayOf, ZONE } from './dates';
 import { DEMO_EMAIL_DOMAIN, SEEDED } from './env';
 
 let counter = 0;
@@ -135,6 +135,13 @@ export async function saveBlocksDraft(coord: Session, participantId: string, day
 }
 
 /** Approves a revision for rostering, as the agreement page's dialog does. The preview's reasons come first, so a refused approval says why. */
+/** Starts the roster week holding `date`, as the board's Start rostering does. A week already started answers 409 roster-week-started: fine here, the e2e organisation is shared. */
+export async function startWeek(coord: Session, date: string) {
+  const res = await call(coord, 'POST', `/rostering/weeks/${mondayOf(date)}/start`);
+  if (res.status === 409 && res.body?.code === 'roster-week-started') return;
+  await expectStatus('start week', 200, res);
+}
+
 export async function approveDraft(coord: Session, participantId: string, draftId: string) {
   const preview = await expectStatus('approval preview', 200, await call(coord, 'GET', `/participants/${participantId}/service-agreement-drafts/${draftId}/approval-preview`));
   if (!preview.data.canApprove) throw new Error(`the draft cannot be approved: ${JSON.stringify(preview.data.reasons)}`);

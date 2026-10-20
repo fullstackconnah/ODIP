@@ -100,10 +100,12 @@ public class OdipDbContext : DbContext
 
     /// <summary>Public landing-page early-access requests. NOT tenant-scoped: see <see cref="Entities.EarlyAccessRequest"/>'s type doc.</summary>
     public DbSet<EarlyAccessRequest> EarlyAccessRequests => Set<EarlyAccessRequest>();
+    public DbSet<EarlyAccessLaterSubmission> EarlyAccessLaterSubmissions => Set<EarlyAccessLaterSubmission>();
 
     // Rostering (M4)
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<ShiftPattern> ShiftPatterns => Set<ShiftPattern>();
+    public DbSet<RosterWeek> RosterWeeks => Set<RosterWeek>();
     public DbSet<StaffParticipantCompatibility> StaffParticipantCompatibilities => Set<StaffParticipantCompatibility>();
     public DbSet<ShiftNote> ShiftNotes => Set<ShiftNote>();
 
@@ -1077,6 +1079,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.OverrideReason).HasMaxLength(2000);
             entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
+            entity.Property(e => e.RegularAwayReason).HasMaxLength(200);
             // What the pattern the shift was generated from asked of a worker (plan builder, phase D). Deliberately no unique index on a shift: the demo pack places its shifts by a
             // deterministic id, and a natural key here would wedge it. Generation is made safe by an advisory lock (RosterShiftGenerator), not by a key.
             entity.Property(e => e.RequirementsJson).HasColumnType("jsonb");
@@ -1096,6 +1099,9 @@ public class OdipDbContext : DbContext
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // SetNull: losing the user only loses the flag's name, never the shift (as ShiftPattern.DefaultUser).
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.RegularUserId).OnDelete(DeleteBehavior.SetNull);
+
             // Board queries filter by day/week; the roster-check helper filters by staff+week.
             entity.HasIndex(e => new { e.TenantId, e.ServiceDate });
             entity.HasIndex(e => new { e.TenantId, e.UserId, e.ServiceDate });
@@ -1110,6 +1116,8 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Notes).HasMaxLength(2000);
+            // The slot's regular: a second coordinator's Stop or Make must not overwrite a change made since the board loaded (REV281B).
+            entity.Property(e => e.DefaultUserId).IsConcurrencyToken();
 
             entity.HasOne(e => e.Participant)
                 .WithMany()
@@ -1133,6 +1141,14 @@ public class OdipDbContext : DbContext
             entity.HasOne<ServiceAgreementDraft>().WithMany().HasForeignKey(e => e.SourceDraftId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.SourceDraftId);
             entity.HasIndex(e => new { e.SourceDraftId, e.SourceBlockKey, e.DayOfWeek, e.WorkerSlot }).IsUnique().HasFilter("\"SourceDraftId\" IS NOT NULL").HasDatabaseName("IX_ShiftPatterns_SourceDraft_Block_Day_Slot");
+        });
+
+        // ── RosterWeek (Start rostering, 2026-10-16) ─────────────
+        modelBuilder.Entity<RosterWeek>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.TenantId, e.WeekStart }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.StartedByUserId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── StaffParticipantCompatibility ────────────────────────
@@ -1563,9 +1579,18 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100);
             entity.Property(e => e.Phone).HasMaxLength(50);
             entity.Property(e => e.Email).HasMaxLength(200);
+            // The main contact and the participant details: the Person and Participant lengths, so Start intake never truncates.
+            entity.Property(e => e.ContactFirstName).HasMaxLength(100);
+            entity.Property(e => e.ContactLastName).HasMaxLength(100);
+            entity.Property(e => e.ContactRelationship).HasMaxLength(100);
+            entity.Property(e => e.NdisNumber).HasMaxLength(20);
+            entity.Property(e => e.AddressStreet).HasMaxLength(200);
+            entity.Property(e => e.AddressSuburb).HasMaxLength(100);
+            entity.Property(e => e.AddressState).HasMaxLength(10);
+            entity.Property(e => e.AddressPostcode).HasMaxLength(4);
             entity.Property(e => e.Source).HasMaxLength(20).IsRequired();
             entity.Property(e => e.Provenance).HasMaxLength(2000);
             entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.Restrict);
@@ -1801,12 +1826,30 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.Organisation).HasMaxLength(150).IsRequired();
             // 254 is the longest valid email address (RFC 5321 path limit minus the angle brackets).
             entity.Property(e => e.Email).HasMaxLength(254).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Role).HasMaxLength(100);
+            entity.Property(e => e.OrganisationSize).HasMaxLength(16);
+            entity.Property(e => e.Message).HasMaxLength(1000);
             // Concurrency token: two simultaneous repeat submissions from one address must both be
             // counted. The loser's UPDATE matches no row, EF throws DbUpdateConcurrencyException and
             // EarlyAccessService retries against the fresh count instead of losing an increment.
             entity.Property(e => e.RequestCount).IsConcurrencyToken();
             // Email is stored trimmed + lower-cased, so a plain unique index is case-insensitive in effect.
             entity.HasIndex(e => e.Email).IsUnique();
+        });
+
+        // A repeat sign-up whose answers differed. Same exemptions as its parent (no tenant, no filter, not audited); same column lengths.
+        modelBuilder.Entity<EarlyAccessLaterSubmission>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Organisation).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(30);
+            entity.Property(e => e.Role).HasMaxLength(100);
+            entity.Property(e => e.OrganisationSize).HasMaxLength(16);
+            entity.Property(e => e.Message).HasMaxLength(1000);
+            entity.HasOne(e => e.EarlyAccessRequest).WithMany(r => r.LaterSubmissions)
+                .HasForeignKey(e => e.EarlyAccessRequestId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Onboarding import batches ──────────────────────────────
@@ -1966,6 +2009,9 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftPattern>()
             .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<RosterWeek>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<StaffParticipantCompatibility>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

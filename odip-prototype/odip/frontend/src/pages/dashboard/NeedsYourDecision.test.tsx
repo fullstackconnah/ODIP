@@ -227,11 +227,93 @@ describe('NeedsYourDecision — bolder and bulk runs (decision-bulk SHAPE §2, �
     }
     render(<Live />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve all 3 leave requests' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3 selected leave requests' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 3' }))
 
     await waitFor(() => expect(screen.getByText('Approved 3 leave requests')).toBeInTheDocument())
     expect(selected()).toHaveAccessibleName('Leave (0)')
     expect(within(screen.getByRole('tabpanel')).getByText('Approved 3 leave requests')).toBeVisible()
   })
+})
+
+describe('NeedsYourDecision — a decided row stays gone until its own group reads again (deep review R3, S-R3-1)', () => {
+  const later = (ms: number) => Date.now() + ms
+  const groupsAt = (leave: { rows: QuickRow[]; readAt: number }, tasksReadAt: number) => [
+    group('leave', { ...leave, count: leave.rows.length }),
+    group('tasks', { rows: [row('t')], readAt: tasksReadAt }),
+  ]
+  const approveL1 = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Approve: Person l1' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Approve: Person l1' })).not.toBeInTheDocument())
+  }
+
+  it('keeps an approved leave row gone when the tasks refetch lands first, and after the leave refetch that no longer lists it', async () => {
+    const { rerender } = render(<Harness groups={groupsAt({ rows: [row('l1'), row('l2')], readAt: 1 }, 1)} />)
+    await approveL1()
+
+    rerender(<Harness groups={groupsAt({ rows: [row('l1'), row('l2')], readAt: 1 }, later(60_000))} />)
+    expect(screen.queryByRole('button', { name: 'Approve: Person l1' })).not.toBeInTheDocument()
+
+    rerender(<Harness groups={groupsAt({ rows: [row('l2')], readAt: later(120_000) }, later(60_000))} />)
+    expect(screen.queryByRole('button', { name: 'Approve: Person l1' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the row gone while the leave refetch fails: the cached pre-approval data never gets a live Approve', async () => {
+    const { rerender } = render(<Harness groups={groupsAt({ rows: [row('l1'), row('l2')], readAt: 1 }, 1)} />)
+    await approveL1()
+
+    // Tasks read again; Leave's read rejected, so its readAt never moved.
+    rerender(<Harness groups={groupsAt({ rows: [row('l1'), row('l2')], readAt: 1 }, later(60_000))} />)
+    rerender(<Harness groups={groupsAt({ rows: [row('l1'), row('l2')], readAt: 1 }, later(120_000))} />)
+
+    expect(screen.queryByRole('button', { name: 'Approve: Person l1' })).not.toBeInTheDocument()
+  })
+
+  it('shows the row again when its own group reads later and still lists it', async () => {
+    const { rerender } = render(<Harness groups={groupsAt({ rows: [row('l1'), row('l2')], readAt: 1 }, 1)} />)
+    await approveL1()
+
+    rerender(<Harness groups={groupsAt({ rows: [row('l1'), row('l2')], readAt: later(60_000) }, 1)} />)
+
+    expect(await screen.findByRole('button', { name: 'Approve: Person l1' })).toBeInTheDocument()
+  })
+})
+
+describe('NeedsYourDecision — unknown outcome recovery across tabs', () => {
+  it('preserves held IDs and check control after leaving and returning, without an automatic resend', async () => {
+    const run = vi.fn(async () => { throw new Error('Network reply lost') })
+    const reread = vi.fn().mockRejectedValueOnce(new Error('Status offline')).mockResolvedValue(['a'])
+    render(<Harness groups={[group('completions', { rows: [row('a', [tap('a', run)])], reread }), group('tasks', { rows: [row('b')] })]} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown shift completions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 selected shift completion' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+    await screen.findByText('Not confirmed yet')
+    fireEvent.click(screen.getByRole('tab', { name: 'Tasks (1)' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Completions (1)' }))
+    expect(screen.getByRole('button', { name: 'Approve: Person a' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: 'Check latest status' })).toBeVisible()
+    expect(run).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Check latest status' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve: Person a' })).not.toHaveAttribute('aria-disabled'))
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(reread).toHaveBeenNthCalledWith(2, ['a'])
+    expect(screen.getByRole('checkbox', { name: 'Select: Person a' })).not.toBeChecked()
+  })
+})
+
+
+it('keeps recovery presence after an uncertain list goes empty and its notice is dismissed', async () => {
+  const run = vi.fn(async () => { throw new Error('Reply lost') })
+  const reread = vi.fn(async (): Promise<string[]> => { throw new Error('Status unavailable') })
+  const view = render(<Harness groups={[group('completions', { rows: [row('a', [tap('a', run)])], reread })]} />)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown shift completions' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Approve 1 selected shift completion' }))
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Approve 1' }))
+  await screen.findByText('Not confirmed yet')
+  view.rerender(<Harness groups={[group('completions', { rows: [], count: 0, reread })]} />)
+  fireEvent.click(screen.getByRole('button', { name: /Dismiss notice/ }))
+  expect(screen.getByRole('button', { name: 'Check latest status' })).toBeVisible()
+  expect(screen.queryByText('All clear.')).not.toBeInTheDocument()
+  expect(run).toHaveBeenCalledTimes(1)
 })

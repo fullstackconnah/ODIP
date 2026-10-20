@@ -108,3 +108,11 @@ describe('bulkCopy — the result notice (SHAPE §6)', () => {
       .toEqual({ tone: 'success', title: 'Approved 100 of 134', message: 'Run it again for the rest.' })
   })
 })
+
+describe('bulkCopy — a run with no answer (review #266 F1)', () => {
+  it('never says approved for rows that left, and says what a waiting row can do', () => {
+    expect(resultNotice('tasks', result({ total: 3, left: 1, waiting: 2 })).message).toBe("1 has left the list: done here, or changed by someone else. 2 weren't marked done: they're still here to try again.")
+    expect(resultNotice('leave', result({ total: 1, waiting: 1 })).message).toBe("1 wasn't approved: it's still here to try again.")
+    expect(resultNotice('leave', result({ total: 2, unchecked: 2 })).message).toBe("2 couldn't be checked, so they're held here until the list can be read again. Refresh the page to check now.")
+  })
+})

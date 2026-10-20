@@ -329,10 +329,10 @@ public class IncidentsController : ControllerBase
                 Title = i.Title,
                 IncidentDateTime = i.IncidentDateTime,
                 Location = i.Location,
-                ReportedByName = i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName,
+                ReportedByName = (i.ReportedByUser.FirstName + " " + i.ReportedByUser.LastName).Trim(),
                 InvolvedParticipantId = i.InvolvedParticipantId,
                 InvolvedParticipantName = i.InvolvedParticipant != null
-                    ? i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName : null,
+                    ? (i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName).Trim() : null,
                 QscReportingStatus = i.QscReportingStatus,
                 IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.CreatedAt, DateTime.UtcNow),
                 CreatedAt = i.CreatedAt,
@@ -343,7 +343,7 @@ public class IncidentsController : ControllerBase
                 ParticipantBookingId = i.ParticipantBookingId,
                 InvolvedStaffId = i.InvolvedUserId,
                 InvolvedStaffName = i.InvolvedUser != null
-                    ? i.InvolvedUser.FirstName + " " + i.InvolvedUser.LastName : null,
+                    ? (i.InvolvedUser.FirstName + " " + i.InvolvedUser.LastName).Trim() : null,
                 ReportedByStaffId = i.ReportedByUserId,
                 RestrictivePracticeType = i.RestrictivePracticeType,
                 RestrictivePracticeId = i.RestrictivePracticeId,
@@ -379,7 +379,7 @@ public class IncidentsController : ControllerBase
                 QscReferenceNumber = i.QscReferenceNumber,
                 ReviewedByStaffId = i.ReviewedByUserId,
                 ReviewedByName = i.ReviewedByUser != null
-                    ? i.ReviewedByUser.FirstName + " " + i.ReviewedByUser.LastName : null,
+                    ? (i.ReviewedByUser.FirstName + " " + i.ReviewedByUser.LastName).Trim() : null,
                 ReviewedAt = i.ReviewedAt,
                 ReviewNotes = i.ReviewNotes,
                 CorrectiveActions = i.CorrectiveActions,
@@ -571,7 +571,7 @@ public class IncidentsController : ControllerBase
         // Coordinator users. Ruling (design spec §4): the email carries NO participant name —
         // see IncidentReportedTemplate's own doc comment for why.
         var reporterName = await _db.Users.Where(u => u.Id == dto.ReportedByStaffId)
-            .Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct) ?? "A staff member";
+            .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
         var incidentRecipients = await _db.Users
             .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
             .ToListAsync(ct);

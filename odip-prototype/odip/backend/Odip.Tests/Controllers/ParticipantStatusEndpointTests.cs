@@ -567,6 +567,53 @@ public class ParticipantStatusEndpointTests
     }
 
     [Fact]
+    public async Task BeginServices_AgreementApprovedBeforeActivation_FillsStartedWeekWithoutTouchingMatchingManualShift()
+    {
+        var clock = Odip.Tests.Medications.FakeClock.AtUtc(2026, 10, 10, 2, 0); // 13:00 in NSW
+        using var fx = Create(clock: clock);
+        var today = new DateOnly(2026, 10, 10);
+        var participant = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-3));
+        var draft = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = participant.Id, AgreementStartDate = today.AddDays(-7), AgreementEndDate = today.AddDays(7) };
+        var pattern = new ShiftPattern { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = participant.Id, SourceDraftId = draft.Id, SourceBlockKey = "synthetic", DayOfWeek = today.DayOfWeek, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), EffectiveFrom = today.AddDays(-7), EffectiveTo = today.AddDays(7), IsActive = true };
+        fx.Db.AddRange(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, State = "NSW" }, participant, draft, pattern,
+            new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = TenantId, DraftId = draft.Id, ParticipantId = participant.Id, ApprovedAt = DateTime.UtcNow, ApprovedByName = "Synthetic" },
+            new RosterWeek { Id = Guid.NewGuid(), TenantId = TenantId, WeekStart = RosterWeek.MondayOf(today) },
+            new Shift { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = participant.Id, ServiceDate = today, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), Status = ShiftStatus.Draft });
+        await fx.Db.SaveChangesAsync();
+
+        Ok(await fx.Controller.BeginServices(participant.Id, CancellationToken.None));
+
+        var shifts = await fx.Db.Shifts.Where(s => s.ParticipantId == participant.Id && s.ServiceDate == today).ToListAsync();
+        Assert.Equal(2, shifts.Count);
+        Assert.Single(shifts, s => s.ShiftPatternId == pattern.Id);
+        Assert.Single(shifts, s => s.ShiftPatternId is null);
+    }
+
+    [Fact]
+    public async Task MakeActive_ApprovedAgreementInStartedWeek_MaterialisesOnce()
+    {
+        var clock = Odip.Tests.Medications.FakeClock.AtUtc(2026, 10, 10, 2, 0);
+        using var fx = Create(clock: clock); var day = new DateOnly(2026, 10, 10);
+        var p = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-2));
+        var d = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, AgreementStartDate = day.AddDays(-7), AgreementEndDate = day.AddDays(7) };
+        var pattern = new ShiftPattern { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, SourceDraftId = d.Id, SourceBlockKey = "m", DayOfWeek = day.DayOfWeek, StartTime = new TimeOnly(9,0), EndTime = new TimeOnly(12,0), EffectiveFrom = day.AddDays(-7), EffectiveTo = day.AddDays(7), IsActive = true };
+        fx.Db.AddRange(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, State = "NSW" }, p, d, pattern, new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = TenantId, DraftId = d.Id, ParticipantId = p.Id, ApprovedAt = DateTime.UtcNow, ApprovedByName = "Synthetic" }, new RosterWeek { Id = Guid.NewGuid(), TenantId = TenantId, WeekStart = RosterWeek.MondayOf(day) }); await fx.Db.SaveChangesAsync();
+        Ok(await fx.Controller.MakeActive(p.Id, default)); Ok(await fx.Controller.MakeActive(p.Id, default));
+        Assert.Single(await fx.Db.Shifts.Where(s => s.ParticipantId == p.Id && s.ShiftPatternId == pattern.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task BeginServices_ApprovedAgreementWithoutStartedWeek_MakesNoShift()
+    {
+        var clock = Odip.Tests.Medications.FakeClock.AtUtc(2026, 10, 10, 2, 0); using var fx = Create(clock: clock); var day = new DateOnly(2026, 10, 10);
+        var p = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-2)); var d = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, AgreementStartDate = day.AddDays(-7), AgreementEndDate = day.AddDays(7) };
+        fx.Db.AddRange(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, State = "NSW" }, p, d, new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = TenantId, DraftId = d.Id, ParticipantId = p.Id, ApprovedAt = DateTime.UtcNow, ApprovedByName = "Synthetic" }, new ShiftPattern { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, SourceDraftId = d.Id, SourceBlockKey = "u", DayOfWeek = day.DayOfWeek, StartTime = new TimeOnly(9,0), EndTime = new TimeOnly(12,0), EffectiveFrom = day.AddDays(-7), EffectiveTo = day.AddDays(7), IsActive = true }); await fx.Db.SaveChangesAsync();
+        Ok(await fx.Controller.BeginServices(p.Id, default));
+        Assert.Empty(await fx.Db.Shifts.ToListAsync());
+        Assert.Empty(await fx.Db.RosterWeeks.ToListAsync());
+    }
+
+    [Fact]
     public async Task BeginServices_Twice_KeepsTheFirstDate_AndWritesNoSecondAuditRow()
     {
         using var fx = Create();
@@ -644,6 +691,24 @@ public class ParticipantStatusEndpointTests
         Assert.Equal("Your organisation enforces readiness, so services begin when the participant is made active.", message);
         Assert.Equal(before, Scalars(await fx.Db.Participants.SingleAsync()));
         Assert.Empty(UpdatedAuditRows(fx.Db, participant.Id));
+    }
+
+    [Fact]
+    public async Task BeginServices_EnforcedRefusal_WithApprovedPatternAndStartedWeek_MakesNoShift()
+    {
+        using var fx = Create(); var day = DateOnly.FromDateTime(DateTime.UtcNow); var p = RichParticipant(isActive: false, isDraft: true, intakeCompletedAt: DateTime.UtcNow.AddDays(-2)); var d = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, AgreementStartDate = day.AddDays(-7), AgreementEndDate = day.AddDays(7) };
+        fx.Db.AddRange(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantReadinessMode = ParticipantReadinessMode.Enforce }, p, d, new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = TenantId, DraftId = d.Id, ParticipantId = p.Id, ApprovedAt = DateTime.UtcNow, ApprovedByName = "Synthetic" }, new ShiftPattern { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, SourceDraftId = d.Id, SourceBlockKey = "r", DayOfWeek = day.DayOfWeek, StartTime = new TimeOnly(9,0), EndTime = new TimeOnly(12,0), EffectiveFrom = day.AddDays(-7), EffectiveTo = day.AddDays(7), IsActive = true }, new RosterWeek { Id = Guid.NewGuid(), TenantId = TenantId, WeekStart = RosterWeek.MondayOf(day) }); await fx.Db.SaveChangesAsync();
+        BadRequest(await fx.Controller.BeginServices(p.Id, default));
+        Assert.False((await fx.Db.Participants.SingleAsync()).IsActive); Assert.Empty(await fx.Db.Shifts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ChangeStatus_ActivationWithApprovedPatternAndStartedWeek_MakesShift()
+    {
+        var clock = Odip.Tests.Medications.FakeClock.AtUtc(2026,10,10,2,0); using var fx = Create(clock: clock); var day = new DateOnly(2026,10,10); var p = RichParticipant(isActive: false, isDraft: false); var d = new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, AgreementStartDate = day.AddDays(-7), AgreementEndDate = day.AddDays(7) };
+        fx.Db.AddRange(new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantId, State = "NSW" }, p, d, new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = TenantId, DraftId = d.Id, ParticipantId = p.Id, ApprovedAt = DateTime.UtcNow, ApprovedByName = "Synthetic" }, new ShiftPattern { Id = Guid.NewGuid(), TenantId = TenantId, ParticipantId = p.Id, SourceDraftId = d.Id, SourceBlockKey = "s", DayOfWeek = day.DayOfWeek, StartTime = new TimeOnly(9,0), EndTime = new TimeOnly(12,0), EffectiveFrom = day.AddDays(-7), EffectiveTo = day.AddDays(7), IsActive = true }, new RosterWeek { Id = Guid.NewGuid(), TenantId = TenantId, WeekStart = RosterWeek.MondayOf(day) }); await fx.Db.SaveChangesAsync();
+        Ok(await fx.Controller.ChangeStatus(p.Id, new ChangeParticipantStatusDto { IsActive = true }, default));
+        Assert.Single(await fx.Db.Shifts.Where(s => s.ParticipantId == p.Id).ToListAsync());
     }
 
     [Fact]

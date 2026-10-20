@@ -1,6 +1,6 @@
 import { Locator, Page } from '@playwright/test';
 import { test, expect, call } from '../../support/fixtures';
-import { assignShift, makeParticipant, makeShift, makeStaff } from '../../support/data';
+import { assignShift, makeParticipant, makeShift, makeStaff, startWeek } from '../../support/data';
 import { addDays, mondayOf, nextWednesday } from '../../support/dates';
 
 // Roster board drag and drop (spec 2026-10-14), on the real API and PostgreSQL. A person carried from the staff strip fills a Needs staff shift (/assign); the same person,
@@ -27,6 +27,8 @@ test('a person from the strip fills a Needs staff shift, then swaps with a colle
   const samsShift = await makeShift(session, participant.id, addDays(wednesday, 1));
   await assignShift(session, samsShift.id, sam.id);
 
+  // Its shifts are one-offs, so the week reads as unstarted until Start rostering (2026-10-16): the grid would sit under the Start card.
+  await startWeek(session, wednesday);
   await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
   const openPuck = page.locator(`[data-shift-open="${open.id}"]`);
   const samsPuck = page.locator(`[data-shift-open="${samsShift.id}"]`);
@@ -62,6 +64,8 @@ test('a shift\'s menu swaps its person with a colleague on another shift', async
   await assignShift(session, alexsShift.id, alex.id);
   await assignShift(session, samsShift.id, sam.id);
 
+  // Its shifts are one-offs, so the week reads as unstarted until Start rostering (2026-10-16): the grid would sit under the Start card.
+  await startWeek(session, wednesday);
   await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
   const alexsPuck = page.locator(`[data-shift-open="${alexsShift.id}"]`);
   const samsPuck = page.locator(`[data-shift-open="${samsShift.id}"]`);

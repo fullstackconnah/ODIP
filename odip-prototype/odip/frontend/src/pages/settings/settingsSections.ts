@@ -10,11 +10,11 @@ export type SettingsPerms = Pick<
 
 export type SectionKey =
   | 'profile' | 'notifications' | 'appearance'
-  | 'organisation' | 'billing' | 'safety' | 'alerts'
+  | 'setup' | 'organisation' | 'billing' | 'safety' | 'alerts'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'holidays'
   | 'import' | 'export' | 'integrations' | 'failed-sends'
-  | 'tenants' | 'users' | 'catalogue'
+  | 'tenants' | 'users' | 'catalogue' | 'alpha-signups'
 
 export type SectionGroup = 'My account' | 'Organisation' | 'Pricing and budgets' | 'Content' | 'Data' | 'Platform'
 
@@ -46,6 +46,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'profile', label: 'Profile', group: 'My account', visible: everyone, description: "Who you're signed in as." },
   { key: 'notifications', label: 'Notifications', group: 'My account', visible: everyone, description: "Which events ODIP emails you about. Your choices don't change anyone else's." },
   { key: 'appearance', label: 'Appearance', group: 'My account', visible: everyone, description: 'How tables look for you. Saved on this device only, so another computer keeps its own.' },
+  { key: 'setup', label: 'Organisation setup', group: 'Organisation', visible: managesOrganisation, description: "Review your organisation's existing settings. You can leave and return at any time." },
   { key: 'organisation', label: 'Organisation profile', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "Your organisation's legal details and address, as they appear on NDIS claims, bulk payment files and invoices." },
   { key: 'billing', label: 'Billing details', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'The bank account on your invoices, your GST and PACE status, and the note printed at the foot of every invoice.' },
   { key: 'safety', label: 'Safety checks', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "What ODIP stops, and what it only warns about, when something isn't in place. These apply to everyone in your organisation, and every change is recorded in the audit log." },
@@ -66,6 +67,8 @@ export const SECTIONS: SectionDef[] = [
   { key: 'catalogue', label: 'Support catalogue', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: 'NDIS price limits for every support item. Import the new catalogue when the NDIA publishes one.' },
   { key: 'holidays', label: 'Public holidays', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: HOLIDAYS },
   { key: 'failed-sends', label: 'Failed sends', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: "Emails ODIP couldn't deliver, across every organisation. Retry one, or send a test email." },
+  // Alpha sign-ups (landing PR 1): the public early-access rows. AdminEarlyAccessController admits a SuperAdmin only.
+  { key: 'alpha-signups', label: 'Alpha sign-ups', group: 'Platform', wide: true, visible: p => p.isSuperAdmin, description: 'People who asked to join the alpha on the website. Each sign-up is deleted 12 months after it was first sent; delete one sooner if they ask.' },
 ]
 
 /** Old ?tab= keys whose section has a new name. Every other old key is its own section key. Old keys live forever: sent emails carry them. */

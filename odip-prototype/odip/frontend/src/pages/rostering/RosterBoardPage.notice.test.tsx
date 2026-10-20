@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RosterBoardPage from './RosterBoardPage'
 import { makeParticipantBoard, makeParticipantRow, makeShift, makeStaffBoard } from './test-fixtures'
@@ -25,7 +25,7 @@ vi.mock('@/api/hooks', async () => {
 })
 vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 
-const NOTICE = /^Shifts from a service agreement appear here once it's approved for rostering\./
+const NOTICE = /^Shifts from a service agreement appear here once it's approved for rostering and the week is started\./
 const DANIEL = makeParticipantRow({ participantId: 'p-1', fullName: 'Daniel Osei' })
 const GRACE = makeParticipantRow({ participantId: 'p-2', fullName: 'Grace Palmer-Hughes', shifts: [makeShift({ id: 'g-1', participantId: 'p-2', participantName: 'Grace Palmer-Hughes', serviceDate: '2026-08-18' })] })
 const DANIEL_WAITS: PendingAgreementDto = { participantId: 'p-1', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }
@@ -35,7 +35,8 @@ const showBoard = (board: RosterBoardDto) => h.board.mockReturnValue({ data: boa
 
 function renderPage(entry = '/rostering?date=2026-08-17') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[entry]}><RosterBoardPage /></MemoryRouter></QueryClientProvider>)
+  const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: [entry] })
+  return { ...render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>), router }
 }
 
 beforeEach(() => {

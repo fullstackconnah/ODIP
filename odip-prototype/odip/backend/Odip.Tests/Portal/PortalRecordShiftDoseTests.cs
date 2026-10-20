@@ -162,7 +162,6 @@ public class PortalRecordShiftDoseTests
                  {
                      (ShiftStatus.Published, ShiftErrorCodes.ShiftNotInProgress), (ShiftStatus.PendingReview, ShiftErrorCodes.ShiftAlreadyFinished),
                      (ShiftStatus.Completed, ShiftErrorCodes.ShiftAlreadyCompleted), (ShiftStatus.Cancelled, ShiftErrorCodes.ShiftCancelled),
-                     (ShiftStatus.Draft, ShiftErrorCodes.ShiftNotPublished),
                  })
         {
             var f = Create(status);
@@ -174,6 +173,19 @@ public class PortalRecordShiftDoseTests
             Assert.Equal(code, Body(result).Code);
             Assert.Empty(await f.Db.MedicationAdministrations.ToListAsync());
         }
+    }
+
+    [Fact]
+    public async Task OnADraft_IsNotFound()   // L1 (2026-10-16): a Draft is invisible to its worker on every portal path
+    {
+        var f = Create(ShiftStatus.Draft);
+        var med = AddMed(f);
+
+        var result = await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose(Nine), default);
+
+        Assert.Equal(404, Status(result));
+        Assert.Equal("Shift not found.", Assert.Single(Body(result).Errors!));
+        Assert.Empty(await f.Db.MedicationAdministrations.ToListAsync());
     }
 
     [Fact]

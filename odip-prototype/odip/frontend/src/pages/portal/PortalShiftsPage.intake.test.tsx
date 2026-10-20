@@ -19,7 +19,7 @@ const shift = (id: string, startTime: string) => ({
 // Fri 16 Oct 2026, 10:00 am in Sydney.
 const visit = {
   inquiryId: 'inq-1', firstName: 'Noah', lastName: 'Fitzgerald', participantId: null, participantIsDraft: null, participantIntakeCompletedAt: null,
-  startsAt: '2026-10-15T23:00:00Z', durationMinutes: 90, location: '12 Smith St, Parramatta', staffUserId: 'dana', staffName: 'Dana Smith',
+  startsAt: '2026-10-15T23:00:00Z', durationMinutes: 90, location: '12 Smith St, Parramatta', staffUserId: 'dana', staffName: 'Dana Smith', hasAddress: true, contactNeedsName: false,
   confirmedAt: null, timeZoneId: 'Australia/Sydney',
 }
 

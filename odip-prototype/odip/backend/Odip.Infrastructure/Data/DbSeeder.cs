@@ -2368,7 +2368,7 @@ public static class DbSeeder
                     ConsentType = type,
                     Granted = granted,
                     RecordedAt = granted.HasValue ? now.AddMonths(-3) : null,
-                    SignedByName = granted == true ? $"{participant.FirstName} {participant.LastName}" : null,
+                    SignedByName = granted == true ? $"{participant.FirstName} {participant.LastName}".Trim() : null,
                     SignedDate = granted == true ? DateOnly.FromDateTime(now.AddMonths(-3)) : null,
                     CreatedAt = now.AddMonths(-3), UpdatedAt = now.AddMonths(-3),
                 });

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ParticipantRow } from './ParticipantRow'
-import { makeParticipantRow, WEEK_DAYS } from '../test-fixtures'
+import { makeParticipantRow, makeShift, makeUnfilledShift, WEEK_DAYS } from '../test-fixtures'
 import { TONE } from '@/lib/tone'
 import type { PendingAgreementDto } from '@/api/types'
 
@@ -13,10 +13,14 @@ function renderRow(
   overrides: Parameters<typeof makeParticipantRow>[0] = {},
   { hideCoverageBadge = false }: { hideCoverageBadge?: boolean } = {},
 ) {
+  const shifts = overrides.shifts ?? Array.from(
+    { length: overrides.daysWithoutCover ?? 0 },
+    (_, index) => makeUnfilledShift({ id: `unassigned-${index}`, serviceDate: WEEK_DAYS[index % WEEK_DAYS.length] }),
+  )
   return render(
     <MemoryRouter>
       <ParticipantRow
-        row={makeParticipantRow(overrides)}
+        row={makeParticipantRow({ ...overrides, shifts })}
         days={WEEK_DAYS}
         canWrite
         onOpen={noop}
@@ -46,7 +50,7 @@ describe('ParticipantRow header — one line: name, ratio chip, coverage badge',
     const head = headerOf('Grace Palmer-Hughes')
     const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
     const chip = screen.getByRole('img', { name: '2:1 support' })
-    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
     // A row, not the old two stacked lines: no flex-col, vertically centred, still --row-h tall.
     expect(head).toHaveClass('flex', 'items-center', 'min-h-[var(--row-h)]')
@@ -62,7 +66,7 @@ describe('ParticipantRow header — one line: name, ratio chip, coverage badge',
     const head = headerOf('Grace Palmer-Hughes')
     const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
     const chip = screen.getByRole('img', { name: '2:1 support' })
-    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
     // gap-2 (8px) is the floor between the name group and the chips, so the name never touches the badge.
     expect(head).toHaveClass('gap-2')
@@ -111,35 +115,57 @@ describe('ParticipantRow header — one line: name, ratio chip, coverage badge',
   it('does not switch its wording by column width: no container query, so the name gets the room at every width', () => {
     renderRow({ fullName: 'Mia Chen', daysWithoutCover: 6 })
 
-    // The old design spelled "6 days uncovered" out in a 15rem-wide header (@container), and those 110px
+    // The old design spelled the coverage count out in a 15rem-wide header (@container), and those 110px
     // are what truncated "Grace Palmer-Hughes" to "Grace Pa…" at 1920. One compact badge, always.
     expect(headerOf('Mia Chen')).not.toHaveClass('@container')
-    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
     expect(badge.outerHTML).not.toMatch(/@\[|@container/)
     expect(headerOf('Mia Chen').innerHTML).not.toMatch(/@\[|@container/)
   })
 })
 
 describe('ParticipantRow header — coverage badge (a compact count; the words are its name and title)', () => {
-  it('shows "6 days uncovered" as a warning icon + the count, with the full wording as its title and accessible name', () => {
+  it('counts actual unassigned shifts, not empty days or cells', () => {
+    renderRow({
+      daysWithoutCover: 7,
+      shifts: [
+        makeUnfilledShift({ id: 'open-morning', serviceDate: '2026-08-18' }),
+        makeUnfilledShift({ id: 'open-afternoon', serviceDate: '2026-08-18' }),
+        makeShift({ id: 'assigned', serviceDate: '2026-08-18', staffId: 'staff-1', staffName: 'Alex Rivera' }),
+      ],
+    })
+
+    const badge = screen.getByRole('img', { name: '2 unassigned shifts' })
+    expect(badge).toHaveTextContent(/^2$/)
+    expect(screen.queryByRole('img', { name: /days uncovered/ })).not.toBeInTheDocument()
+  })
+
+  it('reports zero unassigned shifts for an otherwise empty week', () => {
+    renderRow({ daysWithoutCover: 7, shifts: [] })
+
+    expect(screen.getByRole('img', { name: 'Fully covered' })).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /unassigned shift/ })).not.toBeInTheDocument()
+  })
+
+  it('shows "6 unassigned shifts" as a warning icon + the count, with the full wording as its title and accessible name', () => {
     renderRow({ daysWithoutCover: 6 })
 
-    const badge = screen.getByRole('img', { name: '6 days uncovered' })
-    expect(badge).toHaveAttribute('title', '6 days uncovered')
+    const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
+    expect(badge).toHaveAttribute('title', '6 unassigned shifts')
     // Only the count is text in the row; the words are not rendered at all (they cost the name 110px).
     expect(badge).toHaveTextContent(/^6$/)
     expect(within(badge).getByText('6')).toHaveClass('tabular-nums')
-    expect(screen.queryByText('6 days uncovered')).not.toBeInTheDocument()
+    expect(screen.queryByText('6 unassigned shifts')).not.toBeInTheDocument()
     expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     // The amber warning-container tint is the colour meaning; it is unchanged.
     expect(badge).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]', 'h-5', 'rounded-sm')
   })
 
-  it('pluralises the title and name: one day is "1 day uncovered"', () => {
+  it('pluralises the title and name: one shift is "1 unassigned shift"', () => {
     renderRow({ daysWithoutCover: 1 })
 
-    const badge = screen.getByRole('img', { name: '1 day uncovered' })
-    expect(badge).toHaveAttribute('title', '1 day uncovered')
+    const badge = screen.getByRole('img', { name: '1 unassigned shift' })
+    expect(badge).toHaveAttribute('title', '1 unassigned shift')
     expect(badge).toHaveTextContent(/^1$/)
   })
 
@@ -151,13 +177,13 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
     expect(badge).toHaveTextContent('')
     expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     expect(screen.queryByText('Fully covered')).not.toBeInTheDocument()
-    expect(screen.queryByRole('img', { name: /uncovered/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /unassigned shift/ })).not.toBeInTheDocument()
   })
 
   it('leaves the name the room the badge used to take: the badge is the compact size, not a 110px pill', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6 })
 
-    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
     // A count is one glyph wide (a week has at most 7 uncovered days): icon + gap + digit inside px-1.5.
     expect(badge).toHaveClass('px-1.5', 'gap-1')
     expect(badge.className).not.toMatch(/(^|\s)(w-|min-w-|max-w-)/)
@@ -169,7 +195,7 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
   it('shows no coverage state at all on a week with no shifts anywhere, but still the ratio chip', () => {
     renderRow({ daysWithoutCover: 7 }, { hideCoverageBadge: true })
 
-    expect(screen.queryByRole('img', { name: /uncovered|Fully covered/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /unassigned shift|Fully covered/ })).not.toBeInTheDocument()
     expect(screen.getByRole('img', { name: '1:1 support' })).toBeInTheDocument()
   })
 
@@ -206,7 +232,7 @@ describe('ParticipantRow header — readiness chip', () => {
     const marker = screen.getByRole('img', { name: 'Restrictive practice authorised' })
     const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
     const ratio = screen.getByRole('img', { name: '1:1 support' })
-    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
     expect(name.parentElement).toContainElement(chip)
     expect(isBefore(name, marker)).toBe(true)
@@ -256,7 +282,7 @@ describe('ParticipantRow header — readiness chip', () => {
     renderRow({ daysWithoutCover: 6, readinessIssues: ISSUES })
 
     const ratio = screen.getByRole('img', { name: '1:1 support' })
-    const badge = screen.getByRole('img', { name: '6 days uncovered' })
+    const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
     const tail = ratio.parentElement as HTMLElement
     expect(tail).toHaveClass('shrink-0', 'ml-auto', 'gap-2')
     expect(tail).toContainElement(badge)

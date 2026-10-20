@@ -1,20 +1,27 @@
-// Early-access request form for the public landing page.
+// Alpha sign-up form for the public landing page.
 // Plain TypeScript (no React): the landing page is its own Vite entry and stays light.
-// Contract (POST /api/public/early-access, JSON):
-//   202 { status: "received" }  any valid request, including a duplicate email and a filled honeypot
-//   400 ValidationProblemDetails with per-field errors
-//   429 with Retry-After when rate-limited
-//   500 generic
+// Contract (POST /api/public/early-access, same-origin JSON, landing PR 1):
+//   202 { status: "received" }  any valid request, including a repeat email and a filled honeypot
+//   400 ValidationProblemDetails, errors keyed by the camelCase field names; the page shows the server's own text
+//   413 / 415 over the 8 KB body cap or not JSON; 429 with Retry-After when rate-limited; 500 generic
 
 export const ENDPOINT = '/api/public/early-access'
-export const LIMITS = { name: 100, organisation: 150, email: 254 } as const
+export const FIELDS = ['name', 'organisation', 'role', 'organisationSize', 'email', 'phone', 'message'] as const // DOM order
+export type FieldName = (typeof FIELDS)[number]
+export const SIZES = ['under-10', '10-49', '50-199', '200-plus'] as const
+export const LIMITS = { name: 100, organisation: 150, role: 100, email: 254, message: 1000 } as const
+export const MESSAGES = {
+  name: 'Enter your name', organisation: "Enter your organisation's name", email: 'Enter your email address',
+  emailShape: 'Enter an email address like name@example.org', organisationSize: "Choose your organisation's size",
+  phone: 'Use digits, spaces and + ( ) - only', phoneDigits: 'Enter a phone number with 8 to 15 digits', message: 'Keep this to 1,000 characters or fewer',
+  tooLong: (n: number) => `Keep this to ${n} characters or fewer`,
+} as const
+export const OFFLINE_MESSAGE = "We couldn't reach Bunya Support. Check your connection and send again; your details are still in the form."
+export const REFUSED_MESSAGE = 'Something in the form was refused. Check it and send again.'
+export const ERROR_MESSAGE = "Something went wrong on our side and your details weren't saved. Try again in a few minutes."
 
-export type FieldName = 'name' | 'organisation' | 'email'
 export type FieldErrors = Partial<Record<FieldName, string>>
-export interface Values {
-  name: string
-  organisation: string
-  email: string
+export type Values = Record<FieldName, string> & {
   /** Honeypot: people never see this field, so a value means a bot filled it in. */
   website: string
 }
@@ -23,29 +30,40 @@ export type SubmitResult =
   | { kind: 'received' }
   | { kind: 'invalid'; errors: FieldErrors }
   | { kind: 'rate-limited'; retryAfterSeconds: number | null }
+  | { kind: 'offline' }
   | { kind: 'error' }
 
-const FIELDS: FieldName[] = ['name', 'organisation', 'email']
 // Deliberately lenient: the server does the strict check and answers 400 with field errors.
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PHONE = /^[0-9 +()-]*$/
+const PHONE_DIGITS = /^\d{8,15}$/
+
+export const invalidMessage = (n: number) => (n === 1 ? 'Check the highlighted field.' : `Check the ${n} highlighted fields.`)
+
+export function waitMessage(retryAfterSeconds: number | null): string {
+  const n = retryAfterSeconds === null ? 10 : Math.max(1, Math.ceil(retryAfterSeconds / 60))
+  return `Too many sign-ups have come from this network in the last few minutes. Try again in ${n} minute${n === 1 ? '' : 's'}.`
+}
 
 export function validateField(field: FieldName, raw: string): string | null {
-  const value = raw.trim()
-  if (field === 'name') {
-    if (!value) return 'Enter your name.'
-    if (value.length > LIMITS.name) return `Use ${LIMITS.name} characters or fewer.`
+  const v = raw.trim()
+  switch (field) {
+    case 'name':
+    case 'organisation':
+      return !v ? MESSAGES[field] : v.length > LIMITS[field] ? MESSAGES.tooLong(LIMITS[field]) : null
+    case 'email':
+      return !v ? MESSAGES.email : v.length > LIMITS.email || !EMAIL_SHAPE.test(v) ? MESSAGES.emailShape : null
+    case 'organisationSize':
+      return (SIZES as readonly string[]).includes(v) ? null : MESSAGES.organisationSize
+    case 'role':
+      return v.length > LIMITS.role ? MESSAGES.tooLong(LIMITS.role) : null
+    case 'phone':
+      // The server's rule (EarlyAccessRequestValidator): 8 to 15 digits, and a + only as the first character; a blank phone is fine.
+      if (!PHONE.test(v)) return MESSAGES.phone
+      return v && !(v.lastIndexOf('+') <= 0 && PHONE_DIGITS.test(v.replace(/\D/g, ''))) ? MESSAGES.phoneDigits : null
+    case 'message':
+      return v.length > LIMITS.message ? MESSAGES.message : null
   }
-  if (field === 'organisation') {
-    if (!value) return 'Enter your organisation.'
-    if (value.length > LIMITS.organisation) return `Use ${LIMITS.organisation} characters or fewer.`
-  }
-  if (field === 'email') {
-    if (!value) return 'Enter your email address.'
-    if (value.length > LIMITS.email || !EMAIL_SHAPE.test(value)) {
-      return 'Enter a valid email address, like name@organisation.org.au.'
-    }
-  }
-  return null
 }
 
 export function validate(values: Values): FieldErrors {
@@ -57,14 +75,14 @@ export function validate(values: Values): FieldErrors {
   return errors
 }
 
-/** Maps ValidationProblemDetails ({ errors: { Name: ["..."] } }) onto the three visible fields. */
+/** Maps ValidationProblemDetails ({ errors: { organisationSize: ["..."] } }) onto the fields, matching keys in any casing (first key wins). */
 export function parseFieldErrors(body: unknown): FieldErrors {
   const out: FieldErrors = {}
   const errors = (body as { errors?: Record<string, unknown> } | null)?.errors
   if (!errors || typeof errors !== 'object') return out
   for (const [key, value] of Object.entries(errors)) {
-    const field = FIELDS.find((f) => f === key.toLowerCase())
-    if (!field) continue
+    const field = FIELDS.find((f) => f.toLowerCase() === key.toLowerCase())
+    if (!field || out[field]) continue
     const first = Array.isArray(value) ? value.find((v) => typeof v === 'string') : value
     if (typeof first === 'string' && first.trim()) out[field] = first.trim()
   }
@@ -88,47 +106,37 @@ export async function submitRequest(
 ): Promise<SubmitResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const body: Record<string, string> = {}
+  for (const field of FIELDS) body[field] = values[field].trim()
+  body.website = values.website
   try {
     const response = await fetchFn(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        name: values.name.trim(),
-        organisation: values.organisation.trim(),
-        email: values.email.trim(),
-        website: values.website,
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     })
     if (response.status === 429) {
       return { kind: 'rate-limited', retryAfterSeconds: parseRetryAfter(response.headers.get('Retry-After')) }
     }
     if (response.status === 400) {
-      let body: unknown = null
+      let parsed: unknown = null
       try {
-        body = await response.json()
+        parsed = await response.json()
       } catch {
-        body = null
+        parsed = null
       }
-      return { kind: 'invalid', errors: parseFieldErrors(body) }
+      return { kind: 'invalid', errors: parseFieldErrors(parsed) }
     }
     if (response.ok) return { kind: 'received' }
     return { kind: 'error' }
   } catch {
-    return { kind: 'error' }
+    // A rejected fetch or the timeout's abort: the request never got an answer.
+    return { kind: 'offline' }
   } finally {
     clearTimeout(timer)
   }
 }
-
-export function waitMessage(retryAfterSeconds: number | null): string {
-  const minutes = retryAfterSeconds === null ? null : Math.max(1, Math.ceil(retryAfterSeconds / 60))
-  const wait = minutes === null ? 'a few minutes' : minutes === 1 ? 'a minute' : `${minutes} minutes`
-  return `There have been a lot of requests from your network. Wait ${wait} and try again. Your details are still here.`
-}
-
-export const ERROR_MESSAGE = 'Something went wrong on our side, so your request was not sent. Your details are still here. Try again.'
-export const INVALID_MESSAGE = 'Some details need another look. Check the fields marked below.'
 
 export interface FormOptions {
   fetchFn?: typeof fetch
@@ -139,36 +147,37 @@ export interface FormController {
   destroy(): void
 }
 
+type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+
 export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions = {}): FormController {
   const container = form.parentElement ?? form
   const inputs = Object.fromEntries(
-    [...FIELDS, 'website' as const].map((f) => [f, form.querySelector<HTMLInputElement>(`[data-field="${f}"]`)]),
-  ) as Record<FieldName | 'website', HTMLInputElement | null>
+    [...FIELDS, 'website' as const].map((f) => [f, form.querySelector<Control>(`[data-field="${f}"]`)]),
+  ) as Record<FieldName | 'website', Control | null>
   const errorEls = Object.fromEntries(
     FIELDS.map((f) => [f, form.querySelector<HTMLElement>(`[data-error="${f}"]`)]),
   ) as Record<FieldName, HTMLElement | null>
   const status = form.querySelector<HTMLElement>('[data-status]')
   const submit = form.querySelector<HTMLButtonElement>('[data-submit]')
   const submitLabel = form.querySelector<HTMLElement>('[data-submit-label]')
+  const nojs = form.querySelector<HTMLElement>('[data-nojs]')
   const success = container.querySelector<HTMLElement>('[data-success]')
+  const heading = container.querySelector<HTMLElement>('[data-success-heading]')
   const reset = container.querySelector<HTMLElement>('[data-reset]')
-  const successEmail = container.querySelector<HTMLElement>('[data-success-email]')
-  const emailFallback = successEmail?.textContent ?? 'your address'
-  const hideOnSuccess = Array.from(container.querySelectorAll<HTMLElement>('[data-hide-on-success]'))
-  const idleLabel = submitLabel?.textContent?.trim() || 'Request early access'
 
   let state: FormState = 'idle'
+  // Touched means edited: a field shows a blur error only once the visitor has changed it.
+  const touched = new Set<FieldName>()
   // Blur validation shows an error and shifts the layout. If that happens while the pointer is pressing the
   // submit button, the button moves away and the click is lost, so blur never validates in that moment.
   let pressingSubmit = false
 
+  const fieldOf = (target: EventTarget | null) => FIELDS.find((f) => inputs[f] === target)
+
   function values(): Values {
-    return {
-      name: inputs.name?.value ?? '',
-      organisation: inputs.organisation?.value ?? '',
-      email: inputs.email?.value ?? '',
-      website: inputs.website?.value ?? '',
-    }
+    const out = { website: inputs.website?.value ?? '' } as Values
+    for (const field of FIELDS) out[field] = inputs[field]?.value ?? ''
+    return out
   }
 
   function setFieldError(field: FieldName, message: string | null) {
@@ -184,7 +193,7 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
     }
   }
 
-  function showStatus(message: string | null, tone: 'error' | 'wait' | 'info' = 'info') {
+  function showStatus(message: string | null, tone: 'error' | 'wait' = 'error') {
     if (!status) return
     status.textContent = message ?? ''
     status.hidden = !message
@@ -199,29 +208,29 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
       submit.disabled = false
       submit.setAttribute('aria-disabled', String(busy))
     }
-    if (submitLabel) {
-      submitLabel.textContent = busy ? 'Sending…' : next === 'error' || next === 'rate-limited' ? 'Try again' : idleLabel
-    }
+    if (submitLabel) submitLabel.textContent = busy ? 'Sending…' : 'Join the alpha'
   }
 
-  function focusFirstInvalid(errors: FieldErrors): boolean {
+  function markInvalid(errors: FieldErrors) {
+    for (const field of FIELDS) setFieldError(field, errors[field] ?? null)
     const first = FIELDS.find((f) => errors[f])
-    if (!first) return false
-    inputs[first]?.focus()
-    return true
+    // A 400 that names no known field has nothing to mark, so the status says so itself.
+    showStatus(first ? invalidMessage(Object.keys(errors).length) : REFUSED_MESSAGE, 'error')
+    if (first) inputs[first]?.focus()
+    else status?.focus()
   }
 
-  function onInput(event: Event) {
-    const target = event.target as HTMLInputElement
-    const field = FIELDS.find((f) => inputs[f] === target)
-    if (field && target.getAttribute('aria-invalid') === 'true') setFieldError(field, null)
+  function onEdit(event: Event) {
+    const field = fieldOf(event.target)
+    if (!field) return
+    touched.add(field)
+    if (inputs[field]?.getAttribute('aria-invalid') === 'true' && !validateField(field, inputs[field]!.value)) setFieldError(field, null)
   }
 
   function onBlur(event: FocusEvent) {
     if (pressingSubmit || event.relatedTarget === submit) return
-    const target = event.target as HTMLInputElement
-    const field = FIELDS.find((f) => inputs[f] === target)
-    if (field && target.value.trim()) setFieldError(field, validateField(field, target.value))
+    const field = fieldOf(event.target)
+    if (field && touched.has(field)) setFieldError(field, validateField(field, inputs[field]!.value))
   }
 
   async function onSubmit(event: SubmitEvent) {
@@ -229,54 +238,45 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
     if (state === 'submitting') return
     const current = values()
     const errors = validate(current)
-    for (const field of FIELDS) setFieldError(field, errors[field] ?? null)
     if (Object.keys(errors).length > 0) {
-      showStatus(null)
       setState('idle')
-      focusFirstInvalid(errors)
+      markInvalid(errors)
       return
     }
+    for (const field of FIELDS) setFieldError(field, null)
     showStatus(null)
     setState('submitting')
     const result = await submitRequest(current, options.fetchFn, options.endpoint)
     if (result.kind === 'received') {
       setState('success')
       form.hidden = true
-      hideOnSuccess.forEach((el) => (el.hidden = true))
-      if (successEmail) successEmail.textContent = current.email.trim()
-      if (success) {
-        success.hidden = false
-        success.focus()
-      }
+      if (success) success.hidden = false
+      heading?.focus()
       return
     }
     if (result.kind === 'invalid') {
       setState('idle')
-      for (const field of FIELDS) setFieldError(field, result.errors[field] ?? null)
-      showStatus(INVALID_MESSAGE, 'error')
-      if (!focusFirstInvalid(result.errors)) status?.focus()
+      markInvalid(result.errors)
       return
     }
     if (result.kind === 'rate-limited') {
       setState('rate-limited')
       showStatus(waitMessage(result.retryAfterSeconds), 'wait')
-      status?.focus()
-      return
+    } else {
+      setState('error')
+      showStatus(result.kind === 'offline' ? OFFLINE_MESSAGE : ERROR_MESSAGE, 'error')
     }
-    setState('error')
-    showStatus(ERROR_MESSAGE, 'error')
     status?.focus()
   }
 
   function onReset() {
     for (const f of [...FIELDS, 'website' as const]) if (inputs[f]) inputs[f]!.value = ''
+    touched.clear()
     for (const field of FIELDS) setFieldError(field, null)
     showStatus(null)
     setState('idle')
     form.hidden = false
-    hideOnSuccess.forEach((el) => (el.hidden = false))
     if (success) success.hidden = true
-    if (successEmail) successEmail.textContent = emailFallback
     inputs.name?.focus()
   }
 
@@ -287,10 +287,12 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
   doc.addEventListener('pointerup', onRelease)
   doc.addEventListener('pointercancel', onRelease)
   form.addEventListener('submit', onSubmit)
-  form.addEventListener('input', onInput)
+  form.addEventListener('input', onEdit)
+  form.addEventListener('change', onEdit)
   form.addEventListener('focusout', onBlur)
   reset?.addEventListener('click', onReset)
-  // The button ships disabled so a no-JavaScript visitor cannot send the form to the wrong place.
+  // The button ships disabled, with a note, so a no-JavaScript visitor cannot send the form to the wrong place.
+  if (nojs) nojs.hidden = true
   setState('idle')
 
   return {
@@ -300,7 +302,8 @@ export function initEarlyAccessForm(form: HTMLFormElement, options: FormOptions 
       doc.removeEventListener('pointerup', onRelease)
       doc.removeEventListener('pointercancel', onRelease)
       form.removeEventListener('submit', onSubmit)
-      form.removeEventListener('input', onInput)
+      form.removeEventListener('input', onEdit)
+      form.removeEventListener('change', onEdit)
       form.removeEventListener('focusout', onBlur)
       reset?.removeEventListener('click', onReset)
     },

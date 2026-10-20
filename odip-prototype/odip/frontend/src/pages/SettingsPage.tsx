@@ -8,6 +8,7 @@ import { useNotices } from '@/hooks/useNotices'
 import { usePermissions } from '@/lib/permissions'
 import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
+import AlphaSignupsTab from '@/pages/settings/AlphaSignupsTab'
 import AlertWindowsSection from '@/pages/settings/AlertWindowsSection'
 import AppearanceSection from '@/pages/settings/AppearanceSection'
 import BillingDetailsSection from '@/pages/settings/BillingDetailsSection'
@@ -17,6 +18,7 @@ import EventTemplatesSection from '@/pages/settings/EventTemplatesSection'
 import ImportDataTab from '@/pages/settings/ImportDataTab'
 import IntegrationsTab from '@/pages/settings/IntegrationsTab'
 import NotificationPreferencesTab from '@/pages/settings/NotificationPreferencesTab'
+import OrganisationSetupSection from '@/pages/settings/OrganisationSetupSection'
 import OrganisationProfileSection from '@/pages/settings/OrganisationProfileSection'
 import PlanPricingSettingsTab from '@/pages/settings/PlanPricingSettingsTab'
 import ProfileSection from '@/pages/settings/ProfileSection'
@@ -80,6 +82,7 @@ export default function SettingsPage() {
       case 'profile': return framed(<ProfileSection />)
       case 'notifications': return <NotificationPreferencesTab {...frame} />
       case 'appearance': return framed(<AppearanceSection />)
+      case 'setup': return framed(<OrganisationSetupSection />)
       case 'organisation': return <OrganisationProfileSection {...frame} />
       case 'billing': return <BillingDetailsSection {...frame} />
       case 'safety': return <SafetyChecksSection {...frame} />
@@ -93,6 +96,7 @@ export default function SettingsPage() {
       case 'export': return framed(<DataExportTab />)
       case 'integrations': return framed(<IntegrationsTab />)
       case 'failed-sends': return framed(<AdminNotificationsTab />)
+      case 'alpha-signups': return framed(<AlphaSignupsTab />)
       case 'catalogue': return framed(<SupportCatalogueSection />)
       case 'users': return framed(<UsersTab notices={userNotices} onAddUser={addUser} onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }} />)
       case 'tenants': return framed(tenantDetail ? (

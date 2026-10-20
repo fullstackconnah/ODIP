@@ -1,41 +1,51 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
+import { CheckboxField } from '@/components/CheckboxField'
+import { Callout } from '@/components/Callout'
+import { PageState } from '@/components/PageState'
+import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { StatusBadge } from '@/components/StatusBadge'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
-import { ROW_ACTIONS_CARD, TAP_AREA, TAP_FLOOR } from '@/components/tapArea'
+import { ROW_ACTIONS_CARD, TAP_FLOOR } from '@/components/tapArea'
 import { formatRatio } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
-import { SHOWN_ROWS, isPresent, rowKey, shownCount, trackMinimums, visibleRows, type ActionOutcome, type FactColumn, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
+import { SHOWN_ROWS, isPresent, rowKey, shownCount, visibleRows, type ActionOutcome, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 import { BATCH_MAX, actionLabel, confirmCopy, isBulkKey, resultNotice, rowRef, runningLabel, selectName, type BulkResult } from './bulkCopy'
 
 // A busy control is aria-disabled, not disabled: a disabled button drops focus in some browsers, and a refused tap must leave focus where it was (SHAPE §4).
 const HELD = 'opacity-50 cursor-not-allowed'
-// DataTable's cell: --cell-px across, no padding down, centred in the row. Below xl a row is a card and its cells are plain flex items.
-const CELL = 'px-[var(--cell-px)] align-middle max-xl:p-0'
-// DataTable's checkbox, at 16px. Its <label> carries the touch pad (an input takes no pseudo-element), so it is 44 by 44 on touch.
-const BOX = 'm-0 size-4 rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer disabled:cursor-not-allowed'
-// The box track: --cell-px, the box, --cell-px (DataTable's w-10). Fixed, so the columns never shift as rows with a box come and go.
-const BOX_TRACK = 'calc(var(--cell-px) * 2 + 1rem)'
 
 type TapAction = Extract<RowAction, { kind: 'tap' }>
 /** A row's one-tap decision: what makes it safe to tick and to Complete all (SHAPE §3). */
 const tapOf = (row: QuickRow) => row.actions.find((a): a is TapAction => a.kind === 'tap')
 const statusOf = (err: unknown) => (err as { response?: { status?: number } } | undefined)?.response?.status
+/**
+ * No answer from ODIP itself, so the server may have committed and the outcome is unknown, not failed. ODIP answers with its ApiResponse envelope (every
+ * handled and unhandled error: ExceptionHandlingMiddleware), or on a 4xx with a problem body. Anything else is a proxy or a dropped connection: no response,
+ * an HTML page or no body (a 500, a Cloudflare 520 or 524), or a gateway's 502/503/504 whatever it carries.
+ */
+const noAnswer = (err: unknown) => {
+  const response = (err as { response?: { status?: number; data?: { success?: unknown; status?: unknown } | string | null } } | undefined)?.response
+  const { status = 0, data } = response ?? {}
+  if (!response || !data || typeof data !== 'object' || status === 502 || status === 503 || status === 504) return true
+  return !(data.success === false || (status >= 400 && status < 500 && typeof data.status === 'number'))
+}
 
 /**
  * Where focus goes when the row that holds it leaves (SHAPE §5), read BEFORE it leaves: the next row's first control, else this tab's link while the tab
  * stays. Null when focus is not in the row, so nothing is moved for somebody working elsewhere (a tap that finishes in a tab the viewer has left).
  */
 function focusTargets(rowEl: HTMLElement): Array<HTMLElement | null | undefined> | null {
-  if (!rowEl.contains(document.activeElement)) return null
+  const detail = rowEl.nextElementSibling?.hasAttribute('data-row-detail') ? rowEl.nextElementSibling as HTMLElement : null
+  if (!rowEl.contains(document.activeElement) && !detail?.contains(document.activeElement)) return null
   return [
-    rowEl.nextElementSibling?.querySelector<HTMLElement>('a, button'),
+    (detail?.nextElementSibling ?? rowEl.nextElementSibling)?.querySelector<HTMLElement>('a, button'),
     rowEl.closest('[data-quick-group]')?.querySelector<HTMLElement>('[data-group-link]'),
   ]
 }
@@ -47,9 +57,10 @@ const afterTabLeft = () =>
   ?? document.getElementById('dashboard-alerts')
 
 /** A row's inline form (SHAPE §4, "An action that needs input"): in the detail row under its row. Its checks mirror the server's, never exceed them. */
-function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
+function RowForm({ id, form, held = false, onClose, onBusy, onDone, onRefused }: {
   id: string
   form: QuickForm
+  held?: boolean
   onClose: () => void
   onBusy: (busy: boolean) => void
   onDone: (outcome: ActionOutcome) => void
@@ -64,7 +75,7 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (busy) return
+    if (busy || held) return
     if (form.required && !value.trim()) return setError(form.required)
     if (over) return setError(`Keep it to ${form.maxLength} characters.`)
     setError(undefined)
@@ -106,7 +117,7 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
       )}
       <div className="flex shrink-0 justify-end gap-1.5 pointer-coarse:gap-2 md:pt-5">
         <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-        <Button type="submit" variant={form.danger ? 'danger' : 'primary'} size="sm" aria-disabled={busy || undefined} className={busy ? HELD : undefined}>
+        <Button type="submit" variant={form.danger ? 'danger' : 'primary'} size="sm" aria-disabled={busy || held || undefined} className={busy || held ? HELD : undefined}>
           {busy ? form.busyLabel : form.submitLabel}
         </Button>
       </div>
@@ -114,224 +125,25 @@ function RowForm({ id, form, onClose, onBusy, onDone, onRefused }: {
   )
 }
 
-/** A fact cell: one plain value; a dash in the table and nothing on the card when empty. Only free text is cut (in the table) or wrapped (on a card). */
-function FactCell({ column, value }: { column: FactColumn; value: string | null | undefined | false }) {
-  const classes = [CELL, 'text-[13px] text-[var(--color-muted-foreground)]', !column.long && 'whitespace-nowrap', !value && 'max-xl:hidden', column.fromLg && 'max-lg:hidden']
-  return (
-    <td role="cell" className={classes.filter(Boolean).join(' ')}>
-      {!value ? '—' : column.long ? <span className="block break-words xl:truncate" title={value}>{value}</span> : value}
-    </td>
-  )
-}
-
 /**
- * The table's columns from xl (SHAPE §4), sized by content: the subject and free text grow up to their full width before anything else gets spare
- * width, so text is cut only when no column has room left. The subject wins over free text: its minimum (--subject-min, set by useSubjectMin) is its
- * full width while the free-text facts can still give way to their floor. Dates and short facts are as wide as they are and never cut. What is left
- * over sits in a gap before the buttons (`minmax(0, 1fr)`), which are as wide as the widest row's own buttons, busy labels included.
- */
-const gridColumns = (columns: FactColumn[], lead: number) => [
-  ...(lead ? [BOX_TRACK] : []), 'minmax(var(--subject-min, 0px), max-content)',
-  ...columns.map((column, i) => (column.long ? `minmax(var(--fact-min-${i + 1 + lead}, 0px), max-content)` : 'max-content')), 'minmax(0, 1fr)', 'max-content',
-].join(' ')
-// How narrow a free-text fact gets before a subject is cut.
-const FACT_FLOOR_REM = 6
-
-/**
- * Sets the table's --subject-min: the subject column's full width (text and flags), less whatever the table lacks once every free-text fact is at its
- * floor (or at its own width, when that is less), and each free-text fact's --fact-min-<track> to that floor (the arithmetic: trackMinimums). CSS grid
- * shares spare width equally between growing tracks, so without this a title is cut while a trip beside it stays whole. Re-measured when the table or a
- * subject changes size (a tab shown, fonts loaded, the window resized), and when the columns or the shown rows change. Its keys are strings, so a
- * render that changes neither does not re-subscribe: `freeText` has one character per fact column ('1' free text, '0' not); `rowIds` names the rows.
- * `lead` is 1 when the bulk box column comes first: every track and cell after it moves one along, and its fixed width counts as fixed.
- */
-function useSubjectMin(tableRef: RefObject<HTMLTableElement | null>, freeText: string, rowIds: string, lead: number) {
-  useLayoutEffect(() => {
-    const table = tableRef.current
-    if (!table || typeof ResizeObserver === 'undefined') return
-    const px = (v: string) => parseFloat(v) || 0
-    const padX = (el: Element) => { const cs = getComputedStyle(el); return px(cs.paddingLeft) + px(cs.paddingRight) }
-    const textWidth = (el: Element) => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect().width }
-    // A cell's full width: a cut span counts at its whole text (scrollWidth).
-    const natural = (td: Element) => { const span = td.querySelector('span[title]'); return (span ? span.scrollWidth : textWidth(td)) + padX(td) }
-    const fit = () => {
-      if (getComputedStyle(table).display !== 'grid') return
-      const rows = [...table.querySelectorAll(':scope > tbody > tr:not([data-detail])')]
-      const tracks = getComputedStyle(table).gridTemplateColumns.split(' ').map(px)
-      const floor = FACT_FLOOR_REM * px(getComputedStyle(document.documentElement).fontSize)
-      const subject = Math.max(0, ...rows.map((tr) => {
-        const line = tr.children[lead].firstElementChild!
-        const [text, ...flags] = [...line.children]
-        const gap = px(getComputedStyle(line).columnGap)
-        return text.scrollWidth + flags.reduce((sum, flag) => sum + gap + flag.getBoundingClientRect().width, 0) + padX(tr.children[lead])
-      }))
-      // Tracks lead+1..n are the facts (lead the subject, 0 the box when there is one; then the gap and the buttons). Free text gives way; everything
-      // else is fixed at its width.
-      const free = [...freeText].flatMap((flag, i) => (flag === '1' ? [i + 1 + lead] : []))
-      const fixed = tracks[tracks.length - 1] + (lead ? tracks[0] : 0) + [...freeText].reduce((sum, flag, i) => sum + (flag === '1' ? 0 : tracks[i + 1 + lead]), 0)
-      const facts = free.map((track) => Math.max(0, ...rows.map((tr) => natural(tr.children[track]))))
-      const mins = trackMinimums({ table: table.clientWidth, fixed, floor, subject, facts })
-      const set = (name: string, value: number) => { const v = `${Math.floor(value)}px`; if (table.style.getPropertyValue(name) !== v) table.style.setProperty(name, v) }
-      free.forEach((track, k) => set(`--fact-min-${track}`, mins.facts[k]))
-      set('--subject-min', mins.subject)
-    }
-    const observer = new ResizeObserver(fit)
-    observer.observe(table)
-    table.querySelectorAll(':scope > tbody > tr > td[data-subject] span[title]').forEach((span) => observer.observe(span))
-    return () => observer.disconnect()
-  }, [tableRef, freeText, rowIds, lead])
-}
-
-// From xl every row group and row is a subgrid of the table's columns, so each row keeps its own box (height, hairline, hover tint).
-const SUBGRID = 'xl:col-span-full xl:grid xl:grid-cols-subgrid'
-// The buttons' track: the last one, past the gap.
-const LAST_TRACK = 'xl:col-[-2/-1]'
-
-/**
- * One decision row (SHAPE §4, §6): its own row group, so its error line and form (the detail row) stay with it. From xl a table row of --row-h with the
- * buttons at the right edge; below xl the same elements reflow into the house phone card: the subject and its flags, the facts line, the buttons under them.
- */
-function QuickRowView({ row, columns, box, inRun, onOccupied, onDone, onRefused }: {
-  row: QuickRow
-  columns: FactColumn[]
-  /** The bulk box column (SHAPE §3): absent on a tab without it; null for a row with nothing to tick (its cell stays, empty). */
-  box?: { checked: boolean; locked: boolean; onChange: (checked: boolean) => void } | null
-  /** In a bulk run: its buttons are held, as a tap in flight holds them. */
-  inRun: boolean
-  /** Tells the group while a form is open or a tap is in flight here: its box is unticked and disabled, and Complete all leaves it out. */
-  onOccupied: (rowId: string, occupied: boolean) => void
-  onDone: (outcome: ActionOutcome, rowEl: HTMLElement) => void
-  onRefused: (err: unknown, message: string) => void
-}) {
-  const rowRef = useRef<HTMLTableSectionElement>(null)
-  const formId = useId()
-  const [tapping, setTapping] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string>()
-  const [formOpen, setFormOpen] = useState(false)
-  const busy = tapping || submitting || inRun
-  const occupied = tapping || submitting || formOpen
-  useEffect(() => onOccupied(row.id, occupied), [onOccupied, row.id, occupied])
-  useEffect(() => () => onOccupied(row.id, false), [onOccupied, row.id])
-  const tapAction = tapOf(row)
-  const formAction = row.actions.find((a): a is Extract<RowAction, { kind: 'form' }> => a.kind === 'form')
-  const opener = () => rowRef.current?.querySelector<HTMLElement>(`[aria-controls="${formId}"]`)
-
-  function closeForm() {
-    setFormOpen(false)
-    opener()?.focus()
-  }
-
-  function done(outcome: ActionOutcome) {
-    onDone(outcome, rowRef.current!)
-    setFormOpen(false)
-    if (outcome.keep) {
-      setTapping(false)
-      setSubmitting(false)
-      opener()?.focus()
-    }
-  }
-
-  async function tap(action: Extract<RowAction, { kind: 'tap' }>) {
-    if (busy) return
-    setError(undefined)
-    setTapping(true)
-    try {
-      done(await action.run())
-    } catch (err) {
-      const message = extractErrorMessage(err, action.failText)
-      setError(message)
-      onRefused(err, message)
-      setTapping(false)
-    }
-  }
-
-  const held = busy ? HELD : undefined
-  const form = formOpen && formAction
-  return (
-    <tbody ref={rowRef} role="rowgroup" className={`max-xl:block max-xl:rounded-2xl max-xl:border max-xl:border-[var(--color-border)] max-xl:bg-[var(--color-card)] max-xl:p-4 ${SUBGRID}`}>
-      <tr role="row" className={`max-xl:flex max-xl:flex-wrap max-xl:items-center max-xl:gap-x-3 max-xl:gap-y-1 xl:h-[var(--row-h)] xl:items-center xl:transition-colors xl:hover:bg-[var(--color-surface-container-low)] ${SUBGRID}`}>
-        {box !== undefined && (
-          // Below xl the box leads the card's subject line, on its first line (the subject wraps beside it). A row with nothing to tick keeps its empty
-          // cell, in the table and on a card, so every name in the list starts at one edge.
-          <td role="cell" data-select className={`${CELL} max-xl:w-4 max-xl:shrink-0 max-xl:self-start max-xl:pt-0.5`}>
-            {box && tapAction && (
-              <label className={`${TAP_AREA} flex size-4`}>
-                <input
-                  type="checkbox"
-                  className={BOX}
-                  aria-label={selectName(tapAction.name)}
-                  checked={box.checked && !occupied}
-                  disabled={occupied || box.locked}
-                  onChange={(e) => box.onChange(e.target.checked)}
-                />
-              </label>
-            )}
-          </td>
-        )}
-        <td role="cell" data-subject className={`${CELL} ${box !== undefined ? 'max-xl:min-w-0 max-xl:basis-[calc(100%-1.75rem)]' : 'max-xl:basis-full'}`}>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 xl:flex-nowrap">
-            <span className="min-w-0 text-sm font-semibold text-[var(--color-foreground)] xl:truncate" title={row.subject}>{row.subject}</span>
-            {row.flags.slice(0, 2).map((flag) => (
-              <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />
-            ))}
-          </div>
-        </td>
-        {columns.map((column, i) => <FactCell key={column.header} column={column} value={row.facts[i]} />)}
-        <td role="cell" className={`${CELL} whitespace-nowrap max-xl:mt-2 max-xl:basis-full ${LAST_TRACK} ${row.actions.length === 0 ? 'max-xl:hidden' : ''}`}>
-          {row.actions.length > 0 && (
-            <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
-              {row.actions.map((action) =>
-                action.kind === 'link' ? (
-                  <Button key={action.label} variant="secondary" size="sm" to={action.to} aria-label={action.name}>{action.label}</Button>
-                ) : action.kind === 'form' ? (
-                  <Button
-                    key={action.label}
-                    variant="secondary"
-                    size="sm"
-                    aria-label={action.name}
-                    aria-expanded={formOpen}
-                    aria-controls={formId}
-                    aria-disabled={busy || undefined}
-                    className={held}
-                    onClick={() => { if (!busy) { if (formOpen) closeForm(); else setFormOpen(true) } }}
-                  >
-                    {action.label}
-                  </Button>
-                ) : (
-                  <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined} className={held} onClick={() => tap(action)}>
-                    {/* An invisible, zero-height copy of the busy label holds the button at the wider of the two, so a tap never moves the columns. */}
-                    <span data-reserve={action.busyLabel} className="grid after:invisible after:h-0 after:content-[attr(data-reserve)]">
-                      {tapping ? action.busyLabel : action.label}
-                    </span>
-                  </Button>
-                ),
-              )}
-            </div>
-          )}
-        </td>
-      </tr>
-      {(error || form) && (
-        <tr data-detail role="row" className="block xl:col-span-full">
-          <td role="cell" colSpan={columns.length + 2 + (box === undefined ? 0 : 1)} className="block px-[var(--cell-px)] pb-2 max-xl:p-0 max-xl:pt-3">
-            {error && <p role="alert" className="pb-1 text-xs text-[var(--color-destructive)]">{error}</p>}
-            {form && <RowForm id={formId} form={form.form} onClose={closeForm} onBusy={setSubmitting} onDone={done} onRefused={onRefused} />}
-          </td>
-        </tr>
-      )}
-    </tbody>
-  )
-}
-
-/**
- * One decision tab's panel (SHAPE §4, §5): its table of up to five rows (DataTable's look from xl, house phone cards below it), the link to the full page
+ * One decision tab's panel (SHAPE §4, §5): its table of up to five rows (the shared DataTable and its house phone cards below md), the link to the full page
  * under it, and the group's notices under that (a notice inserted above would push every row down under a moving finger). A waiting or failed group says
  * so in place of the table and is never clear (`awaitsData`). A tab with a one-tap decision also gets the bulk bar over its table and a box column
  * (decision-bulk SHAPE §3–§6).
  */
-export function QuickGroup({ model, state }: { model: GroupModel; state: DecisionState }) {
+export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupModel; state: DecisionState; onRecoveryChange?: (key: GroupModel['key'], pending: boolean) => void }) {
   const linkRef = useRef<HTMLAnchorElement>(null)
-  const tableRef = useRef<HTMLTableElement>(null)
+  const subjects = useRef(new Map<string, HTMLSpanElement>())
+  const [rowUi, setRowUi] = useState<Map<string, { tapping?: boolean; submitting?: boolean; formOpen?: boolean; error?: string }>>(() => new Map())
+  const [needsCheck, setNeedsCheck] = useState<ReadonlySet<string>>(() => new Set())
+  const [checking, setChecking] = useState(false)
+  const rowUiOf = (id: string) => rowUi.get(id) ?? {}
+  const updateRow = (id: string, patch: Partial<ReturnType<typeof rowUiOf>>) => setRowUi(previous => {
+    const next = new Map(previous)
+    next.set(id, { ...previous.get(id), ...patch })
+    return next
+  })
+  const detailId = useId()
   const groupRef = useRef<HTMLDivElement>(null)
   const allRef = useRef<HTMLInputElement>(null)
   const rows = visibleRows(model, state.gone)
@@ -344,27 +156,36 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
   // Bulk: safe = a row with a one-tap decision, anywhere in the tab; the ticks are only the rows on screen.
   const bulkKey = isBulkKey(model.key) ? model.key : null
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
-  const [occupied, setOccupied] = useState<ReadonlySet<string>>(() => new Set())
-  const [confirm, setConfirm] = useState<'all' | 'selected' | null>(null)
+  const occupied = new Set([...rowUi].filter(([, ui]) => ui.tapping || ui.submitting || ui.formOpen).map(([id]) => id))
+  const [confirm, setConfirm] = useState<'selected' | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number; ids: ReadonlySet<string> } | null>(null)
-  const onOccupied = useCallback((rowId: string, on: boolean) => setOccupied((prev) => {
-    if (prev.has(rowId) === on) return prev
-    const next = new Set(prev)
-    if (on) next.add(rowId)
-    else next.delete(rowId)
-    return next
-  }), [])
+  // Sent with no answer, and the re-read failed too: each held (no retry) with when the group was last read, until an explicit status check succeeds.
+  const [held, setHeld] = useState<ReadonlyMap<string, number>>(() => new Map())
+  const readAt = model.readAt ?? 0
+  const readAtRef = useRef(readAt)
+  useEffect(() => { readAtRef.current = readAt })
+  const unsure: ReadonlySet<string> = new Set(held.keys())
   const safe = ready ? rows.filter((row) => tapOf(row)) : []
-  const free = safe.filter((row) => !occupied.has(row.id))
-  const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id))
+  const tickable = shown.filter((row) => tapOf(row) && !occupied.has(row.id) && !unsure.has(row.id) && !needsCheck.has(row.id))
+  const shownEligibility = JSON.stringify(tickable.map(row => row.id))
+  const [previousEligibility, setPreviousEligibility] = useState(shownEligibility)
+  if (shownEligibility !== previousEligibility) {
+    setPreviousEligibility(shownEligibility)
+    const eligibleIds: string[] = JSON.parse(shownEligibility)
+    setSelected(previous => {
+      const next = new Set([...previous].filter(id => eligibleIds.includes(id)))
+      return next.size === previous.size ? previous : next
+    })
+  }
+  const recoveryPending = needsCheck.size > 0 || held.size > 0
+  useEffect(() => { onRecoveryChange?.(model.key, recoveryPending) }, [model.key, recoveryPending, onRecoveryChange])
+  useEffect(() => () => onRecoveryChange?.(model.key, false), [model.key, onRecoveryChange])
   const ticked = tickable.filter((row) => selected.has(row.id))
-  const bar = !!bulkKey && (safe.length > 0 || !!progress)
-  const lead = bar ? 1 : 0
-  const mode = ticked.length > 0 ? 'selected' : 'all'
-  const count = mode === 'selected' ? ticked.length : free.length
+  const bar = !!bulkKey && (shown.some((row) => tapOf(row)) || !!progress)
+  const mode = 'selected' as const
+  const count = ticked.length
   const action = bulkKey && actionLabel(bulkKey, mode, count)
   useEffect(() => { if (allRef.current) allRef.current.indeterminate = ticked.length > 0 && ticked.length < tickable.length })
-  useSubjectMin(tableRef, model.columns.map((column) => (column.long ? '1' : '0')).join(''), shown.map((row) => row.id).join('\n'), lead)
 
   // Decided or removed elsewhere (409, 404): say so, since the refetch may take the row and its alert line away, and refetch so the row resolves.
   function refused(err: unknown, message: string) {
@@ -399,17 +220,21 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
    * A confirmed run (SHAPE §6), from a snapshot of its rows taken now: Completions in ONE approve-batch request, Leave and Tasks through each row's own
    * tap, one at a time in row order. No announcement per row; at the end ONE commit adds the run's notice and takes every decided row away together.
    */
-  async function run(runMode: 'all' | 'selected') {
+  async function run() {
     if (!bulkKey) return
     setConfirm(null)
-    const picked = runMode === 'selected' ? ticked : free
+    const picked = ticked
     const list = model.approveBatch ? picked.slice(0, BATCH_MAX) : picked
+    if (!list.length || progress || checking) return
     const result: BulkResult = {
       total: list.length, decided: 0, stale: 0, failed: [], overlaps: [],
-      skipped: runMode === 'all' ? rows.length - safe.length : 0,
+      skipped: 0,
       of: model.approveBatch && picked.length > BATCH_MAX ? picked.length : undefined,
     }
     const leaving: string[] = []
+    const unanswered: QuickRow[] = []
+    const refusedIds: string[] = []
+    let unchecked: string[] = []
     state.setRunning(model.key, true)
     setProgress({ done: 0, total: list.length, ids: new Set(list.map((row) => row.id)) })
     // Once, as it starts (the button's count is the progress; no announcement per row).
@@ -423,12 +248,13 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
           // Stale as the single approve's 409 and 404 are: reviewed already, or the shift or its completion gone (a not-found shift has no code).
           else if (answer && (answer.code === null || answer.code === 'SHIFT_NOT_PENDING_REVIEW' || answer.code === 'SHIFT_COMPLETION_NOT_FOUND')) result.stale++
           // Flagged since the queue read: the server skipped it (clean only); it stays, needing review.
-          else if (answer?.code === 'SHIFT_NEEDS_REVIEW') result.skipped++
-          else result.failed.push({ ref: rowRef(tapOf(row)!.name), message: answer?.message ?? '' })
+          else if (answer?.code === 'SHIFT_NEEDS_REVIEW') { result.skipped++; refusedIds.push(row.id) }
+          else { result.failed.push({ ref: rowRef(tapOf(row)!.name), message: answer?.message ?? '' }); refusedIds.push(row.id) }
         }
-      } catch {
-        // One SaveChanges on the server: a failed request approved nothing.
-        result.wholeFailed = true
+      } catch (err) {
+        // One SaveChanges on the server: a request ODIP refused approved nothing. With no answer, it may have committed.
+        if (noAnswer(err)) unanswered.push(...list)
+        else { result.wholeFailed = true; refusedIds.push(...list.map(row => row.id)) }
       }
     } else {
       for (const [i, row] of list.entries()) {
@@ -436,7 +262,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         setProgress((p) => p && { ...p, done: i })
         try {
           const outcome = await tap.run()
-          if (outcome.stale) result.stale++
+          if (outcome.stale && outcome.keep) result.skipped++
+          else if (outcome.stale) result.stale++
           else {
             result.decided++
             if (outcome.overlap) result.overlaps.push(outcome.overlap)
@@ -445,8 +272,22 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
         } catch (err) {
           const status = statusOf(err)
           if (status === 404 || status === 409) result.stale++
-          else result.failed.push({ ref: rowRef(tap.name), message: extractErrorMessage(err, '') })
+          else if (noAnswer(err)) unanswered.push(row)
+          else { result.failed.push({ ref: rowRef(tap.name), message: extractErrorMessage(err, '') }); refusedIds.push(row.id) }
         }
+      }
+    }
+    // Unknown is never reported as approved or as failed: a fresh read says which rows have left the list and which still wait.
+    if (unanswered.length) {
+      try {
+        const pending = new Set(await model.reread!(unanswered.map((row) => row.id)))
+        for (const row of unanswered) {
+          if (pending.has(row.id)) result.waiting = (result.waiting ?? 0) + 1
+          else { result.left = (result.left ?? 0) + 1; leaving.push(row.id) }
+        }
+      } catch {
+        result.unchecked = unanswered.length
+        unchecked = unanswered.map((row) => row.id)
       }
     }
     const notice = resultNotice(bulkKey, result)
@@ -456,6 +297,8 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       state.setRunning(model.key, false)
       setProgress(null)
       setSelected(new Set())
+      setNeedsCheck(previous => new Set([...previous, ...refusedIds]))
+      if (unchecked.length) setHeld((prev) => new Map([...prev, ...unchecked.map((id): [string, number] => [id, readAtRef.current])]))
     })
     if (result.stale) model.refetch()
     // Onto the run's notice (newest first), unless the viewer has gone to another tab or elsewhere.
@@ -467,9 +310,107 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
 
   function clear() {
     setSelected(new Set())
-    groupRef.current?.querySelector<HTMLElement>('[data-bulk-action]')?.focus()
+    allRef.current?.focus()
   }
 
+  function refuseRow(row: QuickRow, err: unknown, message: string) {
+    updateRow(row.id, { error: rowUiOf(row.id).formOpen ? undefined : message, tapping: false, submitting: false })
+    setNeedsCheck(previous => new Set([...previous, row.id]))
+    if (noAnswer(err)) setHeld(previous => new Map([...previous, [row.id, readAtRef.current]]))
+    refused(err, message)
+  }
+
+  const rowElement = (id: string) => subjects.current.get(id)?.closest('tr')
+  const formId = (id: string) => `${detailId}-${id}`
+  const locked = (row: QuickRow) => !!progress || checking || unsure.has(row.id) || needsCheck.has(row.id)
+
+  function closeForm(row: QuickRow) {
+    updateRow(row.id, { formOpen: false })
+    rowElement(row.id)?.querySelector<HTMLElement>('[aria-controls]')?.focus()
+  }
+
+  function done(row: QuickRow, outcome: ActionOutcome) {
+    const element = rowElement(row.id)
+    if (element) finish(row, outcome, element)
+    updateRow(row.id, { formOpen: false, tapping: false, submitting: false, error: undefined })
+  }
+
+  async function tap(row: QuickRow, action: TapAction) {
+    const ui = rowUiOf(row.id)
+    if (locked(row) || ui.tapping || ui.submitting) return
+    updateRow(row.id, { tapping: true, error: undefined })
+    try { done(row, await action.run()) }
+    catch (err) { refuseRow(row, err, extractErrorMessage(err, action.failText)) }
+  }
+
+  async function checkLatest() {
+    if (checking || progress || !model.reread) return
+    const ids = [...new Set([...needsCheck, ...held.keys()])]
+    if (!ids.length) return
+    setChecking(true)
+    try {
+      const pending = new Set(await model.reread(ids))
+      // A successful reread updates the group hook's rows/actions too. Require a new selection;
+      // never replay an old action closure or infer that this client approved an absent item.
+      for (const id of ids) if (!pending.has(id)) state.markGone(rowKey(model.key, id))
+      setNeedsCheck(new Set())
+      setHeld(new Map())
+      setSelected(new Set())
+      state.notify('success', 'Status checked', 'Review the latest rows and select again if needed. Nothing was resent.', model.key)
+    } catch {
+      state.notify('danger', 'Status could not be checked', 'Nothing was resent. Actions stay blocked until a status check succeeds.', model.key)
+    } finally { setChecking(false) }
+  }
+
+  const columns: Column<QuickRow>[] = [
+    ...(bar ? [{ key: 'selection', header: 'Select', pin: false as const, mobile: 'status' as const,
+      minWidth: 'calc(24px + var(--control-h))', render: (row: QuickRow) => {
+        const action = tapOf(row)
+        return action ? <CheckboxField label={<span className="sr-only">{selectName(action.name)}</span>}
+          className="[&_input]:m-0 [&_input]:size-4 [&_input]:accent-[var(--color-primary)] pointer-coarse:[&_label]:min-w-11"
+          checked={selected.has(row.id) && tickable.some(item => item.id === row.id)}
+          disabled={!tickable.some(item => item.id === row.id) || !!progress || checking}
+          onChange={event => setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} /> : null
+      } }] : []),
+    { key: 'subject', header: model.subjectHeader, pin: 'start', mobile: 'primary', minWidth: '10rem',
+      render: row => <div className="flex min-w-0 flex-wrap items-center gap-2 md:flex-nowrap">
+        <span ref={element => { if (element) subjects.current.set(row.id, element); else subjects.current.delete(row.id) }}
+          data-quick-subject className="min-w-0 font-semibold md:max-w-[16rem] md:truncate" title={row.subject}>{row.subject}</span>
+        {row.flags.slice(0, 2).map(flag => <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />)}
+        {unsure.has(row.id) && <StatusBadge tone="neutral" label="Not confirmed yet" className="shrink-0 whitespace-nowrap" />}
+      </div> },
+    ...model.columns.map((column, index): Column<QuickRow> => ({
+      key: `fact-${index}`, header: column.header, mobile: 'meta',
+      render: row => <CellText className="text-[13px] text-[var(--color-muted-foreground)] md:max-w-[18rem]">{row.facts[index] || '\u2014'}</CellText>,
+    })),
+    { key: 'actions', header: '', render: row => {
+      const ui = rowUiOf(row.id), busy = !!ui.tapping || !!ui.submitting || locked(row)
+      return <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
+        {row.actions.map(action => action.kind === 'link'
+          ? <Button key={action.label} variant="secondary" size="sm" to={action.to} aria-label={action.name}>{action.label}</Button>
+          : action.kind === 'form'
+            ? <Button key={action.label} variant="secondary" size="sm" aria-label={action.name} aria-expanded={!!ui.formOpen}
+                aria-controls={formId(row.id)} aria-disabled={busy || undefined} className={busy ? HELD : undefined}
+                onClick={() => { if (!busy) { updateRow(row.id, { formOpen: !ui.formOpen }); setSelected(previous => { const next = new Set(previous); next.delete(row.id); return next }) } }}>{action.label}</Button>
+            : <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined}
+                className={busy ? HELD : undefined} onClick={() => void tap(row, action)}>
+                <span data-reserve={action.busyLabel} className="grid after:invisible after:h-0 after:content-[attr(data-reserve)]">{ui.tapping ? action.busyLabel : action.label}</span>
+              </Button>)}
+      </div>
+    } },
+  ]
+
+  function rowDetail(row: QuickRow) {
+    const ui = rowUiOf(row.id)
+    const formAction = row.actions.find((action): action is Extract<RowAction, { kind: 'form' }> => action.kind === 'form')
+    if (!ui.error && !(ui.formOpen && formAction)) return null
+    return <div>
+      {ui.error && <Callout tone="error">{ui.error}</Callout>}
+      {ui.formOpen && formAction && <RowForm id={formId(row.id)} form={formAction.form} held={locked(row)}
+        onClose={() => closeForm(row)} onBusy={busy => updateRow(row.id, { submitting: busy })}
+        onDone={outcome => done(row, outcome)} onRefused={(err, message) => refuseRow(row, err, message)} />}
+    </div>
+  }
   const copy = bulkKey && confirm && confirmCopy(bulkKey, confirm, count, rows.length - safe.length)
   return (
     <div
@@ -478,38 +419,26 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
       // Below xl, a control tabbed to never hides under the stuck bar: the header (3rem) and the bar (--control-h and its 1rem padding) above it.
       className={bar ? 'max-xl:[&_:is(a,button,input,textarea)]:scroll-mt-[calc(3rem+var(--control-h)+1rem)]' : undefined}
     >
-      {model.phase === 'loading' && <p className="text-[13px] text-[var(--color-muted-foreground)]">Loading {model.noun}…</p>}
-      {model.phase === 'error' && (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[13px] text-[var(--color-destructive)]">Couldn't load {model.noun}.</p>
-          <Button variant="secondary" size="sm" onClick={() => model.refetch()} aria-label={`Try again: ${model.noun}`}>Try again</Button>
-        </div>
-      )}
+      {model.phase === 'loading' && <PageState kind="loading" noun={model.noun} />}
+      {model.phase === 'error' && <PageState kind="error" noun={`${model.title.toLowerCase()} queue`} onRetry={() => model.refetch()} />}
       {bar && action && (
-        // The panel bar (SHAPE §4): Select all and Complete all at rest; the count, Clear and the selection's action once a box is ticked. Its box lines up
+        // The panel bar (SHAPE §4): Select shown at rest; the count, Clear and the selection's action once a box is ticked. Its box lines up
         // over the row boxes and its button's right edge with the row buttons'. Below xl it sticks under the app header, inside its own panel.
         <div className="mb-2 flex items-center justify-between gap-3 xl:h-[var(--control-h)] xl:px-[calc(1px+var(--cell-px))] max-xl:sticky max-xl:top-12 max-xl:z-20 max-xl:bg-[var(--color-background)] max-xl:px-[calc(1px+1rem)] max-xl:py-2 max-xl:shadow-[0_24px_32px_-12px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)]">
           <div className="flex min-w-0 items-center gap-3">
             {tickable.length > 0 && (
-              // Once ticked, the box alone: the row boxes' size-4 + touch pad, so the count sits where "Select all" was (no jump on a phone).
-              <label className={ticked.length > 0 ? `${TAP_AREA} flex size-4`
-                : 'flex min-h-[var(--control-h)] items-center gap-2 text-[13px] font-medium text-[var(--color-foreground)] pointer-coarse:min-w-[var(--tap-min)]'}>
-                <input
-                  ref={allRef}
-                  type="checkbox"
-                  className={BOX}
-                  aria-label={`Select all shown ${model.noun}`}
-                  checked={ticked.length > 0 && ticked.length === tickable.length}
-                  aria-disabled={progress ? true : undefined}
-                  onChange={(e) => { if (!progress) setSelected(new Set(e.target.checked ? tickable.map((row) => row.id) : [])) }}
-                />
-                <span className={ticked.length > 0 ? 'sr-only' : undefined}>Select all</span>
-              </label>
+              <div ref={element => { allRef.current = element?.querySelector('input') ?? null }}>
+                <CheckboxField label={ticked.length > 0 ? <span className="sr-only">Select all shown {model.noun}</span> : 'Select shown'}
+                  className="[&_input]:m-0 [&_input]:size-4 [&_input]:accent-[var(--color-primary)] pointer-coarse:[&_label]:min-w-11"
+                  aria-label={`Select all shown ${model.noun}`} checked={ticked.length > 0 && ticked.length === tickable.length}
+                  aria-disabled={progress || checking ? true : undefined}
+                  onChange={event => { if (!progress && !checking) setSelected(new Set(event.target.checked ? tickable.map(row => row.id) : [])) }} />
+              </div>
             )}
             {ticked.length > 0 && (
               <>
                 <span className="whitespace-nowrap text-[13px] tabular-nums text-[var(--color-muted-foreground)]">{ticked.length} selected</span>
-                <Button variant="ghost" aria-disabled={progress ? true : undefined} className={progress ? HELD : undefined} onClick={() => { if (!progress) clear() }}>Clear</Button>
+                <Button variant="ghost" aria-disabled={progress || checking ? true : undefined} className={progress ? HELD : undefined} onClick={() => { if (!progress && !checking) clear() }}>Clear</Button>
               </>
             )}
           </div>
@@ -518,67 +447,38 @@ export function QuickGroup({ model, state }: { model: GroupModel; state: Decisio
               data-bulk-action
               // While running, the name is the visible count (label in name, WCAG 2.5.3).
               aria-label={progress ? undefined : action.name}
-              aria-disabled={progress ? true : undefined}
+              aria-disabled={progress || checking ? true : undefined}
               className={`shrink-0 ${progress ? HELD : ''}`}
-              onClick={() => { if (!progress) setConfirm(mode) }}
+              onClick={() => { if (!progress && !checking) setConfirm(mode) }}
             >
               {progress && bulkKey ? runningLabel(bulkKey, progress.done, progress.total) : action.label}
             </Button>
           )}
         </div>
       )}
-      {shown.length > 0 && (
-        <div className="xl:overflow-x-auto xl:rounded-md xl:border xl:border-[var(--color-border)] xl:bg-[var(--color-card)]">
-          {/* Explicit roles: a table drawn as a grid (xl) or as cards (below xl) keeps its table semantics in every browser. */}
-          <table
-            ref={tableRef}
-            role="table"
-            style={{ gridTemplateColumns: gridColumns(model.columns, lead) }}
-            className="w-full text-sm tabular-nums max-xl:flex max-xl:flex-col max-xl:gap-3 xl:grid xl:divide-y xl:divide-[var(--color-border)]"
-          >
-            <thead role="rowgroup" className={`max-xl:hidden ${SUBGRID}`}>
-              {/* The header band (bolder, SHAPE §2): Mist, so it reads as the table's head and never as a hovered row (that is surface-container-low). */}
-              <tr role="row" className={`h-[var(--table-head-h)] bg-[var(--color-surface-container)] xl:items-center ${SUBGRID}`}>
-                {lead > 0 && <th role="columnheader" data-select className={CELL}><span className="sr-only">Select</span></th>}
-                {[model.subjectHeader, ...model.columns.map((column) => column.header), ''].map((header, i) => (
-                  <th key={i} role="columnheader" className={`${CELL} ${i === model.columns.length + 1 ? LAST_TRACK : ''} whitespace-nowrap text-left text-xs font-semibold text-[var(--color-muted-foreground)]`}>{header}</th>
-                ))}
-              </tr>
-            </thead>
-            {shown.map((row) => (
-              <QuickRowView
-                key={row.id}
-                row={row}
-                columns={model.columns}
-                box={!bar ? undefined : tapOf(row) ? {
-                  checked: selected.has(row.id),
-                  // A run holds every box: its selection was taken at Confirm.
-                  locked: !!progress,
-                  onChange: (checked) => setSelected((prev) => { const next = new Set(prev); if (checked) next.add(row.id); else next.delete(row.id); return next }),
-                } : null}
-                inRun={!!progress?.ids.has(row.id)}
-                onOccupied={onOccupied}
-                onDone={(outcome, rowEl) => finish(row, outcome, rowEl)}
-                onRefused={refused}
-              />
-            ))}
-          </table>
-        </div>
+      {(needsCheck.size > 0 || held.size > 0) && (
+        <Callout tone="info" className="mb-2">
+          <p>Check the latest status before retrying. No items will be resent automatically.</p>
+          <Button variant="secondary" size="sm" aria-disabled={checking || !model.reread || undefined}
+            onClick={() => void checkLatest()}>{checking ? 'Checking status.' : 'Check latest status'}</Button>
+          {!model.reread && <Link to={model.link.to}>Open the full workflow to check</Link>}
+        </Callout>
       )}
+      {shown.length > 0 && <DataTable data={shown} columns={columns} keyField="id" rowDetail={rowDetail} />}
       <div className="mt-2 flex justify-end first:mt-0">
         <Link
           ref={linkRef}
           data-group-link
           to={model.link.to}
           aria-label={cut ? `See all ${model.noun}` : undefined}
-          className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}
+          className={`${TAP_FLOOR} pointer-coarse:min-w-11 pointer-coarse:justify-end text-xs font-bold text-[var(--color-primary)] hover:underline`}
         >
           {cut ? 'See all' : model.link.openLabel}
         </Link>
       </div>
       <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={() => linkRef.current} className="mt-2 empty:mt-0" />
       {copy && confirm && (
-        <ConfirmDialog open onCancel={() => setConfirm(null)} onConfirm={() => void run(confirm)} title={copy.title} message={copy.message} confirmLabel={copy.confirm} />
+        <ConfirmDialog open onCancel={() => setConfirm(null)} onConfirm={() => void run()} title={copy.title} message={copy.message} confirmLabel={copy.confirm} />
       )}
     </div>
   )

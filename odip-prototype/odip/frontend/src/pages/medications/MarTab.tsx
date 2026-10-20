@@ -105,6 +105,12 @@ export default function MarTab() {
     return Array.from(byTime.entries()).sort(([a], [b]) => a.localeCompare(b))
   }, [mar])
 
+  // A PRN row carries the pending administration ID, while the loaded scheduled rows carry
+  // administration detail. Only this exact ID joins the two; lastDoseAt is display-only.
+  const outcomeAdministration = outcomeFor?.outcomePendingAdministrationId
+    ? (mar?.entries ?? []).find(entry => entry.administration?.id === outcomeFor.outcomePendingAdministrationId)?.administration
+    : undefined
+
   const participantItems = [
     { value: '', label: 'All participants' },
     ...participants.map(p => ({ value: p.id, label: p.fullName })),
@@ -410,6 +416,15 @@ export default function MarTab() {
           </>
         }
       >
+        {outcomeFor && (
+          <div className="mb-4 rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] px-3 py-2 text-sm">
+            <p className="font-medium">{outcomeFor.participantName} · {outcomeFor.name}{outcomeFor.strength ? ` ${outcomeFor.strength}` : ''}</p>
+            {outcomeAdministration && <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+              Given {formatWithTimeZone(outcomeAdministration.administeredAt, outcomeAdministration.administeredAtTimeZone, { hour: '2-digit', minute: '2-digit' })}
+              {outcomeAdministration.doseDescription ? ` · ${outcomeAdministration.doseDescription}` : ''}
+            </p>}
+          </div>
+        )}
         <label className="block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]" htmlFor="prn-outcome-text">
           Outcome <span aria-hidden="true">*</span>
         </label>

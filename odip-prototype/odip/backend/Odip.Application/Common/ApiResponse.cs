@@ -46,6 +46,8 @@ public class PagedResult<T>
     public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
     public bool HasNext => Page < TotalPages;
     public bool HasPrevious => Page > 1;
+    /// <summary>Keyset paging only (GetCompletions): pass it back as <c>after</c> for the rows after this page's last one, so rows cannot slide between pages.</summary>
+    public string? NextCursor { get; set; }
 
     public static async Task<PagedResult<T>> CreateAsync(
         IQueryable<T> query, int page, int pageSize, CancellationToken ct = default)

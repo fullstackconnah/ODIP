@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DragEndEvent } from '@dnd-kit/core'
 import RosterBoardPage from './RosterBoardPage'
@@ -76,7 +76,8 @@ const onShift = (shift: ShiftDto): DropTarget => ({ kind: 'shift', shift })
 
 function renderPage(entry = '/rostering?date=2026-08-17') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[entry]}><RosterBoardPage /></MemoryRouter></QueryClientProvider>)
+  const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: [entry] })
+  return { ...render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>), router }
 }
 
 /** What dnd-kit hands onDragEnd when a carried person is let go over `target` (null: over nothing). */
@@ -207,6 +208,9 @@ describe('RosterBoardPage drag and drop: when the server says no', () => {
 
   it('tells the board frame how tall the error notice is, so strip and grid still share one screen (finish review fix 5)', async () => {
     h.move.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['Another change to the roster is still running.'] } } })
+    // All published, so no Publish banner stands in the notice wrapper before the error comes (2026-10-16: the banner is measured there too).
+    if (BOARD.groupBy !== 'Participant') throw new Error('participant board')
+    h.board.mockReturnValue({ data: { ...BOARD, participantRows: BOARD.participantRows.map(r => ({ ...r, shifts: r.shifts.map(s => ({ ...s, status: 'Published' as const })) })) }, isLoading: false, isError: false, refetch: vi.fn() })
     const { container } = renderPage()
     const page = container.querySelector('.animate-fade-in') as HTMLElement
     expect(page.style.getPropertyValue('--roster-notice-h')).toBe('')
@@ -354,7 +358,7 @@ describe('RosterBoardPage: Publish week', () => {
     h.publish.mockResolvedValueOnce({ published: 4, notified: 2, unfilled: 1, skipped: 0 })
     renderPage()
 
-    expect(screen.getByText('4 drafts')).toBeInTheDocument()
+    expect(screen.getByText('4 shifts not visible to staff yet')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Publish week' }))
     const dialog = screen.getByRole('alertdialog', { name: 'Publish 17–23 Aug?' })
     expect(within(dialog).getByText('4 draft shifts go out to staff. The 2 people on them are notified. 1 still needs staff and is published as needing staff.')).toBeInTheDocument()

@@ -13,4 +13,6 @@ export interface PagedResult<T> {
   totalPages: number
   hasNext: boolean
   hasPrevious: boolean
+  /** Keyset-paged lists only (the completions queue): the `after` token for the rows past this page. */
+  nextCursor?: string | null
 }

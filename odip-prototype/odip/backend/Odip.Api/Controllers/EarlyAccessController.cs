@@ -19,8 +19,9 @@ namespace Odip.Api.Controllers;
 /// <list type="bullet">
 /// <item>202 <c>{ "status": "received" }</c> for any valid request — including an address already on file
 /// (never revealed) and a filled honeypot (silently dropped, nothing stored).</item>
-/// <item>400 ValidationProblemDetails whose <c>errors</c> are keyed <c>name</c>, <c>organisation</c>, <c>email</c>.</item>
-/// <item>413 when the body exceeds <see cref="MaxBodyBytes"/>; 415 when it is not JSON.</item>
+/// <item>400 ValidationProblemDetails whose <c>errors</c> are keyed <c>name</c>, <c>organisation</c>, <c>email</c>,
+/// <c>organisationSize</c>, <c>role</c>, <c>phone</c> and <c>message</c>.</item>
+/// <item>413 when the body exceeds <see cref="MaxBodyBytes"/> (8 KB); 415 when it is not JSON.</item>
 /// <item>429 with <c>Retry-After</c> from <see cref="EarlyAccessRateLimiting"/> (5 per client IP per 10 minutes plus
 /// a global cap), applied by the limiter before this action runs.</item>
 /// <item>500 with the generic ExceptionHandlingMiddleware body for anything unexpected.</item>
@@ -33,8 +34,11 @@ public class EarlyAccessController : ControllerBase
 {
     public const string RoutePath = "api/public/early-access";
 
-    /// <summary>The request body limit the contract promises: 4 KB of JSON.</summary>
-    public const int MaxBodyBytes = 4096;
+    /// <summary>
+    /// 8 KB. The largest valid form is about 5 KB of JSON: every field at its limit in 3-byte characters measured 4,959 bytes
+    /// (2026-10-16), and the rest is room for escapes.
+    /// </summary>
+    public const int MaxBodyBytes = 8192;
 
     private const string UnexpectedErrorMessage = "An unexpected error occurred. Please try again later.";
 
@@ -82,7 +86,7 @@ public class EarlyAccessController : ControllerBase
         EarlyAccessRecordResult result;
         try
         {
-            result = await _service.RecordAsync(checkedRequest.Name, checkedRequest.Organisation, checkedRequest.Email, ct);
+            result = await _service.RecordAsync(checkedRequest, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -100,15 +104,17 @@ public class EarlyAccessController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<object>.Fail(UnexpectedErrorMessage));
         }
 
-        // Only a first-time address is worth an email. The notifier queues and returns at once, so the response
-        // is the same 202 in the same time whichever branch ran. The row is already stored: a notifier fault must
-        // not turn this into an error for the visitor.
-        if (result.Outcome == EarlyAccessOutcome.Created)
+        // A new address, or a known one that sent different answers, is worth an email (an identical repeat is not). The
+        // notifier queues and returns at once, so the response is the same 202 in the same time whichever branch ran.
+        // The row is already stored: a notifier fault must not turn this into an error for the visitor.
+        // shortcut: past the 10-submission limit every differing repeat still queues a notice; the notifier's bounded queue and the
+        // public rate limit cap the volume.
+        if (result.Notice is { } notice)
         {
             try
             {
                 _notifier.NotifyNewRequest(new EarlyAccessNotification(
-                    checkedRequest.Name, checkedRequest.Organisation, checkedRequest.Email, result.RequestedAtUtc));
+                    checkedRequest.Name, checkedRequest.Organisation, checkedRequest.Email, result.RequestedAtUtc, notice));
             }
             catch (Exception ex)
             {

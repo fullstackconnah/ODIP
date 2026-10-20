@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Tabs } from '@/components/Tabs'
 import { AllClearRow } from './AttentionBand'
 import { QuickGroup } from './QuickGroup'
-import { isPresent, shownCount, visibleRows, type GroupKey, type GroupModel } from './quickGroupModel'
+import { isPresent, rowKey, shownCount, visibleRows, type GroupKey, type GroupModel } from './quickGroupModel'
 import type { DecisionState } from './useDecisionState'
 
 /** The open tab. `settled` once the viewer picked it, it had rows, or the one before it emptied: from then on only a pick or an emptying moves it. */
@@ -34,9 +34,30 @@ function tabLabel(group: GroupModel, count: number, open: boolean) {
  * All clear row under the panel (muted tabs are skipped by the arrow keys, so a keyboard screen-reader user would otherwise never hear it). With every
  * group at zero, the heading and that row alone.
  */
-export function NeedsYourDecision({ groups, state }: { groups: GroupModel[]; state: DecisionState }) {
+export function NeedsYourDecision({ groups, state, onRecoveryPresenceChange }: { groups: GroupModel[]; state: DecisionState; onRecoveryPresenceChange?: (pending: boolean) => void }) {
+  // A failed/uncertain action still needs a status check even if a later list is empty or its notice was dismissed.
+  // IDs and retry guards stay in QuickGroup; the parent only keeps that recovery panel mounted.
+  const [recovering, setRecovering] = useState<ReadonlySet<GroupKey>>(() => new Set())
+  const onRecoveryChange = useCallback((key: GroupKey, pending: boolean) => setRecovering(previous => {
+    if (previous.has(key) === pending) return previous
+    const next = new Set(previous)
+    if (pending) next.add(key)
+    else next.delete(key)
+    return next
+  }), [])
+  useEffect(() => { onRecoveryPresenceChange?.(recovering.size > 0) }, [recovering, onRecoveryPresenceChange])
+  // A fresh read that lists a row marked decided here again says it was not decided after all: show it, and let the next read settle it. Here, not in
+  // QuickGroup: a group with every row marked is absent from the page, so it could never see its own rows come back.
+  const readStamp = groups.map((group) => group.readAt ?? 0).join()
+  useEffect(() => {
+    // Its own group's read, later than the mark: another group's read (or a failed refetch) says nothing about this row.
+    const back = groups.flatMap((group) => group.rows.map((row) => rowKey(group.key, row.id)).filter((key) => (state.gone.get(key) ?? Infinity) < (group.readAt ?? 0)))
+    if (back.length) state.unmarkGone(back)
+    // Only a new read decides: `gone` itself changing (a row just marked) must not undo the mark.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readStamp])
   const notices = (group: GroupModel) => state.notices.filter((notice) => notice.subject === group.key).length
-  const present = groups.filter((group) => isPresent(group, state.gone, notices(group), state.running.has(group.key)))
+  const present = groups.filter((group) => isPresent(group, state.gone, notices(group), state.running.has(group.key)) || recovering.has(group.key))
   const clear = groups.filter((group) => !present.includes(group)).map((group) => group.noun)
   const hasRows = (group: GroupModel) => group.phase === 'ready' && visibleRows(group, state.gone).length > 0
 
@@ -90,7 +111,7 @@ export function NeedsYourDecision({ groups, state }: { groups: GroupModel[]; sta
                 hidden={group.key !== next.key}
                 className="mt-[var(--card-pad)]"
               >
-                <QuickGroup model={group} state={state} />
+                <QuickGroup model={group} state={state} onRecoveryChange={onRecoveryChange} />
               </div>
             ))}
           </div>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bookingBody, bookingFormOf, cancelNotice, visitsByDay, visitStage, withVisits, durationLabel, endsLabel, inviteLine, isPastVisit, sendsInvite, validateBooking, staffOptions, visitTimes, visitWhen,
-  NO_CONNECTION, enquirySavedNotice, refusalOf, serverBookingErrors,
+  NO_CONNECTION, enquirySavedNotice, refusalOf, serverBookingErrors, invitee, inviteeEmailLabel, resultLine,
 } from './intakeBooking'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 
@@ -49,10 +49,24 @@ describe('intake visit wording', () => {
   })
 
   it('reads the invite line from the stored outcome: an error beats an earlier send', () => {
-    expect(inviteLine({ intakeInviteSentAt: '2026-10-14T03:00:00Z', intakeInviteError: null })).toEqual({ text: 'Invite sent', failed: false })
-    expect(inviteLine({ intakeInviteSentAt: '2026-10-14T03:00:00Z', intakeInviteError: 'NotConfigured' })).toEqual({ text: "Invite not sent: email isn't set up yet", failed: true })
-    expect(inviteLine({ intakeInviteSentAt: null, intakeInviteError: 'Failed' })).toEqual({ text: "Invite not sent: the email couldn't be sent", failed: true })
-    expect(inviteLine({ intakeInviteSentAt: null, intakeInviteError: null })).toBeNull()
+    const email = 'priya@example.com'
+    expect(inviteLine({ email, intakeInviteSentAt: '2026-10-14T03:00:00Z', intakeInviteError: null })).toEqual({ text: 'Invite sent', failed: false })
+    expect(inviteLine({ email, intakeInviteSentAt: '2026-10-14T03:00:00Z', intakeInviteError: 'NotConfigured' })).toEqual({ text: "Invite not sent: email isn't set up yet", failed: true })
+    expect(inviteLine({ email, intakeInviteSentAt: null, intakeInviteError: 'Failed' })).toEqual({ text: "Invite not sent: the email couldn't be sent", failed: true })
+    expect(inviteLine({ email, intakeInviteSentAt: null, intakeInviteError: null })).toBeNull()
+  })
+
+  // D: a converted enquiry's email is read-only, so one that cannot take an invite reads as none (a non-converted one is the server's 400).
+  it('says the email on file cannot take an invite for a converted enquiry only', () => {
+    const bad = { email: 'a b@c.d', intakeInviteSentAt: null, intakeInviteError: null }
+    expect(inviteLine({ ...bad, participantId: 'p-1' })).toEqual({ text: 'No invite: bad email', failed: false })
+    expect(inviteLine({ ...bad, participantId: null })).toBeNull()
+    expect(inviteLine({ ...bad, email: 'ok@example.com', participantId: 'p-1' })).toBeNull()
+  })
+
+  // L7: booked with no email is not a failure (the Tone Rule): a muted line, not a warning.
+  it('says no invite went out because there is no email, not that one failed', () => {
+    expect(inviteLine({ email: null, intakeInviteSentAt: null, intakeInviteError: null })).toEqual({ text: 'No invite: no email', failed: false })
   })
 })
 
@@ -74,6 +88,7 @@ describe('the booking form', () => {
     expect(bookingBody({ ...form, date: '2026-10-16', time: '10:00', location: 'Home' }, 'Australia/Sydney', true)).toEqual({
       startsAt: '2026-10-15T23:00:00Z', durationMinutes: 90, location: 'Home', staffUserId: 'dana', notes: null, contactEmail: 'noah@example.com',
     })
+    expect(bookingBody({ ...form, email: ' ', date: '2026-10-16', time: '10:00', location: 'Home' }, 'Australia/Sydney', true)).not.toHaveProperty('contactEmail')
   })
 
   it('emails only when something the invite says has changed', () => {
@@ -86,21 +101,22 @@ describe('the booking form', () => {
 
   it('says what is missing in the brief words, and checks a past time only when the time changed', () => {
     const blank = { email: '', date: '', time: '', duration: '90', location: ' ', staffUserId: '', notes: 'x'.repeat(1001) }
-    expect(validateBooking(blank, { askEmail: true, firstName: 'Noah', timeChanged: true, zone: 'Australia/Sydney', now: NOW })).toEqual({
-      email: "Add Noah's email to send the invite.", date: 'Choose a date.', time: 'Choose a start time.', location: 'Say where the visit is.',
+    // L7: no email is never an error; one typed is checked for its format (below).
+    expect(validateBooking(blank, { askEmail: true, timeChanged: true, zone: 'Australia/Sydney', now: NOW })).toEqual({
+      date: 'Choose a date.', time: 'Choose a start time.', location: 'Say where the visit is.',
       staffUserId: "Choose who's going.", notes: 'Keep notes under 1,000 characters.',
     })
     const past = { ...bookingFormOf(row(), 'dana'), date: '2026-10-13' }
-    expect(validateBooking(past, { askEmail: false, firstName: 'Noah', timeChanged: true, zone: 'Australia/Sydney', now: NOW }).time).toBe("Choose a time that hasn't passed.")
-    expect(validateBooking(past, { askEmail: false, firstName: 'Noah', timeChanged: false, zone: 'Australia/Sydney', now: NOW })).toEqual({})
-    expect(validateBooking({ ...past, email: 'noah@' }, { askEmail: true, firstName: 'Noah', timeChanged: false, zone: 'Australia/Sydney', now: NOW }).email)
+    expect(validateBooking(past, { askEmail: false, timeChanged: true, zone: 'Australia/Sydney', now: NOW }).time).toBe("Choose a time that hasn't passed.")
+    expect(validateBooking(past, { askEmail: false, timeChanged: false, zone: 'Australia/Sydney', now: NOW })).toEqual({})
+    expect(validateBooking({ ...past, email: 'noah@' }, { askEmail: true, timeChanged: false, zone: 'Australia/Sydney', now: NOW }).email)
       .toBe('Enter a full email address, like name@example.com.')
   })
 
   // Fix round 1, S2: the server's rule, mirrored. A passed visit can be rebooked at a new time, never re-sent at its old one.
   it('refuses an invite change to a passed visit unless its time changes', () => {
     const form = bookingFormOf(row(), 'dana')
-    const opts = { askEmail: false, firstName: 'Noah', zone: 'Australia/Sydney', now: NOW, pastVisitChange: true }
+    const opts = { askEmail: false, zone: 'Australia/Sydney', now: NOW, pastVisitChange: true }
     expect(validateBooking(form, { ...opts, timeChanged: false }).time).toBe('This visit has passed. Change the date and time to book another.')
     expect(validateBooking(form, { ...opts, timeChanged: true }).time).toBeUndefined()
     expect(validateBooking(form, { ...opts, timeChanged: false, pastVisitChange: false })).toEqual({})
@@ -135,7 +151,7 @@ describe('what a cancel tells the coordinator', () => {
 describe('visits beside shifts', () => {
   const visit = (startsAt: string, overrides = {}) => ({
     inquiryId: startsAt, firstName: 'Noah', lastName: 'Fitzgerald', participantId: null, participantIsDraft: null, participantIntakeCompletedAt: null,
-    startsAt, durationMinutes: 90, location: 'Home', staffUserId: 'dana', staffName: 'Dana Smith', confirmedAt: null, timeZoneId: 'Australia/Sydney', ...overrides,
+    startsAt, durationMinutes: 90, location: 'Home', staffUserId: 'dana', staffName: 'Dana Smith', confirmedAt: null, timeZoneId: 'Australia/Sydney', hasAddress: true, contactNeedsName: false, ...overrides,
   })
 
   it('reads where the intake has got to', () => {
@@ -177,7 +193,7 @@ describe('the shared refusal helpers (the slide-over and the enquiry form)', () 
 describe("the enquiry form's save summary (SHAPE.md section 6)", () => {
   // 2030, so visitWhen shows the year whenever the test runs. 23:00Z is 10:00 am on Wed 16 Oct 2030 in Sydney.
   const ana = row({ id: 'inq-9', firstName: 'Ana', lastName: 'Lopez', email: 'ana@example.com', timeZoneId: 'Australia/Sydney' })
-  const booked = { ...ana, intakeStartsAt: '2030-10-15T23:00:00Z', intakeDurationMinutes: 90, intakeStaffName: 'Dana Smith', intakeInviteSentAt: '2030-10-01T00:00:00Z', intakeInviteError: null }
+  const booked = { ...ana, contactFirstName: 'Sarah', intakeStartsAt: '2030-10-15T23:00:00Z', intakeDurationMinutes: 90, intakeStaffName: 'Dana Smith', intakeInviteSentAt: '2030-10-01T00:00:00Z', intakeInviteError: null }
   const base = { created: true, enquiry: ana, visit: null, resent: false, contacts: null } as const
 
   it('booked and sent, with a contact', () => {
@@ -190,8 +206,18 @@ describe("the enquiry form's save summary (SHAPE.md section 6)", () => {
   it('booked but the invite was not sent: danger, and says to tell them another way', () => {
     expect(enquirySavedNotice({ ...base, enquiry: { ...booked, intakeInviteSentAt: null, intakeInviteError: 'NotConfigured' }, visit: 'booked' })).toEqual({
       tone: 'danger', title: 'Enquiry saved, invite not sent', subject: 'inq-9',
-      message: "The intake visit is booked for Wed 16 Oct 2030, 10:00 am, but email isn't set up yet, so Ana wasn't told. Let them know another way.",
+      message: "The intake visit is booked for Wed 16 Oct 2030, 10:00 am, but email isn't set up yet, so Sarah wasn't told. Let them know another way.",
     })
+  })
+
+  it('booked or moved with no email: says nobody was emailed, and why (SHAPE N6)', () => {
+    const noEmail = { ...booked, contactFirstName: null, email: null, intakeInviteSentAt: null }
+    expect(enquirySavedNotice({ ...base, enquiry: noEmail, visit: 'booked' })).toEqual({
+      tone: 'success', title: 'Enquiry captured', subject: 'inq-9',
+      message: 'Intake visit booked for Wed 16 Oct 2030, 10:00 am with Dana Smith. No invite sent: the main contact has no email.',
+    })
+    expect(enquirySavedNotice({ ...base, created: false, enquiry: { ...noEmail, contactFirstName: 'Wei' }, visit: 'moved' }).message)
+      .toBe('Intake visit moved to Wed 16 Oct 2030, 10:00 am. No invite went out: Wei has no email.')
   })
 
   it('moved, resent, and the resend that failed', () => {
@@ -207,5 +233,31 @@ describe("the enquiry form's save summary (SHAPE.md section 6)", () => {
     expect(enquirySavedNotice({ ...base, contacts: 2 }).message).toBe('Ana Lopez is on the Enquiries list. 2 contacts saved.')
     expect(enquirySavedNotice(base)).toEqual({ tone: 'success', title: 'Enquiry captured', message: 'Ana Lopez is on the Enquiries list.', subject: 'inq-9' })
     expect(enquirySavedNotice({ ...base, created: false, contacts: 0 })).toEqual({ tone: 'success', title: 'Enquiry saved', message: "Ana Lopez's changes are saved.", subject: 'inq-9' })
+    // Review Focus 5: no last name, no trailing space.
+    expect(enquirySavedNotice({ ...base, enquiry: { ...ana, firstName: 'Jo', lastName: '' } }).message).toBe('Jo is on the Enquiries list.')
+  })
+})
+
+describe('who a sentence names (SHAPE section 9)', () => {
+  const base = row({ contactFirstName: null })
+  it('the participant when they are their own contact, else the contact, else the main contact', () => {
+    expect(invitee({ ...base, contactIsParticipant: true, contactFirstName: 'Sarah' })).toBe('Noah')
+    expect(invitee({ ...base, contactFirstName: ' Sarah ' })).toBe('Sarah')
+    expect(invitee(base)).toBe('the main contact')
+    expect(invitee(base, { start: true })).toBe('The main contact')
+  })
+
+  it("labels the slide-over's email by who it is for", () => {
+    expect(inviteeEmailLabel({ ...base, contactFirstName: 'Sarah' })).toBe("Sarah's email")
+    expect(inviteeEmailLabel({ ...base, contactIsParticipant: true })).toBe("Noah's email")
+    expect(inviteeEmailLabel(base)).toBe("Main contact's email")
+  })
+
+  it('the result line with no email says so and names who to tell', () => {
+    const booked = { ...base, contactFirstName: 'Sarah', intakeInviteSentAt: null, intakeInviteError: null }
+    expect(resultLine({ ...booked, email: null }, 'Australia/Sydney')).toEqual({ tone: 'warning', text: 'No invite sent: Sarah has no email. Let them know another way.' })
+    expect(resultLine(booked, 'Australia/Sydney')).toEqual({ tone: 'warning', text: 'No invite has gone out yet.' })
+    expect(resultLine({ ...booked, intakeInviteError: 'NotConfigured' }, 'Australia/Sydney').text)
+      .toBe("Invite not sent: email isn't set up yet. The visit is still booked, so let Sarah know another way.")
   })
 })

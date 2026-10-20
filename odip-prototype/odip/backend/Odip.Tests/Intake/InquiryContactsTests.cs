@@ -59,7 +59,7 @@ public class InquiryContactsTests
 
     private ParticipantInquiry SeedInquiry(Guid? participantId = null, Guid? tenantId = null)
     {
-        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId ?? _tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone", ParticipantId = participantId };
+        var inquiry = new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId ?? _tenantId, FirstName = "Ana", LastName = "Lopez", Source = "Phone", ParticipantId = participantId }.WithFullAddress();
         _db.ParticipantInquiries.Add(inquiry);
         _db.SaveChanges();
         return inquiry;
@@ -127,6 +127,60 @@ public class InquiryContactsTests
         _db.ChangeTracker.Clear();
         Data<ParticipantInquiryDto>((await Controller().Update(inquiry.Id, UpdateBody([]), CancellationToken.None)).Result);
         Assert.Empty(Stored());
+    }
+
+    // REV280: a tab on the pre-redesign bundle sends no ContactIsParticipant, DateOfBirth or PlanType, so the stored ones stand and the role rules must read those.
+    private ParticipantInquiry SeedInquiryFor(DateOnly dob, PlanType plan)
+    {
+        var inquiry = SeedInquiry();
+        inquiry.DateOfBirth = dob; inquiry.PlanType = plan;
+        _db.SaveChanges();
+        _db.ChangeTracker.Clear();
+        return inquiry;
+    }
+
+    [Fact]
+    public async Task Update_FromAnOldClient_RefusesAPlanNomineeForAStoredMinor()
+    {
+        var inquiry = SeedInquiryFor(DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-10), PlanType.SelfManaged);
+        SeedContacts(inquiry, new InquiryContact { Role = ContactRoleType.Guardian, FirstName = "Maria", LastName = "Lopez" });
+
+        var errors = Problems((await Controller().Update(inquiry.Id, UpdateBody([Contact(ContactRoleType.PlanNominee, "Tom", "Ng")]), CancellationToken.None)).Result);
+
+        Assert.Equal(["Plan Nominee is not available for a participant under 18 — use Child Representative instead."], errors["contacts[0].role"]);
+        Assert.Equal("Maria", Assert.Single(Stored()).FirstName);
+    }
+
+    [Fact]
+    public async Task Update_FromAnOldClient_RefusesAProviderContactForAStoredAgencyManagedEnquiry()
+    {
+        var inquiry = SeedInquiryFor(DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-40), PlanType.AgencyManaged);
+
+        var errors = Problems((await Controller().Update(inquiry.Id, UpdateBody([Contact(ContactRoleType.ProviderContact, "Lee", "Park")]), CancellationToken.None)).Result);
+
+        Assert.Equal(["Agency-managed participants can only record registered-provider contacts."], errors["contacts[0].role"]);
+        Assert.Empty(Stored());
+    }
+
+    [Fact]
+    public async Task Update_FromAnOldClient_AcceptsAPlanNomineeForAStoredAdult()
+    {
+        var inquiry = SeedInquiryFor(DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-40), PlanType.SelfManaged);
+
+        Data<ParticipantInquiryDto>((await Controller().Update(inquiry.Id, UpdateBody([Contact(ContactRoleType.PlanNominee, "Tom", "Ng")]), CancellationToken.None)).Result);
+
+        Assert.Equal(ContactRoleType.PlanNominee, Assert.Single(Stored()).Role);
+    }
+
+    [Fact]
+    public async Task Update_FromANewClient_UsesTheDtoValuesNotTheStoredOnes()
+    {
+        var inquiry = SeedInquiryFor(DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-40), PlanType.SelfManaged);
+        var body = UpdateBody([Contact(ContactRoleType.PlanNominee, "Tom", "Ng")]) with { ContactIsParticipant = false, DateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-10), PlanType = PlanType.SelfManaged };
+
+        var errors = Problems((await Controller().Update(inquiry.Id, body, CancellationToken.None)).Result);
+
+        Assert.Equal(["Plan Nominee is not available for a participant under 18 — use Child Representative instead."], errors["contacts[0].role"]);
     }
 
     [Fact]

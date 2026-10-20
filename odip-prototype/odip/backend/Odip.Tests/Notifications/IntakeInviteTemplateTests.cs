@@ -17,7 +17,8 @@ public class IntakeInviteTemplateTests
         StartsAtUtc: new DateTime(2026, 10, 15, 23, 0, 0, DateTimeKind.Utc), DurationMinutes: 90, TimeZoneId: "Australia/Sydney",
         Location: "12 Smith St, Parramatta", StaffFullName: "Sam Lee", ManagerName: "Alex Brown", ManagerPhone: "02 9000 0000",
         ReplyTo: "dana@provider.example", OrganizerName: "Dana Smith", Uid: "abc@odip", Sequence: 0,
-        StampUtc: new DateTime(2026, 10, 14, 3, 5, 0, DateTimeKind.Utc), OrganizerEmail: "dana@provider.example");
+        StampUtc: new DateTime(2026, 10, 14, 3, 5, 0, DateTimeKind.Utc), OrganizerEmail: "dana@provider.example",
+        RecipientFirstName: "Sarah", RecipientFullName: "Sarah Walsh");
 
     [Fact]
     public void A_booking_says_when_where_who_and_how_to_confirm()
@@ -26,7 +27,7 @@ public class IntakeInviteTemplateTests
 
         Assert.Equal("priya.nair@example.com.au", message.RecipientAddress);
         Assert.Equal("Your intake visit with Sample Support Co: Fri 16 Oct, 10:00 am", message.Subject);
-        Assert.StartsWith("Hello,", message.PlainTextBody);
+        Assert.StartsWith("Hello Sarah,", message.PlainTextBody);
         Assert.Contains("This confirms an intake visit for Noah Fitzgerald with Sample Support Co.", message.PlainTextBody);
         Assert.Contains("When: Friday 16 October 2026, 10:00 am to 11:30 am", message.PlainTextBody);
         Assert.Contains("Where: 12 Smith St, Parramatta", message.PlainTextBody);
@@ -40,6 +41,16 @@ public class IntakeInviteTemplateTests
         Assert.Equal("REQUEST", message.Ics!.Method);
         Assert.Contains("mailto:priya.nair@example.com.au", message.Ics.Content.Replace("\r\n ", ""));
         Assert.Contains("ORGANIZER;CN=\"Dana Smith\":mailto:dana@provider.example", message.Ics.Content.Replace("\r\n ", ""));
+        Assert.Contains("CN=\"Sarah Walsh\"", message.Ics.Content.Replace("\r\n ", ""));
+    }
+
+    [Fact]
+    public void Without_a_recipient_name_the_greeting_is_plain_Hello()
+    {
+        var message = IntakeInviteTemplate.Render(Payload() with { RecipientFirstName = null, RecipientFullName = null });
+
+        Assert.StartsWith("Hello,", message.PlainTextBody);
+        Assert.DoesNotContain("Sarah", message.Ics!.Content);
     }
 
     [Fact]
@@ -82,7 +93,7 @@ public class IntakeInviteTemplateTests
         var message = IntakeInviteTemplate.Render(Payload() with
         {
             PersonFirstName = Script, PersonFullName = Script, ProviderName = Script, ProviderAddress = Script,
-            Location = Script, StaffFullName = Script, ManagerName = Script,
+            Location = Script, StaffFullName = Script, ManagerName = Script, RecipientFirstName = Script, RecipientFullName = Script,
         });
 
         Assert.DoesNotContain("<script>", message.HtmlBody);

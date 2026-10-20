@@ -10,6 +10,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -29,7 +30,8 @@ public class ParticipantsController : ControllerBase
     private readonly ParticipantIntakeSnapshotService _intakeSnapshots;
     private readonly TimeProvider _clock;
     private readonly ParticipantCreateService _creator;
-    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null, TimeProvider? clock = null)
+    private readonly ServiceAgreementApprovalService _agreementApproval;
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null, TimeProvider? clock = null, ServiceAgreementApprovalService? agreementApproval = null)
     {
         _clock = clock ?? TimeProvider.System;
         _db = db;
@@ -38,6 +40,7 @@ public class ParticipantsController : ControllerBase
         _safetyNoteSync = safetyNoteSync;
         _intakeSnapshots = intakeSnapshots ?? new ParticipantIntakeSnapshotService(db);
         _creator = new ParticipantCreateService(db, compatLink, safetyNoteSync, _intakeSnapshots, _clock);
+        _agreementApproval = agreementApproval ?? new ServiceAgreementApprovalService(db, new RosterPlacementGate(), clock: _clock);
     }
 
     /// <summary>
@@ -135,7 +138,7 @@ public class ParticipantsController : ControllerBase
             {
                 Id = p.Id, FirstName = p.FirstName, LastName = p.LastName,
                 PreferredName = p.PreferredName,
-                FullName = string.IsNullOrEmpty(p.PreferredName) ? p.FirstName + " " + p.LastName : p.PreferredName + " " + p.LastName,
+                FullName = string.IsNullOrEmpty(p.PreferredName) ? (p.FirstName + " " + p.LastName).Trim() : (p.PreferredName + " " + p.LastName).Trim(),
                 MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber.Substring(p.NdisNumber.Length - 1) : "•••" : null,
                 PlanType = p.PlanType, Region = p.Region, IsRepeatClient = p.IsRepeatClient,
                 IsActive = p.IsActive, MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
@@ -492,7 +495,6 @@ public class ParticipantsController : ControllerBase
 
         // ── Write ──
         var previousSupportRatio = p.SupportRatio;
-        var previousEmail = p.Email;
         ApplyIntakeScope(p, dto);
         p.UpdatedAt = DateTime.UtcNow;
 
@@ -508,13 +510,12 @@ public class ParticipantsController : ControllerBase
             });
         }
 
-        // The enquiry this participant came from keeps its own copy of the name and contact details (the Enquiries tab reads it):
-        // keep it in step. Where the enquiry came from (source, provenance) is its own record and is not touched.
+        // The enquiry keeps the participant's name in step (the Enquiries tab reads it). Its phone and email are the MAIN CONTACT's (spec L6): not touched.
+        // Where the enquiry came from (source, provenance) is its own record and is not touched either.
         foreach (var inquiry in await _db.ParticipantInquiries.Where(i => i.ParticipantId == p.Id).ToListAsync(ct))
         {
-            inquiry.FirstName = p.FirstName; inquiry.LastName = p.LastName; inquiry.Phone = p.Phone;
-            // The enquiry's email is where the intake visit's invite goes, and a booking can store it on the enquiry alone: a participant that never had one never blanks it, but one the coordinator just cleared does.
-            if (!string.IsNullOrWhiteSpace(p.Email) || !string.IsNullOrWhiteSpace(previousEmail)) inquiry.Email = p.Email;
+            inquiry.FirstName = p.FirstName;
+            inquiry.LastName = string.IsNullOrWhiteSpace(p.LastName) ? string.Empty : p.LastName; // "" not null: see ParticipantInquiriesController.Apply
             inquiry.UpdatedAt = p.UpdatedAt;
         }
 
@@ -698,6 +699,8 @@ public class ParticipantsController : ControllerBase
         // The audit interceptor writes the one row for this change; the reason rides on it instead of making a second one.
         if (!string.IsNullOrWhiteSpace(reason) && HttpContext != null)
             HttpContext.Items[AuditInterceptor.ReasonItemKey(p.Id)] = reason.Trim();
+        try { if (activate) await _agreementApproval.PopulateStartedWeeksAsync(p.TenantId, p.Id, ct); }
+        catch (RosterBusyException busy) { return Conflict(ApiResponse<ParticipantStatusResultDto>.Fail(busy.Message)); }
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantStatusResultDto>.Ok(StatusResult(p, changed: true, warnings)));
     }
@@ -760,6 +763,8 @@ public class ParticipantsController : ControllerBase
             p.IsDraft = false;
             p.UpdatedAt = DateTime.UtcNow;
             p.IsActive = true;
+            try { await _agreementApproval.PopulateStartedWeeksAsync(p.TenantId, p.Id, ct); }
+            catch (RosterBusyException busy) { return Conflict(ApiResponse<ParticipantDetailDto>.Fail(busy.Message)); }
             await _db.SaveChangesAsync(ct);
         }
 
@@ -793,6 +798,8 @@ public class ParticipantsController : ControllerBase
             p.ServicesStartedAt ??= DateTime.UtcNow;
             p.IsActive = true;
             p.UpdatedAt = DateTime.UtcNow;
+            try { await _agreementApproval.PopulateStartedWeeksAsync(p.TenantId, p.Id, ct); }
+            catch (RosterBusyException busy) { return Conflict(ApiResponse<ParticipantDetailDto>.Fail(busy.Message)); }
             await _db.SaveChangesAsync(ct);
         }
 

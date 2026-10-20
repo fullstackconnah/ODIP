@@ -10,6 +10,7 @@ import type {
   AssignShiftDto,
   MoveStaffDto,
   PublishWeekResultDto,
+  StartWeekResultDto,
   CheckShiftDto,
   ShiftCheckResult,
   RosterFindingDto,
@@ -124,6 +125,29 @@ export function usePublishWeek() {
   })
 }
 
+/** Start rostering (2026-10-16): the week's agreement shifts, made once. The board refetch is awaited, so the card is gone when mutateAsync settles; a refusal refetches too (a 409 roster-week-started means the board is stale). */
+export function useStartWeek() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (weekStart: string) => apiPost<StartWeekResultDto>(`/rostering/weeks/${weekStart}/start`),
+    onSuccess: () => refreshBudgetFigures(qc),   // the shifts it makes are booked ahead
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/** Make or stop being the regular: the pattern slot's default worker (null for none). `expectedRegularId` is the regular the board showed (the all-zero Guid for none): another coordinator's change since is a 409. No shift changes; the board and the patterns refetch before mutateAsync settles. */
+export function useSetRegular() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ patternId, ...body }: { patternId: string; shiftId: string; staffId: string | null; expectedRegularId: string }) =>
+      apiPut<ShiftPatternDto>(`/rostering/patterns/${patternId}/regular`, body),
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['roster-board'] }),
+      qc.invalidateQueries({ queryKey: ['roster-patterns'] }),
+    ]),
+  })
+}
+
 /**
  * Read-only shift notes (NOTES-01) for the roster slide-over — coordinators/admins read via
  * this surface; only the assigned worker creates/edits their own, via the portal hooks.
@@ -182,6 +206,35 @@ export function useCompletions(filters: CompletionFilters = {}, page = 1, pageSi
   return useQuery({
     queryKey: ['rostering-completions', filters, page, pageSize],
     queryFn: () => apiGet<PagedResult<CompletionQueueItemDto>>('/rostering/completions', { ...filters, page, pageSize }),
+    refetchInterval: 60_000,
+    enabled: options?.enabled ?? true,
+  })
+}
+
+/** The server's page maximum (PagingParams.MaxPageSize). */
+const MAX_PAGE_SIZE = 200
+
+/**
+ * The WHOLE queue for one filter, read a page maximum at a time until the server's total: the dashboard's Complete all counts and sends from every
+ * clean row, not the first page's (review #266 F2). One query, so it has data only once every page is in, never a partial count. Under the
+ * ['rostering-completions'] prefix, so every approve hook's invalidation refreshes it.
+ */
+export function useAllCompletions(filters: CompletionFilters, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['rostering-completions', filters, 'all'],
+    queryFn: async () => {
+      // Keyed by shift: a row decided mid-read moves the page edges, and must not come back twice.
+      const items = new Map<string, CompletionQueueItemDto>()
+      // By keyset, not OFFSET: another reviewer deciding a row mid-read would slide the rows after it across a page edge and skip one.
+      let after: string | undefined
+      for (;;) {
+        const result = await apiGet<PagedResult<CompletionQueueItemDto>>('/rostering/completions',
+          after ? { ...filters, pageSize: MAX_PAGE_SIZE, after } : { ...filters, page: 1, pageSize: MAX_PAGE_SIZE })
+        for (const item of result.items) items.set(item.shiftId, item)
+        if (result.items.length < MAX_PAGE_SIZE || !result.nextCursor || result.nextCursor === after) return { items: [...items.values()], totalCount: result.totalCount }
+        after = result.nextCursor
+      }
+    },
     refetchInterval: 60_000,
     enabled: options?.enabled ?? true,
   })

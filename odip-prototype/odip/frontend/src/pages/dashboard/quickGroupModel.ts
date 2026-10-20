@@ -77,6 +77,10 @@ export interface GroupModel {
   noun: string
   phase: QueryPhase
   refetch: () => void
+  /** A bulk tab's fresh read, for a run that got no answer for `sent`: the ids of the rows still pending. Rejects when the read, or the check of a sent row missing from it, fails. */
+  reread?: (sent: string[]) => Promise<string[]>
+  /** When the group was last read in full (the oldest of its queries' dataUpdatedAt): a row held since an earlier read is released when it passes it. */
+  readAt?: number
   /** The server's total. */
   count: number
   /** Every row the group fetched, in its order. QuickGroup shows the first SHOWN_ROWS still undecided. */
@@ -101,12 +105,12 @@ export function groupPhase(...queries: QueryLike[]): QueryPhase {
 }
 
 /** The rows not decided here. A decided row leaves at once, before the refetch drops it. */
-export function visibleRows(model: GroupModel, gone: ReadonlySet<string>): QuickRow[] {
+export function visibleRows(model: GroupModel, gone: ReadonlyMap<string, number>): QuickRow[] {
   return model.rows.filter((row) => !gone.has(rowKey(model.key, row.id)))
 }
 
 /** The pill: the server's total, less the decided rows it still lists. */
-export function shownCount(model: GroupModel, gone: ReadonlySet<string>): number {
+export function shownCount(model: GroupModel, gone: ReadonlyMap<string, number>): number {
   return model.count - (model.rows.length - visibleRows(model, gone).length)
 }
 
@@ -114,7 +118,7 @@ export function shownCount(model: GroupModel, gone: ReadonlySet<string>): number
  * On the page while waiting, failed, holding a row, holding a notice, or while the server still counts rows beyond the ones decided here (every
  * fetched row decided before the refetch lands), or while a bulk run goes. Only a ready group with nothing left is absent, and named clear.
  */
-export function isPresent(model: GroupModel, gone: ReadonlySet<string>, notices: number, running = false): boolean {
+export function isPresent(model: GroupModel, gone: ReadonlyMap<string, number>, notices: number, running = false): boolean {
   // A bulk run keeps its tab: the real server's refetch can empty it mid-run, before the run's notice exists (SHAPE §6).
   return running || model.phase !== 'ready' || visibleRows(model, gone).length > 0 || shownCount(model, gone) > 0 || notices > 0
 }

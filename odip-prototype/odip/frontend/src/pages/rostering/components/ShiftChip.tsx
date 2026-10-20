@@ -9,7 +9,7 @@ import { formatShiftTimeRange, isUnfilledShift, RATIO_LABELS, shiftSource } from
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
-import { DropStateContext, dropOutcome, firstName, isLockedShift, lockedWords, pickName, type DragCarry, type DropTarget } from '../lib/rosterDrag'
+import { DropStateContext, canDeleteShift, dropOutcome, firstName, isLockedShift, lockedWords, pickName, type DragCarry, type DropTarget } from '../lib/rosterDrag'
 
 /**
  * Accessible name for the severity marker — states the severity(s) present and their counts, so
@@ -48,6 +48,8 @@ export type ShiftChipProps = {
   onAssignTo: (shift: ShiftDto) => void
   onUnassign: (shift: ShiftDto) => void
   onDelete: (shift: ShiftDto) => void
+  /** "Make {first} the regular" / "Stop being the regular" (L2), on an agreement pattern's shift with a worker: the only patterns Start makes shifts from. It changes the pattern, not the shift, so a locked chip keeps it. */
+  onSetRegular?: (shift: ShiftDto) => void
 }
 
 const LABEL_LINK =
@@ -65,7 +67,7 @@ const LABEL_LINK =
 /** The provenance glyphs (the brief, section 5): a page with a tick, two arrows, six spokes. Each reads apart from the others, and from the chip's other marks, without colour at 12px. */
 const SOURCE_ICON = { agreed: FileCheck, pattern: Repeat, adhoc: Asterisk } as const
 
-export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggable = false, onOpen, onAssignTo, onUnassign, onDelete }: ShiftChipProps) {
+export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggable = false, onOpen, onAssignTo, onUnassign, onDelete, onSetRegular }: ShiftChipProps) {
   const hasFindings = shift.findings.length > 0
   const hasBlocking = shift.findings.some(f => f.severity === 'Blocking')
   const showRatio = shift.ratio !== 'OneToOne'
@@ -122,7 +124,9 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   // The words of every marker that applies, on the chip itself, one to a line: on leave, the over-budget marker, the severity marker. The disc and the severity icon are pointer-events-none (they must never take a click),
   // so hit testing skips them and their own titles can never show; the pointer lands on the chip, and this is what it shows. Their aria-labels, and the control's accessible name, are unchanged.
-  const chipTitle = [onApprovedLeave ? onLeaveTitle : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null, statusWords].filter(Boolean).join('\n')
+  // The regular in words only (the brief, 5.3: no mark): why an open shift's regular isn't on it, and who the regular is.
+  const awayLine = shift.regularAwayReason ? `Regular away: ${shift.regularAwayReason}` : null
+  const chipTitle = [onApprovedLeave ? onLeaveTitle : null, awayLine, shift.isRegular ? `${shift.staffName} is the regular` : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null, statusWords].filter(Boolean).join('\n')
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
@@ -130,8 +134,10 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
     // Swap (the lead's decision 1): an assigned, unlocked chip, wherever the page can open the swap picker. It waits while a write is out, as every drag and plus does.
     ...(swap && isFilled && !locked ? [{ value: 'swap', label: `Swap ${firstName(shift.staffName)} with…`, disabled: dragsOff }] : []),
+    // Agreement patterns only: Start never makes a Patterns-page pattern's shifts, so the confirm's "every week you start" would be untrue there (its regular is the Patterns page's own field).
+    ...(onSetRegular && shift.shiftPatternId && shift.fromAgreement && shift.staffId ? [{ value: 'regular', label: shift.isRegular ? 'Stop being the regular' : `Make ${firstName(shift.staffName)} the regular` }] : []),
     ...(shift.staffId ? [{ value: 'unassign', label: `Remove ${firstName(shift.staffName)}` }] : []),
-    { value: 'delete', label: 'Delete' },
+    ...(canDeleteShift(shift) ? [{ value: 'delete', label: 'Delete' }] : []),
   ]
 
   function handleMenuSelect(value: string) {
@@ -140,6 +146,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     else if (value === 'assign') { if (!canPick) onAssignTo(shift); else if (!dragsOff) pick?.(shift) }
     else if (value === 'swap') { if (!dragsOff) swap?.(shift) }
     else if (value === 'unassign') onUnassign(shift)
+    else if (value === 'regular') onSetRegular?.(shift)
     else if (value === 'delete') onDelete(shift)
   }
 
@@ -164,6 +171,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     hasFindings ? findingsSeverityLabel(shift.findings) : null,
     `${timeRange}${shift.endsNextDay ? ' (ends the next day)' : ''}`,
     labelText,
+    shift.isRegular ? `${firstName(shift.staffName)} is the regular` : null,
+    awayLine,
     // The label's visible word is in the name too (WCAG 2.5.3): Ad hoc's title already starts with it.
     source.kind === 'adhoc' ? null : source.word,
     source.title,
@@ -174,7 +183,16 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   ].filter(Boolean).join(', ')
 
   // The Participant view's plus fills the empty box but for the menu (the chip brief, section 4); the Unfilled lane's keeps the lead cell, since its name cell names the participant.
-  const spanPlus = canPick && context === 'participant'
+  // An away chip's plus keeps the lead cell, as on the Unfilled lane, so its box can say why it is open (the brief, 5.4).
+  const spanPlus = canPick && context === 'participant' && !shift.regularAwayReason
+  // Why this open shift needs someone (the brief, 5.4): the reason is in the titles, the name and the shift panel. No colour: the dashed box already says it needs someone.
+  const awayFlag = (
+    <span data-regular-away className="inline-flex min-w-0 flex-1 items-center gap-1 text-xs font-semibold text-muted-foreground" title={awayLine ?? undefined}>
+      <CalendarOff className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <span className="truncate @[11rem]:hidden">Away</span>
+      <span className="hidden truncate @[11rem]:inline">Regular away</span>
+    </span>
+  )
   const hasLead = canPick || (canWrite && draggable)
   const hasMenu = canWrite && !busy && !carrying
 
@@ -196,7 +214,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         </Link>
       )
       // A writer's plus fills this box in the Participant view (the chip brief, section 4): words beside it would be a visible label its name lacks, and the row header names the participant.
-      : spanPlus ? null : <span className="min-w-0 flex-1 truncate italic text-muted-foreground">Needs staff</span>
+      : shift.regularAwayReason ? awayFlag : spanPlus ? null : <span className="min-w-0 flex-1 truncate italic text-muted-foreground">Needs staff</span>
     : (
       <Link
         to={`/participants/${shift.participantId}`}
@@ -354,6 +372,12 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
               <span className="ml-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground" title={onLeaveTitle}>
                 <CalendarOff className="h-3 w-3" aria-hidden="true" />
                 <span className="hidden @[15rem]:inline" title={onLeaveTitle}>On leave</span>
+              </span>
+            )}
+            {awayLine && context !== 'participant' && (
+              <span data-regular-away className="ml-1 inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground" title={awayLine}>
+                <CalendarOff className="h-3 w-3" aria-hidden="true" />
+                <span className="hidden @[15rem]:inline">Regular away</span>
               </span>
             )}
           </span>
