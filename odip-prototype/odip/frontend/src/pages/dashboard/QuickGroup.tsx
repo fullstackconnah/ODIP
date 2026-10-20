@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
@@ -178,7 +178,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
     })
   }
   const recoveryPending = needsCheck.size > 0 || held.size > 0
-  useEffect(() => { onRecoveryChange?.(model.key, recoveryPending) }, [model.key, recoveryPending, onRecoveryChange])
+  useLayoutEffect(() => { onRecoveryChange?.(model.key, recoveryPending) }, [model.key, recoveryPending, onRecoveryChange])
   useEffect(() => () => onRecoveryChange?.(model.key, false), [model.key, onRecoveryChange])
   const ticked = tickable.filter((row) => selected.has(row.id))
   const bar = !!bulkKey && (shown.some((row) => tapOf(row)) || !!progress)
