@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { Dropdown } from './Dropdown'
 import { Button } from './Button'
 import { TAP_AREA } from './tapArea'
@@ -72,7 +72,7 @@ describe('Dropdown — 44px option rows under a coarse pointer', () => {
   it('gives every option the --tap-min floor', async () => {
     render(<Dropdown variant="icon" label="More actions" icon={<span>i</span>} items={ITEMS} onSelect={() => {}} />)
 
-    screen.getByRole('button', { name: 'More actions' }).click()
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
 
     const options = await screen.findAllByRole('option')
     expect(options).toHaveLength(2)
@@ -95,7 +95,7 @@ describe('Dropdown — which way the panel opens', () => {
       render(<Dropdown variant="menu" value="" onChange={() => {}} label="Actions" items={ITEMS} />)
       const trigger = screen.getByRole('button', { name: 'Actions' })
       trigger.getBoundingClientRect = () => ({ top: 560, bottom: 590, height: 30, left: 300, right: 340, width: 40, x: 300, y: 560, toJSON: () => ({}) })
-      trigger.click()
+      fireEvent.click(trigger)
       const panel = await screen.findByRole('listbox')
       expect(panel.style.bottom).toBe(`${844 - 560 + 8}px`)
       expect(panel.style.top).toBe('')
