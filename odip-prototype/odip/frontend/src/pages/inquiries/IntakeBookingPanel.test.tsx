@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntakeBookingPanel } from './IntakeBookingPanel'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), confirm: vi.fn(), resend: vi.fn() }))
+const mocks = vi.hoisted(() => ({ save: vi.fn(), confirm: vi.fn(), resend: vi.fn(), get: vi.fn() }))
+vi.mock('@/api/client', () => ({ apiGet: mocks.get }))
 vi.mock('@/api/hooks', () => ({
   useStaff: () => ({
     data: [
@@ -48,6 +49,7 @@ async function fillNewBooking(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', id: 'dana', fullName: 'Dana Smith' }))
+  mocks.get.mockReset()
   mocks.save.mockReset()
   mocks.confirm.mockReset()
   mocks.resend.mockReset()
@@ -354,6 +356,7 @@ describe('IntakeBookingPanel: the booked view', () => {
 
       // The colleague moved the visit to 11:00 and the list refetched.
       refreshTo(bookedRow({ updatedAt: 'v9', intakeStartsAt: '2030-10-16T00:00:00Z' }))
+      mocks.get.mockResolvedValue(bookedRow({ updatedAt: 'v9', intakeStartsAt: '2030-10-16T00:00:00Z' }))
       mocks.save.mockResolvedValue(bookedRow({ updatedAt: 'v10', intakeStartsAt: '2030-10-16T00:00:00Z', intakeNotes: 'Gate code 4321' }))
       await user.click(screen.getByRole('button', { name: 'Reload' }))
 
@@ -375,12 +378,46 @@ describe('IntakeBookingPanel: the booked view', () => {
       await screen.findByText("The invite wasn't sent")
 
       refreshTo(bookedRow({ updatedAt: 'v9', intakeLocation: 'Library', intakeInviteError: 'Failed' }))
+      mocks.get.mockResolvedValue(bookedRow({ updatedAt: 'v9', intakeLocation: 'Library', intakeInviteError: 'Failed' }))
       mocks.resend.mockResolvedValue(bookedRow({ updatedAt: 'v10', intakeLocation: 'Library' }))
       await user.click(screen.getByRole('button', { name: 'Reload' }))
       expect(screen.getByLabelText(/^Where/)).toHaveValue('Library') // nothing was typed, so the form shows the colleague's visit
       await user.click(screen.getByRole('button', { name: 'Send again' }))
 
       expect(mocks.resend).toHaveBeenLastCalledWith({ id: 'inq-1', expectedUpdatedAt: 'v9' })
+    })
+
+    it('Reload retries a failed refresh without losing refusal or typed edits, then adopts a successful fresh version', async () => {
+      const user = userEvent.setup()
+      mocks.save.mockRejectedValueOnce(changed)
+      panel(bookedRow())
+      await user.type(screen.getByLabelText(/^Notes for your team/), ' typed')
+      await user.click(screen.getByRole('button', { name: 'Save notes' }))
+      await screen.findByText('Someone else just changed this visit. Reload and try again.')
+      let rejectRefresh!: (error: Error) => void
+      mocks.get.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectRefresh = reject }))
+      await user.click(screen.getByRole('button', { name: 'Reload' }))
+      expect(mocks.get).toHaveBeenCalledWith('/inquiries/inq-1')
+      fireEvent.click(screen.getByRole('button', { name: 'Reloading…' }))
+      expect(mocks.get).toHaveBeenCalledTimes(1)
+      expect(mocks.save).toHaveBeenCalledTimes(1)
+      expect(mocks.resend).not.toHaveBeenCalled()
+      expect(mocks.confirm).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Reloading…' })).toHaveAttribute('aria-disabled', 'true')
+      expect(screen.getByLabelText(/^Notes for your team/)).toHaveValue('Gate code typed')
+      expect(screen.queryByText('Reloaded. Showing the latest changes.')).not.toBeInTheDocument()
+      rejectRefresh(new Error('offline'))
+      expect(await screen.findByText(/Couldn.t reload/)).toBeInTheDocument()
+      expect(screen.getByText('Someone else just changed this visit. Reload and try again.')).toBeInTheDocument()
+      expect(screen.getByLabelText(/^Notes for your team/)).toHaveValue('Gate code typed')
+      mocks.get.mockResolvedValueOnce(bookedRow({ updatedAt: 'v9', intakeLocation: 'Library' }))
+      await user.click(screen.getByRole('button', { name: 'Reload' }))
+      await screen.findByText('Reloaded. Showing the latest changes.')
+      expect(screen.getByLabelText(/^Where/)).toHaveValue('Library')
+      expect(screen.getByLabelText(/^Notes for your team/)).toHaveValue('Gate code typed')
+      mocks.save.mockResolvedValueOnce(bookedRow({ updatedAt: 'v10' }))
+      await user.click(screen.getByRole('button', { name: 'Save notes' }))
+      expect(mocks.save).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ expectedUpdatedAt: 'v9', notes: 'Gate code typed' }) }))
     })
 
     it('Reload waits while the list is still refetching', async () => {
@@ -397,6 +434,15 @@ describe('IntakeBookingPanel: the booked view', () => {
       expect(screen.getByText('Someone else just changed this visit. Reload and try again.')).toBeInTheDocument()
     })
 
+    it('keeps an unrelated409 refusal without offering version reload', async () => {
+      const user = userEvent.setup()
+      mocks.resend.mockRejectedValue({ isAxiosError: true, response: { status: 409, data: { success: false, errors: ["This visit has already happened, so there's no invite to send."] } } })
+      panel(bookedRow())
+      await user.click(screen.getByRole('button', { name: 'Send again' }))
+      expect(await screen.findByText("This visit has already happened, so there's no invite to send.")).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Reload' })).not.toBeInTheDocument()
+      expect(mocks.get).not.toHaveBeenCalled()
+    })
     it('a busy staff member (a 409 with a field reason) is shown on its field, with no Reload', async () => {
       const user = userEvent.setup()
       mocks.save.mockRejectedValue({ isAxiosError: true, response: { status: 409, data: { success: false, errors: { staffUserId: ['Sam is busy then.'] } } } })

@@ -1,4 +1,5 @@
 import { useIsFetching } from '@tanstack/react-query'
+import { apiGet } from '@/api/client'
 import { useEffect, useRef, useState } from 'react'
 import { useConfirmIntakeBooking, useResendIntakeInvite, useSetIntakeBooking } from '@/api/hooks'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
@@ -60,7 +61,8 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
   // The write that was refused refetches the lists; Reload waits for that, so it never adopts the row it is replacing.
   const refetching = useIsFetching({ queryKey: ['participant-inquiries'] }) > 0
   const [announcement, setAnnouncement] = useState('')
-  const [busy, setBusy] = useState<'save' | 'resend' | 'confirm' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'resend' | 'confirm' | 'reload' | null>(null)
+  const [reloadError, setReloadError] = useState<string | null>(null)
   // The click guard: aria-disabled does not stop a click, and a second press before the re-render must not send a second invite.
   const inFlight = useRef(false)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -101,7 +103,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
     setErrors(e => ({ ...e, [field]: undefined }))
   }
 
-  async function run<T>(kind: 'save' | 'resend' | 'confirm', action: () => Promise<T>): Promise<T | undefined> {
+  async function run<T>(kind: 'save' | 'resend' | 'confirm' | 'reload', action: () => Promise<T>): Promise<T | undefined> {
     if (inFlight.current) return undefined
     inFlight.current = true
     setBusy(kind)
@@ -168,19 +170,26 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
     }
   }
 
-  /** Take the colleague's change: the refreshed row replaces the copy (and its version); each field they edited keeps their value, the rest show the new visit. */
-  function reload() {
-    if (refetching) return
-    const fresh = bookingFormOf(row, '')
-    setForm(f => Object.fromEntries(Object.entries(fresh).map(([key, value]) => [key, f[key as BookingField] === saved[key as BookingField] ? value : f[key as BookingField]])) as BookingForm)
-    setSaved(fresh)
-    setCurrent(row)
-    setErrors({})
-    setRefusal(null)
-    setAnnouncement('Reloaded. Showing the latest changes.')
-    focusNext.current = row.intakeStartsAt ? 'result' : 'date'
+  /** Read a fresh version; keep typed fields and only rebase untouched fields after that read succeeds. */
+  async function reload() {
+    if (refetching || inFlight.current) return
+    setReloadError(null)
+    try {
+      const answer = await run('reload', () => apiGet<ParticipantInquiryDto>(`/inquiries/${current.id}`))
+      if (!answer) return
+      const fresh = bookingFormOf(answer, '')
+      setForm(f => Object.fromEntries(Object.entries(fresh).map(([key, value]) => [key, f[key as BookingField] === saved[key as BookingField] ? value : f[key as BookingField]])) as BookingForm)
+      setSaved(fresh)
+      setCurrent(answer)
+      setErrors({})
+      setRefusal(null)
+      setAnnouncement('Reloaded. Showing the latest changes.')
+      focusNext.current = answer.intakeStartsAt ? 'result' : 'date'
+    } catch {
+      setReloadError("Couldn't reload the visit. Try again. Your entries are kept.")
+      focusNext.current = 'refusal'
+    }
   }
-
   const footer = (
     <>
       {booked && !past ? <Button variant="ghost-danger" onClick={() => onRequestCancel(current)}>Cancel visit</Button> : <span />}
@@ -217,10 +226,10 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
               tone="danger"
               title={refusal.title}
               actions={refusal.stale ? (
-                <Button variant="secondary" size="sm" onClick={reload} aria-disabled={refetching || undefined} className={DISABLED_LOOK}>Reload</Button>
+                <Button variant="secondary" size="sm" onClick={reload} aria-disabled={refetching || busy === 'reload' || undefined} className={DISABLED_LOOK}>{busy === 'reload' ? 'Reloading…' : 'Reload'}</Button>
               ) : undefined}
             >
-              <span className="break-words">{refusal.text}</span>
+              <span className="break-words">{refusal.text}</span>{reloadError && <p className="mt-2">{reloadError}</p>}
             </Callout>
           </div>
         )}

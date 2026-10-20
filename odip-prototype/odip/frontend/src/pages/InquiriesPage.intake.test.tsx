@@ -183,7 +183,7 @@ describe('when a colleague changed the visit', () => {
     await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
     await user.click(screen.getByRole('option', { name: 'Cancel visit' }))
     await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
-    await within(screen.getByRole('alertdialog')).findByText('Someone else just changed this visit. The details above are now up to date. Cancel the visit again if you still want to.')
+    await within(screen.getByRole('alertdialog')).findByText('Someone else just changed this visit. Check the visit details before trying again.')
     expect(mocks.cancelVisit).toHaveBeenLastCalledWith({ id: 'sent', expectedUpdatedAt: '2026-10-14T03:05:01.123456Z' })
 
     // The colleague moved the visit to Thu 17 Oct and the list refetched.
@@ -195,9 +195,24 @@ describe('when a colleague changed the visit', () => {
     expect(await screen.findByText('Intake visit cancelled')).toBeInTheDocument()
   })
 
-  it('a cancel refused for another reason keeps the server text', async () => {
+  it('never claims freshness when the refused cancel list refetch fails', async () => {
     const user = userEvent.setup()
-    mocks.cancelVisit.mockRejectedValue({ isAxiosError: true, response: { status: 403, data: { success: false, errors: ['You cannot cancel this visit.'] } } })
+    mocks.inquiries.mockImplementation(() => useQuery({ queryKey: ['participant-inquiries'], queryFn: async () => { throw new Error('offline') }, initialData: rows, staleTime: Infinity, retry: false }))
+    mocks.cancelVisit.mockRejectedValueOnce(changed)
+    const { client } = page()
+    await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
+    await user.click(screen.getByRole('option', { name: 'Cancel visit' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel visit' }))
+    await client.refetchQueries({ queryKey: ['participant-inquiries'] })
+    const dialog = screen.getByRole('alertdialog')
+    expect(await within(dialog).findByText('Someone else just changed this visit. Check the visit details before trying again.')).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent('now up to date')
+    expect(screen.getByRole('button', { name: 'Keep visit' })).toBeEnabled()
+    expect(mocks.cancelVisit).toHaveBeenCalledTimes(1)
+  })
+  it.each([403, 409])('a cancel refused for another reason keeps the server text (HTTP %s)', async (status) => {
+    const user = userEvent.setup()
+    mocks.cancelVisit.mockRejectedValue({ isAxiosError: true, response: { status, data: { success: false, errors: ['You cannot cancel this visit.'] } } })
     page()
 
     await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
