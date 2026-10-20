@@ -13,12 +13,12 @@ import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import PlatformFooter from '@/components/layout/PlatformFooter'
 import {
-  barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, NAV_ACTIVE, NAV_IDLE, navItems, resolveNav, toBarItem,
+  barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, NAV_ACTIVE, NAV_IDLE, navItems, navLeaves, isLeafVisible, isWorkspaceHidden, resolveNav, toBarItem,
   type BarAudience, type BarItem, type NavCounts, type NavGroup, type NavLeaf,
 } from '@/components/layout/navConfig'
 import { readStoredOpenGroups, storeGroupOpen } from '@/components/layout/navOpenGroups'
 import { usePermissions } from '@/lib/permissions'
-import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount } from '@/api/hooks'
+import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount, useModuleVisibility } from '@/api/hooks'
 import { endSession } from '@/api/client'
 import { Wordmark } from '@/components/Wordmark'
 
@@ -229,7 +229,11 @@ export default function AppLayout() {
     storeGroupOpen(id, willOpen)
   }
 
-  const resolvedNav = resolveNav(navItems, permissions)
+  const visibility = useModuleVisibility()
+  // An unavailable current-tenant answer must never hide work using a previous or failed answer.
+  const savedVisibility = visibility.isError ? undefined : visibility.data
+  const resolvedNav = resolveNav(navItems, permissions, savedVisibility)
+  const otherWorkspaces = navLeaves.filter(leaf => isLeafVisible(leaf, permissions) && isWorkspaceHidden(leaf, savedVisibility))
   const barAudience: BarAudience = permissions.isSupportWorker ? 'field' : 'office'
   const barItems = barEntries(resolvedNav, barAudience).map(entry => toBarItem(entry, location.pathname, counts))
   const closeDrawer = () => setSidebarOpen(false)
@@ -304,6 +308,12 @@ export default function AppLayout() {
             ) : (
               <SidebarLink key={entry.leaf.to} leaf={entry.leaf} pathname={location.pathname} counts={counts} onNavigate={closeDrawer} />
             ),
+          )}
+          {otherWorkspaces.length > 0 && (
+            <details open={otherWorkspaces.some(leaf => isLeafActive(leaf, location.pathname)) || undefined} className="mt-2">
+              <summary className={`cursor-pointer rounded-md px-3 py-1.5 min-h-[var(--tap-min)] text-sm ${NAV_IDLE}`}>Other workspaces</summary>
+              {otherWorkspaces.map(leaf => <SidebarLink key={leaf.to} leaf={leaf} pathname={location.pathname} counts={counts} onNavigate={closeDrawer} />)}
+            </details>
           )}
         </nav>
 

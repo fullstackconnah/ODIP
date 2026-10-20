@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGetWithDefault, apiPutRaw, apiClient } from '../client'
-import type { AppSettingsDto, UpdateAppSettingsDto, ApiResponse, TenantUserDto } from '../types'
+import type { AppSettingsDto, UpdateAppSettingsDto, ApiResponse, TenantUserDto, ModuleVisibilityDto } from '../types'
 
 export function useSettings() {
   return useQuery({
@@ -26,5 +26,33 @@ export function useAdminTenantUsers(tenantId: string | null) {
         .get<ApiResponse<TenantUserDto[]>>(`/admin/tenants/${tenantId}/users`)
         .then(r => r.data),
     enabled: !!tenantId,
+  })
+}
+
+const VISIBLE_WORKSPACES = { hiddenAccommodation: false, hiddenVehicles: false }
+
+function moduleVisibilityKey() {
+  const user = JSON.parse(localStorage.getItem('odip_user') || '{}')
+  const tenant = localStorage.getItem('odip_viewing_tenant') ?? user.tenantId ?? null
+  return ['module-visibility', tenant] as const
+}
+
+export function useModuleVisibility() {
+  return useQuery({
+    queryKey: moduleVisibilityKey(),
+    queryFn: () => apiGetWithDefault<ModuleVisibilityDto>('/settings/module-visibility', VISIBLE_WORKSPACES),
+    refetchOnMount: 'always',
+  })
+}
+
+export function useUpdateModuleVisibility() {
+  const qc = useQueryClient()
+  const key = moduleVisibilityKey()
+  return useMutation({
+    mutationFn: (data: ModuleVisibilityDto) => apiPutRaw<ModuleVisibilityDto>('/settings/module-visibility', data),
+    onSuccess: response => {
+      qc.setQueryData(key, response.data)
+      return qc.invalidateQueries({ queryKey: key })
+    },
   })
 }

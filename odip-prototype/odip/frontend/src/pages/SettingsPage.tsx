@@ -1,3 +1,4 @@
+import WorkspaceVisibilitySection from '@/pages/settings/WorkspaceVisibilitySection'
 import { Fragment, useState, type ReactNode } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import type { AdminUserDto, TenantSummaryDto } from '@/api/types'
@@ -82,6 +83,7 @@ export default function SettingsPage() {
       case 'profile': return framed(<ProfileSection />)
       case 'notifications': return <NotificationPreferencesTab {...frame} />
       case 'appearance': return framed(<AppearanceSection />)
+      case 'workspace-visibility': return <WorkspaceVisibilitySection {...frame} />
       case 'setup': return framed(<OrganisationSetupSection />)
       case 'organisation': return <OrganisationProfileSection {...frame} />
       case 'billing': return <BillingDetailsSection {...frame} />

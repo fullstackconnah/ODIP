@@ -244,3 +244,21 @@ describe('navConfig — the bottom bar', () => {
     expect(myShifts).toMatchObject({ label: 'My shifts', count: 2, noun: 'witness approval', active: true, current: 'page' })
   })
 })
+
+describe('optional workspace presentation visibility', () => {
+  const hidden = { hiddenAccommodation: true, hiddenVehicles: true }
+  const paths = (entries: ReturnType<typeof resolveNav>) => entries.flatMap(e => e.kind === 'group' ? e.children.map(c => c.to) : [e.leaf.to])
+  it('moves only the two optional destinations out of primary navigation', () => {
+    const before = paths(resolveNav(navItems, everything))
+    const after = paths(resolveNav(navItems, everything, hidden))
+    expect(after).not.toContain('/accommodation')
+    expect(after).not.toContain('/vehicles')
+    expect(after).toEqual(before.filter(p => p !== '/accommodation' && p !== '/vehicles'))
+    expect(isLeafVisible(navLeaves.find(l => l.to === '/vehicles')!, everything)).toBe(true)
+  })
+  it('restores both links when visible and never changes role permissions', () => {
+    expect(paths(resolveNav(navItems, everything, { hiddenAccommodation: false, hiddenVehicles: false }))).toEqual(paths(resolveNav(navItems, everything)))
+    const worker = accessFor('SupportWorker')
+    expect(paths(resolveNav(navItems, worker, hidden))).toEqual(paths(resolveNav(navItems, worker)))
+  })
+})

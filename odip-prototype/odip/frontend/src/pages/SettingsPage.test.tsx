@@ -7,7 +7,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, mockUseEventTemplates, settingsData, mockSyncMutate, holidayRows, screenSize } = vi.hoisted(() => ({
+const { mockUsePermissions, mockWorkspaceRead, mockUseEventTemplates, settingsData, mockSyncMutate, holidayRows, screenSize } = vi.hoisted(() => ({
+  mockWorkspaceRead: vi.fn().mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false, isFetching: false }),
   mockUsePermissions: vi.fn(),
   screenSize: { belowMd: false },
   // The Public Holidays tab: the rows usePublicHolidays returns (a stable reference, like a cached query).
@@ -52,6 +53,8 @@ function renderSettingsPageWithQueryClient(url = '/settings') {
 vi.mock('@/api/hooks', () => ({
   useEventTemplates: mockUseEventTemplates,
   useActivities: () => ({ data: [] }),
+  useModuleVisibility: mockWorkspaceRead,
+  useUpdateModuleVisibility: () => ({ mutate: vi.fn(), isPending: false }),
   useSettings: () => ({ data: settingsData }),
   useUpdateSettings: () => ({ mutate: vi.fn((_vars, opts) => opts?.onSuccess?.()), isPending: false }),
   useSupportCatalogue: () => ({ data: [] }),
@@ -493,7 +496,7 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
     }
   })
 
-  it.each([['Admin', 17], ['Coordinator', 10], ['SuperAdmin', 21], ['SuperAdminNoOrg', 9]] as const)('gives %s a rail of %i sections', (role, count) => {
+  it.each([['Admin', 18], ['Coordinator', 10], ['SuperAdmin', 22], ['SuperAdminNoOrg', 9]] as const)('gives %s a rail of %i sections', (role, count) => {
     mockUsePermissions.mockReturnValue(SETTINGS_PERMS[role])
     renderSettingsPage()
     expect(within(rail()).getAllByRole('link')).toHaveLength(count)
@@ -654,5 +657,28 @@ describe('SettingsPage - optional administrator organisation setup', () => {
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
     expect(screen.getByRole('button', { name: /Staff qualifications/ })).toHaveTextContent('60 days')
     expect(setupQueries.provider).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('SettingsPage workspace visibility boundary', () => {
+  beforeEach(() => mockWorkspaceRead.mockClear())
+  it.each(['Coordinator', 'SupportWorker', 'ReadOnly', 'SuperAdminNoOrg'] as const)('does not mount or query configuration for %s direct links', async role => {
+    const perms = role === 'SupportWorker' || role === 'ReadOnly'
+      ? { ...SETTINGS_PERMS.Coordinator, isCoordinator: false, hasOrganisation: false }
+      : SETTINGS_PERMS[role]
+    mockUsePermissions.mockReturnValue(perms)
+    renderSettingsPage('/settings?section=workspace-visibility')
+    expect(screen.queryByRole('heading', { name: 'Workspace visibility' })).not.toBeInTheDocument()
+    expect(mockWorkspaceRead).not.toHaveBeenCalled()
+  })
+  it('keeps the mobile Back link behind the existing unsaved guard', async () => {
+    screenSize.belowMd = true
+    const user = userEvent.setup()
+    const { router } = renderSettingsPage('/settings?section=workspace-visibility')
+    await user.click(screen.getByRole('checkbox', { name: 'Show Vehicles' }))
+    await user.click(screen.getByRole('link', { name: 'Back to settings' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Leave Workspace visibility without saving?')
+    expect(router.state.location.search).toBe('?section=workspace-visibility')
   })
 })

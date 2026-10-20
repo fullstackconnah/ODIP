@@ -1,3 +1,4 @@
+import type { ModuleVisibilityDto } from '@/api/types'
 import type { PageKey, UserRole } from '@/lib/permissions'
 
 /**
@@ -217,14 +218,14 @@ export type ResolvedEntry = ResolvedLink | ResolvedGroup
  * with exactly one child left is a plain link to it (a header that opens onto a single row is a click for nothing). No role has such a
  * group today; it is what keeps a future role filter, or a new group holding one page, from producing one.
  */
-export function resolveNav(entries: NavEntry[], access: NavAccess): ResolvedEntry[] {
+export function resolveNav(entries: NavEntry[], access: NavAccess, visibility?: ModuleVisibilityDto): ResolvedEntry[] {
   const resolved: ResolvedEntry[] = []
   for (const entry of entries) {
     if (!isGroup(entry)) {
-      if (isLeafVisible(entry, access)) resolved.push({ kind: 'link', leaf: entry, bar: entry.bar })
+      if (isLeafVisible(entry, access) && !isWorkspaceHidden(entry, visibility)) resolved.push({ kind: 'link', leaf: entry, bar: entry.bar })
       continue
     }
-    const children = entry.children.filter(child => isLeafVisible(child, access))
+    const children = entry.children.filter(child => isLeafVisible(child, access) && !isWorkspaceHidden(child, visibility))
     if (children.length === 0) continue
     if (children.length === 1) resolved.push({ kind: 'link', leaf: children[0], bar: entry.bar ?? children[0].bar })
     else resolved.push({ kind: 'group', group: entry, children })
@@ -303,3 +304,9 @@ export function toBarItem(entry: ResolvedEntry, pathname: string, counts: NavCou
 /** The nav item looks, shared by the sidebar and the Settings rail: the lit "you are here" item, and every other item. */
 export const NAV_ACTIVE = 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)] font-bold'
 export const NAV_IDLE = 'text-[var(--color-secondary)] font-medium hover:bg-[var(--color-surface-container-high)]'
+
+/** Presentation only: routes, API permissions and linked workflows never consult this. */
+export function isWorkspaceHidden(leaf: NavLeaf, visibility?: ModuleVisibilityDto): boolean {
+  return (leaf.page === 'accommodation' && visibility?.hiddenAccommodation === true)
+    || (leaf.page === 'vehicles' && visibility?.hiddenVehicles === true)
+}
