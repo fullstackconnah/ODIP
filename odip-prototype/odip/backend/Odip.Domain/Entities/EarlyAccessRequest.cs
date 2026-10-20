@@ -51,6 +51,26 @@ public class EarlyAccessRequest
     /// <summary>How many times this address has submitted the form; starts at 1.</summary>
     public int RequestCount { get; set; }
 
-    /// <summary>Repeat sign-ups whose answers differed from the ones above, oldest first; at most 10. See <see cref="EarlyAccessLaterSubmission"/>.</summary>
+    /// <summary>Repeat sign-ups whose answers differed from the ones above, oldest first; at most 10, plus the first over-limit one. See <see cref="EarlyAccessLaterSubmission"/>.</summary>
     public List<EarlyAccessLaterSubmission> LaterSubmissions { get; set; } = [];
+
+    /// <summary>
+    /// Distinct repeats sent after the 10 later submissions were full. Only the first is kept, in one <see cref="EarlyAccessLaterSubmission"/>
+    /// row with <c>IsOverLimit</c> that no later repeat replaces, so an anonymous repeat cannot erase it and a lost email notice loses nothing;
+    /// the others only add to this count and move <see cref="LastOverLimitAtUtc"/>.
+    /// </summary>
+    public int OverLimitCount { get; set; }
+
+    /// <summary>When the most recent over-limit repeat arrived; null until there is one.</summary>
+    public DateTime? LastOverLimitAtUtc { get; set; }
+
+    /// <summary>
+    /// True from the first over-limit repeat until a SuperAdmin marks the sign-up followed up. Set by EVERY distinct over-limit repeat, and
+    /// no public submission ever clears it: only the first such repeat is shown, so a later one (a removal request, say) must never be
+    /// taken as handled while nobody has looked. A new over-limit repeat after it was cleared sets it again.
+    /// </summary>
+    public bool FollowUpNeeded { get; set; }
+
+    /// <summary>When a SuperAdmin last marked the over-limit repeats followed up; null if never. Kept after a new repeat sets <see cref="FollowUpNeeded"/> again.</summary>
+    public DateTime? FollowUpClearedAtUtc { get; set; }
 }

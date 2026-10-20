@@ -215,3 +215,71 @@ describe('UserSwitcher — a switch whose reload was cancelled', () => {
     expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
   })
 })
+
+describe("UserSwitcher dismissal", () => {
+  it.each([
+    ["switch", "Cancel"],
+    ["switch", "Escape"],
+    ["switch", "Close dialog"],
+    ["exit", "Cancel"],
+    ["exit", "Escape"],
+    ["exit", "Close dialog"],
+  ])("dismisses %s via %s once", async (flow, dismiss) => {
+    const user = userEvent.setup();
+    setSuperAdminSignedIn();
+    if (flow === "exit") {
+      localStorage.setItem('odip_superadmin_user', localStorage.getItem('odip_user')!);
+      localStorage.setItem("odip_viewing_user", "user-support-1");
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    const originalUser = localStorage.getItem("odip_user");
+    const originalViewingUser = localStorage.getItem("odip_viewing_user");
+    const originalSuperAdmin = localStorage.getItem("odip_superadmin_user");
+    const originalViewingTenant = localStorage.getItem("odip_viewing_tenant");
+
+    render(
+      <header style={{ backdropFilter: "blur(24px)" }}>
+        <UserSwitcher />
+      </header>
+    );
+
+    const trigger = screen.getByRole("button", { name: /^USR / });
+    await user.click(trigger);
+
+    if (flow === "switch") {
+      const casey = screen.getByRole("button", { name: /Casey Coordinator/ });
+      await user.click(casey);
+    } else {
+      const exit = screen.getByRole("button", { name: /Exit view/ });
+      await user.click(exit);
+    }
+
+    const dialogTitle =
+      flow === "switch" ? "Switch user?" : "Exit user view?";
+    const dialog = screen.getByRole("alertdialog", { name: dialogTitle });
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.tab({ shift: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    if (dismiss === "Escape") {
+      await user.keyboard("{Escape}");
+    } else {
+      await user.click(screen.getByRole("button", { name: dismiss }));
+    }
+
+    expect(screen.queryByRole("alertdialog", { name: dialogTitle })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(document.body.style.overflow).toBe(originalOverflow);
+    expect(localStorage.getItem("odip_user")).toBe(originalUser);
+    expect(localStorage.getItem("odip_viewing_user")).toBe(originalViewingUser);
+    expect(localStorage.getItem("odip_superadmin_user")).toBe(originalSuperAdmin);
+    expect(localStorage.getItem("odip_viewing_tenant")).toBe(originalViewingTenant);
+  });
+});

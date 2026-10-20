@@ -62,7 +62,7 @@ public static class ImportFundingRows
     public static void Match(List<ImportRowPlan> plans, IReadOnlyList<ImportParticipantMatch> participants)
     {
         // Only real numbers: a participant saved with "-" or "TBC" is never found by it.
-        var byNdis = participants.Where(p => p.NdisNumber != null && IsNdisNumber(ImportParticipantRows.NdisKey(p.NdisNumber))).ToLookup(p => ImportParticipantRows.NdisKey(p.NdisNumber!));
+        var byNdis = participants.Where(p => p.NdisNumber != null && ImportParticipantRows.IsNdisNumber(ImportParticipantRows.NdisKey(p.NdisNumber))).ToLookup(p => ImportParticipantRows.NdisKey(p.NdisNumber!));
         var byName = participants.Where(p => p.DateOfBirth is not null).ToLookup(p => (NameKey($"{p.FirstName} {p.LastName}".Trim()), p.DateOfBirth!.Value));
         foreach (var plan in plans.Where(p => p.Funding != null && p.Status != ImportRowStatus.Skipped))
         {
@@ -116,7 +116,7 @@ public static class ImportFundingRows
     }
 
     private static bool OneOff(string typed, string number) =>
-        IsNdisNumber(number) && typed.Length == number.Length && typed.Zip(number).Count(pair => pair.First != pair.Second) <= 1;
+        ImportParticipantRows.IsNdisNumber(number) && typed.Length == number.Length && typed.Zip(number).Count(pair => pair.First != pair.Second) <= 1;
 
     /// <summary>
     /// The plan rules, over the rows grouped into plans:
@@ -247,7 +247,7 @@ public static class ImportFundingRows
         if (dobError != null) reasons.Add(dobError);
         // A placeholder ("-", "TBC", "N/A") or anything else that isn't 9 digits is no NDIS number: as a key it would put several people's money on
         // whoever in ODIP holds the same placeholder. The row finds its participant by name and date of birth instead.
-        var ndisKey = IsNdisNumber(ImportParticipantRows.NdisKey(ndis)) ? ImportParticipantRows.NdisKey(ndis) : null;
+        var ndisKey = ImportParticipantRows.IsNdisNumber(ImportParticipantRows.NdisKey(ndis)) ? ImportParticipantRows.NdisKey(ndis) : null;
         var byName = first.Length > 0 && last.Length > 0 && dateOfBirth is not null;
         var known = ndisKey != null || byName;
         if (!known) reasons.Add(ndis.Length > 0
@@ -292,9 +292,6 @@ public static class ImportFundingRows
         else reasons.ForEach(plan.Refuse);
         return plan;
     }
-
-    /// <summary>An NDIS number is 9 digits (NdisKey has already dropped the spaces).</summary>
-    private static bool IsNdisNumber(string key) => key.Length == 9 && key.All(char.IsAsciiDigit);
 
     private static string NameKey(string name) => string.Join(' ', name.Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
 

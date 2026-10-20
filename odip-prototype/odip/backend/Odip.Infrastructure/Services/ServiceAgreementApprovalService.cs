@@ -546,12 +546,12 @@ public sealed class ServiceAgreementApprovalService
 
     /// <summary>The same weekly support: the same weekday and worker slot, the same times, ratio and kind of night, and the same asks of a worker. A shift of the one is a shift of the other. The block id is not
     /// compared: the builder renumbers blocks on every save, and two blocks on one day at the same times would overlap, which the engine refuses.</summary>
-    private static bool SameSupport(ShiftPattern a, ShiftPattern b) =>
+    public static bool SameSupport(ShiftPattern a, ShiftPattern b) =>
         a.DayOfWeek == b.DayOfWeek && a.WorkerSlot == b.WorkerSlot && a.StartTime == b.StartTime && a.EndTime == b.EndTime
         && a.EndsNextDay == b.EndsNextDay && a.Ratio == b.Ratio && a.NightType == b.NightType && SameAsks(a.RequirementsJson, b.RequirementsJson);
 
     /// <summary>The same asks of a worker, read as what they mean: PostgreSQL stores them as jsonb, which reads back with its own key order and spacing, so the stored text never equals the mapper's.</summary>
-    private static bool SameAsks(string? a, string? b) =>
+    public static bool SameAsks(string? a, string? b) =>
         a == b || (a is not null && b is not null && DraftJson.Write(DraftJson.ReadRequirements(a)) == DraftJson.Write(DraftJson.ReadRequirements(b)));
 
     /// <summary>
@@ -695,6 +695,49 @@ public sealed class ServiceAgreementApprovalService
     {
         var provider = ProviderTimeZoneResolver.FromState(await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct));
         return ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, provider.Zone);
+    }
+
+    /// <summary>Fills only approved agreement patterns into roster weeks that are already started after a participant becomes service-eligible.</summary>
+    public async Task PopulateStartedWeeksAsync(Guid tenantId, Guid participantId, CancellationToken ct)
+    {
+        await using var board = await RosterGenerationLock.AcquireAsync(_db, tenantId, ct, _generator.LockWait, scope: "roster-board");
+        await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, _generator.LockWait);
+
+        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId && p.TenantId == tenantId, ct);
+        // The lifecycle endpoint has already applied its readiness policy before entering this
+        // lock. EF returns that tracked transition here, allowing its shifts and state to save
+        // together; infrastructure must not depend on the API-only readiness implementation.
+        if (participant is null || !participant.IsActive)
+            return;
+
+        var today = await ProviderTodayAsync(tenantId, ct);
+        var patterns = await _db.ShiftPatterns
+            .Where(p => p.ParticipantId == participantId && p.TenantId == tenantId && p.IsActive && p.SourceDraftId != null
+                && _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == p.SourceDraftId))
+            .ToListAsync(ct);
+        // Commit the tracked lifecycle transition while the board lock is still held even when
+        // approval has not produced patterns yet. A concurrent approval then observes the
+        // participant as eligible and fills its started weeks itself.
+        if (patterns.Count == 0)
+        {
+            await _db.SaveChangesAsync(ct);
+            await held.CommitAsync(ct);
+            await board.CommitAsync(ct);
+            return;
+        }
+
+        var made = new List<Shift>();
+        foreach (var group in patterns.GroupBy(p => p.EffectiveTo))
+        {
+            var end = group.Key;
+            if (end is null || end < today) continue;
+            foreach (var (from, to) in await StartedWindowsAsync(tenantId, today, end.Value, ct))
+                made.AddRange((await _generator.AddAsync(_db, group.ToList(), from, to, ct)).MadeShifts);
+        }
+        await _availability.MarkRegularsAwayAsync(made, ct);
+        await _db.SaveChangesAsync(ct);
+        await held.CommitAsync(ct);
+        await board.CommitAsync(ct);
     }
 
     private static string OverlapMessage(int count) => count == 1

@@ -44,6 +44,11 @@ export function isLockedShift(shift: { status: ShiftStatus }): boolean {
   return LOCKED_SHIFT_STATUSES.includes(shift.status)
 }
 
+/** A started or finished shift has a completion behind it, so the server refuses its Delete (409); a cancelled one can still go. */
+export function canDeleteShift(shift: { status: ShiftStatus }): boolean {
+  return shift.status !== 'InProgress' && shift.status !== 'PendingReview' && shift.status !== 'Completed'
+}
+
 const STATUS_WORDS: Partial<Record<ShiftStatus, string>> = { InProgress: 'In progress', PendingReview: 'Pending review', Completed: 'Completed', Cancelled: 'Cancelled' }
 
 /** "In progress", "Pending review", "Completed" or "Cancelled": how the lock, the carried puck and the announcements name a locked status. */

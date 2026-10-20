@@ -173,7 +173,7 @@ public class RosterStartWeekTests
         Assert.Equal((5, 0), (result.AssignedToRegulars, result.RegularAway));
     }
 
-    private static void Leave(OdipDbContext db, Guid userId, LeaveStatus status, DateOnly day) => db.LeaveRequests.Add(new LeaveRequest
+    internal static void Leave(OdipDbContext db, Guid userId, LeaveStatus status, DateOnly day) => db.LeaveRequests.Add(new LeaveRequest
     {
         Id = Guid.NewGuid(), TenantId = TenantA, UserId = userId, LeaveType = LeaveType.Annual, StartDate = day, EndDate = day, Status = status,
         RequestedByUserId = userId, RequestedAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),

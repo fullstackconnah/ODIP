@@ -131,6 +131,26 @@ describe('ShiftChip menu', () => {
   })
 })
 
+describe('ShiftChip menu: Delete on locked shifts', () => {
+  // A started or finished shift has a completion behind it, so the server refuses its Delete (409): the menu does not offer it. A cancelled shift can still go.
+  it.each(['InProgress', 'PendingReview', 'Completed'] as const)('does not offer Delete on a %s shift, and still offers Edit', async status => {
+    const user = userEvent.setup()
+    renderChip(<ShiftChip shift={makeShift({ staffId: 'staff-1', status })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    await user.click(screen.getByRole('button', { name: /actions for/i }))
+    expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('still offers Delete on a cancelled shift', async () => {
+    const user = userEvent.setup()
+    renderChip(<ShiftChip shift={makeShift({ staffId: 'staff-1', status: 'Cancelled' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+    await user.click(screen.getByRole('button', { name: /actions for/i }))
+    expect(screen.getByRole('option', { name: 'Delete' })).toBeInTheDocument()
+  })
+})
+
 describe('ShiftChip read-only (canWrite false)', () => {
   it('renders no menu and no drag handle', () => {
     const shift = makeShift()

@@ -63,6 +63,27 @@ public class EarlyAccessSignupDto
 
     /// <summary>Repeat sign-ups whose answers differed from the ones above, newest last; at most 10 (RequestCount - 1 may be higher).</summary>
     public List<EarlyAccessLaterSubmissionDto> LaterSubmissions { get; set; } = [];
+
+    /// <summary>Distinct repeats sent after the 10 were full; only the first is kept, in <see cref="FirstOverLimit"/>, and the rest are counted.</summary>
+    public int OverLimitCount { get; set; }
+
+    /// <summary>When the latest of those over-limit repeats arrived; null when there were none.</summary>
+    public DateTime? LastOverLimitAtUtc { get; set; }
+
+    public EarlyAccessLaterSubmissionDto? FirstOverLimit { get; set; }
+
+    /// <summary>True while over-limit repeats are unseen by a person: set by each one, cleared only by the SuperAdmin's "Mark followed up".</summary>
+    public bool FollowUpNeeded { get; set; }
+
+    /// <summary>When the SuperAdmin last marked them followed up; null if never.</summary>
+    public DateTime? FollowUpClearedAtUtc { get; set; }
+}
+
+/// <summary>Body of POST api/v1/admin/early-access/{id}/followed-up: the over-limit count the SuperAdmin was looking at.</summary>
+public class MarkFollowedUpDto
+{
+    /// <summary>The sign-up's OverLimitCount on screen. If more have arrived since, the server refuses (409) so they are not marked followed up unseen.</summary>
+    public int OverLimitCount { get; set; }
 }
 
 /// <summary>What a repeat sign-up said when it differed from the stored answers; the tab shows only the fields that differ.</summary>

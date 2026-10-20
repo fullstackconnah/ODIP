@@ -9,7 +9,7 @@ import { formatShiftTimeRange, isUnfilledShift, RATIO_LABELS, shiftSource } from
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
-import { DropStateContext, dropOutcome, firstName, isLockedShift, lockedWords, pickName, type DragCarry, type DropTarget } from '../lib/rosterDrag'
+import { DropStateContext, canDeleteShift, dropOutcome, firstName, isLockedShift, lockedWords, pickName, type DragCarry, type DropTarget } from '../lib/rosterDrag'
 
 /**
  * Accessible name for the severity marker — states the severity(s) present and their counts, so
@@ -137,7 +137,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     // Agreement patterns only: Start never makes a Patterns-page pattern's shifts, so the confirm's "every week you start" would be untrue there (its regular is the Patterns page's own field).
     ...(onSetRegular && shift.shiftPatternId && shift.fromAgreement && shift.staffId ? [{ value: 'regular', label: shift.isRegular ? 'Stop being the regular' : `Make ${firstName(shift.staffName)} the regular` }] : []),
     ...(shift.staffId ? [{ value: 'unassign', label: `Remove ${firstName(shift.staffName)}` }] : []),
-    { value: 'delete', label: 'Delete' },
+    ...(canDeleteShift(shift) ? [{ value: 'delete', label: 'Delete' }] : []),
   ]
 
   function handleMenuSelect(value: string) {

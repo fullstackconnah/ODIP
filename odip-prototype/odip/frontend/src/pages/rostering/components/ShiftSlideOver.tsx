@@ -27,7 +27,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
 import { getRosterGate } from '../lib/rosterGate'
-import { lockedWords } from '../lib/rosterDrag'
+import { canDeleteShift, lockedWords } from '../lib/rosterDrag'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange, shiftSource } from '../lib/roster'
 import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
 import { getRelevantRoutines } from '../lib/routines'
@@ -356,9 +356,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
   async function handleDelete() {
     if (!existing) return
-    await deleteShift.mutateAsync(existing.id)
-    setConfirmDelete(false)
-    onClose()
+    try {
+      await deleteShift.mutateAsync(existing.id)
+      onClose()
+    } catch (err: unknown) {
+      // The server's own words (the started-or-finished 409, busy); the panel stays open with the shift as it was.
+      setError(refusalOf(err, 'Something went wrong deleting this shift. Please try again.'))
+    } finally {
+      setConfirmDelete(false)
+    }
   }
 
   return (
@@ -373,7 +379,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         footerClassName="flex items-center justify-between gap-3"
         footer={canWrite ? (
           <>
-            {isEdit ? (
+            {isEdit && existing && canDeleteShift(existing) ? (
               <Button variant="ghost-danger" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" /> Delete
               </Button>

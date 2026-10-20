@@ -10,6 +10,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -29,7 +30,8 @@ public class ParticipantsController : ControllerBase
     private readonly ParticipantIntakeSnapshotService _intakeSnapshots;
     private readonly TimeProvider _clock;
     private readonly ParticipantCreateService _creator;
-    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null, TimeProvider? clock = null)
+    private readonly ServiceAgreementApprovalService _agreementApproval;
+    public ParticipantsController(OdipDbContext db, StaffCompatibilityLinkService compatLink, ParticipantDocumentService documentService, SafetyNoteSyncService safetyNoteSync, ParticipantIntakeSnapshotService? intakeSnapshots = null, TimeProvider? clock = null, ServiceAgreementApprovalService? agreementApproval = null)
     {
         _clock = clock ?? TimeProvider.System;
         _db = db;
@@ -38,6 +40,7 @@ public class ParticipantsController : ControllerBase
         _safetyNoteSync = safetyNoteSync;
         _intakeSnapshots = intakeSnapshots ?? new ParticipantIntakeSnapshotService(db);
         _creator = new ParticipantCreateService(db, compatLink, safetyNoteSync, _intakeSnapshots, _clock);
+        _agreementApproval = agreementApproval ?? new ServiceAgreementApprovalService(db, new RosterPlacementGate(), clock: _clock);
     }
 
     /// <summary>
@@ -696,6 +699,8 @@ public class ParticipantsController : ControllerBase
         // The audit interceptor writes the one row for this change; the reason rides on it instead of making a second one.
         if (!string.IsNullOrWhiteSpace(reason) && HttpContext != null)
             HttpContext.Items[AuditInterceptor.ReasonItemKey(p.Id)] = reason.Trim();
+        try { if (activate) await _agreementApproval.PopulateStartedWeeksAsync(p.TenantId, p.Id, ct); }
+        catch (RosterBusyException busy) { return Conflict(ApiResponse<ParticipantStatusResultDto>.Fail(busy.Message)); }
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ParticipantStatusResultDto>.Ok(StatusResult(p, changed: true, warnings)));
     }
@@ -758,6 +763,8 @@ public class ParticipantsController : ControllerBase
             p.IsDraft = false;
             p.UpdatedAt = DateTime.UtcNow;
             p.IsActive = true;
+            try { await _agreementApproval.PopulateStartedWeeksAsync(p.TenantId, p.Id, ct); }
+            catch (RosterBusyException busy) { return Conflict(ApiResponse<ParticipantDetailDto>.Fail(busy.Message)); }
             await _db.SaveChangesAsync(ct);
         }
 
@@ -791,6 +798,8 @@ public class ParticipantsController : ControllerBase
             p.ServicesStartedAt ??= DateTime.UtcNow;
             p.IsActive = true;
             p.UpdatedAt = DateTime.UtcNow;
+            try { await _agreementApproval.PopulateStartedWeeksAsync(p.TenantId, p.Id, ct); }
+            catch (RosterBusyException busy) { return Conflict(ApiResponse<ParticipantDetailDto>.Fail(busy.Message)); }
             await _db.SaveChangesAsync(ct);
         }
 

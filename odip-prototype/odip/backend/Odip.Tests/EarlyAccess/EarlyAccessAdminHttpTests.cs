@@ -216,6 +216,141 @@ public class EarlyAccessAdminHttpTests
         }
     }
 
+    private static EarlyAccessRequest NeedingFollowUp(string name, int overLimitCount = 3)
+    {
+        var row = Signup(name, 30, 1, count: 14);
+        row.OverLimitCount = overLimitCount;
+        row.LastOverLimitAtUtc = DateTime.UtcNow.AddDays(-1);
+        row.FollowUpNeeded = true;
+        return row;
+    }
+
+    private static string FollowedUpPath(Guid id) => $"{Path}/{id}/followed-up";
+
+    private static StringContent Body(int overLimitCount) =>
+        new(JsonSerializer.Serialize(new { overLimitCount }), System.Text.Encoding.UTF8, "application/json");
+
+    [Fact]
+    public async Task SuperAdmin_List_SaysWhichSignupsNeedFollowUp_AndWhenItWasLastCleared()
+    {
+        await using var host = await Host.StartAsync();
+        var needs = NeedingFollowUp("Amara");
+        var cleared = Signup("Bella", 5, 5);
+        cleared.OverLimitCount = 2;
+        cleared.FollowUpClearedAtUtc = new DateTime(2026, 10, 18, 1, 0, 0, DateTimeKind.Utc);
+        var plain = Signup("Cody", 10, 10);
+        await host.SeedAsync(needs, cleared, plain);
+
+        using var json = JsonDocument.Parse(await (await host.SendAsync(HttpMethod.Get, Path, "SuperAdmin")).Content.ReadAsStringAsync());
+        var items = json.RootElement.GetProperty("data").GetProperty("items").EnumerateArray().ToDictionary(i => i.GetProperty("name").GetString()!);
+        Assert.True(items["Amara"].GetProperty("followUpNeeded").GetBoolean());
+        Assert.False(items["Amara"].TryGetProperty("followUpClearedAtUtc", out _));
+        Assert.False(items["Bella"].GetProperty("followUpNeeded").GetBoolean());
+        Assert.Equal("2026-10-18T01:00:00Z", items["Bella"].GetProperty("followUpClearedAtUtc").GetString());
+        Assert.False(items["Cody"].GetProperty("followUpNeeded").GetBoolean());
+    }
+
+    [Fact]
+    public async Task SuperAdmin_MarkFollowedUp_ClearsTheMarker_AndWritesOneAuditRowWithWhoAndWhenOnly()
+    {
+        await using var host = await Host.StartAsync();
+        var row = NeedingFollowUp("Amara");
+        await host.SeedAsync(row);
+
+        var response = await host.SendBodyAsync(FollowedUpPath(row.Id), "SuperAdmin", Body(3));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var after = await host.RowAsync(row.Id);
+        Assert.False(after.FollowUpNeeded);
+        Assert.InRange(after.FollowUpClearedAtUtc!.Value, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddSeconds(5));
+        Assert.Equal(3, after.OverLimitCount); // the count and the stored entry are history, not cleared
+        var audit = Assert.Single(await host.AuditRowsAsync());
+        Assert.Equal("EarlyAccessRequest", audit.EntityType);
+        Assert.Equal(row.Id, audit.EntityId);
+        Assert.Equal(AuditAction.Updated, audit.Action);
+        Assert.Equal(Host.CallerId, audit.ChangedById);
+        Assert.Equal("Jordan Lee", audit.ChangedByName);
+        Assert.Equal("[]", audit.Changes);
+        foreach (var value in new[] { row.Name, row.Organisation, row.Email, row.Phone!, row.Role!, row.Message! })
+            Assert.DoesNotContain(value, audit.EntityType + audit.ChangedByName + audit.Changes);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Admin")]
+    [InlineData("Coordinator")]
+    [InlineData("SupportWorker")]
+    [InlineData("ReadOnly")]
+    public async Task OnlyTheSuperAdminCanMarkFollowedUp(string? role)
+    {
+        await using var host = await Host.StartAsync();
+        var row = NeedingFollowUp("Amara");
+        await host.SeedAsync(row);
+
+        var response = await host.SendBodyAsync(FollowedUpPath(row.Id), role, Body(3), role is null ? null : Guid.NewGuid());
+
+        Assert.Equal(role is null ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.True((await host.RowAsync(row.Id)).FollowUpNeeded);
+        Assert.Empty(await host.AuditRowsAsync());
+    }
+
+    [Fact]
+    public async Task MarkFollowedUp_RefusesWhenMoreHaveArrivedSinceTheSuperAdminLooked_AndKeepsTheMarker()
+    {
+        await using var host = await Host.StartAsync();
+        var row = NeedingFollowUp("Amara", overLimitCount: 4);
+        await host.SeedAsync(row);
+
+        var response = await host.SendBodyAsync(FollowedUpPath(row.Id), "SuperAdmin", Body(3)); // the page showed 3; there are 4 now
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.True((await host.RowAsync(row.Id)).FollowUpNeeded);
+        Assert.Null((await host.RowAsync(row.Id)).FollowUpClearedAtUtc);
+        Assert.Empty(await host.AuditRowsAsync());
+    }
+
+    [Fact]
+    public async Task MarkFollowedUp_OfAnUnknownId_Returns404_AndWritesNoAuditRow()
+    {
+        await using var host = await Host.StartAsync();
+        await host.SeedAsync(NeedingFollowUp("Amara"));
+
+        var response = await host.SendBodyAsync(FollowedUpPath(Guid.NewGuid()), "SuperAdmin", Body(3));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Empty(await host.AuditRowsAsync());
+    }
+
+    [Fact]
+    public async Task MarkFollowedUp_OnASignupThatNeedsNone_IsAHarmlessOk_AndWritesNoAuditRow()
+    {
+        await using var host = await Host.StartAsync();
+        var row = Signup("Bella", 5, 5);
+        await host.SeedAsync(row);
+
+        var response = await host.SendBodyAsync(FollowedUpPath(row.Id), "SuperAdmin", Body(0));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null((await host.RowAsync(row.Id)).FollowUpClearedAtUtc);
+        Assert.Empty(await host.AuditRowsAsync());
+    }
+
+    [Fact]
+    public async Task SuperAdmin_Delete_RemovesASignupThatNeedsFollowUp_WithItsOverLimitEntry()
+    {
+        await using var host = await Host.StartAsync();
+        var row = NeedingFollowUp("Amara");
+        await host.SeedAsync(row);
+        var over = Later(row, "Please remove me", 2);
+        over.IsOverLimit = true;
+        await host.SeedLaterAsync(over);
+
+        Assert.Equal(HttpStatusCode.OK, (await host.SendAsync(HttpMethod.Delete, $"{Path}/{row.Id}", "SuperAdmin")).StatusCode);
+
+        Assert.Equal(0, await host.CountRowsAsync());
+        Assert.Empty(await host.LaterMessagesAsync());
+    }
+
     [Fact]
     public async Task Delete_OfAnUnknownId_Returns404_AndWritesNoAuditRow()
     {
@@ -299,6 +434,20 @@ public class EarlyAccessAdminHttpTests
             var db = scope.ServiceProvider.GetRequiredService<OdipDbContext>();
             db.EarlyAccessRequests.AddRange(rows);
             await db.SaveChangesAsync();
+        }
+
+        public Task<HttpResponseMessage> SendBodyAsync(string path, string? role, HttpContent body, Guid? tenantClaim = null)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = body };
+            if (role is not null) request.Headers.Add("X-Test-Role", role);
+            if (tenantClaim is { } tenant) request.Headers.Add("X-Test-Tenant", tenant.ToString());
+            return Client.SendAsync(request);
+        }
+
+        public async Task<EarlyAccessRequest> RowAsync(Guid id)
+        {
+            using var scope = _app.Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<OdipDbContext>().EarlyAccessRequests.AsNoTracking().SingleAsync(e => e.Id == id);
         }
 
         public async Task SeedLaterAsync(params EarlyAccessLaterSubmission[] rows)

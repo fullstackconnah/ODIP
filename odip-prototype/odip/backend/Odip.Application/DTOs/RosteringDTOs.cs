@@ -499,7 +499,13 @@ public record CreateShiftPatternDto
 public record UpdateShiftPatternDto : CreateShiftPatternDto;
 
 /// <summary>"Make X the regular" / "Stop being the regular" (L2): the worker for the pattern's slot, or null to clear it.</summary>
-public record SetRegularDto { public Guid ShiftId { get; init; } public Guid? StaffId { get; init; } }
+public record SetRegularDto
+{
+    public Guid ShiftId { get; init; }
+    public Guid? StaffId { get; init; }
+    /// <summary>The regular the coordinator was shown (REV281B): null for an old tab (no check), Guid.Empty for "none shown". A different live regular refuses the change (409).</summary>
+    public Guid? ExpectedRegularId { get; init; }
+}
 
 public record GeneratePatternResultDto
 {

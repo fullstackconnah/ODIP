@@ -14,6 +14,15 @@ export interface EarlyAccessSignupDto {
   requestCount: number
   /** Repeat sign-ups whose answers differed from the ones above, newest last; the server keeps the first 10. */
   laterSubmissions: EarlyAccessLaterSubmissionDto[]
+  /** Distinct repeats sent after those 10 were full. Only the first is kept, in firstOverLimit; the rest are counted. */
+  overLimitCount: number
+  /** When the latest of those arrived; absent when there were none. */
+  lastOverLimitAtUtc?: string
+  firstOverLimit?: EarlyAccessLaterSubmissionDto
+  /** True while over-limit repeats have not been followed up by a person. Every one sets it; only "Mark followed up" clears it, never a public submission. */
+  followUpNeeded: boolean
+  /** When it was last marked followed up; absent if never. */
+  followUpClearedAtUtc?: string
 }
 
 /** What a repeat sign-up said. The stored sign-up keeps its first answers; the tab shows only the fields here that differ from them. */

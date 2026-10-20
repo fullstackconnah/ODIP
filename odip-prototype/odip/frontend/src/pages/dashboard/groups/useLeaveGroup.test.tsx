@@ -59,7 +59,7 @@ describe('Leave group — what it reads', () => {
     apiGetWithDefault.mockImplementation((url: string) => (url === '/leave' ? Promise.reject(new Error('down')) : Promise.resolve([])))
     renderGroup(() => useLeaveGroup(true, 'u-viewer'))
 
-    expect(await screen.findByText("Couldn't load leave requests.")).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't load this leave queue. Check your connection and try again.")).toBeInTheDocument()
   })
 })
 
@@ -68,7 +68,7 @@ describe('Leave group — your own request', () => {
     answer([leave(), leave({ id: 'l2', userId: 'u-ana', userFullName: 'Ana Ruiz', requestedByUserId: 'u-sam' })])
     renderGroup(() => useLeaveGroup(true, 'u-sam'))
 
-    const own = (await screen.findByText('Sam Lee')).closest('tbody')!
+    const own = (await screen.findByText('Sam Lee')).closest('tr')!
     expect(within(own).getByText('Your request')).toBeInTheDocument()
     expect(within(own).queryAllByRole('button')).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Approve leave: Ana Ruiz, 20–24 Oct 2026' })).toBeInTheDocument()
@@ -187,14 +187,15 @@ describe('Leave group — Complete all (decision-bulk)', () => {
     })
     renderGroup(() => useLeaveGroup(true, 'u-viewer'))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 2 leave requests' }))
-    expect(screen.getByRole('alertdialog')).toHaveTextContent("Your own request isn't included: someone else decides it.")
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 2 selected leave requests' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('2 selected leave requests')
     fireEvent.click(screen.getByRole('button', { name: 'Approve 2' }))
 
     await waitFor(() => expect(screen.getByText('Approved 2 leave requests')).toBeInTheDocument())
     expect(apiPost.mock.calls.map(([url]) => url)).toEqual(['/leave/l1/approve', '/leave/unavailability/r1/approve'])
     expect(screen.getByText(
-      'Your own request stays for someone else. 2 overlap the roster: 1 shift now has a cover task, 1 shift overlaps regular unavailability and 1 trip overlaps.')).toBeInTheDocument()
+      '2 overlap the roster: 1 shift now has a cover task, 1 shift overlaps regular unavailability and 1 trip overlaps.')).toBeInTheDocument()
     // One notice for the run, not one per overlapping approval.
     expect(screen.queryByText(/^Leave approved\./)).toBeNull()
     expect(subjects()).toEqual(['Dev Admin'])
@@ -212,7 +213,8 @@ describe('Leave group — Complete all (decision-bulk)', () => {
     })
     renderGroup(() => useLeaveGroup(true, 'u-viewer'))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve all 3 leave requests' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all shown leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3 selected leave requests' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 3' }))
 
     await waitFor(() => expect(screen.getByText('Approved 1 leave request')).toBeInTheDocument())
