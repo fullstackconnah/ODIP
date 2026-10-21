@@ -64,7 +64,7 @@ export default function NotificationPreferencesTab(frame: SectionFrame) {
   return (
     <SettingsSection {...frame} save={emailPrefs ? { dirty: isDirty, pending: update.isPending, result, onSave: save } : undefined}>
       {!emailPrefs ? (
-        isError ? <PageState kind="error" noun="notifications section" onRetry={() => { void refetch() }} /> : <PageState kind="loading" noun="notifications section" />
+        isError ? <PageState kind="error" noun="notifications section" onRetry={() => refetch()} /> : <PageState kind="loading" noun="notifications section" />
       ) : (
         // One column of ticks per area; the areas flow in two columns from xl.
         <div className="gap-x-[var(--section-gap)] xl:columns-2">

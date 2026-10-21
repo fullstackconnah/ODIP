@@ -34,7 +34,7 @@ export default function AlertWindowsSection(frame: SectionFrame) {
   return (
     <SettingsSection {...frame} save={days === null ? undefined : { dirty, pending: update.isPending, result, onSave: save }}>
       {days === null ? (
-        isError ? <PageState kind="error" noun="alert windows section" onRetry={() => { void refetch() }} /> : <PageState kind="loading" noun="alert windows section" />
+        isError ? <PageState kind="error" noun="alert windows section" onRetry={() => refetch()} /> : <PageState kind="loading" noun="alert windows section" />
       ) : (
         <div className={formGrid}>
           <FormField label="Staff qualifications" hint="Warn this many days before a qualification expires. Shown on Qualifications and the dashboard." className={span.medium}>

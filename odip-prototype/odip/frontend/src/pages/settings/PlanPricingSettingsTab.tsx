@@ -122,7 +122,7 @@ export default function PlanPricingSettingsTab(frame: SectionFrame) {
   return (
     <SettingsSection {...frame} save={settings && current ? { dirty, pending: update.isPending, result, problems, onSave: save } : undefined}>
       {query.isLoading ? <PageState kind="loading" noun="plan pricing section" />
-        : !settings || !current ? (told ? <Callout tone="info" className="max-w-prose">{told}</Callout> : <PageState kind="error" noun="plan pricing section" onRetry={() => { void query.refetch() }} />)
+        : !settings || !current ? (told ? <Callout tone="info" className="max-w-prose">{told}</Callout> : <PageState kind="error" noun="plan pricing section" onRetry={() => query.refetch()} />)
         : (
           <>
             {settings.isDefault && <Callout tone="info" className="max-w-prose">Nothing has been saved yet: these are the defaults the plan builder assumes. Confirm the registration groups below, then check the rest.</Callout>}

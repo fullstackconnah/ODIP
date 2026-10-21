@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { Button } from './Button'
 import { BackButton } from './BackButton'
 import { Callout } from './Callout'
@@ -11,8 +12,8 @@ export type PageStateProps =
   | (Common & { kind: 'loading' })
   | (Common & {
       kind: 'error'
-      /** Shows a "Try again" button that calls this (normally the query's `refetch`). Without it the banner has no action. */
-      onRetry?: () => void
+      /** Shows "Try again". Return the retry Promise (normally `refetch`) to hold the action until it settles; synchronous callbacks remain supported. */
+      onRetry?: () => unknown
     })
   | (Common & {
       kind: 'not-found'
@@ -22,6 +23,53 @@ export type PageStateProps =
     })
 
 const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
+  const [state, setState] = useState<'idle' | 'pending' | 'failed'>('idle')
+  const pending = useRef(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  function retry() {
+    if (pending.current || !onRetry) return
+    pending.current = true
+    const finish = (failed: boolean) => {
+      pending.current = false
+      if (mounted.current) setState(failed ? 'failed' : 'idle')
+    }
+    try {
+      const request = onRetry()
+      if (request && typeof request === 'object' && 'then' in request && typeof request.then === 'function') {
+        setState('pending')
+        void request.then(() => finish(false), () => finish(true))
+      } else finish(false)
+    } catch {
+      finish(true)
+    }
+  }
+
+  return (
+    <div>
+      <Callout
+        tone="danger"
+        actions={onRetry ? (
+          <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
+            Try again
+          </Button>
+        ) : undefined}
+      >
+        Couldn't load this {noun}. Check your connection and try again.
+      </Callout>
+      <div role={state === 'idle' ? undefined : 'status'} aria-live="polite" aria-atomic="true" className="text-sm text-[var(--color-muted-foreground)] [&:not(:empty)]:mt-2">
+        {state === 'pending' && 'Trying again…'}
+        {state === 'failed' && "Couldn't load it again. Try again when your connection is ready."}
+      </div>
+    </div>
+  )
+}
 
 /**
  * What a page shows in place of itself while its record is loading, when the load failed, and when there is no such record. They are three
@@ -49,20 +97,7 @@ export function PageState(props: PageStateProps) {
     )
   }
   if (props.kind === 'error') {
-    return (
-      <Callout
-        tone="danger"
-        actions={
-          props.onRetry ? (
-            <Button variant="secondary" size="sm" onClick={props.onRetry}>
-              Try again
-            </Button>
-          ) : undefined
-        }
-      >
-        Couldn't load this {noun}. Check your connection and try again.
-      </Callout>
-    )
+    return <RetryError noun={noun} onRetry={props.onRetry} />
   }
   return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">

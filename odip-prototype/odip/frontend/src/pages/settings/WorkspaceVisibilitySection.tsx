@@ -26,7 +26,7 @@ export default function WorkspaceVisibilitySection(frame: SectionFrame) {
   return (
     <SettingsSection {...frame} save={draft ? { dirty, pending: update.isPending, result, onSave: save } : undefined}>
       {!draft ? (
-        query.isError ? <PageState kind="error" noun="workspace visibility settings" onRetry={() => { void query.refetch() }} /> : <PageState kind="loading" noun="workspace visibility settings" />
+        query.isError ? <PageState kind="error" noun="workspace visibility settings" onRetry={() => query.refetch()} /> : <PageState kind="loading" noun="workspace visibility settings" />
       ) : (
         <>
           <p className="max-w-prose text-sm text-[var(--color-muted-foreground)]">These choices change the usual menu for everyone in your organisation. Hidden workspaces stay available under Other workspaces in the menu. Existing records, links, tasks and alerts stay available.</p>

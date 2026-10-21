@@ -76,7 +76,7 @@ export default function BudgetsPage() {
 
   let state: BudgetRiskTableState
   if (phase === 'loading') state = { status: 'loading' }
-  else if (phase === 'error') state = { status: 'failed', onRetry: () => { void budgets.refetch() } }
+  else if (phase === 'error') state = { status: 'failed', onRetry: () => budgets.refetch() }
   else if (nothingAtAll) state = { status: 'empty' }
   else state = { status: 'ready', rows: shown.map(row => budgetRiskRow(row, figures)), noBudget }
 

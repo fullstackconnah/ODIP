@@ -46,7 +46,7 @@ export default function FundingLedger({ participantId, enabled = true, nextPlanS
   const query = useFundingLedger(participantId, enabled)
 
   if (query.isLoading) return <PageState kind="loading" noun="budget ledger" />
-  if (!query.data) return <PageState kind="error" noun="budget ledger" onRetry={() => { void query.refetch() }} />
+  if (!query.data) return <PageState kind="error" noun="budget ledger" onRetry={() => query.refetch()} />
 
   const data = query.data
   // A background refetch that fails over figures already on screen must not replace them (DESIGN.md): a quiet, retryable line under them is the honest place for that.

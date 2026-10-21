@@ -81,7 +81,7 @@ export default function BudgetSettingsTab(frame: SectionFrame) {
   return (
     <SettingsSection {...frame} save={settings ? { dirty, pending: update.isPending, result, onSave: save } : undefined}>
       {query.isLoading ? <PageState kind="loading" noun="budgets section" />
-        : !settings ? (told ? <Callout tone="info" className="max-w-prose">{told}</Callout> : <PageState kind="error" noun="budgets section" onRetry={() => { void query.refetch() }} />)
+        : !settings ? (told ? <Callout tone="info" className="max-w-prose">{told}</Callout> : <PageState kind="error" noun="budgets section" onRetry={() => query.refetch()} />)
         : (
           <>
             {settings.isDefault && <Callout tone="info" className="max-w-prose">Nothing has been saved yet: these are the defaults (Warn only, and approaching at 80%).</Callout>}

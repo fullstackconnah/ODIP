@@ -50,7 +50,7 @@ export default function FundingTab({ participantId, planType }: { participantId:
 
   const data = plansQuery.data
   if (plansQuery.isLoading) return <PageState kind="loading" noun="budget" />
-  if (!data) return <PageState kind="error" noun="budget" onRetry={() => { void plansQuery.refetch() }} />
+  if (!data) return <PageState kind="error" noun="budget" onRetry={() => plansQuery.refetch()} />
 
   const plans = data.plans ?? []
   const current = currentPlanOf(plans, today)

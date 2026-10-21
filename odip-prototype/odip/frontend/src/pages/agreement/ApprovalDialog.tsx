@@ -138,7 +138,7 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
         {preview.isLoading && <PageState kind="loading" noun="approval summary" />}
         {preview.isError && !data && (httpStatusOf(preview.error) === 403
           ? <Callout tone="warning">{failureMessages(preview.error)[0]}</Callout>
-          : <PageState kind="error" noun="approval summary" onRetry={() => { void preview.refetch() }} />)}
+          : <PageState kind="error" noun="approval summary" onRetry={() => preview.refetch()} />)}
         {data && (blocked
           ? <Reasons reasons={data.reasons} say={say} groups={groups} onGoToShifts={onGoToShifts ? blockId => { onGoToShifts(blockId); onClose() } : undefined} />
           : <WhatItDoes participantId={participantId} draft={draft} preview={data} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />)}

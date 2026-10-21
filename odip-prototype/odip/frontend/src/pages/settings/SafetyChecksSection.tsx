@@ -108,7 +108,7 @@ export default function SafetyChecksSection(frame: SectionFrame) {
       {...frame}
       save={p.form && !p.incomplete ? { dirty: p.dirty || readinessMode.changed || medicationMode.changed, pending: p.pending, result: p.result, onSave: () => (tightens.readiness || tightens.medication ? setConfirming(true) : save()) } : undefined}
     >
-      {p.query.isError && !p.form ? <PageState kind="error" noun="safety checks section" onRetry={() => { void p.query.refetch() }} />
+      {p.query.isError && !p.form ? <PageState kind="error" noun="safety checks section" onRetry={() => p.query.refetch()} />
         : !p.form ? <PageState kind="loading" noun="safety checks section" />
         : (
           <>

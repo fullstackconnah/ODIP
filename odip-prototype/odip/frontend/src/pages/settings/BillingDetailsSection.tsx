@@ -39,7 +39,7 @@ export default function BillingDetailsSection(frame: SectionFrame) {
 
   return (
     <SettingsSection {...frame} save={p.form && !p.incomplete ? { dirty: p.dirty, pending: p.pending, result: p.result, onSave: () => p.save() } : undefined}>
-      {p.query.isError && !p.form ? <PageState kind="error" noun="billing details section" onRetry={() => { void p.query.refetch() }} />
+      {p.query.isError && !p.form ? <PageState kind="error" noun="billing details section" onRetry={() => p.query.refetch()} />
         : !p.form ? <PageState kind="loading" noun="billing details section" />
         : (
           <>
