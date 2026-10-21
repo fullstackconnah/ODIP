@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Odip.Tests" />
     <ProjectReference Include="..\Odip.Domain\Odip.Domain.csproj" />
     <ProjectReference Include="..\Odip.Application\Odip.Application.csproj" />
   </ItemGroup>
