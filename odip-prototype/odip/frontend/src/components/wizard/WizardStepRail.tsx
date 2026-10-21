@@ -133,7 +133,8 @@ export function WizardStepRail<V>({
     return (
       <>
         <span className="w-4 md:w-8 h-px bg-[var(--color-border)] lg:hidden" aria-hidden="true" />
-        <span aria-hidden="true" className="mx-auto my-0.5 hidden lg:block w-px flex-1 min-h-[12px] bg-[var(--color-border)]" />
+        {/* Match the marker centre: px-3 button padding + half its w-5 marker. */}
+        <span aria-hidden="true" className="ml-[1.375rem] my-0.5 hidden lg:block w-px flex-1 min-h-[12px] bg-[var(--color-border)]" />
       </>
     )
   }
