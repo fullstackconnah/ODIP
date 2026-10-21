@@ -640,14 +640,38 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       expect(chip).not.toHaveClass('my-2')
     })
 
-    it('keeps the words as a bonus on a wide chip: in the name row, and display:none below 18rem, never clipped', () => {
-      renderChip(<ShiftChip shift={makeShift({ ...emergency(), participantName: 'Grace Palmer' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    it('paints the full marker words in a dedicated wrapped row at every chip width', () => {
+      const shift = makeShift({ ...emergency(), participantName: 'Grace Palmer' })
+      const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-      const words = screen.getByText('Over budget: emergency', { selector: 'span' })
-      expect(words).toHaveClass('hidden', '@[18rem]:inline')
-      expect(words).toHaveAttribute('aria-hidden', 'true')
-      expect(screen.getByRole('link', { name: 'Grace Palmer' }).parentElement).toContainElement(words)
+      const words = container.querySelector('[data-budget-marker-words]') as HTMLElement
+      expect(words).toHaveTextContent('Over budget: emergency')
+      expect(words).not.toHaveClass('hidden', 'invisible', 'sr-only')
+      expect(words).not.toHaveAttribute('aria-hidden')
+      expect(words).toHaveClass('row-start-3', 'whitespace-normal', 'break-words', 'text-xs', 'leading-4')
+      expect(words.parentElement).toBe(getOpenButton(shift))
+      // The explicit control name includes the complete marker once. Because it is an aria-labeled control,
+      // its visible child text does not become a second copy in the accessible name; the disc also retains
+      // its own full marker label as required by the design.
+      const name = getOpenButton(shift).getAttribute('aria-label')!
+      expect(name.match(/Over budget: emergency/g)).toHaveLength(1)
+      expect(screen.getByRole('img', { name: /Over budget: emergency/ })).toHaveAttribute('aria-label', 'Over budget: emergency, Admin review pending')
     })
+
+    it('paints the Admin override words in the same dedicated row and keeps its accessible name exact once', () => {
+      const shift = makeShift({ overrideReason: 'Client carer is in hospital', acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] })
+      const { container } = renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+
+      const words = container.querySelector('[data-budget-marker-words]') as HTMLElement
+      expect(words).toHaveTextContent('Over budget: Admin override')
+      expect(words).not.toHaveClass('hidden', 'invisible', 'sr-only')
+      expect(words).not.toHaveAttribute('aria-hidden')
+      expect(words).toHaveClass('row-start-3', 'whitespace-normal', 'break-words')
+      const name = getOpenButton(shift).getAttribute('aria-label')!
+      expect(name.match(/Over budget: Admin override/g)).toHaveLength(1)
+      expect(screen.getByRole('img', { name: 'Over budget: Admin override' })).toBeInTheDocument()
+    })
+
   })
 })
 
