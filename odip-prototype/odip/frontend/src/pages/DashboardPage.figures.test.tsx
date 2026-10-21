@@ -13,6 +13,7 @@ const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeave
 
 vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
+  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
   useDashboard: mockUseDashboard,
   useSettings: () => ({ data: undefined }),
   useStaff: mockUseStaff,
