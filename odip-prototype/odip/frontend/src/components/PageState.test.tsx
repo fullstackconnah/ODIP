@@ -46,9 +46,25 @@ describe('PageState: error', () => {
     expect(retry).not.toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this trip.")
     expect(screen.queryByText('private transport detail')).not.toBeInTheDocument()
-    if (outcome === 'reject') expect(screen.getByRole('status')).toHaveTextContent('Try again')
+    if (outcome === 'reject') expect(screen.getByRole('status')).toHaveTextContent("Couldn't load it again.")
     await act(async () => { fireEvent.click(retry) })
     expect(onRetry).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([{ isError: true }, { status: 'error' }])('counts a request that resolves with a failed result as failed: %o', async (result) => {
+    const request = deferred()
+    renderState(<PageState kind="error" noun="trip" onRetry={() => request.promise.then(() => result)} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await act(async () => { request.resolve() })
+    expect(screen.getByRole('status')).toHaveTextContent("Couldn't load it again.")
+  })
+
+  it('treats a resolved success result as success', async () => {
+    const request = deferred()
+    renderState(<PageState kind="error" noun="trip" onRetry={() => request.promise.then(() => ({ isError: false, status: 'success' }))} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await act(async () => { request.resolve() })
+    expect(screen.queryByText("Couldn't load it again.")).not.toBeInTheDocument()
   })
 
   it('does not invent a pending request for a synchronous callback', () => {
@@ -85,7 +101,7 @@ describe('PageState: error', () => {
     renderState(<PageState kind="error" noun="trip" onRetry={onRetry} />)
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled()
-    expect(screen.getByRole('status')).toHaveTextContent('Try again')
+    expect(screen.getByRole('status')).toHaveTextContent("Couldn't load it again.")
     expect(screen.queryByText('private transport detail')).not.toBeInTheDocument()
   })
 

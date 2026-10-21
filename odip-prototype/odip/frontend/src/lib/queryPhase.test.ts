@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { onlineManager, QueryClient, QueryObserver } from '@tanstack/react-query'
-import { awaitsData } from './queryPhase'
+import { awaitsData, queryPhase, retryingAfterError } from './queryPhase'
 
 afterEach(() => {
   onlineManager.setOnline(true)
@@ -55,5 +55,21 @@ describe('awaitsData against a real query', () => {
       expect(result).toMatchObject({ status: 'pending', fetchStatus: 'idle' })
       expect(awaitsData(result)).toBe(false)
     }
+  })
+})
+
+describe('retryingAfterError and queryPhase', () => {
+  it.each([
+    ['a retry of a failed query with no data', { isFetching: true, errorUpdateCount: 1, data: undefined }, true],
+    ['a first load', { isFetching: true, errorUpdateCount: 0, data: undefined }, false],
+    ['a background refetch behind data', { isFetching: true, errorUpdateCount: 1, data: [] }, false],
+    ['a settled failure', { isFetching: false, errorUpdateCount: 1, data: undefined }, false],
+  ] as const)('%s', (_label, query, expected) => {
+    expect(retryingAfterError(query)).toBe(expected)
+  })
+
+  it('keeps the error phase while a failed no-data query retries, though TanStack reports it as loading', () => {
+    expect(queryPhase({ isLoading: true, isError: false, isFetching: true, errorUpdateCount: 1, data: undefined })).toBe('error')
+    expect(queryPhase({ isLoading: true, isError: false, isFetching: true, errorUpdateCount: 0, data: undefined })).toBe('loading')
   })
 })

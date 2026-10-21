@@ -9,6 +9,7 @@ import {
 } from '@/api/types'
 import { CheckboxField } from '@/components/CheckboxField'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { SettingsGroup, SettingsSection, type SaveResult, type SectionFrame } from './SettingsSection'
 import { notSavedText } from './settingsSections'
 
@@ -28,7 +29,9 @@ function buildEmailState(rows: NotificationPreferenceRowDto[]): EmailPrefsState 
  * A 400 ("Unknown event type or channel.") is said in the foot.
  */
 export default function NotificationPreferencesTab(frame: SectionFrame) {
-  const { data, isError, refetch } = useNotificationPreferences()
+  const prefsQuery = useNotificationPreferences()
+  const { data, refetch } = prefsQuery
+  const isError = prefsQuery.isError || retryingAfterError(prefsQuery)
   const update = useUpdateNotificationPreferences()
   const [emailPrefs, setEmailPrefs] = useState<EmailPrefsState | null>(null)
   const [initialPrefs, setInitialPrefs] = useState<EmailPrefsState | null>(null)

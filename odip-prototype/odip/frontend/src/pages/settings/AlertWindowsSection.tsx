@@ -3,6 +3,7 @@ import { useSettings, useUpdateSettings } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { formGrid, span } from '@/lib/formGrid'
 import { SettingsSection, type SaveResult, type SectionFrame } from './SettingsSection'
 import { notSavedText } from './settingsSections'
@@ -14,7 +15,9 @@ const WINDOW_ITEMS = [7, 14, 30, 60, 90].map(days => ({ value: String(days), lab
  * Only an Admin or a SuperAdmin changes it (SettingsController PUT); a Coordinator sees it locked.
  */
 export default function AlertWindowsSection(frame: SectionFrame) {
-  const { data: settings, isError, refetch } = useSettings()
+  const settingsQuery = useSettings()
+  const { data: settings, refetch } = settingsQuery
+  const isError = settingsQuery.isError || retryingAfterError(settingsQuery)
   const update = useUpdateSettings()
   const [days, setDays] = useState<number | null>(null)
   const [savedDays, setSavedDays] = useState<number | null>(null)

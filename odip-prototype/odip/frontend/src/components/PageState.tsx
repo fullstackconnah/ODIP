@@ -24,6 +24,8 @@ export type PageStateProps =
 
 const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
+const isFailedResult = (result: unknown) => !!result && typeof result === 'object' && ((result as { isError?: unknown }).isError === true || (result as { status?: unknown }).status === 'error')
+
 function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
   const [state, setState] = useState<'idle' | 'pending' | 'failed'>('idle')
   const pending = useRef(false)
@@ -44,29 +46,32 @@ function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
       const request = onRetry()
       if (request && typeof request === 'object' && 'then' in request && typeof request.then === 'function') {
         setState('pending')
-        void request.then(() => finish(false), () => finish(true))
+        // refetch() RESOLVES with { isError: true } when the request fails (no throwOnError), so a resolved failure counts, as does a rejection.
+        void request.then((result: unknown) => finish(isFailedResult(result)), () => finish(true))
       } else finish(false)
     } catch {
       finish(true)
     }
   }
 
+  // The visible line sits beside the button, inside the actions row, so the banner never changes height; the polite status node is what assistive tech hears.
+  const status = state === 'pending' ? 'Trying again…' : state === 'failed' ? "Couldn't load it again." : ''
   return (
     <div>
       <Callout
         tone="danger"
         actions={onRetry ? (
-          <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
-            Try again
-          </Button>
+          <>
+            <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
+              Try again
+            </Button>
+            <span aria-hidden="true" className="text-[var(--color-muted-foreground)]">{status}</span>
+          </>
         ) : undefined}
       >
         Couldn't load this {noun}. Check your connection and try again.
       </Callout>
-      <div role={state === 'idle' ? undefined : 'status'} aria-live="polite" aria-atomic="true" className="text-sm text-[var(--color-muted-foreground)] [&:not(:empty)]:mt-2">
-        {state === 'pending' && 'Trying again…'}
-        {state === 'failed' && "Couldn't load it again. Try again when your connection is ready."}
-      </div>
+      <div role={state === 'idle' ? undefined : 'status'} aria-live="polite" aria-atomic="true" className="sr-only">{status}</div>
     </div>
   )
 }

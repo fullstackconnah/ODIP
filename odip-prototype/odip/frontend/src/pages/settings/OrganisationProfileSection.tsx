@@ -1,6 +1,7 @@
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { TextField } from '@/components/TextField'
 import { formGrid, span } from '@/lib/formGrid'
 import { SettingsGroup, SettingsSection, type SectionFrame } from './SettingsSection'
@@ -21,7 +22,7 @@ export default function OrganisationProfileSection(frame: SectionFrame) {
 
   return (
     <SettingsSection {...frame} save={p.form ? { dirty: p.dirty, pending: p.pending, result: p.result, onSave: () => p.save() } : undefined}>
-      {p.query.isError && !p.form ? <PageState kind="error" noun="organisation profile" onRetry={() => p.query.refetch()} />
+      {(p.query.isError || retryingAfterError(p.query)) && !p.form ? <PageState kind="error" noun="organisation profile" onRetry={() => p.query.refetch()} />
         : !p.form ? <PageState kind="loading" noun="organisation profile" />
         : (
           <>

@@ -3,6 +3,7 @@ import { useModuleVisibility, useUpdateModuleVisibility } from '@/api/hooks'
 import type { ModuleVisibilityDto } from '@/api/types'
 import { CheckboxField } from '@/components/CheckboxField'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { SettingsSection, type SaveResult, type SectionFrame } from './SettingsSection'
 import { notSavedText } from './settingsSections'
 
@@ -26,7 +27,7 @@ export default function WorkspaceVisibilitySection(frame: SectionFrame) {
   return (
     <SettingsSection {...frame} save={draft ? { dirty, pending: update.isPending, result, onSave: save } : undefined}>
       {!draft ? (
-        query.isError ? <PageState kind="error" noun="workspace visibility settings" onRetry={() => query.refetch()} /> : <PageState kind="loading" noun="workspace visibility settings" />
+        query.isError || retryingAfterError(query) ? <PageState kind="error" noun="workspace visibility settings" onRetry={() => query.refetch()} /> : <PageState kind="loading" noun="workspace visibility settings" />
       ) : (
         <>
           <p className="max-w-prose text-sm text-[var(--color-muted-foreground)]">These choices change the usual menu for everyone in your organisation. Hidden workspaces stay available under Other workspaces in the menu. Existing records, links, tasks and alerts stay available.</p>

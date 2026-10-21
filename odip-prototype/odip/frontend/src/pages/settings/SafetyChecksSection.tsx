@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from 'react'
 import type { MedicationCompetencyMode, ParticipantReadinessMode } from '@/api/types'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
@@ -108,7 +109,7 @@ export default function SafetyChecksSection(frame: SectionFrame) {
       {...frame}
       save={p.form && !p.incomplete ? { dirty: p.dirty || readinessMode.changed || medicationMode.changed, pending: p.pending, result: p.result, onSave: () => (tightens.readiness || tightens.medication ? setConfirming(true) : save()) } : undefined}
     >
-      {p.query.isError && !p.form ? <PageState kind="error" noun="safety checks section" onRetry={() => p.query.refetch()} />
+      {(p.query.isError || retryingAfterError(p.query)) && !p.form ? <PageState kind="error" noun="safety checks section" onRetry={() => p.query.refetch()} />
         : !p.form ? <PageState kind="loading" noun="safety checks section" />
         : (
           <>

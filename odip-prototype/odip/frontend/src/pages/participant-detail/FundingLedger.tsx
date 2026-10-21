@@ -10,6 +10,7 @@ import { DataTable } from '@/components/DataTable'
 import { FactBar } from '@/components/FactBar'
 import { ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { StatusBadge } from '@/components/StatusBadge'
 import { chipToneOf, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence, unpricedTripDaySentence } from '@/lib/budgetLedger'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
@@ -45,7 +46,7 @@ function BudgetStatusBadge({ status, size }: { status: keyof typeof BUDGET_STATU
 export default function FundingLedger({ participantId, enabled = true, nextPlanStart }: { participantId: string; enabled?: boolean; nextPlanStart?: string }) {
   const query = useFundingLedger(participantId, enabled)
 
-  if (query.isLoading) return <PageState kind="loading" noun="budget ledger" />
+  if (query.isLoading && !retryingAfterError(query)) return <PageState kind="loading" noun="budget ledger" />
   if (!query.data) return <PageState kind="error" noun="budget ledger" onRetry={() => query.refetch()} />
 
   const data = query.data
