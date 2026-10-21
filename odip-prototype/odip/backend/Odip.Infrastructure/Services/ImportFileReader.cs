@@ -78,23 +78,28 @@ public static class ImportFileReader
         using (workbook)
         {
             var sheet = workbook.Worksheets.FirstOrDefault(s => s.Visibility == XLWorksheetVisibility.Visible);
-            // Contents only: the template formats whole columns as text, and formatting must not stretch the range to the sheet's last row.
-            var used = sheet?.RangeUsed(XLCellsUsedOptions.Contents);
-            if (sheet is null || used is null) return new List<List<string>>();
-            var lastRow = used.LastRow().RowNumber();
-            var lastColumn = used.LastColumn().ColumnNumber();
-            // Checked before reading cells: one value far down or far right would otherwise make the loop below read billions of cells.
-            if (lastRow - 1 > MaxRows) throw TooManyRows(lastRow - 1);
-            if (lastColumn > MaxColumns) throw new ImportException(TooManyColumns);
-            var lines = new List<List<string>>(lastRow);
-            for (var r = 1; r <= lastRow; r++)
-            {
-                var cells = new List<string>(lastColumn);
-                for (var c = 1; c <= lastColumn; c++) cells.Add(CellText(sheet.Cell(r, c)));
-                lines.Add(cells);
-            }
-            return lines;
+            return ReadWorksheet(sheet);
         }
+    }
+
+    internal static List<List<string>> ReadWorksheet(IXLWorksheet? sheet)
+    {
+        // Contents only: the template formats whole columns as text, and formatting must not stretch the range to the sheet's last row.
+        var used = sheet?.RangeUsed(XLCellsUsedOptions.Contents);
+        if (sheet is null || used is null) return new List<List<string>>();
+        var lastRow = used.LastRow().RowNumber();
+        var lastColumn = used.LastColumn().ColumnNumber();
+        // Checked before reading cells: one value far down or far right would otherwise make the loop below read billions of cells.
+        if (lastRow - 1 > MaxRows) throw TooManyRows(lastRow - 1);
+        if (lastColumn > MaxColumns) throw new ImportException(TooManyColumns);
+        var lines = new List<List<string>>(lastRow);
+        for (var r = 1; r <= lastRow; r++)
+        {
+            var cells = new List<string>(lastColumn);
+            for (var c = 1; c <= lastColumn; c++) cells.Add(CellText(sheet.Cell(r, c)));
+            lines.Add(cells);
+        }
+        return lines;
     }
 
     // A date cell becomes yyyy-MM-dd, which ImportValues reads; any other cell is the text Excel shows, so a number formatted to keep its leading
