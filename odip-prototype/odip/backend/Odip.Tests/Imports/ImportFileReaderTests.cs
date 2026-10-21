@@ -1,7 +1,7 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 using ClosedXML.Excel;
+using Moq;
 using Odip.Infrastructure.Services;
 using Xunit;
 
@@ -80,14 +80,52 @@ public class ImportFileReaderTests
     }
 
     [Fact]
-    public void Refuses_a_sparse_xlsx_whose_last_cell_is_far_away_without_reading_every_cell()
+    public void Refuses_a_sparse_xlsx_whose_last_cell_is_far_away()
     {
         var file = Xlsx(sheet => { sheet.Cell(1, 1).Value = "First name"; sheet.Cell(1048576, 16384).Value = "x"; });
-        var watch = Stopwatch.StartNew();
         var refusal = Refusal(file, "people.xlsx");
-        watch.Stop();
         Assert.Equal("The file has 1,048,575 rows. Import at most 2,000 at a time: split the file and import each part.", refusal);
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"took {watch.Elapsed.TotalSeconds:0.0} s");
+    }
+
+    [Theory]
+    [InlineData(1048576, 16384, "The file has 1,048,575 rows. Import at most 2,000 at a time: split the file and import each part.")]
+    [InlineData(2, 201, "This file has more than 200 columns. Remove the extra columns and try again.")]
+    public void Refuses_oversized_worksheet_bounds_before_reading_any_cell(int lastRow, int lastColumn, string expected)
+    {
+        using var workbook = new XLWorkbook();
+        var range = workbook.Worksheets.Add("People").Range(1, 1, lastRow, lastColumn);
+        var sheet = new Mock<IXLWorksheet>(MockBehavior.Strict);
+        sheet.Setup(s => s.RangeUsed(XLCellsUsedOptions.Contents)).Returns(range);
+
+        var refusal = Assert.Throws<ImportException>(() => ImportFileReader.ReadWorksheet(sheet.Object));
+
+        Assert.Equal(expected, refusal.Message);
+        sheet.Verify(s => s.Cell(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public void Reads_cells_within_worksheet_bounds()
+    {
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.Worksheets.Add("People");
+        sheet.Cell(1, 1).Value = "First name";
+        sheet.Cell(1, 2).Value = "Last name";
+        sheet.Cell(2, 1).Value = "Ava";
+        sheet.Cell(2, 2).Value = "Stone";
+
+        var lines = ImportFileReader.ReadWorksheet(sheet);
+
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(new[] { "First name", "Last name" }, lines[0]);
+        Assert.Equal(new[] { "Ava", "Stone" }, lines[1]);
+    }
+
+    [Fact]
+    public void An_absent_or_empty_worksheet_has_no_rows()
+    {
+        using var workbook = new XLWorkbook();
+        Assert.Empty(ImportFileReader.ReadWorksheet(null));
+        Assert.Empty(ImportFileReader.ReadWorksheet(workbook.Worksheets.Add("People")));
     }
 
     [Fact]
