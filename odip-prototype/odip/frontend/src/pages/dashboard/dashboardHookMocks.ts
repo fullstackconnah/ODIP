@@ -9,6 +9,7 @@ export const mockUseStaff = vi.fn()
 export const mockUseParticipantAlertsAggregate = vi.fn()
 export const mockUsePendingLeaveQueue = vi.fn()
 export const mockUsePendingCompletionQueue = vi.fn()
+export const mockUseModuleVisibility = vi.fn(() => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }))
 // The page's decision groups (pages/dashboard/useDecisionGroups), mocked by the page tests beside the barrel.
 export const mockUseDecisionGroups = vi.fn()
 
@@ -19,4 +20,5 @@ export const hooks = {
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
   usePendingLeaveQueue: mockUsePendingLeaveQueue,
   usePendingCompletionQueue: mockUsePendingCompletionQueue,
+  useModuleVisibility: mockUseModuleVisibility,
 }

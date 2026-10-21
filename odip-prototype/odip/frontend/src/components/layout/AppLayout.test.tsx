@@ -57,6 +57,82 @@ function renderAt(path: string) {
   )
 }
 
+describe('platform page finder', () => {
+  beforeEach(() => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', fullName: 'Synthetic Coordinator' }))
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })
+  })
+
+  it('replaces inert entity search with a filter of existing permitted page destinations', () => {
+    renderAt('/')
+    expect(screen.queryByRole('textbox', { name: 'Search trips and participants' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Find a page' }))
+    const dialog = screen.getByRole('dialog', { name: 'Explore the platform' })
+    expect(document.querySelector('header')).not.toContainElement(dialog)
+    fireEvent.change(within(dialog).getByRole('searchbox', { name: 'Find a page' }), { target: { value: 'medication' } })
+    expect(within(dialog).getByRole('link', { name: /Medications/ })).toHaveAttribute('href', '/medications')
+    expect(within(dialog).queryByRole('link', { name: /^Trips/ })).not.toBeInTheDocument()
+    fireEvent.change(within(dialog).getByRole('searchbox', { name: 'Find a page' }), { target: { value: 'no matching page' } })
+    expect(within(dialog).getByText('No matching page. Try a different page name.')).toBeInTheDocument()
+    expect(within(dialog).queryAllByRole('link')).toHaveLength(0)
+  })
+
+  it('navigates to the chosen existing page and closes the directory', () => {
+    renderAt('/')
+    fireEvent.click(screen.getByRole('button', { name: 'Find a page' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('link', { name: /^Medications/ }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Medications' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('does not advertise refused role destinations or explicitly hidden workspaces', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true }, isError: false })
+    renderAt('/')
+    fireEvent.click(screen.getByRole('button', { name: 'Find a page' }))
+    const dialog = screen.getByRole('dialog', { name: 'Explore the platform' })
+    expect(within(dialog).getByRole('link', { name: /^Participants/ })).toHaveAttribute('href', '/participants')
+    for (const name of ['Roster board', 'Leave', 'Completions', 'Budgets', 'Settings', 'Caregiver forms', 'Vehicles', 'Accommodation']) {
+      expect(within(dialog).queryByRole('link', { name: new RegExp(`^${name}`) })).not.toBeInTheDocument()
+    }
+  })
+
+  it('closes on Escape and opens a fresh unfiltered directory', () => {
+    renderAt('/')
+    const trigger = screen.getByRole('button', { name: 'Find a page' })
+    fireEvent.click(trigger)
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Find a page' }), { target: { value: 'medication' } })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: 'Explore the platform' })).not.toBeInTheDocument()
+    fireEvent.click(trigger)
+    expect(screen.getByRole('searchbox', { name: 'Find a page' })).toHaveValue('')
+    expect(within(screen.getByRole('dialog')).getByRole('link', { name: /^Trips/ })).toBeInTheDocument()
+  })
+
+  it('keeps presentation-only workspaces discoverable when the current visibility answer fails', () => {
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: true, hiddenVehicles: true }, isError: true })
+    renderAt('/')
+    fireEvent.click(screen.getByRole('button', { name: 'Find a page' }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('link', { name: /^Accommodation/ })).toHaveAttribute('href', '/accommodation')
+    expect(within(dialog).getByRole('link', { name: /^Vehicles/ })).toHaveAttribute('href', '/vehicles')
+  })
+
+  it.each([null, 'UnknownRole'])('offers no directory destinations for an unrecognised role %s', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    renderAt('/')
+    fireEvent.click(screen.getByRole('button', { name: 'Find a page' }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).queryAllByRole('link')).toHaveLength(0)
+    expect(within(dialog).getByText('No platform pages are available for this account.')).toBeInTheDocument()
+  })
+})
+
 describe('AppLayout nav active state', () => {
   afterEach(() => {
     localStorage.clear()
@@ -469,25 +545,6 @@ describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
     const { container } = renderAt('/trips')
 
     expect(container.innerHTML).not.toMatch(/(?:min-h|min-w|h|w)-\[44px\]/)
-  })
-})
-
-// Density polish (touch): from md up the header search is a 32px box around a 20px input. On a touch tablet that is a
-// 20px target, so the box takes the --tap-min floor (the header is 48px, 44 fits) and the input stretches to fill it.
-describe('AppLayout — header search field on touch', () => {
-  afterEach(() => {
-    localStorage.clear()
-  })
-
-  it('floors the search box at --tap-min and stretches the input to fill it under a coarse pointer', () => {
-    renderAt('/trips')
-
-    const input = screen.getByRole('textbox', { name: 'Search trips and participants' })
-    const box = input.parentElement as HTMLElement
-    // A mouse keeps the 32px box (h-8) and the 20px input; the floor is 0px there.
-    expect(box).toHaveClass('hidden', 'md:flex', 'items-center', 'h-8', 'min-h-[var(--tap-min)]', 'w-[360px]')
-    expect(input).toHaveClass('pointer-coarse:self-stretch', 'w-full')
-    expect(input.className).not.toMatch(/(^|\s)(h-|min-h-|self-stretch)/)
   })
 })
 
