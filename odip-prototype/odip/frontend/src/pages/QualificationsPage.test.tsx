@@ -13,6 +13,7 @@ const { mockUseStaff, mockUseSettings, providerSettings } = vi.hoisted(() => ({
 
 vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
+  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
   useStaff: mockUseStaff,
   useSettings: mockUseSettings,
   useUpdateStaff: () => ({ mutate: vi.fn(), isPending: false }),

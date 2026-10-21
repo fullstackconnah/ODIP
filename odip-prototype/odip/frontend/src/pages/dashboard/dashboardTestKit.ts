@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from '../DashboardPage'
 import {
-  mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseDecisionGroups,
+  mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseDecisionGroups, mockUseModuleVisibility,
 } from './dashboardHookMocks'
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -34,6 +34,7 @@ export function installDashboardDefaults() {
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0))
     mockUseStaff.mockReturnValue({ data: [] })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })
     // No decision groups: a test sees the band exactly as its viewer's role draws it.
     mockUseDecisionGroups.mockReturnValue([])
   })

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue } from '@/api/hooks'
+import { useMemo, useState, type ReactNode } from 'react'
+import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue, useModuleVisibility } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
 import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
@@ -21,6 +21,8 @@ import { useDecisionGroups } from './dashboard/useDecisionGroups'
 import { useDecisionState } from './dashboard/useDecisionState'
 import { NeedsYourDecision } from './dashboard/NeedsYourDecision'
 import { isPresent } from './dashboard/quickGroupModel'
+import { DashboardShortcuts, PlatformEntryRail } from '@/components/layout/PlatformDirectory'
+import { platformNavigation } from '@/components/layout/platformDirectoryModel'
 import { BUDGET_OVER_ALERT, budgetsAtRisk } from '@/lib/budgetRisk'
 import { budgetsAtRiskItem } from './budgets/budgetBand'
 import { Link } from 'react-router-dom'
@@ -39,10 +41,11 @@ const tripsStart = (n: number) => (n === 1 ? 'Trip starts' : 'Trips start')
 // is the greeting, the document title stays "Management Dashboard".
 // The greeting and the date need no data (the clock and the sign-in are enough), so the page opens with them while the summary is still on its way; the counts line is data, and
 // is left out until the counts are.
-function DashboardHeader({ now, fullName, counts }: {
+function DashboardHeader({ now, fullName, counts, action }: {
   now: Date
   fullName: string | null
   counts?: { upcomingTrips: number; activeParticipants: number; outstandingTasks: number }
+  action?: ReactNode
 }) {
   return (
     <PageHeader
@@ -50,6 +53,7 @@ function DashboardHeader({ now, fullName, counts }: {
       title={greetingFor(now, fullName)}
       titleNote={<time dateTime={localIsoDate(now)}>{formatToday(now)}</time>}
       documentTitle="Management Dashboard"
+      action={action}
       subtitle={
         counts && (
           <PageHeaderMeta>
@@ -65,6 +69,8 @@ function DashboardHeader({ now, fullName, counts }: {
 
 export default function DashboardPage() {
   const permissions = usePermissions()
+  const visibility = useModuleVisibility()
+  const platform = platformNavigation(permissions, visibility.isError ? undefined : visibility.data)
   const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, isReadOnly, fullName, id, isAdmin, isSuperAdmin } = permissions
   // The viewer's clock, ticking every minute. The title reads it, and so does the one figure that depends on the day (the qualification count below), so the page never
   // advertises a new date beside a count that still belongs to yesterday.
@@ -264,11 +270,14 @@ export default function DashboardPage() {
       <DashboardHeader
         now={now}
         fullName={fullName}
+        action={<DashboardShortcuts entries={platform} permissions={permissions} />}
         counts={d && { upcomingTrips: d.upcomingTripCount, activeParticipants: d.activeParticipantCount, outstandingTasks: d.outstandingTaskCount }}
       />
       {/* Mounted before any group can speak, outside the sections, so it survives the page turning all clear (SHAPE §10). sr-only, so it takes no gap. */}
       {groups.length > 0 && <AnnouncementRegion message={decision.announcement} />}
 
+      <div className={`grid gap-[var(--section-gap)] ${platform.length > 0 ? 'xl:grid-cols-[minmax(0,1fr)_18rem]' : ''}`}>
+      <div className="flex min-w-0 flex-col gap-[var(--section-gap)]">
       {pageClear ? (
         // Same id as the Alerts heading, which it replaces: where focus lands when the last decision turns the page clear (QuickGroup's finish).
         <div id="dashboard-alerts" tabIndex={-1} className="focus:outline-none">
@@ -393,6 +402,9 @@ export default function DashboardPage() {
           )}
         </Card>
       )}
+      </div>
+      <PlatformEntryRail entries={platform} />
+      </div>
     </div>
   )
 }

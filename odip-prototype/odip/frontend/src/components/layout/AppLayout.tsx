@@ -12,6 +12,8 @@ import NotificationBell from '@/components/layout/NotificationBell'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import PlatformFooter from '@/components/layout/PlatformFooter'
+import { PlatformDirectoryTrigger } from '@/components/layout/PlatformDirectory'
+import { platformNavigation } from '@/components/layout/platformDirectoryModel'
 import {
   barEntries, groupCount, isGroup, isGroupActive, isLeafActive, leafCount, NAV_ACTIVE, NAV_IDLE, navItems, navLeaves, isLeafVisible, isWorkspaceHidden, resolveNav, toBarItem,
   type BarAudience, type BarItem, type NavCounts, type NavGroup, type NavLeaf,
@@ -348,17 +350,8 @@ export default function AppLayout() {
                   {user.tenantName}
                 </span>
               )}
-              {/* 32px on a mouse; the --tap-min floor makes the box 44px on touch (the header is 48px) and the input
-                  stretches to fill it, so a tap anywhere in the field lands in the input, not just on its 20px line. */}
-              <div className="hidden md:flex items-center h-8 min-h-[var(--tap-min)] bg-[var(--color-sidebar)] rounded-md px-3 gap-2 w-[360px]">
-                <span className="material-symbols-outlined text-[var(--color-muted-foreground)]" aria-hidden="true" style={{ fontSize: '18px' }}>search</span>
-                <input
-                  className="bg-transparent border-none outline-none text-sm w-full pointer-coarse:self-stretch placeholder:text-[var(--color-muted-foreground)]/60 text-[var(--color-foreground)]"
-                  placeholder="Search trips, participants..."
-                  aria-label="Search trips and participants"
-                  type="text"
-                />
-              </div>
+              {/* Page navigation only: the old entity-search field had no query or results behaviour. */}
+              <PlatformDirectoryTrigger compact entries={platformNavigation(permissions, savedVisibility)} />
             </div>
             <div className="flex items-center gap-3">
               {isSuperAdmin && <TenantSwitcher />}
