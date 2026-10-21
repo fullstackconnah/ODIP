@@ -438,7 +438,7 @@ export function DataTable<T>({
   if (error && data.length === 0) return <PageState kind="error" noun="list" onRetry={onRetry} />
 
   return (
-    <div ref={scrollRef} className={className ?? 'relative bg-[var(--color-card)] rounded-md border border-[var(--color-border)] overflow-x-auto'}>
+    <div ref={scrollRef} className={className ?? 'relative md:bg-[var(--color-card)] md:rounded-md md:border md:border-[var(--color-border)] overflow-x-auto'}>
       {loading && data.length > 0 && (
         <div className="absolute inset-0 bg-[var(--color-card)]/50 flex items-center justify-center z-10 rounded-md">
           <div className="w-5 h-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
