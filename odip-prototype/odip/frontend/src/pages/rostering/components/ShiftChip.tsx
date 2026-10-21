@@ -114,6 +114,9 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const budgetReviewWords = budgetMarker === 'emergency' ? (shift.budgetReview?.state === 'Reviewed' ? 'Reviewed' : 'Admin review pending') : null
   const budgetMarkerName = budgetMarker ? [OVER_BUDGET_MARKER[budgetMarker], budgetReviewWords].filter(Boolean).join(', ') : null
   const budgetMarkerTitle = budgetMarkerName ? `${budgetMarkerName}${shift.overrideReason ? ` — ${shift.overrideReason}` : ''}` : null
+  // A marked chip grows a row for the marker's WORDS (see the marker line in the box below). Only a marked chip does, so every other chip on the board is exactly what it was: same rows, same height.
+  const markedChip = Boolean(budgetMarker)
+
   // What the marker looks like (design review H1): each state has its own silhouette and glyph as well as its tone, so they read apart without colour, and none is the generic override shield. A round alarm for an
   // emergency waiting on its review, a round tick once it is reviewed, a rounded-square key for an Admin override (the Admin's own act, with no review to wait for).
   const budgetDisc = budgetMarker === 'adminOverride'
@@ -234,9 +237,10 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       // below is the first thing to clip, so the hover text must not depend on it being visible.
       title={chipTitle}
       aria-busy={busy || undefined}
-      // The tray: the header row over the --control-h box row. Three columns, lead, name and menu, which the open control and its box share (subgrid), so the grip, the plus and
-      // the menu, siblings of the open control, sit in the box's own cells. A 2px pad and a 2px row gap make 56px with a mouse and 68px under a coarse pointer.
-      className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_var(--control-h)] gap-y-0.5 rounded-sm border border-border bg-surface-container-low p-0.5 text-[13px] transition-opacity duration-150 ${
+      // The tray: the header row over the --control-h box row; a marked chip adds one row for its marker words.
+      // Three columns, lead, name and menu. The open control and its box share the rows and columns (subgrid), so the grip, plus and menu still sit in the box's cells.
+      // A 2px pad and a 2px row gap make 56px with a mouse and 68px under a coarse pointer; a marked chip grows only for its marker line.
+      className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] ${markedChip ? 'grid-rows-[auto_var(--control-h)_auto]' : 'grid-rows-[auto_var(--control-h)]'} gap-y-0.5 rounded-sm border border-border bg-surface-container-low p-0.5 text-[13px] transition-opacity duration-150 ${
         isDragging || fading ? 'opacity-50' : ''
       } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings || budgetMarker ? 'my-2' : ''}`}
     >
@@ -303,7 +307,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         data-shift-open={shift.id}
         onClick={() => onOpen(shift)}
         onKeyDown={handleOpenKeyDown}
-        className="col-span-full row-[1/span_2] grid grid-cols-subgrid grid-rows-subgrid rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className={`col-span-full ${markedChip ? 'row-[1/span_3]' : 'row-[1/span_2]'} grid grid-cols-subgrid grid-rows-subgrid rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
       >
         {/* The header: one 16px line of 12px text, 4px in from the tray's inner edge. The time has the chip's whole width and never gives way; the kind is right-aligned after it. */}
         <span className="col-span-full flex h-4 min-w-0 items-center gap-0.5 px-0.5 text-xs">
@@ -333,7 +337,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
             overflow-hidden on the name cell: on a narrow day column the name can be squeezed to nothing and the fixed-width tail (override icon, on-leave marker) still has to yield, not spill over the menu. */}
         <span
           data-shift-box
-          className={`col-span-full grid grid-cols-subgrid items-center rounded-[calc(var(--radius-sm)_-_2px)] border border-border bg-card ${dashed || onApprovedLeave ? 'border-dashed' : ''} ${
+          className={`col-span-full ${markedChip ? 'row-start-2' : ''} grid grid-cols-subgrid items-center rounded-[calc(var(--radius-sm)_-_2px)] border border-border bg-card ${dashed || onApprovedLeave ? 'border-dashed' : ''} ${
             overKind === 'assign' || overKind === 'move' || overKind === 'prompt' || picking ? 'ring-2 ring-ring' : ''
           }`}
         >
@@ -348,12 +352,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
               operationally) an under-covered ratio surfaces as a RATIO_SHORTFALL finding, which the severity
               marker already makes visible.
             */}
-            {budgetMarker && budgetMarkerTitle ? (
-              // The words are a bonus on a chip wide enough for them (container query on the chip); below that they are display:none, never a clipped word. The marker itself is the disc on the chip's corner, below.
-              <span className={`ml-1 hidden shrink-0 text-xs font-semibold @[18rem]:inline ${budgetDisc.ink}`} aria-hidden="true">
-                {OVER_BUDGET_MARKER[budgetMarker]}
-              </span>
-            ) : shift.overrideReason && (
+            {!budgetMarker && shift.overrideReason && (
               <span
                 className="ml-1 shrink-0 text-muted-foreground"
                 role="img"
@@ -382,6 +381,16 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
             )}
           </span>
         </span>
+        {budgetMarker && (
+          /* The spec calls for the marker WORDS on the chip, including at 130px. The marker line has the chip's full width, so natural line breaks keep both words intact without overflowing the tray.
+             It's a child of the open control, but the control's explicit aria-label remains the single accessible name (the browser does not add descendants to an aria-labeled control). */
+          <span
+            data-budget-marker-words
+            className={`col-span-full row-start-3 min-w-0 whitespace-normal break-words px-0.5 text-xs font-semibold leading-4 ${budgetDisc.ink}`}
+          >
+            {OVER_BUDGET_MARKER[budgetMarker]}
+          </span>
+        )}
       </div>
 
       {/*

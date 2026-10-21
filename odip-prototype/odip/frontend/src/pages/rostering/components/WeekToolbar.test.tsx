@@ -178,3 +178,25 @@ describe('WeekToolbar at phone width (finish review)', () => {
     expect(badge.parentElement).toHaveClass('flex-wrap')
   })
 })
+
+describe('WeekToolbar at a 200 %-equivalent layout width (R-57 reflow)', () => {
+  // The week navigation is three buttons whose min-content width (44 + 99 + 44 + two 4px gaps
+  // = 195px) is wider than the page's content row at a 195 CSS px layout width (163px). With
+  // `shrink-0` on that group the row could not shrink, so the WHOLE PAGE was wider than its
+  // client width: a 16px document-level horizontal overflow, measured at 195 CSS px.
+  //
+  // The fix is that the group may shrink and wrap: the row breaks between the buttons, each of
+  // which keeps its own words on one line. Nothing is clipped and no width is hidden.
+  it('lets the week-navigation group shrink and wrap instead of forcing the page wider', () => {
+    renderToolbar()
+    const group = screen.getByRole('button', { name: 'Previous week' }).parentElement
+    expect(group).toHaveClass('flex-wrap')
+    expect(group).not.toHaveClass('shrink-0')
+    expect(group).toHaveClass('min-w-0')
+  })
+
+  it('keeps each week-navigation control on one line, so no button\'s words break across two', () => {
+    renderToolbar()
+    expect(screen.getByRole('button', { name: 'This week' })).toHaveClass('whitespace-nowrap')
+  })
+})
