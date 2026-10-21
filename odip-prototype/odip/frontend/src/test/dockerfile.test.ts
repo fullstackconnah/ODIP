@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const DOCKERFILE = resolve(__dirname, '../../Dockerfile')
-// Repo-root workflow, outside the image's build context: absent inside the image, so its checks skip there.
+// Repo-root .github is outside the image's build context; a checkout missing deploy.yml must fail, not skip.
 const DEPLOY_WORKFLOW = resolve(__dirname, '../../../../../.github/workflows/deploy.yml')
 // Capped at 4 workers: the deploy host also runs test jobs, and an uncapped run starved it (deploy of #244, 2026-10-15).
 const TEST_RUN = 'RUN npm test -- --maxWorkers=4'
@@ -42,7 +42,7 @@ const waitStep = () => {
   return lines.slice(start, next).join('\n')
 }
 
-describe.skipIf(!existsSync(DEPLOY_WORKFLOW))('.github/workflows/deploy.yml: the memory wait', () => {
+describe.skipIf(!existsSync(resolve(__dirname, '../../../../../.github')))('.github/workflows/deploy.yml: the memory wait', () => {
   it('runs before the source sync and the image build, so a failed wait changes nothing on the host', () => {
     const wait = workflowLines().indexOf('- name: Wait for free memory')
     expect(wait).toBeGreaterThanOrEqual(0)
