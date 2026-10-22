@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useBooking, useUpdateBooking } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { Modal } from '@/components/Modal'
@@ -6,6 +6,7 @@ import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
 import { bookingBudgetNotice } from '@/lib/bookingBudget'
 import { queryPhase } from '@/lib/queryPhase'
+import { isNotFoundError } from '@/lib/httpStatus'
 import { BOOKING_STATUSES, type BookingStatus, type InsuranceStatus, type SupportRatio } from '@/api/types/enums'
 import { BOOKING_STATUS_LABELS, statusItems } from '@/lib/tone'
 import type { BookingDetailDto, BookingListDto, UpdateBookingDto } from '@/api/types/bookings'
@@ -54,6 +55,12 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
   const [editForm, setEditForm] = useState<EditForm | null>(null)
   // Initialised once, when the detail first arrives; a later background refetch must not overwrite what the person has typed.
   if (detail && !editForm) setEditForm(formFrom(detail))
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const hasForm = !!editForm
+  // The form replaces a state that held focus (the dialog, or the Try again button that just unmounted): put focus on its first control.
+  useEffect(() => {
+    if (hasForm) bodyRef.current?.querySelector<HTMLElement>('button, input, textarea, select')?.focus()
+  }, [hasForm])
 
   const handleUpdateBooking = () => {
     if (!detail || !editForm) return
@@ -103,9 +110,13 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
         </>
       }
     >
+      {/* One wrapper for every state, with a shared minimum height, so the dialog does not jump between the loading line, the error and the form. */}
+      <div ref={bodyRef} data-testid="booking-edit-body" className="min-h-[min(39.25rem,calc(90vh-8.25rem))]">
       {!editForm ? (
         phase === 'error'
-          ? <PageState kind="error" noun="booking" onRetry={() => query.refetch()} />
+          ? (isNotFoundError(query.error)
+            ? <PageState kind="not-found" noun="booking" />
+            : <PageState kind="error" noun="booking" onRetry={() => query.refetch()} />)
           : <PageState kind="loading" noun="booking" />
       ) : (
         <div className="space-y-4">
@@ -235,6 +246,7 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
           )}
         </div>
       )}
+      </div>
     </Modal>
   )
 }

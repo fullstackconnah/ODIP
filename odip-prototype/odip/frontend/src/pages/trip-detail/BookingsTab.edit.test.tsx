@@ -33,6 +33,7 @@ const original = apiClient.defaults.adapter
 let puts: Record<string, unknown>[] = []
 let patches: Record<string, unknown>[] = []
 let detailFailures = 0
+let detailStatus = 500
 let putFails = false
 
 const reply = (config: InternalAxiosRequestConfig, status: number, body: unknown): AxiosResponse =>
@@ -42,14 +43,15 @@ beforeEach(() => {
   puts = []
   patches = []
   detailFailures = 0
+  detailStatus = 500
   putFails = false
   const adapter: AxiosAdapter = async config => {
     const method = (config.method ?? 'get').toLowerCase()
     if (method === 'get' && config.url?.endsWith('/bookings/booking-1')) {
       if (detailFailures > 0) {
         detailFailures--
-        const res = reply(config, 500, { success: false, message: 'boom' })
-        throw Object.assign(new Error('Request failed with status code 500'), { isAxiosError: true, response: res, config })
+        const res = reply(config, detailStatus, { success: false, message: 'boom' })
+        throw Object.assign(new Error(`Request failed with status code ${detailStatus}`), { isAxiosError: true, response: res, config })
       }
       return reply(config, 200, { success: true, data: detail })
     }
@@ -134,6 +136,45 @@ describe('BookingsTab — editing a booking keeps the details the list row does 
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByPlaceholderText('Optional notes...')).toHaveValue('Original note')
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+  })
+
+  it('a 404 reads as not found, not as a connection problem', async () => {
+    const user = userEvent.setup()
+    detailFailures = 1
+    detailStatus = 404
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+
+    expect(await screen.findByText('Booking not found')).toBeInTheDocument()
+    expect(screen.queryByText(/Check your connection/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('moves focus into the form when it first appears after a retry', async () => {
+    const user = userEvent.setup()
+    detailFailures = 1
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    await user.click(await screen.findByRole('button', { name: 'Try again' }))
+
+    const notes = await screen.findByPlaceholderText('Optional notes...')
+    const firstField = screen.getByText('Booking Status').parentElement as HTMLElement
+    await waitFor(() => expect(firstField.contains(document.activeElement)).toBe(true))
+    expect(notes).toBeInTheDocument()
+  })
+
+  it('keeps one body wrapper with a minimum height from loading through error to the form, so the dialog does not jump', async () => {
+    const user = userEvent.setup()
+    detailFailures = 1
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    const body = await screen.findByTestId('booking-edit-body')
+    expect(body.className).toMatch(/min-h-/)
+    await screen.findByText(/Couldn't load this booking/)
+    expect(screen.getByTestId('booking-edit-body')).toBe(body)
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await screen.findByPlaceholderText('Optional notes...')
+    expect(screen.getByTestId('booking-edit-body')).toBe(body)
   })
 
   it('cancelling a booking changes only its status, not a full update built from the list row', async () => {
