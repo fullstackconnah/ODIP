@@ -248,6 +248,16 @@ public record ProviderSettingsDto
 
     /// <summary>The organisation's staff come from Employment Hero: the frontend hides "New staff member" and the staff import, and the server refuses them.</summary>
     public bool EmploymentHeroConnected { get; init; }
+
+    /// <summary>Invoice numbering and terms (Xero PR1).</summary>
+    public string InvoiceNumberPrefix { get; init; } = "INV-";
+    public string CreditNotePrefix { get; init; } = "CN-";
+    public int InvoiceStartNumber { get; init; } = 1;
+    public int PaymentTermsDays { get; init; } = 14;
+    /// <summary>Read-only: the number the next invoice will get ("INV-0043"), from the organisation's counter, else the start number.</summary>
+    public string NextInvoiceDisplayNumber { get; init; } = string.Empty;
+    /// <summary>Read-only: the organisation has issued an invoice, so the start number is locked.</summary>
+    public bool InvoicesIssued { get; init; }
 }
 
 public record UpsertProviderSettingsDto
@@ -289,6 +299,13 @@ public record UpsertProviderSettingsDto
     /// (it is last-write-wins: a form that re-sent a stale value would silently undo another admin's change). Only Warn and Enforce are accepted
     /// (400 otherwise). A change that actually alters the stored mode writes one audit row (ProviderSettings, MedicationCompetencyMode, old, new, who).</summary>
     public MedicationCompetencyMode? MedicationCompetencyMode { get; init; }
+
+    /// <summary>Each is applied only when sent and different from the stored value (every settings section echoes the whole row), and each change is
+    /// audited as one field change. A changed start number is refused (409) once the organisation has issued an invoice.</summary>
+    public string? InvoiceNumberPrefix { get; init; }
+    public string? CreditNotePrefix { get; init; }
+    public int? InvoiceStartNumber { get; init; }
+    public int? PaymentTermsDays { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════

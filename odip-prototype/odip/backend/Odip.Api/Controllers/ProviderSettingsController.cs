@@ -9,6 +9,7 @@ using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -31,8 +32,9 @@ public class ProviderSettingsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<ProviderSettingsDto>>> Get(CancellationToken ct)
     {
-        var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        var s = await OwnRow().FirstOrDefaultAsync(ct);
         if (s == null) return Ok(ApiResponse<ProviderSettingsDto?>.Ok(null));
+        var (next, issued) = await InvoiceService.NumberingOfAsync(_db, s, ct);
 
         // A Coordinator reads the settings without the bank account: Settings hides it and this API doesn't send it. Invoice PDFs still print it by design (payment details; InvoiceService).
         var hideBank = User?.IsInRole("Coordinator") == true && !User.IsInRole("Admin") && !User.IsInRole("SuperAdmin");
@@ -47,7 +49,10 @@ public class ProviderSettingsController : ControllerBase
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
             ParticipantReadinessMode = s.ParticipantReadinessMode,
             MedicationCompetencyMode = s.MedicationCompetencyMode,
-            EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, s.TenantId, ct)
+            EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, s.TenantId, ct),
+            InvoiceNumberPrefix = s.InvoiceNumberPrefix, CreditNotePrefix = s.CreditNotePrefix,
+            InvoiceStartNumber = s.InvoiceStartNumber, PaymentTermsDays = s.PaymentTermsDays,
+            NextInvoiceDisplayNumber = next, InvoicesIssued = issued,
         }));
     }
 
@@ -75,11 +80,31 @@ public class ProviderSettingsController : ControllerBase
         if (dto.MedicationCompetencyMode is { } requestedCompetency && !Enum.IsDefined(requestedCompetency))
             return BadRequest(ApiResponse<bool>.Fail("The medication competency mode must be Warn or Enforce."));
 
-        var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        var bad = PrefixProblem(dto.InvoiceNumberPrefix, "INV-") ?? PrefixProblem(dto.CreditNotePrefix, "CN-")
+            ?? (dto.InvoiceStartNumber is < 1 or > 99_999_999 ? "Enter a whole number from 1 to 99,999,999." : null)
+            ?? (dto.PaymentTermsDays is < 0 or > 365 ? "Enter a whole number of days from 0 to 365." : null);
+        if (bad != null) return BadRequest(ApiResponse<bool>.Fail(bad));
+
+        var s = await OwnRow().FirstOrDefaultAsync(ct);
         if (s == null)
         {
             s = new ProviderSettings { Id = Guid.NewGuid() };
             _db.ProviderSettings.Add(s);
+        }
+
+        // Numbering changes only when a field is sent AND differs: every settings section echoes the whole row, so an unchanged echo is never a change.
+        var prefixChanged = dto.InvoiceNumberPrefix is { } p && p != s.InvoiceNumberPrefix;
+        var cnPrefixChanged = dto.CreditNotePrefix is { } cp && cp != s.CreditNotePrefix;
+        var startChanged = dto.InvoiceStartNumber is { } st && st != s.InvoiceStartNumber;
+        var termsChanged = dto.PaymentTermsDays is { } td && td != s.PaymentTermsDays;
+        if ((prefixChanged || cnPrefixChanged || startChanged || termsChanged) && _tenant?.TenantId is null)
+            return BadRequest(ApiResponse<bool>.Fail("Choose an organisation to view as before changing how invoices are numbered."));
+        // shortcut: a start number changed during the very first issue is ignored; Settings then shows the counter's real next number.
+        if (startChanged)
+        {
+            var owner = _tenant?.TenantId ?? s.TenantId;
+            if (await _db.Invoices.IgnoreQueryFilters().AnyAsync(i => i.TenantId == owner && i.Kind == InvoiceKind.Invoice, ct))
+                return Conflict(ApiResponse<bool>.Fail("Invoice numbers have started, so the starting number can't change."));
         }
 
         // A brand-new row starts at the defaults (Warn for both modes), which is what applied until now.
@@ -112,7 +137,52 @@ public class ProviderSettingsController : ControllerBase
                 previousCompetency.ToString(), newCompetency.ToString(), User));
         }
 
+        // Each numbering change is one field-change audit row, like the modes above (the row holds bank details, so it is never audited whole).
+        if (prefixChanged)
+        {
+            AuditNumbering(s, nameof(ProviderSettings.InvoiceNumberPrefix), s.InvoiceNumberPrefix, dto.InvoiceNumberPrefix!);
+            s.InvoiceNumberPrefix = dto.InvoiceNumberPrefix!;
+        }
+        if (cnPrefixChanged)
+        {
+            AuditNumbering(s, nameof(ProviderSettings.CreditNotePrefix), s.CreditNotePrefix, dto.CreditNotePrefix!);
+            s.CreditNotePrefix = dto.CreditNotePrefix!;
+        }
+        if (startChanged)
+        {
+            AuditNumbering(s, nameof(ProviderSettings.InvoiceStartNumber), Invariant(s.InvoiceStartNumber), Invariant(dto.InvoiceStartNumber!.Value));
+            s.InvoiceStartNumber = dto.InvoiceStartNumber!.Value;
+        }
+        if (termsChanged)
+        {
+            AuditNumbering(s, nameof(ProviderSettings.PaymentTermsDays), Invariant(s.PaymentTermsDays), Invariant(dto.PaymentTermsDays!.Value));
+            s.PaymentTermsDays = dto.PaymentTermsDays!.Value;
+        }
+
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
     }
+
+    /// <summary>The caller's organisation's row; with no organisation in scope (a SuperAdmin not viewing as one) the first row, in a stable order.</summary>
+    private IQueryable<ProviderSettings> OwnRow()
+    {
+        var tenantId = _tenant?.TenantId;
+        return _db.ProviderSettings.Where(s => tenantId == null || s.TenantId == tenantId).OrderBy(s => s.Id);
+    }
+
+    /// <summary>A prefix ends up in the PDF's file name: 1 to 10 letters, digits, - _ or . (null = not sent).</summary>
+    private static string? PrefixProblem(string? prefix, string example) => prefix switch
+    {
+        null => null,
+        "" => $"Enter a prefix, such as {example}.",
+        _ when prefix.Any(char.IsWhiteSpace) => "No spaces.",
+        { Length: > 10 } => "10 characters at most.",
+        _ when !prefix.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.') => "Use letters, digits, - _ or . only.",
+        _ => null,
+    };
+
+    private void AuditNumbering(ProviderSettings s, string field, string oldValue, string newValue) =>
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ProviderSettings), s.Id, field, oldValue, newValue, User));
+
+    private static string Invariant(int value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }

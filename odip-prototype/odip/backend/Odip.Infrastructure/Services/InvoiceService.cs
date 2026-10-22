@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -209,6 +210,18 @@ public class InvoiceService
     /// </summary>
     public static decimal GstFor(IEnumerable<Odip.Domain.Entities.ClaimLineItem> lines, bool gstRegistered) =>
         gstRegistered ? Math.Round(lines.Where(l => l.GSTCode == GSTCode.P1).Sum(l => l.TotalAmount) * 0.1m, 2, MidpointRounding.AwayFromZero) : 0m;
+
+    /// <summary>The printed number: the prefix, then the number zero-padded to 4 digits (INV-0042); longer numbers grow.</summary>
+    public static string FormatNumber(string prefix, int number) => prefix + number.ToString("D4", CultureInfo.InvariantCulture);
+
+    /// <summary>The settings row's own organisation's next invoice number and whether it has issued one (never the query filter's: a SuperAdmin's is off).</summary>
+    public static async Task<(string Next, bool Issued)> NumberingOfAsync(OdipDbContext db, ProviderSettings s, CancellationToken ct)
+    {
+        var next = await db.InvoiceNumberCounters.IgnoreQueryFilters()
+            .Where(c => c.TenantId == s.TenantId && c.Kind == InvoiceKind.Invoice).Select(c => (int?)c.NextNumber).FirstOrDefaultAsync(ct);
+        var issued = await db.Invoices.IgnoreQueryFilters().AnyAsync(i => i.TenantId == s.TenantId && i.Kind == InvoiceKind.Invoice, ct);
+        return (FormatNumber(s.InvoiceNumberPrefix, next ?? s.InvoiceStartNumber), issued);
+    }
 
     private static string GstLabel(GSTCode code) => code switch
     {
