@@ -20,6 +20,7 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { EditTripModal } from './trip-detail'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 type Tab = 'active' | 'completed'
 type TripsView = 'table' | 'cards'
@@ -105,7 +106,8 @@ export default function TripsPage() {
     params.status = 'Completed'
   }
 
-  const { data: allTrips = [], isLoading, isError, refetch } = useTrips(params)
+  const pageQuery = useTrips(params)
+  const { data: allTrips = [], isLoading, isError, refetch } = pageQuery
   // PP-63: the exact data EditTripModal needs — TripsPage already fetched it for the old
   // hand-rolled modal, so this stays even though the modal itself moved to trip-detail/.
   const { data: tripDetail } = useTrip(editingTripId ?? undefined)
@@ -318,9 +320,9 @@ export default function TripsPage() {
       )}
 
       {/* Trips list */}
-      {isLoading ? (
+      {isLoading && !retryingAfterError(pageQuery) ? (
         <PageState kind="loading" noun="trips" />
-      ) : isError && allTrips.length === 0 ? (
+      ) : (isError || retryingAfterError(pageQuery)) && allTrips.length === 0 ? (
         <PageState kind="error" noun="trip list" onRetry={() => refetch()} />
       ) : trips.length === 0 ? (
         tab === 'completed' ? (

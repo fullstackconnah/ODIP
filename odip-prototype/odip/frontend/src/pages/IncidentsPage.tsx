@@ -20,6 +20,7 @@ import { formatDateAu } from '@/lib/utils'
 import { formatAge, plural } from '@/lib/format'
 import { SHIFT_NOTE_FLAG_LABELS } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 type IncidentsTab = 'incidents' | 'flagged-notes'
 
@@ -180,10 +181,11 @@ export default function IncidentsPage() {
   // the Incidents tab. Only sets the initial tab — switching tabs afterwards via Tabs doesn't
   // write the param back, matching how qscOverdueOnly is a one-way filter, not a synced tab state.
   const [tab, setTab] = useState<IncidentsTab>(searchParams.get('view') === 'flagged-notes' ? 'flagged-notes' : 'incidents')
-  const { data: flaggedNotes = [], isLoading: flaggedNotesLoading, isError: flaggedNotesError, refetch: refetchFlaggedNotes } = useFlaggedShiftNotes(
+  const flaggedQuery = useFlaggedShiftNotes(
     { withoutIncident: true },
     { enabled: canViewFlaggedNotes },
   )
+  const { data: flaggedNotes = [], isLoading: flaggedNotesLoading, isError: flaggedNotesError, refetch: refetchFlaggedNotes } = flaggedQuery
   const [statusFilter, setStatusFilter] = useState('')
   const [severityFilter, setSeverityFilter] = useState('')
   const [page, setPage] = useState(1)
@@ -221,7 +223,8 @@ export default function IncidentsPage() {
   // client-side `.filter(i => i.isOverdue24h)`, which ran unconditionally too.
   if (qscOverdueOnly) queryParams.isOverdueQsc = 'true'
 
-  const { data: incidents = [], isLoading, isError, refetch } = useIncidents(queryParams)
+  const pageQuery = useIncidents(queryParams)
+  const { data: incidents = [], isLoading, isError, refetch } = pageQuery
   // `incidents` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as ParticipantPicker.
@@ -385,7 +388,7 @@ export default function IncidentsPage() {
       </div>
 
       {showFlaggedNotes ? (
-        <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} isError={flaggedNotesError} onRetry={() => refetchFlaggedNotes()} />
+        <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} isError={flaggedNotesError || retryingAfterError(flaggedQuery)} onRetry={() => refetchFlaggedNotes()} />
       ) : (
       <>
       {/* QSC Overdue Alert Banner — one 40px line: the headline, the reason and the link all stay,
@@ -449,7 +452,7 @@ export default function IncidentsPage() {
           columns={incidentColumns}
           keyField="id"
           loading={isLoading}
-          error={isError}
+          error={isError || retryingAfterError(pageQuery)}
           onRetry={() => refetch()}
           emptyMessage="No incidents found"
           pagination={{

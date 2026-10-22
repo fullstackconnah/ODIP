@@ -11,6 +11,7 @@ import { formatRelative, plural } from '@/lib/format'
 import { canSendSetPasswordEmail, sendActionLabel } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { parseApiDate } from '@/lib/utils'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -85,7 +86,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
   const ownNotices = useNotices()
   const { notices, notify, dismiss } = lifted ?? ownNotices
   const { data: tenants = [] } = useAdminTenantsSummary()
-  const { data: pagedResult, isLoading, isError, refetch } = useAdminUsers({
+  const pageQuery = useAdminUsers({
     tenantId: tenantId || undefined,
     role: role || undefined,
     status: status || undefined,
@@ -93,6 +94,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
     page,
     pageSize: PAGE_SIZE,
   })
+  const { data: pagedResult, isLoading, isError, refetch } = pageQuery
 
   const users = pagedResult?.items ?? []
   const totalCount = pagedResult?.totalCount ?? 0
@@ -193,7 +195,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
         data={users}
         keyField="id"
         loading={isLoading}
-        error={isError}
+        error={isError || retryingAfterError(pageQuery)}
         onRetry={() => refetch()}
         emptyMessage="No users found."
         columns={[

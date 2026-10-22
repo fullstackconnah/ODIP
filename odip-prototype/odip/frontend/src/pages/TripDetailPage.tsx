@@ -19,6 +19,7 @@ import { FactBar, type FactBarSegment } from '@/components/FactBar'
 import { glanceState } from '@/components/glanceState'
 import { formatRatio, plural } from '@/lib/format'
 import { OverviewTab, BookingsTab, AccommodationTab, VehiclesTab, StaffTab, TasksTab, ActivitiesTab, ClaimsTab, IncidentsTab, EditTripModal } from './trip-detail'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /** Material Symbols category glyph for a fact-bar segment — the same icons the pre-density stat
  * tiles carried (people, checklist, wheelchair, shield). FactBar pins the size and colour. */
@@ -50,7 +51,8 @@ export default function TripDetailPage() {
   const [activeTab, setActiveTab] = useTabParam(tabKeys, 'overview')
   const [showEditTrip, setShowEditTrip] = useState(false)
 
-  const { data: trip, isLoading, isError, error, refetch } = useTrip(id)
+  const pageQuery = useTrip(id)
+  const { data: trip, isLoading, isError, error, refetch } = pageQuery
   // Each tab's own list, by tab key: a list that failed to load shows its error in the tab, never the tab's "none yet" body.
   const tabLists = {
     bookings: useTripBookings(id),
@@ -77,17 +79,17 @@ export default function TripDetailPage() {
   const claims = tabLists.claims.data ?? []
   const incidents = tabLists.incidents.data ?? []
   // A refetch that fails over rows already on screen keeps them (Q4b): only a list with nothing loaded counts as failed.
-  const activeList: { isError: boolean; data?: unknown[]; refetch: () => unknown } | undefined = tabLists[activeTab as keyof typeof tabLists]
-  const activeListFailed = !!activeList?.isError && !activeList.data?.length
+  const activeList: { isError: boolean; data?: unknown[]; isFetching?: boolean; errorUpdateCount?: number; refetch: () => unknown } | undefined = tabLists[activeTab as keyof typeof tabLists]
+  const activeListFailed = !!activeList && (activeList.isError || retryingAfterError(activeList)) && !activeList.data?.length
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
   const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
 
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 
   if (!id) return null
-  if (isLoading) return <PageState kind="loading" noun="trip" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="trip" />
   if (!trip) {
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="trip" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="trip" backTo="/trips" backLabel="trips" />
   }

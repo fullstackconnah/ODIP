@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { SearchInput } from '@/components/SearchInput'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
-import { queryPhase } from '@/lib/queryPhase'
+import { queryPhase, retryingAfterError } from '@/lib/queryPhase'
 import { useIntakeCompleteNotice } from './intake/intakeComplete'
 
 /**
@@ -38,7 +38,7 @@ function useOnboardingScreen() {
   // The API scopes this query to the current tenant; this page does not add a client-side tenant filter.
   const worklist = useOnboardingWorklist()
   // A request that has not run (paused while the browser reports offline) is loading, not an empty worklist.
-  const worklistLoading = queryPhase(worklist) === 'loading'
+  const worklistLoading = queryPhase(worklist) === 'loading' || retryingAfterError(worklist)
   const [search, setSearch] = useState('')
   const allRows = useMemo(() => worklist.data ?? [], [worklist.data])
   // The onboarding worklist endpoint takes no query parameters, so search is client-side.

@@ -35,6 +35,7 @@ import { useOnline } from './shift/useOnline'
 import { ActionBar, Chip, Section } from './shift/ui'
 import { useNow } from './shift/useNow'
 import type { PortalShiftDetailDto, StartShiftDto } from '@/api/types'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 const TAB_KEYS = ['now', 'about', 'notes'] as const
 type TabKey = typeof TAB_KEYS[number]
@@ -125,7 +126,8 @@ function SubmittedSummary({ shift }: { shift: PortalShiftDetailDto }) {
 
 export default function PortalShiftDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { data: shift, isLoading, isError, error, refetch } = usePortalShiftDetail(id)
+  const pageQuery = usePortalShiftDetail(id)
+  const { data: shift, isLoading, isError, error, refetch } = pageQuery
   useDocumentTitle(shift ? shift.participant.fullName : 'Shift')   // also covers the loading and error states, which have no PageHeader
   const { canCompleteOwnShifts } = usePermissions()
   const online = useOnline()
@@ -196,7 +198,7 @@ export default function PortalShiftDetailPage() {
     setTimeout(() => document.getElementById('shift-tab-about')?.focus(), 0)
   }
 
-  if (isLoading) return <PageState kind="loading" noun="shift" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="shift" />
 
   if (!shift) {
     if (isError && httpStatusOf(error) === 403) {
@@ -207,7 +209,7 @@ export default function PortalShiftDetailPage() {
         </div>
       )
     }
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="shift" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="shift" backTo="/portal" backLabel="my shifts" />
   }

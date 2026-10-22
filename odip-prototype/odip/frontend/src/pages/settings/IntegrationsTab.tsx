@@ -18,6 +18,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateTimeAu, formatRelative, plural } from '@/lib/format'
 import type { Tone } from '@/lib/tone'
 import { extractErrorMessage, parseApiDate } from '@/lib/utils'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 const MUTED = 'text-sm text-[var(--color-muted-foreground)]'
 /** The pickers and the key field take a name's width, not the card's (formGrid's "medium"). */
@@ -28,7 +29,7 @@ const FILTER_FROM = 11
 /** Settings → Integrations: the Employment Hero card. The API key is pasted once and never shown again; staff then come from EH every 30 minutes. */
 export default function IntegrationsTab() {
   const status = useEmploymentHeroStatus()
-  if (status.isLoading) return <PageState kind="loading" noun="integrations" />
+  if (status.isLoading && !retryingAfterError(status)) return <PageState kind="loading" noun="integrations" />
   if (status.isError || !status.data) return <PageState kind="error" noun="integrations" onRetry={() => status.refetch()} />
   const eh = status.data
   const badge: { label: string; tone: Tone } = eh.connected

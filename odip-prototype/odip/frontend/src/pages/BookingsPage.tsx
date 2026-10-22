@@ -22,6 +22,7 @@ import type { BookingListDto } from '@/api/types/bookings'
 import { plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
 import { bookingBudgetNote, bookingBudgetNotice, type BookingBudgetNotice } from '@/lib/bookingBudget'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 // Statuses that end a participant's involvement in a trip — confirmed before applying, same
 // pattern as AccommodationPage's/VehiclesPage's archive confirms.
@@ -57,7 +58,8 @@ export default function BookingsPage() {
   // Asked once typing pauses, not on every keystroke (each one sent a request and flashed the table to loading).
   const term = useDebouncedValue(search.trim(), 300)
   // The list is paged on the server, so the search is a server parameter (participant or trip name): a client filter would search one page.
-  const { data: bookings = [], isLoading, isError, refetch } = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE), ...(term ? { search: term } : {}) })
+  const pageQuery = useBookings({ page: String(page), pageSize: String(BOOKINGS_PAGE_SIZE), ...(term ? { search: term } : {}) })
+  const { data: bookings = [], isLoading, isError, refetch } = pageQuery
   // `bookings` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as IncidentsPage/RegisterTab.
@@ -69,7 +71,7 @@ export default function BookingsPage() {
   // Only a later success on the same booking clears it, so another row's success never hides this refusal.
   const [statusError, setStatusError] = useState<{ bookingId: string; participantName: string; message: string } | null>(null)
   // A failed refetch over rows already on screen keeps them; only a list that never loaded is replaced.
-  const loadFailed = isError && bookings.length === 0
+  const loadFailed = (isError || retryingAfterError(pageQuery)) && bookings.length === 0
 
   function patchStatus(booking: BookingListDto, status: BookingStatus, onSuccess?: (response: Parameters<typeof bookingBudgetNotice>[0]) => void) {
     // Its own promise, not mutate() callbacks: TanStack keeps only the latest call's, so a second change would drop this answer.

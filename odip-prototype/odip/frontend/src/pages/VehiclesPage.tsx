@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { TONE } from '@/lib/tone'
 import { plural } from '@/lib/format'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 type VehicleTypeKey = 'Car' | 'Van' | 'Bus' | 'MiniBus' | 'AccessibleVan' | 'Other'
 
@@ -62,7 +63,8 @@ export default function VehiclesPage() {
   const { canWrite } = usePermissions()
   const [showArchived, setShowArchived] = useState(false)
   const params: Record<string, string> = { isActive: showArchived ? 'false' : 'true' }
-  const { data: vehicles = [], isLoading, isError, refetch } = useVehicles(params)
+  const pageQuery = useVehicles(params)
+  const { data: vehicles = [], isLoading, isError, refetch } = pageQuery
   const deleteVehicle = useDeleteVehicle()
   const restoreVehicle = useRestoreVehicle()
   const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: VehicleListDto } | null>(null)
@@ -99,9 +101,9 @@ export default function VehiclesPage() {
       {actionError && <Callout tone="error">{actionError}</Callout>}
 
       {/* Loading state */}
-      {isLoading ? (
+      {isLoading && !retryingAfterError(pageQuery) ? (
         <PageState kind="loading" noun="vehicles" />
-      ) : isError && vehicles.length === 0 ? (
+      ) : (isError || retryingAfterError(pageQuery)) && vehicles.length === 0 ? (
         <PageState kind="error" noun="vehicle list" onRetry={() => refetch()} />
       ) : filtered.length === 0 ? (
         /* Empty state */

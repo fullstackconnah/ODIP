@@ -1,5 +1,5 @@
 import type { ApproveBatchResultDto, OverlapShiftDto } from '@/api/hooks'
-import { awaitsData, type QueryPhase } from '@/lib/queryPhase'
+import { awaitsData, retryingAfterError, type QueryPhase } from '@/lib/queryPhase'
 import type { Tone } from '@/lib/tone'
 
 // The dashboard's decision groups (SHAPE §4, §5): one model per kind, drawn by QuickGroup. A group hook (pages/dashboard/groups) maps its queries and the
@@ -95,12 +95,13 @@ export const SHOWN_ROWS = 5
 
 export const rowKey = (group: GroupKey, rowId: string) => `${group}:${rowId}`
 
-type QueryLike = { data?: unknown; isError?: boolean; isPending?: boolean; fetchStatus?: string }
+type QueryLike = { data?: unknown; isError?: boolean; isPending?: boolean; fetchStatus?: string; isFetching?: boolean; errorUpdateCount?: number }
 
 /** One phase for a group's requests: waiting while any has no answer yet (paused offline too: awaitsData), failed when any failed with nothing held. Rows already held win over a failed background refetch. */
 export function groupPhase(...queries: QueryLike[]): QueryPhase {
-  if (queries.some((q) => q.data === undefined && awaitsData(q))) return 'loading'
-  if (queries.some((q) => q.data === undefined && q.isError)) return 'error'
+  // A retry of a failed request is still a failure (retryingAfterError), so the banner and its Try again stay mounted.
+  if (queries.some((q) => q.data === undefined && awaitsData(q) && !retryingAfterError(q))) return 'loading'
+  if (queries.some((q) => q.data === undefined && (q.isError || retryingAfterError(q)))) return 'error'
   return 'ready'
 }
 

@@ -20,6 +20,7 @@ import { useIntakeCompleteNotice } from './intake/intakeComplete'
 import { extractErrorMessage, formatWithTimeZone } from '@/lib/utils'
 import { fieldErrors } from '@/lib/fieldErrors'
 import { ACTIVE_TABLE_PATH, participantActivatedState } from './profile/participantActivated'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
  * The onboarding checklist of one participant (owner decisions 2026-10-13): a header (name, stage, View record), one action bar (Begin
@@ -40,9 +41,9 @@ export default function OnboardingDetailPage() {
   const [recording, setRecording] = useState(false)
   const d = detail.data
 
-  if (detail.isLoading) return <PageState kind="loading" noun="onboarding record" />
+  if (detail.isLoading && !retryingAfterError(detail)) return <PageState kind="loading" noun="onboarding record" />
   if (!d) {
-    return detail.isError && !isNotFoundError(detail.error)
+    return (detail.isError || retryingAfterError(detail)) && !isNotFoundError(detail.error)
       ? <PageState kind="error" noun="onboarding record" onRetry={() => detail.refetch()} />
       : <PageState kind="not-found" noun="onboarding record" backTo="/participants?tab=onboarding" backLabel="onboarding" />
   }

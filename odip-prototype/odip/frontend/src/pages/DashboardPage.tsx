@@ -3,7 +3,7 @@ import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, use
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
 import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
-import { awaitsData } from '@/lib/queryPhase'
+import { awaitsData, retryingAfterError } from '@/lib/queryPhase'
 import { localIsoDate } from '@/lib/dateOnly'
 import { formatToday, greetingFor } from '@/lib/greeting'
 import { usePermissions } from '@/lib/permissions'
@@ -287,7 +287,7 @@ export default function DashboardPage() {
         <>
           <div className="flex flex-col gap-2">
             <h2 id="dashboard-alerts" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Alerts</h2>
-            {summary.isError ? (
+            {summary.isError || retryingAfterError(summary) ? (
               <PageState kind="error" noun="dashboard summary" onRetry={() => summary.refetch()} />
             ) : !d ? (
               // No summary yet (in flight, or paused offline) is a spinner, never a band of zeros.

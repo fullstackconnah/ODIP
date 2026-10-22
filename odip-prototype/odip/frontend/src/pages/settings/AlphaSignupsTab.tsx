@@ -14,6 +14,7 @@ import { ORGANISATION_SIZE_LABELS, type EarlyAccessLaterSubmissionDto, type Earl
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { extractErrorMessage } from '@/lib/utils'
 import { formatInstantDateAu } from '@/lib/format'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 const muted = 'text-[var(--color-muted-foreground)]'
 // On a phone the detail labels match the card's own field labels (index.css .mobile-card-table td::before).
@@ -98,7 +99,8 @@ function laterEntry(row: EarlyAccessSignupDto, later: EarlyAccessLaterSubmission
  */
 export default function AlphaSignupsTab() {
   const [page, setPage] = useState(1)
-  const { data, isLoading, isError, refetch } = useEarlyAccessSignups(page)
+  const pageQuery = useEarlyAccessSignups(page)
+  const { data, isLoading, isError, refetch } = pageQuery
   const remove = useDeleteEarlyAccessSignup()
   const markFollowedUp = useMarkEarlyAccessFollowedUp()
   const { notices, notify, dismiss } = useNotices()
@@ -311,7 +313,7 @@ export default function AlphaSignupsTab() {
         keyField="id"
         sortable={false}
         loading={isLoading}
-        error={isError}
+        error={isError || retryingAfterError(pageQuery)}
         onRetry={() => refetch()}
         emptyMessage="No one has signed up for the alpha yet."
         rowDetail={rowDetail}

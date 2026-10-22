@@ -6,6 +6,7 @@ import type { TenantSummaryDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
 import { formatInstantDateAu } from '@/lib/format'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -26,7 +27,8 @@ export default function TenantsTab({
   onEditTenant,
   onViewTenantDetail,
 }: TenantsTabProps) {
-  const { data: tenants = [], isLoading, isError, refetch } = useAdminTenantsSummary()
+  const pageQuery = useAdminTenantsSummary()
+  const { data: tenants = [], isLoading, isError, refetch } = pageQuery
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(() => {
@@ -40,7 +42,7 @@ export default function TenantsTab({
   }, [tenants, search])
 
   // ── Loading state ────────────────────────────────────────────────────────
-  if (isLoading) return <PageState kind="loading" noun="tenants" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="tenants" />
 
   return (
     <div className="space-y-4">
@@ -66,7 +68,7 @@ export default function TenantsTab({
       <DataTable
         data={filtered}
         keyField="id"
-        error={isError}
+        error={isError || retryingAfterError(pageQuery)}
         onRetry={() => refetch()}
         emptyMessage={
           tenants.length === 0

@@ -10,6 +10,7 @@ import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { plural } from '@/lib/format'
 import { formatDateAu } from '@/lib/utils'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
  * The public holiday calendar. It is global: every tenant's plan quotes and claims read the same rows, and a row decides whether a day is priced at
@@ -19,7 +20,8 @@ import { formatDateAu } from '@/lib/utils'
 export default function PublicHolidaysSection({ canEdit }: { canEdit: boolean }) {
   const [year, setYear] = useState(new Date().getFullYear())
   const [state, setState] = useState('VIC')
-  const { data: holidays = [], isLoading: holidaysLoading, isError: holidaysError, refetch: refetchHolidays } = usePublicHolidays(year, state)
+  const pageQuery = usePublicHolidays(year, state)
+  const { data: holidays = [], isLoading: holidaysLoading, isError: holidaysError, refetch: refetchHolidays } = pageQuery
   const createHoliday = useCreatePublicHoliday()
   const deleteHoliday = useDeletePublicHoliday()
   const syncHolidays = useSyncHolidays()
@@ -153,7 +155,7 @@ export default function PublicHolidaysSection({ canEdit }: { canEdit: boolean })
             : []),
         ]}
         loading={holidaysLoading}
-        error={holidaysError}
+        error={holidaysError || retryingAfterError(pageQuery)}
         onRetry={() => refetchHolidays()}
         emptyMessage={`No holidays found for ${year} in ${state}.`}
       />

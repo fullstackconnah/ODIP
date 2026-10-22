@@ -19,6 +19,7 @@ import { deadlineState } from '@/lib/deadline'
 import { toUpdateStaffDto, type StaffListDto, type UpdateStaffDto } from '@/api/types/staff'
 import { POSITION_LABELS } from '@/api/types/enums'
 import { plural } from '@/lib/format'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 const positionLabel = (s: StaffListDto) => POSITION_LABELS[s.position] ?? s.position ?? ''
 
@@ -81,7 +82,8 @@ export default function StaffPage() {
     editPath: (s) => `/staff/${s.id}/edit`,
   })
 
-  const { data: staffData = [], isLoading, isError, refetch } = useStaff(params)
+  const pageQuery = useStaff(params)
+  const { data: staffData = [], isLoading, isError, refetch } = pageQuery
   // PP-45 — StaffController's GetAll only supports `isActive`, no server-side text search, so the
   // filter is applied client-side (same approach CompatibilityPage takes for its matrix filters).
   const staff = search
@@ -223,7 +225,7 @@ export default function StaffPage() {
           keyField="id"
           sortable
           loading={isLoading}
-          error={isError}
+          error={isError || retryingAfterError(pageQuery)}
           onRetry={() => refetch()}
           emptyMessage="No staff found"
         />

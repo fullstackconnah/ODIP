@@ -10,6 +10,7 @@ import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import ImportInvites, { InviteResults, type InviteResult } from './ImportInvites'
 import { undoBlockers, undoFirst } from './importUndoBlockers'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /** What the tab offers to import, in order. Each opens the wizard at /settings/import/{kind}. */
 const KINDS: { kind: ImportKind; title: string; text: string; noun: string }[] = [
@@ -121,7 +122,7 @@ export default function ImportDataTab() {
           columns={columns}
           keyField="id"
           loading={history.isLoading}
-          error={history.isError}
+          error={history.isError || retryingAfterError(history)}
           onRetry={() => history.refetch()}
           emptyMessage="No imports yet. Each import is listed here, with Undo while nothing in it has changed."
         />

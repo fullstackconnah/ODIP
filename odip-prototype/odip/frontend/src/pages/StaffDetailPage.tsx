@@ -29,6 +29,7 @@ import type { StaffOverviewUpcomingShiftDto, StaffOverviewTripAssignmentDto } fr
 import type { IncidentListDto } from '@/api/types/incidents'
 import type { CompletionQueueItemDto } from '@/api/types/rostering'
 import { POSITION_LABELS } from '@/api/types/enums'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 type Tab = 'availability' | 'credentials' | 'upcoming' | 'incidents' | 'completions'
 
@@ -58,7 +59,8 @@ export default function StaffDetailPage() {
 
   const [tab, setTab] = useTabParam(TAB_KEYS, 'availability')
 
-  const { data: overview, isLoading, isError, error, refetch } = useStaffOverview(id)
+  const pageQuery = useStaffOverview(id)
+  const { data: overview, isLoading, isError, error, refetch } = pageQuery
   const { data: settings } = useSettings()
   const warningDays = settings?.qualificationWarningDays ?? 30
 
@@ -86,9 +88,9 @@ export default function StaffDetailPage() {
   // Dismissing the last notice hands focus back to the button that raised it.
   const focusSendButton = () => document.querySelector<HTMLElement>('[data-send-set-password]')
 
-  if (isLoading) return <PageState kind="loading" noun="staff member" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="staff member" />
   if (!overview) {
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="staff member" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="staff member" backTo="/staff" backLabel="staff" />
   }

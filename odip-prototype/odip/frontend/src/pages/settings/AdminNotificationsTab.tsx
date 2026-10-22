@@ -16,6 +16,7 @@ import {
 } from '@/api/types'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 const STATUS_FILTER_ITEMS: { value: NotificationOutboxStatus | ''; label: string }[] = [
   { value: '', label: 'All statuses' },
@@ -41,7 +42,8 @@ export default function AdminNotificationsTab() {
     to: toFilter || undefined,
   }), [statusFilter, fromFilter, toFilter])
 
-  const { data: rows = [], isLoading, isError, refetch } = useAdminNotifications(filters)
+  const pageQuery = useAdminNotifications(filters)
+  const { data: rows = [], isLoading, isError, refetch } = pageQuery
   const retry = useRetryNotification()
   const sendTestEmail = useSendTestEmail()
 
@@ -140,7 +142,7 @@ export default function AdminNotificationsTab() {
           columns={columns}
           keyField="id"
           loading={isLoading}
-          error={isError}
+          error={isError || retryingAfterError(pageQuery)}
           onRetry={() => refetch()}
           emptyMessage="No notifications match these filters."
         />

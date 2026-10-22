@@ -17,6 +17,7 @@ import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftN
 import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS } from '@/api/types/enums'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
  * Connection map: a small local chip for a shift note's flagged categories — the portal's own
@@ -35,13 +36,14 @@ function FlagChip({ category }: { category: ShiftNoteFlagCategory }) {
 
 export default function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { data: incident, isLoading, isError, error, refetch } = useIncident(id)
+  const pageQuery = useIncident(id)
+  const { data: incident, isLoading, isError, error, refetch } = pageQuery
   // PUT /incidents/:id is Admin, Coordinator and SuperAdmin only, the roles canWrite admits.
   const { canWrite } = usePermissions()
 
-  if (isLoading) return <PageState kind="loading" noun="incident" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="incident" />
   if (!incident) {
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="incident" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="incident" backTo="/incidents" backLabel="incidents" />
   }

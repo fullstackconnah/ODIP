@@ -13,6 +13,7 @@ import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { Callout } from '@/components/Callout'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
  * cg04 Task 11 (design §5) — side-by-side current | caregiver's value for changed fields only,
@@ -28,7 +29,8 @@ export default function CaregiverSubmissionReviewPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { canWriteParticipantDetails } = usePermissions()
-  const { data: s, isLoading, isError, error, refetch } = useCaregiverSubmission(id)
+  const pageQuery = useCaregiverSubmission(id)
+  const { data: s, isLoading, isError, error, refetch } = pageQuery
   const accept = useAcceptCaregiverSubmission()
   const reject = useRejectCaregiverSubmission()
   const [confirmAccept, setConfirmAccept] = useState(false)
@@ -42,9 +44,9 @@ export default function CaregiverSubmissionReviewPage() {
     [rows],
   )
 
-  if (isLoading) return <PageState kind="loading" noun="submission" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="submission" />
   if (!s) {
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="submission" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="submission" backTo="/caregiver-submissions" backLabel="caregiver submissions" />
   }

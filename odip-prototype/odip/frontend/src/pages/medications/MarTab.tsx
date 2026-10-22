@@ -18,6 +18,7 @@ import { ROUTE_LABELS, FORM_LABELS, PACKAGING_LABELS } from '@/api/types/medicat
 import type { MarEntryDto, MarPrnDto, AdministrationDto } from '@/api/types/medications'
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
 import { Button } from '@/components/Button'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
  * Connection map: for a Refused/Withheld/Missed/WrongMedication administration, either a link to
@@ -80,7 +81,8 @@ export default function MarTab() {
   const { canRecordAdministrations, canManageMedications, canCreateIncidents } = usePermissions()
   const [date, setDate] = useState(todayIso())
   const [participantId, setParticipantId] = useState('')
-  const { data: mar, isLoading, isError, refetch } = useMar(date, participantId || undefined)
+  const pageQuery = useMar(date, participantId || undefined)
+  const { data: mar, isLoading, isError, refetch } = pageQuery
   // INTAKE-08: the medication picker excludes drafts.
   const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
   const recordPrnOutcome = useRecordPrnOutcome()
@@ -181,13 +183,13 @@ export default function MarTab() {
       </div>
 
       {/* Scheduled slots */}
-      {isLoading ? (
+      {isLoading && !retryingAfterError(pageQuery) ? (
         <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-hidden">
           <SkeletonRow />
           <SkeletonRow />
           <SkeletonRow />
         </div>
-      ) : isError && !mar ? (
+      ) : (isError || retryingAfterError(pageQuery)) && !mar ? (
         <PageState kind="error" noun="medication round" onRetry={() => refetch()} />
       ) : groups.length === 0 ? (
         <EmptyState

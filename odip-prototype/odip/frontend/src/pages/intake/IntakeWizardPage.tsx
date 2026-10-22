@@ -95,7 +95,8 @@ export default function IntakeWizardPage() {
   const createParticipant = useCreateParticipant()
   const saveIntake = useSaveParticipantIntake()
   const saveMutation = isEditMode ? saveIntake : createParticipant
-  const { data: participant, isLoading: participantLoading, isError: participantFailed, error: participantError, refetch: refetchParticipant } = useParticipant(id)
+  const pageQuery = useParticipant(id)
+  const { data: participant, error: participantError, refetch: refetchParticipant } = pageQuery
   // Its own h1 shell, not a PageHeader, so it names the tab itself.
   const heading = isEditMode ? 'Resume intake' : 'Intake'
   useDocumentTitle(heading)
@@ -419,7 +420,7 @@ export default function IntakeWizardPage() {
   // missing record used to leave this page on "Loading..." for ever (L2-06 = L5-02), with no message, no retry and no way back.
   // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
   if (isEditMode && !participant) {
-    const phase = queryPhase({ data: participant, isLoading: participantLoading, isError: participantFailed })
+    const phase = queryPhase(pageQuery)
     if (phase === 'loading') return <PageState kind="loading" noun="participant" />
     return phase === 'error' && !isNotFoundError(participantError)
       ? <PageState kind="error" noun="participant" onRetry={() => refetchParticipant()} />
