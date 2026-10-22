@@ -149,6 +149,8 @@ export const navItems: NavEntry[] = [
         page: 'rostering',
         badge: { source: 'pendingCompletions', noun: 'shift completion' },
       },
+      // Same 'rostering' key as Completions; hidden until Employment Hero is connected.
+      { to: '/rostering/payroll', label: 'Payroll', msIcon: 'payments', page: 'rostering', requiresEmploymentHero: true },
       { to: '/staff', label: 'Staff', msIcon: 'manage_accounts', page: 'staff' },
       { to: '/qualifications', label: 'Qualifications', msIcon: 'health_and_safety', page: 'qualifications' },
     ],
