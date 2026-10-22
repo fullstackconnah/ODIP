@@ -408,10 +408,10 @@ They are three facts and three states: a failed request is not a missing record,
 adds a heading: the screen's one `h1` still comes from `PageHeader`.
 
 The error banner survives its own retry. "Try again" is held while the request runs (`aria-disabled`, `aria-busy`, focus kept on the same button), a line beside the button says
-"Trying again…" and then "Couldn't load it again." (a fixed-width slot, so the button never moves), and a separate polite `sr-only` status announces each change once; a retry
+"Trying again…" and then "Couldn't load it again." (a minimum-width slot, so the button never moves), and a separate polite `sr-only` status announces each change once; a retry
 that resolves with an error counts as failed. A screen keeps its banner through a retry by treating `retryingAfterError(query)` as still in error (`isLoading && !retryingAfterError(q)`,
 `isError || retryingAfterError(q)`), because TanStack resets a failed no-data query to loading the moment the retry starts. The trade-off: a remount whose cached query is still in
-error shows the banner, not a spinner, while it refetches.
+error shows the banner, not a spinner, while it refetches. Known limitation: on a repeat visit to a record that returned 404, the cached error is nulled when the refetch starts, so record pages and edit forms show "Couldn't load this X. Check your connection." until the second 404 arrives, where they used to show a spinner.
 
 ## Elevation & Depth
 

@@ -81,12 +81,14 @@ function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
  * What a page shows in place of itself while its record is loading, when the load failed, and when there is no such record. They are three
  * different facts, so they are three different states:
  *
- *   if (isLoading) return <PageState kind="loading" noun="trip" />
+ *   if (isLoading && !retryingAfterError(query)) return <PageState kind="loading" noun="trip" />
  *   if (!trip) {
- *     return isError && !isNotFoundError(error)
+ *     return (isError || retryingAfterError(query)) && !isNotFoundError(error)
  *       ? <PageState kind="error" noun="trip" onRetry={() => refetch()} />
  *       : <PageState kind="not-found" noun="trip" backTo="/trips" backLabel="trips" />
  *   }
+ *
+ * `retryingAfterError` (lib/queryPhase) keeps the banner on screen through a retry, when TanStack resets the failed query to loading.
  *
  * A 404 from the API is an answer ("no such record"), not a failure, so `isNotFoundError` routes it to not-found; and the failed branch sits
  * under `!trip` so a background refetch that fails over data already on screen never replaces the page.
