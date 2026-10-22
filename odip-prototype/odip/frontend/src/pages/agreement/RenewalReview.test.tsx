@@ -38,11 +38,20 @@ describe('RenewalReview', () => {
     const tail = { ...revision(2, '2026-11-02', '2026-11-22', []), isSummary: true }
     render(<RenewalReview renewal={revision(3, '2026-11-23', '2027-01-03', [line({})])} renewedFrom={tail} termStart="2026-10-12" oldLines={oldLines} oldFailed={false} onRetry={vi.fn()} />)
 
-    expect(screen.getByText(/v2 covers only the last part of the agreement, from Mon 2 Nov 2026 to Sun 22 Nov 2026 \(the agreement began on Mon 12 Oct 2026\), so its totals are not set beside v3.s\./)).toBeInTheDocument()
+    expect(screen.getByText(/v2 only covers the end of the agreement \(Mon 2 Nov 2026 to Sun 22 Nov 2026; the agreement began on Mon 12 Oct 2026\), so its total is not compared with v3.s\. The unit prices are\./)).toBeInTheDocument()
     expect(screen.queryByText(/came to/)).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'v2 total' })).not.toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'v2 unit price' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'v3 total' })).toBeInTheDocument()
+  })
+
+  it('compares the totals as usual when the term starts the day the revision renewed starts', () => {
+    render(<RenewalReview renewal={renewal} renewedFrom={renewedFrom} termStart="2026-10-12" oldLines={oldLines} oldFailed={false} onRetry={vi.fn()} />)
+
+    expect(screen.getByText(/v1 ran from/)).toBeInTheDocument()
+    expect(screen.queryByText(/only covers the end/)).not.toBeInTheDocument()
+    expect(screen.getByText(/v1 came to/)).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'v1 total' })).toBeInTheDocument()
   })
 
   it('marks an old line the renewal\u0027s dates do not reach as such, not as missing, and says nothing blocks approval', () => {

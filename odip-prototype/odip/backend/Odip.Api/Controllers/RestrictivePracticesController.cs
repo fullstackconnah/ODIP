@@ -132,7 +132,7 @@ public class RestrictivePracticesController : ControllerBase
 
         _db.RestrictivePractices.AddRange(practices);
 
-        // Sync-write (see CreateBulk): recompute the participant's derived flag once for the whole
+        // Sync-write: recompute the participant's derived flag once for the whole
         // batch. The query only sees already-committed rows (none of `practices` is saved yet),
         // so whether any new row is active is OR'd in explicitly, same as Update/Delete.
         var hasOtherActiveEntry = await _db.RestrictivePractices

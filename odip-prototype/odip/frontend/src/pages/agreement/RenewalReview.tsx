@@ -64,7 +64,7 @@ export function RenewalReview({ renewal, renewedFrom, termStart, oldLines, oldBl
       <h3 id="renewal-review" className="text-sm font-semibold">Renewal of {was}</h3>
       <p className="max-w-prose text-sm">
         {now} runs from {formatServiceDate(renewal.agreementStartDate)} to {formatServiceDate(renewal.agreementEndDate)}, priced from the price list as it is now. {tailOnly
-          ? `${was} covers only the last part of the agreement, from ${formatServiceDate(renewedFrom.agreementStartDate)} to ${formatServiceDate(renewedFrom.agreementEndDate)} (the agreement began on ${formatServiceDate(termStart)}), so its totals are not set beside ${now}'s.`
+          ? `${was} only covers the end of the agreement (${formatServiceDate(renewedFrom.agreementStartDate)} to ${formatServiceDate(renewedFrom.agreementEndDate)}; the agreement began on ${formatServiceDate(termStart)}), so its total is not compared with ${now}'s. The unit prices are.`
           : `${was} ran from ${formatServiceDate(renewedFrom.agreementStartDate)} to ${formatServiceDate(renewedFrom.agreementEndDate)}.`}
       </p>
       {oldFailed ? (

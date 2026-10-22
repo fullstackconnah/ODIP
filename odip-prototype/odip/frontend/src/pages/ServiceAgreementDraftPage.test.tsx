@@ -626,7 +626,7 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
 
     await user.click(stepButton('Check'))
 
-    expect(await screen.findByText(/v3 covers only the last part of the agreement, from Thu 1 Oct 2026 to Sun 1 Nov 2026 \(the agreement began on Wed 1 Jul 2026\)/)).toBeInTheDocument()
+    expect(await screen.findByText(/v3 only covers the end of the agreement \(Thu 1 Oct 2026 to Sun 1 Nov 2026; the agreement began on Wed 1 Jul 2026\), so its total is not compared with v4.s\. The unit prices are\./)).toBeInTheDocument()
     expect(screen.queryByText(/came to/)).not.toBeInTheDocument()
   })
 

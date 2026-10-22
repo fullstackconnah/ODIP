@@ -251,7 +251,7 @@ public class DraftPruningTests
     {
         await using var f = await SetUpAsync();
 
-        var first = await SaveAsync(f, Request());
+        var first = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(), "actor", CancellationToken.None);      // no BaseVersion at all
 
         Assert.NotNull(first.Draft);
     }
