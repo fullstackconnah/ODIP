@@ -71,15 +71,19 @@ function putBody(nth = 0): Record<string, unknown> {
   return call[1] as Record<string, unknown>
 }
 
-/** The row as the server held it, as a section PUTs it back: every field except the two modes, which go only when changed. */
+/** The row as the server held it, as a section PUTs it back: every field except the two modes and the four numbering fields, which go only when changed (an override is a change). */
 function rowWithoutModes(row: ProviderSettingsDto, overrides: Partial<ProviderSettingsDto> = {}) {
-  const body: Partial<ProviderSettingsDto> = { ...row, ...overrides }
+  const body: Partial<ProviderSettingsDto> = { ...row }
   delete body.participantReadinessMode
   delete body.medicationCompetencyMode
   delete body.employmentHeroConnected
   delete body.nextInvoiceDisplayNumber   // computed on GET (Xero PR1); never written
   delete body.invoicesIssued
-  return body
+  delete body.invoiceNumberPrefix   // numbering is sent only by the section that changed it
+  delete body.creditNotePrefix
+  delete body.invoiceStartNumber
+  delete body.paymentTermsDays
+  return { ...body, ...overrides }
 }
 
 const saveButton = () => screen.getByRole('button', { name: 'Save changes' })
@@ -380,11 +384,25 @@ describe('Billing details: invoice numbers and payment terms', () => {
 
     await user.click(saveButton())
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
-    expect(putBody(1)).toEqual(rowWithoutModes(makeSettings({ invoicesIssued: true }), { paymentTermsDays: 30 }))
+    // The typed start number is dropped once the cell flips: the row's own value goes back, which the server reads as unchanged.
+    expect(putBody(1)).toEqual(rowWithoutModes(makeSettings({ invoicesIssued: true }), { paymentTermsDays: 30, invoiceStartNumber: 1 }))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
   })
 
-  it('after the first invoice, saving Organisation profile sends the starting number back unchanged', async () => {
+  it('a save from another section sends none of the numbering fields from its cached row, so it cannot put back what another Admin set', async () => {
+    const user = userEvent.setup()
+    await open()
+    // The cached row still holds the numbering as loaded (another Admin may have changed it since); a bank-details save must not echo it.
+    await user.clear(screen.getByLabelText('BSB'))
+    await user.type(screen.getByLabelText('BSB'), '063-000')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { bsb: '063-000' }))
+    for (const k of ['invoiceNumberPrefix', 'creditNotePrefix', 'invoiceStartNumber', 'paymentTermsDays']) expect(putBody()).not.toHaveProperty(k)
+  })
+
+  it('after the first invoice, saving Organisation profile sends no numbering field', async () => {
     const user = userEvent.setup()
     server = makeSettings({ invoicesIssued: true, nextInvoiceDisplayNumber: 'INV-0043', invoiceStartNumber: 42 })
     renderSection('organisation')

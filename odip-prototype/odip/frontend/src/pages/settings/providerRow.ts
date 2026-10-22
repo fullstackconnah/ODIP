@@ -12,8 +12,9 @@ const REQUIRED_FIELDS = 'Fill in the registration number, ABN, organisation name
  * field from the body, so a section sends the row as the server last gave it with only the fields it changed replaced: an untouched null
  * stays null, and another section's fields go back exactly as they came. The query refetches when a section opens (the form seeds only
  * after that), a save writes what it sent into the cache, and the cache refetches after every save; so "as the server last gave it" is
- * that cache (another Admin saving in between can still be overwritten, as before). The two modes are never echoed: Safety checks adds
- * one through `extra` only when the person changed it.
+ * that cache (another Admin saving in between can still be overwritten, as before). The two modes and the four invoice numbering fields
+ * are never echoed: Safety checks adds a mode through `extra` only when the person changed it, and Billing details sends a numbering
+ * field only when its form changed it (the server reads a missing field as unchanged; once an invoice is issued it also sends the row's own start number back).
  */
 export function useProviderRow<F extends Record<string, string | boolean | number>>(pick: (row: ProviderSettingsDto | null) => F) {
   const query = useProviderSettings(true, 'always')
@@ -40,6 +41,11 @@ export function useProviderRow<F extends Record<string, string | boolean | numbe
     delete body.employmentHeroConnected   // computed by the server on GET; never written
     delete body.nextInvoiceDisplayNumber   // likewise (Xero PR1)
     delete body.invoicesIssued
+    // The numbering fields go only when this section changed them (below): a stale cached copy must not put back what another Admin set.
+    delete body.invoiceNumberPrefix
+    delete body.creditNotePrefix
+    delete body.invoiceStartNumber
+    delete body.paymentTermsDays
     for (const k of changed) Object.assign(body, { [k]: form[k] })
     setResult(null)
     upsert.mutate({ ...body, ...extra } as UpsertProviderSettingsDto, {
