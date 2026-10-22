@@ -271,6 +271,10 @@ public class ClaimsController : ControllerBase
         var c = await TenantClaims().FirstOrDefaultAsync(x => x.Id == claimId, ct);
         if (c == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
+        // A status moves along the paths in CanMove only (the page says "This cannot be undone"), checked before anything is changed, so a refusal writes nothing.
+        if (dto.Status is { } wanted && !CanMove(c.Status, wanted))
+            return Conflict(ApiResponse<bool>.Fail($"This claim is {Words(c.Status)}, so it can't be marked as {Words(wanted)}."));
+
         // The authoriser is a user of the caller's organisation (Users is tenant-filtered); checked before anything is changed, so a refusal writes nothing.
         if (dto.AuthorisedByStaffId is { } authoriserId && !await _db.Users.AnyAsync(u => u.Id == authoriserId, ct))
             return BadRequest(ApiResponse<bool>.Fail("Authorising staff member not found."));
@@ -287,16 +291,9 @@ public class ClaimsController : ControllerBase
         }
 
         var now = _clock.GetUtcNow().UtcDateTime;
-        var before = c.Status;
         if (dto.AuthorisedByStaffId.HasValue) c.AuthorisedByUserId = dto.AuthorisedByStaffId;
         if (dto.Notes != null) c.Notes = dto.Notes;
-        if (dto.Status.HasValue)
-        {
-            c.Status = dto.Status.Value;
-            if (dto.Status.Value == TripClaimStatus.Submitted) c.SubmittedDate = now;
-            if (dto.Status.Value == TripClaimStatus.Paid) c.PaidDate = now;
-        }
-        KeepRejectionRecord(c, before, now);
+        if (dto.Status.HasValue) ApplyStatus(c, dto.Status.Value, now);
         if (dto.RejectionCode != null && c.Status == TripClaimStatus.Rejected)
         {
             c.RejectionCode = code;
@@ -307,6 +304,29 @@ public class ClaimsController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    /// <summary>The moves a claim's status may make (a claim saying the status it already has is not a move). What has gone to the NDIA keeps going forward: it is paid, part paid or rejected, and a rejected claim can be sent again.</summary>
+    private static bool CanMove(TripClaimStatus from, TripClaimStatus to) => from == to || (from, to) switch
+    {
+        (TripClaimStatus.Draft or TripClaimStatus.Ready, TripClaimStatus.Submitted) => true,
+        (TripClaimStatus.Submitted or TripClaimStatus.Approved, TripClaimStatus.Paid or TripClaimStatus.PartiallyPaid or TripClaimStatus.Rejected) => true,
+        (TripClaimStatus.PartiallyPaid, TripClaimStatus.Paid) => true,
+        (TripClaimStatus.Rejected, TripClaimStatus.Submitted) => true,
+        _ => false,
+    };
+
+    private static string Words(TripClaimStatus status) => status.ToString().ToLowerInvariant();
+
+    /// <summary>The one place a claim's status is changed (the claim's own buttons, and every line paid or rejected): a real move stamps the day it was submitted or paid, and a repeat of the same status stamps nothing.</summary>
+    private static void ApplyStatus(TripClaim claim, TripClaimStatus status, DateTime now)
+    {
+        var before = claim.Status;
+        if (before == status) return;
+        claim.Status = status;
+        if (status == TripClaimStatus.Submitted) claim.SubmittedDate = now;
+        if (status == TripClaimStatus.Paid) claim.PaidDate = now;
+        KeepRejectionRecord(claim, before, now);
     }
 
     /// <summary>
@@ -332,10 +352,22 @@ public class ClaimsController : ControllerBase
     {
         if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
+        // Two edits to lines of one claim at the same moment would each add up the claim's total from what they read: the second waits here, so it reads what the first saved.
+        RosterGenerationLock held;
+        try { held = await RosterGenerationLock.AcquireAsync(_db, claimId, ct, scope: "claim-edit"); }
+        catch (RosterBusyException) { return Conflict(ApiResponse<bool>.Fail("Another change to this claim is still being saved. Wait a moment, then try again.")); }
+        await using var _ = held;
+
         var item = await _db.ClaimLineItems
             .Include(l => l.TripClaim)
             .FirstOrDefaultAsync(x => x.Id == id && x.TripClaimId == claimId, ct);
         if (item == null) return NotFound(ApiResponse<bool>.Fail("Line item not found"));
+
+        // What was sent to the NDIA stays as it was sent: only the line's status and what was paid on it still change.
+        var claim = item.TripClaim;
+        if ((dto.Hours.HasValue || dto.UnitPrice.HasValue || dto.SupportItemCode != null || dto.ClaimType.HasValue || dto.CancellationReason != null)
+            && claim.Status is not (TripClaimStatus.Draft or TripClaimStatus.Ready))
+            return Conflict(ApiResponse<bool>.Fail("This claim has been submitted, so its lines can't be changed."));
 
         if (dto.Hours.HasValue) { item.Hours = dto.Hours.Value; item.TotalAmount = item.Hours * item.UnitPrice; }
         if (dto.UnitPrice.HasValue) { item.UnitPrice = dto.UnitPrice.Value; item.TotalAmount = item.Hours * item.UnitPrice; }
@@ -356,23 +388,19 @@ public class ClaimsController : ControllerBase
             if (dto.Status.Value == ClaimLineItemStatus.Rejected) item.RejectionReason = dto.RejectionReason;
         }
 
-        // Recalculate claim total — fetch all OTHER items from DB, then add this item's updated amount
-        var otherItems = await _db.ClaimLineItems
-            .Where(l => l.TripClaimId == claimId && l.Id != id)
-            .ToListAsync(ct);
-        item.TripClaim.TotalAmount = otherItems.Sum(l => l.TotalAmount) + item.TotalAmount;
+        // The claim total is always the sum of ALL its lines as stored (the edited one is the tracked copy, so it counts with its new amount).
+        var lines = await _db.ClaimLineItems.Where(l => l.TripClaimId == claimId).ToListAsync(ct);
+        claim.TotalAmount = lines.Sum(l => l.TotalAmount);
 
-        // Auto-update claim status based on line item statuses
-        var statuses = otherItems.Select(l => l.Status).Append(item.Status).ToList();
-        var claimBefore = item.TripClaim.Status;
-        if (statuses.All(s => s == ClaimLineItemStatus.Paid))
-            item.TripClaim.Status = TripClaimStatus.Paid;
-        else if (statuses.All(s => s == ClaimLineItemStatus.Rejected))
-            item.TripClaim.Status = TripClaimStatus.Rejected;
-        // NOTE: TripClaimStatus.PartiallyPaid exists (value 4) but partial auto-promotion is omitted intentionally
-        KeepRejectionRecord(item.TripClaim, claimBefore, _clock.GetUtcNow().UtcDateTime);
+        // Auto-update claim status based on line item statuses, along an allowed move only: every line paid on a draft claim does not make it paid.
+        // NOTE: TripClaimStatus.PartiallyPaid exists but partial auto-promotion is omitted intentionally
+        var target = lines.All(l => l.Status == ClaimLineItemStatus.Paid) ? TripClaimStatus.Paid
+            : lines.All(l => l.Status == ClaimLineItemStatus.Rejected) ? TripClaimStatus.Rejected
+            : (TripClaimStatus?)null;
+        if (target is { } t && CanMove(claim.Status, t)) ApplyStatus(claim, t, _clock.GetUtcNow().UtcDateTime);
 
         await _db.SaveChangesAsync(ct);
+        await held.CommitAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
     }
 

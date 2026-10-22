@@ -499,3 +499,29 @@ describe('ClaimDetailPage — the total in the fact bar', () => {
     expect(screen.getAllByText('$1,234.50')).toHaveLength(3)
   })
 })
+
+// The server refuses a change to a line's figures or type once the claim has gone to the NDIA, so the page stops offering the buttons that make that change.
+describe('ClaimDetailPage — No Show and Mark Confirmed belong to a draft claim', () => {
+  it('offers No Show on a draft claim', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'No Show' })).toBeInTheDocument()
+  })
+
+  it.each(['Submitted', 'Paid', 'Rejected'] as const)('offers neither No Show nor Mark Confirmed on a %s claim, and still shows who was a no show', (status) => {
+    mockUseClaim.mockReturnValue({
+      data: { ...baseClaim([baseLineItem(), baseLineItem({ id: 'li-3', claimType: 'Cancellation', cancellationReason: 'Unwell' })]), status },
+      isLoading: false,
+    })
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'No Show' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mark Confirmed' })).not.toBeInTheDocument()
+    expect(screen.getByText('No Show · Unwell')).toBeInTheDocument()
+  })
+
+  it('offers Mark Confirmed on a draft claim', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ claimType: 'Cancellation', cancellationReason: 'Unwell' })]), isLoading: false })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'Mark Confirmed' })).toBeInTheDocument()
+  })
+})

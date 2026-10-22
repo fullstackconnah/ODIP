@@ -55,6 +55,12 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
     }
   }
 
+  // A refused move (the server allows only real ones, e.g. not Submitted back to Draft) says why, as the bulk change does.
+  function changeStatus(claimId: string, status: TripClaimStatus) {
+    setError(null)
+    updateClaim.mutate({ claimId, data: { status } }, { onError: err => setError(extractErrorMessage(err, 'Failed to update the claim.')) })
+  }
+
   function askForNdiaCode(ids: string[]) {
     setRejectError(null)
     setRejecting(ids)
@@ -133,7 +139,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
                 <Dropdown
                   variant="pill"
                   value={c.status}
-                  onChange={val => (val === 'Rejected' ? askForNdiaCode([c.id]) : updateClaim.mutate({ claimId: c.id, data: { status: val as TripClaimStatus } }))}
+                  onChange={val => (val === 'Rejected' ? askForNdiaCode([c.id]) : changeStatus(c.id, val as TripClaimStatus))}
                   colorClass={getStatusColor(c.status)}
                   items={CLAIM_STATUS_ITEMS}
                   disabled={!canWrite}

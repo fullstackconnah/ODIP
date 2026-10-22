@@ -123,6 +123,17 @@ describe('ClaimsTab: a claim marked Rejected from its status pill', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
+  it('shows the reason the server gave when a status change is refused, and the claim keeps the status it had', async () => {
+    const user = userEvent.setup()
+    refuse = call => call.method === 'put'
+    renderTab([claim('c1')])
+
+    await choose(user, 'Submitted', 'Paid')
+
+    expect(await screen.findByText('The NDIA code is at most 10 characters.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submitted' })).toBeInTheDocument()
+  })
+
   it('asks again for a claim that is already Rejected, which is how a code that was not given is recorded later', async () => {
     const user = userEvent.setup()
     renderTab([claim('c1', 'Rejected')])
