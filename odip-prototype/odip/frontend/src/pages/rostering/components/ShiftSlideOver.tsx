@@ -8,6 +8,9 @@ import type { DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
+import { RefreshBoardAction } from './RefreshBoardAction'
+import { BOARD_REFRESHED } from '../lib/boardChanged'
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { RequirementChips } from '@/components/RequirementChips'
 import { requirementLabels } from '@/lib/workerRequirements'
@@ -137,6 +140,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const budgetNote = noLength ? null : checkedBudgetNote
   const [reasonRequired, setReasonRequired] = useState(false)
   const [error, setError] = useState<PanelRefusal | null>(null)
+  // Refresh the board went through after a board-changed 409: said once, and focus goes to Save (the button that offered it has gone).
+  const [boardRefreshed, setBoardRefreshed] = useState(false)
   // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
   // mode) the server refuses it with the same 400 message. That is shown as soon as the preview says so, not only at Save. It is tied
   // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an
@@ -304,6 +309,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
   async function handleSave() {
     setError(null)
+    setBoardRefreshed(false)
     if (stillBlocking.length > 0) return
     if (refusedOnBudget && !emergencyReady) {
       setEmergencySubmitted(true)
@@ -394,13 +400,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
               <Button variant="ghost" onClick={onClose} className="whitespace-nowrap">
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isBusy || saveWithheld} aria-describedby={saveWithheld && refusalShown ? refusalId : undefined} className="whitespace-nowrap">
+              <Button data-shift-save onClick={handleSave} disabled={isBusy || saveWithheld} aria-describedby={saveWithheld && refusalShown ? refusalId : undefined} className="whitespace-nowrap">
                 {isBusy ? 'Saving…' : emergencyActive ? 'Save as emergency' : reasonRequiredFindings.length > 0 ? 'Save with override' : warningFindings.length > 0 ? 'Save anyway' : 'Save'}
               </Button>
             </div>
           </>
         ) : undefined}
       >
+        {/* Mounted with the board-changed refusal, before its sentence is written (AnnouncementRegion), and only then: the panel has no other polite region. */}
+        {(shownError?.boardChanged || boardRefreshed) && <AnnouncementRegion message={boardRefreshed ? BOARD_REFRESHED : ''} />}
         {budgetMarker && (
           <BudgetEmergencyReviewMarker
             details={{
@@ -652,6 +660,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {footError && (
           <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
             {footError}
+            {shownError?.boardChanged && (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <RefreshBoardAction onRefreshed={() => { setError(null); setBoardRefreshed(true); requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-shift-save]')?.focus()) }} />
+              </div>
+            )}
           </div>
         )}
       </SlideOver>

@@ -24,9 +24,10 @@ import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartW
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode, StartWeekResultDto } from '@/api/types'
 import {
-  WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementNotice,
+  WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementNotice, RefreshBoardAction,
   type ShiftSlideOverTarget,
 } from './components'
+import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
@@ -107,7 +108,9 @@ export default function RosterBoardPage() {
   const [overrideReasonDraft, setOverrideReasonDraft] = useState('')
   // The server's refusal of an assign / unassign that is NOT the 422 findings protocol (e.g. Enforce mode's 400 "Participant is not ready
   // for booking or rostering."). It used to be swallowed, leaving a drag that silently snapped back.
-  const [assignError, setAssignError] = useState<string | null>(null)
+  // boardChanged: the board-changed 409 (lib/boardChanged), whose notice offers Refresh the board. Every write below reports through showWriteError.
+  const [assignError, setAssignError] = useState<{ message: string; boardChanged: boolean } | null>(null)
+  const showWriteError = (err: unknown, fallback: string) => setAssignError({ message: extractErrorMessage(err, fallback), boardChanged: isBoardChanged(err) })
   const [carry, setCarry] = useState<DragCarry | null>(null)
   const [dropPending, setDropPending] = useState<PendingDrop | null>(null)
   const [prompt, setPrompt] = useState<DropPrompt | null>(null)
@@ -275,7 +278,7 @@ export default function RosterBoardPage() {
       await setRegular.mutateAsync({ patternId: shift.shiftPatternId, shiftId: shift.id, staffId: shift.isRegular ? null : shift.staffId ?? null, expectedRegularId: shift.regularUserId ?? NO_REGULAR })
       setRegularNotice(regularDone(shift))
     } catch (err: unknown) {
-      setAssignError(extractErrorMessage(err, 'Something went wrong changing the regular. Please try again.'))
+      showWriteError(err, 'Something went wrong changing the regular. Please try again.')
     } finally {
       closeRegular()
     }
@@ -318,7 +321,7 @@ export default function RosterBoardPage() {
       const words = already ? ALREADY_STARTED : extractErrorMessage(err, START_FAILED)
       if (shownWeek.current !== week) { setAnnouncement(words); return }
       if (already) setStartNotice({ kind: 'already' })
-      else setAssignError(words)
+      else showWriteError(err, START_FAILED)
     } finally {
       startsInFlight.current.delete(week)
       setStartingWeeks(weeks => { const rest = new Set(weeks); rest.delete(week); return rest })
@@ -331,7 +334,7 @@ export default function RosterBoardPage() {
       // The banner's button is about to go (nothing left to publish) or to hide (only blocked drafts left): focus goes to the week heading, never to body (the brief, 3.4).
       requestAnimationFrame(() => document.getElementById(WEEK_HEADING_ID)?.focus())
     } catch (err: unknown) {
-      setAssignError(extractErrorMessage(err, 'Something went wrong publishing this week. Please try again.'))
+      showWriteError(err, 'Something went wrong publishing this week. Please try again.')
     } finally {
       setPublishOpen(false)
     }
@@ -366,7 +369,7 @@ export default function RosterBoardPage() {
         // otherwise cover the banner, and a retry from it cannot fix a refusal that is not about findings.
         setPendingAssign(null)
         setOverrideReasonDraft('')
-        setAssignError(extractErrorMessage(err, 'Something went wrong assigning this shift. Please try again.'))
+        showWriteError(err, 'Something went wrong assigning this shift. Please try again.')
         return false
       }
       if (findings.some(f => f.severity === 'Blocking')) {
@@ -496,7 +499,7 @@ export default function RosterBoardPage() {
     try {
       await deleteShift.mutateAsync(confirmDeleteTarget.id)
     } catch (err: unknown) {
-      setAssignError(extractErrorMessage(err, 'Something went wrong deleting this shift. Please try again.'))
+      showWriteError(err, 'Something went wrong deleting this shift. Please try again.')
     } finally {
       setConfirmDeleteTarget(null)
     }
@@ -528,6 +531,13 @@ export default function RosterBoardPage() {
       ? board.participantRows.every(r => r.shifts.length === 0)
       : board.staffRows.every(r => r.shifts.length === 0) && board.unfilled.length === 0
   )
+
+  /** Refresh the board went through: the stale notice goes, the page says so once, and focus goes to the week heading, never to body (as after Publish). */
+  function boardRefreshed() {
+    setAssignError(null)
+    setAnnouncement(BOARD_REFRESHED)
+    requestAnimationFrame(() => document.getElementById(WEEK_HEADING_ID)?.focus())
+  }
 
   const dismissNotice = (onClick: () => void) => (
     <Button variant="ghost" size="sm" iconOnly onClick={onClick} aria-label="Dismiss notice">
@@ -635,12 +645,15 @@ export default function RosterBoardPage() {
             <Callout
               tone="error"
               actions={
-                <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
-                  <X className="h-4 w-4" />
-                </Button>
+                <>
+                  {assignError.boardChanged && <RefreshBoardAction onRefreshed={boardRefreshed} />}
+                  <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </>
               }
             >
-              {assignError}
+              {assignError.message}
             </Callout>
           )}
         </div>
