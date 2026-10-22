@@ -299,7 +299,7 @@ describe('Billing details: invoice numbers and payment terms', () => {
     expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Bank account', 'Invoice numbers', 'Payment terms', 'Tax and claiming', 'Invoice note'])
     expect(screen.getByText('Printed before the number, as in INV-0042. New invoices only.')).toBeInTheDocument()
     expect(screen.getByText('As in CN-0007. New credit notes only.')).toBeInTheDocument()
-    expect(screen.getByText("Carry on from your old system's numbers. It can't change once an invoice is issued.")).toBeInTheDocument()
+    expect(startNumber()).toHaveAccessibleDescription("Carry on from your old system's numbers. It can't change once an invoice is issued.")
     expect(screen.getByText("Each invoice is due this many days after it's issued. 0 means due on issue.")).toBeInTheDocument()
     expect(screen.getByText("The bank account on your invoices, how they're numbered and when they're due, your GST and PACE status, and the note printed at the foot of every invoice.")).toBeInTheDocument()
   })
@@ -352,6 +352,16 @@ describe('Billing details: invoice numbers and payment terms', () => {
     expect(screen.getByText('Set by the invoices already issued.')).toBeInTheDocument()
     expect(screen.queryByLabelText('First invoice number')).not.toBeInTheDocument()
     expect(prefix()).not.toHaveAttribute('readonly')
+  })
+
+  it('the starting number cell reserves the longer hint in both states, so it keeps its height when it flips (SHAPE C10)', async () => {
+    const longHint = "Carry on from your old system's numbers. It can't change once an invoice is issued."
+    // The field and the reserve share one cell: the field's wrapper's parent.
+    const reserve = (input: HTMLElement) => input.closest('.grid > *')!.parentElement!.querySelector(':scope > [aria-hidden="true"]')
+    server = makeSettings({ invoicesIssued: true, nextInvoiceDisplayNumber: 'INV-0043', invoiceStartNumber: 42 })
+    await open()
+    expect(reserve(screen.getByLabelText('Next invoice'))).toHaveTextContent(longHint)
+    expect(reserve(screen.getByLabelText('Next invoice'))).toHaveClass('invisible')
   })
 
   it("an invoice issued between load and save: shows the server's words, keeps what was typed, flips the cell, and the retry is accepted", async () => {

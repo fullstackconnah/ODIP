@@ -6,10 +6,14 @@ import { PageState } from '@/components/PageState'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
+import { labelClass } from '@/components/FormField'
 import { formGrid, span } from '@/lib/formGrid'
 import { usePermissions } from '@/lib/permissions'
 import { SettingsGroup, SettingsSection, type SectionFrame } from './SettingsSection'
 import { useProviderRow } from './providerRow'
+
+// The starting-number hint, also the invisible reserve that keeps its cell one height in both states.
+const START_HINT = "Carry on from your old system's numbers. It can't change once an invoice is issued."
 
 /** Billing details and Safety checks are saved with the profile's four required fields, so until those are filled in they say so here. */
 export function IncompleteProfileNote() {
@@ -83,11 +87,19 @@ export default function BillingDetailsSection(frame: SectionFrame) {
               <div className={formGrid}>
                 <TextField label="Invoice prefix" hint="Printed before the number, as in INV-0042. New invoices only." maxLength={10} className={span.short} value={p.form.invoiceNumberPrefix} error={errors.invoiceNumberPrefix} readOnly={locked} onChange={e => p.edit({ invoiceNumberPrefix: e.target.value })} />
                 <TextField label="Credit note prefix" hint="As in CN-0007. New credit notes only." maxLength={10} className={span.short} value={p.form.creditNotePrefix} error={errors.creditNotePrefix} readOnly={locked} onChange={e => p.edit({ creditNotePrefix: e.target.value })} />
-                {issued ? (
-                  <TextField label="Next invoice" hint="Set by the invoices already issued." className={span.short} value={p.row!.nextInvoiceDisplayNumber} readOnly />
-                ) : (
-                  <NumberField label="First invoice number" hint="Carry on from your old system's numbers. It can't change once an invoice is issued." min={1} max={99_999_999} step={1} className={span.short} value={p.form.invoiceStartNumber} error={errors.invoiceStartNumber} readOnly={locked} onChange={n => p.edit({ invoiceStartNumber: n })} />
-                )}
+                {/* One cell for both states, as tall as the longer hint: the invisible skeleton keeps the height when it flips (SHAPE C10). */}
+                <div className={`grid ${span.short}`}>
+                  {issued ? (
+                    <TextField label="Next invoice" hint="Set by the invoices already issued." className="[grid-area:1/1]" value={p.row!.nextInvoiceDisplayNumber} readOnly />
+                  ) : (
+                    <NumberField label="First invoice number" hint={START_HINT} min={1} max={99_999_999} step={1} className="[grid-area:1/1]" value={p.form.invoiceStartNumber} error={errors.invoiceStartNumber} readOnly={locked} onChange={n => p.edit({ invoiceStartNumber: n })} />
+                  )}
+                  <div aria-hidden="true" className="invisible [grid-area:1/1]">
+                    <span className={labelClass}>&nbsp;</span>
+                    <div className="h-[var(--control-h)]" />
+                    <p className="text-xs mt-1">{START_HINT}</p>
+                  </div>
+                </div>
               </div>
             </SettingsGroup>
             <SettingsGroup title="Payment terms">
