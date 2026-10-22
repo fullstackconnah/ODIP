@@ -4,6 +4,7 @@ export type PageKey =
   | 'dashboard'
   | 'portal'
   | 'portal-leave'
+  | 'portal-payslips'
   | 'trips'
   | 'schedule'
   | 'participants'
@@ -27,6 +28,7 @@ const SUPPORT_WORKER_PAGES: PageKey[] = [
   'dashboard',
   'portal',
   'portal-leave',
+  'portal-payslips',
   'trips',
   'schedule',
   'participants',
