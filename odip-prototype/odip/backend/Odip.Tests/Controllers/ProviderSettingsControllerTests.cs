@@ -50,6 +50,33 @@ public class ProviderSettingsControllerTests
         Assert.Null(body.Data);
     }
 
+    [Theory]
+    [InlineData("Coordinator", false)]
+    [InlineData("Admin", true)]
+    [InlineData("SuperAdmin", true)]
+    public async Task Get_BankDetails_AreSentToAdminsButNeverToACoordinator(string role, bool sees)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        await new ProviderSettingsController(db).Upsert(
+            MinimalUpsertDto() with { BankAccountName = "Acme Care", BSB = "123456", AccountNumber = "98765432", InvoiceFooterNotes = "Thanks" }, CancellationToken.None);
+        var controller = new ProviderSettingsController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "Test")) },
+            },
+        };
+
+        var result = await controller.Get(CancellationToken.None);
+
+        var data = Assert.IsType<ApiResponse<ProviderSettingsDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal(sees ? "Acme Care" : null, data.BankAccountName);
+        Assert.Equal(sees ? "123456" : null, data.BSB);
+        Assert.Equal(sees ? "98765432" : null, data.AccountNumber);
+        Assert.Equal("Thanks", data.InvoiceFooterNotes);   // everything else is unchanged
+        Assert.Equal("Test Org", data.OrganisationName);
+    }
+
     [Fact]
     public async Task Upsert_ManagerNameAndPhone_RoundTripThroughGet()
     {
