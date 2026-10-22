@@ -47,12 +47,14 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
   const [correction, setCorrection] = useState<Correction | null>(null)
   const sectionRef = useRef<HTMLElement>(null)
   // The row whose Download takes focus once the dialog has gone (its own cleanup hands focus back to the opener first).
-  const [focusAfter, setFocusAfter] = useState<string | null>(null)
+  // A ref, not state: the setCorrection(null) beside it is the render this waits for (react-hooks/set-state-in-effect).
+  const focusAfter = useRef<string | null>(null)
   useEffect(() => {
-    if (!focusAfter) return
-    sectionRef.current?.querySelector<HTMLButtonElement>(`[data-download-id="${focusAfter}"]`)?.focus()
-    setFocusAfter(null)
-  }, [focusAfter])
+    const id = focusAfter.current
+    if (!id) return
+    focusAfter.current = null
+    sectionRef.current?.querySelector<HTMLButtonElement>(`[data-download-id="${id}"]`)?.focus()
+  })
 
   const data = query.data
   const state = data?.invoiceState
@@ -96,7 +98,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
       ? `${original.displayNumber} voided.`
       : `${result.displayNumber} issued. ${original.displayNumber} is credited.`)
     // The opener (Void or Issue credit note) goes once the row refetches, so focus goes to the row's Download, which stays.
-    setFocusAfter(original.id)
+    focusAfter.current = original.id
   }
 
   const count = state === 'preview' && rows.length > 0 ? 'Preview' : state === 'issued' ? `${rows.length} issued` : null

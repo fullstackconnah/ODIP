@@ -60,12 +60,13 @@ export default function ClaimDetailPage() {
   const invoicesHeadingRef = useRef<HTMLHeadingElement>(null)
   const [submitting, setSubmitting] = useState(false)
   // After a submit the Invoices heading takes focus, once the dialog has gone (its own cleanup hands focus back to the opener first).
-  const [focusInvoices, setFocusInvoices] = useState(false)
+  // A ref, not state: the submit's own setSubmitting(false) is the render this waits for (react-hooks/set-state-in-effect).
+  const focusInvoices = useRef(false)
   useEffect(() => {
-    if (!focusInvoices) return
+    if (!focusInvoices.current) return
+    focusInvoices.current = false
     invoicesHeadingRef.current?.focus()
-    setFocusInvoices(false)
-  }, [focusInvoices])
+  })
   // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the page can cancel it: left
   // running it fires setSaved into a tree that is gone.
   const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -434,7 +435,7 @@ export default function ClaimDetailPage() {
         <SubmitClaimDialog
           claimId={id}
           onCancel={() => setSubmitting(false)}
-          onSubmitted={announcement => { setSubmitting(false); setAnnouncement(announcement); setFocusInvoices(true) }}
+          onSubmitted={announcement => { setSubmitting(false); setAnnouncement(announcement); focusInvoices.current = true }}
         />
       )}
       {recordingCode && (
