@@ -256,4 +256,50 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
             await db.Database.ExecuteSqlRawAsync($"DROP TRIGGER IF EXISTS {fn} ON \"Users\"; DROP FUNCTION IF EXISTS {fn}();");
         }
     }
+
+    private static StubHttpHandler EhLines() => new StubHttpHandler()
+        .On(HttpMethod.Post, "/api/v2/business/777/timesheet?enforceUniqueExternalId=true", HttpStatusCode.OK, new { id = 9001 });
+
+    private static async Task<(Guid, int)> SeedShiftsAsync(OdipDbContext db, Guid tenantId, int count)
+    {
+        await ConnectAsync(db, tenantId);
+        var conn = await db.EmploymentHeroConnections.IgnoreQueryFilters().SingleAsync(c => c.TenantId == tenantId);
+        conn.WorkTypeStandard = "7";
+        var worker = await EhTimesheetFixture.WorkerAsync(db, tenantId);
+        var day = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        for (var i = 0; i < count; i++) await EhTimesheetFixture.ApprovedShiftAsync(db, tenantId, worker, day, new TimeOnly(9, 0), new TimeOnly(15, 0));
+        await db.SaveChangesAsync();
+        return (tenantId, count);
+    }
+
+    [SkippableFact]
+    public async Task The_sender_runs_on_Postgres()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        await SeedShiftsAsync(db, tenantId, 2);
+        var eh = EhLines();
+
+        await new EmploymentHeroTimesheetSender(StubHttpHandler.Client(eh), EhFixture.Keys, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<EmploymentHeroTimesheetSender>.Instance, TimeSpan.Zero)
+            .RunAsync(db, tenantId, true, CancellationToken.None);
+
+        Assert.Equal(2, await db.EmploymentHeroOutbox.IgnoreQueryFilters().CountAsync(r => r.TenantId == tenantId && r.Status == EmploymentHeroOutboxStatus.Sent));
+    }
+
+    [SkippableFact]
+    public async Task Two_drains_at_once_post_each_shift_once_on_Postgres()
+    {
+        RequirePostgres();
+        var (db1, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _1 = db1;
+        await SeedShiftsAsync(db1, tenantId, 3);
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+        var eh = EhLines();
+        EmploymentHeroTimesheetSender Sender() => new(StubHttpHandler.Client(eh), EhFixture.Keys, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<EmploymentHeroTimesheetSender>.Instance, TimeSpan.Zero);
+
+        await Task.WhenAll(Sender().RunAsync(db1, tenantId, false, CancellationToken.None), Sender().RunAsync(db2, tenantId, false, CancellationToken.None));
+
+        Assert.Equal(3, eh.Requests.Count(r => r.Method == HttpMethod.Post));
+    }
 }
