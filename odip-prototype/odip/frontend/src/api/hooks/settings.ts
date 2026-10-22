@@ -6,7 +6,7 @@ export function useSettings() {
   return useQuery({
     queryKey: ['settings'],
     queryFn: () =>
-      apiGetWithDefault<AppSettingsDto>('/settings', { qualificationWarningDays: 30 }),
+      apiGetWithDefault<AppSettingsDto>('/settings', { qualificationWarningDays: 30, weeklyHoursWarning: 38 }),
   })
 }
 

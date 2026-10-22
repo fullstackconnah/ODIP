@@ -1479,12 +1479,16 @@ public record UpdateStaffDto : CreateStaffDto { }
 public record AppSettingsDto
 {
     public int QualificationWarningDays { get; init; }
+    public int WeeklyHoursWarning { get; init; }
 }
 
 public record UpdateAppSettingsDto
 {
     [System.ComponentModel.DataAnnotations.Range(1, 365)]
     public int QualificationWarningDays { get; init; }
+    /// <summary>Whole hours a week before the roster warns; left out keeps the stored figure.</summary>
+    [System.ComponentModel.DataAnnotations.Range(1, 100)]
+    public int? WeeklyHoursWarning { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════

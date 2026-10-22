@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Api.Controllers;
@@ -28,7 +29,8 @@ public class SettingsController : ControllerBase
         var s = await _db.AppSettings.FirstOrDefaultAsync(ct);
         return Ok(ApiResponse<AppSettingsDto>.Ok(new AppSettingsDto
         {
-            QualificationWarningDays = s?.QualificationWarningDays ?? 30
+            QualificationWarningDays = s?.QualificationWarningDays ?? 30,
+            WeeklyHoursWarning = s?.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold
         }));
     }
 
@@ -40,17 +42,19 @@ public class SettingsController : ControllerBase
         var s = await _db.AppSettings.FirstOrDefaultAsync(ct);
         if (s == null)
         {
-            s = new AppSettings { QualificationWarningDays = dto.QualificationWarningDays };
+            s = new AppSettings { QualificationWarningDays = dto.QualificationWarningDays, WeeklyHoursWarning = dto.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold };
             _db.AppSettings.Add(s);
         }
         else
         {
             s.QualificationWarningDays = dto.QualificationWarningDays;
+            if (dto.WeeklyHoursWarning is { } hours) s.WeeklyHoursWarning = hours;
         }
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<AppSettingsDto>.Ok(new AppSettingsDto
         {
-            QualificationWarningDays = s.QualificationWarningDays
+            QualificationWarningDays = s.QualificationWarningDays,
+            WeeklyHoursWarning = s.WeeklyHoursWarning
         }));
     }
     [HttpGet("module-visibility")]

@@ -190,7 +190,8 @@ public class RosteringController : ControllerBase
             .Where(c => staffIds.Contains(c.UserId) && allParticipantIds.Contains(c.ParticipantId))
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
 
-        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays);
+        var weeklyHours = await RosterAvailability.WeeklyHoursAsync(_db, activeStaff.Select(u => u.TenantId), ct);
+        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours);
 
         List<RosterFinding> FindingsFor(Shift shift)
         {
@@ -390,7 +391,7 @@ public class RosteringController : ControllerBase
                 {
                     StaffId = staff.Id, FullName = staff.FullName, Role = staff.Position ?? Position.SupportWorker,
                     Compliance = complianceLevel, ComplianceNotes = complianceNotes,
-                    RosteredHours = rosteredHours, TargetHours = RosterConflictService.DefaultWeeklyHoursThreshold,
+                    RosteredHours = rosteredHours, TargetHours = RosterAvailability.WeeklyHoursFor(weeklyHours, staff.TenantId),
                     Shifts = shiftDtos, TripBars = myTripBars, Leave = myLeave
                 });
             }

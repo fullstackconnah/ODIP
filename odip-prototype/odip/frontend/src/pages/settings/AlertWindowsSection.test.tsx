@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import AlertWindowsSection from './AlertWindowsSection'
 
-const { settingsData, mutate } = vi.hoisted(() => ({ settingsData: { qualificationWarningDays: 30 }, mutate: vi.fn() }))
+const { settingsData, mutate } = vi.hoisted(() => ({ settingsData: { qualificationWarningDays: 30, weeklyHoursWarning: 38 }, mutate: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useSettings: () => ({ data: settingsData, isError: false, refetch: vi.fn() }),
   useUpdateSettings: () => ({ mutate, isPending: false }),
@@ -34,7 +34,7 @@ describe('Alert windows', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(mutate.mock.calls[0][0]).toEqual({ qualificationWarningDays: 60 })
+    expect(mutate.mock.calls[0][0]).toEqual({ qualificationWarningDays: 60, weeklyHoursWarning: 38 })
     expect(screen.getByRole('status')).toHaveTextContent('Saved')
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
@@ -59,5 +59,41 @@ describe('Alert windows', () => {
     expect(control).toBeDisabled()
     expect(control).toHaveTextContent('30 days')
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  // QW7 (OPS-4, hours part): the roster's weekly-hours warning, beside the qualification window.
+  it('shows the weekly hours, saves a changed figure with the window, and keeps it when the server refuses', async () => {
+    const user = userEvent.setup()
+    mutate.mockImplementationOnce((_body, opts) => opts.onError({ response: { status: 403, data: {} } }))
+    renderSection()
+    const hours = screen.getByLabelText('Weekly hours')
+    expect(hours).toHaveValue(38)
+
+    await user.clear(hours)
+    await user.type(hours, '25')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(mutate.mock.calls[0][0]).toEqual({ qualificationWarningDays: 30, weeklyHoursWarning: 25 })
+    expect(screen.getByRole('alert')).toHaveTextContent('Not saved. Only an Admin can change these.')
+    expect(screen.getByLabelText('Weekly hours')).toHaveValue(25)
+  })
+
+  it('refuses hours outside 1 to 100 before saving', async () => {
+    const user = userEvent.setup()
+    renderSection()
+    const hours = screen.getByLabelText('Weekly hours')
+
+    await user.clear(hours)
+    await user.type(hours, '101')
+
+    expect(screen.getByText('Enter a whole number from 1 to 100.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    await user.clear(hours)
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+
+  it('locks the hours for a Coordinator', () => {
+    renderSection(true)
+    expect(screen.getByLabelText('Weekly hours')).toBeDisabled()
   })
 })

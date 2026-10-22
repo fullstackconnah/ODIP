@@ -203,4 +203,32 @@ public class RosterAvailabilityTests
         Assert.Null(open.RegularUserId);
         Assert.Null(open.RegularAwayReason);
     }
+
+    // QW7: the weekly-hours threshold is the worker's organisation's setting, 38 when it has none.
+    private static async Task<IReadOnlyList<RosterFinding>> TuesdayFindingsAsync(Set s) =>
+        (await s.LoadAsync()).Check(ShiftOf(s.Mia.Id, s.Kim.Id, Tuesday, 9, 17));   // 8h on top of Monday's 8h = 16h
+
+    [Fact]
+    public async Task OverHours_UsesTheOrganisationsSetting()
+    {
+        await using var s = await SetUpAsync();
+        s.Db.Shifts.Add(ShiftOf(s.Mia.Id, s.Kim.Id, Monday, 9, 17, ShiftStatus.Published));
+        s.Db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = TenantA, WeeklyHoursWarning = 15 });
+        await s.Db.SaveChangesAsync();
+
+        var over = Assert.Single(await TuesdayFindingsAsync(s), f => f.Code == RosterConflictService.OverHours);
+        Assert.Contains("exceed the 15h threshold", over.Message);
+    }
+
+    [Fact]
+    public async Task OverHours_WithNoSetting_StaysAt38()
+    {
+        await using var s = await SetUpAsync();
+        s.Db.Shifts.Add(ShiftOf(s.Mia.Id, s.Kim.Id, Monday, 9, 17, ShiftStatus.Published));
+        // Another organisation's low setting must not reach this worker.
+        s.Db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = TenantB, WeeklyHoursWarning = 5 });
+        await s.Db.SaveChangesAsync();
+
+        Assert.DoesNotContain(await TuesdayFindingsAsync(s), f => f.Code == RosterConflictService.OverHours);
+    }
 }
