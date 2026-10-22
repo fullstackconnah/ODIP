@@ -18,9 +18,10 @@ public class BprCsvService(OdipDbContext db)
             .FirstOrDefaultAsync(c => c.Id == claimId, ct)
             ?? throw new KeyNotFoundException($"Claim {claimId} not found");
 
-        // A claim always belongs to a trip or a participant; the query filter scopes the read when it somehow has neither.
-        var tenantId = claim.TripInstance?.TenantId ?? claim.Participant?.TenantId;
-        var settings = ProviderSettingsGuard.Require(await db.ProviderSettings.FirstOrDefaultAsync(s => tenantId == null || s.TenantId == tenantId, ct));
+        // A claim always belongs to a trip or a participant; with neither there is no organisation to read settings for.
+        var tenantId = claim.TripInstance?.TenantId ?? claim.Participant?.TenantId
+            ?? throw new KeyNotFoundException($"Claim {claimId} not found");
+        var settings = ProviderSettingsGuard.Require(await db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct));
 
         // Nullability audit (shift-completion design spec, delivery PR 3): Kind == Shift claim
         // lines have ParticipantBooking == null — a shift-kind line is excluded here rather than
