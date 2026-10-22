@@ -133,6 +133,25 @@ describe('platform page finder', () => {
   })
 })
 
+describe('AppLayout — the organisation name in the header', () => {
+  afterEach(() => localStorage.clear())
+
+  it('is shown on a phone too: not hidden below the sm breakpoint, and trimmed with an ellipsis instead of crowding the bar', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    const name = screen.getByText('Jo Care Support Services')
+    expect(name).not.toHaveClass('hidden')
+    expect(name).toHaveClass('truncate')
+    expect(name).toHaveAttribute('title', 'Jo Care Support Services')
+  })
+
+  it('is hidden on a phone for a SuperAdmin, whose tenant switcher already names the organisation and needs the room', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    expect(screen.getByText('Jo Care Support Services')).toHaveClass('hidden', 'sm:inline-block')
+  })
+})
+
 describe('AppLayout nav active state', () => {
   afterEach(() => {
     localStorage.clear()

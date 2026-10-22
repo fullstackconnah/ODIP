@@ -568,7 +568,7 @@ public class StaffController : ControllerBase
         if (addressChanged && !dto.AddressConfirmed)
         {
             var rowTenantDomain = await TenantEmailDomainAsync(s.TenantId, ct);
-            if (rowTenantDomain is not null && AddressConfirmation.Needed(emailLower, rowTenantDomain))
+            if (AddressConfirmation.Needed(emailLower, rowTenantDomain))
                 return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, rowTenantDomain), AddressConfirmation.Code));
         }
 

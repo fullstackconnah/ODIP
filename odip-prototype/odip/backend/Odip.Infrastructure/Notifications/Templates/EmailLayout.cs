@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Mail;
 using System.Net.Mime;
 
@@ -16,14 +17,19 @@ internal static class EmailLayout
 
     private const string Font = "font-family:'Plus Jakarta Sans','Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:800;color:#fbf9f5";
 
-    private const string Header =
+    private const string HeaderOpen =
         "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#0f2000\" " +
         "style=\"background-color:#0f2000;border-radius:12px;margin:0 0 20px\"><tr>" +
         $"<td style=\"padding:16px 22px;{Font}\">" +
         $"<img src=\"cid:{WordmarkContentId}\" width=\"243\" height=\"51\" alt=\"Bunya Support\" style=\"display:block;border:0;{Font}\">" +
-        "</td></tr></table>";
+        "</td></tr>";
 
-    public static string WithHeader(string htmlBody) => Header + htmlBody;
+    /// <summary>The header band; a line under the wordmark names the organisation the message comes from, when one is known.</summary>
+    public static string WithHeader(string htmlBody, string? organisationName = null) =>
+        HeaderOpen +
+        (string.IsNullOrWhiteSpace(organisationName) ? "" :
+            $"<tr><td style=\"padding:0 22px 14px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;color:#fbf9f5;word-wrap:break-word;overflow-wrap:anywhere\">{WebUtility.HtmlEncode(organisationName.Trim())}</td></tr>") +
+        "</table>" + htmlBody;
 
     /// <summary>A fresh stream per message: a MailMessage disposes its linked resources' streams.</summary>
     public static LinkedResource WordmarkImage() =>

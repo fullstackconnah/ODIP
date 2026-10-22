@@ -121,7 +121,7 @@ public class EmailIdentityWritersTests
     // ── Tenant first user ───────────────────────────────────────────────
 
     private static CreateTenantWithSetupDto NewTenantWithFirstUser(string email) => new(
-        "Brightside Care", "brightside.example.com", null,
+        "Brightside Care", "brightside.example.com", new TenantSetupProviderDto { State = "VIC" },
         new CreateInitialUserDto("Jane", "Smith", email, "jane.smith", "Admin", null));
 
     [Fact]

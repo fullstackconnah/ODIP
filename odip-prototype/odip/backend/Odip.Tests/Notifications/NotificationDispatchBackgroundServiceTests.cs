@@ -75,6 +75,93 @@ public class NotificationDispatchBackgroundServiceTests
     };
 
     [Fact]
+    public async Task The_message_carries_the_organisation_name_of_the_recipients_own_organisation_only()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var (tenantId, otherId) = (Guid.NewGuid(), Guid.NewGuid());
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId);
+            SeedOutboxRow(db, tenantId, user.Id);
+            db.ProviderSettings.AddRange(
+                new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Jo Care" },
+                new ProviderSettings { Id = Guid.NewGuid(), TenantId = otherId, OrganisationName = "Someone Else" });
+            db.SaveChanges();
+        }
+
+        NotificationMessage? sent = null;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, "id", null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        Assert.Equal("Jo Care", sent!.OrganisationName);
+    }
+
+    // Only another organisation has a profile row: an unscoped lookup would take its name, the recipient's own scope finds none.
+    [Fact]
+    public async Task The_message_carries_no_organisation_name_when_only_another_organisation_has_a_profile()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var (tenantId, otherId) = (Guid.NewGuid(), Guid.NewGuid());
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId);
+            SeedOutboxRow(db, tenantId, user.Id);
+            db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = otherId, OrganisationName = "Someone Else" });
+            db.SaveChanges();
+        }
+
+        NotificationMessage? sent = null;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, "id", null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        Assert.Null(sent!.OrganisationName);
+    }
+
+    // An intake payload whose provider name is blank (not missing) must fall back to the organisation's own name like any other message.
+    [Fact]
+    public async Task A_blank_provider_name_in_an_intake_payload_falls_back_to_the_organisations_name()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId, "sam.lee@provider.example");
+            var payload = new IntakeVisitStaffPayload(IntakeWording.Booked, "sam.lee@provider.example", "Sam Lee", "Noah Fitzgerald",
+                new DateTime(2026, 10, 15, 23, 0, 0, DateTimeKind.Utc), 90, "Australia/Sydney", "12 Smith St", null, null, null, "Dana Smith",
+                "dana@provider.example", "", null, null, "abc@odip", 0, DateTime.UtcNow);
+            db.NotificationOutbox.Add(new NotificationOutbox
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, EventType = NotificationEventType.IntakeBooked, EntityType = "IntakeVisit", EntityId = Guid.NewGuid(),
+                RecipientUserId = user.Id, PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload),
+                Status = NotificationOutboxStatus.Pending, NextAttemptAt = DateTime.UtcNow.AddMinutes(-1), CreatedAt = DateTime.UtcNow.AddMinutes(-1),
+            });
+            db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Jo Care" });
+            db.SaveChanges();
+        }
+
+        NotificationMessage? sent = null;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, "id", null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        Assert.Equal("Jo Care", sent!.OrganisationName);
+    }
+
+    [Fact]
     public async Task DisabledPreference_SkipsWithoutCallingSendAsync()
     {
         var dbName = Guid.NewGuid().ToString();
@@ -102,6 +189,43 @@ public class NotificationDispatchBackgroundServiceTests
         var row = await verifyDb.NotificationOutbox.SingleAsync();
         Assert.Equal(NotificationOutboxStatus.Skipped, row.Status);
         Assert.Equal("User preference disabled", row.LastError);
+    }
+
+    /// <summary>Notifications:Enabled=false (live today) must not SELECT the batch every tick: the pointed-at PostgreSQL does not exist, so any query would throw.</summary>
+    [Fact]
+    public async Task WhenDisabled_TheTick_NeverQueriesTheDatabase()
+    {
+        NotificationDispatchBackgroundService Build(string enabled)
+        {
+            var services = new ServiceCollection();
+            services.AddDbContext<OdipDbContext>(o => o.UseNpgsql("Host=127.0.0.1;Port=1;Database=none;Username=x;Password=x;Timeout=1;Command Timeout=1"));
+            var email = new Mock<INotificationChannel>();
+            email.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+            services.AddSingleton<INotificationChannel>(email.Object);
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:Enabled"] = enabled }).Build();
+            return new NotificationDispatchBackgroundService(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), config, NullLogger<NotificationDispatchBackgroundService>.Instance);
+        }
+
+        await Build("false").RunTickAsync(CancellationToken.None);                                          // no query, no throw
+        await Assert.ThrowsAnyAsync<Exception>(() => Build("true").RunTickAsync(CancellationToken.None));   // the control: enabled does query
+    }
+
+    /// <summary>The hourly purges are independent: when the bell purge throws, the outbox purge still runs (each one opens its own scope, so the scope count shows it).</summary>
+    [Fact]
+    public async Task WhenTheBellPurgeThrows_TheOutboxPurge_StillRuns()
+    {
+        var scopes = 0;
+        var factory = new Mock<IServiceScopeFactory>();
+        factory.Setup(f => f.CreateScope()).Returns(() => throw new InvalidOperationException($"scope {Interlocked.Increment(ref scopes)}"));
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:DispatchIntervalSeconds"] = "3600" }).Build();
+        var service = new NotificationDispatchBackgroundService(factory.Object, config, NullLogger<NotificationDispatchBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        // Scope 1 is the tick, 2 the bell purge, 3 the outbox purge (never reached when they share a try block).
+        for (var i = 0; i < 50 && Volatile.Read(ref scopes) < 3; i++) await Task.Delay(100);
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.True(Volatile.Read(ref scopes) >= 3, $"the outbox purge never ran ({scopes} scope(s) opened)");
     }
 
     [Fact]

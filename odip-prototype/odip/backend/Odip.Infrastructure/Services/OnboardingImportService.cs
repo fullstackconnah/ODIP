@@ -149,7 +149,7 @@ public sealed class OnboardingImportService
             }
             if (_staff.ReservedDomainError(caller, email) is { } reserved) plan.Refuse(reserved);
             if (await _staff.OtherOrganisationAddressErrorAsync(caller, email, tenantId, ct) is { } elsewhere) plan.Refuse(elsewhere);
-            if (plan.Status == ImportRowStatus.Ready && tenantDomain is not null && AddressConfirmation.Needed(email, tenantDomain))
+            if (plan.Status == ImportRowStatus.Ready && AddressConfirmation.Needed(email, tenantDomain))
                 plan.Warnings.Add("This address is at neither your organisation's email domain nor a common provider. Check it before sending sign-in invites.");
         }
 

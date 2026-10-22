@@ -72,14 +72,14 @@ describe('NotificationList', () => {
   })
 
   /** Review Focus 4. */
-  it('says "Showing the latest 30." only when the server says there are more', () => {
+  it('says "Showing 30, unread first." only when the server says there are more', () => {
     renderList({ inbox: loaded([unread('a', 'A', '/portal')], true) })
-    expect(screen.getByText('Showing the latest 30.')).toBeInTheDocument()
+    expect(screen.getByText('Showing 30, unread first.')).toBeInTheDocument()
   })
 
-  it('has no "Showing the latest 30." when the server says that is all', () => {
+  it('has no "Showing 30, unread first." when the server says that is all', () => {
     renderList({ inbox: loaded([unread('a', 'A', '/portal')], false) })
-    expect(screen.queryByText('Showing the latest 30.')).toBeNull()
+    expect(screen.queryByText('Showing 30, unread first.')).toBeNull()
   })
 
   it('shows the alert line when Mark all as read was refused', () => {

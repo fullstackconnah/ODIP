@@ -105,17 +105,22 @@ export function useMarkInboxRead() {
   })
 }
 
-/** Marks everything read, optimistically. On a refusal the dots come back from the snapshot; the caller shows the alert. */
+/** Marks the items the panel shows read (their ids go to the server, so unread items it never showed stay unread), optimistically. On a refusal the dots come back from the snapshot; the caller shows the alert. */
 export function useMarkAllInboxRead() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => apiPost<void>('/notifications/inbox/read-all'),
-    onMutate: async () => {
+    mutationFn: (ids: string[]) => apiPost<void>('/notifications/inbox/read-all', { ids }),
+    onMutate: async (ids: string[]) => {
       await qc.cancelQueries({ queryKey: INBOX_KEY })
       const previous = qc.getQueryData<InboxDto>(INBOX_KEY)
       if (previous) {
         const readAt = new Date().toISOString()
-        qc.setQueryData<InboxDto>(INBOX_KEY, { ...previous, unreadCount: 0, items: previous.items.map(n => (n.readAt ? n : { ...n, readAt })) })
+        const marking = previous.items.filter(n => !n.readAt && ids.includes(n.id)).length
+        qc.setQueryData<InboxDto>(INBOX_KEY, {
+          ...previous,
+          unreadCount: Math.max(0, previous.unreadCount - marking),
+          items: previous.items.map(n => (n.readAt || !ids.includes(n.id) ? n : { ...n, readAt })),
+        })
       }
       return { previous }
     },

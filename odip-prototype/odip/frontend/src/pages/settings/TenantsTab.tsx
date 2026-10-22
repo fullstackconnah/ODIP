@@ -37,7 +37,7 @@ export default function TenantsTab({
     return tenants.filter(
       t =>
         t.name.toLowerCase().includes(q) ||
-        t.emailDomain.toLowerCase().includes(q),
+        (t.emailDomain ?? '').toLowerCase().includes(q),
     )
   }, [tenants, search])
 
@@ -77,7 +77,7 @@ export default function TenantsTab({
         }
         columns={[
           { key: 'name', header: 'Organisation Name', className: 'font-medium' },
-          { key: 'emailDomain', header: 'Email Domain', className: 'text-[var(--color-muted-foreground)]' },
+          { key: 'emailDomain', header: 'Email Domain', className: 'text-[var(--color-muted-foreground)]', render: (tenant: TenantSummaryDto) => tenant.emailDomain ?? 'None' },
           {
             key: 'isActive',
             header: 'Status',
