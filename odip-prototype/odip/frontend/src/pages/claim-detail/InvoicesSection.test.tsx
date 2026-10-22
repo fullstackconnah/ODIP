@@ -169,6 +169,15 @@ describe('InvoicesSection', () => {
     expect(actionsHeader.style.getPropertyValue('--col-min')).toBe('20rem')
   })
 
+  it('the Status column is reserved at one width, so a pill swap (Issued to Voided or Credited) never widens the table (SHAPE C3)', async () => {
+    serveInvoices({ invoiceState: 'preview', invoices: [], groups: [plan], agencyCount: 0 })
+    renderSection()
+
+    await screen.findByRole('button', { name: 'Preview invoice for Sam Lee' })
+    const statusHeader = screen.getByRole('columnheader', { name: 'Status' })
+    expect(statusHeader.style.getPropertyValue('--col-min')).toBe('7rem')
+  })
+
   it('the actions column is held AT its reserved width, so a wide table\'s slack goes elsewhere (SHAPE C4 at 1440)', async () => {
     serveInvoices({ invoiceState: 'preview', invoices: [], groups: [plan], agencyCount: 0 })
     renderSection()

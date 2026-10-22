@@ -184,6 +184,8 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 key: 'status',
                 header: 'Status',
                 mobile: 'status',
+                // Wider than the widest pill, so Issued turning Voided or Credited never moves the table (SHAPE C3).
+                minWidth: '7rem',
                 render: (row: InvoiceRow) => row.invoice
                   ? <StatusBadge status={row.invoice.status} />
                   : state === 'preview' ? <StatusBadge tone="neutral" label="Not issued" /> : <span className="text-[var(--color-muted-foreground)]">—</span>,

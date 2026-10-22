@@ -7,6 +7,7 @@ import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from './Button'
 import { ConfirmDialog } from './ConfirmDialog'
+import { TAP_FLOOR } from './tapArea'
 
 const COULDNT_CHECK = "Couldn't check which invoices this issues."
 const LINE = 'text-[13px] text-[var(--color-muted-foreground)]'
@@ -105,7 +106,7 @@ export function SubmitClaimDialog({ claimId, onCancel, onSubmitted }: SubmitClai
               <p className={LINE}>
                 Set up your organisation's invoice details in Settings first.{' '}
                 {canEditProviderSettings
-                  ? <Link to="/settings?section=organisation" className="whitespace-nowrap font-medium text-[var(--color-primary)] underline underline-offset-2">Open Organisation profile</Link>
+                  ? <Link to="/settings?section=organisation" className={`${TAP_FLOOR} whitespace-nowrap font-medium text-[var(--color-primary)] underline underline-offset-2`}>Open Organisation profile</Link>
                   : 'Ask an Admin to fill in the organisation profile.'}
               </p>
             ) : (

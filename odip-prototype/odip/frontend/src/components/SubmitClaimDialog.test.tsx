@@ -131,6 +131,8 @@ describe('SubmitClaimDialog', () => {
     renderDialog()
     expect(await screen.findByText(/Set up your organisation's invoice details in Settings first\./)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open Organisation profile' })).toHaveAttribute('href', '/settings?section=organisation')
+    // A 44px floor on touch (SHAPE C2): the link is alone at the end of the note.
+    expect(screen.getByRole('link', { name: 'Open Organisation profile' }).className).toContain('min-h-[var(--tap-min)]')
     expect(confirmButton()).toBeDisabled()
   })
 
