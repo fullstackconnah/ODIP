@@ -144,6 +144,12 @@ describe('AppLayout — the organisation name in the header', () => {
     expect(name).toHaveClass('truncate')
     expect(name).toHaveAttribute('title', 'Jo Care Support Services')
   })
+
+  it('is hidden on a phone for a SuperAdmin, whose tenant switcher already names the organisation and needs the room', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    expect(screen.getByText('Jo Care Support Services')).toHaveClass('hidden', 'sm:inline-block')
+  })
 })
 
 describe('AppLayout nav active state', () => {
