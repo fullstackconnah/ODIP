@@ -56,9 +56,6 @@ export function lockedWords(status: ShiftStatus): string {
   return STATUS_WORDS[status] ?? status
 }
 
-/** shortcut: mirrors RosterConflictService.DefaultWeeklyHoursThreshold (38 h); add staff summaries to the participant board if the two ever differ. */
-export const WEEK_TARGET_HOURS = 38
-
 export function firstName(fullName: string | null | undefined): string {
   return (fullName ?? '').trim().split(' ')[0]
 }
@@ -312,10 +309,10 @@ export function moveLine(source: ShiftDto): string {
 }
 
 /** An option's accessible name, in the strip puck's style (StaffStrip): "Jack O'Sullivan, 15 of 38 hours this week, move from Monday 8am to 5pm with Liam, published: tells Jack". */
-export function pickOptionName(row: PickRow): string {
+export function pickOptionName(row: PickRow, weeklyHours: number): string {
   const { person, source } = row
   return [
-    `${person.fullName}, ${hoursText(row.hours)} of ${WEEK_TARGET_HOURS} hours this week`,
+    `${person.fullName}, ${hoursText(row.hours)} of ${weeklyHours} hours this week`,
     person.hasExpiredQualifications ? 'qualifications expired' : null,
     row.leave === 'Approved' ? 'on leave' : row.leave === 'Pending' ? 'leave pending' : null,
     source ? `move from ${format(parseISO(source.serviceDate), 'EEEE')} ${spokenRange(source)} with ${firstName(source.participantName)}` : null,

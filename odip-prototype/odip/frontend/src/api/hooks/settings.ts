@@ -10,6 +10,11 @@ export function useSettings() {
   })
 }
 
+/** The organisation's weekly-hours warning (Settings > Alert windows); 38 until the settings load, as the server's default. */
+export function useWeeklyHoursWarning(): number {
+  return useSettings().data?.weeklyHoursWarning ?? 38
+}
+
 export function useUpdateSettings() {
   const qc = useQueryClient()
   return useMutation({
