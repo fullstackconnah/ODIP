@@ -5,6 +5,7 @@ import { useUpdateClaimLineItem } from '@/api/hooks'
 import type { ClaimLineItemDto } from '@/api/types'
 import type { DropdownItem } from './Dropdown'
 import { Button } from '@/components/Button'
+import { extractErrorMessage } from '@/lib/utils'
 
 const CANCELLATION_REASONS: DropdownItem[] = [
   { value: 'NSDH', label: 'No show – health reason' },
@@ -33,7 +34,7 @@ export function NoShowModal({ claimId, lineItem, onClose, onSuccess }: NoShowMod
     setError('')
     updateLineItem.mutate(
       { claimId, itemId: lineItem.id, data: { claimType: 'Cancellation', cancellationReason: reason } },
-      { onSuccess }
+      { onSuccess, onError: err => setError(extractErrorMessage(err, 'Failed to record the no show.')) }
     )
   }
 

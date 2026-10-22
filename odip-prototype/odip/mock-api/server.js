@@ -2393,8 +2393,8 @@ function saveDraft(participantId, body) {
   const drafts = serviceAgreementDrafts[participantId] || (serviceAgreementDrafts[participantId] = [])
   if (blocks.length === 0) return respond(400, failEnvelope(null, ['Add at least one support block.']))
   if (!body.agreementStartDate || !body.agreementEndDate || body.agreementEndDate < body.agreementStartDate) return respond(400, failEnvelope(null, ['End dates must not precede start dates.']))
-  // The version this plan started from: a save from an older one would silently replace the newer, so it is refused with the newer version's number.
-  if (Number.isInteger(body.baseVersion) && body.baseVersion !== drafts.length) {
+  // The version this plan started from: a save from an older one would silently replace the newer, so it is refused with the newer version's number. Left out it means 0, as on the server.
+  if ((Number.isInteger(body.baseVersion) ? body.baseVersion : 0) !== drafts.length) {
     return respond(409, failEnvelope({ currentVersion: drafts.length }, [`Version ${drafts.length} was saved after the version this plan started from. Load version ${drafts.length} to see what changed, then make your changes again.`], 'draft-version-conflict'))
   }
   const problems = []

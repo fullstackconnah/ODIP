@@ -23,6 +23,18 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? Environment.GetEnvironmentVariable("POSTGRES_CONNECTION_STRING")
     ?? "Host=localhost;Port=5432;Database=odip;Username=postgres;Password=postgres";
 
+// Operator entry point, never run at startup: `dotnet Odip.Api.dll --seed-demo-participant-fixtures [--dry-run]` adds the additive Demo-tenant
+// fixtures (DemoParticipantFixtureSeeder) to an already-migrated database, prints what it added, and exits without starting the host.
+if (args.Contains("--seed-demo-participant-fixtures"))
+{
+    var cliOptions = new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(connectionString)
+        .AddInterceptors(new Odip.Infrastructure.Audit.AuditInterceptor(new Microsoft.AspNetCore.Http.HttpContextAccessor())).Options;
+    var fixtureResult = await new DemoParticipantFixtureSeeder().RunAsync(cliOptions, args.Contains("--dry-run"), CancellationToken.None);
+    Console.WriteLine($"{fixtureResult.Status}: {fixtureResult.Detail}");
+    foreach (var (table, count) in fixtureResult.Added) Console.WriteLine($"  {table}: {count}");
+    Environment.Exit(fixtureResult.Status == DemoFixtureStatus.Seeded ? 0 : 1);
+}
+
 // AuditInterceptor writes AuditLog rows (for the entity types listed in
 // Odip.Infrastructure.Audit.AuditedEntities) on every SaveChanges call. It must be registered
 // in DI and wired into AddDbContext via AddInterceptors — previously it existed but was never

@@ -243,6 +243,9 @@ describe('RecordAdministrationModal amending a high-risk dose', () => {
     expect(mockAmendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ witnessName: 'Rachel Thompson' }),
     }))
+    // The server keeps the stored PRN outcome when an amend sends none, so the modal never sends its cached copy.
+    expect(mockAmendMutateAsync.mock.calls[0][0].data).not.toHaveProperty('prnOutcome')
+    expect(mockAmendMutateAsync.mock.calls[0][0].data).not.toHaveProperty('prnOutcomeAt')
   })
 
   it('sends the typed witness name back when the amendment turns the dose into a refusal', async () => {

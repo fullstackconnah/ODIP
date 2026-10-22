@@ -45,16 +45,6 @@ export interface RestrictivePracticeDto {
   updatedAt: string
 }
 
-export interface CreateRestrictivePracticeDto {
-  type: RestrictivePracticeType
-  description: string
-  authorisedBy?: string | null
-  authorisationDate?: string | null
-  reviewDate?: string | null
-  relatedMedicationId?: string | null
-  isActive: boolean
-}
-
 export interface UpdateRestrictivePracticeDto {
   type: RestrictivePracticeType
   description: string
