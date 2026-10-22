@@ -160,6 +160,15 @@ describe('InvoicesSection', () => {
     expect(screen.queryByText('Only an Admin can void an invoice or issue a credit note.')).not.toBeInTheDocument()
   })
 
+  it('an Admin\'s actions column is reserved at the same width in preview as when issued (SHAPE C4)', async () => {
+    serveInvoices({ invoiceState: 'preview', invoices: [], groups: [plan], agencyCount: 0 })
+    renderSection()
+
+    await screen.findByRole('button', { name: 'Preview invoice for Sam Lee' })
+    const actionsHeader = screen.getAllByRole('columnheader').at(-1)!
+    expect(actionsHeader.style.getPropertyValue('--col-min')).toBe('20rem')
+  })
+
   it('a Coordinator gets Download only, and the line saying who can correct', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     serveInvoices(issued)

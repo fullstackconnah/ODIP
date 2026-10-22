@@ -188,8 +188,8 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
               {
                 key: 'actions',
                 header: '',
-                // Reserved for the widest pair (Download and "Issue credit note"), so the column keeps its width when Void goes.
-                minWidth: canCorrectInvoices && state === 'issued' ? '20rem' : undefined,
+                // Reserved for the widest pair (Download and "Issue credit note") in every state, so the column keeps its width when Void goes.
+                minWidth: canCorrectInvoices ? '20rem' : undefined,
                 render: (row: InvoiceRow) => {
                   const target = file(row)
                   const busy = downloading === row.id
