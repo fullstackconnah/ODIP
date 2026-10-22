@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import MarTab from './MarTab'
@@ -251,32 +251,77 @@ describe('MarTab — PRN outcome context', () => {
 })
 
 describe('MarTab — recording a PRN outcome the server refuses', () => {
-  it('keeps the modal open, shows the server message and keeps the typed outcome', async () => {
-    const refusal = { response: { status: 409, data: { success: false, errors: ['An outcome is already recorded for this dose.'] } } }
-    const mutateAsync = vi.fn().mockRejectedValueOnce(refusal).mockImplementation(() => new Promise(() => {}))
-    mockUseMar.mockReturnValue({ data: { entries: [], prnMedications: [prnEntry({ outcomePendingAdministrationId: 'admin-9' })] }, isLoading: false })
+  const recorded = { response: { status: 409, data: { success: false, code: 'PRN_OUTCOME_ALREADY_RECORDED', errors: ['An outcome is already recorded for this dose.'] } } }
+  const busy = { response: { status: 409, data: { success: false, code: 'ADMINISTRATION_SLOT_BUSY', errors: ['Another person is saving this dose right now. Check the dose, then try again.'] } } }
+  const pendingMar = () => ({ data: { entries: [], prnMedications: [prnEntry({ outcomePendingAdministrationId: 'admin-9' })] }, isLoading: false })
+
+  async function openAndSave(user: ReturnType<typeof userEvent.setup>, text = 'Settled within 30 minutes') {
+    await user.click(screen.getByRole('button', { name: /record outcome/i }))
+    await user.type(screen.getByRole('textbox', { name: /outcome/i }), text)
+    await user.click(screen.getByRole('button', { name: 'Save outcome' }))
+  }
+
+  it('says the outcome was not saved, keeps the text and switches Save off so a retry cannot repeat the 409', async () => {
+    const mutateAsync = vi.fn().mockRejectedValueOnce(recorded)
+    mockUseMar.mockReturnValue(pendingMar())
+    mockUseParticipants.mockReturnValue({ data: [] })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync, isPending: false })
+    const user = userEvent.setup()
+
+    const view = renderTab()
+    await openAndSave(user)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('An outcome is already recorded for this dose.')
+    expect(alert).toHaveTextContent('Your outcome was not saved.')
+    expect(alert).toHaveTextContent('ask a coordinator')
+    expect(mutateAsync).toHaveBeenCalledWith({ id: 'admin-9', prnOutcome: 'Settled within 30 minutes' })
+    expect(screen.getByRole('textbox', { name: /outcome/i })).toHaveValue('Settled within 30 minutes')
+    expect(screen.getByRole('button', { name: 'Save outcome' })).toBeDisabled()
+
+    // The page refetches behind the modal: the dose no longer offers "Record outcome", and closing the window clears everything.
+    mockUseMar.mockReturnValue({ data: { entries: [], prnMedications: [prnEntry({ outcomePendingAdministrationId: null })] }, isLoading: false })
+    view.rerender(<MemoryRouter><MarTab /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('button', { name: /record outcome/i })).not.toBeInTheDocument()
+    expect(mutateAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Save on after a busy answer, and the refusal clears on the next success', async () => {
+    const mutateAsync = vi.fn().mockRejectedValueOnce(busy).mockResolvedValueOnce({ success: true })
+    mockUseMar.mockReturnValue(pendingMar())
     mockUseParticipants.mockReturnValue({ data: [] })
     mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync, isPending: false })
     const user = userEvent.setup()
 
     renderTab()
-    await user.click(screen.getByRole('button', { name: /record outcome/i }))
-    await user.type(screen.getByRole('textbox', { name: /outcome/i }), 'Settled within 30 minutes')
-    await user.click(screen.getByRole('button', { name: 'Save outcome' }))
+    await openAndSave(user)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Another person is saving this dose right now. Check the dose, then try again. Your outcome was not saved.')
+    expect(screen.getByRole('button', { name: 'Save outcome' })).toBeEnabled()
 
-    expect(await screen.findByText('An outcome is already recorded for this dose.')).toBeInTheDocument()
-    expect(mutateAsync).toHaveBeenCalledWith({ id: 'admin-9', prnOutcome: 'Settled within 30 minutes' })
-    expect(screen.getByRole('textbox', { name: /outcome/i })).toHaveValue('Settled within 30 minutes')
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Save outcome' }))
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: /outcome/i })).not.toBeInTheDocument())
+    expect(mutateAsync).toHaveBeenCalledTimes(2)
     await user.click(screen.getByRole('button', { name: /record outcome/i }))
-    expect(screen.queryByText('An outcome is already recorded for this dose.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: /outcome/i })).toHaveValue('')
-    await user.type(screen.getByRole('textbox', { name: /outcome/i }), 'Retry outcome')
-    mutateAsync.mockRejectedValueOnce(refusal)
-    await user.click(screen.getByRole('button', { name: 'Save outcome' }))
-    expect(await screen.findByText('An outcome is already recorded for this dose.')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Save outcome' }))
-    expect(mutateAsync).toHaveBeenCalledTimes(3)
-    expect(screen.queryByText('An outcome is already recorded for this dose.')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['a missing record', { response: { status: 404, data: { success: false, errors: ['Administration record not found'] } } }, 'This dose record is no longer available. Your outcome was not saved. Close this window and refresh the page.', true],
+    ['a dose that is not PRN', { response: { status: 400, data: { success: false, errors: ['Outcomes can only be recorded on PRN doses.'] } } }, 'Outcomes can only be recorded on PRN doses. Your outcome was not saved. Close this window.', true],
+    ['no answer from the server', new Error('Network Error'), 'Could not save the outcome. What you typed is still here. Check your connection and try again.', false],
+  ])('explains %s in plain words', async (_name, failure, message, final) => {
+    mockUseMar.mockReturnValue(pendingMar())
+    mockUseParticipants.mockReturnValue({ data: [] })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn().mockRejectedValueOnce(failure), isPending: false })
+    const user = userEvent.setup()
+
+    renderTab()
+    await openAndSave(user)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(screen.getByRole('textbox', { name: /outcome/i })).toHaveValue('Settled within 30 minutes')
+    expect(screen.getByRole('button', { name: 'Save outcome' }).hasAttribute('disabled')).toBe(final)
   })
 })

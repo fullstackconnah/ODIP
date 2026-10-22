@@ -97,7 +97,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
   const pageQuery = useParticipantMedications(participantId, true)
   const { data: medicationsData, refetch } = pageQuery
   const medications = medicationsData ?? NO_MEDICATIONS
-  const administrationsQuery = useParticipantAdministrations(participantId, isoDaysAgo(14), isoDaysAgo(0))
+  const administrationsQuery = useParticipantAdministrations(participantId, isoDaysAgo(14))
   const administrations = administrationsQuery.data ?? []
   const administrationsPhase = queryPhase(administrationsQuery)
 

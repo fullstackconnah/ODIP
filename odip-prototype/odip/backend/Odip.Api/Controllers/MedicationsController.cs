@@ -4,6 +4,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -322,7 +323,7 @@ public class MedicationsController : ControllerBase
 
         await using var transaction = _db.Database.IsNpgsql() && _db.Database.CurrentTransaction is null
             && System.Transactions.Transaction.Current is null ? await _db.Database.BeginTransactionAsync(ct) : null;
-        await LockAdministrationForWriteAsync(admin, ct);
+        if (!await LockAdministrationForWriteAsync(admin, ct)) return Busy();
         if (_db.Entry(admin).State == EntityState.Detached)
             return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
@@ -343,8 +344,10 @@ public class MedicationsController : ControllerBase
         if (admin.WitnessUserId is null && !string.IsNullOrWhiteSpace(dto.WitnessName)) admin.WitnessName = dto.WitnessName;
         admin.Reason = dto.Reason;
         admin.PrnReason = dto.PrnReason;
-        admin.PrnOutcome = dto.PrnOutcome;
-        admin.PrnOutcomeAt = dto.PrnOutcomeAt;
+        // An amend that sends no outcome keeps the stored one: a client built from an older copy must not wipe an outcome another user recorded.
+        // Consequence: an amend can change an outcome but cannot clear it (nothing in the app offers that).
+        admin.PrnOutcome = dto.PrnOutcome ?? admin.PrnOutcome;
+        admin.PrnOutcomeAt = dto.PrnOutcomeAt ?? admin.PrnOutcomeAt;
         admin.Notes = dto.Notes;
         admin.UpdatedAt = DateTime.UtcNow;
 
@@ -369,15 +372,18 @@ public class MedicationsController : ControllerBase
 
         await using var transaction = _db.Database.IsNpgsql() && _db.Database.CurrentTransaction is null
             && System.Transactions.Transaction.Current is null ? await _db.Database.BeginTransactionAsync(ct) : null;
-        await LockAdministrationForWriteAsync(admin, ct);
+        if (!await LockAdministrationForWriteAsync(admin, ct)) return Busy();
         if (_db.Entry(admin).State == EntityState.Detached)
             return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
-        // A support worker records the outcome once, on a PRN dose; a coordinator corrects it through the amend route.
+        // A support worker records the outcome once, on a PRN dose that was given. Changing it afterwards is a coordinator correction through
+        // the amend API (PUT medications/administrations/{id}); no screen offers that yet, so the app tells the worker to ask a coordinator.
         if (admin.ParticipantMedication?.Type != MedicationType.Prn)
             return BadRequest(ApiResponse<AdministrationDto>.Fail("Outcomes can only be recorded on PRN doses."));
+        if (admin.Status != MedicationAdministrationStatus.Administered)
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("Outcomes can only be recorded on a PRN dose that was given."));
         if (!string.IsNullOrWhiteSpace(admin.PrnOutcome))
-            return Conflict(ApiResponse<AdministrationDto>.Fail("An outcome is already recorded for this dose."));
+            return Conflict(ApiResponse<AdministrationDto>.Fail("An outcome is already recorded for this dose.", MedicationErrorCodes.PrnOutcomeAlreadyRecorded));
 
         admin.PrnOutcome = dto.PrnOutcome;
         admin.PrnOutcomeAt = DateTime.UtcNow;
@@ -391,17 +397,35 @@ public class MedicationsController : ControllerBase
             admin, FullName(med.Participant), med.Name, med.DoseDescription, LookupIncidentId(incidentMap, admin.Id))));
     }
 
+    /// <summary>How long an outcome or amend write waits for another write to the same dose; a test shortens it.</summary>
+    internal TimeSpan OutcomeLockWait { get; init; } = TimeSpan.FromSeconds(20);
+
+    private ActionResult<ApiResponse<AdministrationDto>> Busy() => Conflict(ApiResponse<AdministrationDto>.Fail(
+        "Another person is saving this dose right now. Check the dose, then try again.", MedicationErrorCodes.AdministrationSlotBusy));
+
     // Both clinical writers share the lock; reloading after it preserves first-write checks and the SaveChanges audit.
-    private async Task LockAdministrationForWriteAsync(MedicationAdministration admin, CancellationToken ct)
+    // False when another write held the lock past OutcomeLockWait (nothing was written; the caller answers 409 and its transaction rolls back).
+    private async Task<bool> LockAdministrationForWriteAsync(MedicationAdministration admin, CancellationToken ct)
     {
-        if (!_db.Database.IsNpgsql()) return;
+        if (!_db.Database.IsNpgsql()) return true;
         var bytes = new byte[23];
         admin.Id.TryWriteBytes(bytes);
         "outcome"u8.CopyTo(bytes.AsSpan(16));
         var key = BitConverter.ToInt64(SHA256.HashData(bytes), 0);
-        await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({key})", ct);
+        try
+        {
+            await _db.Database.ExecuteSqlRawAsync(
+                string.Create(CultureInfo.InvariantCulture, $"SET LOCAL lock_timeout = {(int)OutcomeLockWait.TotalMilliseconds}; SELECT pg_advisory_xact_lock({{0}}); SET LOCAL lock_timeout TO DEFAULT"),
+                new object[] { key }, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+        {
+            return false;
+        }
         await _db.Entry(admin).ReloadAsync(ct);
+        return true;
     }
+
     [HttpGet("participants/{participantId:guid}/administrations")]
     public async Task<ActionResult<ApiResponse<List<AdministrationDto>>>> GetParticipantAdministrations(
         Guid participantId, [FromQuery] DateTime? from, [FromQuery] DateTime? to, CancellationToken ct)

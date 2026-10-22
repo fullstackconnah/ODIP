@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import type { AxiosError } from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
@@ -20,6 +21,7 @@ import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/inciden
 import { Button } from '@/components/Button'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { Callout } from '@/components/Callout'
+import { TAP_FLOOR } from '@/components/tapArea'
 
 /**
  * Connection map: for a Refused/Withheld/Missed/WrongMedication administration, either a link to
@@ -78,6 +80,20 @@ function SkeletonRow() {
   )
 }
 
+/** Plain words for a refused outcome save: always that it was NOT saved, and what to do next. */
+function describeOutcomeRefusal(err: unknown): { message: string; final: boolean } {
+  const response = (err as AxiosError<{ code?: string }>)?.response
+  const server = extractErrorMessage(err, '')
+  if (response?.status === 409 && response.data?.code === 'PRN_OUTCOME_ALREADY_RECORDED')
+    return { message: `${server} Your outcome was not saved. Close this window to check the dose. To change a recorded outcome, ask a coordinator.`, final: true }
+  if (response?.status === 409)
+    return { message: `${server} Your outcome was not saved. What you typed is still here, so you can press Save outcome again.`, final: false }
+  if (response?.status === 404)
+    return { message: 'This dose record is no longer available. Your outcome was not saved. Close this window and refresh the page.', final: true }
+  if (response?.status === 400 && server) return { message: `${server} Your outcome was not saved. Close this window.`, final: true }
+  return { message: 'Could not save the outcome. What you typed is still here. Check your connection and try again.', final: false }
+}
+
 export default function MarTab() {
   const { canRecordAdministrations, canManageMedications, canCreateIncidents } = usePermissions()
   const [date, setDate] = useState(todayIso())
@@ -93,7 +109,8 @@ export default function MarTab() {
   const [amendingSlot, setAmendingSlot] = useState<MarEntryDto | null>(null)
   const [outcomeFor, setOutcomeFor] = useState<MarPrnDto | null>(null)
   const [outcomeText, setOutcomeText] = useState('')
-  const [outcomeError, setOutcomeError] = useState<string | null>(null)
+  // `final`: the server will give the same answer again, so Save stays off until the window is closed.
+  const [outcomeRefusal, setOutcomeRefusal] = useState<{ message: string; final: boolean } | null>(null)
   // MED-01: lets a coordinator/support worker review the missed-medication guidance calmly,
   // outside the moment it's triggered by a MAR record — not tied to any specific medication.
   const [showGuidance, setShowGuidance] = useState(false)
@@ -122,12 +139,12 @@ export default function MarTab() {
 
   async function submitPrnOutcome() {
     if (!outcomeFor?.outcomePendingAdministrationId || !outcomeText.trim()) return
-    setOutcomeError(null)
+    setOutcomeRefusal(null)
     try {
       await recordPrnOutcome.mutateAsync({ id: outcomeFor.outcomePendingAdministrationId, prnOutcome: outcomeText.trim() })
     } catch (err) {
-      // A refusal (already recorded, not a PRN dose) stays in the modal with the typed text, like the record-dose modal.
-      setOutcomeError(extractErrorMessage(err, 'Failed to save the outcome.'))
+      // A refusal stays in the modal with the typed text, like the record-dose modal.
+      setOutcomeRefusal(describeOutcomeRefusal(err))
       return
     }
     closeOutcome()
@@ -136,7 +153,7 @@ export default function MarTab() {
   function closeOutcome() {
     setOutcomeFor(null)
     setOutcomeText('')
-    setOutcomeError(null)
+    setOutcomeRefusal(null)
   }
 
   return (
@@ -338,7 +355,7 @@ export default function MarTab() {
                       <button
                         type="button"
                         onClick={() => setOutcomeFor(prn)}
-                        className="text-sm text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
+                        className={`${TAP_FLOOR} text-sm text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded`}
                       >
                         Record outcome
                       </button>
@@ -426,7 +443,7 @@ export default function MarTab() {
             <Button variant="secondary" onClick={closeOutcome}>
               Cancel
             </Button>
-            <Button disabled={!outcomeText.trim() || recordPrnOutcome.isPending} onClick={submitPrnOutcome}>
+            <Button disabled={!outcomeText.trim() || recordPrnOutcome.isPending || outcomeRefusal?.final} onClick={submitPrnOutcome}>
               {recordPrnOutcome.isPending ? 'Saving...' : 'Save outcome'}
             </Button>
           </>
@@ -441,7 +458,7 @@ export default function MarTab() {
             </p>}
           </div>
         )}
-        {outcomeError && <div className="mb-3"><Callout tone="error">{outcomeError}</Callout></div>}
+        {outcomeRefusal && <div className="mb-3"><Callout tone="error">{outcomeRefusal.message}</Callout></div>}
         <label className="block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]" htmlFor="prn-outcome-text">
           Outcome <span aria-hidden="true">*</span>
         </label>
