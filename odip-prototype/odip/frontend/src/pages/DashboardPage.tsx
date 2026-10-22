@@ -312,7 +312,7 @@ export default function DashboardPage() {
                     <div className="flex flex-wrap items-center gap-x-2 px-[var(--card-pad)]">
                       <h3 className="text-sm font-semibold">
                         <button type="button" aria-expanded={alertsOpen} aria-controls={alertsPanelId} onClick={() => setAlertsOpen((open) => !open)}
-                          className="flex min-h-[var(--control-h)] items-center gap-2 rounded-[var(--radius-sm)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
+                          className="flex min-h-[var(--control-h)] items-center gap-2 rounded-[var(--radius-sm)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]">
                           <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-[var(--color-muted-foreground)] transition-transform duration-150 ease-out ${alertsOpen ? 'rotate-90' : ''}`} />
                           <span aria-hidden="true">Critical participant alerts</span>
                           <span aria-hidden="true" className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-bold ${ALERT_SEVERITY_STYLES.Critical.bg} ${ALERT_SEVERITY_STYLES.Critical.text}`}>
@@ -342,7 +342,7 @@ export default function DashboardPage() {
                           <Link
                             key={`${participantId}:${alert.type}:${alert.message}`}
                             to={href}
-                            className={`flex items-center gap-3 px-[var(--card-pad)] py-3 ${style.bg} transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}
+                            className={`flex items-center gap-3 px-[var(--card-pad)] py-3 ${style.bg} transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]`}
                           >
                             <span className={`inline-flex shrink-0 items-center gap-1 text-xs font-bold ${style.text}`}><Icon className="h-3 w-3" /> {style.label}</span>
                             <div className="min-w-0 flex-1">

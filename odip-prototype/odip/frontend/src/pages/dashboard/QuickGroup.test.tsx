@@ -502,7 +502,9 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     unmount()
 
     screenSize.belowMd = true
-    render(<Harness model={model({ count: 3, rows: [tapRow('a', () => first.promise), tapRow('b'), tapRow('c')] })} />)
+    // A fresh run of its own: the first render is unmounted, and nothing from it carries over.
+    const second = deferred()
+    render(<Harness model={model({ count: 3, rows: [tapRow('a', () => second.promise), tapRow('b'), tapRow('c')] })} />)
     expect(screen.getAllByRole('columnheader')[0]).toHaveTextContent(/^Select$/)
     expect(screen.queryByText('None selected')).toBeNull()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
@@ -513,7 +515,7 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     await screen.findByRole('button', { name: 'Approving 1 of 3…' })
     // On a phone Clear is not drawn while a run goes: the running label needs the room, and Clear is held then anyway.
     expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
-    await act(async () => { first.resolve({ announce: 'Approved Person a.' }) })
+    await act(async () => { second.resolve({ announce: 'Approved Person a.' }) })
   })
 
   it('the bar still sticks below xl, and a tabbed-to control clears it (card42 T4)', () => {

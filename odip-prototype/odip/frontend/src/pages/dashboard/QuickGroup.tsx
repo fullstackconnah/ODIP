@@ -376,7 +376,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
     </span>
   )
   const columns: Column<QuickRow>[] = [
-    ...(bar ? [{ key: 'selection', header: (!belowMd && allBox) || 'Select', pin: false as const, mobile: 'status' as const,
+    ...(bar ? [{ key: 'selection', header: (!belowMd && allBox) || <span className="block min-h-[var(--control-h)]">Select</span>, pin: false as const, mobile: 'status' as const,
       minWidth: 'calc(24px + var(--control-h))', render: (row: QuickRow) => {
         const action = tapOf(row)
         return action ? <CheckboxField label={<span className="sr-only">{selectName(action.name)}</span>}
@@ -437,7 +437,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
       {bar && action && (
         // The panel bar (card42): the selection's state and its action, upper right above the table, so ticking never reflows the columns. Its content row is
         // --control-h at rest, ticked and running; below xl it sticks under the app header inside its own panel, and on a phone it carries the select-all box.
-        <div className="mb-2 xl:px-[calc(1px+var(--cell-px))] max-xl:sticky max-xl:top-12 max-xl:z-20 max-xl:bg-[var(--color-background)] max-xl:px-[calc(1px+1rem)] max-xl:py-2 max-xl:shadow-[0_24px_32px_-12px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)]">
+        <div className="mb-2 md:px-[calc(1px+var(--cell-px))] max-md:px-[calc(1px+1rem)] max-xl:sticky max-xl:top-12 max-xl:z-20 max-xl:bg-[var(--color-background)] max-xl:py-2 max-xl:shadow-[0_24px_32px_-12px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)]">
           <div data-bulk-bar className="flex h-[var(--control-h)] items-center gap-3">
             {belowMd && allBox}
             <div className="ml-auto flex min-w-0 items-center gap-3">
