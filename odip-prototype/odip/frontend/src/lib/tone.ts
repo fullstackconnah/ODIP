@@ -163,6 +163,10 @@ export const STATUS_TONE: Record<string, Tone> = {
   notinvoiced: 'neutral',
   invoicesent: 'info',
   partial: 'warning',
+  // Invoices: an issued one is in the pipeline; voided and credited ones no longer stand.
+  issued: 'info',
+  voided: 'neutral',
+  credited: 'neutral',
 
   // QSC
   reportedwithin24h: 'success',
