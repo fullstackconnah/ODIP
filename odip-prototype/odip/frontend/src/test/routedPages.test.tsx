@@ -35,6 +35,8 @@ const WRAPPED: [RegExp, unknown][] = [
   [new RegExp(`/inquiries/${ID}/onboarding$`), { ...RECORD, items: [] }],
   // The dashboard summary is an object, not a list: with the list shape the page crashed on `upcomingTrips` as soon as it arrived (a race this test used to win).
   [/\/dashboard\/summary$/, { upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0, overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [] }],
+  // The payslip list is an object ($ keeps /portal/payslips/9001/pdf out).
+  [/\/portal\/payslips$/, { status: 'Ready', payslips: [] }],
 ]
 
 function answer(url: string): unknown {
@@ -99,6 +101,7 @@ const ROUTES: Route[] = [
   { path: '/portal/shifts/:id', url: `/portal/shifts/${ID}`, load: () => import('@/pages/portal/PortalShiftDetailPage') },
   { path: '/portal/witness-approvals', url: '/portal/witness-approvals', load: () => import('@/pages/portal/PortalWitnessApprovalsPage') },
   { path: '/portal/leave', url: '/portal/leave', load: () => import('@/pages/portal/PortalLeavePage') },
+  { path: '/portal/payslips', url: '/portal/payslips', load: () => import('@/pages/portal/PortalPayslipsPage') },
   { path: '/accessibility', url: '/accessibility', load: () => import('@/pages/AccessibilityPage') },
   { path: '*', url: '/no-such-page', load: () => import('@/pages/NotFoundPage') },
 ]
@@ -118,7 +121,7 @@ const ALLOWED: Record<string, string> = {
 
 // These titles were renamed (or their nav label was) so the two match; this keeps them there.
 const RENAMED_TO_NAV_LABEL = [
-  '/incidents', '/schedule', '/qualifications', '/rostering', '/portal',
+  '/incidents', '/schedule', '/qualifications', '/rostering', '/portal', '/portal/payslips',
   '/trips', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions',
 ]
 

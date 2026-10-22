@@ -26,7 +26,7 @@ public sealed record EhEmployee(int Id, string? FirstName, string? Surname, stri
 /// HttpClient like NagerHolidayProvider (Program.cs sets a 30 s timeout and redacts the Authorization header from HttpClient's logging). The key is
 /// passed per call and only ever goes into that header. Endpoints and their sources: the plan's "Employment Hero Payroll API v2" table.
 /// </summary>
-public class EmploymentHeroClient
+public partial class EmploymentHeroClient
 {
     public const string DefaultBaseUrl = "https://api.yourpayroll.com.au/";
     private const int PageSize = 100;

@@ -4,14 +4,15 @@ import userEvent from '@testing-library/user-event'
 import UserFormPanel from './UserFormPanel'
 import type { AdminUserDto } from '@/api/types'
 
-const { mockTenantsSummary } = vi.hoisted(() => ({
+const { mockTenantsSummary, mockUpdateMutateAsync } = vi.hoisted(() => ({
   mockTenantsSummary: vi.fn<(enabled?: boolean) => { data: { id: string; name: string }[] }>(() => ({ data: [{ id: 'tenant-1', name: 'Sample Support Co' }] })),
+  mockUpdateMutateAsync: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useAdminTenantsSummary: mockTenantsSummary,
   useCreateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useUpdateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateAdminUser: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
@@ -91,6 +92,25 @@ describe('UserFormPanel — the tenants request', () => {
     expect(mockTenantsSummary).toHaveBeenLastCalledWith(false)
     rerender(<UserFormPanel isOpen onClose={() => {}} />)
     expect(mockTenantsSummary).toHaveBeenLastCalledWith(true)
+  })
+})
+
+// The Users form has no staff-profile fields: an edit sends the identity fields only, and the server leaves the staff profile on the row alone.
+describe('UserFormPanel — edit payload', () => {
+  it('sends only the identity fields and the role on an edit', async () => {
+    mockUpdateMutateAsync.mockResolvedValue({ success: true, data: user1 })
+    const u = userEvent.setup()
+    render(<UserFormPanel isOpen onClose={() => {}} user={user1} />)
+
+    await u.click(screen.getByRole('button', { name: 'Role *' }))
+    await u.click(await screen.findByRole('option', { name: 'Support Worker' }))
+    await u.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const { id, data } = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(id).toBe('user-1')
+    expect(Object.keys(data).sort()).toEqual(['addressConfirmed', 'email', 'firstName', 'isActive', 'lastName', 'role', 'username'])
+    expect(data).toEqual({ firstName: 'Ann', lastName: 'One', email: 'ann@example.com', username: 'ann', role: 'SupportWorker', isActive: true })
   })
 })
 
