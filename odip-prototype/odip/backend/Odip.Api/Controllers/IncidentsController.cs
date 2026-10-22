@@ -665,8 +665,7 @@ public class IncidentsController : ControllerBase
         i.ImmediateActionsTaken = dto.ImmediateActionsTaken;
         i.WereEmergencyServicesCalled = dto.WereEmergencyServicesCalled;
         i.EmergencyServicesDetails = dto.EmergencyServicesDetails;
-        i.WitnessNames = dto.WitnessNames;
-        i.WitnessStatements = dto.WitnessStatements;
+        // No screen edits these legacy witness columns, so an update leaves them untouched.
         // Connection-map source links (Deliverable 1): may be newly set, cleared back to null, or
         // changed to a different source — assigning null clears the link.
         i.MedicationAdministrationId = dto.MedicationAdministrationId;
