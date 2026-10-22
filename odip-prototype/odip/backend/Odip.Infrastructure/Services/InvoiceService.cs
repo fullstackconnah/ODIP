@@ -319,6 +319,75 @@ public class InvoiceService
         }).GeneratePdf();
     }
 
+    // ── Reads ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// A payment is recorded against an invoice (lead S5) when a line it covers has a paid amount, or is Paid or Partially paid, or the claim itself was
+    /// marked Paid or Partially paid (that sets no line). Such an invoice can only be credited, never voided.
+    /// </summary>
+    public static bool PaymentRecorded(Invoice invoice, IReadOnlyDictionary<Guid, ClaimLineItem> claimLines, TripClaimStatus claimStatus) =>
+        claimStatus is TripClaimStatus.Paid or TripClaimStatus.PartiallyPaid
+        || invoice.Lines.Any(l => l.ClaimLineItemId is { } id && claimLines.TryGetValue(id, out var line)
+            && (line.PaidAmount > 0 || line.Status is ClaimLineItemStatus.Paid or ClaimLineItemStatus.PartiallyPaid));
+
+    public static InvoiceSummaryDto Summary(Invoice i, string? creditedBy, bool paymentRecorded) => new()
+    {
+        Id = i.Id, Kind = i.Kind, Number = i.Number, DisplayNumber = i.DisplayNumber, Status = i.Status, GroupId = i.ParticipantBookingId ?? i.ParticipantId,
+        ParticipantName = i.ParticipantName, BillToName = i.BillToName, PayerKind = i.PayerKind, IssueDate = i.IssueDate, DueDate = i.DueDate, Total = i.Total,
+        CreditsDisplayNumber = i.CreditsDisplayNumber, CreditedByDisplayNumber = creditedBy, PaymentRecorded = paymentRecorded,
+    };
+
+    /// <summary>The claim's Invoices section (D19): its rows (each credit note under the invoice it credits), its payers, its agency count and its state.</summary>
+    public async Task<ClaimInvoicesDto> ClaimInvoicesAsync(Guid claimId, CancellationToken ct)
+    {
+        var claim = await LoadClaimAsync(claimId, ct) ?? throw new InvalidOperationException("Claim not found.");
+        var rows = await _db.Invoices.AsNoTracking().Include(i => i.Lines).Where(i => i.TripClaimId == claimId).ToListAsync(ct);
+        var groups = GroupsOf(claim);
+        var invoiced = groups.Where(g => IsInvoiced(g.PlanType)).ToList();
+        var settings = invoiced.Count == 0 ? null : await SettingsForAsync(TenantOf(claim), ct);
+        var claimLines = claim.LineItems.ToDictionary(l => l.Id);
+        var creditNotes = rows.Where(r => r.Kind == InvoiceKind.CreditNote && r.CreditsInvoiceId != null).ToLookup(r => r.CreditsInvoiceId!.Value);
+
+        var ordered = rows.Where(r => r.Kind == InvoiceKind.Invoice).OrderBy(r => r.Number)
+            .SelectMany(r => new[] { r }.Concat(creditNotes[r.Id].OrderBy(c => c.Number)))
+            .Select(r => Summary(r, creditNotes[r.Id].Select(c => c.DisplayNumber).FirstOrDefault(),
+                r.Kind == InvoiceKind.Invoice && PaymentRecorded(r, claimLines, claim.Status)))
+            .ToList();
+
+        return new ClaimInvoicesDto
+        {
+            InvoiceState = rows.Count > 0 ? "issued"
+                : invoiced.Count == 0 ? "none"
+                : claim.Status is TripClaimStatus.Draft or TripClaimStatus.Ready ? "preview"
+                : "legacy",
+            Invoices = ordered,
+            Groups = invoiced.Select(g =>
+            {
+                var snapshot = BuildSnapshot(claim, g, settings ?? new ProviderSettings());
+                return new PayerGroupDto { GroupId = g.GroupId, ParticipantName = snapshot.ParticipantName, BillToName = snapshot.BillToName, PayerKind = g.PlanType, Total = snapshot.Total };
+            }).ToList(),
+            AgencyCount = groups.Where(g => g.PlanType == PlanType.AgencyManaged).Select(g => g.Participant.Id).Distinct().Count(),
+        };
+    }
+
+    /// <summary>
+    /// The PDF of one payer of a claim (D18): its issued invoice (the standing one, else the newest) from the snapshot; else the preview of a claim not yet
+    /// submitted; else the legacy derived render of a claim submitted before numbering.
+    /// </summary>
+    public async Task<(byte[] Content, string FileName)> DownloadForGroupAsync(Guid claimId, Guid groupId, CancellationToken ct)
+    {
+        var row = await _db.Invoices.AsNoTracking()
+            .Where(i => i.TripClaimId == claimId && i.Kind == InvoiceKind.Invoice && (i.ParticipantBookingId ?? i.ParticipantId) == groupId)
+            .OrderBy(i => i.Status == InvoiceStatus.Issued ? 0 : 1).ThenByDescending(i => i.CreatedAt)
+            .Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);
+        if (row is { } id && await RenderStoredAsync(id, ct) is { } stored) return stored;
+
+        var status = await _db.TripClaims.Where(c => c.Id == claimId).Select(c => c.Status).FirstAsync(ct);
+        return status is TripClaimStatus.Draft or TripClaimStatus.Ready
+            ? await PreviewAsync(claimId, groupId, ct)
+            : await GenerateInvoiceAsync(claimId, groupId, ct);
+    }
+
     // ── Issue (Mark as Submitted) ──────────────────────────────
 
     /// <summary>The claim's invoices that stand (Kind Invoice, Issued).</summary>

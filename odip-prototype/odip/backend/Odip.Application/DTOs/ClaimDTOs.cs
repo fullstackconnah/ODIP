@@ -223,6 +223,57 @@ public record ShiftClaimGeneratedDto : TripClaimListDto
 // INVOICE DTOs (Xero PR1)
 // ══════════════════════════════════════════════════════════════
 
+/// <summary>A claim's Invoices section (D19). InvoiceState is "preview" (not submitted, no rows), "issued" (has rows), "legacy" (submitted before numbering, no rows) or "none" (no plan- or self-managed payer).</summary>
+public record ClaimInvoicesDto
+{
+    public string InvoiceState { get; init; } = "none";
+    /// <summary>By number, each credit note directly under the invoice it credits.</summary>
+    public List<InvoiceSummaryDto> Invoices { get; init; } = new();
+    /// <summary>Every plan- and self-managed payer (the preview and legacy rows).</summary>
+    public List<PayerGroupDto> Groups { get; init; } = new();
+    /// <summary>The agency-managed participants on the claim (claimed in the BPR CSV, not invoiced).</summary>
+    public int AgencyCount { get; init; }
+}
+
+public record InvoiceSummaryDto
+{
+    public Guid Id { get; init; }
+    public InvoiceKind Kind { get; init; }
+    public int Number { get; init; }
+    public string DisplayNumber { get; init; } = string.Empty;
+    public InvoiceStatus Status { get; init; }
+    /// <summary>The booking (trip claim) or participant (shift claim) it bills for.</summary>
+    public Guid GroupId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string BillToName { get; init; } = string.Empty;
+    public PlanType PayerKind { get; init; }
+    public DateOnly IssueDate { get; init; }
+    public DateOnly? DueDate { get; init; }
+    public decimal Total { get; init; }
+    /// <summary>On a credit note: the invoice it credits.</summary>
+    public string? CreditsDisplayNumber { get; init; }
+    /// <summary>On a credited invoice: its credit note.</summary>
+    public string? CreditedByDisplayNumber { get; init; }
+    /// <summary>A payment is recorded against it (a covered line paid or part paid, or the claim marked paid): it can only be credited, never voided.</summary>
+    public bool PaymentRecorded { get; init; }
+}
+
+public record PayerGroupDto
+{
+    public Guid GroupId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string BillToName { get; init; } = string.Empty;
+    public PlanType PayerKind { get; init; }
+    /// <summary>Subtotal plus GST, as the invoice would be.</summary>
+    public decimal Total { get; init; }
+}
+
+/// <summary>Why an invoice is voided or credited: required, 1 to 500 characters; kept in the audit log, never printed.</summary>
+public record InvoiceReasonDto
+{
+    public string? Reason { get; init; }
+}
+
 /// <summary>The claims a submit confirm is about: one (claim detail, the trip tab's row) or a selection (the trip tab's bulk change), 1 to 100.</summary>
 public record SubmitPreviewRequestDto
 {

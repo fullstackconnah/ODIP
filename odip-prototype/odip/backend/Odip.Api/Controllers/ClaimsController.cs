@@ -494,21 +494,29 @@ public class ClaimsController : ControllerBase
         }
     }
 
-    // GET /api/v1/claims/{claimId}/invoices/{bookingId}
-    [HttpGet("claims/{claimId:guid}/invoices/{bookingId:guid}")]
-    public async Task<IActionResult> DownloadInvoice(Guid claimId, Guid bookingId, CancellationToken ct)
+    // GET /api/v1/claims/{claimId}/invoices/{groupId} — groupId is the booking (trip claim) or the participant (shift claim).
+    [HttpGet("claims/{claimId:guid}/invoices/{groupId:guid}")]
+    public async Task<IActionResult> DownloadInvoice(Guid claimId, Guid groupId, CancellationToken ct)
     {
         if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
         try
         {
-            var (bytes, fileName) = await _invoiceService.GenerateInvoiceAsync(claimId, bookingId, ct);
+            var (bytes, fileName) = await _invoiceService.DownloadForGroupAsync(claimId, groupId, ct);
             return File(bytes, "application/pdf", fileName);
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(ApiResponse<bool>.Fail(ex.Message));
         }
+    }
+
+    // GET /api/v1/claims/{claimId}/invoices — the claim's Invoices section, every state said by the server.
+    [HttpGet("claims/{claimId:guid}/invoices")]
+    public async Task<ActionResult<ApiResponse<ClaimInvoicesDto>>> GetClaimInvoices(Guid claimId, CancellationToken ct)
+    {
+        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<ClaimInvoicesDto>.Fail("Claim not found"));
+        return Ok(ApiResponse<ClaimInvoicesDto>.Ok(await _invoiceService.ClaimInvoicesAsync(claimId, ct)));
     }
 
     // POST /api/v1/claims/submit-preview — a read (POST for the list of ids): what marking each claim as submitted would issue now.
