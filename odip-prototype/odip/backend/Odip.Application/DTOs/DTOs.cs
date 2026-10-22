@@ -1702,8 +1702,8 @@ public record TaskDto
 
 public record CreateTaskDto
 {
-    [Required]
-    public Guid TripInstanceId { get; init; }
+    /// <summary>Optional: a task needs no trip (house upkeep, renewals). When sent it must be the caller's own trip.</summary>
+    public Guid? TripInstanceId { get; init; }
     public Guid? ParticipantBookingId { get; init; }
     public Guid? AccommodationReservationId { get; init; }
     public Guid? VehicleAssignmentId { get; init; }

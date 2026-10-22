@@ -43,7 +43,7 @@ public class TasksController : ControllerBase
     /// </summary>
     private async Task<string?> LinkedRowErrorAsync(CreateTaskDto dto, CancellationToken ct)
     {
-        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct)) return "Trip not found.";
+        if (dto.TripInstanceId is { } tripId && !await _db.TripInstances.AnyAsync(t => t.Id == tripId, ct)) return "Trip not found.";
         if (dto.ParticipantBookingId is { } bookingId
             && !await _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)) return "Booking not found.";
         if (dto.AccommodationReservationId is { } reservationId
@@ -152,7 +152,7 @@ public class TasksController : ControllerBase
         };
         _db.BookingTasks.Add(task);
         await _db.SaveChangesAsync(ct);
-        await _db.Entry(task).Reference(t => t.TripInstance).LoadAsync(ct);
+        if (task.TripInstanceId.HasValue) await _db.Entry(task).Reference(t => t.TripInstance).LoadAsync(ct);
         if (task.OwnerId.HasValue) await _db.Entry(task).Reference(t => t.Owner).LoadAsync(ct);
         return Ok(ApiResponse<TaskDto>.Ok(new TaskDto
         {

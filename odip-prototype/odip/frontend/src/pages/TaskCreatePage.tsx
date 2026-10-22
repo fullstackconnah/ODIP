@@ -50,7 +50,7 @@ const TASK_STATUS_EDIT_ITEMS: DropdownItem[] = [
 ]
 
 const taskSchema = z.object({
-  tripInstanceId: z.string().min(1, 'Trip is required'),
+  tripInstanceId: z.string().optional(),
   taskType: z.string().min(1, 'Task type is required'),
   title: z.string().min(1, 'Title is required'),
   ownerId: z.string().optional(),
@@ -131,6 +131,8 @@ export default function TaskCreatePage() {
     }
   }
 
+  const tripLocked = isEdit || !!tripInstanceIdParam
+
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
   // PP-59: don't render the form with create-mode defaults while an edit-mode fetch is still in
@@ -178,7 +180,8 @@ export default function TaskCreatePage() {
               <input {...register('title')} placeholder="e.g. Confirm accommodation booking" autoFocus />
             </FormField>
 
-            <FormField label="Trip" required error={errors.tripInstanceId?.message} className={span.medium}>
+            {/* A task needs no trip. Opened from a trip it keeps that trip; editing never moves it (the server does not write the trip on update). */}
+            <FormField label="Trip" error={errors.tripInstanceId?.message} hint={tripLocked ? 'This task belongs to this trip.' : 'Leave blank for a task that is not about a trip.'} className={span.medium}>
               <Controller
                 control={control}
                 name="tripInstanceId"
@@ -187,8 +190,11 @@ export default function TaskCreatePage() {
                     value={field.value ?? ''}
                     onChange={field.onChange}
                     onBlur={field.onBlur}
-                    placeholder="Select a trip..."
-                    items={trips.map((t: any) => ({ value: t.id, label: t.tripName }))}
+                    disabled={tripLocked}
+                    items={[
+                      { value: '', label: 'No trip' },
+                      ...trips.map((t: any) => ({ value: t.id, label: t.tripName })),
+                    ]}
                   />
                 )}
               />
