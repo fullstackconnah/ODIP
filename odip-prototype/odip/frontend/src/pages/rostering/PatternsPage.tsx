@@ -129,6 +129,12 @@ export default function PatternsPage() {
 
   const participantOptions = useMemo(() => participants.map(p => ({ value: p.id, label: p.fullName })), [participants])
   const staffOptions = useMemo(() => staff.map(s => ({ value: s.id, label: s.fullName })), [staff])
+  // The panel has no Active control, so it saves the flag the list row has now: a deactivation made since the panel opened is not undone.
+  const panelTarget = useMemo<PatternSlideOverTarget | null>(() => {
+    if (slideOverTarget?.mode !== 'edit') return slideOverTarget
+    const live = patterns.find(p => p.id === slideOverTarget.pattern.id)
+    return live ? { mode: 'edit', pattern: { ...slideOverTarget.pattern, isActive: live.isActive } } : slideOverTarget
+  }, [patterns, slideOverTarget])
   // An agreement pattern is one day of one worker of a block: the days of that block (the same revision, block and worker), for "Change every day of this support" in the panel.
   const blockDays = useMemo(() => {
     const target = slideOverTarget?.mode === 'edit' ? slideOverTarget.pattern : null
@@ -250,7 +256,7 @@ export default function PatternsPage() {
 
       <PatternSlideOver
         key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `pattern-${slideOverTarget.pattern.id}` : 'pattern-new') : 'pattern-closed'}
-        target={slideOverTarget}
+        target={panelTarget}
         onClose={() => setSlideOverTarget(null)}
         canWrite={canWrite}
         participantOptions={participantOptions}

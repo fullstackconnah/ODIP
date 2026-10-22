@@ -183,7 +183,9 @@ export default function StaffCreatePage() {
     setSubmitting(true)
     try {
       if (isEdit) {
-        const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: existing?.isActive ?? true } })
+        // The page has no Active control, so the flag is read at save: a deactivation made since this page loaded is not undone.
+        const { data: current } = await refetchExisting()
+        const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: current?.isActive ?? existing?.isActive ?? true } })
         if (res.success) {
           flushSync(() => reset(data))
           navigate('/staff')

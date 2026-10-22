@@ -80,7 +80,8 @@ beforeEach(() => {
 describe('StaffCreatePage account-role lock (Coordinator editing an Admin)', () => {
   beforeEach(() => {
     mockUsePermissions.mockReturnValue({ isCoordinator: true })
-    mockUseStaffDetail.mockReturnValue({ data: makeStaff({ role: 'Admin', mobile: '0400 000 000' }), isLoading: false })
+    const staff = makeStaff({ role: 'Admin', mobile: '0400 000 000' })
+    mockUseStaffDetail.mockReturnValue({ data: staff, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: staff }) })
   })
 
   it('renders the role field disabled, showing the target\'s actual current role', async () => {
@@ -232,5 +233,23 @@ describe('StaffCreatePage — editing an unknown staff member', () => {
     renderEditPage('missing')
     expect(screen.getByText('Staff member not found')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+})
+
+// The page has no Active control, so Save sends the flag the staff member has now: a deactivation made elsewhere since the page loaded stays.
+describe('StaffCreatePage — saving an edit keeps the current active flag', () => {
+  it('sends the isActive the record has at save time, not the one it loaded with', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isCoordinator: true })
+    const refetch = vi.fn().mockResolvedValue({ data: makeStaff({ isActive: false }) })
+    mockUseStaffDetail.mockReturnValue({ data: makeStaff({ isActive: true }), isLoading: false, refetch })
+    renderEditPage('staff-1')
+
+    const mobileInput = await screen.findByLabelText(/mobile/i)
+    await user.type(mobileInput, '0411 222 333')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(refetch).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'staff-1', data: expect.objectContaining({ mobile: '0411 222 333', isActive: false }) })
   })
 })
