@@ -5,6 +5,7 @@ import type { AgreementEndingDto } from '@/api/types'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { StatusBadge } from '@/components/StatusBadge'
 import { endingWords } from '@/lib/agreementEnding'
 import { formatServiceDate } from '@/lib/planQuote'
@@ -27,7 +28,7 @@ export function AgreementsEndingList({ search }: { search: string }) {
   const term = search.trim().toLowerCase()
   const rows = (query.data ?? []).filter(row => !term || row.participantName.toLowerCase().includes(term))
 
-  if (query.isError && !query.data) return <PageState kind="error" noun="list of agreements ending" onRetry={() => { void query.refetch() }} />
+  if ((query.isError || retryingAfterError(query)) && !query.data) return <PageState kind="error" noun="list of agreements ending" onRetry={() => query.refetch()} />
   if (!query.isLoading && rows.length === 0) {
     return term
       ? <EmptyState icon={CalendarClock} title="No agreements ending match your search" description="Try a different name, or clear the search." />

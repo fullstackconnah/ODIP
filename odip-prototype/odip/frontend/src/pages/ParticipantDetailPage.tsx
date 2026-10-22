@@ -35,6 +35,7 @@ import {
 import { joinList } from '@/lib/format'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
  * A zero-row (or still-loading) DataTable's only body row is one `td[colspan]` message cell — a table
@@ -66,7 +67,8 @@ export default function ParticipantDetailPage() {
     [canAccessClaims, canManageFunding, canAccessRostering, canSeeHistory],
   )
   const [tab, setTab] = useTabParam(tabKeys, 'details')
-  const { data: p, isLoading, isError, error, refetch } = useParticipant(id)
+  const pageQuery = useParticipant(id)
+  const { data: p, isLoading, isError, error, refetch } = pageQuery
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
   // early returns below, per the rules of hooks.
@@ -79,9 +81,9 @@ export default function ParticipantDetailPage() {
   const downloadClientOverview = useDownloadClientOverviewPdf()
   const caregiverLink = useCaregiverLink(id!)
 
-  if (isLoading) return <PageState kind="loading" noun="participant" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="participant" />
   if (!p) {
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="participant" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
   }

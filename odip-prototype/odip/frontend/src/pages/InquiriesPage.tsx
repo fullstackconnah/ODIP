@@ -17,7 +17,7 @@ import { useConfirmIntakeBooking, useConvertParticipantInquiry, useParticipantIn
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
-import { queryPhase } from '@/lib/queryPhase'
+import { queryPhase, retryingAfterError } from '@/lib/queryPhase'
 import { cancelNotice, DEFAULT_DURATION, FALLBACK_ZONE, invitee, isPastVisit, refusalOf, visitDay, type EnquiryNotice } from '@/lib/intakeBooking'
 import { convertRefusal, fullName, startIntakeReason } from '@/lib/inquiryDetails'
 import { CLOSE_OUTCOME_LABELS, closedNotice, reopenedNotice } from '@/lib/inquiryClose'
@@ -80,7 +80,7 @@ function useInquiriesScreen() {
   const { data: inquiries = [], isError, refetch } = inquiriesQuery
   // A request that has not run (paused while the browser reports offline: isLoading false, isError false, data undefined) is loading, not an
   // empty list: "No open enquiries" follows only a request that succeeded.
-  const isLoading = queryPhase(inquiriesQuery) === 'loading'
+  const isLoading = queryPhase(inquiriesQuery) === 'loading' || retryingAfterError(inquiriesQuery)
   const convert = useConvertParticipantInquiry()
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')

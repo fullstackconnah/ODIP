@@ -35,6 +35,7 @@ import { IntakeVisitCard, type VisitRefusal } from './inquiries/IntakeVisitCard'
 import { MainContactCard } from './inquiries/MainContactCard'
 import { ParticipantDetailsFold } from './inquiries/ParticipantDetailsFold'
 import { useBookingStaff } from './inquiries/useBookingStaff'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
  * The form's own state: every field is text while it is being typed ('' for blank), and one box. The name is the PARTICIPANT's; the phone and email
@@ -140,7 +141,7 @@ export default function InquiryFormPage() {
   if (loadId && !ready) {
     // Three facts: still loading (a paused offline request included, review F-1), no such enquiry (a direct intake's id included: the API has
     // no enquiry for it), and a failed load.
-    content = !detailQuery.isError
+    content = !detailQuery.isError && !retryingAfterError(detailQuery)
       ? <PageState kind="loading" noun="enquiry" />
       : isNotFoundError(detailQuery.error)
         ? <PageState kind="not-found" noun="enquiry" backTo="/participants?tab=enquiries" backLabel="enquiries" />

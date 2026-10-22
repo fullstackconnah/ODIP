@@ -6,10 +6,12 @@ import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import TemplateFormPanel from '@/components/TemplateFormPanel'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /** Content › Event templates: the template cards, with "New template" at the top right of the section, where Activity library has "New activity". */
 export default function EventTemplatesSection() {
-  const { data: templates = [], isLoading, isError, refetch } = useEventTemplates()
+  const pageQuery = useEventTemplates()
+  const { data: templates = [], isLoading, isError, refetch } = pageQuery
   const [panelOpen, setPanelOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<EventTemplateDto | undefined>(undefined)
 
@@ -25,7 +27,7 @@ export default function EventTemplatesSection() {
           <Plus className="w-4 h-4" /> New template
         </Button>
       </div>
-      {isError && templates.length === 0 ? (
+      {(isError || retryingAfterError(pageQuery)) && templates.length === 0 ? (
         <PageState kind="error" noun="template list" onRetry={() => refetch()} />
       ) : empty ? (
         // "New template" is the section's action, so the empty state carries no second one.

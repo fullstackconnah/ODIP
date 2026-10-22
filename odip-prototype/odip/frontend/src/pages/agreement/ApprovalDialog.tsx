@@ -9,6 +9,7 @@ import { Callout } from '@/components/Callout'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Modal } from '@/components/Modal'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { plural } from '@/lib/format'
@@ -135,10 +136,10 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
   return (
     <Modal open={open} onClose={close} title={title} size="lg" footer={footer} closeOnBackdrop={!pending} stickyFooter>
       <div className="flex flex-col gap-3 text-sm">
-        {preview.isLoading && <PageState kind="loading" noun="approval summary" />}
-        {preview.isError && !data && (httpStatusOf(preview.error) === 403
+        {preview.isLoading && !retryingAfterError(preview) && <PageState kind="loading" noun="approval summary" />}
+        {(preview.isError || retryingAfterError(preview)) && !data && (httpStatusOf(preview.error) === 403
           ? <Callout tone="warning">{failureMessages(preview.error)[0]}</Callout>
-          : <PageState kind="error" noun="approval summary" onRetry={() => { void preview.refetch() }} />)}
+          : <PageState kind="error" noun="approval summary" onRetry={() => preview.refetch()} />)}
         {data && (blocked
           ? <Reasons reasons={data.reasons} say={say} groups={groups} onGoToShifts={onGoToShifts ? blockId => { onGoToShifts(blockId); onClose() } : undefined} />
           : <WhatItDoes participantId={participantId} draft={draft} preview={data} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />)}

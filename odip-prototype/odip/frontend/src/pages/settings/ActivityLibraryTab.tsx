@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { modalGrid, modalSpan } from '@/lib/formGrid'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 type Form = Required<Omit<CreateActivityDto, 'eventTemplateId'>> & Pick<CreateActivityDto, 'eventTemplateId'>
 
@@ -24,7 +25,8 @@ const toForm = (a: ActivityDto, isActive = a.isActive): Form => ({
 
 /** Settings > Activity Library. Admin, Coordinator and SuperAdmin write it (the server's roles); everyone else reads the list. */
 export default function ActivityLibraryTab() {
-  const { data: activities = [], isLoading, isError, refetch } = useActivities()
+  const pageQuery = useActivities()
+  const { data: activities = [], isLoading, isError, refetch } = pageQuery
   const { isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   const canEdit = isSuperAdmin || isAdmin || isCoordinator
   const create = useCreateActivity()
@@ -74,7 +76,7 @@ export default function ActivityLibraryTab() {
         keyField="id"
         sortable
         loading={isLoading}
-        error={isError}
+        error={isError || retryingAfterError(pageQuery)}
         onRetry={() => refetch()}
         emptyMessage="No activities yet. Add one to offer it when planning trips."
         columns={[

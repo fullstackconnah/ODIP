@@ -8,6 +8,7 @@ import { EmptyState } from './EmptyState'
 import { PageState } from './PageState'
 import { statusClass } from '@/lib/tone'
 import { Callout } from '@/components/Callout'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 interface TripAdminData {
   eventTemplateName?: string | null
@@ -60,14 +61,15 @@ function formatDayName(date: string) {
 }
 
 export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
-  const { data: itinerary, isLoading, isError, refetch } = useTripItinerary(tripId)
+  const pageQuery = useTripItinerary(tripId)
+  const { data: itinerary, isLoading, isError, refetch } = pageQuery
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
-  if (isLoading) return <PageState kind="loading" noun="itinerary" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="itinerary" />
   if (!itinerary) {
     // A failed request is not an empty itinerary: offer the retry instead of the "no schedule yet" hint.
-    if (isError) return <PageState kind="error" noun="itinerary" onRetry={() => refetch()} />
+    if (isError || retryingAfterError(pageQuery)) return <PageState kind="error" noun="itinerary" onRetry={() => refetch()} />
     // Rendered inline at the top of the pane (size="inline"), not centered in an otherwise-empty
     // viewport void, so it reads as part of the page rather than a floating standalone state.
     return (

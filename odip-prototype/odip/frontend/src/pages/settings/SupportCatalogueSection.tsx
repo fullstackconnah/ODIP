@@ -9,6 +9,7 @@ import { DataTable } from '@/components/DataTable'
 import { labelClass } from '@/components/FormField'
 import { Modal } from '@/components/Modal'
 import { extractErrorMessage, formatDateAu } from '@/lib/utils'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /** What the uploaded workbook's header row showed: the 2026-27 layout (zone prices) or the 2025-26 one (a column per state). */
 function catalogueFormatLabel(format: CatalogueFileFormat): string {
@@ -16,7 +17,8 @@ function catalogueFormatLabel(format: CatalogueFileFormat): string {
 }
 
 export default function SupportCatalogueSection() {
-  const { data: groups = [], isLoading: catalogueLoading, isError: catalogueError, refetch: refetchCatalogue } = useSupportCatalogue()
+  const pageQuery = useSupportCatalogue()
+  const { data: groups = [], isLoading: catalogueLoading, isError: catalogueError, refetch: refetchCatalogue } = pageQuery
   const [importing, setImporting] = useState(false)
   const [previewStep, setPreviewStep] = useState<'upload' | 'preview' | null>(null)
   const [preview, setPreview] = useState<CatalogueImportPreviewDto | null>(null)
@@ -113,7 +115,7 @@ export default function SupportCatalogueSection() {
           { key: 'effectiveFrom', header: 'Effective From', type: 'date' as const, sortable: true },
         ]}
         loading={catalogueLoading}
-        error={catalogueError}
+        error={catalogueError || retryingAfterError(pageQuery)}
         onRetry={() => refetchCatalogue()}
         emptyMessage="No catalogue items. Import the NDIS Support Catalogue XLSX."
       />

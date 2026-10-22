@@ -34,6 +34,7 @@ import { SaveStep } from './agreement/SaveStep'
 import { useAgreementPricing } from './agreement/useAgreementPricing'
 import { WeekStep } from './agreement/WeekStep'
 import { FundingPlanEditor } from './funding/FundingPlanEditor'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 type StepKey = 'agreement' | 'week' | 'check' | 'save'
 const STEPS: WizardStepDef<Details>[] = [
@@ -203,9 +204,9 @@ function DraftPage() {
     dob: participant.data?.dateOfBirth || 'Not recorded on participant',
   }
 
-  if (participant.isLoading || drafts.isLoading || (canEdit && plans.isLoading && !plans.isError)) return <PageState kind="loading" noun="service agreement" />
+  if ((participant.isLoading && !retryingAfterError(participant)) || (drafts.isLoading && !retryingAfterError(drafts)) || (canEdit && plans.isLoading && !plans.isError)) return <PageState kind="loading" noun="service agreement" />
   // A read of the saves that fails once the page has them (the second read of a conflict, say) does not take the schedule on screen away: it is said where the person is, not by an error page.
-  if (participant.isError || (drafts.isError && drafts.data === undefined)) {
+  if (participant.isError || retryingAfterError(participant) || ((drafts.isError || retryingAfterError(drafts)) && drafts.data === undefined)) {
     return isNotFoundError(participant.error)
       ? <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
       : <PageState kind="error" noun="service agreement" onRetry={() => { void participant.refetch(); void drafts.refetch() }} />

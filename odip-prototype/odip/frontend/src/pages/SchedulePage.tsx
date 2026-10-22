@@ -19,6 +19,7 @@ import {
   formatDate, tripAccentText,
 } from './schedule'
 import { IntakeVisitsSection } from './schedule/IntakeVisitsSection'
+import { retryingAfterError } from '@/lib/queryPhase'
 import type {
   ScheduleTripDto, ScheduleStaffDto, ScheduleVehicleDto,
   ScheduleStaffTripStatusDto, ScheduleVehicleTripStatusDto,
@@ -46,7 +47,8 @@ const ROW = 'group md:h-[var(--row-h)]'
 export default function SchedulePage() {
   const { canWrite, canManageParticipantLifecycle } = usePermissions()
   const queryClient = useQueryClient()
-  const { data, isLoading, refetch } = useScheduleOverview()
+  const pageQuery = useScheduleOverview()
+  const { data, isLoading, refetch } = pageQuery
   const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set())
   const [sectionStaff, setSectionStaff] = useState(true)
   const [sectionVehicles, setSectionVehicles] = useState(true)
@@ -93,7 +95,7 @@ export default function SchedulePage() {
     })
   }
 
-  if (isLoading) {
+  if (isLoading && !retryingAfterError(pageQuery)) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />

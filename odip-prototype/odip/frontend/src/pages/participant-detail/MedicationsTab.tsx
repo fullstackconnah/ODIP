@@ -94,7 +94,8 @@ function MedicationCard({ medication, canOpen }: { medication: MedicationListDto
 export default function MedicationsTab({ participantId }: { participantId: string | undefined }) {
   const { canManageMedications, canCreateIncidents, isReadOnly } = usePermissions()
   const [showInactive, setShowInactive] = useState(false)
-  const { data: medicationsData, isLoading, isError, refetch } = useParticipantMedications(participantId, true)
+  const pageQuery = useParticipantMedications(participantId, true)
+  const { data: medicationsData, refetch } = pageQuery
   const medications = medicationsData ?? NO_MEDICATIONS
   const administrationsQuery = useParticipantAdministrations(participantId, isoDaysAgo(14), isoDaysAgo(0))
   const administrations = administrationsQuery.data ?? []
@@ -111,7 +112,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
   const showPolypharmacyNotice = activeCount >= 5 || activePsychotropicCount >= 2
 
   // A failed request is not an empty list, and neither is one that has not run (paused offline): without data, say so instead of showing "no medications".
-  const phase = queryPhase({ data: medicationsData, isLoading, isError })
+  const phase = queryPhase(pageQuery)
   if (phase === 'loading') return <PageState kind="loading" noun="medication list" />
   if (phase === 'error') return <PageState kind="error" noun="medication list" onRetry={() => refetch()} />
 

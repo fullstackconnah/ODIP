@@ -20,6 +20,7 @@ import { isNotFoundError } from '@/lib/httpStatus'
 import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 const inputClass = 'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
@@ -46,7 +47,8 @@ async function downloadFile(url: string, filename: string) {
 
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { data: claim, isLoading, isError, error, refetch } = useClaim(id)
+  const pageQuery = useClaim(id)
+  const { data: claim, isLoading, isError, error, refetch } = pageQuery
   const updateClaim = useUpdateClaim()
   const updateLineItem = useUpdateClaimLineItem()
   const [noShowTarget, setNoShowTarget] = useState<ClaimLineItemDto | null>(null)
@@ -80,9 +82,9 @@ export default function ClaimDetailPage() {
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(!!claim && notes !== (claim.notes || ''))
 
-  if (isLoading) return <PageState kind="loading" noun="claim" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="claim" />
   if (!claim) {
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="claim" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="claim" backTo="/trips" backLabel="trips" />
   }

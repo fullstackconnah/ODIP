@@ -7,6 +7,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { StatusBadge } from '@/components/StatusBadge'
 import { localIsoDate } from '@/lib/dateOnly'
 import { currentPlanOf, planStatus, planTitle, writtenDay, writtenSpan, type PlanStatus } from '@/lib/fundingPlan'
@@ -49,8 +50,8 @@ export default function FundingTab({ participantId, planType }: { participantId:
   const today = ledgerQuery.data?.asOf ?? browserToday
 
   const data = plansQuery.data
-  if (plansQuery.isLoading) return <PageState kind="loading" noun="budget" />
-  if (!data) return <PageState kind="error" noun="budget" onRetry={() => { void plansQuery.refetch() }} />
+  if (plansQuery.isLoading && !retryingAfterError(plansQuery)) return <PageState kind="loading" noun="budget" />
+  if (!data) return <PageState kind="error" noun="budget" onRetry={() => plansQuery.refetch()} />
 
   const plans = data.plans ?? []
   const current = currentPlanOf(plans, today)

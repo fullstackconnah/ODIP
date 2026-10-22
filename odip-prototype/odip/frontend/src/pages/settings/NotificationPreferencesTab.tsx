@@ -9,6 +9,7 @@ import {
 } from '@/api/types'
 import { CheckboxField } from '@/components/CheckboxField'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { SettingsGroup, SettingsSection, type SaveResult, type SectionFrame } from './SettingsSection'
 import { notSavedText } from './settingsSections'
 
@@ -28,7 +29,9 @@ function buildEmailState(rows: NotificationPreferenceRowDto[]): EmailPrefsState 
  * A 400 ("Unknown event type or channel.") is said in the foot.
  */
 export default function NotificationPreferencesTab(frame: SectionFrame) {
-  const { data, isError, refetch } = useNotificationPreferences()
+  const prefsQuery = useNotificationPreferences()
+  const { data, refetch } = prefsQuery
+  const isError = prefsQuery.isError || retryingAfterError(prefsQuery)
   const update = useUpdateNotificationPreferences()
   const [emailPrefs, setEmailPrefs] = useState<EmailPrefsState | null>(null)
   const [initialPrefs, setInitialPrefs] = useState<EmailPrefsState | null>(null)
@@ -64,7 +67,7 @@ export default function NotificationPreferencesTab(frame: SectionFrame) {
   return (
     <SettingsSection {...frame} save={emailPrefs ? { dirty: isDirty, pending: update.isPending, result, onSave: save } : undefined}>
       {!emailPrefs ? (
-        isError ? <PageState kind="error" noun="notifications section" onRetry={() => { void refetch() }} /> : <PageState kind="loading" noun="notifications section" />
+        isError ? <PageState kind="error" noun="notifications section" onRetry={() => refetch()} /> : <PageState kind="loading" noun="notifications section" />
       ) : (
         // One column of ticks per area; the areas flow in two columns from xl.
         <div className="gap-x-[var(--section-gap)] xl:columns-2">

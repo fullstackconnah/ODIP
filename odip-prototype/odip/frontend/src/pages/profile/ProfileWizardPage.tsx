@@ -116,7 +116,8 @@ export default function ProfileWizardPage() {
   const returnTo = searchParams.get('from') === 'onboarding' ? `/onboarding/${id}` : `/participants/${id}`
   // Where the header Back goes: Save returns there too, tab included.
   const back = useBackTarget(returnTo)
-  const { data: participant, isLoading, isError, error, refetch } = useParticipant(id)
+  const pageQuery = useParticipant(id)
+  const { data: participant, error, refetch } = pageQuery
   // Its own h1 shell, not a PageHeader, so it names the tab itself.
   const heading = participant ? `Profile — ${participant.firstName} ${participant.lastName}` : 'Profile'
   useDocumentTitle(heading)
@@ -456,7 +457,7 @@ export default function ProfileWizardPage() {
   // missing record used to leave this page on "Loading..." for ever (L2-06 = L5-02).
   // A paused request (the browser is offline and the load has not run) is loading, not "not found" (review F-1).
   if (!participant) {
-    const phase = queryPhase({ data: participant, isLoading, isError })
+    const phase = queryPhase(pageQuery)
     if (phase === 'loading') return <PageState kind="loading" noun="participant" />
     return phase === 'error' && !isNotFoundError(error)
       ? <PageState kind="error" noun="participant" onRetry={() => refetch()} />

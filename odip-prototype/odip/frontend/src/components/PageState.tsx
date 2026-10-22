@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { Button } from './Button'
 import { BackButton } from './BackButton'
 import { Callout } from './Callout'
@@ -11,8 +12,8 @@ export type PageStateProps =
   | (Common & { kind: 'loading' })
   | (Common & {
       kind: 'error'
-      /** Shows a "Try again" button that calls this (normally the query's `refetch`). Without it the banner has no action. */
-      onRetry?: () => void
+      /** Shows "Try again". Return the retry Promise (normally `refetch`) to hold the action until it settles; synchronous callbacks remain supported. */
+      onRetry?: () => unknown
     })
   | (Common & {
       kind: 'not-found'
@@ -23,16 +24,71 @@ export type PageStateProps =
 
 const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
+const isFailedResult = (result: unknown) => !!result && typeof result === 'object' && ((result as { isError?: unknown }).isError === true || (result as { status?: unknown }).status === 'error')
+
+function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
+  const [state, setState] = useState<'idle' | 'pending' | 'failed'>('idle')
+  const pending = useRef(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  function retry() {
+    if (pending.current || !onRetry) return
+    pending.current = true
+    const finish = (failed: boolean) => {
+      pending.current = false
+      if (mounted.current) setState(failed ? 'failed' : 'idle')
+    }
+    try {
+      const request = onRetry()
+      if (request && typeof request === 'object' && 'then' in request && typeof request.then === 'function') {
+        setState('pending')
+        // refetch() RESOLVES with { isError: true } when the request fails (no throwOnError), so a resolved failure counts, as does a rejection.
+        void request.then((result: unknown) => finish(isFailedResult(result)), () => finish(true))
+      } else finish(false)
+    } catch {
+      finish(true)
+    }
+  }
+
+  // The visible line sits beside the button, inside the actions row, so the banner never changes height; the polite status node is what assistive tech hears.
+  const status = state === 'pending' ? 'Trying again…' : state === 'failed' ? "Couldn't load it again." : ''
+  return (
+    <div>
+      <Callout
+        tone="danger"
+        actions={onRetry ? (
+          <>
+            <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
+              Try again
+            </Button>
+            {/* A fixed width, so the right-aligned button holds one x position in idle, pending and failed (the failed copy measures about 136px). */}
+            <span aria-hidden="true" className="min-w-[8.75rem] text-[var(--color-muted-foreground)]">{status}</span>
+          </>
+        ) : undefined}
+      >
+        Couldn't load this {noun}. Check your connection and try again.
+      </Callout>
+      <div role={state === 'idle' ? undefined : 'status'} aria-live="polite" aria-atomic="true" className="sr-only">{status}</div>
+    </div>
+  )
+}
+
 /**
  * What a page shows in place of itself while its record is loading, when the load failed, and when there is no such record. They are three
  * different facts, so they are three different states:
  *
- *   if (isLoading) return <PageState kind="loading" noun="trip" />
+ *   if (isLoading && !retryingAfterError(query)) return <PageState kind="loading" noun="trip" />
  *   if (!trip) {
- *     return isError && !isNotFoundError(error)
+ *     return (isError || retryingAfterError(query)) && !isNotFoundError(error)
  *       ? <PageState kind="error" noun="trip" onRetry={() => refetch()} />
  *       : <PageState kind="not-found" noun="trip" backTo="/trips" backLabel="trips" />
  *   }
+ *
+ * `retryingAfterError` (lib/queryPhase) keeps the banner on screen through a retry, when TanStack resets the failed query to loading.
  *
  * A 404 from the API is an answer ("no such record"), not a failure, so `isNotFoundError` routes it to not-found; and the failed branch sits
  * under `!trip` so a background refetch that fails over data already on screen never replaces the page.
@@ -49,20 +105,7 @@ export function PageState(props: PageStateProps) {
     )
   }
   if (props.kind === 'error') {
-    return (
-      <Callout
-        tone="danger"
-        actions={
-          props.onRetry ? (
-            <Button variant="secondary" size="sm" onClick={props.onRetry}>
-              Try again
-            </Button>
-          ) : undefined
-        }
-      >
-        Couldn't load this {noun}. Check your connection and try again.
-      </Callout>
-    )
+    return <RetryError noun={noun} onRetry={props.onRetry} />
   }
   return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">

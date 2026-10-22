@@ -56,6 +56,7 @@ import type { z } from 'zod'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 // INC-01: the service-type dropdown offers the business streams plus "None" (untagged) —
 // selecting "Trip" is what reveals the trip-select dropdown below.
@@ -185,10 +186,10 @@ function extractIncidentErrorMessage(err: unknown, isEdit: boolean): string {
 export default function IncidentCreatePage() {
   const { id } = useParams()
   const isEdit = !!id
-  const { data: existingIncident, isError, error, refetch } = useIncident(id)
-
+  const pageQuery = useIncident(id)
+  const { data: existingIncident, isError, error, refetch } = pageQuery
   if (isEdit && !existingIncident) {
-    if (!isError) return <PageState kind="loading" noun="incident" />
+    if (!isError && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="incident" />
     return isNotFoundError(error)
       ? <PageState kind="not-found" noun="incident" backTo="/incidents" backLabel="incidents" />
       : <PageState kind="error" noun="incident" onRetry={() => refetch()} />

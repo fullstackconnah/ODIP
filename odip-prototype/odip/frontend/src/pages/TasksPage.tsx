@@ -14,6 +14,7 @@ import { Filter, CheckCircle, Plus, ListChecks, Eye } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
 import { localIsoDate } from '@/lib/dateOnly'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 const TASK_STATUS_ITEMS = [
   { value: 'NotStarted', label: 'Not Started' },
@@ -56,8 +57,8 @@ export default function TasksPage() {
   const queryParams = { ...params }
   if (!showArchived && statusFilter) queryParams.status = statusFilter
 
-  const { data: tasks = [], isLoading, isError, refetch } = useTasks(queryParams)
-
+  const pageQuery = useTasks(queryParams)
+  const { data: tasks = [], isLoading, isError, refetch } = pageQuery
   const markComplete = (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
     updateTask.mutate({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } }, {
@@ -241,7 +242,7 @@ export default function TasksPage() {
           keyField="id"
           sortable
           loading={isLoading}
-          error={isError}
+          error={isError || retryingAfterError(pageQuery)}
           onRetry={() => refetch()}
           emptyMessage="No tasks found"
         />

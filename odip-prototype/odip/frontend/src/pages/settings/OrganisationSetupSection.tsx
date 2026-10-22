@@ -22,13 +22,13 @@ export default function OrganisationSetupSection() {
       title: 'Organisation details', purpose: 'Review the legal name and address used on your documents.',
       destination: 'organisation', action: 'Open organisation profile', phase: providerPhase,
       status: detailsRecorded ? 'Details recorded' : 'Not recorded',
-      recorded: detailsRecorded, noun: 'organisation profile', retry: () => { void provider.refetch() },
+      recorded: detailsRecorded, noun: 'organisation profile', retry: () => provider.refetch(),
     },
     {
       title: 'Registration groups', purpose: 'Review which registration groups your organisation holds.',
       destination: 'pricing', action: 'Open plan pricing', phase: pricingPhase,
       status: pricing.data?.registrationGroupsConfirmed === true ? 'Registration groups confirmed' : 'Review',
-      recorded: pricing.data?.registrationGroupsConfirmed === true, noun: 'registration group list', retry: () => { void pricing.refetch() },
+      recorded: pricing.data?.registrationGroupsConfirmed === true, noun: 'registration group list', retry: () => pricing.refetch(),
     },
     {
       title: 'Billing details', purpose: 'Review your invoice and billing choices.',

@@ -18,6 +18,11 @@ describe('groupPhase', () => {
     expect(groupPhase({ data: [], isError: true })).toBe('ready')
   })
 
+  it('keeps failing while a failed request with nothing held is retried, though TanStack reports it as pending', () => {
+    expect(groupPhase({ data: undefined, isError: false, isPending: true, fetchStatus: 'fetching', isFetching: true, errorUpdateCount: 1 })).toBe('error')
+    expect(groupPhase({ data: undefined, isPending: true, fetchStatus: 'fetching', isFetching: true, errorUpdateCount: 0 })).toBe('loading')
+  })
+
   it('is ready with every answer in, and a disabled request is not waiting', () => {
     expect(groupPhase({ data: [] }, { data: { items: [] } })).toBe('ready')
     expect(groupPhase({ data: undefined, isPending: true, fetchStatus: 'idle' })).toBe('ready')

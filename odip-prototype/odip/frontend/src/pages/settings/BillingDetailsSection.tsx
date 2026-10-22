@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
 import { formGrid, span } from '@/lib/formGrid'
@@ -39,7 +40,7 @@ export default function BillingDetailsSection(frame: SectionFrame) {
 
   return (
     <SettingsSection {...frame} save={p.form && !p.incomplete ? { dirty: p.dirty, pending: p.pending, result: p.result, onSave: () => p.save() } : undefined}>
-      {p.query.isError && !p.form ? <PageState kind="error" noun="billing details section" onRetry={() => { void p.query.refetch() }} />
+      {(p.query.isError || retryingAfterError(p.query)) && !p.form ? <PageState kind="error" noun="billing details section" onRetry={() => p.query.refetch()} />
         : !p.form ? <PageState kind="loading" noun="billing details section" />
         : (
           <>

@@ -5,6 +5,7 @@ import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
 import { PageState } from '@/components/PageState'
+import { retryingAfterError } from '@/lib/queryPhase'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { extractErrorMessage } from '@/lib/utils'
@@ -80,8 +81,8 @@ export default function BudgetSettingsTab(frame: SectionFrame) {
 
   return (
     <SettingsSection {...frame} save={settings ? { dirty, pending: update.isPending, result, onSave: save } : undefined}>
-      {query.isLoading ? <PageState kind="loading" noun="budgets section" />
-        : !settings ? (told ? <Callout tone="info" className="max-w-prose">{told}</Callout> : <PageState kind="error" noun="budgets section" onRetry={() => { void query.refetch() }} />)
+      {query.isLoading && !retryingAfterError(query) ? <PageState kind="loading" noun="budgets section" />
+        : !settings ? (told ? <Callout tone="info" className="max-w-prose">{told}</Callout> : <PageState kind="error" noun="budgets section" onRetry={() => query.refetch()} />)
         : (
           <>
             {settings.isDefault && <Callout tone="info" className="max-w-prose">Nothing has been saved yet: these are the defaults (Warn only, and approaching at 80%).</Callout>}

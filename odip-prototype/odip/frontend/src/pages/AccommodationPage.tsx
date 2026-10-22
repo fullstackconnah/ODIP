@@ -16,13 +16,15 @@ import { useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 export default function AccommodationPage() {
   const { canWrite } = usePermissions()
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const params: Record<string, string> = { isActive: showArchived ? 'false' : 'true' }
-  const { data: properties = [], isLoading, isError, refetch } = useAccommodation(params)
+  const pageQuery = useAccommodation(params)
+  const { data: properties = [], isLoading, isError, refetch } = pageQuery
   const deleteAccommodation = useDeleteAccommodation()
   const restoreAccommodation = useRestoreAccommodation()
   const [confirmState, setConfirmState] = useState<{ type: 'archive' | 'restore'; item: AccommodationListDto } | null>(null)
@@ -54,9 +56,9 @@ export default function AccommodationPage() {
 
       {actionError && <Callout tone="error">{actionError}</Callout>}
 
-      {isLoading ? (
+      {isLoading && !retryingAfterError(pageQuery) ? (
         <PageState kind="loading" noun="properties" />
-      ) : isError && properties.length === 0 ? (
+      ) : (isError || retryingAfterError(pageQuery)) && properties.length === 0 ? (
         <PageState kind="error" noun="property list" onRetry={() => refetch()} />
       ) : filtered.length === 0 ? (
         <EmptyState

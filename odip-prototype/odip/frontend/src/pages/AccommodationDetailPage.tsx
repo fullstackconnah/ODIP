@@ -10,6 +10,7 @@ import { isNotFoundError } from '@/lib/httpStatus'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Card } from '@/components/Card'
 import { FactList } from '@/components/FactList'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 // FactList's value track is a bare `1fr` (= minmax(auto, 1fr)), so an unbreakable value — an email
 // address, a URL — stretches the track past the card and scrolls the whole page sideways on a phone.
@@ -18,12 +19,13 @@ const FACT_LIST_WRAP = 'grid-cols-[10rem_minmax(0,1fr)]! [&_dd]:break-words'
 
 export default function AccommodationDetailPage() {
   const { id } = useParams()
-  const { data: property, isLoading, isError, error, refetch } = useAccommodationDetail(id)
+  const pageQuery = useAccommodationDetail(id)
+  const { data: property, isLoading, isError, error, refetch } = pageQuery
   const { canWrite } = usePermissions()
 
-  if (isLoading) return <PageState kind="loading" noun="property" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="property" />
   if (!property) {
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="property" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="property" backTo="/accommodation" backLabel="accommodation" />
   }

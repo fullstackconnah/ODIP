@@ -14,6 +14,7 @@ import { isPastDue } from '@/lib/deadline'
 import { ComplianceFlagChips } from './MedicationBadges'
 import { DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_TYPE_LABELS, PACKAGING_LABELS } from '@/api/types/medications'
 import type { MedicationListDto } from '@/api/types/medications'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 // Matches MedicationsController.GetRegister's own PagingParams.DefaultPageSize (backend house
 // convention: default 50, ceiling 200) — kept in sync manually since paging params cross the API
@@ -38,7 +39,8 @@ export default function RegisterTab() {
   if (search) queryParams.search = search
   if (status) queryParams.status = status
 
-  const { data: medications = [], isLoading, isError, refetch } = useMedicationRegister(queryParams)
+  const pageQuery = useMedicationRegister(queryParams)
+  const { data: medications = [], isLoading, isError, refetch } = pageQuery
   // `medications` is normally a TruncatableList (see pagedList.ts), but the `= []` default used
   // while loading is a plain array without that extra field — read it as optional, same pattern
   // as IncidentsPage/ParticipantPicker.
@@ -148,7 +150,7 @@ export default function RegisterTab() {
           columns={columns}
           keyField="id"
           loading={isLoading}
-          error={isError}
+          error={isError || retryingAfterError(pageQuery)}
           onRetry={() => refetch()}
           onRowClick={canManageMedications || isReadOnly ? m => navigate(`/medications/${m.id}/edit`) : undefined}
           emptyMessage="No medications found"

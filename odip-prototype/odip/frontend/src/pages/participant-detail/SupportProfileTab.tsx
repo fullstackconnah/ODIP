@@ -19,6 +19,7 @@ import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, AMBULANT_STATUSES, PERSONAL_CA
 import type { AmbulantStatus, PersonalCareLevel, RiskRatingLevel, OvernightSupportType, SupportRatio } from '@/api/types/enums'
 import type { ParticipantDetailDto, SupportProfileDto } from '@/api/types/participants'
 import type { PatchSupportNeedsMobilityDto } from '@/api/types/participant-patch'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 function Tag({ label }: { label: string }) {
   return (
@@ -714,11 +715,11 @@ function SupportProfileSection({ participantId, canEdit, onViewRestrictivePracti
  */
 export default function SupportProfileTab({ participantId, onNavigateToTab }: { participantId: string | undefined; onNavigateToTab?: (tab: string) => void }) {
   const { canWriteParticipantDetails, canWriteSupportProfile } = usePermissions()
-  const { data: p, isLoading, isError, error, refetch } = useParticipant(participantId)
-
-  if (isLoading) return <PageState kind="loading" noun="support profile" />
+  const pageQuery = useParticipant(participantId)
+  const { data: p, isLoading, isError, error, refetch } = pageQuery
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="support profile" />
   if (!p || !participantId) {
-    return isError && !isNotFoundError(error)
+    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
       ? <PageState kind="error" noun="support profile" onRetry={() => refetch()} />
       : <PageState kind="not-found" noun="participant" />
   }

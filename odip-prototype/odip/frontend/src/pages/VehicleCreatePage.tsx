@@ -18,6 +18,7 @@ import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 const VEHICLE_TYPE_ITEMS: DropdownItem[] = [
   { value: 'Car', label: 'Car' },
@@ -53,7 +54,8 @@ export default function VehicleCreatePage() {
   const viewOnly = isEdit && !canWrite
   const createVehicle = useCreateVehicle()
   const updateVehicle = useUpdateVehicle()
-  const { data: existing, isError: isExistingError, error: existingError, refetch: refetchExisting } = useVehicleDetail(isEdit ? id : undefined)
+  const pageQuery = useVehicleDetail(isEdit ? id : undefined)
+  const { data: existing, isError: isExistingError, error: existingError, refetch: refetchExisting } = pageQuery
   const mutation = isEdit ? updateVehicle : createVehicle
 
   const { register, control, handleSubmit, reset, formState: { errors, isDirty } } = useForm({
@@ -110,7 +112,7 @@ export default function VehicleCreatePage() {
 
   // A record that has not loaded is never a blank form: saving it would overwrite the real one.
   if (isEdit && !existing) {
-    if (!isExistingError) return <PageState kind="loading" noun="vehicle" />
+    if (!isExistingError && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="vehicle" />
     return isNotFoundError(existingError)
       ? <PageState kind="not-found" noun="vehicle" backTo="/vehicles" backLabel="vehicles" />
       : <PageState kind="error" noun="vehicle" onRetry={() => refetchExisting()} />

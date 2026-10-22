@@ -1,6 +1,16 @@
 export type QueryPhase = 'loading' | 'error' | 'ready'
 
 /**
+ * A retry of a query that has failed and has no data. TanStack resets such a query to status 'pending' (isError false, isLoading true) the moment the
+ * retry starts, so a screen that tests isError or isLoading swaps its error banner for a spinner: the "Try again" button unmounts, focus is lost, and a
+ * fresh idle banner mounts when the retry fails. Screens treat this as still in the error state (`isError || retryingAfterError(q)`, and
+ * `isLoading && !retryingAfterError(q)`) so the banner stays mounted and shows its own pending feedback.
+ */
+export function retryingAfterError(query: { data?: unknown; isFetching?: boolean; errorUpdateCount?: number }): boolean {
+  return !!query.isFetching && (query.errorUpdateCount ?? 0) > 0 && query.data === undefined
+}
+
+/**
  * What a list screen should show for its query, as three different facts instead of two. A failed request is not an empty record, and
  * neither is one that has not run: TanStack Query pauses a request while the browser reports offline (`isLoading` is false, `isError`
  * is false, `data` is undefined), and a screen that tests only `isLoading` rendered "No contacts recorded" for a participant whose
@@ -12,7 +22,8 @@ export type QueryPhase = 'loading' | 'error' | 'ready'
  *
  * Data already on screen wins over a refetch that failed behind it, so a background failure never replaces a list the user is reading.
  */
-export function queryPhase(query: { data?: unknown; isLoading?: boolean; isError?: boolean }): QueryPhase {
+export function queryPhase(query: { data?: unknown; isLoading?: boolean; isError?: boolean; isFetching?: boolean; errorUpdateCount?: number }): QueryPhase {
+  if (retryingAfterError(query)) return 'error'
   if (query.isLoading) return 'loading'
   if (query.data !== undefined) return 'ready'
   return query.isError ? 'error' : 'loading'

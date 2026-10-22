@@ -15,6 +15,7 @@ import { staffCredentials, credentialIssueCount } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, type DeadlineState, type DeadlineStatus } from '@/lib/deadline'
 import { plural } from '@/lib/format'
 import { toUpdateStaffDto, type StaffListDto } from '@/api/types/staff'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 type FilterTab = 'all' | 'expired' | 'expiring' | 'no-date'
 
@@ -78,7 +79,8 @@ export default function QualificationsPage() {
   const { canWrite, canAccessPage } = usePermissions()
   const staffFromPayroll = useProviderSettings(canWrite).data?.employmentHeroConnected === true
   const { data: settings } = useSettings()
-  const { data: allStaff = [], isLoading, isError, refetch } = useStaff({ isActive: 'true' })
+  const pageQuery = useStaff({ isActive: 'true' })
+  const { data: allStaff = [], isLoading, isError, refetch } = pageQuery
   const updateStaff = useUpdateStaff()
 
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
@@ -135,7 +137,7 @@ export default function QualificationsPage() {
     { key: 'no-date', label: `No date set (${counts['no-date']})` },
   ]
 
-  if (isLoading) return <PageState kind="loading" noun="staff qualifications" />
+  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="staff qualifications" />
 
   // The Dashboard's "Qualification Issues" figure counts issues; the tabs below count staff. The subtitle says both, so 12 reads against 4.
   const issueCount = groups.reduce((sum, g) => sum + g.issueCount, 0)
@@ -156,7 +158,7 @@ export default function QualificationsPage() {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
         {header}
-        {isError ? <PageState kind="error" noun="staff list" onRetry={() => refetch()} /> : <EmptyState
+        {isError || retryingAfterError(pageQuery) ? <PageState kind="error" noun="staff list" onRetry={() => refetch()} /> : <EmptyState
           icon={UserCog}
           title="No staff members yet"
           description="This page tracks expiry dates for staff certifications like First Aid, driver licences, and manual handling. Add a staff member to start tracking theirs."

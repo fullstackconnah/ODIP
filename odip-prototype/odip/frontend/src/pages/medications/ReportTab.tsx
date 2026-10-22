@@ -11,6 +11,7 @@ import type { AdministrationDto } from '@/api/types/medications'
 import { formatWithTimeZone } from '@/lib/utils'
 import { formatWallClock } from '@/lib/wallClock'
 import { plural } from '@/lib/format'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
  * Medication administration report (task 6b): every administration, filterable by participant
@@ -26,12 +27,13 @@ export default function ReportTab() {
 
   // INTAKE-08: drafts before services are left out; archived participants stay, their history is reportable.
   const { data: participants = [] } = useParticipants(SERVICES_BEGUN)
-  const { data: report, isLoading, isError, refetch } = useAdministrationsReport({
+  const pageQuery = useAdministrationsReport({
     participantId: participantId || undefined,
     from: from || undefined,
     to: to || undefined,
     pageSize: 200,
   })
+  const { data: report, isLoading, isError, refetch } = pageQuery
 
   const participantItems = useMemo(() => [
     { value: '', label: 'All participants' },
@@ -125,7 +127,7 @@ export default function ReportTab() {
           keyField="id"
           sortable
           loading={isLoading}
-          error={isError}
+          error={isError || retryingAfterError(pageQuery)}
           onRetry={() => refetch()}
           emptyMessage="No administrations found"
         />
