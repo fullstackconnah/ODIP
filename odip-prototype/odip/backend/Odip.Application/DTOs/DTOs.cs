@@ -2448,21 +2448,6 @@ public record UpdateAdminUserDto
     /// (<see cref="Odip.Application.Common.AddressConfirmation"/>). Without it such a change is refused with a 400; an address the row already holds never asks.
     /// </summary>
     public bool AddressConfirmed { get; init; }
-    public Position? Position { get; init; }
-    public string? Mobile { get; init; }
-    public string? Region { get; init; }
-    public bool IsDriverEligible { get; init; }
-    public bool IsFirstAidQualified { get; init; }
-    public bool IsMedicationCompetent { get; init; }
-    public bool IsManualHandlingCompetent { get; init; }
-    public bool IsOvernightEligible { get; init; }
-    public DateOnly? FirstAidExpiryDate { get; init; }
-    public DateOnly? DriverLicenceExpiryDate { get; init; }
-    public DateOnly? ManualHandlingExpiryDate { get; init; }
-    public DateOnly? MedicationCompetencyExpiryDate { get; init; }
-    public string? WorkerScreeningNumber { get; init; }
-    public DateOnly? WorkerScreeningExpiryDate { get; init; }
-    public string? Notes { get; init; }
 }
 
 // ── Tenant Summary DTO (includes user count) ──────────────────────────────

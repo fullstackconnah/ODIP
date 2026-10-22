@@ -8,6 +8,9 @@ import type { RosterFindingDto } from '@/api/hooks'
 vi.mock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: true }))
 const { apiGetWithDefault, apiPost } = vi.hoisted(() => ({ apiGetWithDefault: vi.fn(), apiPost: vi.fn() }))
 vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiGetWithDefault, apiPost }))
+// The bulk bar and the table header switch on the house breakpoint hook; jsdom reads as a phone, so a desktop case flips this (SHAPE card42 §5).
+const screenSize = vi.hoisted(() => ({ belowMd: true }))
+vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => screenSize.belowMd }))
 
 const leave = (o: Record<string, unknown> = {}) => ({
   id: 'l1', userId: 'u-sam', userFullName: 'Sam Lee', leaveType: 'Annual', startDate: '2026-10-20', endDate: '2026-10-24', status: 'Pending',
@@ -25,6 +28,7 @@ const answer = (leaveRows: unknown[], rules: unknown[] = []) =>
 const refusal = (message: string) => ({ response: { data: { message } } })
 
 beforeEach(() => {
+  screenSize.belowMd = true
   apiGetWithDefault.mockReset()
   apiPost.mockReset()
 })
@@ -221,6 +225,64 @@ describe('Leave group — Complete all (decision-bulk)', () => {
     expect(document.querySelector('[data-quick-group] [role="status"] [data-tone]')).toHaveTextContent("1 has left the list: approved here, or decided by someone else. 1 wasn't approved: it's still here to try again.")
     expect(subjects()).toEqual(['Bo Chan'])
     expect(screen.getByRole('button', { name: /^Approve leave: Bo Chan/ })).not.toHaveAttribute('aria-disabled')
+  })
+})
+
+describe('Leave group — select all in the bar or the table header (card42)', () => {
+  const people = ['Ana Ruiz', 'Ben Cho', 'Cal Diaz', 'Dee Park', 'Eve Hart', 'Fin Ward']
+  const six = () => people.map((name, i) => leave({ id: `l${i + 1}`, userFullName: name, userId: i === 1 ? 'u-viewer' : `u-${i + 1}`,
+    requestedByUserId: `u-${i + 1}`, startDate: `2026-10-1${i}`, endDate: `2026-10-1${i}` }))
+  const box = (name: string) => screen.getByRole('checkbox', { name: new RegExp(`^Select leave: ${name}`) }) as HTMLInputElement
+  const layouts = [['phone', true], ['desktop', false]] as const
+
+  it.each(layouts)('select all takes only the shown, eligible rows and sends only those (%s)', async (_layout, belowMd) => {
+    screenSize.belowMd = belowMd
+    const leaves = six()
+    answer(leaves)
+    apiPost.mockImplementation(async (url: string) => {
+      leaves.splice(leaves.findIndex((l) => url === `/leave/${l.id}/approve`), 1)
+      return { leave: leave({ status: 'Approved' }), overlaps: [], overlapShifts: [] }
+    })
+    renderGroup(() => useLeaveGroup(true, 'u-viewer'))
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Decline leave: Cal Diaz/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
+
+    for (const name of ['Ana Ruiz', 'Dee Park', 'Eve Hart']) expect(box(name).checked).toBe(true)
+    expect(box('Cal Diaz')).toBeDisabled()
+    expect(box('Cal Diaz').checked).toBe(false)
+    const own = screen.getByText('Ben Cho').closest('tr')!
+    expect(within(own).queryByRole('checkbox')).toBeNull()
+    expect(within(own).getByText('Your request')).toBeInTheDocument()
+    expect(screen.queryByText('Fin Ward')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3 selected leave requests' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3' }))
+    await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(3))
+    expect(apiPost.mock.calls.map(([url]) => url)).toEqual(['/leave/l1/approve', '/leave/l4/approve', '/leave/l5/approve'])
+  })
+
+  it.each(layouts)('the visible select-all goes mixed, then checked, at both layouts (%s)', async (_layout, belowMd) => {
+    screenSize.belowMd = belowMd
+    answer(six().slice(2, 5))
+    renderGroup(() => useLeaveGroup(true, 'u-viewer'))
+    await screen.findByText('Cal Diaz')
+
+    const alls = screen.getAllByRole('checkbox', { name: 'Select all shown leave requests' })
+    expect(alls).toHaveLength(1)
+    const all = alls[0] as HTMLInputElement
+    expect(all.closest('thead') !== null).toBe(!belowMd)
+
+    fireEvent.click(box('Cal Diaz'))
+    expect(all.indeterminate).toBe(true)
+    expect(all.checked).toBe(false)
+    fireEvent.click(box('Dee Park'))
+    fireEvent.click(box('Eve Hart'))
+    expect(all.indeterminate).toBe(false)
+    expect(all.checked).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
   })
 })
 

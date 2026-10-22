@@ -2,6 +2,7 @@
 // the forms use the same rule so the person is told under End time, where they are looking, and a check that cannot say anything useful is not sent.
 import { apiErrorCode, apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { extractErrorMessage } from '@/lib/utils'
+import { isBoardChanged } from './boardChanged'
 
 /** The server's sentence for a shift with no length (RosteringController.ShiftEndsBeforeItStartsMessage). The fallback for recognising its 400 (below), and what the form's own rule says under End time. */
 export const NO_LENGTH_MESSAGE = "The shift must end after it starts. Tick 'Ends the next day' for an overnight shift."
@@ -15,10 +16,10 @@ export function isNoLengthRefusal(error: unknown): boolean {
 }
 
 /** A failed call as a panel keeps it: the words to show (the server's own when it sent any, else the fallback) and whether it is the refusal for no length. */
-export type PanelRefusal = { message: string; noLength: boolean }
+export type PanelRefusal = { message: string; noLength: boolean; boardChanged?: boolean }
 
 export function refusalOf(error: unknown, fallback: string): PanelRefusal {
-  return { message: extractErrorMessage(error, fallback), noLength: isNoLengthRefusal(error) }
+  return { message: extractErrorMessage(error, fallback), noLength: isNoLengthRefusal(error), boardChanged: isBoardChanged(error) }
 }
 
 /**

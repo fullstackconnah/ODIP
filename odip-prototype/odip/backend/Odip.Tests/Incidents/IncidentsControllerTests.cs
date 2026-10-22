@@ -545,6 +545,41 @@ public class IncidentsControllerTests
         Assert.True(saved.IsRestrictivePracticeAuthorised);
     }
 
+    [Fact]
+    public async Task Update_EditWithoutWitnessText_KeepsTheLegacyWitnessColumns()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+        await controller.Create(CreateDto(reporter.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        // Legacy free-text witnesses, from before the witness list existed. No screen edits them.
+        incident.WitnessNames = "Mei Zhang";
+        incident.WitnessStatements = "slip";
+        await db.SaveChangesAsync();
+
+        var updateDto = new UpdateIncidentDto
+        {
+            ReportedByStaffId = reporter.Id,
+            IncidentType = IncidentType.RestrictivePracticeUse,
+            RestrictivePracticeType = RestrictivePracticeType.Seclusion,
+            Severity = IncidentSeverity.Medium,
+            Title = "Updated title",
+            Description = "What happened.",
+            IncidentDateTime = new DateTime(2026, 8, 30, 10, 0, 0, DateTimeKind.Utc),
+            Status = IncidentStatus.Draft,
+            QscReportingStatus = QscReportingStatus.Required,
+        };
+
+        var result = await controller.Update(incident.Id, updateDto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal("Updated title", saved.Title);
+        Assert.Equal("Mei Zhang", saved.WitnessNames);
+        Assert.Equal("slip", saved.WitnessStatements);
+    }
+
     // ── "This use was not authorised" (UsedWithoutAuthorisation) ─────────────
 
     /// <summary>An RP edit of an existing incident: everything the wizard sends back, with the link and the flag given.</summary>

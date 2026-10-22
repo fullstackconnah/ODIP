@@ -23,6 +23,17 @@ export function useBookings(params?: Record<string, string>) {
   })
 }
 
+/** One booking in full. The list row lacks the detail-only columns (notes, plan-type override, insurance details...), so an edit form starts from this, never
+ *  from the row. gcTime 0: the form is initialised once from what it loads, so it must not open on an older copy left in the cache. */
+export function useBooking(id: string | undefined) {
+  return useQuery({
+    queryKey: ['bookings', 'detail', id],
+    queryFn: () => apiGet<BookingDetailDto>(`/bookings/${id}`),
+    enabled: !!id,
+    gcTime: 0,
+  })
+}
+
 export function useTripBookings(tripId: string | undefined) {
   return useQuery({
     queryKey: ['trip-bookings', tripId],
@@ -96,8 +107,8 @@ export function useDeleteBooking() {
 export function useCancelBooking() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateBookingDto }) =>
-      apiPutRaw<BookingListDto>(`/bookings/${id}`, { ...data, bookingStatus: 'Cancelled' }),
+    // A PATCH of the status alone: a PUT assigns every column of the update DTO, so one built from the list row blanked the detail-only ones.
+    mutationFn: (id: string) => apiPatchRaw<BookingDetailDto>(`/bookings/${id}`, { bookingStatus: 'Cancelled' }),
     onSuccess: () => {
       refreshBudgetFigures(qc)   // a cancelled booking costs nothing
       qc.invalidateQueries({ queryKey: ['bookings'] })

@@ -23,6 +23,7 @@ const { mockDownloadMutate, mockUseDownloadClientOverviewPdf, mockUseCreateBooki
 vi.mock('@/api/hooks', () => ({
   useCreateBooking: mockUseCreateBooking,
   useUpdateBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBooking: () => ({ data: undefined, isLoading: true, isError: false, isFetching: true, refetch: vi.fn() }),
   usePatchBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useDeleteBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useCancelBooking: () => ({ mutate: vi.fn(), isPending: false, isError: false }),

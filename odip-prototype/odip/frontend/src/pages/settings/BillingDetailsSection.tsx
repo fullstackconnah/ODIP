@@ -24,7 +24,7 @@ export function IncompleteProfileNote() {
   )
 }
 
-/** Organisation › Billing details: the bank account on invoices (never shown to a Coordinator), GST and PACE, and the invoice note. */
+/** Organisation › Billing details: the bank account on invoices (hidden from Coordinators here; invoices still print it), GST and PACE, and the invoice note. */
 export default function BillingDetailsSection(frame: SectionFrame) {
   const { showBankDetails } = usePermissions()
   const p = useProviderRow(row => ({

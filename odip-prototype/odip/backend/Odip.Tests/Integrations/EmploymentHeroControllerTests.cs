@@ -417,6 +417,21 @@ public class EmploymentHeroControllerTests
     }
 
     [Fact]
+    public async Task After_Link_repairs_a_duplicate_the_next_sync_gives_the_person_EHs_email_instead_of_saying_it_is_already_used()
+    {
+        var (db, tenant, jane, item, robert) = await DuplicateFromFirstSyncAsync();
+        await using var _ = db;
+        var employee = Employee(302, "Robert", "Smith", "robert@acme.org.au");
+        await Controller(db, tenant, new StubHttpHandler().On("/api/v2/business/777/employee/302/details", HttpStatusCode.OK, employee)).Link(item.Id, new EmploymentHeroLinkDto("302"), CancellationToken.None);
+
+        await Sync(Eh(employee, Employee(303, "Hal", "Ng", "hal@acme.org.au"))).RunAsync(db, tenant, CancellationToken.None);
+
+        Assert.Equal("robert@acme.org.au", jane.Email);
+        Assert.NotEqual("robert@acme.org.au", robert.Email);   // the archived duplicate gave the address up
+        Assert.DoesNotContain(db.EmploymentHeroAttentions, a => a.Kind == EmploymentHeroAttentionKind.FixInEmploymentHero);
+    }
+
+    [Fact]
     public async Task Link_still_refuses_the_id_of_a_sync_added_person_who_has_signed_in()
     {
         var (db, tenant, jane, item, robert) = await DuplicateFromFirstSyncAsync();
