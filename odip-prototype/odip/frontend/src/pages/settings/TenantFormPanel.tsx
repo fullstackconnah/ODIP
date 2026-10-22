@@ -6,6 +6,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { SlideOver } from '@/components/SlideOver'
 import {
@@ -44,15 +45,14 @@ type Done = { tenantName: string; firstUser: FirstUserDone | null }
 // ---------------------------------------------------------------------------
 
 const AUSTRALIAN_STATES = [
-  { value: '', label: 'Select state...' },
-  { value: 'ACT', label: 'ACT' },
-  { value: 'NSW', label: 'NSW' },
-  { value: 'NT', label: 'NT' },
-  { value: 'QLD', label: 'QLD' },
-  { value: 'SA', label: 'SA' },
-  { value: 'TAS', label: 'TAS' },
-  { value: 'VIC', label: 'VIC' },
-  { value: 'WA', label: 'WA' },
+  { key: 'ACT', label: 'ACT' },
+  { key: 'NSW', label: 'NSW' },
+  { key: 'NT', label: 'NT' },
+  { key: 'QLD', label: 'QLD' },
+  { key: 'SA', label: 'SA' },
+  { key: 'TAS', label: 'TAS' },
+  { key: 'VIC', label: 'VIC' },
+  { key: 'WA', label: 'WA' },
 ]
 
 const ROLE_OPTIONS = [
@@ -436,15 +436,7 @@ export default function TenantFormPanel({
         {!isEdit && (
           <div>
             <label id="tf-state-label" className={labelClass}>State *</label>
-            <Dropdown
-              variant="form"
-              aria-labelledby="tf-state-label"
-              aria-required="true"
-              value={state}
-              onChange={setState}
-              items={AUSTRALIAN_STATES}
-              label="Select state..."
-            />
+            <ToggleGroup className="flex-wrap rounded-[var(--radius-md)] border border-[var(--color-border)] p-1 w-fit max-w-full" ariaLabel="State" options={AUSTRALIAN_STATES} value={state} onChange={setState} />
           </div>
         )}
 

@@ -5,7 +5,6 @@ import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
 import { Suspense, useState, useRef } from 'react'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import NotificationBell from '@/components/layout/NotificationBell'
@@ -336,7 +335,7 @@ export default function AppLayout() {
           <div className="flex items-center justify-between h-full px-[var(--gutter,20px)]">
             <div className="flex min-w-0 items-center gap-4">
               <button
-                className={`${TAP_AREA} lg:hidden p-2 rounded-md hover:bg-[var(--color-accent)] transition-colors`}
+                className="lg:hidden p-2 pointer-coarse:flex pointer-coarse:size-[var(--tap-min)] pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}

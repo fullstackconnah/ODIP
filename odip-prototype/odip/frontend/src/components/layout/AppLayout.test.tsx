@@ -5,7 +5,6 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import AppLayout from './AppLayout'
-import { TAP_AREA } from '@/components/tapArea'
 
 // AppLayout renders the portal nav's pending-witness-count badge and the Rostering nav's
 // pending-leave-count badge via TanStack Query hooks — stub just those exports (keeping the
@@ -362,23 +361,24 @@ describe('AppLayout — participant lifecycle navigation', () => {
 // changing size. jsdom has no layout or media queries, so these pin the class contract; the token floors are 0px
 // on a mouse, so the desktop shell is unchanged.
 describe('AppLayout — 44px coarse-pointer hit areas', () => {
-  const pad = TAP_AREA.split(' ')
+  // The header controls are 44px boxes under touch, not 36/32px boxes with an invisible pad: what is measured is what is tappable.
+  const box = ['pointer-coarse:size-[var(--tap-min)]']
 
   afterEach(() => {
     localStorage.clear()
   })
 
-  it('pads the header "Open menu" toggle (36px) and keeps the pad when it becomes "Close menu"', () => {
+  it('gives the header "Open menu" toggle (36px) a real 44px box under touch and keeps it when it becomes "Close menu"', () => {
     renderAt('/trips')
-    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass(...pad, 'p-2', 'lg:hidden')
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('p-2', 'lg:hidden', ...box)
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
-    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...pad)
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...box)
   })
 
-  it('pads the header "Notifications" bell (32px), a working button now', () => {
+  it('gives the header "Notifications" bell (32px) a real 44px box under touch, a working button now', () => {
     renderAt('/trips')
     const bell = screen.getByRole('button', { name: 'Notifications' })
-    expect(bell).toHaveClass(...pad, 'w-8', 'h-8')
+    expect(bell).toHaveClass('w-8', 'h-8', ...box)
     expect(bell).toBeEnabled()
   })
 

@@ -35,17 +35,17 @@ describe('Organisation profile: state and manager', () => {
     show()
     expect(await screen.findByDisplayValue('Priya Sharma')).toBeInTheDocument()
     expect(screen.getByDisplayValue('0412 345 007')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /State/ })).toHaveTextContent('WA')
+    // All eight states are on the page at once (no panel to scroll), and the stored one is selected.
+    expect(screen.getAllByRole('radio').map(r => r.textContent)).toEqual(['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'])
+    expect(screen.getByRole('radio', { name: 'WA' })).toBeChecked()
   })
 
   // The real old case is an organisation with no provider row at all (the server answers null), not a row with a blank state.
   it('does not pick Victoria for an organisation with no profile row yet', async () => {
     api.get.mockResolvedValue(null)
     show()
-    const state = await screen.findByRole('button', { name: /State/ })
-    expect(state).not.toHaveTextContent('VIC')
-    expect(state).toHaveTextContent('Select state')
-    expect(state).toHaveAttribute('aria-required', 'true')
+    await screen.findByRole('radiogroup', { name: 'State' })
+    screen.getAllByRole('radio').forEach(r => expect(r).not.toBeChecked())
   })
 
   it('keeps Save off until a state is chosen, so no organisation is put on Victoria by saving', async () => {
@@ -58,8 +58,7 @@ describe('Organisation profile: state and manager', () => {
     await user.type(screen.getByRole('textbox', { name: 'Address' }), '1 Example Street')
     expect(screen.getByRole('button', { name: /^Save/ })).toBeDisabled()
 
-    await user.click(screen.getByRole('button', { name: /State/ }))
-    await user.click(screen.getByRole('option', { name: 'WA' }))
+    await user.click(screen.getByRole('radio', { name: 'WA' }))
     await user.click(screen.getByRole('button', { name: /^Save/ }))
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/provider-settings', expect.objectContaining({ state: 'WA', organisationName: 'Jo Care' })))
