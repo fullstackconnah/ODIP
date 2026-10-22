@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RosterBoardPage from './RosterBoardPage'
 import { makeParticipantBoard, makeParticipantRow, makeShift, makeUnfilledShift } from './test-fixtures'
 import { WEEK_HEADING_ID, ShiftSlideOver } from './components'
+import { useRosterBoard } from '@/api/hooks'
 
 // The board-changed 409 (RosteringController.BoardChangedMessage) offers "Refresh the board". The board query, the writes and the QueryClient are REAL:
 // only the HTTP layer is faked, so "it refetched" is a counted GET /rostering/board, not a mocked refetch.
@@ -36,8 +37,11 @@ vi.mock('@/api/hooks', async () => {
 vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 
 const BOARD_CHANGED = 'This shift changed after the board was loaded. Refresh the board and try again.'
+const REFRESH_FAILED = "Couldn't refresh the board. Try again."
 const LOCKED = "This shift has started, finished or been cancelled, so its worker can't be changed here."
 const conflict = (message: string, code?: string) => ({ response: { status: 409, data: { success: false, errors: [message], ...(code ? { code } : {}) } } })
+
+const boardChanged = () => conflict(BOARD_CHANGED, 'SHIFT_BOARD_CHANGED')
 
 // The week of Monday 2026-08-17: Mia's open Tuesday, Sam on her Wednesday (from pattern pat-wed), Alex on Jo's Tuesday.
 const OPEN = makeUnfilledShift({ id: 'open', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', durationHours: 6, status: 'Draft' })
@@ -46,6 +50,14 @@ const JO_TUE = makeShift({ id: 'jo-tue', participantId: 'p-2', participantName: 
 const BOARD = makeParticipantBoard({
   participantRows: [
     makeParticipantRow({ participantId: 'p-1', fullName: 'Mia Chen', shifts: [OPEN, SAM_WED] }),
+    makeParticipantRow({ participantId: 'p-2', fullName: 'Jo Park', shifts: [JO_TUE] }),
+  ],
+})
+
+// The week as it is after somebody else moved Sam off Wednesday.
+const BOARD_SAM_OFF = makeParticipantBoard({
+  participantRows: [
+    makeParticipantRow({ participantId: 'p-1', fullName: 'Mia Chen', shifts: [OPEN, makeUnfilledShift({ ...SAM_WED })] }),
     makeParticipantRow({ participantId: 'p-2', fullName: 'Jo Park', shifts: [JO_TUE] }),
   ],
 })
@@ -91,7 +103,7 @@ beforeEach(() => {
 
 describe('the board-changed 409 offers Refresh the board (real QueryClient)', () => {
   it('refetches the shown week, clears the notice, says so once, and puts focus on the week heading', async () => {
-    const { user } = await refuse(u => pick(u, /^Kim Lee/), conflict(BOARD_CHANGED))
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
     // The refusal's own onSettled refetch lands first, so the count below is the action's alone.
     await waitFor(() => expect(h.get.mock.calls.filter(c => c[0] === '/rostering/board').length).toBeGreaterThanOrEqual(2))
     const settled = boardGets()
@@ -99,15 +111,17 @@ describe('the board-changed 409 offers Refresh the board (real QueryClient)', ()
     await waitFor(() => expect(screen.queryByText(BOARD_CHANGED)).not.toBeInTheDocument())
     expect(boardGets()).toBe(settled + 1)
     expect(h.get).toHaveBeenLastCalledWith('/rostering/board', { weekStart: '2026-08-17', groupBy: 'participant' })
-    expect(screen.getAllByText('The board is up to date.')).toHaveLength(1)
-    expect(screen.getByText('The board is up to date.').closest('[role="status"]')).not.toBeNull()
+    // Said once to a screen reader (the page's polite region) and shown once to everyone else (a success notice that does not announce itself).
+    const said = screen.getAllByText('The board is up to date.')
+    expect(said).toHaveLength(2)
+    expect(said.filter(el => el.getAttribute('role') === 'status')).toHaveLength(1)
     expect(document.getElementById(WEEK_HEADING_ID)).toHaveFocus()
   })
 
   it('says the outcome again on a second refresh, since each refresh first says it is refreshing', async () => {
-    const { user } = await refuse(u => pick(u, /^Kim Lee/), conflict(BOARD_CHANGED))
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
     await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
-    await screen.findByText('The board is up to date.')
+    await screen.findAllByText('The board is up to date.')
     await pick(user, /^Kim Lee/)
     await screen.findByText(BOARD_CHANGED)
     const region = screen.getByText('The board is up to date.')
@@ -121,7 +135,7 @@ describe('the board-changed 409 offers Refresh the board (real QueryClient)', ()
   })
 
   it('holds the button while it runs (aria-busy, aria-disabled) and ignores a second press', async () => {
-    const { user } = await refuse(u => pick(u, /^Kim Lee/), conflict(BOARD_CHANGED))
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
     await waitFor(() => expect(boardGets()).toBeGreaterThanOrEqual(2))
     let release = () => {}
     h.get.mockImplementation((url: string) => (url === '/rostering/board' ? new Promise(res => { release = () => res(BOARD) }) : Promise.resolve([])))
@@ -138,16 +152,64 @@ describe('the board-changed 409 offers Refresh the board (real QueryClient)', ()
   })
 
   it('keeps the notice and says so when the refresh fails', async () => {
-    const { user } = await refuse(u => pick(u, /^Kim Lee/), conflict(BOARD_CHANGED))
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
     await waitFor(() => expect(boardGets()).toBeGreaterThanOrEqual(2))
     h.get.mockImplementation(async (url: string) => { if (url === '/rostering/board') throw new Error('offline'); return [] })
     await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
-    expect(await screen.findAllByText("Couldn't refresh the board.")).not.toHaveLength(0)
+    expect(await screen.findAllByText(REFRESH_FAILED)).not.toHaveLength(0)
     expect(screen.getByText(BOARD_CHANGED)).toBeInTheDocument()
+    // The week stays on screen: a failed refresh is not the load-error page with a second Retry.
+    expect(document.querySelector('[data-shift-chip="sam-wed"]')).not.toBeNull()
+    expect(screen.queryByText("Couldn't load the roster board")).not.toBeInTheDocument()
     expect(refreshButton()).toBeInTheDocument()
     expect(refreshButton()).not.toHaveAttribute('aria-busy')
     expect(refreshButton()).toHaveFocus()
     expect(screen.queryByText('The board is up to date.')).not.toBeInTheDocument()
+  })
+
+  it('puts the action under the message, in the text column: only the dismiss X is in the actions slot', async () => {
+    await refuse(u => pick(u, /^Kim Lee/), boardChanged())
+    expect(refreshButton()?.closest('[role="alert"]')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Dismiss error' }).parentElement).not.toContainElement(refreshButton())
+  })
+
+  it.each([
+    { name: 'the code, whatever the sentence says (the copy was edited)', refusal: conflict('Somebody reworded this sentence.', 'SHIFT_BOARD_CHANGED') },
+    { name: 'the sentence alone (a server from before the code)', refusal: conflict(BOARD_CHANGED) },
+  ])('offers Refresh the board on $name', async ({ refusal }) => {
+    await refuse(u => pick(u, /^Kim Lee/), refusal)
+    expect(refreshButton()).toBeInTheDocument()
+  })
+
+  it('shows the success notice, and clears it by itself after a few seconds', async () => {
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+      await screen.findByRole('button', { name: 'Dismiss notice' })
+      act(() => { vi.advanceTimersByTime(6000) })
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Dismiss notice' })).not.toBeInTheDocument())
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a refresh that resolves after a newer write began says nothing and takes no focus', async () => {
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
+    await waitFor(() => expect(boardGets()).toBeGreaterThanOrEqual(2))
+    const releases: (() => void)[] = []
+    h.get.mockImplementation((url: string) => (url === '/rostering/board' ? new Promise(res => { releases.push(() => res(BOARD)) }) : Promise.resolve([])))
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    await waitFor(() => expect(refreshButton()).toHaveAttribute('aria-busy', 'true'))
+    const NOT_READY = 'Participant is not ready for booking or rostering.'
+    h.post.mockRejectedValue({ response: { status: 400, data: { success: false, errors: [NOT_READY] } } })
+    await pick(user, /^Kim Lee/)   // the old notice and its action go at once; the refusal itself waits for the board refetch (onSettled)
+    await waitFor(() => expect(releases.length).toBeGreaterThanOrEqual(2))
+    await act(async () => { releases.forEach(r => r()); await new Promise(r => setTimeout(r, 50)) })
+    await screen.findByText(NOT_READY)
+    // The late refresh belongs to a notice that is gone: it says nothing and takes no focus.
+    expect(screen.queryByText('The board is up to date.')).not.toBeInTheDocument()
+    expect(document.getElementById(WEEK_HEADING_ID)).not.toHaveFocus()
   })
 })
 
@@ -169,7 +231,7 @@ describe.each(PATHS)('$path', ({ act }) => {
   })
 
   it('shows Refresh the board for the board-changed 409', async () => {
-    await refuse(act, conflict(BOARD_CHANGED))
+    await refuse(act, boardChanged())
     expect(refreshButton()).toBeInTheDocument()
   })
 
@@ -179,46 +241,102 @@ describe.each(PATHS)('$path', ({ act }) => {
   })
 })
 
-// The empty-day move (POST shifts with moveFromShiftId) is refused in the shift panel, not on the board: the same action, from the same component.
+// The empty-day move (POST shifts with moveFromShiftId) is refused in the shift panel, not on the board: the same action, from the same component. It is the only way a panel gets the
+// board-changed 409 (PUT shifts/{id} never sends it). The board query is REAL here too (BoardObserver), so a refresh is a counted GET.
+function BoardObserver() { useRosterBoard('2026-08-17', 'participant'); return null }
+const MOVE = { mode: 'create' as const, participantId: 'p-1', staffId: 'staff-2', serviceDate: '2026-08-20', moveFromShiftId: 'sam-wed' }
+const SAVED = makeShift({ id: 'new', participantId: 'p-1', participantName: 'Mia Chen', staffId: 'staff-2', staffName: 'Sam Wilson', serviceDate: '2026-08-20', status: 'Draft' })
+const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+const panelProps = () => ({ onClose: vi.fn(), canWrite: true, participantOptions: [{ value: 'p-1', label: 'Mia Chen' }], staffOptions: [{ value: 'staff-2', label: 'Sam Wilson' }] })
+const saveButton = () => screen.getByRole('button', { name: /^save$/i })
+
 describe('the shift panel: an empty-day move (POST shifts with moveFromShiftId)', () => {
-  const renderPanel = () => render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
-      <ShiftSlideOver
-        target={{ mode: 'create', participantId: 'p-1', staffId: 'staff-2', serviceDate: '2026-08-20', moveFromShiftId: 'sam-wed' }}
-        onClose={vi.fn()}
-        canWrite
-        participantOptions={[{ value: 'p-1', label: 'Mia Chen' }]}
-        staffOptions={[{ value: 'staff-2', label: 'Sam Wilson' }]}
-      />
-    </QueryClientProvider>,
-  )
+  const renderPanel = ({ observe = true, onSaved = vi.fn() } = {}) => {
+    render(
+      <QueryClientProvider client={newClient()}>
+        {observe && <BoardObserver />}
+        <ShiftSlideOver target={MOVE} {...panelProps()} onSaved={onSaved} />
+      </QueryClientProvider>,
+    )
+    return onSaved
+  }
   it.each([
-    { refusal: conflict(BOARD_CHANGED), shows: true },
+    { refusal: boardChanged(), shows: true },
     { refusal: conflict(LOCKED, 'SHIFT_STATUS_LOCKED'), shows: false },
   ])('Refresh the board shown: $shows', async ({ refusal, shows }) => {
     const user = userEvent.setup()
     h.post.mockRejectedValue(refusal)
     renderPanel()
-    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    await user.click(saveButton())
     await screen.findByText(refusal.response.data.errors[0])
     expect(h.post).toHaveBeenCalledWith('/rostering/shifts', expect.objectContaining({ moveFromShiftId: 'sam-wed', staffId: 'staff-2' }))
     if (shows) expect(refreshButton()).toBeInTheDocument()
     else expect(refreshButton()).not.toBeInTheDocument()
   })
-  it('a reopened panel starts with an empty announcement region, not the last done line', async () => {
+
+  it('refreshes for real; with Sam still on the shift he was carried off, it says the board is up to date and Save keeps the move', async () => {
     const user = userEvent.setup()
-    h.post.mockRejectedValue(conflict(BOARD_CHANGED))
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-    const props = { onClose: vi.fn(), canWrite: true, participantOptions: [{ value: 'p-1', label: 'Mia Chen' }], staffOptions: [{ value: 'staff-2', label: 'Sam Wilson' }] }
-    const target = () => ({ mode: 'create' as const, participantId: 'p-1', staffId: 'staff-2', serviceDate: '2026-08-20', moveFromShiftId: 'sam-wed' })
-    const ui = (t: ReturnType<typeof target> | null) => <QueryClientProvider client={client}><ShiftSlideOver {...props} target={t} /></QueryClientProvider>
-    const { rerender } = render(ui(target()))
-    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    h.post.mockRejectedValueOnce(boardChanged()).mockResolvedValue(SAVED)
+    const onSaved = renderPanel()
+    await waitFor(() => expect(boardGets()).toBe(1))
+    await user.click(saveButton())
+    await screen.findByText(BOARD_CHANGED)
+    await waitFor(() => expect(boardGets()).toBe(2))   // the refusal's own refetch (onSettled)
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    // The panel's polite region and a visible note: the panel is a modal, so the page's region is not heard.
+    expect(await screen.findAllByText('The board is up to date.')).toHaveLength(2)
+    expect(boardGets()).toBe(3)
+    await user.click(saveButton())
+    await waitFor(() => expect(h.post).toHaveBeenCalledTimes(2))
+    expect(h.post).toHaveBeenLastCalledWith('/rostering/shifts', expect.objectContaining({ moveFromShiftId: 'sam-wed' }))
+    expect(onSaved).toHaveBeenCalledTimes(1)
+  })
+
+  it('with Sam gone from that shift, the refreshed panel does not claim it is up to date, says why, and Save no longer sends the stale move', async () => {
+    const user = userEvent.setup()
+    h.post.mockRejectedValueOnce(boardChanged()).mockResolvedValue(SAVED)
+    const onSaved = renderPanel()
+    await waitFor(() => expect(boardGets()).toBe(1))
+    await user.click(saveButton())
+    await screen.findByText(BOARD_CHANGED)
+    await waitFor(() => expect(boardGets()).toBe(2))   // the refusal's own refetch (onSettled)
+    h.get.mockImplementation(async (url: string) => (url === '/rostering/board' ? BOARD_SAM_OFF : []))
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    const why = /Sam Wilson is no longer on the shift you moved them from\. Save adds this shift without moving them\./
+    expect(await screen.findAllByText(why)).toHaveLength(2)
+    expect(screen.queryByText('The board is up to date.')).not.toBeInTheDocument()
+    expect(boardGets()).toBe(3)
+    await user.click(saveButton())
+    await waitFor(() => expect(h.post).toHaveBeenCalledTimes(2))
+    expect(h.post.mock.calls[1][1]).not.toHaveProperty('moveFromShiftId')
+    // Nobody was moved by this save, so the board must not announce a move.
+    expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('with no board on screen nothing was refreshed: it says so instead of claiming success', async () => {
+    const user = userEvent.setup()
+    h.post.mockRejectedValue(boardChanged())
+    renderPanel({ observe: false })
+    await user.click(saveButton())
     await screen.findByText(BOARD_CHANGED)
     await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
-    await screen.findByText('The board is up to date.')
+    expect(await screen.findAllByText(REFRESH_FAILED)).not.toHaveLength(0)
+    expect(screen.queryByText('The board is up to date.')).not.toBeInTheDocument()
+  })
+
+  it('a reopened panel starts with an empty announcement region, not the last done line', async () => {
+    const user = userEvent.setup()
+    h.post.mockRejectedValue(boardChanged())
+    const client = newClient()
+    const props = panelProps()
+    const ui = (t: typeof MOVE | null) => <QueryClientProvider client={client}><BoardObserver /><ShiftSlideOver {...props} target={t} /></QueryClientProvider>
+    const { rerender } = render(ui(MOVE))
+    await user.click(saveButton())
+    await screen.findByText(BOARD_CHANGED)
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    await screen.findAllByText('The board is up to date.')
     rerender(ui(null))
-    rerender(ui(target()))
+    rerender(ui({ ...MOVE }))
     expect(screen.queryByText('The board is up to date.')).not.toBeInTheDocument()
     expect(document.querySelector('[role="status"]')).toBeNull()
   })

@@ -9,8 +9,9 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { FormField } from '@/components/FormField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
+import { Callout } from '@/components/Callout'
 import { RefreshBoardAction } from './RefreshBoardAction'
-import { BOARD_REFRESHED } from '../lib/boardChanged'
+import { BOARD_REFRESHED, moveGoneSentence } from '../lib/boardChanged'
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { RequirementChips } from '@/components/RequirementChips'
 import { requirementLabels } from '@/lib/workerRequirements'
@@ -142,8 +143,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [error, setError] = useState<PanelRefusal | null>(null)
   // What Refresh the board says (pending, failed, done) after a board-changed 409, in the panel's own region: one outside the modal is not heard. Done moves focus to Save.
   const [refreshSaid, setRefreshSaid] = useState('')
+  // The done sentence, shown as well as said (the region is sr-only, and the refusal that was on screen is gone). gone: the refreshed board no longer has the carried
+  // person on the shift they were carried off, so the server would refuse the move again; the sentence says so and Save adds the shift without it.
+  const [refreshDone, setRefreshDone] = useState<{ text: string; gone: boolean } | null>(null)
   // The panel stays mounted while closed: a reopened one must not mount its announcement region already holding the last done line.
-  useEffect(() => setRefreshSaid(''), [target])
+  useEffect(() => { setRefreshSaid(''); setRefreshDone(null) }, [target])
   // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
   // mode) the server refuses it with the same 400 message. That is shown as soon as the preview says so, not only at Save. It is tied
   // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an
@@ -309,9 +313,22 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     if (value.trim()) setReasonRequired(false)
   }
 
+  /** Refresh the board went through: read the carried person's old shift again from the fresh board, so the panel only says "up to date" when that is true. */
+  function boardRefreshed(shifts: ShiftDto[]) {
+    const carried = target?.mode === 'create' && target.moveFromShiftId ? target : null
+    const onBoard = carried && shifts.find(shift => shift.id === carried.moveFromShiftId)
+    const gone = !!carried && onBoard?.staffId !== carried.staffId
+    const sentence = gone ? moveGoneSentence(staffOptions.find(option => option.value === carried.staffId)?.label ?? 'That person') : BOARD_REFRESHED
+    setError(null)
+    setRefreshDone({ text: sentence, gone })
+    setRefreshSaid(sentence)
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-shift-save]')?.focus())
+  }
+
   async function handleSave() {
     setError(null)
     setRefreshSaid('')
+    setRefreshDone(done => (done?.gone ? done : null))   // the note that the move is gone stays: it is why Save sends none
     if (stillBlocking.length > 0) return
     if (refusedOnBudget && !emergencyReady) {
       setEmergencySubmitted(true)
@@ -340,14 +357,14 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       acknowledgedFindingCodes: [...new Set(warningFindings.map(f => f.code))],
       ...(emergencyActive ? { emergency: true } : {}),
       // A person carried off a puck moves in the same save; once the Staff field names somebody else, nobody is moving.
-      ...(target?.mode === 'create' && target.moveFromShiftId && staffId === target.staffId ? { moveFromShiftId: target.moveFromShiftId } : {}),
+      ...(target?.mode === 'create' && target.moveFromShiftId && staffId === target.staffId && !refreshDone?.gone ? { moveFromShiftId: target.moveFromShiftId } : {}),
     }
 
     try {
       const saved = isEdit && existing
         ? await updateShift.mutateAsync({ id: existing.id, data: payload })
         : await createShift.mutateAsync(payload)
-      onSaved?.(saved)
+      if (!refreshDone?.gone) onSaved?.(saved)   // without the move nobody was moved by this save: the board must not announce one
       onClose()
     } catch (err: unknown) {
       const serverFindings = getRosterFindings(err)
@@ -662,13 +679,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {footError && (
           <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
             {footError}
-            {shownError?.boardChanged && (
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <RefreshBoardAction announce={setRefreshSaid} onRefreshed={() => { setError(null); setRefreshSaid(BOARD_REFRESHED); requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-shift-save]')?.focus()) }} />
-              </div>
-            )}
+            {shownError?.boardChanged && <RefreshBoardAction announce={setRefreshSaid} onRefreshed={boardRefreshed} />}
           </div>
         )}
+        {refreshDone && <Callout tone={refreshDone.gone ? 'warning' : 'success'} announce={false}>{refreshDone.text}</Callout>}
       </SlideOver>
 
       <ConfirmDialog

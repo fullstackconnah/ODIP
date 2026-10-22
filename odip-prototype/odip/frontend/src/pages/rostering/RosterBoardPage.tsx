@@ -22,13 +22,13 @@ import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { plural } from '@/lib/format'
 import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useSetRegular, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
-import type { ShiftDto, RosterFindingDto, RosterBoardDto, MoveStaffMode, StartWeekResultDto } from '@/api/types'
+import type { ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto } from '@/api/types'
 import {
   WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementNotice, RefreshBoardAction,
   type ShiftSlideOverTarget,
 } from './components'
 import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
-import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan } from './lib/roster'
+import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, allBoardShifts } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedSentence, replacePromptLines, rosterAnnouncements,
@@ -63,13 +63,8 @@ function focusShift(id: string) {
 const NO_REGULAR = '00000000-0000-0000-0000-000000000000'
 const HINT_DISMISSED_KEY = 'odip.roster.hintDismissed'
 
-/** Every shift currently on the board, across whichever grouping is loaded — used to resolve an exception's shiftId back to a full ShiftDto. */
-function allBoardShifts(board: RosterBoardDto | undefined): ShiftDto[] {
-  if (!board) return []
-  return board.groupBy === 'Participant'
-    ? board.participantRows.flatMap(r => r.shifts)
-    : [...board.unfilled, ...board.staffRows.flatMap(r => r.shifts)]
-}
+/** How long "The board is up to date." stays on screen after Refresh the board: a confirmation, not a standing claim about a board others keep changing. */
+const UP_TO_DATE_MS = 6000
 
 export default function RosterBoardPage() {
   const { canWrite } = usePermissions()
@@ -109,8 +104,14 @@ export default function RosterBoardPage() {
   // The server's refusal of an assign / unassign that is NOT the 422 findings protocol (e.g. Enforce mode's 400 "Participant is not ready
   // for booking or rostering."). It used to be swallowed, leaving a drag that silently snapped back.
   // boardChanged: the board-changed 409 (lib/boardChanged), whose notice offers Refresh the board. Every write below reports through showWriteError.
-  const [assignError, setAssignError] = useState<{ message: string; boardChanged: boolean } | null>(null)
+  // done: the same slot after Refresh the board went through, as a success notice that clears itself (the next refusal replaces it, as it replaces any notice here).
+  const [assignError, setAssignError] = useState<{ message: string; boardChanged: boolean; done?: boolean } | null>(null)
   const showWriteError = (err: unknown, fallback: string) => setAssignError({ message: extractErrorMessage(err, fallback), boardChanged: isBoardChanged(err) })
+  useEffect(() => {
+    if (!assignError?.done) return
+    const timer = setTimeout(() => setAssignError(null), UP_TO_DATE_MS)
+    return () => clearTimeout(timer)
+  }, [assignError])
   const [carry, setCarry] = useState<DragCarry | null>(null)
   const [dropPending, setDropPending] = useState<PendingDrop | null>(null)
   const [prompt, setPrompt] = useState<DropPrompt | null>(null)
@@ -144,6 +145,8 @@ export default function RosterBoardPage() {
   })
 
   const { data: board, isLoading, isError, refetch } = useRosterBoard(weekStart, groupBy)
+  // A refetch that fails (Refresh the board, a refocus) keeps the week on screen with the data it has: only a week that never loaded is the load-error page.
+  const loadFailed = isError && !board
   // INTAKE-08: the board's participant filter/assignment picker excludes drafts (the board
   // query itself already excludes them server-side; this keeps the filter dropdown in sync).
   const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
@@ -532,9 +535,9 @@ export default function RosterBoardPage() {
       : board.staffRows.every(r => r.shifts.length === 0) && board.unfilled.length === 0
   )
 
-  /** Refresh the board went through: the stale notice goes, the page says so once, and focus goes to the week heading, never to body (as after Publish). */
+  /** Refresh the board went through: the stale notice becomes "up to date" (shown, and said once), and focus goes to the week heading, never to body (as after Publish). */
   function boardRefreshed() {
-    setAssignError(null)
+    setAssignError({ message: BOARD_REFRESHED, boardChanged: false, done: true })
     setAnnouncement(BOARD_REFRESHED)
     requestAnimationFrame(() => document.getElementById(WEEK_HEADING_ID)?.focus())
   }
@@ -642,18 +645,18 @@ export default function RosterBoardPage() {
           {/* Its own polite status is the announcement: nothing on the chip changes at rest (the brief, 5.2). */}
           {regularNotice && <Callout tone="success" actions={dismissNotice(() => setRegularNotice(null))}>{regularNotice}</Callout>}
           {assignError && (
+            // The action sits under the message (the text column), so only the dismiss X is in the shared actions slot. The success notice does not announce itself: the page's region already says it.
             <Callout
-              tone="error"
-              actions={
-                <>
-                  {assignError.boardChanged && <RefreshBoardAction onRefreshed={boardRefreshed} announce={setAnnouncement} />}
-                  <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
-                    <X className="h-4 w-4" />
-                  </Button>
-                </>
-              }
+              tone={assignError.done ? 'success' : 'error'}
+              announce={!assignError.done}
+              actions={assignError.done ? dismissNotice(() => setAssignError(null)) : (
+                <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
             >
               {assignError.message}
+              {assignError.boardChanged && <RefreshBoardAction onRefreshed={boardRefreshed} announce={setAnnouncement} />}
             </Callout>
           )}
         </div>
@@ -661,7 +664,7 @@ export default function RosterBoardPage() {
 
       {isLoading && <RosterGridSkeleton days={days} />}
 
-      {isError && (
+      {loadFailed && (
         // Retry is a real <Button size="md"> under the EmptyState, not EmptyState's own `action` slot, which
         // draws a hand-rolled min-h-[44px] text button that ignores the density tokens (44px on a mouse).
         // gap-5 + pb-10 reproduce the slot's spacing (gap-3 + mt-2 above it, py-10 around it), hence pb-0!.
@@ -681,7 +684,7 @@ export default function RosterBoardPage() {
       {/* The grid always renders, even for a week with zero shifts — that empty grid is the
           add-a-shift affordance. Guidance for a first-time/empty week is this dismissible hint
           above the grid, never a replacement for it. */}
-      {!isLoading && !isError && filteredBoard && weekHasNoShifts && !hintDismissed && !hasNotice && !unstarted && (
+      {!isLoading && !loadFailed && filteredBoard && weekHasNoShifts && !hintDismissed && !hasNotice && !unstarted && (
         <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface-container-low p-[var(--card-pad)]">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1">
@@ -706,7 +709,7 @@ export default function RosterBoardPage() {
         </div>
       )}
 
-      {!isLoading && !isError && grid && (unstarted ? (
+      {!isLoading && !loadFailed && grid && (unstarted ? (
         // The brief, 2.2: one grid cell, two layers. Below, the week's grid, faded, inert (no pointer, no Tab, no drop target) and hidden from assistive tech;
         // above it, outside the scrolling frame so it never scrolls away sideways, the card. No scrim and no blur: the faded grid reads as dormant paper.
         <div className="grid grid-cols-[minmax(0,1fr)]">
