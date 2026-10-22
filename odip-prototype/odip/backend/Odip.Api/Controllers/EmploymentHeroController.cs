@@ -219,6 +219,8 @@ public class EmploymentHeroController : ControllerBase
                 {
                     holder.ExternalPayrollId = null;
                     holder.IsActive = false;
+                    // The address stays unique even on an archived row, so it would block the person's own sync (EH's email is the duplicate's). Never signed in, so nothing relies on it.
+                    holder.Email = $"{holder.Username}@placeholder.local";
                     await _db.SaveChangesAsync(ct);   // first, on its own: the payroll-id index allows one holder at a time
                 }
                 person.ExternalPayrollId = employeeId;
