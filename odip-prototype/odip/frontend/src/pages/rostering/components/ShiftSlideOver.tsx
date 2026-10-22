@@ -142,6 +142,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [error, setError] = useState<PanelRefusal | null>(null)
   // What Refresh the board says (pending, failed, done) after a board-changed 409, in the panel's own region: one outside the modal is not heard. Done moves focus to Save.
   const [refreshSaid, setRefreshSaid] = useState('')
+  // The panel stays mounted while closed: a reopened one must not mount its announcement region already holding the last done line.
+  useEffect(() => setRefreshSaid(''), [target])
   // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
   // mode) the server refuses it with the same 400 message. That is shown as soon as the preview says so, not only at Save. It is tied
   // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an

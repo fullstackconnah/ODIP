@@ -120,6 +120,23 @@ describe('the board-changed 409 offers Refresh the board (real QueryClient)', ()
     expect(region).toHaveTextContent('The board is up to date.')
   })
 
+  it('holds the button while it runs (aria-busy, aria-disabled) and ignores a second press', async () => {
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), conflict(BOARD_CHANGED))
+    await waitFor(() => expect(boardGets()).toBeGreaterThanOrEqual(2))
+    let release = () => {}
+    h.get.mockImplementation((url: string) => (url === '/rostering/board' ? new Promise(res => { release = () => res(BOARD) }) : Promise.resolve([])))
+    const settled = boardGets()
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    await waitFor(() => expect(refreshButton()).toHaveAttribute('aria-busy', 'true'))
+    expect(refreshButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(refreshButton()).toHaveFocus()
+    await user.click(refreshButton() as HTMLElement)
+    expect(boardGets()).toBe(settled + 1)
+    release()
+    await waitFor(() => expect(screen.queryByText(BOARD_CHANGED)).not.toBeInTheDocument())
+    expect(boardGets()).toBe(settled + 1)
+  })
+
   it('keeps the notice and says so when the refresh fails', async () => {
     const { user } = await refuse(u => pick(u, /^Kim Lee/), conflict(BOARD_CHANGED))
     await waitFor(() => expect(boardGets()).toBeGreaterThanOrEqual(2))
@@ -129,6 +146,7 @@ describe('the board-changed 409 offers Refresh the board (real QueryClient)', ()
     expect(screen.getByText(BOARD_CHANGED)).toBeInTheDocument()
     expect(refreshButton()).toBeInTheDocument()
     expect(refreshButton()).not.toHaveAttribute('aria-busy')
+    expect(refreshButton()).toHaveFocus()
     expect(screen.queryByText('The board is up to date.')).not.toBeInTheDocument()
   })
 })
@@ -145,6 +163,11 @@ const PATHS: { path: string; act: (user: User) => Promise<void> }[] = [
 ]
 
 describe.each(PATHS)('$path', ({ act }) => {
+  it('shows no Refresh when the same sentence arrives as a non-409 error', async () => {
+    await refuse(act, { response: { status: 400, data: { success: false, errors: [BOARD_CHANGED] } } })
+    expect(refreshButton()).not.toBeInTheDocument()
+  })
+
   it('shows Refresh the board for the board-changed 409', async () => {
     await refuse(act, conflict(BOARD_CHANGED))
     expect(refreshButton()).toBeInTheDocument()
@@ -181,5 +204,22 @@ describe('the shift panel: an empty-day move (POST shifts with moveFromShiftId)'
     expect(h.post).toHaveBeenCalledWith('/rostering/shifts', expect.objectContaining({ moveFromShiftId: 'sam-wed', staffId: 'staff-2' }))
     if (shows) expect(refreshButton()).toBeInTheDocument()
     else expect(refreshButton()).not.toBeInTheDocument()
+  })
+  it('a reopened panel starts with an empty announcement region, not the last done line', async () => {
+    const user = userEvent.setup()
+    h.post.mockRejectedValue(conflict(BOARD_CHANGED))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const props = { onClose: vi.fn(), canWrite: true, participantOptions: [{ value: 'p-1', label: 'Mia Chen' }], staffOptions: [{ value: 'staff-2', label: 'Sam Wilson' }] }
+    const target = () => ({ mode: 'create' as const, participantId: 'p-1', staffId: 'staff-2', serviceDate: '2026-08-20', moveFromShiftId: 'sam-wed' })
+    const ui = (t: ReturnType<typeof target> | null) => <QueryClientProvider client={client}><ShiftSlideOver {...props} target={t} /></QueryClientProvider>
+    const { rerender } = render(ui(target()))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    await screen.findByText(BOARD_CHANGED)
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    await screen.findByText('The board is up to date.')
+    rerender(ui(null))
+    rerender(ui(target()))
+    expect(screen.queryByText('The board is up to date.')).not.toBeInTheDocument()
+    expect(document.querySelector('[role="status"]')).toBeNull()
   })
 })

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/Button'
-import { TAP_AREA } from '@/components/tapArea'
 
 const FAILED = "Couldn't refresh the board."
 
@@ -47,7 +46,7 @@ export function RefreshBoardAction({ onRefreshed, announce }: RefreshBoardAction
   const status = state === 'pending' ? 'Refreshing…' : state === 'failed' ? FAILED : ''
   return (
     <>
-      <Button variant="secondary" size="sm" onClick={refresh} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className={`${TAP_AREA} aria-disabled:opacity-50 aria-disabled:cursor-not-allowed`}>
+      <Button variant="secondary" size="sm" onClick={refresh} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
         Refresh the board
       </Button>
       {/* A fixed width (the failed line measures about 170px), so the button holds one x position in every state. */}
