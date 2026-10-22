@@ -29,13 +29,13 @@ vi.mock('@/api/hooks', () => ({
 // TaskCreatePage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker — that
 // throws under a plain declarative <MemoryRouter>/<Routes>, so tests need a data router (same
 // requirement IncidentCreatePage.test.tsx/the retired create-wizard's test suite document).
-function renderCreatePage() {
+function renderCreatePage(search = '') {
   const router = createMemoryRouter(
     [
       { path: '/tasks/new', element: <TaskCreatePage /> },
       { path: '/tasks', element: <div>Tasks list</div> },
     ],
-    { initialEntries: ['/tasks/new'] },
+    { initialEntries: ['/tasks/new' + search] },
   )
   return render(<RouterProvider router={router} />)
 }
@@ -77,7 +77,7 @@ describe('TaskCreatePage — UX-01 Owner picker (SearchableSelect)', () => {
     renderCreatePage()
 
     await user.type(screen.getByLabelText('Title *'), 'Confirm accommodation booking')
-    await user.click(screen.getByPlaceholderText('Select a trip...'))
+    await user.click(screen.getByDisplayValue('No trip'))
     await user.click(screen.getByRole('option', { name: 'Gold Coast Beach Break' }))
 
     await user.click(screen.getByDisplayValue('Unassigned'))
@@ -193,5 +193,70 @@ describe('TaskCreatePage — load and save feedback', () => {
   it('says it is loading while the task loads', () => {
     renderEditPage()
     expect(screen.getByRole('status')).toHaveTextContent('Loading task…')
+  })
+})
+
+// QW1 (OPS-1): a task needs no trip. The Trip field is optional, and locked to the trip when the form is opened from one.
+describe('TaskCreatePage — Trip is optional', () => {
+  it('creates a task with no trip, sending every field with a null trip', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('Title *'), 'Renew fire-safety check')
+    await user.click(screen.getByRole('button', { name: /create task/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toEqual({
+      tripInstanceId: null, taskType: 'Other', title: 'Renew fire-safety check', ownerId: null, priority: 'Medium',
+      dueDate: null, status: 'NotStarted', notes: null,
+    })
+  })
+
+  it('opened from a trip, shows that trip locked and sends its id', async () => {
+    const user = userEvent.setup()
+    renderCreatePage('?tripInstanceId=trip-1')
+
+    const trip = screen.getByDisplayValue('Gold Coast Beach Break')
+    expect(trip).toBeDisabled()
+    expect(screen.getByText('This task belongs to this trip.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Title *'), 'Confirm accommodation')
+    await user.click(screen.getByRole('button', { name: /create task/i }))
+
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ tripInstanceId: 'trip-1', title: 'Confirm accommodation' })
+  })
+
+  it('offers no trip as the first choice and says a blank trip is fine', () => {
+    renderCreatePage()
+    expect(screen.getByDisplayValue('No trip')).toHaveAttribute('role', 'combobox')
+    expect(screen.getByText('Leave blank for a task that is not about a trip.')).toBeInTheDocument()
+  })
+
+  it('keeps what was typed when the server refuses the save, and shows why', async () => {
+    const user = userEvent.setup()
+    createState.error = { response: { status: 400, data: { message: 'Task owner not found.' } } }
+    mockCreateMutateAsync.mockRejectedValue(createState.error)
+    renderCreatePage()
+
+    await user.type(screen.getByLabelText('Title *'), 'Renew fire-safety check')
+    await user.click(screen.getByRole('button', { name: /create task/i }))
+
+    expect(screen.getByText('Task owner not found.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Title *')).toHaveValue('Renew fire-safety check')
+  })
+
+  it('edits a task with no trip: the Trip shows No trip, locked', () => {
+    mockUseTask.mockReturnValue({ data: { id: 'task-1', taskType: 'Other', title: 'Renew fire-safety check', priority: 'Medium', status: 'NotStarted' } as TaskDto, isError: false })
+    renderEditPage()
+    expect(screen.getByDisplayValue('No trip')).toBeDisabled()
+    expect(screen.getByText("This task isn't about a trip.")).toBeInTheDocument()
+    expect(screen.queryByText('This task belongs to this trip.')).not.toBeInTheDocument()
+  })
+
+  it('edits a task with a trip: the Trip is locked and the hint says it cannot be changed', () => {
+    mockUseTask.mockReturnValue({ data: { id: 'task-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break', taskType: 'Other', title: 'Confirm', priority: 'Medium', status: 'NotStarted' } as TaskDto, isError: false })
+    renderEditPage()
+    expect(screen.getByDisplayValue('Gold Coast Beach Break')).toBeDisabled()
+    expect(screen.getByText("The trip can't be changed once a task is made.")).toBeInTheDocument()
+    expect(screen.queryByText('This task belongs to this trip.')).not.toBeInTheDocument()
   })
 })

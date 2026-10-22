@@ -133,6 +133,25 @@ describe('platform page finder', () => {
   })
 })
 
+describe('AppLayout — the organisation name in the header', () => {
+  afterEach(() => localStorage.clear())
+
+  it('is shown on a phone too: not hidden below the sm breakpoint, and trimmed with an ellipsis instead of crowding the bar', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    const name = screen.getByText('Jo Care Support Services')
+    expect(name).not.toHaveClass('hidden')
+    expect(name).toHaveClass('truncate')
+    expect(name).toHaveAttribute('title', 'Jo Care Support Services')
+  })
+
+  it('is hidden on a phone for a SuperAdmin, whose tenant switcher already names the organisation and needs the room', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    expect(screen.getByText('Jo Care Support Services')).toHaveClass('hidden', 'sm:inline-block')
+  })
+})
+
 describe('AppLayout nav active state', () => {
   afterEach(() => {
     localStorage.clear()
@@ -627,10 +646,10 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
 
     expect(hrefs(mainNav())).toEqual([
       '/', '/portal',
-      '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles', '/tasks',
+      '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
       '/participants', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
-      '/budgets',
+      '/tasks', '/budgets',
       '/incidents', '/settings',
     ])
   })
@@ -643,9 +662,9 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     // home is My shifts).
     expect(hrefs(mainNav())).toEqual([
       '/portal',
-      '/trips', '/schedule', '/tasks',
+      '/trips', '/schedule',
       '/participants', '/medications',
-      '/incidents',
+      '/tasks', '/incidents',
     ])
   })
 })
@@ -685,23 +704,25 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
   const FULL_MENU = [
     'Dashboard',
     'My shifts',
-    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
     'Participants: Participants | Medications | Caregiver forms',
     'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+    'Tasks',
     'Budgets',
     'Incidents',
     'Settings',
   ]
   // A SupportWorker starts from My shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
-  const SUPPORT_WORKER_MENU = ['My shifts', 'Trips: Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
+  const SUPPORT_WORKER_MENU = ['My shifts', 'Trips: Trips | Schedule', 'Participants: Participants | Medications', 'Tasks', 'Incidents']
   // ReadOnly reads most of the app but its API refuses Rostering (all five pages), Budgets, Caregiver forms and
   // Settings, so the menu does not offer them: Budgets and Settings disappear, Staff & roster is down to Staff and Qualifications.
   const READ_ONLY_MENU = [
     'Dashboard',
     'My shifts',
-    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
     'Participants: Participants | Medications',
     'Staff & roster: Staff | Qualifications',
+    'Tasks',
     'Incidents',
   ]
 
@@ -836,12 +857,12 @@ describe('AppLayout — open groups are remembered (U1)', () => {
     localStorage.setItem(KEY, JSON.stringify(['gone-group', 42, 'trips']))
     const { unmount } = renderAt('/')
     expect(expanded(/Trips$/)).toBe('true')
-    expect(navShape()).toHaveLength(8)
+    expect(navShape()).toHaveLength(9)
     unmount()
 
     localStorage.setItem(KEY, '{not json')
     renderAt('/')
-    expect(navShape()).toHaveLength(8)
+    expect(navShape()).toHaveLength(9)
     expect(expanded(/Trips$/)).toBe('false')
   })
 
@@ -982,7 +1003,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
   it('lights the cell of the section that holds the page, not only the cell that links to it exactly', () => {
     signIn('Coordinator')
     for (const [path, expected] of [
-      ['/', 'Dashboard'], ['/trips/t-1', 'Trips'], ['/schedule', 'Trips'], ['/vehicles', 'Trips'], ['/tasks', 'Trips'],
+      ['/', 'Dashboard'], ['/trips/t-1', 'Trips'], ['/schedule', 'Trips'], ['/vehicles', 'Trips'], ['/tasks', 'menuMore'],
       ['/rostering/leave', 'Roster'], ['/staff', 'Roster'], ['/qualifications', 'Roster'],
       ['/participants/p-1', 'Participants'], ['/onboarding/p-1', 'Participants'], ['/medications', 'Participants'],
     ] as const) {

@@ -1,10 +1,14 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DndContext } from '@dnd-kit/core'
 import type { StaffListDto } from '@/api/types'
 import { DropStateContext } from '../lib/rosterDrag'
 import { CarriedPuck, StaffStrip } from './StaffStrip'
+
+// The organisation's weekly-hours setting (Settings > Alert windows); 38 unless a test sets it.
+const { weekly } = vi.hoisted(() => ({ weekly: { hours: 38 } }))
+vi.mock('@/api/hooks/settings', () => ({ useWeeklyHoursWarning: () => weekly.hours }))
 
 const { draggables } = vi.hoisted(() => ({ draggables: [] as unknown[] }))
 vi.mock('@dnd-kit/core', async importOriginal => {
@@ -40,6 +44,23 @@ function renderStrip(props: Partial<React.ComponentProps<typeof StaffStrip>> = {
 }
 
 describe('StaffStrip', () => {
+  afterEach(() => { weekly.hours = 38 })
+
+  it("judges hours against the organisation's weekly figure, not a fixed 38", () => {
+    weekly.hours = 45
+    renderStrip({ hours: new Map([['s-1', 40]]) })
+    const puck = screen.getByRole('button', { name: /Sam Wilson/ })
+    expect(puck).toHaveAccessibleName('Sam Wilson, 40 of 45 hours this week, qualifications expired')
+    expect(screen.getByText('40 / 45 h')).toBeInTheDocument()
+    expect(puck.querySelector('.bg-\\[var\\(--color-warning\\)\\]')).toBeNull()
+  })
+
+  it('warns once the hours pass a lower figure', () => {
+    weekly.hours = 30
+    renderStrip({ hours: new Map([['s-1', 32]]) })
+    expect(screen.getByRole('button', { name: /Sam Wilson/ }).querySelector('.bg-\\[var\\(--color-warning\\)\\]')).not.toBeNull()
+  })
+
   it('shows every active person, in the order given, as a puck named with their hours this week', () => {
     renderStrip()
     expect(screen.getByRole('region', { name: 'Staff' })).toBeInTheDocument()

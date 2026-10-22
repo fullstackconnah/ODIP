@@ -5,7 +5,8 @@ import type { StaffListDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchInput } from '@/components/SearchInput'
 import { formatHoursMeter } from '../lib/roster'
-import { DropStateContext, WEEK_TARGET_HOURS, carriedLine, hoursText, dropOutcome, type DragCarry, type DropTarget } from '../lib/rosterDrag'
+import { useWeeklyHoursWarning } from '@/api/hooks/settings'
+import { DropStateContext, carriedLine, hoursText, dropOutcome, type DragCarry, type DropTarget } from '../lib/rosterDrag'
 
 export type StaffStripProps = {
   staff: StaffListDto[]
@@ -56,10 +57,11 @@ export function StaffStrip({ staff, isLoading, hours, regionOptions, regionFilte
 /** One person in the strip. The whole puck is the drag source: it has no other action, so it needs no separate handle. */
 function StaffPuck({ person, hours }: { person: StaffListDto; hours: number }) {
   const { disabled } = useContext(DropStateContext)
+  const weeklyHours = useWeeklyHoursWarning()
   const carry: DragCarry = { staffId: person.id, staffName: person.fullName }
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `staff:${person.id}`, data: carry, disabled })
-  const over = hours > WEEK_TARGET_HOURS
-  const name = `${person.fullName}, ${hoursText(hours)} of ${WEEK_TARGET_HOURS} hours this week${person.hasExpiredQualifications ? ', qualifications expired' : ''}`
+  const over = hours > weeklyHours
+  const name = `${person.fullName}, ${hoursText(hours)} of ${weeklyHours} hours this week${person.hasExpiredQualifications ? ', qualifications expired' : ''}`
 
   return (
     // Not touch-none: a swipe still scrolls the strip, and a 200 ms press lifts the puck (the page's TouchSensor).
@@ -74,10 +76,10 @@ function StaffPuck({ person, hours }: { person: StaffListDto; hours: number }) {
       {/* The chip's own warning mark, in the on-warning ink (ShiftChip): a flagged person can still be carried; the server decides. */}
       {person.hasExpiredQualifications && <AlertTriangle className="h-3 w-3 shrink-0 text-[var(--color-on-warning-container)]" aria-hidden="true" />}
       <span className="min-w-0 truncate font-medium text-foreground" title={person.fullName}>{person.fullName}</span>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatHoursMeter(hours, WEEK_TARGET_HOURS)}</span>
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatHoursMeter(hours, weeklyHours)}</span>
       {/* StaffRow's hours meter: 2px on the bottom edge, olive, amber past the target. */}
       <span className="absolute inset-x-0 bottom-0 h-0.5 bg-input" aria-hidden="true">
-        <span className={`block h-full ${over ? 'bg-[var(--color-warning)]' : 'bg-primary'}`} style={{ width: `${Math.min(100, (hours / WEEK_TARGET_HOURS) * 100)}%` }} />
+        <span className={`block h-full ${over ? 'bg-[var(--color-warning)]' : 'bg-primary'}`} style={{ width: `${Math.min(100, (hours / weeklyHours) * 100)}%` }} />
       </span>
     </button>
   )
@@ -86,13 +88,14 @@ function StaffPuck({ person, hours }: { person: StaffListDto; hours: number }) {
 /** The puck that rides the pointer in the page's DragOverlay: the person, and a second line naming what letting go here would do. */
 export function CarriedPuck({ carry, hours }: { carry: DragCarry; hours: number }) {
   const { over } = useDndContext()
+  const weeklyHours = useWeeklyHoursWarning()
   const line = carriedLine(carry, dropOutcome(carry, over?.data.current as DropTarget | undefined))
   // The Floating Panel shadow (DESIGN.md), its tint taken from --color-foreground (27,28,26 at 14%) so no literal colour joins the uiStandards baseline.
   return (
     <div className="flex w-max max-w-64 cursor-grabbing flex-col rounded-sm border border-border bg-card px-2 py-1 text-[13px] shadow-[0_24px_40px_-12px_color-mix(in_srgb,var(--color-foreground)_14%,transparent)]">
       <span className="flex items-center gap-1.5">
         <span className="min-w-0 truncate font-medium text-foreground">{carry.staffName}</span>
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatHoursMeter(hours, WEEK_TARGET_HOURS)}</span>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatHoursMeter(hours, weeklyHours)}</span>
       </span>
       {line && <span className="text-xs text-muted-foreground">{line}</span>}
     </div>

@@ -80,6 +80,8 @@ describe('TenantFormPanel as a dialog', () => {
     render(<TenantFormPanel isOpen onClose={onClose} />)
     await user.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Acme')
     await user.type(screen.getByPlaceholderText('e.g. acme.com.au'), 'acme.com.au')
+    await user.click(screen.getByRole('button', { name: /State/ }))
+    await user.click(screen.getByRole('option', { name: 'NSW' }))
     await user.click(screen.getByRole('button', { name: 'Create tenant' }))
     expect(await screen.findByText('Tenant created')).toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -108,10 +110,10 @@ describe('TenantFormPanel — every field is named by its label', () => {
     const user = userEvent.setup()
     render(<TenantFormPanel isOpen onClose={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /provider settings/i }))
-    for (const label of ['Organisation Name *', 'Email Domain *', 'Registration Number', 'ABN', 'Organisation Name', 'Address', 'Bank Account Name', 'BSB', 'Account Number', 'Invoice Footer Notes']) {
+    for (const label of ['Organisation Name *', 'Email Domain', 'Registration Number', 'ABN', 'Organisation Name', 'Address', 'Bank Account Name', 'BSB', 'Account Number', 'Invoice Footer Notes']) {
       expect(screen.getByLabelText(label, { selector: 'input, textarea' }), label).toBeInTheDocument()
     }
-    expect(screen.getByLabelText('State')).toBeInTheDocument()
+    expect(screen.getByText('State *')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /initial admin user/i }))
     expect(screen.getByLabelText('Role')).toBeInTheDocument()
   })

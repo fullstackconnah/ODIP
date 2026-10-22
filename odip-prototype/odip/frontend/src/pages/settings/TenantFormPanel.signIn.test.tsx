@@ -55,6 +55,8 @@ async function createTenant({ firstUser = true, password = '', beforeCreate }: {
   render(<TenantFormPanel isOpen onClose={onClose} />)
   await u.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Brightside Care')
   await u.type(screen.getByPlaceholderText('e.g. acme.com.au'), 'brightside.example.com')
+  await u.click(screen.getByRole('button', { name: /State/ }))
+  await u.click(screen.getByRole('option', { name: 'NSW' }))
   if (firstUser) {
     await u.click(screen.getByRole('button', { name: /initial admin user/i }))
     await u.type(screen.getByLabelText('First Name'), 'Jane')

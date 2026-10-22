@@ -334,7 +334,7 @@ export default function AppLayout() {
         {/* Top bar — fixed 48px */}
         <header className="sticky top-0 z-30 h-12 bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
           <div className="flex items-center justify-between h-full px-[var(--gutter,20px)]">
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 items-center gap-4">
               <button
                 className={`${TAP_AREA} lg:hidden p-2 rounded-md hover:bg-[var(--color-accent)] transition-colors`}
                 onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -346,7 +346,7 @@ export default function AppLayout() {
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
               {user.tenantName && (
-                <span className="hidden sm:inline-flex text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium">
+                <span title={user.tenantName} className={`${isSuperAdmin ? 'hidden sm:inline-block' : 'inline-block'} max-w-[7.5rem] truncate sm:max-w-none text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium`}>
                   {user.tenantName}
                 </span>
               )}

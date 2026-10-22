@@ -7,6 +7,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Incidents;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Tasks;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -20,11 +21,16 @@ public class TasksController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly TimeProvider _clock;
+    private readonly ICurrentTenant? _tenant;
 
-    public TasksController(OdipDbContext db, TimeProvider? clock = null)
+    public const string ChooseOrganisation = "Choose an organisation to view as before adding a task without a trip: a task belongs to one organisation.";
+
+    // shortcut: a null tenant (unit tests only; DI always supplies one) skips the no-organisation refusal in Create.
+    public TasksController(OdipDbContext db, TimeProvider? clock = null, ICurrentTenant? tenant = null)
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
+        _tenant = tenant;
     }
 
     /// <summary>
@@ -43,7 +49,7 @@ public class TasksController : ControllerBase
     /// </summary>
     private async Task<string?> LinkedRowErrorAsync(CreateTaskDto dto, CancellationToken ct)
     {
-        if (!await _db.TripInstances.AnyAsync(t => t.Id == dto.TripInstanceId, ct)) return "Trip not found.";
+        if (dto.TripInstanceId is { } tripId && !await _db.TripInstances.AnyAsync(t => t.Id == tripId, ct)) return "Trip not found.";
         if (dto.ParticipantBookingId is { } bookingId
             && !await _db.ParticipantBookings.AnyAsync(b => b.Id == bookingId && _db.TripInstances.Any(t => t.Id == b.TripInstanceId), ct)) return "Booking not found.";
         if (dto.AccommodationReservationId is { } reservationId
@@ -142,9 +148,18 @@ public class TasksController : ControllerBase
         if (await LinkedRowErrorAsync(dto, ct) is { } linkedRowError)
             return BadRequest(ApiResponse<TaskDto>.Fail(linkedRowError));
 
+        // A booking names its trip, so a task made from a booking sits on that trip's task list too.
+        var tripId = dto.TripInstanceId
+            ?? (dto.ParticipantBookingId is { } linkedBooking
+                ? await _db.ParticipantBookings.Where(b => b.Id == linkedBooking).Select(b => (Guid?)b.TripInstanceId).FirstOrDefaultAsync(ct)
+                : null);
+        // The task belongs to its trip's organisation (a SuperAdmin with no organisation chosen has no ambient one to stamp); with no trip it needs the caller's.
+        var tenantId = tripId is { } linkedTrip ? await _db.TripInstances.Where(t => t.Id == linkedTrip).Select(t => (Guid?)t.TenantId).FirstOrDefaultAsync(ct) : _tenant is { IsSuperAdmin: false } ? _tenant.TenantId : null;
+        if (tenantId is null && _tenant is not null) return BadRequest(ApiResponse<TaskDto>.Fail(ChooseOrganisation));
+
         var task = new BookingTask
         {
-            Id = Guid.NewGuid(), TripInstanceId = dto.TripInstanceId,
+            Id = Guid.NewGuid(), TripInstanceId = tripId, TenantId = tenantId ?? default,
             ParticipantBookingId = dto.ParticipantBookingId, AccommodationReservationId = dto.AccommodationReservationId,
             VehicleAssignmentId = dto.VehicleAssignmentId, StaffAssignmentId = dto.StaffAssignmentId,
             TaskType = dto.TaskType, Title = dto.Title, OwnerId = dto.OwnerId,
@@ -152,7 +167,7 @@ public class TasksController : ControllerBase
         };
         _db.BookingTasks.Add(task);
         await _db.SaveChangesAsync(ct);
-        await _db.Entry(task).Reference(t => t.TripInstance).LoadAsync(ct);
+        if (task.TripInstanceId.HasValue) await _db.Entry(task).Reference(t => t.TripInstance).LoadAsync(ct);
         if (task.OwnerId.HasValue) await _db.Entry(task).Reference(t => t.Owner).LoadAsync(ct);
         return Ok(ApiResponse<TaskDto>.Ok(new TaskDto
         {

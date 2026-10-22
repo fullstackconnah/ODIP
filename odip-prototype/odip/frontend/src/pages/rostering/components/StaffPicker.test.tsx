@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StaffPicker, type StaffPickerProps } from './StaffPicker'
@@ -6,6 +6,10 @@ import { pickerPlacement } from '../lib/rosterDrag'
 import { makeShift, makeUnfilledShift } from '../test-fixtures'
 import { TONE } from '@/lib/tone'
 import type { StaffListDto } from '@/api/types'
+
+// The organisation's weekly-hours setting (Settings > Alert windows); 38 unless a test sets it.
+const { weekly } = vi.hoisted(() => ({ weekly: { hours: 38 } }))
+vi.mock('@/api/hooks/settings', () => ({ useWeeklyHoursWarning: () => weekly.hours }))
 
 // Mia's Tuesday 18 August, 9am-3pm, Needs staff. Kim is free, Mei is free but flagged and past 38 hours, Jack is on Liam's Published 8am-5pm, Marcus is on leave and Alex's leave is pending.
 const target = makeUnfilledShift({ id: 'open', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', status: 'Draft' })
@@ -33,6 +37,15 @@ const groupLabels = () => screen.queryAllByRole('group').map(g => document.getEl
 const optionNames = (container: HTMLElement) => within(container).getAllByRole('option').map(o => o.getAttribute('aria-label'))
 
 describe('StaffPicker: who is offered, and how (the brief, section 4)', () => {
+  afterEach(() => { weekly.hours = 38 })
+
+  it("judges hours against the organisation's weekly figure: 40 of 45 is calm, and named so", () => {
+    weekly.hours = 45
+    renderPicker()
+    expect(screen.getByText('40 / 45 h').className).not.toContain(TONE.warning.ink)
+    expect(screen.getByRole('option', { name: /^Mei Zhang, 40 of 45 hours this week/ })).toBeInTheDocument()
+  })
+
   it('opens as a dialog named like the plus, focus in the search, and the groups Free, On another shift, On leave in that order', () => {
     const { search } = renderPicker()
     expect(screen.getByRole('dialog', { name: 'Assign someone to Tuesday 9am to 3pm for Mia' })).toBeInTheDocument()
