@@ -87,6 +87,21 @@ public class CrossTenantTripTests
         Assert.Equal(day.Id, Assert.Single(body.Data!).Id);
     }
 
+    [Fact]
+    public async Task Itinerary_NamesTheTripsOwnOrganisation_NotAnotherOnes()
+    {
+        using var db = Db();
+        var trip = Trip(db, A);
+        db.ProviderSettings.AddRange(
+            new ProviderSettings { Id = Guid.NewGuid(), TenantId = A, OrganisationName = "Org A" },
+            new ProviderSettings { Id = Guid.NewGuid(), TenantId = B, OrganisationName = "Org B" });
+        db.SaveChanges();
+
+        var result = await Trips(db).GetItinerary(trip.Id, CancellationToken.None);
+
+        Assert.Equal("Org A", Assert.IsType<ApiResponse<ItineraryDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.OrganisationName);
+    }
+
     // Already scoped by a join to a required, tenant-filtered parent; these pin it so the join is not removed by accident.
 
     [Fact]

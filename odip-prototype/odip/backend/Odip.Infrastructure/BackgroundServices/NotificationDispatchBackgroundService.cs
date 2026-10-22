@@ -188,6 +188,9 @@ public class NotificationDispatchBackgroundService : BackgroundService
         try
         {
             message = RenderTemplate(row.EventType, row.PayloadJson, baseUrl);
+            // The organisation's own name goes in the header; db is scoped to the recipient's organisation.
+            if (message.OrganisationName is null)
+                message = message with { OrganisationName = await db.ProviderSettings.Select(s => s.OrganisationName).FirstOrDefaultAsync(ct) };
         }
         catch (Exception ex)
         {

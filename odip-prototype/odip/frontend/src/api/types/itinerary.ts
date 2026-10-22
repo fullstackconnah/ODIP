@@ -3,6 +3,7 @@ import type { TripStatus, SupportRatio, ReservationStatus, VehicleType, VehicleA
 export interface ItineraryDto {
   tripId: string
   tripName: string
+  organisationName: string | null
   tripCode: string | null
   destination: string | null
   region: string | null

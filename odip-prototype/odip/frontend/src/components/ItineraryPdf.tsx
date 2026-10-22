@@ -81,6 +81,11 @@ function formatDayName(date: string) {
   return parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long' })
 }
 
+/** The footer's first line: when it was made, and by which organisation. */
+export function generatedLine(organisationName: string | null | undefined) {
+  return `Generated ${new Date().toLocaleDateString('en-AU')}${organisationName ? ` · ${organisationName}` : ''}`
+}
+
 function ItineraryDocument({ data, version }: { data: ItineraryDto; version: ExportVersion }) {
   const isStaff = version === 'staff'
 
@@ -91,6 +96,7 @@ function ItineraryDocument({ data, version }: { data: ItineraryDto; version: Exp
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <View>
+              {data.organisationName && <Text style={[styles.meta, { marginBottom: 4 }]}>{data.organisationName}</Text>}
               <Text style={styles.title}>{data.tripName}</Text>
               <Text style={styles.subtitle}>{data.destination || 'Destination TBD'}{data.region ? ` · ${data.region}` : ''}</Text>
               <Text style={styles.meta}>{formatDateLong(data.startDate)} — {formatDateLong(data.endDate)}</Text>
@@ -211,7 +217,7 @@ function ItineraryDocument({ data, version }: { data: ItineraryDto; version: Exp
         )}
 
         <View style={styles.footer}>
-          <Text>Generated {new Date().toLocaleDateString('en-AU')} · Odip</Text>
+          <Text>{generatedLine(data.organisationName)}</Text>
           <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
         </View>
       </Page>
@@ -272,7 +278,7 @@ function ItineraryDocument({ data, version }: { data: ItineraryDto; version: Exp
           ))}
 
           <View style={styles.footer} fixed>
-            <Text>Generated {new Date().toLocaleDateString('en-AU')} · Odip</Text>
+            <Text>{generatedLine(data.organisationName)}</Text>
             <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
           </View>
         </Page>

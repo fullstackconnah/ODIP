@@ -75,6 +75,33 @@ public class NotificationDispatchBackgroundServiceTests
     };
 
     [Fact]
+    public async Task The_message_carries_the_organisation_name_of_the_recipients_own_organisation_only()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var (tenantId, otherId) = (Guid.NewGuid(), Guid.NewGuid());
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId);
+            SeedOutboxRow(db, tenantId, user.Id);
+            db.ProviderSettings.AddRange(
+                new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Jo Care" },
+                new ProviderSettings { Id = Guid.NewGuid(), TenantId = otherId, OrganisationName = "Someone Else" });
+            db.SaveChanges();
+        }
+
+        NotificationMessage? sent = null;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, "id", null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        Assert.Equal("Jo Care", sent!.OrganisationName);
+    }
+
+    [Fact]
     public async Task DisabledPreference_SkipsWithoutCallingSendAsync()
     {
         var dbName = Guid.NewGuid().ToString();
