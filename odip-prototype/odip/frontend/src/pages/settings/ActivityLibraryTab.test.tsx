@@ -64,6 +64,18 @@ describe('ActivityLibraryTab', () => {
     expect(update).toHaveBeenCalledWith({ id: 'a1', data: expect.objectContaining({ activityName: 'Beach stroll', location: 'Burleigh', isActive: true }) })
   })
 
+  // Save has no Active control, so it sends the flag the list row has now (a deactivation made since the panel opened stays).
+  it('saves with the isActive the list row has now, not the one the panel opened with', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<ActivityLibraryTab />)
+    await user.click(screen.getByRole('button', { name: 'Edit Beach walk' }))
+    rows.current = [{ ...beach, isActive: false }, old]
+    rerender(<ActivityLibraryTab />)
+    await user.type(screen.getByLabelText(/Name/), ' 2')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(update).toHaveBeenCalledWith({ id: 'a1', data: expect.objectContaining({ activityName: 'Beach walk 2', isActive: false }) })
+  })
+
   it('deactivates only after a confirm, with isActive false', async () => {
     const user = userEvent.setup()
     render(<ActivityLibraryTab />)
