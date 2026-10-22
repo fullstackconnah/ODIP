@@ -139,7 +139,8 @@ describe('PortalPayslipsPage', () => {
   it('names the payslip that failed, shows the server reason, and retries the same one', async () => {
     const user = userEvent.setup()
     const reason = "Payslips can't be shown right now: an Admin needs to check the Employment Hero connection."
-    mockDownload.mockRejectedValueOnce(httpError(503, reason))
+    // the PDF request is responseType 'blob', so the error body arrives as a Blob
+    mockDownload.mockRejectedValueOnce({ response: { status: 503, data: new Blob([JSON.stringify({ errors: [reason] })], { type: 'application/json' }) } })
     renderPage()
 
     await user.click(downloadButton('Download PDF: payslip paid 8 Oct 2026'))
@@ -183,6 +184,21 @@ describe('PortalPayslipsPage', () => {
     expect(refetch).toHaveBeenCalledTimes(1)
     expect(mockDownload).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(screen.queryByText(/Couldn't download/)).not.toBeInTheDocument())
+  })
+
+  it('keeps the failure, with Refresh list, when the refresh itself fails', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn().mockResolvedValue({ isError: true })
+    mockUseMyPayslips.mockReturnValue({ ...ready(ROWS), refetch })
+    mockDownload.mockRejectedValueOnce(httpError(404))
+    renderPage()
+
+    await user.click(downloadButton('Download PDF: payslip paid 8 Oct 2026'))
+    await user.click(await screen.findByRole('button', { name: 'Refresh list' }))
+
+    await waitFor(() => expect(refetch).toHaveBeenCalledTimes(1))
+    expect(screen.getByText("Couldn't download the payslip paid 8 Oct 2026.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh list' })).toBeEnabled()
   })
 
   it('brings the failure into view when it appears, since the pressed row can be far down the list', async () => {

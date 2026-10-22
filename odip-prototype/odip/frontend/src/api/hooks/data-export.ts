@@ -79,7 +79,7 @@ export async function exportFailure(err: unknown): Promise<DataExportFailure> {
 }
 
 /** The ApiResponse's sentence. A blob request's error body is itself a Blob, so it is read out of that first; anything unreadable gives the fallback. */
-async function serverSentence(body: unknown, fallback: string): Promise<string> {
+export async function serverSentence(body: unknown, fallback: string): Promise<string> {
   let data: unknown = body
   try {
     data = data instanceof Blob ? JSON.parse(await readText(data)) : data

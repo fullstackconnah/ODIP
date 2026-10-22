@@ -9,8 +9,10 @@ import { PageState } from '@/components/PageState'
 import { Callout } from '@/components/Callout'
 import { Button } from '@/components/Button'
 import { formatDateRange } from '@/lib/dateRange'
+import type { AxiosError } from 'axios'
 import { httpStatusOf } from '@/lib/httpStatus'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { serverSentence } from '@/api/hooks/data-export'
 import { extractErrorMessage } from '@/lib/utils'
 
 const DASH = '–'
@@ -45,8 +47,7 @@ export default function PortalPayslipsPage() {
 
   // `failed.list === data` alone would keep the callout after a refresh that found the same list (react-query keeps the reference), so a settled refresh clears it.
   async function refresh() {
-    await refetch()
-    setFailed(null)
+    if (!(await refetch()).isError) setFailed(null)
   }
 
   async function open(payslip: PortalPayslipDto) {
@@ -57,7 +58,7 @@ export default function PortalPayslipsPage() {
       setFailed(null)
       setAnnouncement(`${what(payslip).replace(/^p/, 'P')} downloaded.`)
     } catch (err) {
-      setFailed({ payslip, status: httpStatusOf(err), message: extractErrorMessage(err, 'Try again in a few minutes.'), list: data })
+      setFailed({ payslip, status: httpStatusOf(err), message: await serverSentence((err as AxiosError).response?.data, 'Try again in a few minutes.'), list: data })
       setAnnouncement('')
     } finally {
       setBusy(prev => {
