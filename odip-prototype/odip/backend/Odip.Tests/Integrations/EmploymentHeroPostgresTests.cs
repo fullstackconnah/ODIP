@@ -73,6 +73,29 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal("23505", Assert.IsType<PostgresException>(failure.InnerException).SqlState);
     }
 
+[SkippableFact]
+    public async Task The_outbox_refuses_a_second_row_for_one_entity_but_not_for_another_kind_or_organisation()
+    {
+        RequirePostgres();
+        var (dbA, tenantA) = await _pg.NewTenantContextAsync();
+        var (dbB, tenantB) = await _pg.NewTenantContextAsync();
+        await using var _a = dbA;
+        await using var _b = dbB;
+        var entity = Guid.NewGuid();
+        EmploymentHeroOutbox Row(Guid tenant, EmploymentHeroOutboxKind kind) => new() { Id = Guid.NewGuid(), TenantId = tenant, Kind = kind, EntityId = entity };
+
+        dbA.EmploymentHeroOutbox.Add(Row(tenantA, EmploymentHeroOutboxKind.Timesheet));
+        await dbA.SaveChangesAsync();
+        dbA.EmploymentHeroOutbox.Add(Row(tenantA, EmploymentHeroOutboxKind.Leave));
+        dbB.EmploymentHeroOutbox.Add(Row(tenantB, EmploymentHeroOutboxKind.Timesheet));
+        await dbA.SaveChangesAsync();
+        await dbB.SaveChangesAsync();
+
+        dbA.EmploymentHeroOutbox.Add(Row(tenantA, EmploymentHeroOutboxKind.Timesheet));
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => dbA.SaveChangesAsync());
+        Assert.Equal(EmploymentHeroOutbox.OneRowIndexName, Assert.IsType<PostgresException>(failure.InnerException).ConstraintName);
+    }
+
     private static async Task ConnectAsync(OdipDbContext db, Guid tenantId)
     {
         var (cipher, nonce) = EhFixture.Keys.Protect(EhFixture.ApiKey, tenantId);

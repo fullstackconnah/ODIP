@@ -63,6 +63,7 @@ const NOT_A_PILL: Record<string, string> = {
   DemoTickStatus: 'the outcome of one demo-data top-up tick, read from logs and tests; no API sends it and no screen shows it',
   DemoFixtureStatus: 'the result of the operator-run Demo participant fixture seeder CLI; no API sends it and no screen shows it',
   ApprovalStatus: 'what a call to approve (or preview) an agreement revision came to, between the service and its controller; the controller turns it into an HTTP status and the screen reads the reasons, never this word',
+  EmploymentHeroOutboxStatus: 'never printed: the payroll check prints PayrollShiftStatus, derived from it',
 }
 
 /** The extra enums the walk treats as statuses although their names do not end in "Status" (they are pills too). */
