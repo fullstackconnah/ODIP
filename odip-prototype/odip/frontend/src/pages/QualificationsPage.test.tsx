@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import QualificationsPage from './QualificationsPage'
 import DashboardPage from './DashboardPage'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseStaff, mockUseSettings, providerSettings, mockMutate, mockApiGet } = vi.hoisted(() => ({
+const { mockUseStaff, mockUseSettings, providerSettings, mockMutate, mockApiGet, mockPending } = vi.hoisted(() => ({
   mockMutate: vi.fn(),
+  mockPending: { current: false }, // what the page-wide mutation reports while any PUT is in flight
   mockApiGet: vi.fn(),
   mockUseStaff: vi.fn(),
   mockUseSettings: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('@/api/hooks', () => ({
   useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
   useStaff: mockUseStaff,
   useSettings: mockUseSettings,
-  useUpdateStaff: () => ({ mutate: mockMutate, isPending: false }),
+  useUpdateStaff: () => ({ mutate: mockMutate, isPending: mockPending.current }),
   useProviderSettings: () => ({ data: providerSettings.current }),
   // The dashboard's own request, answered with a real summary of zeros (the page no longer makes one up).
   useDashboard: () => ({
@@ -212,7 +213,7 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
     fireEvent.click(screen.getByRole('button', { name: /^Edit: .+, Ivy OneIssue$/ }))
     fireEvent.change(screen.getByLabelText('Expiry date'), { target: { value: '2027-01-02' } })
   }
-  beforeEach(() => { mockMutate.mockReset(); mockApiGet.mockReset() })
+  beforeEach(() => { mockMutate.mockReset(); mockApiGet.mockReset(); mockPending.current = false })
 
   it('disables Save with its pending label while the record is re-read, and sends no PUT until it answers', async () => {
     let release: (v: unknown) => void = () => {}
@@ -256,6 +257,38 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
     await new Promise(r => setTimeout(r, 0))
     expect(mockMutate).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Expiry date')).toBeInTheDocument()
+  })
+
+  // Row A's PUT is sent and held; the user then opens another row's Edit. Returns the callbacks A's PUT was sent with.
+  async function holdIvyPutThenOpenAnotherRow() {
+    mockApiGet.mockResolvedValue({ ...STAFF[4] })
+    openIvyEdit()
+    mockPending.current = true // the mutation reports its PUT in flight from the moment Save is pressed
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled() // A's own row says so
+    fireEvent.click(screen.getAllByRole('button', { name: /^Edit: .+, (?!Ivy OneIssue$)/ })[0])
+    return mockMutate.mock.calls[0][1]
+  }
+
+  it('leaves the editor of row B open, with no error, when the PUT of row A succeeds after B was opened', async () => {
+    const sent = await holdIvyPutThenOpenAnotherRow()
+    act(() => sent.onSuccess())
+    expect(screen.getByLabelText('Expiry date')).toBeInTheDocument()
+    expect(screen.queryByText(/Failed to save/)).not.toBeInTheDocument()
+  })
+
+  it('does not show the failed PUT of row A under the open editor of row B', async () => {
+    const sent = await holdIvyPutThenOpenAnotherRow()
+    act(() => sent.onError())
+    expect(screen.getByLabelText('Expiry date')).toBeInTheDocument()
+    expect(screen.queryByText(/Failed to save/)).not.toBeInTheDocument()
+  })
+
+  it('says Saving… only on the row being saved: Save of row B stays enabled while the PUT of row A is held', async () => {
+    await holdIvyPutThenOpenAnotherRow()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Saving…' })).not.toBeInTheDocument()
   })
 
   it('falls back to the record loaded with the page when the re-read fails', async () => {

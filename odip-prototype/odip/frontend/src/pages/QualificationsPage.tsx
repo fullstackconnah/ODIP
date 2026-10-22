@@ -90,6 +90,7 @@ export default function QualificationsPage() {
   const [editValue, setEditValue] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [rereading, setRereading] = useState(false)
+  const [savingKey, setSavingKey] = useState<string | null>(null) // the row whose PUT is in flight; the mutation's own pending flag covers the whole page
   const editSeq = useRef(0) // bumped when an editor opens or closes, so a save still re-reading a record the user has left is dropped
 
   const warningDays = settings?.qualificationWarningDays ?? 30
@@ -144,9 +145,12 @@ export default function QualificationsPage() {
     if (seq !== editSeq.current) return
     setRereading(false)
 
+    setSavingKey(row.key)
     updateStaff.mutate({ id: row.staffId, data: toUpdateStaffDto(s, { [row.fieldKey]: editValue || undefined }) }, {
-      onSuccess: () => { setEditingKey(null); setSaveError(null) },
-      onError: () => setSaveError('Failed to save. Please try again.'),
+      // A save the user has left (editor closed, or another row opened) still refreshes the data but must not touch the editor open now.
+      onSuccess: () => { if (seq === editSeq.current) { setEditingKey(null); setSaveError(null) } },
+      onError: () => { if (seq === editSeq.current) setSaveError('Failed to save. Please try again.') },
+      onSettled: () => setSavingKey(k => (k === row.key ? null : k)),
     })
   }
 
@@ -288,10 +292,11 @@ export default function QualificationsPage() {
                         align: 'right' as const,
                         render: (q) => {
                           const isEditing = editingKey === q.key
+                          const isSaving = savingKey === q.key || (isEditing && rereading) // one editor is open at a time, so rereading belongs to it
                           return isEditing ? (
                             <div className="flex items-center gap-1.5 pointer-coarse:gap-2 justify-end">
-                              <Button size="sm" onClick={() => handleSave(q)} disabled={updateStaff.isPending || rereading}>
-                                {updateStaff.isPending || rereading ? 'Saving…' : 'Save'}
+                              <Button size="sm" onClick={() => handleSave(q)} disabled={isSaving}>
+                                {isSaving ? 'Saving…' : 'Save'}
                               </Button>
                               <Button variant="ghost" size="sm" onClick={closeEditor}>
                                 Cancel
