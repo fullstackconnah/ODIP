@@ -13,6 +13,11 @@ export type FormFieldProps = {
    * caller owns rendering the element at this id; FormField only wires the association.
    */
   descriptionId?: string
+  /**
+   * Keep the hint on screen under an error, and hold the error's line while there is none, so the field is the same height either way
+   * (a hint that carries guidance the user needs most when they are wrong, and a Save bar that must not jump).
+   */
+  keepHint?: boolean
   layout?: 'default' | 'checkbox'
   className?: string
   children: ReactNode
@@ -51,7 +56,7 @@ type LabelledFieldProps = {
   'aria-describedby'?: string
 }
 
-export function FormField({ label, required, error, hint, descriptionId, layout = 'default', className, children }: FormFieldProps) {
+export function FormField({ label, required, error, hint, descriptionId, keepHint, layout = 'default', className, children }: FormFieldProps) {
   const generatedId = useId()
   const existingId = isValidElement(children) ? (children.props as { id?: string }).id : undefined
   const fieldId = existingId ?? generatedId
@@ -90,7 +95,7 @@ export function FormField({ label, required, error, hint, descriptionId, layout 
 
   const hintId = `${fieldId}-hint`
   const errorId = `${fieldId}-error`
-  const showHint = !!hint && !error
+  const showHint = !!hint && (!error || !!keepHint)
   const showError = !!error
   const describedBy = [showHint && hintId, showError && errorId, descriptionId].filter(Boolean).join(' ') || undefined
 
@@ -130,6 +135,7 @@ export function FormField({ label, required, error, hint, descriptionId, layout 
       {enhanced}
       {showHint && <p id={hintId} className="text-xs text-[var(--color-muted-foreground)] mt-1">{hint}</p>}
       {showError && <p id={errorId} role="alert" className="text-xs text-[var(--color-destructive)] mt-1">{error}</p>}
+      {keepHint && !showError && <p aria-hidden="true" className="text-xs mt-1">&nbsp;</p>}
     </div>
   )
 }

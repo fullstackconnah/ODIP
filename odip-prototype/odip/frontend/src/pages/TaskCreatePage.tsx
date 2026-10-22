@@ -132,6 +132,9 @@ export default function TaskCreatePage() {
   }
 
   const tripLocked = isEdit || !!tripInstanceIdParam
+  const tripHint = isEdit
+    ? existingTask?.tripInstanceId ? "The trip can't be changed once a task is made." : "This task isn't about a trip."
+    : tripInstanceIdParam ? 'This task belongs to this trip.' : 'Leave blank for a task that is not about a trip.'
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
@@ -181,7 +184,7 @@ export default function TaskCreatePage() {
             </FormField>
 
             {/* A task needs no trip. Opened from a trip it keeps that trip; editing never moves it (the server does not write the trip on update). */}
-            <FormField label="Trip" error={errors.tripInstanceId?.message} hint={tripLocked ? 'This task belongs to this trip.' : 'Leave blank for a task that is not about a trip.'} className={span.medium}>
+            <FormField label="Trip" error={errors.tripInstanceId?.message} hint={tripHint} className={span.medium}>
               <Controller
                 control={control}
                 name="tripInstanceId"

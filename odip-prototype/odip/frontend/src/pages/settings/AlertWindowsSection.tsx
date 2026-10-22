@@ -49,8 +49,8 @@ export default function AlertWindowsSection(frame: SectionFrame) {
           <FormField label="Staff qualifications" hint="Warn this many days before a qualification expires. Shown on Qualifications and the dashboard." className={span.medium}>
             <Dropdown variant="form" value={String(days)} onChange={v => setDays(Number(v))} items={WINDOW_ITEMS} disabled={frame.readOnly} />
           </FormField>
-          <FormField label="Weekly hours" error={hoursValid ? undefined : 'Enter a whole number from 1 to 100.'} hint="Warn on the roster when a worker is rostered more than this many hours in a week. 38 unless you change it." className={span.medium}>
-            <input type="number" inputMode="numeric" min={1} max={100} step={1} value={hours ?? ''} onChange={e => setHours(e.target.value)} disabled={frame.readOnly} />
+          <FormField label="Weekly hours" error={hoursValid ? undefined : 'Enter a whole number from 1 to 100.'} hint="Warn on the roster when a worker is rostered more than this many hours in a week. 38 unless you change it." keepHint className={span.medium}>
+            <input type="number" inputMode="numeric" min={1} max={100} step={1} value={hours ?? ''} onChange={e => setHours(e.target.value)} readOnly={frame.readOnly} />
           </FormField>
         </div>
       )}

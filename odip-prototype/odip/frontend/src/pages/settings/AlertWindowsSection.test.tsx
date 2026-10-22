@@ -87,13 +87,18 @@ describe('Alert windows', () => {
     await user.type(hours, '101')
 
     expect(screen.getByText('Enter a whole number from 1 to 100.')).toBeInTheDocument()
+    // The guidance stays: it matters most when the figure is wrong.
+    expect(screen.getByText(/38 unless you change it/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
     await user.clear(hours)
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
-  it('locks the hours for a Coordinator', () => {
+  it('locks the hours for a Coordinator: read-only like the sibling fields, so the section\'s locked look applies', () => {
     renderSection(true)
-    expect(screen.getByLabelText('Weekly hours')).toBeDisabled()
+    const hours = screen.getByLabelText('Weekly hours')
+    expect(hours).toHaveAttribute('readonly')
+    expect(hours).not.toBeDisabled()
+    expect(hours).toHaveValue(38)
   })
 })

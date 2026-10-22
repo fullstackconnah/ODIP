@@ -248,5 +248,15 @@ describe('TaskCreatePage — Trip is optional', () => {
     mockUseTask.mockReturnValue({ data: { id: 'task-1', taskType: 'Other', title: 'Renew fire-safety check', priority: 'Medium', status: 'NotStarted' } as TaskDto, isError: false })
     renderEditPage()
     expect(screen.getByDisplayValue('No trip')).toBeDisabled()
+    expect(screen.getByText("This task isn't about a trip.")).toBeInTheDocument()
+    expect(screen.queryByText('This task belongs to this trip.')).not.toBeInTheDocument()
+  })
+
+  it('edits a task with a trip: the Trip is locked and the hint says it cannot be changed', () => {
+    mockUseTask.mockReturnValue({ data: { id: 'task-1', tripInstanceId: 'trip-1', tripName: 'Gold Coast Beach Break', taskType: 'Other', title: 'Confirm', priority: 'Medium', status: 'NotStarted' } as TaskDto, isError: false })
+    renderEditPage()
+    expect(screen.getByDisplayValue('Gold Coast Beach Break')).toBeDisabled()
+    expect(screen.getByText("The trip can't be changed once a task is made.")).toBeInTheDocument()
+    expect(screen.queryByText('This task belongs to this trip.')).not.toBeInTheDocument()
   })
 })
