@@ -75,7 +75,7 @@ export default function TenantDetailView({
             </span>
           </div>
           <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-            {tenant.emailDomain}
+            {tenant.emailDomain ?? 'No email domain'}
           </p>
         </div>
 

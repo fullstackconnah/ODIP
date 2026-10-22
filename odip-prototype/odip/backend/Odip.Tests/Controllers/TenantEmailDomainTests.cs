@@ -230,19 +230,4 @@ public class TenantEmailDomainTests
         Assert.Equal(SharedProviderMessage(EmailIdentity.NormaliseDomain(typed)), Refusal(result));
         Assert.Empty(await db.Tenants.ToListAsync());
     }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("@")]
-    [InlineData(" @ ")]
-    public async Task A_domain_that_is_nothing_once_tidied_is_refused_at_create_and_update(string typed)
-    {
-        using var db = SuperAdminDb();
-        var tenant = SeedTenant(db, "acme.example.com");
-
-        Assert.Equal("Email domain is required.", Refusal(await Controller(db).Create(new CreateTenantDto("Another", typed))));
-        Assert.Equal("Email domain is required.", Refusal(await Controller(db).Update(tenant.Id, new UpdateTenantDto("Acme Support", typed, true))));
-        Assert.Equal("acme.example.com", (await db.Tenants.SingleAsync()).EmailDomain);
-    }
 }

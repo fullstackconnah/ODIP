@@ -31,6 +31,20 @@ public class OnboardingImportStaffTests
         Service(db, tenantId).PreviewAsync(ImportKind.Staff, file, "staff.csv", null, CancellationToken.None, Admin());
 
     [Fact]
+    public async Task Staff_preview_still_warns_about_an_unusual_address_when_the_organisation_has_no_domain()
+    {
+        var (db, tenantId) = TwoOrganisations();
+        using var _ = db;
+        (await db.Tenants.SingleAsync(t => t.Id == tenantId)).EmailDomain = null;
+        await db.SaveChangesAsync();
+
+        var rows = (await Preview(db, tenantId, Csv(Header, "Lee,Ho,lee@unusual.example.net", "Jo,Ng,jo.ng@gmail.com"))).Rows;
+
+        Assert.StartsWith("This address is at neither your organisation's email domain", rows[0].Warnings.Single());
+        Assert.Empty(rows[1].Warnings);
+    }
+
+    [Fact]
     public async Task Staff_preview_skips_an_email_already_here_and_refuses_one_used_elsewhere()
     {
         var (db, tenantId) = TwoOrganisations();

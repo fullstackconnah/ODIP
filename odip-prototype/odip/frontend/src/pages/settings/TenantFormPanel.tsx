@@ -97,7 +97,8 @@ export default function TenantFormPanel({
   const [providerExpanded, setProviderExpanded] = useState(false)
   const [registrationNumber, setRegistrationNumber] = useState('')
   const [abn, setAbn] = useState('')
-  const [orgName, setOrgName] = useState('')
+  // null until typed in: the field then follows the organisation's name above.
+  const [orgName, setOrgName] = useState<string | null>(null)
   const [address, setAddress] = useState('')
   const [state, setState] = useState('')
   const [gstRegistered, setGstRegistered] = useState(false)
@@ -145,7 +146,7 @@ export default function TenantFormPanel({
     if (tenant) {
       // Edit mode — populate tenant details only
       setName(tenant.name)
-      setEmailDomain(tenant.emailDomain)
+      setEmailDomain(tenant.emailDomain ?? '')
       setIsActive(tenant.isActive)
     } else {
       // Create mode — clear everything
@@ -154,7 +155,7 @@ export default function TenantFormPanel({
       setIsActive(true)
       setRegistrationNumber('')
       setAbn('')
-      setOrgName('')
+      setOrgName(null)
       setAddress('')
       setState('')
       setGstRegistered(false)
@@ -190,27 +191,20 @@ export default function TenantFormPanel({
         await updateMutation.mutateAsync({ id: tenant.id, data })
         setSuccessMessage('Tenant updated')
       } else {
-        // Build provider settings only if any field is filled
-        const hasProvider =
-          registrationNumber || abn || orgName || address || state ||
-          gstRegistered || isPaceProvider || bankAccountName || bsb ||
-          accountNumber || invoiceFooterNotes
-
-        const providerSettings = hasProvider
-          ? {
-              registrationNumber,
-              abn,
-              organisationName: orgName,
-              address,
-              state: state || undefined,
-              gstRegistered,
-              isPaceProvider,
-              bankAccountName: bankAccountName || undefined,
-              bsb: bsb || undefined,
-              accountNumber: accountNumber || undefined,
-              invoiceFooterNotes: invoiceFooterNotes || undefined,
-            }
-          : null
+        // The server always makes the provider row, so the state is a choice made here (the button below stays off until it is).
+        const providerSettings = {
+          registrationNumber,
+          abn,
+          organisationName: orgName ?? name,
+          address,
+          state,
+          gstRegistered,
+          isPaceProvider,
+          bankAccountName: bankAccountName || undefined,
+          bsb: bsb || undefined,
+          accountNumber: accountNumber || undefined,
+          invoiceFooterNotes: invoiceFooterNotes || undefined,
+        }
 
         // Build initial user only if required fields are filled
         const hasUser = firstName && lastName && email && username
@@ -306,7 +300,7 @@ export default function TenantFormPanel({
   const isBusy = createMutation.isPending || updateMutation.isPending || submitting
   // A typed first-user password is a live credential (the account is verified from the start), so it is held to a real minimum.
   const passwordTooShort = userPassword !== '' && userPassword.length < MIN_PASSWORD_LENGTH
-  const canSubmit = name.trim() !== '' && emailDomain.trim() !== '' && !isBusy && !passwordTooShort
+  const canSubmit = name.trim() !== '' && (isEdit || state !== '') && !isBusy && !passwordTooShort
 
   function handleGenerate() {
     try {
@@ -322,7 +316,7 @@ export default function TenantFormPanel({
   // "Tenant updated" notice, up to the auto-close) there is nothing left to lose. A create never gets here: it ends in the done
   // view above, which passes dirty={false} itself.
   const current = JSON.stringify([
-    name, emailDomain, isActive, registrationNumber, abn, orgName, address, state, gstRegistered, isPaceProvider,
+    name, emailDomain, isActive, registrationNumber, abn, orgName ?? '', address, state, gstRegistered, isPaceProvider,
     bankAccountName, bsb, accountNumber, invoiceFooterNotes, firstName, lastName, email, username, role, userPassword,
   ])
   const initial = JSON.stringify([
@@ -426,7 +420,7 @@ export default function TenantFormPanel({
         </div>
 
         <div>
-          <label htmlFor="tf-email-domain" className={labelClass}>Email Domain *</label>
+          <label htmlFor="tf-email-domain" className={labelClass}>Email Domain</label>
           <input
             id="tf-email-domain"
             type="text"
@@ -434,8 +428,25 @@ export default function TenantFormPanel({
             onChange={e => setEmailDomain(e.target.value)}
             className={inputClass}
             placeholder="e.g. acme.com.au"
+            aria-describedby="tf-email-domain-hint"
           />
+          <p id="tf-email-domain-hint" className="mt-1 text-xs text-[var(--color-muted-foreground)]">Leave blank if your staff use personal addresses</p>
         </div>
+
+        {!isEdit && (
+          <div>
+            <label id="tf-state-label" className={labelClass}>State *</label>
+            <Dropdown
+              variant="form"
+              aria-labelledby="tf-state-label"
+              aria-required="true"
+              value={state}
+              onChange={setState}
+              items={AUSTRALIAN_STATES}
+              label="Select state..."
+            />
+          </div>
+        )}
 
         {isEdit && (
           <div className="flex items-center gap-3">
@@ -508,7 +519,7 @@ export default function TenantFormPanel({
                 <input
                   id="tf-org-name"
                   type="text"
-                  value={orgName}
+                  value={orgName ?? name}
                   onChange={e => setOrgName(e.target.value)}
                   className={inputClass}
                   placeholder="Legal entity name"
@@ -523,18 +534,6 @@ export default function TenantFormPanel({
                   value={address}
                   onChange={e => setAddress(e.target.value)}
                   className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label id="tf-state-label" className={labelClass}>State</label>
-                <Dropdown
-                  variant="form"
-                  aria-labelledby="tf-state-label"
-                  value={state}
-                  onChange={setState}
-                  items={AUSTRALIAN_STATES}
-                  label="Select state..."
                 />
               </div>
 

@@ -1823,6 +1823,8 @@ public record ItineraryDto
 {
     public Guid TripId { get; init; }
     public string TripName { get; init; } = string.Empty;
+    /// <summary>The trip's own organisation, named on the exported PDF.</summary>
+    public string? OrganisationName { get; init; }
     public string? TripCode { get; init; }
     public string? Destination { get; init; }
     public string? Region { get; init; }
@@ -2340,17 +2342,17 @@ public record UpdateIncidentDto : CreateIncidentDto
 public record TenantDto(
     Guid Id,
     string Name,
-    string EmailDomain,
+    string? EmailDomain,
     bool IsActive,
     DateTime CreatedAt);
 
 public record CreateTenantDto(
     string Name,
-    string EmailDomain);
+    string? EmailDomain);
 
 public record UpdateTenantDto(
     string Name,
-    string EmailDomain,
+    string? EmailDomain,
     bool IsActive);
 
 public record TenantUserDto(
@@ -2470,7 +2472,7 @@ public record UpdateAdminUserDto
 public record TenantSummaryDto(
     Guid Id,
     string Name,
-    string EmailDomain,
+    string? EmailDomain,
     bool IsActive,
     DateTime CreatedAt,
     int UserCount);
@@ -2482,7 +2484,7 @@ public record TenantSummaryDto(
 public record TenantCreatedDto(
     Guid Id,
     string Name,
-    string EmailDomain,
+    string? EmailDomain,
     bool IsActive,
     DateTime CreatedAt,
     int UserCount,
@@ -2493,9 +2495,29 @@ public record TenantCreatedDto(
 
 public record CreateTenantWithSetupDto(
     string Name,
-    string EmailDomain,
-    UpsertProviderSettingsDto? ProviderSettings,
+    string? EmailDomain,
+    TenantSetupProviderDto? ProviderSettings,
     CreateInitialUserDto? InitialUser);
+
+/// <summary>
+/// The organisation's provider row as typed at setup. Unlike <see cref="UpsertProviderSettingsDto"/> nothing here is required: the row is always made, and the
+/// registration number, ABN and address are filled in later under Organisation profile (whose own save still requires them). A blank State means none chosen.
+/// </summary>
+public record TenantSetupProviderDto
+{
+    public string RegistrationNumber { get; init; } = string.Empty;
+    public string ABN { get; init; } = string.Empty;
+    public string OrganisationName { get; init; } = string.Empty;
+    public string Address { get; init; } = string.Empty;
+    public string? State { get; init; }
+    public bool GSTRegistered { get; init; }
+    public bool IsPaceProvider { get; init; }
+    public string? BankAccountName { get; init; }
+    public string? BSB { get; init; }
+    public string? AccountNumber { get; init; }
+    public string? InvoiceFooterNotes { get; init; }
+    public MedicationCompetencyMode? MedicationCompetencyMode { get; init; }
+}
 
 public record CreateInitialUserDto(
     string FirstName,

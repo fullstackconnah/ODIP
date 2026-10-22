@@ -13,7 +13,8 @@ public class Tenant
     public string Name { get; set; } = string.Empty;
 
     /// <summary>Unique email domain, e.g. "abilityoptions.com.au"</summary>
-    public string EmailDomain { get; set; } = string.Empty;
+    /// <summary>The organisation's own email domain; null for one whose staff use personal addresses. Unique when set.</summary>
+    public string? EmailDomain { get; set; }
 
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
