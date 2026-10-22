@@ -104,6 +104,22 @@ describe('the board-changed 409 offers Refresh the board (real QueryClient)', ()
     expect(document.getElementById(WEEK_HEADING_ID)).toHaveFocus()
   })
 
+  it('says the outcome again on a second refresh, since each refresh first says it is refreshing', async () => {
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), conflict(BOARD_CHANGED))
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    await screen.findByText('The board is up to date.')
+    await pick(user, /^Kim Lee/)
+    await screen.findByText(BOARD_CHANGED)
+    const region = screen.getByText('The board is up to date.')
+    let release = () => {}
+    h.get.mockImplementation((url: string) => (url === '/rostering/board' ? new Promise(res => { release = () => res(BOARD) }) : Promise.resolve([])))
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    await waitFor(() => expect(region).toHaveTextContent('Refreshing the board…'))
+    release()
+    await waitFor(() => expect(screen.queryByText(BOARD_CHANGED)).not.toBeInTheDocument())
+    expect(region).toHaveTextContent('The board is up to date.')
+  })
+
   it('keeps the notice and says so when the refresh fails', async () => {
     const { user } = await refuse(u => pick(u, /^Kim Lee/), conflict(BOARD_CHANGED))
     await waitFor(() => expect(boardGets()).toBeGreaterThanOrEqual(2))

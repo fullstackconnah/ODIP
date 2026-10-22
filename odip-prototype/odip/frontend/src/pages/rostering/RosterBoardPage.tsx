@@ -646,7 +646,7 @@ export default function RosterBoardPage() {
               tone="error"
               actions={
                 <>
-                  {assignError.boardChanged && <RefreshBoardAction onRefreshed={boardRefreshed} />}
+                  {assignError.boardChanged && <RefreshBoardAction onRefreshed={boardRefreshed} announce={setAnnouncement} />}
                   <Button variant="ghost" size="sm" iconOnly onClick={() => setAssignError(null)} aria-label="Dismiss error">
                     <X className="h-4 w-4" />
                   </Button>
