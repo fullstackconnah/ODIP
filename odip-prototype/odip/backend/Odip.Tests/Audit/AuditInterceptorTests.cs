@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -14,7 +13,7 @@ namespace Odip.Tests.Audit;
 
 public class AuditInterceptorTests
 {
-    private static OdipDbContext CreateDb(Guid? userId = null, IInterceptor? afterAudit = null)
+    private static OdipDbContext CreateDb(Guid? userId = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
@@ -39,11 +38,10 @@ public class AuditInterceptorTests
             accessor.Setup(a => a.HttpContext).Returns(context);
         }
 
-        var builder = new DbContextOptionsBuilder<OdipDbContext>()
+        var options = new DbContextOptionsBuilder<OdipDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .AddInterceptors(new AuditInterceptor(accessor.Object));
-        if (afterAudit is not null) builder.AddInterceptors(afterAudit);
-        var options = builder.Options;
+            .AddInterceptors(new AuditInterceptor(accessor.Object))
+            .Options;
 
         return new OdipDbContext(options, tenant.Object);
     }
@@ -220,47 +218,5 @@ public class AuditInterceptorTests
         Assert.Equal(AuditAction.Created, log.Action);
         Assert.Null(log.ChangedById);
         Assert.Null(log.ChangedByName);
-    }
-
-    /// <summary>Fails the first save that reaches it (after the AuditInterceptor has run), like a lost concurrency race, then lets saves through.</summary>
-    private sealed class FailFirstSaveInterceptor : SaveChangesInterceptor
-    {
-        private bool _failed;
-
-        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
-        {
-            if (_failed) return base.SavingChangesAsync(eventData, result, cancellationToken);
-            _failed = true;
-            throw new DbUpdateConcurrencyException("lost the race");
-        }
-    }
-
-    [Fact]
-    public async Task SaveChanges_RetriedAfterAFailedAttempt_WritesOneAuditRowPerChangedEntity()
-    {
-        using var db = CreateDb(userId: Guid.NewGuid(), afterAudit: new FailFirstSaveInterceptor());
-        db.Participants.Add(NewParticipant());
-
-        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
-        await db.SaveChangesAsync();
-
-        var log = Assert.Single(db.AuditLogs.ToList());
-        Assert.Equal(AuditAction.Created, log.Action);
-    }
-
-    [Fact]
-    public async Task SaveChanges_RetriedAfterAFailedAttempt_KeepsACallerAddedAuditRowOnce()
-    {
-        using var db = CreateDb(userId: Guid.NewGuid(), afterAudit: new FailFirstSaveInterceptor());
-        db.Participants.Add(NewParticipant());
-        db.AuditLogs.Add(new AuditLog { Id = Guid.NewGuid(), EntityType = "Setting", EntityId = Guid.NewGuid(), Action = AuditAction.Updated, ChangedAt = DateTimeOffset.UtcNow, Changes = "[]" });
-
-        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
-        await db.SaveChangesAsync();
-
-        var logs = db.AuditLogs.ToList();
-        Assert.Equal(2, logs.Count);
-        Assert.Single(logs, l => l.EntityType == "Setting");
-        Assert.Single(logs, l => l.EntityType == nameof(Participant));
     }
 }

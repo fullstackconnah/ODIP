@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +29,10 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
 
     private readonly IHttpContextAccessor _httpContextAccessor;
 
+    // The rows this interceptor added to a context for its current save attempt. A failed attempt rolls the database back but leaves them
+    // tracked as Added, so a caller that retries on the same context would save them AND a freshly built second set.
+    private readonly ConditionalWeakTable<DbContext, List<AuditLog>> _pending = new();
+
     public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
     {
         _httpContextAccessor = httpContextAccessor;
@@ -43,9 +48,36 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
             var auditEntries = BuildAuditEntries(eventData.Context);
             if (auditEntries.Count > 0)
                 eventData.Context.Set<AuditLog>().AddRange(auditEntries);
+            _pending.AddOrUpdate(eventData.Context, auditEntries);
         }
 
         return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+    {
+        if (eventData.Context is not null) _pending.Remove(eventData.Context);
+        return base.SavedChangesAsync(eventData, result, cancellationToken);
+    }
+
+    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    {
+        DetachPending(eventData.Context);
+        return base.SaveChangesFailedAsync(eventData, cancellationToken);
+    }
+
+    public override Task SaveChangesCanceledAsync(DbContextEventData eventData, CancellationToken cancellationToken = default)
+    {
+        DetachPending(eventData.Context);
+        return base.SaveChangesCanceledAsync(eventData, cancellationToken);
+    }
+
+    private void DetachPending(DbContext? context)
+    {
+        if (context is null || !_pending.TryGetValue(context, out var rows)) return;
+        _pending.Remove(context);
+        foreach (var row in rows)
+            if (context.Entry(row).State == EntityState.Added) context.Entry(row).State = EntityState.Detached;
     }
 
     private List<AuditLog> BuildAuditEntries(DbContext context)
