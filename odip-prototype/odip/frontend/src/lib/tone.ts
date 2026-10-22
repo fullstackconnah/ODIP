@@ -233,6 +233,11 @@ export const STATUS_TONE: Record<string, Tone> = {
   failed: 'danger',
   skipped: 'neutral',
 
+  // Hours sent to Employment Hero (sent and failed are above): waiting for something, changed after the pay run closed, staff not linked.
+  waiting: 'warning',
+  changed: 'danger',
+  notlinked: 'warning',
+
   // Service agreement drafts
   unapproveddraft: 'warning',
   approvedforelectronicsigning: 'success',

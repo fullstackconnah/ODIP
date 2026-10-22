@@ -15,3 +15,6 @@ public record EmploymentHeroBusinessDto(string Id, string Name);
 /// <summary>AddedBySync: the employee is linked to someone the sync itself created who has never signed in, so Link may move the id to the chosen person.</summary>
 public record EmploymentHeroEmployeeDto(string Id, string Name, string? Email, bool AddedBySync = false);
 public record EmploymentHeroLinkDto(string? EmployeeId);
+
+/// <summary>The one word the Payroll page prints for a shift's hours, derived server side from the outbox row (EmploymentHeroTimesheets.StatusOf). Append-only.</summary>
+public enum PayrollShiftStatus { Sent, Waiting, Failed, Changed, NotLinked }
