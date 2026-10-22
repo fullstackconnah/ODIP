@@ -169,6 +169,23 @@ describe('InvoicesSection', () => {
     expect(actionsHeader.style.getPropertyValue('--col-min')).toBe('20rem')
   })
 
+  it('the actions column is held AT its reserved width, so a wide table\'s slack goes elsewhere (SHAPE C4 at 1440)', async () => {
+    serveInvoices({ invoiceState: 'preview', invoices: [], groups: [plan], agencyCount: 0 })
+    renderSection()
+
+    await screen.findByRole('button', { name: 'Preview invoice for Sam Lee' })
+    const wrapper = screen.getByRole('table').parentElement!
+    expect(wrapper.className).toContain('md:[&_:is(th,td):last-child]:w-[var(--col-min)]')
+  })
+
+  it('Download keeps its label-swap min-width on the phone card too (SHAPE C6 at 390)', async () => {
+    serveInvoices({ invoiceState: 'preview', invoices: [], groups: [plan], agencyCount: 0 })
+    renderSection()
+
+    // ROW_ACTIONS_CARD's 44px min-width outranks a plain utility below md; the reserve must win there.
+    expect((await screen.findByRole('button', { name: 'Preview invoice for Sam Lee' })).className).toContain('min-w-[8.5rem]!')
+  })
+
   it('a Coordinator gets Download only, and the line saying who can correct', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     serveInvoices(issued)

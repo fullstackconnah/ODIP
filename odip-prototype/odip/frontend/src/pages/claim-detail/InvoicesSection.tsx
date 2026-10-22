@@ -126,7 +126,8 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
           <DataTable
             data={rows}
             keyField="id"
-            className="overflow-x-auto"
+            // Held AT the actions column's reserve (not just above it), so a wide table's slack goes to the text columns (SHAPE C4).
+            className="overflow-x-auto md:[&_:is(th,td):last-child]:w-[var(--col-min)]"
             columns={[
               {
                 key: 'number',
@@ -201,7 +202,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                         data-download-id={row.id}
                         variant="secondary"
                         size="sm"
-                        className="min-w-[8.5rem]"
+                        className="min-w-[8.5rem]!"
                         aria-label={target.label}
                         aria-disabled={busy || undefined}
                         onClick={() => { if (!busy) download(row) }}
