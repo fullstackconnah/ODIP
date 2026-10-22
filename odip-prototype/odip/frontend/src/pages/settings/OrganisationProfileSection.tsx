@@ -16,7 +16,9 @@ export default function OrganisationProfileSection(frame: SectionFrame) {
     abn: row?.abn ?? '',
     registrationNumber: row?.registrationNumber ?? '',
     address: row?.address ?? '',
-    state: row?.state ?? 'VIC',
+    state: row?.state ?? '',
+    managerName: row?.managerName ?? '',
+    managerPhone: row?.managerPhone ?? '',
   }))
   const { readOnly } = frame
 
@@ -37,8 +39,15 @@ export default function OrganisationProfileSection(frame: SectionFrame) {
               <div className={formGrid}>
                 <TextField label="Address" className={span.long} value={p.form.address} readOnly={readOnly} onChange={e => p.edit({ address: e.target.value })} />
                 <FormField label="State" className={span.short}>
-                  <Dropdown variant="form" value={p.form.state} onChange={v => p.edit({ state: v })} items={STATES} disabled={readOnly} />
+                  <Dropdown variant="form" value={p.form.state} onChange={v => p.edit({ state: v })} items={STATES} label="Select state..." disabled={readOnly} />
                 </FormField>
+              </div>
+            </SettingsGroup>
+            {/* The same two fields as under Safety checks (one stored value), here because families and staff ring this person. */}
+            <SettingsGroup title="Manager contact">
+              <div className={formGrid}>
+                <TextField label="Manager name" className={span.medium} value={p.form.managerName} readOnly={readOnly} onChange={e => p.edit({ managerName: e.target.value })} />
+                <TextField label="Manager phone" inputMode="tel" className={span.short} value={p.form.managerPhone} readOnly={readOnly} onChange={e => p.edit({ managerPhone: e.target.value })} />
               </div>
             </SettingsGroup>
           </>
