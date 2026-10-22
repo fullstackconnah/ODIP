@@ -300,6 +300,8 @@ public class ClaimEditGuardsTests
     [Theory]
     [InlineData(TripClaimStatus.Submitted)]
     [InlineData(TripClaimStatus.Paid)]
+    [InlineData(TripClaimStatus.Approved)]
+    [InlineData(TripClaimStatus.PartiallyPaid)]
     public async Task ASubmittedOrPaidClaim_CannotBeDeleted_SoItsLinesCannotBeRemoved(TripClaimStatus status)
     {
         var (db, controller) = Create();
@@ -310,5 +312,49 @@ public class ClaimEditGuardsTests
         Assert.Equal(400, StatusOf(result));
         db.ChangeTracker.Clear();
         Assert.Equal(2, await db.ClaimLineItems.CountAsync(l => l.TripClaimId == claim.Id));
+    }
+
+    // Rejected stays deletable: delete and regenerate is the only way to correct an NDIA rejection (its lines are locked and it cannot go back to Draft).
+    [Theory]
+    [InlineData(TripClaimStatus.Draft)]
+    [InlineData(TripClaimStatus.Ready)]
+    [InlineData(TripClaimStatus.Rejected)]
+    [InlineData(TripClaimStatus.Cancelled)]
+    public async Task ADraftReadyRejectedOrCancelledClaim_CanBeDeleted(TripClaimStatus status)
+    {
+        var (db, controller) = Create();
+        var (claim, _, _) = Seed(db, status);
+
+        Assert.Equal(200, StatusOf(await controller.DeleteClaim(claim.Id, Ct)));
+        db.ChangeTracker.Clear();
+        Assert.False(await db.TripClaims.AnyAsync(c => c.Id == claim.Id));
+    }
+
+    [Fact]
+    public async Task TheRefusalToMoveAStatus_NamesTheClaim_AndSaysPartiallyPaidInPlainEnglish()
+    {
+        var (db, controller) = Create();
+        var (claim, _, _) = Seed(db, TripClaimStatus.Paid);
+
+        var result = await controller.UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.PartiallyPaid }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        Assert.Equal($"{claim.ClaimReference} is paid, so it can't be marked as partially paid.", RefusalOf(result));
+    }
+
+    [Theory]
+    [InlineData(0.015, null)]
+    [InlineData(null, 10.005)]
+    public async Task AnAmountWithMoreThanTwoDecimals_IsRefused_AndNothingIsWritten(double? hours, double? price)
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Draft);
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Hours = (decimal?)hours, UnitPrice = (decimal?)price }, Ct);
+
+        Assert.Equal(400, StatusOf(result));
+        db.ChangeTracker.Clear();
+        var stored = await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id);
+        Assert.Equal((2m, 50m, 100m), (stored.Hours, stored.UnitPrice, stored.TotalAmount));
     }
 }

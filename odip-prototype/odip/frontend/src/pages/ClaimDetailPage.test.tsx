@@ -7,15 +7,16 @@ import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseClaim, mockUpdateClaim } = vi.hoisted(() => ({
+const { mockUseClaim, mockUpdateClaim, mockUpdateLineItem } = vi.hoisted(() => ({
   mockUseClaim: vi.fn(),
   mockUpdateClaim: vi.fn(),
+  mockUpdateLineItem: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useClaim: mockUseClaim,
   useUpdateClaim: () => ({ mutate: mockUpdateClaim, isPending: false }),
-  useUpdateClaimLineItem: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateClaimLineItem: () => ({ mutate: mockUpdateLineItem, isPending: false }),
 }))
 
 // ClaimDetailPage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker — that
@@ -523,5 +524,26 @@ describe('ClaimDetailPage — No Show and Mark Confirmed belong to a draft claim
     mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ claimType: 'Cancellation', cancellationReason: 'Unwell' })]), isLoading: false })
     renderPage()
     expect(screen.getByRole('button', { name: 'Mark Confirmed' })).toBeInTheDocument()
+  })
+
+  it("says, in the Mark as Submitted confirm, that the lines can't be changed after it", async () => {
+    const user = userEvent.setup()
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })   // a draft
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Mark as Submitted' }))
+
+    expect(screen.getByRole('alertdialog', { name: 'Mark as submitted?' })).toHaveTextContent("Mark this claim as submitted to the NDIA? You can't change its lines after this.")
+  })
+
+  it("shows the server's reason on the page when Mark Confirmed is refused (the claim moved on while the page was open)", async () => {
+    const user = userEvent.setup()
+    mockUpdateLineItem.mockImplementation((_vars, opts) => opts.onError({ response: { data: { errors: ["This claim has been submitted, so its lines can't be changed."] } } }))
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ claimType: 'Cancellation', cancellationReason: 'Unwell' })]), isLoading: false })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Mark Confirmed' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent("This claim has been submitted, so its lines can't be changed.")
   })
 })

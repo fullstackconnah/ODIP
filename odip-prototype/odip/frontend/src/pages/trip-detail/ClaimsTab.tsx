@@ -22,6 +22,24 @@ const CLAIM_STATUS_ITEMS = [
   { value: 'PartiallyPaid', label: 'Partially Paid' },
 ]
 
+// A status in words (every status a claim can hold, so a pill never shows a bare dash).
+const STATUS_LABEL: Record<TripClaimStatus, string> = {
+  Draft: 'Draft', Ready: 'Ready', Submitted: 'Submitted', Approved: 'Approved', Paid: 'Paid', PartiallyPaid: 'Partially Paid', Rejected: 'Rejected', Cancelled: 'Cancelled',
+}
+
+// Where a claim's status may go next; mirrors ClaimsController.CanMove (the server's refusal stays as the backstop). Paid, Cancelled: nowhere.
+const LEGAL_NEXT: Partial<Record<TripClaimStatus, TripClaimStatus[]>> = {
+  Draft: ['Submitted'],
+  Ready: ['Submitted'],
+  Submitted: ['Paid', 'PartiallyPaid', 'Rejected'],
+  Approved: ['Paid', 'PartiallyPaid', 'Rejected'],
+  PartiallyPaid: ['Paid'],
+  Rejected: ['Submitted'],
+}
+
+// Same set as the server's DeleteClaim guard: a Rejected claim stays deletable because delete-and-regenerate is the only way to correct an NDIA rejection.
+const DELETABLE = new Set<TripClaimStatus>(['Draft', 'Ready', 'Rejected', 'Cancelled'])
+
 export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: string; claims: TripClaimListDto[]; trip: TripDetailDto; canWrite: boolean }) {
   const deleteClaim = useDeleteClaim()
   const updateClaim = useUpdateClaim()
@@ -43,16 +61,18 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
     return Promise.all(ids.map(id => updateClaim.mutateAsync({ claimId: id, data })))
   }
 
+  // Each claim is judged on its own, so a mixed selection changes the claims it can and says which it could not; those stay selected.
   async function bulkUpdateClaimStatus(ids: string[], status: string) {
+    setError(null)
     setBulkLoading(true)
-    try {
-      await writeClaims(ids, { status: status as TripClaimStatus })
-      setSelectedClaimIds(new Set())
-    } catch (err: unknown) {
-      setError(extractErrorMessage(err, 'Failed to update claims.'))
-    } finally {
-      setBulkLoading(false)
+    const results = await Promise.allSettled(ids.map(id => updateClaim.mutateAsync({ claimId: id, data: { status: status as TripClaimStatus } })))
+    const refused = results.flatMap((r, i) => (r.status === 'rejected' ? [{ id: ids[i], reason: r.reason as unknown }] : []))
+    setSelectedClaimIds(new Set(refused.map(r => r.id)))
+    if (refused.length > 0) {
+      const why = extractErrorMessage(refused[0].reason, 'Failed to update claims.')
+      setError(ids.length > 1 ? `${ids.length - refused.length} of ${ids.length} claims changed. ${why}` : why)
     }
+    setBulkLoading(false)
   }
 
   // A refused move (the server allows only real ones, e.g. not Submitted back to Draft) says why, as the bulk change does.
@@ -67,6 +87,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
   }
 
   async function rejectClaims(ids: string[], code: string | null) {
+    setError(null)
     setRejectLoading(true)
     setRejectError(null)
     try {
@@ -87,6 +108,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
 
   function confirmDeleteClaim() {
     if (!deletingClaim) return
+    setError(null)
     deleteClaim.mutate(deletingClaim.id, {
       onSuccess: () => setDeletingClaim(null),
       onError: (err: unknown) => {
@@ -141,8 +163,8 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
                   value={c.status}
                   onChange={val => (val === 'Rejected' ? askForNdiaCode([c.id]) : changeStatus(c.id, val as TripClaimStatus))}
                   colorClass={getStatusColor(c.status)}
-                  items={CLAIM_STATUS_ITEMS}
-                  disabled={!canWrite}
+                  items={[c.status, ...(LEGAL_NEXT[c.status] ?? [])].map(value => ({ value, label: STATUS_LABEL[value] }))}
+                  disabled={!canWrite || !LEGAL_NEXT[c.status]}
                 />
               ),
             },
@@ -155,7 +177,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
               render: (c: TripClaimListDto) => (
                 <div className="flex items-center gap-3">
                   <Link to={`/claims/${c.id}`} className="text-xs text-[var(--color-primary)] hover:underline" aria-label={`View: ${c.claimReference}`}>View</Link>
-                  {canWrite && c.status !== 'Submitted' && c.status !== 'Paid' && (
+                  {canWrite && DELETABLE.has(c.status) && (
                     <Button variant="ghost-danger" size="sm" onClick={() => handleDelete(c)} aria-label={`Delete: ${c.claimReference}`}>
                       Delete
                     </Button>

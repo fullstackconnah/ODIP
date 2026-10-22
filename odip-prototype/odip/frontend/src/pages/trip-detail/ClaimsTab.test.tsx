@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
 import type { TripClaimListDto } from '@/api/types/claims'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -17,15 +17,17 @@ import ClaimsTab from './ClaimsTab'
 interface Call { method: string; url: string; body: unknown }
 const calls: Call[] = []
 let refuse: ((call: Call) => boolean) | null = null
+let refusalText = 'The NDIA code is at most 10 characters.'
 
 beforeEach(() => {
   calls.length = 0
   refuse = null
+  refusalText = 'The NDIA code is at most 10 characters.'
   const adapter: AxiosAdapter = async (config: InternalAxiosRequestConfig): Promise<AxiosResponse> => {
     const call: Call = { method: String(config.method ?? 'get').toLowerCase(), url: String(config.url ?? ''), body: typeof config.data === 'string' ? JSON.parse(config.data) : config.data }
     calls.push(call)
     if (refuse?.(call)) {
-      const error = Object.assign(new Error('Request failed with status code 400'), { isAxiosError: true, response: { status: 400, data: { errors: ['The NDIA code is at most 10 characters.'] } } })
+      const error = Object.assign(new Error('Request failed with status code 400'), { isAxiosError: true, response: { status: 400, data: { errors: [refusalText] } } })
       throw error
     }
     return { data: { data: true }, status: 200, statusText: 'OK', headers: {}, config: { headers: {} as never } } as AxiosResponse
@@ -201,3 +203,80 @@ describe('ClaimsTab: row actions', () => {
     expect(screen.queryByRole('button', { name: 'Delete: TC-2' })).not.toBeInTheDocument()
   })
 })
+
+describe('ClaimsTab: guards on a claim that has gone to the NDIA', () => {
+  it('offers a claim\'s status pill only the statuses it can legally move to, and a Paid claim none', async () => {
+    const user = userEvent.setup()
+    renderTab([claim('d', 'Draft'), claim('p', 'Paid')])
+
+    await user.click(screen.getByRole('button', { name: 'Draft' }))
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Draft', 'Submitted'])
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('button', { name: 'Paid' })).toBeDisabled()
+  })
+
+  it("names an Approved claim's pill, and lists the legal targets of an Approved one", async () => {
+    const user = userEvent.setup()
+    renderTab([claim('a', 'Approved')])
+
+    expect(screen.getByRole('button', { name: 'Approved' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Approved' }))
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Approved', 'Paid', 'Partially Paid', 'Rejected'])
+  })
+
+  it('offers Delete for a Draft or Rejected claim only (not Submitted, Approved, Partially Paid or Paid)', () => {
+    renderTab([claim('1', 'Draft'), claim('2', 'Rejected'), claim('3', 'Submitted'), claim('4', 'Approved'), claim('5', 'PartiallyPaid'), claim('6', 'Paid')])
+
+    expect(screen.getAllByRole('button', { name: /^Delete: / }).map(b => b.getAttribute('aria-label'))).toEqual(['Delete: TC-1', 'Delete: TC-2'])
+  })
+
+  it('changes the claims it can in a mixed bulk change, names the one it could not, and keeps only that one selected', async () => {
+    const user = userEvent.setup()
+    refuse = call => call.url === '/claims/c1'
+    refusalText = 'TC-c1 is draft, so it can\'t be marked as paid.'
+    renderTab([claim('c1', 'Draft'), claim('c2', 'Submitted')])
+
+    await selectBoth(user)
+    await user.click(screen.getByRole('button', { name: '2 rows' }))
+    await user.click(screen.getByRole('option', { name: 'Paid' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('1 of 2 claims changed. TC-c1 is draft, so it can\'t be marked as paid.')
+    expect(puts()).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '1 row' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select row c1' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select row c2' })).not.toBeChecked()
+  })
+
+  it('clears the old refusal when a later bulk change succeeds', async () => {
+    const user = userEvent.setup()
+    refuse = call => call.method === 'put'
+    refusalText = 'TC-c1 is submitted, so it can\'t be marked as paid.'
+    renderTab([claim('c1')])
+    await choose(user, 'Submitted', 'Paid')
+    expect(await screen.findByRole('alert')).toHaveTextContent('TC-c1 is submitted')
+
+    refuse = null
+    await selectBoth(user)
+    await user.click(screen.getByRole('button', { name: '1 row' }))
+    await user.click(screen.getByRole('option', { name: 'Paid' }))
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('reloads the claim and its list when a status change is refused, so stale options go', async () => {
+    const user = userEvent.setup()
+    const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
+    refuse = call => call.method === 'put'
+    renderTab([claim('c1')])
+
+    await choose(user, 'Submitted', 'Paid')
+    await screen.findByRole('alert')
+
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['claim', 'c1'] })
+    spy.mockRestore()
+  })
+})
+
+async function selectBoth(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('checkbox', { name: 'Select all rows' }))
+}

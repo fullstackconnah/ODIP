@@ -16,6 +16,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
+import { Callout } from '@/components/Callout'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -125,7 +126,7 @@ export default function ClaimDetailPage() {
   function statusConfirmCopy(status: TripClaimStatus | null) {
     switch (status) {
       case 'Submitted':
-        return { title: 'Mark as submitted?', message: 'Mark this claim as submitted to the NDIA?', confirmLabel: 'Mark as Submitted', variant: 'default' as const }
+        return { title: 'Mark as submitted?', message: "Mark this claim as submitted to the NDIA? You can't change its lines after this.", confirmLabel: 'Mark as Submitted', variant: 'default' as const }
       case 'Paid':
         return { title: 'Mark as paid?', message: 'Mark this claim as paid? This cannot be undone.', confirmLabel: 'Mark as Paid', variant: 'default' as const }
       default:
@@ -135,7 +136,8 @@ export default function ClaimDetailPage() {
 
   function handleRevertToConfirmed(item: ClaimLineItemDto) {
     if (!id) return
-    updateLineItem.mutate({ claimId: id, itemId: item.id, data: { claimType: 'Standard' } })
+    setStatusError(null)
+    updateLineItem.mutate({ claimId: id, itemId: item.id, data: { claimType: 'Standard' } }, { onError: err => setStatusError(refusalOf(err)) })
   }
 
   return (
@@ -217,6 +219,9 @@ export default function ClaimDetailPage() {
           </div>
         }
       />
+
+      {/* A refused Mark Confirmed (the claim moved on while this page was open) says why; the dialogs show their own refusals. */}
+      {statusError && !statusConfirmTarget && !recordingCode && <Callout tone="error">{statusError}</Callout>}
 
       <FactBar
         segments={[
