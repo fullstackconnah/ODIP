@@ -24,8 +24,8 @@ public record CreateServiceAgreementDraftDto
     public List<CreateServiceAgreementDraftLineDto> Lines { get; init; } = [];
     /// <summary>
     /// The version of the newest revision the caller started from (0 when it had none). When the participant's newest version is not that one by the time the save is made, somebody
-    /// else saved in between and this save would silently replace their work as the newest: it is refused with 409 and the newer version number instead. Left out, nothing is checked
-    /// (callers that predate the builder).
+    /// else saved in between and this save would silently replace their work as the newest: it is refused with 409 and the newer version number instead. Left out, it means 0: required
+    /// in practice once the participant has any revision.
     /// </summary>
     [Range(0, int.MaxValue)] public int? BaseVersion { get; init; }
 }

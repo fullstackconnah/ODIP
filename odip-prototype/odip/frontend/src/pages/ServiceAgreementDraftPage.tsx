@@ -145,6 +145,8 @@ function DraftPage() {
     ? drafts.data?.find(entry => !!entry.approval && entry.version < onScreen.version && addDays(entry.agreementEndDate, 1) === onScreen.agreementStartDate)
     : undefined
   const renewedLines = useServiceAgreementDraft(participantId, renewedFrom?.id, !!renewedFrom)
+  // A pattern change is saved as a revision that covers only the weeks from the change and keeps the end: the term starts at the earliest approved revision ending on the same day (as the server sizes the renewal).
+  const termStart = renewedFrom ? drafts.data?.filter(entry => !!entry.approval && entry.agreementEndDate === renewedFrom.agreementEndDate).map(entry => entry.agreementStartDate).sort()[0] : undefined
   if (loaded && baseline === null && participant.data) {
     setBaseVersion(newest?.version ?? 0)
     // A save with a block that can no longer be read is not loaded: an empty shift would look like a schedule nobody made, and saving over it would lose it for good.
@@ -461,7 +463,7 @@ function DraftPage() {
           {step === 'check' && (
             <div className="flex flex-col gap-[var(--section-gap)]">
               {renewedFrom && onScreen && (
-                <RenewalReview renewal={onScreen} renewedFrom={renewedFrom} oldLines={renewedLines.data?.lines} oldBlocks={renewedLines.data?.blocks} oldFailed={renewedLines.isError} onRetry={() => { void renewedLines.refetch() }} />
+                <RenewalReview renewal={onScreen} renewedFrom={renewedFrom} termStart={termStart} oldLines={renewedLines.data?.lines} oldBlocks={renewedLines.data?.blocks} oldFailed={renewedLines.isError} onRetry={() => { void renewedLines.refetch() }} />
               )}
               <CheckStep
                 pricing={pricing} issues={issues} readOnly={readOnly} onFix={fix} onChangeHolidays={selectShiftsOf} budgetHeadingRef={budgetHeadingRef}

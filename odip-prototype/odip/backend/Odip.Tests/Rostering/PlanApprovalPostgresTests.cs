@@ -290,6 +290,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
             var saved = await new ServiceAgreementDraftService(other).SaveAsync(tenantId, participantId, new CreateServiceAgreementDraftDto
             {
                 PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30), AgreementStartDate = Start, AgreementEndDate = new DateOnly(2026, 12, 20), State = "NSW",
+                BaseVersion = 1,
                 Blocks = new List<DraftBlockDto> { new() { Block = WeekdayBlock() } },
             }, "another coordinator", CancellationToken.None);
             Assert.Equal(2, Assert.IsType<ServiceAgreementDraft>(saved.Draft).Version);          // version 1 was nobody's, so this save replaces it

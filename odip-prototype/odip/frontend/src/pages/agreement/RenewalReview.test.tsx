@@ -33,6 +33,18 @@ describe('RenewalReview', () => {
     expect(screen.getByText(`v1 came to ${formatCurrency(9046.44)}; v2 comes to ${formatCurrency(8829.6)}.`)).toBeInTheDocument()
   })
 
+  it('does not set the totals of a tail-only revision beside a full-term renewal (a pattern change covers only its last weeks)', () => {
+    // v2 was a pattern change on 2026-11-02: the revision renewed covers 2 Nov to 22 Nov only, while the agreement began on 12 Oct.
+    const tail = { ...revision(2, '2026-11-02', '2026-11-22', []), isSummary: true }
+    render(<RenewalReview renewal={revision(3, '2026-11-23', '2027-01-03', [line({})])} renewedFrom={tail} termStart="2026-10-12" oldLines={oldLines} oldFailed={false} onRetry={vi.fn()} />)
+
+    expect(screen.getByText(/v2 covers only the last part of the agreement, from Mon 2 Nov 2026 to Sun 22 Nov 2026 \(the agreement began on Mon 12 Oct 2026\), so its totals are not set beside v3.s\./)).toBeInTheDocument()
+    expect(screen.queryByText(/came to/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'v2 total' })).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'v2 unit price' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'v3 total' })).toBeInTheDocument()
+  })
+
   it('marks an old line the renewal\u0027s dates do not reach as such, not as missing, and says nothing blocks approval', () => {
     // A public holiday in v1's dates and none in v2's: the line has no partner, but nothing is withdrawn.
     const holiday = line({ band: 'Public Holiday', itemCode: '04_102_0125_6_1', unitPrice: 163.46, total: 653.84 })
