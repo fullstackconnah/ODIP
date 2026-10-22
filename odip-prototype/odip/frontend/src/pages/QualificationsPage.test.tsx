@@ -1,22 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import QualificationsPage from './QualificationsPage'
 import DashboardPage from './DashboardPage'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseStaff, mockUseSettings, providerSettings } = vi.hoisted(() => ({
+const { mockUseStaff, mockUseSettings, providerSettings, mockMutate, mockApiGet } = vi.hoisted(() => ({
+  mockMutate: vi.fn(),
+  mockApiGet: vi.fn(),
   mockUseStaff: vi.fn(),
   mockUseSettings: vi.fn(),
   providerSettings: { current: undefined as { employmentHeroConnected?: boolean } | undefined },
 }))
 
+vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiGet: mockApiGet }))
 vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
   useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
   useStaff: mockUseStaff,
   useSettings: mockUseSettings,
-  useUpdateStaff: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateStaff: () => ({ mutate: mockMutate, isPending: false }),
   useProviderSettings: () => ({ data: providerSettings.current }),
   // The dashboard's own request, answered with a real summary of zeros (the page no longer makes one up).
   useDashboard: () => ({
@@ -39,7 +42,7 @@ function pinToday() {
 }
 
 const person = (id: string, fullName: string, o: Record<string, unknown> = {}) => ({
-  id, fullName, isFirstAidQualified: false, isDriverEligible: false, isManualHandlingCompetent: false, isMedicationCompetent: false,
+  id, fullName, isActive: true, isFirstAidQualified: false, isDriverEligible: false, isManualHandlingCompetent: false, isMedicationCompetent: false,
   firstAidExpiryDate: null, driverLicenceExpiryDate: null, manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null,
   workerScreeningNumber: null, workerScreeningExpiryDate: null, ...o,
 })
@@ -197,6 +200,42 @@ describe('QualificationsPage: controls by role', () => {
     expect(screen.getByRole('link', { name: 'Edit Dana Expired' })).toBeInTheDocument()
     // Every row has an inline Edit, so its name carries the row's credential and person.
     expect(screen.getAllByRole('button', { name: /^Edit: .+, Dana Expired$/ }).length).toBeGreaterThan(0)
+  })
+})
+
+// The PUT rewrites the whole staff record and this page has no Active control, so the flag is read at save: a deactivation made since the page
+// loaded is not undone by an expiry edit.
+describe('QualificationsPage: the inline save keeps the active flag it does not show', () => {
+  const openIvyEdit = () => {
+    renderList()
+    expandAll()
+    fireEvent.click(screen.getByRole('button', { name: /^Edit: .+, Ivy OneIssue$/ }))
+    fireEvent.change(screen.getByLabelText('Expiry date'), { target: { value: '2027-01-02' } })
+  }
+  beforeEach(() => { mockMutate.mockReset(); mockApiGet.mockReset() })
+
+  it('disables Save with its pending label while the record is re-read, and sends no PUT until it answers', async () => {
+    let release: (v: unknown) => void = () => {}
+    mockApiGet.mockReturnValue(new Promise(r => { release = r }))
+    openIvyEdit()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockApiGet).toHaveBeenCalledWith('/staff/s5')
+    expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled()
+    expect(mockMutate).not.toHaveBeenCalled()
+
+    release({ ...STAFF[4], isActive: false })
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
+    expect(mockMutate.mock.calls[0][0]).toEqual({ id: 's5', data: expect.objectContaining({ isActive: false, medicationCompetencyExpiryDate: '2027-01-02' }) })
+  })
+
+  it('falls back to the record loaded with the page when the re-read fails', async () => {
+    mockApiGet.mockRejectedValue(new Error('offline'))
+    openIvyEdit()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
+    expect(mockMutate.mock.calls[0][0].data).toEqual(expect.objectContaining({ isActive: true, medicationCompetencyExpiryDate: '2027-01-02' }))
   })
 })
 

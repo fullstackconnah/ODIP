@@ -14,7 +14,8 @@ import { usePermissions } from '@/lib/permissions'
 import { staffCredentials, credentialIssueCount } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel, type DeadlineState, type DeadlineStatus } from '@/lib/deadline'
 import { plural } from '@/lib/format'
-import { toUpdateStaffDto, type StaffListDto } from '@/api/types/staff'
+import { apiGet } from '@/api/client'
+import { toUpdateStaffDto, type StaffDetailDto, type StaffListDto } from '@/api/types/staff'
 import { retryingAfterError } from '@/lib/queryPhase'
 
 type FilterTab = 'all' | 'expired' | 'expiring' | 'no-date'
@@ -88,6 +89,7 @@ export default function QualificationsPage() {
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [rereading, setRereading] = useState(false)
 
   const warningDays = settings?.qualificationWarningDays ?? 30
   const groups = buildGroups(allStaff, warningDays)
@@ -120,9 +122,15 @@ export default function QualificationsPage() {
     setSaveError(null)
   }
 
-  function handleSave(row: QualRow) {
-    const s = allStaff.find((m: any) => m.id === row.staffId)
-    if (!s) return
+  async function handleSave(row: QualRow) {
+    const cached = allStaff.find((m: any) => m.id === row.staffId)
+    if (!cached) return
+
+    // The PUT rewrites the whole record and this page has no Active control, so it is read at save: a deactivation made since the list loaded is
+    // not undone. If the re-read fails, the row loaded with the page is sent (never worse than before).
+    setRereading(true)
+    const s = await apiGet<StaffDetailDto>(`/staff/${row.staffId}`).catch(() => cached)
+    setRereading(false)
 
     updateStaff.mutate({ id: row.staffId, data: toUpdateStaffDto(s, { [row.fieldKey]: editValue || undefined }) }, {
       onSuccess: () => { setEditingKey(null); setSaveError(null) },
@@ -270,8 +278,8 @@ export default function QualificationsPage() {
                           const isEditing = editingKey === q.key
                           return isEditing ? (
                             <div className="flex items-center gap-1.5 pointer-coarse:gap-2 justify-end">
-                              <Button size="sm" onClick={() => handleSave(q)} disabled={updateStaff.isPending}>
-                                {updateStaff.isPending ? 'Saving...' : 'Save'}
+                              <Button size="sm" onClick={() => handleSave(q)} disabled={updateStaff.isPending || rereading}>
+                                {updateStaff.isPending || rereading ? 'Saving...' : 'Save'}
                               </Button>
                               <Button variant="ghost" size="sm" onClick={() => { setEditingKey(null); setSaveError(null) }}>
                                 Cancel
