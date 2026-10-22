@@ -87,44 +87,9 @@ public class MedicationsController : ControllerBase
         {
             Id = Guid.NewGuid(),
             ParticipantId = participantId,
-            Name = dto.Name,
-            Strength = dto.Strength,
-            Form = dto.Form,
-            Route = dto.Route,
-            DoseDescription = dto.DoseDescription,
-            Directions = dto.Directions,
-            Type = dto.Type,
-            TimesOfDay = dto.TimesOfDay,
-            Frequency = dto.Frequency,
-            DaysOfWeek = ParseDaysOfWeek(dto.DaysOfWeek),
-            IntervalDays = dto.IntervalDays,
-            AnchorDate = dto.AnchorDate,
-            PrnIndication = dto.PrnIndication,
-            PrnMaxDosesPer24h = dto.PrnMaxDosesPer24h,
-            PrnMinIntervalMinutes = dto.PrnMinIntervalMinutes,
-            Purpose = dto.Purpose,
-            IsPsychotropic = dto.IsPsychotropic,
-            IsChemicalRestraint = dto.IsChemicalRestraint,
-            BspInPlace = dto.BspInPlace,
-            RestrictivePracticeAuthorisationRef = dto.RestrictivePracticeAuthorisationRef,
-            IsHighRisk = dto.IsHighRisk,
-            IsHighIntensitySupport = dto.IsHighIntensitySupport,
-            DrugSchedule = dto.DrugSchedule,
-            SupportLevel = dto.SupportLevel,
-            PrescriberName = dto.PrescriberName,
-            PharmacyName = dto.PharmacyName,
-            PharmacyPhone = dto.PharmacyPhone,
-            Packaging = dto.Packaging,
-            StartDate = dto.StartDate,
-            EndDate = dto.EndDate,
-            NextReviewDue = dto.NextReviewDue,
-            ConsentObtained = dto.ConsentObtained,
-            ConsentGivenBy = dto.ConsentGivenBy,
-            ConsentDate = dto.ConsentDate,
-            StorageRequirements = dto.StorageRequirements,
             Status = MedicationStatus.Active,
-            Notes = dto.Notes,
         };
+        Apply(med, dto);
         _db.ParticipantMedications.Add(med);
         await _db.SaveChangesAsync(ct);
 
@@ -155,43 +120,8 @@ public class MedicationsController : ControllerBase
             dto.Frequency, dto.DaysOfWeek, dto.IntervalDays, dto.AnchorDate);
         if (validationError != null) return BadRequest(ApiResponse<MedicationDetailDto>.Fail(validationError));
 
-        med.Name = dto.Name;
-        med.Strength = dto.Strength;
-        med.Form = dto.Form;
-        med.Route = dto.Route;
-        med.DoseDescription = dto.DoseDescription;
-        med.Directions = dto.Directions;
-        med.Type = dto.Type;
-        med.TimesOfDay = dto.TimesOfDay;
-        med.Frequency = dto.Frequency;
-        med.DaysOfWeek = ParseDaysOfWeek(dto.DaysOfWeek);
-        med.IntervalDays = dto.IntervalDays;
-        med.AnchorDate = dto.AnchorDate;
-        med.PrnIndication = dto.PrnIndication;
-        med.PrnMaxDosesPer24h = dto.PrnMaxDosesPer24h;
-        med.PrnMinIntervalMinutes = dto.PrnMinIntervalMinutes;
-        med.Purpose = dto.Purpose;
-        med.IsPsychotropic = dto.IsPsychotropic;
-        med.IsChemicalRestraint = dto.IsChemicalRestraint;
-        med.BspInPlace = dto.BspInPlace;
-        med.RestrictivePracticeAuthorisationRef = dto.RestrictivePracticeAuthorisationRef;
-        med.IsHighRisk = dto.IsHighRisk;
-        med.IsHighIntensitySupport = dto.IsHighIntensitySupport;
-        med.DrugSchedule = dto.DrugSchedule;
-        med.SupportLevel = dto.SupportLevel;
-        med.PrescriberName = dto.PrescriberName;
-        med.PharmacyName = dto.PharmacyName;
-        med.PharmacyPhone = dto.PharmacyPhone;
-        med.Packaging = dto.Packaging;
-        med.StartDate = dto.StartDate;
-        med.EndDate = dto.EndDate;
-        med.NextReviewDue = dto.NextReviewDue;
-        med.ConsentObtained = dto.ConsentObtained;
-        med.ConsentGivenBy = dto.ConsentGivenBy;
-        med.ConsentDate = dto.ConsentDate;
-        med.StorageRequirements = dto.StorageRequirements;
+        Apply(med, dto);
         med.Status = dto.Status;
-        med.Notes = dto.Notes;
         med.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
@@ -429,6 +359,12 @@ public class MedicationsController : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == id, ct);
         if (admin == null) return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
+        // A support worker records the outcome once, on a PRN dose; a coordinator corrects it through the amend route.
+        if (admin.ParticipantMedication?.Type != MedicationType.Prn)
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("Outcomes can only be recorded on PRN doses."));
+        if (!string.IsNullOrWhiteSpace(admin.PrnOutcome))
+            return Conflict(ApiResponse<AdministrationDto>.Fail("An outcome is already recorded for this dose."));
+
         admin.PrnOutcome = dto.PrnOutcome;
         admin.PrnOutcomeAt = DateTime.UtcNow;
         admin.UpdatedAt = DateTime.UtcNow;
@@ -449,8 +385,11 @@ public class MedicationsController : ControllerBase
             .Include(a => a.Participant)
             .Where(a => a.ParticipantId == participantId);
 
-        if (from.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= from.Value);
-        if (to.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) <= to.Value);
+        // Unpaged, so an omitted from is the last 90 days rather than the whole history.
+        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(from, to, ct);
+        fromUtc ??= _slots.UtcNow.AddDays(-90);
+        query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= fromUtc);
+        if (toUtcExclusive.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) < toUtcExclusive);
 
         var items = await query.OrderByDescending(a => a.CreatedAt).ToListAsync(ct);
         var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(items.Select(a => a.Id).ToList(), ct);
@@ -483,8 +422,9 @@ public class MedicationsController : ControllerBase
             .AsQueryable();
 
         if (participantId.HasValue) query = query.Where(a => a.ParticipantId == participantId.Value);
-        if (from.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= from.Value);
-        if (to.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) <= to.Value);
+        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(from, to, ct);
+        if (fromUtc.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= fromUtc);
+        if (toUtcExclusive.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) < toUtcExclusive);
 
         var ordered = query.OrderByDescending(a => a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt);
 
@@ -505,6 +445,18 @@ public class MedicationsController : ControllerBase
     }
 
     // ── Helpers ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A date-only from/to names whole provider-local days (it binds as that day's 00:00, which is hours before the same-day doses'
+    /// UTC instants): from is the start of its day, to the start of the NEXT day (exclusive), both as UTC. shortcut: a time of day on
+    /// either is ignored; the only callers send dates, so add a time-aware range when one needs it.
+    /// </summary>
+    private async Task<(DateTime? FromUtc, DateTime? ToUtcExclusive)> DayRangeUtcAsync(DateTime? from, DateTime? to, CancellationToken ct)
+    {
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone;
+        return (from.HasValue ? ProviderLocalTime.LocalToUtc(from.Value.Date, zone) : null,
+                to.HasValue ? ProviderLocalTime.LocalToUtc(to.Value.Date.AddDays(1), zone) : null);
+    }
 
     private string GetRecordedByName() =>
         User?.FindFirst("fullName")?.Value
@@ -527,6 +479,47 @@ public class MedicationsController : ControllerBase
 
         var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
         return exists ? userId : null;
+    }
+
+    /// <summary>The medication fields a coordinator edits, copied from the request: the one list Create and Update share.</summary>
+    private static void Apply(ParticipantMedication m, CreateMedicationDto dto)
+    {
+        m.Name = dto.Name;
+        m.Strength = dto.Strength;
+        m.Form = dto.Form;
+        m.Route = dto.Route;
+        m.DoseDescription = dto.DoseDescription;
+        m.Directions = dto.Directions;
+        m.Type = dto.Type;
+        m.TimesOfDay = dto.TimesOfDay;
+        m.Frequency = dto.Frequency;
+        m.DaysOfWeek = ParseDaysOfWeek(dto.DaysOfWeek);
+        m.IntervalDays = dto.IntervalDays;
+        m.AnchorDate = dto.AnchorDate;
+        m.PrnIndication = dto.PrnIndication;
+        m.PrnMaxDosesPer24h = dto.PrnMaxDosesPer24h;
+        m.PrnMinIntervalMinutes = dto.PrnMinIntervalMinutes;
+        m.Purpose = dto.Purpose;
+        m.IsPsychotropic = dto.IsPsychotropic;
+        m.IsChemicalRestraint = dto.IsChemicalRestraint;
+        m.BspInPlace = dto.BspInPlace;
+        m.RestrictivePracticeAuthorisationRef = dto.RestrictivePracticeAuthorisationRef;
+        m.IsHighRisk = dto.IsHighRisk;
+        m.IsHighIntensitySupport = dto.IsHighIntensitySupport;
+        m.DrugSchedule = dto.DrugSchedule;
+        m.SupportLevel = dto.SupportLevel;
+        m.PrescriberName = dto.PrescriberName;
+        m.PharmacyName = dto.PharmacyName;
+        m.PharmacyPhone = dto.PharmacyPhone;
+        m.Packaging = dto.Packaging;
+        m.StartDate = dto.StartDate;
+        m.EndDate = dto.EndDate;
+        m.NextReviewDue = dto.NextReviewDue;
+        m.ConsentObtained = dto.ConsentObtained;
+        m.ConsentGivenBy = dto.ConsentGivenBy;
+        m.ConsentDate = dto.ConsentDate;
+        m.StorageRequirements = dto.StorageRequirements;
+        m.Notes = dto.Notes;
     }
 
     private static Weekdays? ParseDaysOfWeek(List<string>? days)

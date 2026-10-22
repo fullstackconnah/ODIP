@@ -249,3 +249,23 @@ describe('MarTab — PRN outcome context', () => {
     expect(screen.queryByText('2 tablets')).not.toBeInTheDocument()
   })
 })
+
+describe('MarTab — recording a PRN outcome the server refuses', () => {
+  it('keeps the modal open, shows the server message and keeps the typed outcome', async () => {
+    const refusal = { response: { status: 409, data: { success: false, errors: ['An outcome is already recorded for this dose.'] } } }
+    const mutateAsync = vi.fn().mockRejectedValue(refusal)
+    mockUseMar.mockReturnValue({ data: { entries: [], prnMedications: [prnEntry({ outcomePendingAdministrationId: 'admin-9' })] }, isLoading: false })
+    mockUseParticipants.mockReturnValue({ data: [] })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync, isPending: false })
+    const user = userEvent.setup()
+
+    renderTab()
+    await user.click(screen.getByRole('button', { name: /record outcome/i }))
+    await user.type(screen.getByRole('textbox', { name: /outcome/i }), 'Settled within 30 minutes')
+    await user.click(screen.getByRole('button', { name: 'Save outcome' }))
+
+    expect(await screen.findByText('An outcome is already recorded for this dose.')).toBeInTheDocument()
+    expect(mutateAsync).toHaveBeenCalledWith({ id: 'admin-9', prnOutcome: 'Settled within 30 minutes' })
+    expect(screen.getByRole('textbox', { name: /outcome/i })).toHaveValue('Settled within 30 minutes')
+  })
+})

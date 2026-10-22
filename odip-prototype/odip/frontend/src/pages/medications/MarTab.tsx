@@ -9,7 +9,7 @@ import { Modal } from '@/components/Modal'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { formatDateAu, formatWithTimeZone } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu, formatWithTimeZone } from '@/lib/utils'
 import { formatRelative } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
 import { RecordAdministrationModal } from './RecordAdministrationModal'
@@ -19,6 +19,7 @@ import type { MarEntryDto, MarPrnDto, AdministrationDto } from '@/api/types/medi
 import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/incidentPrefill'
 import { Button } from '@/components/Button'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { Callout } from '@/components/Callout'
 
 /**
  * Connection map: for a Refused/Withheld/Missed/WrongMedication administration, either a link to
@@ -92,6 +93,7 @@ export default function MarTab() {
   const [amendingSlot, setAmendingSlot] = useState<MarEntryDto | null>(null)
   const [outcomeFor, setOutcomeFor] = useState<MarPrnDto | null>(null)
   const [outcomeText, setOutcomeText] = useState('')
+  const [outcomeError, setOutcomeError] = useState<string | null>(null)
   // MED-01: lets a coordinator/support worker review the missed-medication guidance calmly,
   // outside the moment it's triggered by a MAR record — not tied to any specific medication.
   const [showGuidance, setShowGuidance] = useState(false)
@@ -120,9 +122,21 @@ export default function MarTab() {
 
   async function submitPrnOutcome() {
     if (!outcomeFor?.outcomePendingAdministrationId || !outcomeText.trim()) return
-    await recordPrnOutcome.mutateAsync({ id: outcomeFor.outcomePendingAdministrationId, prnOutcome: outcomeText.trim() })
+    setOutcomeError(null)
+    try {
+      await recordPrnOutcome.mutateAsync({ id: outcomeFor.outcomePendingAdministrationId, prnOutcome: outcomeText.trim() })
+    } catch (err) {
+      // A refusal (already recorded, not a PRN dose) stays in the modal with the typed text, like the record-dose modal.
+      setOutcomeError(extractErrorMessage(err, 'Failed to save the outcome.'))
+      return
+    }
+    closeOutcome()
+  }
+
+  function closeOutcome() {
     setOutcomeFor(null)
     setOutcomeText('')
+    setOutcomeError(null)
   }
 
   return (
@@ -404,12 +418,12 @@ export default function MarTab() {
 
       <Modal
         open={!!outcomeFor}
-        onClose={() => { setOutcomeFor(null); setOutcomeText('') }}
+        onClose={closeOutcome}
         title={`Record PRN outcome — ${outcomeFor?.name ?? ''}`}
         size="sm"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setOutcomeFor(null); setOutcomeText('') }}>
+            <Button variant="secondary" onClick={closeOutcome}>
               Cancel
             </Button>
             <Button disabled={!outcomeText.trim() || recordPrnOutcome.isPending} onClick={submitPrnOutcome}>
@@ -427,6 +441,7 @@ export default function MarTab() {
             </p>}
           </div>
         )}
+        {outcomeError && <div className="mb-3"><Callout tone="error">{outcomeError}</Callout></div>}
         <label className="block text-sm font-medium mb-1.5 text-[var(--color-muted-foreground)]" htmlFor="prn-outcome-text">
           Outcome <span aria-hidden="true">*</span>
         </label>
