@@ -13,6 +13,7 @@ const planApproval = require('./planApproval')
 const fundingModule = require('./funding')
 const intakeBookingModule = require('./intakeBooking')
 const rosterBudgetModule = require('./rosterBudget')
+const invoicesModule = require('./invoices')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
 const BASE = '/api/v1'
@@ -2050,6 +2051,16 @@ const claimLineItemsByClaimId = {
   ],
 }
 
+// Xero PR1: the invoice fixtures (claim-inv-f1 ... f10) join the claims above; invoices.js holds their invoices and routes.
+const invoiceMock = invoicesModule.create({ respond, failEnvelope, claims, lineItemsByClaimId: claimLineItemsByClaimId })
+
+/** GET/PUT provider-settings: the organisation's billing details, with the invoice numbering invoices.js keeps. */
+const providerSettingsRow = {
+  id: 'ps-0001', registrationNumber: '4050000001', abn: '12345678901', organisationName: 'Sample Support Co', address: '1 Sample St, Brisbane QLD 4000', state: 'QLD',
+  gstRegistered: false, isPaceProvider: true, bankAccountName: 'Sample Support Co', bsb: '000-000', accountNumber: '00000000', invoiceFooterNotes: null,
+  managerName: null, managerPhone: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
+}
+
 function claimDetail(c) {
   return {
     ...c,
@@ -2496,6 +2507,8 @@ const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope,
 const routes = [
   ...funding.get,
   ...intake.get,
+  ...invoiceMock.get,
+  ['provider-settings', () => invoiceMock.settingsDto(providerSettingsRow)],
   ['dashboard/summary', () => dashboardSummary],
   ['plan-pricing/settings', () => planPricingSettings],
   ['service-agreements/ending', () => agreementsEnding()],
@@ -2599,7 +2612,8 @@ const routes = [
   ['trips/:id/vehicles', (id) => tripVehicleAssignments[id] || []],
   ['trips/:id/accommodation', () => []],
   ['trips/:id/schedule', () => []],
-  ['trips/:id/claims', () => []],
+  // Only the invoice fixtures are listed on a trip (t-0004), so the trip Claims tab can show the submit confirms.
+  ['trips/:id/claims', (id) => claims.filter((c) => c.tripInstanceId === id && c.id.startsWith('claim-inv-'))],
   ['claims/:id', (id) => claimDetail(claims.find((c) => c.id === id) || claims[0])],
   ['trips/:id/itinerary', () => null],
   ['trips/:id', (id) => {
@@ -2775,6 +2789,7 @@ const postRoutes = [
   ...earlyAccessFollowedUp,
   ...funding.post,
   ...intake.post,
+  ...invoiceMock.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
     if (!body.periodFrom || !body.periodTo || body.periodFrom > body.periodTo) return respond(400, failEnvelope(null, ['The agreement period ends before it starts.']))
@@ -2998,6 +3013,12 @@ const postRoutes = [
 const putRoutes = [
   ...packageRoutesPut,
   ...funding.put,
+  ['provider-settings', (body) => {
+    const refused = invoiceMock.saveNumbering(body)
+    if (refused) return refused
+    for (const key of Object.keys(providerSettingsRow)) if (key !== 'id' && body[key] !== undefined) providerSettingsRow[key] = body[key]
+    return invoiceMock.settingsDto(providerSettingsRow)
+  }],
   ...intake.put,
   // A claim's status and notes, and, with a rejection, the NDIA's code (budget phase 2b: at most 10 characters, and only with a claim that is being marked Rejected). Kept in the fixture, so the next
   // GET shows it. A claim that stops being rejected forgets the moment and the code, as the server's does.
@@ -3007,6 +3028,9 @@ const putRoutes = [
     const code = typeof body.rejectionCode === 'string' ? body.rejectionCode.trim() : null
     if (code && code.length > 10) return respond(400, failEnvelope(null, ['The NDIA code is at most 10 characters.']))
     if (code && (body.status || claim.status) !== 'Rejected') return respond(400, failEnvelope(null, ['An NDIA rejection code goes with a rejected claim: mark the claim as Rejected to record it.']))
+    // Marking it submitted issues its invoices first, or is refused (no billing details), as the server does.
+    const refused = body.status === 'Submitted' && claim.status !== 'Submitted' ? invoiceMock.issueOnSubmit(claim) : null
+    if (refused) return refused
     if (typeof body.notes === 'string') claim.notes = body.notes
     if (body.status) {
       const before = claim.status
@@ -3148,6 +3172,15 @@ function send(res, status, body) {
 
 /** Sends a route's result: a respond(status, body) result keeps its status and raw body, anything else is a 200 ok() envelope. */
 function sendResult(res, result) {
+  if (result && typeof result.then === 'function') {
+    result.then((settled) => sendResult(res, settled))
+    return
+  }
+  if (result && result[invoicesModule.FILE]) {
+    res.writeHead(200, { ...CORS_HEADERS, 'Content-Type': 'application/pdf' })
+    res.end(result[invoicesModule.FILE])
+    return
+  }
   if (result && typeof result === 'object' && result[HTTP]) {
     send(res, result[HTTP], result.body)
     return
@@ -3384,7 +3417,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'DELETE') {
-      for (const [pattern, handler] of [...packageRoutesDelete, ...funding.delete, ...intake.delete, ...earlyAccessDelete, ...rosterShiftDelete]) {
+      for (const [pattern, handler] of [...packageRoutesDelete, ...invoiceMock.delete, ...funding.delete, ...intake.delete, ...earlyAccessDelete, ...rosterShiftDelete]) {
         const params = matchRoute(pattern, segments)
         if (params) {
           // The query too: Cancel visit sends the form's version as ?expectedUpdatedAt (ODIP-REVIEW-268).

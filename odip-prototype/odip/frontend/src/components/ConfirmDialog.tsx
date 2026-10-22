@@ -13,6 +13,8 @@ export type ConfirmDialogProps = {
   cancelLabel?: string
   variant?: 'default' | 'danger'
   loading?: boolean
+  /** Holds the confirm button without the "Processing..." label: the caller is still checking what confirming would do. */
+  confirmDisabled?: boolean
   /** Accessible name for the confirm button (overrides the visible label for screen readers). */
   confirmAriaLabel?: string
   /**
@@ -26,7 +28,7 @@ export type ConfirmDialogProps = {
 
 export function ConfirmDialog({
   open, onConfirm, onCancel, title, message,
-  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, footer, confirmAriaLabel,
+  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, confirmDisabled, footer, confirmAriaLabel,
 }: ConfirmDialogProps) {
   return (
     <Modal
@@ -44,7 +46,7 @@ export function ConfirmDialog({
             <Button
               variant={variant === 'danger' ? 'danger' : 'primary'}
               onClick={onConfirm}
-              disabled={loading}
+              disabled={loading || confirmDisabled}
               aria-label={confirmAriaLabel ?? confirmLabel}
             >
               {loading ? 'Processing...' : confirmLabel}

@@ -271,6 +271,8 @@ export type TripClaimStatus = typeof TRIP_CLAIM_STATUSES[number]
 // ── Invoice Status (Xero PR1) ───────────────────────────
 export const INVOICE_STATUSES = ['Issued', 'Voided', 'Credited'] as const
 export type InvoiceStatus = typeof INVOICE_STATUSES[number]
+export const INVOICE_KINDS = ['Invoice', 'CreditNote'] as const
+export type InvoiceKind = typeof INVOICE_KINDS[number]
 
 // ── Claim Line Item Status ──────────────────────────────
 export const CLAIM_LINE_ITEM_STATUSES = ['Draft', 'Submitted', 'Approved', 'Paid', 'PartiallyPaid', 'Rejected'] as const
