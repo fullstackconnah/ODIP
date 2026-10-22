@@ -22,6 +22,8 @@ public static class ShiftErrorCodes
     public const string ShiftNeedsReview = "SHIFT_NEEDS_REVIEW";
     public const string ShiftReturnReasonRequired = "SHIFT_RETURN_REASON_REQUIRED";
     public const string ShiftReturnReasonTooLong = "SHIFT_RETURN_REASON_TOO_LONG";
+    /// <summary>A roster write was refused because the board it was made from is out of date (the 409 whose copy offers "Refresh the board"). The frontend branches on this, with the sentence as a fallback.</summary>
+    public const string ShiftBoardChanged = "SHIFT_BOARD_CHANGED";
     public const string ShiftStatusLocked = "SHIFT_STATUS_LOCKED";
     public const string ShiftTimesLocked = "SHIFT_TIMES_LOCKED";
     public const string ShiftBatchSizeInvalid = "SHIFT_BATCH_SIZE_INVALID";

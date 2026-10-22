@@ -219,6 +219,7 @@ public class RosterRegularTests
 
         var (_, body) = await RefusedAsync(dbName, patternId, shiftId, null, expected: samId);
         Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+        Assert.Equal(BoardChangedCode, body.Code);
         Assert.Equal(alexId, DefaultOf(dbName, patternId));
     }
 
@@ -245,6 +246,7 @@ public class RosterRegularTests
         var dbName = SeedSamPattern(out var samId, out _, out var patternId, out var shiftId);
         var (_, body) = await RefusedAsync(dbName, patternId, shiftId, samId, expected: Guid.Empty);
         Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+        Assert.Equal(BoardChangedCode, body.Code);
         Assert.Equal(samId, DefaultOf(dbName, patternId));
     }
 
@@ -299,6 +301,8 @@ public class RosterRegularTests
 
     private const string PatternChanged = "This pattern changed after you opened it. Reload and try again.";
     private const string BoardChanged = "This shift changed after the board was loaded. Refresh the board and try again.";
+    /// <summary>The wire value the frontend branches on (lib/boardChanged.ts); pinned here as a literal so renaming the constant cannot silently change it.</summary>
+    private const string BoardChangedCode = "SHIFT_BOARD_CHANGED";
 
     private static async Task<(ConflictObjectResult Conflict, ApiResponse<ShiftPatternDto> Body)> RefusedAsync(string dbName, Guid patternId, Guid shiftId, Guid? staffId, Guid? expected = null)
     {
@@ -329,6 +333,7 @@ public class RosterRegularTests
         var (_, body) = await RefusedAsync(dbName, patternId, shiftId, kimId);
 
         Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+        Assert.Equal(BoardChangedCode, body.Code);
         using var check = TestDb.Create(dbName);
         Assert.Null(check.ShiftPatterns.Single(p => p.Id == patternId).DefaultUserId);
     }
@@ -347,6 +352,7 @@ public class RosterRegularTests
 
         var (_, body) = await RefusedAsync(dbName, patternId, shiftId, kimId);
         Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+        Assert.Equal(BoardChangedCode, body.Code);
     }
 
     [Fact]
@@ -357,6 +363,7 @@ public class RosterRegularTests
 
         var (_, body) = await RefusedAsync(dbName, patternId, Guid.NewGuid(), kimId);
         Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+        Assert.Equal(BoardChangedCode, body.Code);
     }
 
     [Fact]
@@ -374,6 +381,7 @@ public class RosterRegularTests
 
         var (_, body) = await RefusedAsync(dbName, patternId, shiftId, leeId);
         Assert.Equal(BoardChanged, Assert.Single(body.Errors!));
+        Assert.Equal(BoardChangedCode, body.Code);
         Assert.IsType<OkObjectResult>((await SetRegularAsync(dbName, patternId, shiftId, null)).Result);
     }
 
