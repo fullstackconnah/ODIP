@@ -135,6 +135,8 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     expect(screen.queryByRole('link', { name: /Jamie Smith/ })).toBeNull()
     expect(screen.getByText('across 2 participants')).toBeVisible()
     expect(screen.getAllByRole('link', { name: 'View All' })[0]).toHaveAttribute('href', '/participants')
+    // 44 x 44 on touch: the floor gives the height, and the 12px words alone are about 40px wide (N7).
+    expect(screen.getAllByRole('link', { name: 'View All' })[0]).toHaveClass('pointer-coarse:min-w-11')
 
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')

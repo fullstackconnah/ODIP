@@ -325,7 +325,7 @@ export default function DashboardPage() {
                       <span className="text-[13px] text-[var(--color-muted-foreground)] max-md:order-last max-md:basis-full max-md:pb-2 max-md:pl-6">
                         across {plural(criticalParticipantCount, 'participant')}
                       </span>
-                      <Link to="/participants" className={`${TAP_FLOOR} ml-auto text-xs font-bold text-[var(--color-primary)] hover:underline`}>
+                      <Link to="/participants" className={`${TAP_FLOOR} pointer-coarse:min-w-11 pointer-coarse:justify-end ml-auto text-xs font-bold text-[var(--color-primary)] hover:underline`}>
                         View All
                       </Link>
                     </div>
