@@ -82,6 +82,62 @@ public class InvoiceNumberingPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(new[] { 41, 42, 43, 44 }, await NumbersAsync(tenantId));
     }
 
+    /// <summary>Throws once, when the save carries a new invoice: after the counter's statement has taken a number.</summary>
+    private sealed class ThrowOnInvoiceSave : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<Invoice>().Any(e => e.State == EntityState.Added))
+                throw new InvalidOperationException("The save failed.");
+            return base.SavingChangesAsync(eventData, result, ct);
+        }
+    }
+
+    [SkippableFact(DisplayName = "Postgres: a failed issue burns no number")]
+    public async Task AFailedIssue_BurnsNoNumber()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, claims) = await SeedAsync(3, start: 7);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SubmitAsync(tenantId, claims[0], new ThrowOnInvoiceSave()));
+        await using (var check = PostgresFixture.NewContext(_pg.ConnectionString, TenantOf(tenantId)))
+        {
+            Assert.Equal(TripClaimStatus.Draft, (await check.TripClaims.SingleAsync(c => c.Id == claims[0])).Status);
+            Assert.Empty(await NumbersAsync(tenantId));
+        }
+
+        var results = await Task.WhenAll(claims.Skip(1).Select(id => SubmitAsync(tenantId, id)));
+
+        Assert.All(results, r => Assert.IsType<OkObjectResult>(r));
+        Assert.Equal(new[] { 7, 8 }, await NumbersAsync(tenantId));
+    }
+
+    [SkippableFact(DisplayName = "Postgres: a deleted claim keeps its voided invoice, number and lines")]
+    public async Task ADeletedClaim_KeepsItsVoidedInvoice()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, claims) = await SeedAsync(1);
+        var tenant = TenantOf(tenantId);
+        Assert.IsType<OkObjectResult>(await SubmitAsync(tenantId, claims[0]));
+
+        await using (var own = PostgresFixture.NewContext(_pg.ConnectionString, tenant))
+        {
+            var controller = Controller(own, tenant);
+            Assert.IsType<OkObjectResult>((await controller.UpdateClaim(claims[0], new UpdateClaimDto { Status = TripClaimStatus.Rejected }, CancellationToken.None)).Result);
+            var invoiceId = await own.Invoices.Where(i => i.TripClaimId == claims[0]).Select(i => i.Id).SingleAsync();
+            Assert.IsType<OkObjectResult>((await controller.VoidInvoice(invoiceId, new InvoiceReasonDto { Reason = "Wrong rate" }, CancellationToken.None)).Result);
+            Assert.IsType<OkObjectResult>((await controller.DeleteClaim(claims[0], CancellationToken.None)).Result);
+        }
+
+        await using var check = PostgresFixture.NewContext(_pg.ConnectionString, tenant);
+        Assert.False(await check.TripClaims.AnyAsync(c => c.Id == claims[0]));
+        var invoice = await check.Invoices.Include(i => i.Lines).SingleAsync(i => i.ClaimReference != "" && i.TripClaimId == null);
+        Assert.Equal((1, "INV-0001", InvoiceStatus.Voided), (invoice.Number, invoice.DisplayNumber, invoice.Status));
+        Assert.All(invoice.Lines, l => Assert.Null(l.ClaimLineItemId));
+        Assert.NotEmpty(invoice.Lines);
+    }
+
     [SkippableFact(DisplayName = "Postgres: a 600-character plan manager address still submits")]
     public async Task ASixHundredCharacterAddress_StillSubmits()
     {
