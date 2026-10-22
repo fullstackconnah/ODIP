@@ -72,14 +72,15 @@ public sealed class ServiceAgreementDraftService
 
         // The version this plan started from is checked before the work of pricing it, and again once it is priced and has its number (a save can land while the engine is working):
         // a second coordinator's save must not quietly become the newest version over the first one's work.
-        if (request.BaseVersion is int baseVersion && await NewestVersionAsync(participantId, ct) is var newest && newest != baseVersion)
+        // A save that leaves it out counts as starting from nothing, so it is refused once any revision exists (it would otherwise replace a colleague's unapproved draft unseen).
+        if (await NewestVersionAsync(participantId, ct) is var newest && newest != (request.BaseVersion ?? 0))
             return DraftSaveResult.Conflicted(newest);
 
         var draft = blocks.Count > 0
             ? await BuildFromBlocksAsync(tenantId, participant, request, blocks, actor, ct)
             : await BuildFromLinesAsync(tenantId, participant, request, actor, ct);
         if (draft.Draft is null) return draft;
-        if (request.BaseVersion is int started && draft.Draft.Version - 1 != started) return DraftSaveResult.Conflicted(draft.Draft.Version - 1);
+        if (draft.Draft.Version - 1 != (request.BaseVersion ?? 0)) return DraftSaveResult.Conflicted(draft.Draft.Version - 1);
 
         // The new revision and the removal of the ones it replaces are one SaveChanges, so one transaction: a save that fails, or loses a race for its version number, takes nothing with it.
         _db.ServiceAgreementDrafts.Add(draft.Draft);

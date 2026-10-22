@@ -47,7 +47,7 @@ public class RestrictivePracticesControllerTests
         return medication;
     }
 
-    private static CreateRestrictivePracticeDto CreateDto(
+    private static BulkCreateRestrictivePracticeRowDto CreateDto(
         string description = "Locked doors overnight for safety.",
         RestrictivePracticeType type = RestrictivePracticeType.EnvironmentalRestraint,
         string? authorisedBy = null, DateOnly? authorisationDate = null, DateOnly? reviewDate = null,
@@ -62,7 +62,10 @@ public class RestrictivePracticesControllerTests
         IsActive = isActive,
     };
 
-    // ── Create ────────────────────────────────────────────────────────────
+    private static Task<ActionResult<ApiResponse<List<RestrictivePracticeDto>>>> CreateOne(RestrictivePracticesController controller, Guid participantId, BulkCreateRestrictivePracticeRowDto row) =>
+        controller.CreateBulk(participantId, new BulkCreateRestrictivePracticeDto { Items = new() { row } }, CancellationToken.None);
+
+    // ── Create (one row through the bulk endpoint, the only create path) ──────────────────
 
     [Fact]
     public async Task Create_ParticipantMissing_ReturnsNotFound()
@@ -70,7 +73,7 @@ public class RestrictivePracticesControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
-        var result = await controller.Create(Guid.NewGuid(), CreateDto(), CancellationToken.None);
+        var result = await CreateOne(controller, Guid.NewGuid(), CreateDto());
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
@@ -88,15 +91,16 @@ public class RestrictivePracticesControllerTests
             authorisedBy: "Dr. Chen", authorisationDate: new DateOnly(2026, 1, 15),
             reviewDate: new DateOnly(2026, 7, 15));
 
-        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+        var result = await CreateOne(controller, participant.Id, dto);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(ok.Value);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(ok.Value);
         Assert.True(body.Success);
-        Assert.Equal(participant.Id, body.Data!.ParticipantId);
-        Assert.Equal(RestrictivePracticeType.Seclusion, body.Data.Type);
-        Assert.Equal("Dr. Chen", body.Data.AuthorisedBy);
-        Assert.True(body.Data.IsActive);
+        var entry = Assert.Single(body.Data!);
+        Assert.Equal(participant.Id, entry.ParticipantId);
+        Assert.Equal(RestrictivePracticeType.Seclusion, entry.Type);
+        Assert.Equal("Dr. Chen", entry.AuthorisedBy);
+        Assert.True(entry.IsActive);
 
         var saved = await db.RestrictivePractices.SingleAsync();
         Assert.Equal(participant.Id, saved.ParticipantId);
@@ -116,11 +120,12 @@ public class RestrictivePracticesControllerTests
             type: RestrictivePracticeType.ChemicalRestraint,
             relatedMedicationId: medication.Id);
 
-        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+        var result = await CreateOne(controller, participant.Id, dto);
 
-        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Equal(medication.Id, body.Data!.RelatedMedicationId);
-        Assert.Equal("Risperidone", body.Data.RelatedMedicationName);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var linked = Assert.Single(body.Data!);
+        Assert.Equal(medication.Id, linked.RelatedMedicationId);
+        Assert.Equal("Risperidone", linked.RelatedMedicationName);
     }
 
     [Fact]
@@ -134,10 +139,10 @@ public class RestrictivePracticesControllerTests
 
         var dto = CreateDto(type: RestrictivePracticeType.ChemicalRestraint, relatedMedicationId: medicationForB.Id);
 
-        var result = await controller.Create(participantA.Id, dto, CancellationToken.None);
+        var result = await CreateOne(controller, participantA.Id, dto);
 
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(bad.Value);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
         Assert.False(body.Success);
         Assert.Contains(body.Errors!, e => e.Contains("does not belong", StringComparison.OrdinalIgnoreCase));
 
@@ -156,10 +161,10 @@ public class RestrictivePracticesControllerTests
         // only ChemicalRestraint entries may link a medication.
         var dto = CreateDto(type: RestrictivePracticeType.Seclusion, relatedMedicationId: medication.Id);
 
-        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+        var result = await CreateOne(controller, participant.Id, dto);
 
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(bad.Value);
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(bad.Value);
         Assert.False(body.Success);
         Assert.Contains(body.Errors!, e => e.Contains("only be set when Type is ChemicalRestraint", StringComparison.OrdinalIgnoreCase));
 
@@ -175,7 +180,7 @@ public class RestrictivePracticesControllerTests
 
         var dto = CreateDto(type: RestrictivePracticeType.ChemicalRestraint, relatedMedicationId: Guid.NewGuid());
 
-        var result = await controller.Create(participant.Id, dto, CancellationToken.None);
+        var result = await CreateOne(controller, participant.Id, dto);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
@@ -357,7 +362,7 @@ public class RestrictivePracticesControllerTests
         Assert.False(participant.HasRestrictivePracticeFlag);
         var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
-        await controller.Create(participant.Id, CreateDto(isActive: true), CancellationToken.None);
+        await CreateOne(controller, participant.Id, CreateDto(isActive: true));
 
         var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
         Assert.True(saved.HasRestrictivePracticeFlag);
@@ -370,7 +375,7 @@ public class RestrictivePracticesControllerTests
         var participant = SeedParticipant(db);
         var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
-        await controller.Create(participant.Id, CreateDto(isActive: false), CancellationToken.None);
+        await CreateOne(controller, participant.Id, CreateDto(isActive: false));
 
         var saved = await db.Participants.SingleAsync(p => p.Id == participant.Id);
         Assert.False(saved.HasRestrictivePracticeFlag);
@@ -539,7 +544,7 @@ public class RestrictivePracticesControllerTests
         using var scopedDb = CreateTenantScopedDb(dbName, tenantId);
         var controller = new RestrictivePracticesController(scopedDb, new SafetyNoteSyncService(scopedDb));
 
-        var result = await controller.Create(participantId, CreateDto(), CancellationToken.None);
+        var result = await CreateOne(controller, participantId, CreateDto());
 
         Assert.IsType<OkObjectResult>(result.Result);
 
@@ -950,7 +955,7 @@ public class RestrictivePracticesControllerTests
         var participant = SeedParticipant(db);
         var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
-        await controller.Create(participant.Id, CreateDto(isActive: true), CancellationToken.None);
+        await CreateOne(controller, participant.Id, CreateDto(isActive: true));
 
         var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:restrictivePractices");
         Assert.False(note.IsArchived);
@@ -963,11 +968,11 @@ public class RestrictivePracticesControllerTests
         var participant = SeedParticipant(db);
         var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
-        var createResult = await controller.Create(participant.Id, CreateDto(isActive: true), CancellationToken.None);
-        var created = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<OkObjectResult>(createResult.Result).Value);
+        var createResult = await CreateOne(controller, participant.Id, CreateDto(isActive: true));
+        var created = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(createResult.Result).Value);
         Assert.False((await db.ParticipantNotes.SingleAsync(n => n.SourceKey == "safety:restrictivePractices")).IsArchived);
 
-        await controller.Delete(created.Data!.Id, CancellationToken.None);
+        await controller.Delete(created.Data!.Single().Id, CancellationToken.None);
 
         var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:restrictivePractices");
         Assert.True(note.IsArchived);
