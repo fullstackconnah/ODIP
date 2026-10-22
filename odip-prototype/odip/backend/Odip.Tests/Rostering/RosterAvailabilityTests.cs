@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
@@ -230,5 +231,21 @@ public class RosterAvailabilityTests
         await s.Db.SaveChangesAsync();
 
         Assert.DoesNotContain(await TuesdayFindingsAsync(s), f => f.Code == RosterConflictService.OverHours);
+    }
+
+    [Fact]
+    public async Task OverHours_ReadsTheWorkersOrganisation_EvenWhenTheCallerIsAnotherTenant()
+    {
+        // The caller is organisation B (the ambient filter would hide A's row); the worker is A's and A's setting is 15.
+        var tenant = new Moq.Mock<Odip.Domain.Interfaces.ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(TenantB);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        await using var db = new OdipDbContext(new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = TenantA, WeeklyHoursWarning = 15 });
+        await db.SaveChangesAsync();
+
+        var byTenant = await RosterAvailability.WeeklyHoursAsync(db, new[] { TenantA }, default);
+
+        Assert.Equal(15, RosterAvailability.WeeklyHoursFor(byTenant, TenantA));
     }
 }

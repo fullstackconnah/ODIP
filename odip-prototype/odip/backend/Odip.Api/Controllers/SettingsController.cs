@@ -19,6 +19,8 @@ public class SettingsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as before changing settings: settings belong to one organisation.";
     public SettingsController(OdipDbContext db, ICurrentTenant tenant) { _db = db; _tenant = tenant; }
 
     // The one setting is the qualification warning window: ReadOnly reads it so its Qualifications, Staff and Dashboard figures match everyone else's.
@@ -26,7 +28,7 @@ public class SettingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin,ReadOnly")]
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Get(CancellationToken ct)
     {
-        var s = await _db.AppSettings.FirstOrDefaultAsync(ct);
+        var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
         return Ok(ApiResponse<AppSettingsDto>.Ok(new AppSettingsDto
         {
             QualificationWarningDays = s?.QualificationWarningDays ?? 30,
@@ -39,7 +41,8 @@ public class SettingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Update(
         [FromBody] UpdateAppSettingsDto dto, CancellationToken ct)
     {
-        var s = await _db.AppSettings.FirstOrDefaultAsync(ct);
+        if (_tenant.TenantId is null) return BadRequest(ApiResponse<AppSettingsDto>.Fail(ChooseOrganisation));
+        var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
         if (s == null)
         {
             s = new AppSettings { QualificationWarningDays = dto.QualificationWarningDays, WeeklyHoursWarning = dto.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold };

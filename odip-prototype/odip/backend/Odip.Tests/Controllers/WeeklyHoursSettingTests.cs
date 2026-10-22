@@ -68,4 +68,33 @@ public class WeeklyHoursSettingTests
         var dto = new UpdateAppSettingsDto { QualificationWarningDays = 30, WeeklyHoursWarning = hours };
         Assert.Equal(valid, Validator.TryValidateObject(dto, new ValidationContext(dto), null, true));
     }
+
+    [Fact]
+    public async Task Update_ForASuperAdminWhoHasNotChosenAnOrganisation_IsRefused()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = A, WeeklyHoursWarning = 30 });
+        await db.SaveChangesAsync();
+
+        var result = await new SettingsController(db, tenant.Object).Update(new UpdateAppSettingsDto { QualificationWarningDays = 14, WeeklyHoursWarning = 20 }, default);
+
+        Assert.Equal(SettingsController.ChooseOrganisation, Assert.Single(Assert.IsType<ApiResponse<AppSettingsDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Errors!));
+        Assert.Equal(30, (await db.AppSettings.SingleAsync()).WeeklyHoursWarning);
+    }
+
+    [Fact]
+    public async Task GetAndUpdate_WithTwoRowsForOneOrganisation_UseTheLowestId_LikeTheRoster()
+    {
+        var (db, controller) = Create(A);
+        db.AppSettings.Add(new AppSettings { Id = new Guid("00000000-0000-0000-0000-000000000009"), TenantId = A, WeeklyHoursWarning = 40 });
+        db.AppSettings.Add(new AppSettings { Id = new Guid("00000000-0000-0000-0000-000000000001"), TenantId = A, WeeklyHoursWarning = 15 });
+        await db.SaveChangesAsync();
+
+        Assert.Equal(15, Data(await controller.Get(default)).WeeklyHoursWarning);
+        Data(await controller.Update(new UpdateAppSettingsDto { QualificationWarningDays = 30, WeeklyHoursWarning = 20 }, default));
+        Assert.Equal(20, (await db.AppSettings.SingleAsync(x => x.Id == new Guid("00000000-0000-0000-0000-000000000001"))).WeeklyHoursWarning);
+    }
 }

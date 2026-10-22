@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Data;
 using Xunit;
 using static Odip.Tests.Security.CrossTenant;
 
@@ -68,5 +71,56 @@ public class TaskWithoutTripTests
         var list = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(null, null, null, null, CancellationToken.None)).Result).Value).Data!;
         Assert.Empty(list);
         Assert.IsType<NotFoundObjectResult>((await controller.GetById(theirs.Id, CancellationToken.None)).Result);
+    }
+
+    /// <summary>A SuperAdmin who has not chosen an organisation to view as: no tenant, every row visible.</summary>
+    private static (OdipDbContext Db, TasksController Controller) TenantlessSuperAdmin()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        return (db, new TasksController(db, null, tenant.Object));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Create_WithATrip_TakesTheTripsOrganisation_EvenForATenantlessSuperAdmin()
+    {
+        var (db, controller) = TenantlessSuperAdmin();
+        using var _ = db;
+        var trip = Trip(db, B);
+
+        var result = await controller.Create(new CreateTaskDto { Title = "Confirm", TripInstanceId = trip.Id }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(B, (await db.BookingTasks.SingleAsync()).TenantId);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Create_WithNoTrip_ForASuperAdminWhoHasNotChosenAnOrganisation_IsRefused()
+    {
+        var (db, controller) = TenantlessSuperAdmin();
+        using var _ = db;
+
+        var result = await controller.Create(new CreateTaskDto { Title = "Renew" }, CancellationToken.None);
+
+        Assert.Equal(TasksController.ChooseOrganisation, Assert.Single(Assert.IsType<ApiResponse<TaskDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Errors!));
+        Assert.Empty(await db.BookingTasks.ToListAsync());
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Create_WithNoTripButABooking_TakesTheBookingsTrip()
+    {
+        using var db = Db();
+        var trip = Trip(db, A);
+        var booking = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = Participant(db, A).Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1) };
+        db.Add(booking);
+        db.SaveChanges();
+
+        var result = await new TasksController(db).Create(new CreateTaskDto { Title = "Confirm", ParticipantBookingId = booking.Id }, CancellationToken.None);
+
+        var created = Assert.IsType<ApiResponse<TaskDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal((trip.Id, trip.TripName), (created.TripInstanceId, created.TripName));
+        Assert.Equal(trip.Id, (await db.BookingTasks.SingleAsync()).TripInstanceId);
     }
 }

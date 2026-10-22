@@ -42,7 +42,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
     public static async Task<IReadOnlyDictionary<Guid, int>> WeeklyHoursAsync(OdipDbContext db, IEnumerable<Guid> tenantIds, CancellationToken ct)
     {
         var ids = tenantIds.Distinct().ToList();
-        var rows = await db.AppSettings.IgnoreQueryFilters().Where(s => ids.Contains(s.TenantId)).Select(s => new { s.TenantId, s.WeeklyHoursWarning }).ToListAsync(ct);
+        var rows = await db.AppSettings.IgnoreQueryFilters().Where(s => ids.Contains(s.TenantId)).OrderBy(s => s.Id).Select(s => new { s.TenantId, s.WeeklyHoursWarning }).ToListAsync(ct);
         return rows.GroupBy(r => r.TenantId).ToDictionary(g => g.Key, g => g.First().WeeklyHoursWarning);
     }
 
