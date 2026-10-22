@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStaff, useSettings, useUpdateStaff, useProviderSettings } from '@/api/hooks'
 import { DataTable } from '@/components/DataTable'
@@ -90,6 +90,7 @@ export default function QualificationsPage() {
   const [editValue, setEditValue] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [rereading, setRereading] = useState(false)
+  const editSeq = useRef(0) // bumped when an editor opens or closes, so a save still re-reading a record the user has left is dropped
 
   const warningDays = settings?.qualificationWarningDays ?? 30
   const groups = buildGroups(allStaff, warningDays)
@@ -116,7 +117,16 @@ export default function QualificationsPage() {
     })
   }
 
+  function closeEditor() {
+    editSeq.current++
+    setRereading(false)
+    setEditingKey(null)
+    setSaveError(null)
+  }
+
   function handleEdit(row: QualRow) {
+    editSeq.current++
+    setRereading(false)
     setEditingKey(row.key)
     setEditValue(row.expiryDate ?? '')
     setSaveError(null)
@@ -128,8 +138,10 @@ export default function QualificationsPage() {
 
     // The PUT rewrites the whole record and this page has no Active control, so it is read at save: a deactivation made since the list loaded is
     // not undone. If the re-read fails, the row loaded with the page is sent (never worse than before).
+    const seq = editSeq.current
     setRereading(true)
     const s = await apiGet<StaffDetailDto>(`/staff/${row.staffId}`).catch(() => cached)
+    if (seq !== editSeq.current) return
     setRereading(false)
 
     updateStaff.mutate({ id: row.staffId, data: toUpdateStaffDto(s, { [row.fieldKey]: editValue || undefined }) }, {
@@ -279,9 +291,9 @@ export default function QualificationsPage() {
                           return isEditing ? (
                             <div className="flex items-center gap-1.5 pointer-coarse:gap-2 justify-end">
                               <Button size="sm" onClick={() => handleSave(q)} disabled={updateStaff.isPending || rereading}>
-                                {updateStaff.isPending || rereading ? 'Saving...' : 'Save'}
+                                {updateStaff.isPending || rereading ? 'Saving…' : 'Save'}
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => { setEditingKey(null); setSaveError(null) }}>
+                              <Button variant="ghost" size="sm" onClick={closeEditor}>
                                 Cancel
                               </Button>
                             </div>

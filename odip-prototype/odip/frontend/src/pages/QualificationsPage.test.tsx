@@ -221,12 +221,41 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(mockApiGet).toHaveBeenCalledWith('/staff/s5')
-    expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
     expect(mockMutate).not.toHaveBeenCalled()
 
     release({ ...STAFF[4], isActive: false })
     await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
     expect(mockMutate.mock.calls[0][0]).toEqual({ id: 's5', data: expect.objectContaining({ isActive: false, medicationCompetencyExpiryDate: '2027-01-02' }) })
+  })
+
+  it('sends nothing when Cancel is pressed while the record is re-read', async () => {
+    let release: (v: unknown) => void = () => {}
+    mockApiGet.mockReturnValue(new Promise(r => { release = r }))
+    openIvyEdit()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByLabelText('Expiry date')).not.toBeInTheDocument()
+
+    release({ ...STAFF[4], isActive: false })
+    await Promise.resolve()
+    await new Promise(r => setTimeout(r, 0))
+    expect(mockMutate).not.toHaveBeenCalled()
+  })
+
+  it('sends nothing for row A, and leaves the editor of row B open, when B is opened while A is re-read', async () => {
+    let release: (v: unknown) => void = () => {}
+    mockApiGet.mockReturnValue(new Promise(r => { release = r }))
+    openIvyEdit()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getAllByRole('button', { name: /^Edit: .+, (?!Ivy OneIssue$)/ })[0])
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled() // A's pending re-read does not hold B's Save
+
+    release({ ...STAFF[4], isActive: false })
+    await Promise.resolve()
+    await new Promise(r => setTimeout(r, 0))
+    expect(mockMutate).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Expiry date')).toBeInTheDocument()
   })
 
   it('falls back to the record loaded with the page when the re-read fails', async () => {
