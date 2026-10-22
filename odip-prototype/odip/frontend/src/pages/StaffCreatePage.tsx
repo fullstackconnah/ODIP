@@ -184,6 +184,7 @@ export default function StaffCreatePage() {
     try {
       if (isEdit) {
         // The page has no Active control, so the flag is read at save: a deactivation made since this page loaded is not undone.
+        // If the re-read fails, the flag cached at page load is sent (never worse than before).
         const { data: current } = await refetchExisting()
         const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: current?.isActive ?? existing?.isActive ?? true } })
         if (res.success) {
@@ -455,7 +456,7 @@ export default function StaffCreatePage() {
         <div className="flex justify-end gap-3">
           <Button variant="secondary" to="/staff">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending || submitting}>
-            {mutation.isPending
+            {mutation.isPending || (isEdit && submitting)
               ? (isEdit ? 'Saving…' : 'Creating…')
               : submitting && !isEdit && emailLinkAvailable
                 ? 'Sending link...'

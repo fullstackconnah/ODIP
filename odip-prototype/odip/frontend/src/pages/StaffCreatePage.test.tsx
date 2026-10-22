@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import StaffCreatePage from './StaffCreatePage'
@@ -251,5 +251,26 @@ describe('StaffCreatePage — saving an edit keeps the current active flag', () 
 
     expect(refetch).toHaveBeenCalledTimes(1)
     expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'staff-1', data: expect.objectContaining({ mobile: '0411 222 333', isActive: false }) })
+  })
+})
+
+describe('StaffCreatePage — the pre-save re-read of an edit', () => {
+  it('reads "Saving…" and stays disabled while the re-read is pending, then sends the update', async () => {
+    const user = userEvent.setup()
+    mockUsePermissions.mockReturnValue({ isCoordinator: true })
+    let release: (v: { data: ReturnType<typeof makeStaff> }) => void = () => {}
+    const refetch = vi.fn().mockReturnValue(new Promise(resolve => { release = resolve }))
+    mockUseStaffDetail.mockReturnValue({ data: makeStaff({ isActive: true }), isLoading: false, refetch })
+    renderEditPage('staff-1')
+
+    await user.type(await screen.findByLabelText(/mobile/i), '0411 222 333')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    const busy = await screen.findByRole('button', { name: 'Saving…' })
+    expect(busy).toBeDisabled()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+
+    release({ data: makeStaff({ isActive: true }) })
+    await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1))
   })
 })
