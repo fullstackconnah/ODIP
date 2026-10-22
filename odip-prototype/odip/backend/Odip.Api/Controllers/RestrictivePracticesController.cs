@@ -51,54 +51,6 @@ public class RestrictivePracticesController : ControllerBase
         return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(items.Select(ToDto).ToList()));
     }
 
-    [HttpPost("participants/{participantId:guid}/restrictive-practices")]
-    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<RestrictivePracticeDto>>> Create(
-        Guid participantId, [FromBody] CreateRestrictivePracticeDto dto, CancellationToken ct)
-    {
-        var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct);
-        if (participant == null) return NotFound(ApiResponse<RestrictivePracticeDto>.Fail("Participant not found"));
-
-        if (dto.RelatedMedicationId.HasValue)
-        {
-            var medicationError = await ValidateRelatedMedicationAsync(dto.Type, dto.RelatedMedicationId.Value, participantId, ct);
-            if (medicationError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(medicationError));
-        }
-
-        var practice = new RestrictivePractice
-        {
-            Id = Guid.NewGuid(),
-            ParticipantId = participantId,
-            Type = dto.Type,
-            Description = dto.Description,
-            AuthorisedBy = dto.AuthorisedBy,
-            AuthorisationDate = dto.AuthorisationDate,
-            ReviewDate = dto.ReviewDate,
-            RelatedMedicationId = dto.RelatedMedicationId,
-            IsActive = dto.IsActive,
-        };
-        _db.RestrictivePractices.Add(practice);
-
-        // Sync-write: keep Participant.HasRestrictivePracticeFlag consistent with the register in
-        // the SAME SaveChangesAsync call. RosteringController/PortalController read that column
-        // directly (not the derived computation ParticipantsController uses on read), so this is
-        // what keeps field staff seeing correct status without touching either controller. The
-        // query below only sees already-committed rows (this new `practice` isn't saved yet), so
-        // its own IsActive is OR'd in explicitly.
-        var hasOtherActiveEntry = await _db.RestrictivePractices
-            .Where(rp => rp.ParticipantId == participantId && rp.IsActive)
-            .AnyAsync(ct);
-        participant.HasRestrictivePracticeFlag = practice.IsActive || hasOtherActiveEntry;
-
-        // PD-5: keeps the restrictive-practices auto-note in sync alongside the flag above, in
-        // the same SaveChangesAsync.
-        await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
-
-        await _db.SaveChangesAsync(ct);
-
-        return Ok(ApiResponse<RestrictivePracticeDto>.Ok(await ToDtoWithMedicationNameAsync(practice, ct)));
-    }
-
     /// <summary>
     /// PD-2: bulk-create N register entries in one request — now the ONLY create path ("Add
     /// entries"), including a single row, since the single-entry create form was removed in
@@ -115,7 +67,7 @@ public class RestrictivePracticesController : ControllerBase
     /// impossible to create a chemical restraint entry at all. A row's
     /// <see cref="BulkCreateRestrictivePracticeRowDto.RelatedMedicationId"/> is optional and,
     /// when set, validated with the same <see cref="ValidateRelatedMedicationAsync"/> helper
-    /// <see cref="Create"/>/<see cref="Update"/> already use.
+    /// <see cref="Update"/> already uses.
     /// </summary>
     [HttpPost("participants/{participantId:guid}/restrictive-practices/bulk")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -180,9 +132,9 @@ public class RestrictivePracticesController : ControllerBase
 
         _db.RestrictivePractices.AddRange(practices);
 
-        // Sync-write (see Create): recompute the participant's derived flag once for the whole
+        // Sync-write: recompute the participant's derived flag once for the whole
         // batch. The query only sees already-committed rows (none of `practices` is saved yet),
-        // so whether any new row is active is OR'd in explicitly, same as Create/Update/Delete.
+        // so whether any new row is active is OR'd in explicitly, same as Update/Delete.
         var hasOtherActiveEntry = await _db.RestrictivePractices
             .Where(rp => rp.ParticipantId == participantId && rp.IsActive)
             .AnyAsync(ct);
@@ -219,7 +171,7 @@ public class RestrictivePracticesController : ControllerBase
         practice.IsActive = dto.IsActive;
         practice.UpdatedAt = DateTime.UtcNow;
 
-        // Sync-write (see Create): recompute the participant's derived flag in the same
+        // Sync-write (see CreateBulk): recompute the participant's derived flag in the same
         // SaveChangesAsync call. The query below still reflects this row's pre-update committed
         // IsActive, so it's excluded and the new state (dto.IsActive) is OR'd in explicitly.
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == practice.ParticipantId, ct);
@@ -248,7 +200,7 @@ public class RestrictivePracticesController : ControllerBase
 
         _db.RestrictivePractices.Remove(practice);
 
-        // Sync-write (see Create): the deleted row can no longer contribute regardless of its own
+        // Sync-write (see CreateBulk): the deleted row can no longer contribute regardless of its own
         // IsActive, so the recomputed flag is just "does any other active row remain".
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == practice.ParticipantId, ct);
         if (participant != null)

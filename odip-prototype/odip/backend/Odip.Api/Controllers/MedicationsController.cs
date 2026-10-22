@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -87,44 +89,9 @@ public class MedicationsController : ControllerBase
         {
             Id = Guid.NewGuid(),
             ParticipantId = participantId,
-            Name = dto.Name,
-            Strength = dto.Strength,
-            Form = dto.Form,
-            Route = dto.Route,
-            DoseDescription = dto.DoseDescription,
-            Directions = dto.Directions,
-            Type = dto.Type,
-            TimesOfDay = dto.TimesOfDay,
-            Frequency = dto.Frequency,
-            DaysOfWeek = ParseDaysOfWeek(dto.DaysOfWeek),
-            IntervalDays = dto.IntervalDays,
-            AnchorDate = dto.AnchorDate,
-            PrnIndication = dto.PrnIndication,
-            PrnMaxDosesPer24h = dto.PrnMaxDosesPer24h,
-            PrnMinIntervalMinutes = dto.PrnMinIntervalMinutes,
-            Purpose = dto.Purpose,
-            IsPsychotropic = dto.IsPsychotropic,
-            IsChemicalRestraint = dto.IsChemicalRestraint,
-            BspInPlace = dto.BspInPlace,
-            RestrictivePracticeAuthorisationRef = dto.RestrictivePracticeAuthorisationRef,
-            IsHighRisk = dto.IsHighRisk,
-            IsHighIntensitySupport = dto.IsHighIntensitySupport,
-            DrugSchedule = dto.DrugSchedule,
-            SupportLevel = dto.SupportLevel,
-            PrescriberName = dto.PrescriberName,
-            PharmacyName = dto.PharmacyName,
-            PharmacyPhone = dto.PharmacyPhone,
-            Packaging = dto.Packaging,
-            StartDate = dto.StartDate,
-            EndDate = dto.EndDate,
-            NextReviewDue = dto.NextReviewDue,
-            ConsentObtained = dto.ConsentObtained,
-            ConsentGivenBy = dto.ConsentGivenBy,
-            ConsentDate = dto.ConsentDate,
-            StorageRequirements = dto.StorageRequirements,
             Status = MedicationStatus.Active,
-            Notes = dto.Notes,
         };
+        Apply(med, dto);
         _db.ParticipantMedications.Add(med);
         await _db.SaveChangesAsync(ct);
 
@@ -155,43 +122,8 @@ public class MedicationsController : ControllerBase
             dto.Frequency, dto.DaysOfWeek, dto.IntervalDays, dto.AnchorDate);
         if (validationError != null) return BadRequest(ApiResponse<MedicationDetailDto>.Fail(validationError));
 
-        med.Name = dto.Name;
-        med.Strength = dto.Strength;
-        med.Form = dto.Form;
-        med.Route = dto.Route;
-        med.DoseDescription = dto.DoseDescription;
-        med.Directions = dto.Directions;
-        med.Type = dto.Type;
-        med.TimesOfDay = dto.TimesOfDay;
-        med.Frequency = dto.Frequency;
-        med.DaysOfWeek = ParseDaysOfWeek(dto.DaysOfWeek);
-        med.IntervalDays = dto.IntervalDays;
-        med.AnchorDate = dto.AnchorDate;
-        med.PrnIndication = dto.PrnIndication;
-        med.PrnMaxDosesPer24h = dto.PrnMaxDosesPer24h;
-        med.PrnMinIntervalMinutes = dto.PrnMinIntervalMinutes;
-        med.Purpose = dto.Purpose;
-        med.IsPsychotropic = dto.IsPsychotropic;
-        med.IsChemicalRestraint = dto.IsChemicalRestraint;
-        med.BspInPlace = dto.BspInPlace;
-        med.RestrictivePracticeAuthorisationRef = dto.RestrictivePracticeAuthorisationRef;
-        med.IsHighRisk = dto.IsHighRisk;
-        med.IsHighIntensitySupport = dto.IsHighIntensitySupport;
-        med.DrugSchedule = dto.DrugSchedule;
-        med.SupportLevel = dto.SupportLevel;
-        med.PrescriberName = dto.PrescriberName;
-        med.PharmacyName = dto.PharmacyName;
-        med.PharmacyPhone = dto.PharmacyPhone;
-        med.Packaging = dto.Packaging;
-        med.StartDate = dto.StartDate;
-        med.EndDate = dto.EndDate;
-        med.NextReviewDue = dto.NextReviewDue;
-        med.ConsentObtained = dto.ConsentObtained;
-        med.ConsentGivenBy = dto.ConsentGivenBy;
-        med.ConsentDate = dto.ConsentDate;
-        med.StorageRequirements = dto.StorageRequirements;
+        Apply(med, dto);
         med.Status = dto.Status;
-        med.Notes = dto.Notes;
         med.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
@@ -389,6 +321,12 @@ public class MedicationsController : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == id, ct);
         if (admin == null) return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
+        await using var transaction = _db.Database.IsNpgsql() && _db.Database.CurrentTransaction is null
+            && System.Transactions.Transaction.Current is null ? await _db.Database.BeginTransactionAsync(ct) : null;
+        if (!await LockAdministrationForWriteAsync(admin, ct)) return Busy();
+        if (_db.Entry(admin).State == EntityState.Detached)
+            return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
+
         if (dto.Status != MedicationAdministrationStatus.Administered && string.IsNullOrWhiteSpace(dto.Reason))
             return BadRequest(ApiResponse<AdministrationDto>.Fail("A reason is required when a dose is refused, withheld, missed or the wrong medication was given."));
 
@@ -406,8 +344,10 @@ public class MedicationsController : ControllerBase
         if (admin.WitnessUserId is null && !string.IsNullOrWhiteSpace(dto.WitnessName)) admin.WitnessName = dto.WitnessName;
         admin.Reason = dto.Reason;
         admin.PrnReason = dto.PrnReason;
-        admin.PrnOutcome = dto.PrnOutcome;
-        admin.PrnOutcomeAt = dto.PrnOutcomeAt;
+        // An amend that sends no outcome keeps the stored one: a client built from an older copy must not wipe an outcome another user recorded.
+        // Consequence: an amend can change an outcome but cannot clear it (nothing in the app offers that).
+        admin.PrnOutcome = dto.PrnOutcome ?? admin.PrnOutcome;
+        admin.PrnOutcomeAt = dto.PrnOutcomeAt ?? admin.PrnOutcomeAt;
         admin.Notes = dto.Notes;
         admin.UpdatedAt = DateTime.UtcNow;
 
@@ -415,6 +355,7 @@ public class MedicationsController : ControllerBase
 
         var med = admin.ParticipantMedication!;
         var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(new[] { admin.Id }, ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
         return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(
             admin, FullName(med.Participant), med.Name, med.DoseDescription, LookupIncidentId(incidentMap, admin.Id))));
     }
@@ -429,6 +370,21 @@ public class MedicationsController : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == id, ct);
         if (admin == null) return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
 
+        await using var transaction = _db.Database.IsNpgsql() && _db.Database.CurrentTransaction is null
+            && System.Transactions.Transaction.Current is null ? await _db.Database.BeginTransactionAsync(ct) : null;
+        if (!await LockAdministrationForWriteAsync(admin, ct)) return Busy();
+        if (_db.Entry(admin).State == EntityState.Detached)
+            return NotFound(ApiResponse<AdministrationDto>.Fail("Administration record not found"));
+
+        // A support worker records the outcome once, on a PRN dose that was given. Changing it afterwards is a coordinator correction through
+        // the amend API (PUT medications/administrations/{id}); no screen offers that yet, so the app tells the worker to ask a coordinator.
+        if (admin.ParticipantMedication?.Type != MedicationType.Prn)
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("Outcomes can only be recorded on PRN doses."));
+        if (admin.Status != MedicationAdministrationStatus.Administered)
+            return BadRequest(ApiResponse<AdministrationDto>.Fail("Outcomes can only be recorded on a PRN dose that was given."));
+        if (!string.IsNullOrWhiteSpace(admin.PrnOutcome))
+            return Conflict(ApiResponse<AdministrationDto>.Fail("An outcome is already recorded for this dose.", MedicationErrorCodes.PrnOutcomeAlreadyRecorded));
+
         admin.PrnOutcome = dto.PrnOutcome;
         admin.PrnOutcomeAt = DateTime.UtcNow;
         admin.UpdatedAt = DateTime.UtcNow;
@@ -436,8 +392,38 @@ public class MedicationsController : ControllerBase
 
         var med = admin.ParticipantMedication!;
         var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(new[] { admin.Id }, ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
         return Ok(ApiResponse<AdministrationDto>.Ok(ToAdministrationDto(
             admin, FullName(med.Participant), med.Name, med.DoseDescription, LookupIncidentId(incidentMap, admin.Id))));
+    }
+
+    /// <summary>How long an outcome or amend write waits for another write to the same dose; a test shortens it.</summary>
+    internal TimeSpan OutcomeLockWait { get; init; } = TimeSpan.FromSeconds(20);
+
+    private ActionResult<ApiResponse<AdministrationDto>> Busy() => Conflict(ApiResponse<AdministrationDto>.Fail(
+        "Another person is saving this dose right now. Check the dose, then try again.", MedicationErrorCodes.AdministrationSlotBusy));
+
+    // Both clinical writers share the lock; reloading after it preserves first-write checks and the SaveChanges audit.
+    // False when another write held the lock past OutcomeLockWait (nothing was written; the caller answers 409 and its transaction rolls back).
+    private async Task<bool> LockAdministrationForWriteAsync(MedicationAdministration admin, CancellationToken ct)
+    {
+        if (!_db.Database.IsNpgsql()) return true;
+        var bytes = new byte[23];
+        admin.Id.TryWriteBytes(bytes);
+        "outcome"u8.CopyTo(bytes.AsSpan(16));
+        var key = BitConverter.ToInt64(SHA256.HashData(bytes), 0);
+        try
+        {
+            await _db.Database.ExecuteSqlRawAsync(
+                string.Create(CultureInfo.InvariantCulture, $"SET LOCAL lock_timeout = {(int)OutcomeLockWait.TotalMilliseconds}; SELECT pg_advisory_xact_lock({{0}}); SET LOCAL lock_timeout TO DEFAULT"),
+                new object[] { key }, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+        {
+            return false;
+        }
+        await _db.Entry(admin).ReloadAsync(ct);
+        return true;
     }
 
     [HttpGet("participants/{participantId:guid}/administrations")]
@@ -449,8 +435,12 @@ public class MedicationsController : ControllerBase
             .Include(a => a.Participant)
             .Where(a => a.ParticipantId == participantId);
 
-        if (from.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= from.Value);
-        if (to.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) <= to.Value);
+        // Unpaged, so an omitted from is the last 90 days rather than the whole history.
+        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(from, to, ct);
+        fromUtc ??= _slots.UtcNow.AddDays(-90);
+        var fromLocal = from?.Date ?? ProviderLocalTime.UtcToLocal(fromUtc.Value, (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone);
+        query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt >= fromUtc : a.ScheduledAt != null ? a.ScheduledAt >= fromLocal : a.CreatedAt >= fromUtc);
+        if (to.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt < toUtcExclusive : a.ScheduledAt != null ? a.ScheduledAt < to.Value.Date.AddDays(1) : a.CreatedAt < toUtcExclusive);
 
         var items = await query.OrderByDescending(a => a.CreatedAt).ToListAsync(ct);
         var incidentMap = await GetIncidentIdsByAdministrationIdsAsync(items.Select(a => a.Id).ToList(), ct);
@@ -483,8 +473,9 @@ public class MedicationsController : ControllerBase
             .AsQueryable();
 
         if (participantId.HasValue) query = query.Where(a => a.ParticipantId == participantId.Value);
-        if (from.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) >= from.Value);
-        if (to.HasValue) query = query.Where(a => (a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt) <= to.Value);
+        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(from, to, ct);
+        if (from.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt >= fromUtc : a.ScheduledAt != null ? a.ScheduledAt >= from.Value.Date : a.CreatedAt >= fromUtc);
+        if (to.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt < toUtcExclusive : a.ScheduledAt != null ? a.ScheduledAt < to.Value.Date.AddDays(1) : a.CreatedAt < toUtcExclusive);
 
         var ordered = query.OrderByDescending(a => a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt);
 
@@ -505,6 +496,18 @@ public class MedicationsController : ControllerBase
     }
 
     // ── Helpers ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A date-only from/to names whole provider-local days (it binds as that day's 00:00, which is hours before the same-day doses'
+    /// UTC instants): from is the start of its day, to the start of the NEXT day (exclusive), both as UTC. shortcut: a time of day on
+    /// either is ignored; the only callers send dates, so add a time-aware range when one needs it.
+    /// </summary>
+    private async Task<(DateTime? FromUtc, DateTime? ToUtcExclusive)> DayRangeUtcAsync(DateTime? from, DateTime? to, CancellationToken ct)
+    {
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone;
+        return (from.HasValue ? ProviderLocalTime.LocalToUtc(from.Value.Date, zone) : null,
+                to.HasValue ? ProviderLocalTime.LocalToUtc(to.Value.Date.AddDays(1), zone) : null);
+    }
 
     private string GetRecordedByName() =>
         User?.FindFirst("fullName")?.Value
@@ -527,6 +530,47 @@ public class MedicationsController : ControllerBase
 
         var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
         return exists ? userId : null;
+    }
+
+    /// <summary>The medication fields a coordinator edits, copied from the request: the one list Create and Update share.</summary>
+    private static void Apply(ParticipantMedication m, CreateMedicationDto dto)
+    {
+        m.Name = dto.Name;
+        m.Strength = dto.Strength;
+        m.Form = dto.Form;
+        m.Route = dto.Route;
+        m.DoseDescription = dto.DoseDescription;
+        m.Directions = dto.Directions;
+        m.Type = dto.Type;
+        m.TimesOfDay = dto.TimesOfDay;
+        m.Frequency = dto.Frequency;
+        m.DaysOfWeek = ParseDaysOfWeek(dto.DaysOfWeek);
+        m.IntervalDays = dto.IntervalDays;
+        m.AnchorDate = dto.AnchorDate;
+        m.PrnIndication = dto.PrnIndication;
+        m.PrnMaxDosesPer24h = dto.PrnMaxDosesPer24h;
+        m.PrnMinIntervalMinutes = dto.PrnMinIntervalMinutes;
+        m.Purpose = dto.Purpose;
+        m.IsPsychotropic = dto.IsPsychotropic;
+        m.IsChemicalRestraint = dto.IsChemicalRestraint;
+        m.BspInPlace = dto.BspInPlace;
+        m.RestrictivePracticeAuthorisationRef = dto.RestrictivePracticeAuthorisationRef;
+        m.IsHighRisk = dto.IsHighRisk;
+        m.IsHighIntensitySupport = dto.IsHighIntensitySupport;
+        m.DrugSchedule = dto.DrugSchedule;
+        m.SupportLevel = dto.SupportLevel;
+        m.PrescriberName = dto.PrescriberName;
+        m.PharmacyName = dto.PharmacyName;
+        m.PharmacyPhone = dto.PharmacyPhone;
+        m.Packaging = dto.Packaging;
+        m.StartDate = dto.StartDate;
+        m.EndDate = dto.EndDate;
+        m.NextReviewDue = dto.NextReviewDue;
+        m.ConsentObtained = dto.ConsentObtained;
+        m.ConsentGivenBy = dto.ConsentGivenBy;
+        m.ConsentDate = dto.ConsentDate;
+        m.StorageRequirements = dto.StorageRequirements;
+        m.Notes = dto.Notes;
     }
 
     private static Weekdays? ParseDaysOfWeek(List<string>? days)

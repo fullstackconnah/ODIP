@@ -34,13 +34,16 @@ public class ProviderSettingsController : ControllerBase
         var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
         if (s == null) return Ok(ApiResponse<ProviderSettingsDto?>.Ok(null));
 
+        // A Coordinator reads the settings without the bank account: Settings hides it and this API doesn't send it. Invoice PDFs still print it by design (payment details; InvoiceService).
+        var hideBank = User?.IsInRole("Coordinator") == true && !User.IsInRole("Admin") && !User.IsInRole("SuperAdmin");
+
         return Ok(ApiResponse<ProviderSettingsDto>.Ok(new ProviderSettingsDto
         {
             Id = s.Id, RegistrationNumber = s.RegistrationNumber, ABN = s.ABN,
             OrganisationName = s.OrganisationName, Address = s.Address,
             GSTRegistered = s.GSTRegistered, IsPaceProvider = s.IsPaceProvider,
-            BankAccountName = s.BankAccountName, BSB = s.BSB,
-            AccountNumber = s.AccountNumber, InvoiceFooterNotes = s.InvoiceFooterNotes,
+            BankAccountName = hideBank ? null : s.BankAccountName, BSB = hideBank ? null : s.BSB,
+            AccountNumber = hideBank ? null : s.AccountNumber, InvoiceFooterNotes = s.InvoiceFooterNotes,
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
             ParticipantReadinessMode = s.ParticipantReadinessMode,
             MedicationCompetencyMode = s.MedicationCompetencyMode,

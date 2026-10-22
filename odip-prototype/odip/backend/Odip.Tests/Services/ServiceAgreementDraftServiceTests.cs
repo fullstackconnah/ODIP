@@ -194,7 +194,7 @@ public class ServiceAgreementDraftServiceTests
             catalogue.PriceLimit_VIC = 99.50m;
             catalogue.CatalogueVersion = "synthetic-v2";
             await db.SaveChangesAsync();
-            var (second, secondError) = await service.CreateAsync(tenantId, participant.Id, Request(), "synthetic-actor", CancellationToken.None);
+            var (second, secondError) = await service.CreateAsync(tenantId, participant.Id, Request() with { BaseVersion = first.Version }, "synthetic-actor", CancellationToken.None);
 
             Assert.Null(secondError);
             Assert.Equal(1, first.Version);
@@ -244,7 +244,6 @@ public class ServiceAgreementDraftServiceTests
             Assert.Equal(ProvisionalAgreementTemplate.PdfSha256, selected.TemplatePdfSha256);
             var pdf = await controller.Pdf(ownParticipant.Id, Guid.NewGuid(), CancellationToken.None);
             Assert.IsType<Microsoft.AspNetCore.Mvc.NotFoundObjectResult>(pdf);
-            Assert.IsType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>(controller.AttachSignedEvidence(ownParticipant.Id, Guid.NewGuid()).Result);
         }
     }
 }

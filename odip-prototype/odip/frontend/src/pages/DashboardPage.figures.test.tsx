@@ -85,9 +85,10 @@ describe('Dashboard "Critical Participant Alerts" figure', () => {
 
     renderPage()
 
-    const tile = screen.getByRole('group', { name: 'Critical Participant Alerts 3' })
-    expect(tile).toHaveTextContent('3')
-    expect(tile).toHaveTextContent('2 participants')
+    // A loaded count is the disclosure under the band, not a tile (card42); its header keeps the tile's honesty line.
+    expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Critical participant alerts (3)' })).toBeInTheDocument()
+    expect(screen.getByText('across 2 participants')).toBeInTheDocument()
   })
 })
 

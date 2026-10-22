@@ -3,7 +3,7 @@ import { cleanup, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 import { mockUseDashboard, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue } from './dashboard/dashboardHookMocks'
-import { installDashboardDefaults, renderPage, summaryData, asRole, pendingLeave, pendingCompletions, criticalAlertFor, staffWithOneIssue, threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk, showAll, band, tiles, tileLabels, tileFor, clearRow, routeExists } from './dashboard/dashboardTestKit'
+import { installDashboardDefaults, renderPage, summaryData, asRole, pendingLeave, pendingCompletions, criticalAlertFor, staffWithOneIssue, threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk, showAll, band, grid, tiles, tileLabels, tileFor, clearRow, routeExists } from './dashboard/dashboardTestKit'
 
 vi.mock('@/api/hooks', async () => (await import('./dashboard/dashboardHookMocks')).hooks)
 vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (await import('./dashboard/dashboardHookMocks')).mockUseDecisionGroups }))
@@ -212,7 +212,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     expect(band().querySelector('[aria-busy]')).toBeNull()
   })
 
-  it('settles from each placeholder: a zero joins the All clear row, a count becomes a tinted tile', () => {
+  it('settles from each placeholder: a zero joins the All clear row, a loaded count becomes the alert disclosure (card42)', () => {
     asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(failed)
     mockUseParticipantAlertsAggregate.mockReturnValue(inFlight)
@@ -227,9 +227,8 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false, isError: false })
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
     rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
-    expect(tileLabels()).toEqual(['Critical Participant Alerts'])
-    expect(alerts()).toHaveAttribute('data-attention', 'error')
-    expect(within(alerts()).getByText('1')).toBeInTheDocument()
+    expect(grid()).toBeNull()   // no tile at all: the count is the disclosure under the band
+    expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
     expect(clearNames()).toMatch(/qualification issues/)
     expect(clearNames()).toMatch(/pending leave/)
     expect(within(band()).queryByText("Couldn't load")).not.toBeInTheDocument()
@@ -415,8 +414,8 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     withAlerts(budgetParticipant('p1', 'Noor Refused', 'budget-ndia-exhausted', { budgetInForce: true }))
     renderPage()
 
-    expect(tileLabels()).toContain('Critical Participant Alerts')
-    expect(tileLabels()).not.toContain('Budgets at risk')
+    expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
+    expect(grid()).toBeNull()   // no Budgets at risk tile, and the loaded Critical count is the disclosure, not a tile
     expect(band()).not.toHaveTextContent(/budgets over or forecast to go over/)
   })
 
@@ -507,8 +506,8 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
       }))
       renderPage()
 
-      expect(tileFor('Critical Participant Alerts')).toHaveAccessibleName('Critical Participant Alerts 1')
-      expect(tileLabels()).not.toContain('Budgets at risk')
+      expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
+      expect(grid()).toBeNull()   // no Budgets at risk tile, and the loaded Critical count is the disclosure, not a tile
       expect(screen.getByText('NDIA says the funds ran out')).toBeInTheDocument()
       const card = screen.getByText('NDIA rejected a claim for Core on 8 Oct 2026: not enough funds in the funding period (V27)').closest('a')!
       expect(card).toHaveAttribute('href', '/participants/p1?tab=funding')
@@ -526,7 +525,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
       renderPage()
 
       expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
-      expect(tileFor('Critical Participant Alerts')).toHaveAccessibleName('Critical Participant Alerts 1')
+      expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
     })
 
     it('keeps counting the Critical alerts that are not about budgets, as before', () => {
@@ -534,9 +533,56 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
       mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk)
       renderPage()
 
-      expect(tileFor('Critical Participant Alerts')).toHaveAccessibleName('Critical Participant Alerts 3')
-      expect(tileFor('Critical Participant Alerts')).toHaveTextContent('Critical alerts across 2 participants')
+      expect(screen.getByRole('heading', { name: 'Critical participant alerts (3)' })).toBeInTheDocument()
+      expect(screen.getByText('across 2 participants')).toBeInTheDocument()
       expect(budgetTile()).toHaveAccessibleName('Budgets at risk 3')
     })
+  })
+})
+
+// card42: a loaded positive count is the disclosure under the band, never a tile; a count that is not known yet (loading, paused, failed) keeps the band's en dash.
+describe('DashboardPage — Critical participant alerts: the band tile and the disclosure (card42)', () => {
+  const disclosure = () => screen.queryByRole('heading', { name: /^Critical participant alerts \(\d+\)$/ })
+  const pageClear = () => screen.queryByText('All clear. Nothing needs you right now.')
+  const clearNames = () => clearRow()?.textContent ?? ''
+  // Everything but the alerts at zero (the kit leaves one shift completion waiting), so only the alerts can keep the page from all clear.
+  const everythingElseZero = () => { asRole('SuperAdmin'); mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0)) }
+
+  it('live critical alerts with everything else at zero never make the page all clear (T6)', () => {
+    everythingElseZero()
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false, isError: false })
+    renderPage()
+
+    expect(pageClear()).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Alerts' })).toBeInTheDocument()
+    expect(clearNames()).not.toMatch(/critical participant alerts/)
+    expect(disclosure()).toHaveAccessibleName('Critical participant alerts (1)')
+  })
+
+  const two = [criticalAlertFor('p1', 'Jamie Smith'), criticalAlertFor('p2', 'Alex Rivera')]
+  it.each([
+    ['loaded positive', { data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false, isError: false }, null, 'Critical participant alerts (1)'],
+    ['loading', { data: undefined, isPending: true, isLoading: true, isError: false }, 'Critical Participant Alerts Loading', null],
+    ['paused offline', { data: undefined, isPending: true, isLoading: false, fetchStatus: 'paused', isError: false }, 'Critical Participant Alerts Loading', null],
+    ['failed with no data', { data: undefined, isLoading: false, isError: true }, "Critical Participant Alerts Couldn't load", null],
+    ['failed with held data', { data: two, isLoading: false, isError: true }, "Critical Participant Alerts Couldn't load", 'Critical participant alerts (2)'],
+    ['zero', { data: [], isLoading: false, isError: false }, null, null],
+  ] as const)('no positive tile, but failed and unknown warnings are kept (T7: %s)', (name, alertsQuery, tile, heading) => {
+    everythingElseZero()
+    mockUseParticipantAlertsAggregate.mockReturnValue(alertsQuery)
+    renderPage()
+
+    if (name === 'zero') {
+      // The one case the page may be clear: everything, the alerts included, has data and is at zero; the field names them.
+      expect(pageClear()).toBeInTheDocument()
+      expect(document.body.textContent).toMatch(/critical participant alerts/)
+    } else {
+      expect(pageClear()).not.toBeInTheDocument()
+      expect(clearNames()).not.toMatch(/critical participant alerts/)
+    }
+    if (tile) expect(within(band()).getByRole('link', { name: tile })).toBeInTheDocument()
+    else if (name !== 'zero') expect(within(band()).queryByText('Critical Participant Alerts')).toBeNull()
+    if (heading) expect(disclosure()).toHaveAccessibleName(heading)
+    else expect(disclosure()).toBeNull()
   })
 })

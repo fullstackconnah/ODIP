@@ -79,8 +79,9 @@ public class DraftPruningTests
         Blocks = (blocks.Length == 0 ? new[] { MonWed() } : blocks).Select(b => new DraftBlockDto { Block = b, Requirements = new DraftBlockRequirementsDto() }).ToList(),
     };
 
-    private static Task<DraftSaveResult> SaveAsync(Fixture f, CreateServiceAgreementDraftDto request) =>
-        f.Service.SaveAsync(f.TenantId, f.Participant.Id, request, "actor", CancellationToken.None);
+    /// <summary>Saves as the page does: from the newest version there is, unless the test names a base version.</summary>
+    private static async Task<DraftSaveResult> SaveAsync(Fixture f, CreateServiceAgreementDraftDto request) =>
+        await f.Service.SaveAsync(f.TenantId, f.Participant.Id, request.BaseVersion is null ? request with { BaseVersion = await f.Db.ServiceAgreementDrafts.Where(x => x.ParticipantId == f.Participant.Id).MaxAsync(x => (int?)x.Version) ?? 0 } : request, "actor", CancellationToken.None);
 
     /// <summary>A revision as saving it would have stored it, put straight in the database (so nothing is pruned on the way in).</summary>
     private static async Task<ServiceAgreementDraft> StoreAsync(OdipDbContext db, Guid tenantId, Guid participantId, int version)
@@ -232,6 +233,30 @@ public class DraftPruningTests
     }
 
     [Fact]
+    public async Task A_save_with_no_base_version_is_refused_once_a_revision_exists_and_prunes_nothing()
+    {
+        await using var f = await SetUpAsync();
+        var first = await StoreAsync(f.Db, f.TenantId, f.Participant.Id, 1);
+
+        var unbased = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(), "actor", CancellationToken.None);      // a client that leaves BaseVersion out
+
+        Assert.Null(unbased.Draft);
+        Assert.Equal(1, unbased.ConflictVersion);
+        Assert.Equal(new[] { 1 }, await VersionsAsync(f.Db, f.Participant.Id));
+        Assert.NotEqual((0, 0), await ChildrenAsync(f.Db, first.Id));
+    }
+
+    [Fact]
+    public async Task A_first_save_needs_no_base_version()
+    {
+        await using var f = await SetUpAsync();
+
+        var first = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(), "actor", CancellationToken.None);      // no BaseVersion at all
+
+        Assert.NotNull(first.Draft);
+    }
+
+    [Fact]
     public async Task A_save_the_engine_refuses_prunes_nothing()
     {
         await using var f = await SetUpAsync();
@@ -269,7 +294,7 @@ public class DraftPruningTests
         var stored = await StoreAsync(f.Db, f.TenantId, f.Participant.Id, 1);
         await using var failing = NewContext(f.DbName, f.TenantId, false, new FailingSaveInterceptor(Inserting, () => new DbUpdateException("the database went away")));
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => new ServiceAgreementDraftService(failing).SaveAsync(f.TenantId, f.Participant.Id, Request(), "actor", CancellationToken.None));
+        await Assert.ThrowsAsync<DbUpdateException>(() => new ServiceAgreementDraftService(failing).SaveAsync(f.TenantId, f.Participant.Id, Request() with { BaseVersion = 1 }, "actor", CancellationToken.None));
 
         await using var read = NewContext(f.DbName, f.TenantId);
         Assert.Equal(new[] { 1 }, await VersionsAsync(read, f.Participant.Id));
@@ -283,7 +308,7 @@ public class DraftPruningTests
         await StoreAsync(f.Db, f.TenantId, f.Participant.Id, 1);
         await using var failing = NewContext(f.DbName, f.TenantId, false, new FailingSaveInterceptor(Deleting, () => new DbUpdateException("the delete failed")));
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => new ServiceAgreementDraftService(failing).SaveAsync(f.TenantId, f.Participant.Id, Request(), "actor", CancellationToken.None));
+        await Assert.ThrowsAsync<DbUpdateException>(() => new ServiceAgreementDraftService(failing).SaveAsync(f.TenantId, f.Participant.Id, Request() with { BaseVersion = 1 }, "actor", CancellationToken.None));
 
         await using var read = NewContext(f.DbName, f.TenantId);
         Assert.Equal(new[] { 1 }, await VersionsAsync(read, f.Participant.Id));
@@ -298,11 +323,11 @@ public class DraftPruningTests
         var interceptor = new FailingSaveInterceptor(Deleting, () => new DbUpdateConcurrencyException("the row was already deleted"), async () =>
         {
             await using var other = NewContext(f.DbName, f.TenantId);
-            Assert.NotNull((await new ServiceAgreementDraftService(other).SaveAsync(f.TenantId, f.Participant.Id, Request(), "someone-else", CancellationToken.None)).Draft);
+            Assert.NotNull((await new ServiceAgreementDraftService(other).SaveAsync(f.TenantId, f.Participant.Id, Request() with { BaseVersion = 1 }, "someone-else", CancellationToken.None)).Draft);
         });
         await using var racing = NewContext(f.DbName, f.TenantId, false, interceptor);
 
-        var loser = await new ServiceAgreementDraftService(racing).SaveAsync(f.TenantId, f.Participant.Id, Request(), "me", CancellationToken.None);
+        var loser = await new ServiceAgreementDraftService(racing).SaveAsync(f.TenantId, f.Participant.Id, Request() with { BaseVersion = 1 }, "me", CancellationToken.None);
 
         Assert.Null(loser.Draft);
         Assert.Equal(2, loser.ConflictVersion);                        // the other save's version is the newest now
@@ -352,7 +377,7 @@ public class DraftPruningTests
             });
         await using var racing = NewContext(f.DbName, f.TenantId, false, interceptor);
 
-        var saved = await new ServiceAgreementDraftService(racing).SaveAsync(f.TenantId, f.Participant.Id, Request(), "actor", CancellationToken.None);
+        var saved = await new ServiceAgreementDraftService(racing).SaveAsync(f.TenantId, f.Participant.Id, Request() with { BaseVersion = 1 }, "actor", CancellationToken.None);
 
         Assert.Equal(2, Assert.IsType<ServiceAgreementDraft>(saved.Draft).Version);
         await using var read = NewContext(f.DbName, f.TenantId);

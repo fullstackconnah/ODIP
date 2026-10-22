@@ -30,7 +30,7 @@ export function renderGroup(useGroup: () => GroupModel) {
 export const announcement = () => document.querySelector('.sr-only[role="status"]')
 
 /** The table's column headers, the empty actions header last (the bulk box column, when a tab has one, is left out: QuickGroup's own tests cover it). */
-export const headers = () => screen.getAllByRole('columnheader').filter((th) => th.textContent !== 'Select').map((th) => th.textContent)
+export const headers = () => screen.getAllByRole('columnheader').filter((th) => th.textContent !== 'Select' && !th.querySelector('input[type="checkbox"]')).map((th) => th.textContent)
 
 /** A decision row's row group (its row, and its detail row while it has one), found by its subject. */
 export const rowOf = (subject: string) => screen.getByText(subject).closest('tr')!

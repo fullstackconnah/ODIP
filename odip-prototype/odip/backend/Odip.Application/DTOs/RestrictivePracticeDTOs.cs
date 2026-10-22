@@ -23,23 +23,6 @@ public record RestrictivePracticeDto
     public DateTime UpdatedAt { get; init; }
 }
 
-public record CreateRestrictivePracticeDto
-{
-    public RestrictivePracticeType Type { get; init; }
-
-    [Required, StringLength(2000)]
-    public string Description { get; init; } = string.Empty;
-
-    [StringLength(200)]
-    public string? AuthorisedBy { get; init; }
-    public DateOnly? AuthorisationDate { get; init; }
-    public DateOnly? ReviewDate { get; init; }
-
-    /// <summary>Only meaningful for Type == ChemicalRestraint. Must reference a medication belonging to the same participant.</summary>
-    public Guid? RelatedMedicationId { get; init; }
-    public bool IsActive { get; init; } = true;
-}
-
 public record UpdateRestrictivePracticeDto
 {
     public RestrictivePracticeType Type { get; init; }
@@ -64,7 +47,7 @@ public record UpdateRestrictivePracticeDto
 /// <see cref="Type"/> may be <see cref="RestrictivePracticeType.ChemicalRestraint"/>.
 /// <see cref="RelatedMedicationId"/> is optional even for a chemical-restraint row (logged
 /// before the medication record exists is still a meaningful entry); when set it's validated the
-/// same way <see cref="CreateRestrictivePracticeDto.RelatedMedicationId"/> is, via
+/// same way an update's related medication is, via
 /// <c>RestrictivePracticesController.ValidateRelatedMedicationAsync</c>. No data-annotation
 /// attributes here on purpose: bulk validation is done manually per row in the controller so
 /// every failure can be reported against its row index instead of short-circuiting on the first

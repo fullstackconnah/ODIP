@@ -107,7 +107,7 @@ const cases: Case[] = [
   { name: 'a trip booking is made (confirmed)', use: useCreateBooking, variables: { tripInstanceId: 'trip-1', participantId: 'participant-1' }, method: 'post', url: '/bookings', keeps: ['bookings'], named: 'participant-1' },
   { name: 'a trip booking is changed (confirmed)', use: useUpdateBooking, variables: { id: 'booking-1', data: {} }, method: 'put', url: '/bookings/booking-1', keeps: ['bookings'] },
   { name: 'a trip booking is patched (confirmed)', use: usePatchBooking, variables: { id: 'booking-1', data: { bookingStatus: 'Confirmed' } }, method: 'patch', url: '/bookings/booking-1', keeps: ['bookings'] },
-  { name: 'a trip booking is cancelled', use: useCancelBooking, variables: { id: 'booking-1', data: {} }, method: 'put', url: '/bookings/booking-1', keeps: ['bookings'] },
+  { name: 'a trip booking is cancelled', use: useCancelBooking, variables: 'booking-1', method: 'patch', url: '/bookings/booking-1', keeps: ['bookings'] },
   { name: 'a trip booking is deleted', use: useDeleteBooking, variables: 'booking-1', method: 'delete', url: '/bookings/booking-1', keeps: ['bookings'] },
   { name: 'a trip is updated (status, dates)', use: useUpdateTrip, variables: { id: 'trip-1', data: { status: 'Completed' } }, method: 'put', url: '/trips/trip-1', keeps: ['trips'] },
   { name: 'a trip is patched (status)', use: usePatchTrip, variables: { id: 'trip-1', data: { status: 'InProgress' } }, method: 'patch', url: '/trips/trip-1', keeps: ['trips'] },

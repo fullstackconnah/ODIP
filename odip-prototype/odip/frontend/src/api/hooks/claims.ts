@@ -96,6 +96,11 @@ export function useUpdateClaim() {
       // Marking a claim Rejected (with the NDIA's code, which starts the "funds ran out" signal), Paid or back to Draft moves what the alerts, the dashboard's tile and the Budgets list say.
       refreshBudgetWarnings(qc)
     },
+    // A refusal means the page was stale (somebody else moved the claim): reload it, so the buttons that no longer apply go.
+    onError: (_, { claimId }) => {
+      qc.invalidateQueries({ queryKey: ['claim', claimId] })
+      qc.invalidateQueries({ queryKey: ['trip-claims'] })
+    },
   })
 }
 
@@ -114,6 +119,7 @@ export function useUpdateClaimLineItem() {
       refreshLedgers(qc, participants)
       refreshBudgetWarnings(qc)
     },
+    onError: (_, { claimId }) => qc.invalidateQueries({ queryKey: ['claim', claimId] }),
   })
 }
 
