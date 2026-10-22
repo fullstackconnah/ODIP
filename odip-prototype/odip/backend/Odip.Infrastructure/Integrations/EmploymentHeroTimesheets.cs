@@ -4,7 +4,10 @@ using System.Text.Json;
 using Odip.Application.DTOs;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
+using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Infrastructure.Integrations;
 
@@ -68,6 +71,31 @@ public static class EmploymentHeroTimesheets
     // shortcut: the hash covers the whole EhTimesheetLine shape, so adding a field later resends every line in the 62-day window; upgrade by hashing a fixed field list then.
     public static string Hash(EhTimesheetLine line) =>
         Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(line with { Id = null }, EmploymentHeroClient.WireJson)));
+
+    /// <summary>The provider-local date the organisation connected on; shifts before it are never queued. Null when the organisation isn't connected.</summary>
+    public static async Task<DateOnly?> CutoffAsync(OdipDbContext db, Guid tenantId, CancellationToken ct)
+    {
+        var at = await db.EmploymentHeroConnections.IgnoreQueryFilters().Where(c => c.TenantId == tenantId).Select(c => (DateTime?)c.ConnectedAt).FirstOrDefaultAsync(ct);
+        if (at is null) return null;
+        return ProviderLocalTime.TodayIn(ProviderLocalTime.AsUtc(at.Value), (await ProviderTimeZoneResolver.ResolveAsync(db, tenantId, ct)).Zone);
+    }
+
+    public static EmploymentHeroOutbox NewRow(Guid tenantId, Guid completionId, DateTime now) => new()
+    {
+        Id = Guid.NewGuid(), TenantId = tenantId, Kind = EmploymentHeroOutboxKind.Timesheet, EntityId = completionId,
+        Status = EmploymentHeroOutboxStatus.Pending, Attempts = 0, NextAttemptAt = now, CreatedAt = now, UpdatedAt = now,
+    };
+
+    /// <summary>Adds a Pending row for each approved shift on or after the connect date that has none yet. Never saves: it rides on the approval's own save.</summary>
+    public static async Task EnqueueAsync(OdipDbContext db, Guid tenantId, IReadOnlyCollection<(Shift Shift, ShiftCompletion Completion)> approved, DateTime now, CancellationToken ct)
+    {
+        if (approved.Count == 0 || await CutoffAsync(db, tenantId, ct) is not { } cutoff) return;
+        var due = approved.Where(p => p.Shift.ServiceDate >= cutoff).Select(p => p.Completion.Id).ToList();
+        if (due.Count == 0) return;
+        var have = await db.EmploymentHeroOutbox.IgnoreQueryFilters()
+            .Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet && due.Contains(r.EntityId)).Select(r => r.EntityId).ToListAsync(ct);
+        foreach (var id in due.Except(have)) db.EmploymentHeroOutbox.Add(NewRow(tenantId, id, now));
+    }
 
     /// <summary>The one derivation of a shift's word, reason and whether Send missing may queue it. The first matching rule wins.</summary>
     public static (PayrollShiftStatus Status, string? Reason, bool Sendable) StatusOf(EmploymentHeroOutbox? row, bool linked, string? waitReason, TimeZoneInfo providerZone)
