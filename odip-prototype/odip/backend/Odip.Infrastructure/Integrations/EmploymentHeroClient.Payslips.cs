@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Odip.Infrastructure.Integrations;
 
@@ -84,4 +85,13 @@ public partial class EmploymentHeroClient
     }
 
     private static EmploymentHeroException NotAPayslip() => new(EmploymentHeroFailure.Unavailable, NotAPayslipMessage);
+}
+
+public static class EmploymentHeroClientLogging
+{
+    /// <summary>HttpClient's own category for the typed client.</summary>
+    public const string Category = "System.Net.Http.HttpClient.EmploymentHeroClient";
+
+    /// <summary>Keeps each EH request URL (it names the employee and the pay run) out of the Information log.</summary>
+    public static ILoggingBuilder QuietEmploymentHeroClient(this ILoggingBuilder logging) => logging.AddFilter(Category, LogLevel.Warning);
 }

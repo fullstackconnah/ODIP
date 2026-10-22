@@ -180,6 +180,30 @@ public class PortalPayslipsControllerTests
         Assert.Empty(eh.Requests);
     }
 
+    /// <summary>Two people in ONE organisation: Sam is linked to "42", Kim is not (or is "77"). Kim never sees Sam's payslips, whatever order the rows come back in.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("77")]
+    public async Task A_colleague_in_the_same_organisation_never_reaches_anothers_payslips(string? kimsPayrollId)
+    {
+        var (db, _, tenant, _) = await OrganisationAsync();   // Sam, "42", is the first row
+        await using var _ = db;
+        var kim = EhFixture.Staff(tenant, "Kim", "Ng", "kim@acme.org.au", kimsPayrollId);
+        db.Users.Add(kim);
+        await db.SaveChangesAsync();
+        var eh = Eh();
+        var controller = Controller(db, tenant, kim.Id, eh);
+
+        var list = Data(await controller.List(CancellationToken.None));
+        var pdf = await controller.Pdf(9001, CancellationToken.None);
+
+        Assert.DoesNotContain(eh.Requests, r => r.RequestUri!.AbsolutePath.Contains("/ess/42/"));
+        Assert.Empty(list.Payslips);
+        Assert.IsType<NotFoundObjectResult>(pdf);
+        if (kimsPayrollId is null) { Assert.Equal("NotLinked", list.Status); Assert.Empty(eh.Requests); }
+        else Assert.All(eh.Requests, r => Assert.StartsWith("/api/v2/ess/77/", r.RequestUri!.AbsolutePath));
+    }
+
     [Fact]
     public async Task No_action_takes_a_person_from_the_client()
     {
@@ -203,12 +227,16 @@ public class PortalPayslipsControllerTests
     [InlineData("SuperAdmin", false)]
     [InlineData("SuperAdmin", true)]
     [InlineData("SupportWorker", true)]
-    public async Task SuperAdmins_and_view_as_are_refused_and_call_nobody(string role, bool viewAsSam)
+    public async Task SuperAdmins_and_view_as_are_refused_and_call_nobody(string role, bool viewAsOther)
     {
         var (db, _, tenant, sam) = await OrganisationAsync();
         await using var _ = db;
+        // The viewed user is a second, linked person: a resolver that honoured ViewAsUserId would reach Kim's EH record.
+        var kim = EhFixture.Staff(tenant, "Kim", "Ng", "kim@acme.org.au", "77");
+        db.Users.Add(kim);
+        await db.SaveChangesAsync();
         var eh = Eh();
-        var controller = Controller(db, tenant, sam.Id, eh, role, viewAsSam ? sam.Id : null);
+        var controller = Controller(db, tenant, sam.Id, eh, role, viewAsOther ? kim.Id : null);
 
         var list = await controller.List(CancellationToken.None);
         var pdf = await controller.Pdf(9001, CancellationToken.None);
@@ -387,6 +415,34 @@ public class PortalPayslipsControllerTests
         foreach (var payload in new[] { "%PDF", Convert.ToBase64String(Pdf), "1234.56" })
             Assert.DoesNotContain(logs.Messages, m => m.Contains(payload));
         Assert.DoesNotContain(typeof(PortalPayslipsController).GetConstructors().SelectMany(c => c.GetParameters()), p => p.ParameterType.Name.StartsWith("ILogger"));
+    }
+
+    [Fact]
+    public async Task The_payslip_URL_is_logged_by_HttpClient_unless_the_EH_category_is_filtered_to_Warning()
+    {
+        var (db, _, tenant, sam) = await OrganisationAsync();
+        await using var _ = db;
+        var tenantMock = new Mock<ICurrentTenant>();
+        tenantMock.Setup(t => t.TenantId).Returns(tenant);
+
+        async Task<IReadOnlyCollection<string>> RunAsync(bool filtered)
+        {
+            var logs = new CapturedLogs();
+            var services = new ServiceCollection()
+                .AddLogging(b => { b.SetMinimumLevel(LogLevel.Trace).AddProvider(logs); if (filtered) b.QuietEmploymentHeroClient(); })
+                .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
+                .AddSingleton(db).AddSingleton(tenantMock.Object).AddSingleton(Keys);
+            services.AddHttpClient<EmploymentHeroClient>(c => c.Timeout = TimeSpan.FromSeconds(30))
+                .RedactLoggedHeaders(new[] { "Authorization" }).ConfigurePrimaryHttpMessageHandler(() => Eh());
+            await using var provider = services.BuildServiceProvider();
+            var controller = ActivatorUtilities.CreateInstance<PortalPayslipsController>(provider);
+            controller.ControllerContext = new ControllerContext { HttpContext = HttpFor(sam.Id, "SupportWorker") };
+            await controller.Pdf(9001, CancellationToken.None);
+            return logs.Messages.ToArray();
+        }
+
+        Assert.Contains(await RunAsync(filtered: false), m => m.Contains("/document/payslip/9001"));   // the capture is real
+        Assert.DoesNotContain(await RunAsync(filtered: true), m => m.Contains("/document/payslip"));
     }
 
     [Fact]
