@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { TONE } from '@/lib/tone'
 import { mockUseDashboard, mockUseParticipantAlertsAggregate } from './dashboard/dashboardHookMocks'
 import { installDashboardDefaults, renderPage, summaryData, asRole } from './dashboard/dashboardTestKit'
@@ -69,9 +69,9 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     })
     renderPage()
 
-    // The summary tile keeps its established label; the compact detail heading now carries the item count.
-    expect(screen.getAllByText('Critical Participant Alerts')).toHaveLength(1)
-    expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
+    // A loaded count has no band tile (card42): the disclosure heading carries it, and its rows are one press away.
+    expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).getByRole('button'))
     expect(screen.getByText('Jamie Smith')).toBeInTheDocument()
     expect(screen.getByText('NDIS plan end date has passed')).toBeInTheDocument()
     // Only the Critical-severity alert is surfaced — the Warning-only participant is excluded.
@@ -112,6 +112,40 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     // The card shows the alert type in the same human wording as the label map, alongside the message.
     expect(screen.getByText('Open serious incident')).toBeInTheDocument()
     expect(screen.getByText('QSC report overdue')).toBeInTheDocument()
+  })
+
+  it('a loaded critical count is a collapsed disclosure, not a band tile (card42 T5)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    const critical = (message: string) => ({ type: 'plan-expired', severity: 'Critical', message, deepLinkTab: 'details', linkTo: null })
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [
+        { participantId: 'p1', participantName: 'Jamie Smith', isActive: true, alerts: [critical('Plan ended'), critical('No plan manager')], criticalCount: 2, warningCount: 0, infoCount: 0 },
+        { participantId: 'p2', participantName: 'Alex Rivera', isActive: true, alerts: [critical('No funding')], criticalCount: 1, warningCount: 0, infoCount: 0 },
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
+    const toggle = within(screen.getByRole('heading', { name: 'Critical participant alerts (3)' })).getByRole('button')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveAttribute('type', 'button')
+    const panel = document.getElementById(toggle.getAttribute('aria-controls')!)!
+    expect(panel).not.toBeVisible()
+    expect(screen.queryByRole('link', { name: /Jamie Smith/ })).toBeNull()
+    expect(screen.getByText('across 2 participants')).toBeVisible()
+    expect(screen.getAllByRole('link', { name: 'View All' })[0]).toHaveAttribute('href', '/participants')
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(panel).toBeVisible()
+    expect(screen.getAllByRole('link', { name: /Jamie Smith/ })).toHaveLength(2)
+    expect(screen.getByRole('link', { name: /Alex Rivera/ })).toHaveAttribute('href', '/participants/p2?tab=details')
+    expect(screen.getByText('No funding')).toBeVisible()
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(panel).not.toBeVisible()
   })
 
   it('has no tile and no list section when there are no Critical alerts: the band names the item among the clear ones', () => {
@@ -161,9 +195,9 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     expect(screen.getByText('Jamie Smith')).toBeInTheDocument()
     expect(screen.queryByText('Churned Client')).not.toBeInTheDocument()
 
-    // Tile count reflects only the active participant's Critical alert (1), not both (2).
-    expect(screen.getByText('1')).toBeInTheDocument()
-    expect(screen.queryByText('2')).not.toBeInTheDocument()
+    // The count reflects only the active participant's Critical alert (1), not both (2).
+    expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Critical participant alerts (2)' })).not.toBeInTheDocument()
   })
 
   it('does not claim "All clear" while the alerts request is still loading (a false negative would be worse than a blank tile)', () => {

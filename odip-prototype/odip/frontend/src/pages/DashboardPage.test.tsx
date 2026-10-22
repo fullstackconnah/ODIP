@@ -21,7 +21,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     showAll()
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER)
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Critical Participant Alerts'))
     // The band is the only region: one landmark, named by what it is for.
     expect(screen.getAllByRole('region')).toHaveLength(1)
     expect(clearRow()).toBeNull()
@@ -38,7 +38,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     }))
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Missing Vehicles' && label !== 'Budgets at risk'))
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical Participant Alerts', 'Missing Vehicles', 'Budgets at risk'].includes(label)))
     expect(screen.queryByRole('group', { name: /Missing Vehicles/ })).not.toBeInTheDocument()
     // No budget is in force for anybody here, so the band does not name Budgets at risk at all: it cannot say it checked what nobody recorded. The other zero is a name in the row.
     expect(clearRow()).toHaveTextContent('All clear on trips missing vehicles')
@@ -115,8 +115,8 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     showAll()
     renderPage()
 
-    expect(within(tileFor('Critical Participant Alerts')).getByText('3')).toBeInTheDocument()
-    expect(tileFor('Critical Participant Alerts')).toHaveTextContent('Critical alerts across 2 participants.')
+    expect(screen.getByRole('heading', { name: 'Critical participant alerts (3)' })).toBeInTheDocument()
+    expect(screen.getByText('across 2 participants')).toBeInTheDocument()
     expect(within(tileFor('Qualification Issues')).getByText('3')).toBeInTheDocument()
     expect(tileFor('Qualification Issues')).toHaveTextContent('Expired, undated or due within 30 days, across 2 staff members.')
   })
@@ -129,8 +129,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     })
     renderPage()
 
-    expect(tileFor('Critical Participant Alerts')).toHaveTextContent('Critical alerts across 1 participant.')
-    expect(within(tileFor('Critical Participant Alerts')).getByText('1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
   })
 })
 
@@ -138,7 +137,6 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
   // [label, the honest line at 3, the link's text, where it goes]. The Missing counts are of the trips the server calls upcoming (start today or within 60 days).
   const EXPECTED = [
     ['Qualification Issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications'],
-    ['Critical Participant Alerts', 'Critical alerts across 2 participants.', 'Review participants', '/participants'],
     ['Budgets at risk', '3 participants: 2 over, 1 forecast to go over', 'Review budgets', '/budgets'],
     ['Overdue', 'Tasks past their due date and still open.', 'Open overdue tasks', '/tasks?status=Overdue'],
     ['Missing Accommodation', 'Trips start within 60 days with no accommodation reserved.', 'Open trips', '/trips'],
@@ -224,7 +222,8 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     expect(tileFor('Missing Vehicles')).toHaveTextContent('Trip starts within 60 days with no vehicle assigned.')
     expect(tileFor('Missing Staff')).toHaveTextContent('Trip starts within 60 days with no staff assigned.')
     expect(tileFor('Qualification Issues')).toHaveTextContent('across 1 staff member.')
-    expect(tileFor('Critical Participant Alerts')).toHaveTextContent('across 1 participant.')
+    expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
+    expect(screen.getByText('across 1 participant')).toBeInTheDocument()
   })
 
   it('states the warning window the Qualifications page uses (30 days unless the settings say otherwise), with the noun agreeing', () => {
@@ -251,7 +250,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     renderPage()
 
     // danger -> the error container; warning -> the warning container (the trip glance strip's own tints).
-    const danger = ['Qualification Issues', 'Critical Participant Alerts', 'Budgets at risk', 'Overdue', 'QSC Overdue']
+    const danger = ['Qualification Issues', 'Budgets at risk', 'Overdue', 'QSC Overdue']
     const warning = ['Missing Accommodation', 'Missing Vehicles', 'Missing Staff', 'Open Incidents', 'Pending Leave', 'Shift Completions']
     for (const label of danger) {
       expect(tileFor(label)).toHaveAttribute('data-attention', 'error')
@@ -415,7 +414,7 @@ describe('DashboardPage — the All clear row and field name the items by nouns'
     showAll()
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER)
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Critical Participant Alerts'))
     expect(screen.getByRole('group', { name: 'Overdue 3' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'QSC Overdue 3' })).toBeInTheDocument()
   })
@@ -429,7 +428,7 @@ describe('DashboardPage — needs-attention band: accessibility', () => {
     expect(screen.getByRole('region', { name: 'Alerts' })).toBe(band())
     for (const link of within(band()).getAllByRole('link')) expect(link).toHaveAccessibleName()
     const names = within(band()).getAllByRole('group').map((group) => group.getAttribute('aria-label'))
-    expect(names).toEqual(FULL_ORDER.map((label) => `${label} 3`))
+    expect(names).toEqual(FULL_ORDER.filter((label) => label !== 'Critical Participant Alerts').map((label) => `${label} 3`))
   })
 
   it('floors every action link at --tap-min and makes the whole tile its hit area, so it keeps a 44px target on touch', () => {
@@ -448,7 +447,7 @@ describe('DashboardPage — needs-attention band: accessibility', () => {
     renderPage()
 
     expect(band().innerHTML).not.toMatch(/text-(?:xl|2xl|3xl|4xl|5xl|6xl|\[(?:1[0-2]|1[5-9]|[2-9]\d)px\]|\[0?\.\d+rem\])/)
-    expect(band().querySelectorAll('.text-display')).toHaveLength(11)
+    expect(band().querySelectorAll('.text-display')).toHaveLength(10)
   })
 
   it('still has exactly one h1 whatever the band shows', () => {

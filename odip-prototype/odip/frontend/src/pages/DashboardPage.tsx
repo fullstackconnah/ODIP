@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
 import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue, useModuleVisibility } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
@@ -93,6 +93,9 @@ export default function DashboardPage() {
   const groups = useDecisionGroups(gates, { viewerId: id, today, warningDays, mayCloseBudgetReview: isAdmin || isSuperAdmin, staff })
   const decision = useDecisionState()
   const [hasRecovery, setHasRecovery] = useState(false)
+  // The Critical participant alerts disclosure: collapsed on every visit; its header carries what the band tile did (card42 §3.2).
+  const [alertsOpen, setAlertsOpen] = useState(false)
+  const alertsPanelId = useId()
   // A queue is counted in the band only where its group is not shown (call 6); a viewer with the group reads the same requests there.
   const pendingLeave = usePendingLeaveQueue(canApproveLeave && !gates.leave)
   const pendingCompletions = usePendingCompletionQueue(canReviewCompletions && !gates.completions)
@@ -132,6 +135,8 @@ export default function DashboardPage() {
   // Alert beside this tile, so that one alert (and only that one) is left out of the Critical count and list: the tile, in the danger tone, is where "over" reaches the dashboard. The NDIA's
   // "the funds ran out" alert is a different fact and stays with the Critical alerts.
   const budgetRisk = budgetsAtRisk(alertsAggregate)
+  // A loaded or held list of Critical alerts is shown as the disclosure under the band, so the band does not repeat it as a tile (card42).
+  const criticalListed = canViewAlerts && criticalAlertItems.length > 0
 
   // The needs-attention band: every item the dashboard counts, in a fixed order, handed to the band, which makes a tile of each one that needs somebody and names the rest
   // in one "All clear" row. An item is left out only by what the role can open: Qualification Issues needs the Qualifications page, the alerts item needs canViewAlerts,
@@ -162,7 +167,9 @@ export default function DashboardPage() {
       error: staffError,
     })
   }
-  if (canViewAlerts) {
+  // Only a count that is not known yet stays a tile (the en dash while loading or after a failure); a zero is named in the All clear row; a loaded positive is the
+  // disclosure under the band instead.
+  if (canViewAlerts && (!criticalListed || alertsLoading || alertsError)) {
     attentionItems.push({
       label: 'Critical Participant Alerts',
       noun: 'critical participant alerts',
@@ -257,7 +264,7 @@ export default function DashboardPage() {
     })
   }
   // Every item has data and is at zero: the band is clear.
-  const bandClear = !!d && attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
+  const bandClear = !!d && !criticalListed && attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
   // "Nothing needs you" only when it is true: every group and every alert has data and is at zero, and no consequence notice is waiting (SHAPE §6).
   const groupsClear = !hasRecovery && groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
   const pageClear = bandClear && groupsClear
@@ -298,18 +305,32 @@ export default function DashboardPage() {
               <>
                 <AttentionBand items={attentionItems} />
 
-                {/* Critical Participant Alerts — coordinator/admin-facing (task 6c). The same detail as the band's alerts tile, listed: it takes the panels' own heading and
-                    link size (the title step, 12px "View All") rather than the 18px heading it used to have, so the band above stays the loudest thing on the page. */}
-                {canViewAlerts && criticalAlertItems.length > 0 && (
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold">Critical participant alerts ({criticalAlertItems.length})</h3>
-                      <Link to="/participants" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
+                {/* Critical participant alerts (task 6c, card42): an APG disclosure under the band, collapsed by default. Its header does the old tile's job (severity,
+                    count, how many participants, the link); the rows are one press away. Not <details>: an h3 inside <summary> drops out of heading navigation. */}
+                {criticalListed && (
+                  <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
+                    <div className="flex flex-wrap items-center gap-x-2 px-[var(--card-pad)]">
+                      <h3 className="text-sm font-semibold">
+                        <button type="button" aria-expanded={alertsOpen} aria-controls={alertsPanelId} onClick={() => setAlertsOpen((open) => !open)}
+                          className="flex min-h-[var(--control-h)] items-center gap-2 rounded-[var(--radius-sm)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
+                          <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-[var(--color-muted-foreground)] transition-transform duration-150 ease-out ${alertsOpen ? 'rotate-90' : ''}`} />
+                          <span aria-hidden="true">Critical participant alerts</span>
+                          <span aria-hidden="true" className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-bold ${ALERT_SEVERITY_STYLES.Critical.bg} ${ALERT_SEVERITY_STYLES.Critical.text}`}>
+                            <ALERT_SEVERITY_STYLES.Critical.icon className="h-3 w-3" /> {criticalAlertItems.length}
+                          </span>
+                          <span className="sr-only">Critical participant alerts ({criticalAlertItems.length})</span>
+                        </button>
+                      </h3>
+                      {/* Outside the heading, so its name stays the count: 3 alerts read against the 2 flagged rows on the Participants table. */}
+                      <span className="text-[13px] text-[var(--color-muted-foreground)] max-md:order-last max-md:basis-full max-md:pb-2 max-md:pl-6">
+                        across {plural(criticalParticipantCount, 'participant')}
+                      </span>
+                      <Link to="/participants" className={`${TAP_FLOOR} ml-auto text-xs font-bold text-[var(--color-primary)] hover:underline`}>
                         View All
                       </Link>
                     </div>
 
-                    <div className="divide-y divide-[var(--color-border)] rounded-[var(--radius-md)] border border-[var(--color-border)]">
+                    <div id={alertsPanelId} hidden={!alertsOpen} className="divide-y divide-[var(--color-border)] border-t border-[var(--color-border)]">
                       {criticalAlertItems.slice(0, 6).map(({ participantId, participantName, alert }) => {
                         const style = ALERT_SEVERITY_STYLES.Critical
                         const Icon = style.icon
