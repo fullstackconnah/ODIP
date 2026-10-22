@@ -30,7 +30,7 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     // The rows this interceptor added to a context for its current save attempt. A failed attempt rolls the database back but leaves them
-    // tracked as Added, so a caller that retries on the same context would save them AND a freshly built second set.
+    // tracked as Added, so a retry on the same context would save them AND a freshly built second set: the next attempt drops them first.
     private readonly ConditionalWeakTable<DbContext, List<AuditLog>> _pending = new();
 
     public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
@@ -45,6 +45,7 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
     {
         if (eventData.Context is not null)
         {
+            DetachPending(eventData.Context);
             var auditEntries = BuildAuditEntries(eventData.Context);
             if (auditEntries.Count > 0)
                 eventData.Context.Set<AuditLog>().AddRange(auditEntries);
@@ -58,18 +59,6 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
     {
         if (eventData.Context is not null) _pending.Remove(eventData.Context);
         return base.SavedChangesAsync(eventData, result, cancellationToken);
-    }
-
-    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
-    {
-        DetachPending(eventData.Context);
-        return base.SaveChangesFailedAsync(eventData, cancellationToken);
-    }
-
-    public override Task SaveChangesCanceledAsync(DbContextEventData eventData, CancellationToken cancellationToken = default)
-    {
-        DetachPending(eventData.Context);
-        return base.SaveChangesCanceledAsync(eventData, cancellationToken);
     }
 
     private void DetachPending(DbContext? context)

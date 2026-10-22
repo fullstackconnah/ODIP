@@ -74,7 +74,8 @@ public class AuditInterceptorRetryPostgresTests : IClassFixture<PostgresFixture>
         await using var _ = db;
 
         await using var read = Open(db.Database.GetConnectionString()!);
-        Assert.Single(await read.AuditLogs.Where(a => a.EntityId == participantId && a.Action == AuditAction.Updated).ToListAsync());
+        var rows = await read.AuditLogs.Where(a => a.EntityId == participantId && a.Action == AuditAction.Updated).ToListAsync();
+        Assert.True(rows.Count == 1, string.Join(" | ", rows.Select(r => $"{r.Id} {r.EntityType} {r.Changes}")));
     }
 
     [SkippableFact]
