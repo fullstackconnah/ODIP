@@ -1,7 +1,7 @@
 import { addDays, addWeeks, format, isValid, parseISO, startOfWeek } from 'date-fns'
 import { formatShiftTime, parseApiDate } from '@/lib/utils'
 import { formatRatio } from '@/lib/format'
-import type { ShiftDto } from '@/api/types'
+import type { ShiftDto, RosterBoardDto } from '@/api/types'
 
 // Re-exported so existing `from '../lib/roster'` imports across the rostering feature keep
 // working unchanged — the implementation itself now lives in the shared lib alongside
@@ -247,4 +247,12 @@ export function shiftSource(shift: Pick<ShiftDto, 'shiftPatternId' | 'fromAgreem
   if (shift.fromAgreement) return { kind: 'agreed', word: 'Scheduled', title: shift.sourceDraftVersion !== undefined ? `From agreement v${shift.sourceDraftVersion}` : 'From an agreement' }
   if (shift.shiftPatternId) return { kind: 'pattern', word: 'Scheduled', title: 'From a pattern' }
   return { kind: 'adhoc', word: 'Ad hoc', title: 'Ad hoc: not from an agreement or a pattern' }
+}
+
+/** Every shift currently on the board, across whichever grouping is loaded: resolves an exception's shiftId back to a full ShiftDto, and tells whether a shift is still where it was. */
+export function allBoardShifts(board: RosterBoardDto | undefined): ShiftDto[] {
+  if (!board) return []
+  return board.groupBy === 'Participant'
+    ? board.participantRows.flatMap(r => r.shifts)
+    : [...board.unfilled, ...board.staffRows.flatMap(r => r.shifts)]
 }

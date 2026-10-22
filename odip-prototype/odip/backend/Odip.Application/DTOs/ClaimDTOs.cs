@@ -87,7 +87,9 @@ public record UpdateClaimDto
 
 public record UpdateClaimLineItemDto
 {
+    [Range(typeof(decimal), "0.01", "1000", ParseLimitsInInvariantCulture = true)]
     public decimal? Hours { get; init; }
+    [Range(typeof(decimal), "0", "10000", ParseLimitsInInvariantCulture = true)]
     public decimal? UnitPrice { get; init; }
     [StringLength(50)]
     public string? SupportItemCode { get; init; }
@@ -97,6 +99,7 @@ public record UpdateClaimLineItemDto
     public ClaimLineItemStatus? Status { get; init; }
     [StringLength(1000)]
     public string? RejectionReason { get; init; }
+    [Range(typeof(decimal), "0", "1000000", ParseLimitsInInvariantCulture = true)]
     public decimal? PaidAmount { get; init; }
 }
 

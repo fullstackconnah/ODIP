@@ -46,6 +46,8 @@ export type NavLeaf = {
   requiresParticipantLifecycleMutation?: boolean
   /** Roles that can open the page but have somewhere better to start (the Dashboard, for a SupportWorker: My shifts). */
   hideForRoles?: UserRole[]
+  /** Only for an organisation connected to Employment Hero (module visibility). */
+  requiresEmploymentHero?: boolean
   matchActive?: NavMatch
   badge?: NavBadge
   bar?: NavBarSlot
@@ -85,9 +87,13 @@ export const navItems: NavEntry[] = [
     label: 'My shifts',
     msIcon: 'calendar_today',
     page: 'portal',
+    // /portal/payslips is its own leaf, which would make /portal exact-only (isExactMatchOnly) and drop My shifts off its own sub-pages.
+    matchActive: path => path === '/portal' || (path.startsWith('/portal/') && !path.startsWith('/portal/payslips')),
     badge: { source: 'pendingWitness', noun: 'witness approval' },
     bar: { order: 1, audience: 'field' },
   },
+  // Staff read their own payslips from Employment Hero; not for a SuperAdmin (the API refuses them). No bar slot: on a phone it sits under More.
+  { to: '/portal/payslips', label: 'My payslips', msIcon: 'receipt_long', page: 'portal-payslips', requiresEmploymentHero: true, hideForRoles: ['SuperAdmin'] },
   {
     id: 'trips',
     label: 'Trips',
@@ -99,9 +105,6 @@ export const navItems: NavEntry[] = [
       { to: '/bookings', label: 'Bookings', msIcon: 'description', page: 'bookings' },
       { to: '/accommodation', label: 'Accommodation', msIcon: 'home_work', page: 'accommodation' },
       { to: '/vehicles', label: 'Vehicles', msIcon: 'directions_car', page: 'vehicles' },
-      // Today's tasks are trip-bound (a task needs a trip; the create form says so), so they live with the trips. The obligation
-      // engine is making them a general work queue: if that lands, Tasks goes back to a top-level entry (one line to move).
-      { to: '/tasks', label: 'Tasks', msIcon: 'checklist', page: 'tasks' },
     ],
   },
   {
@@ -147,6 +150,8 @@ export const navItems: NavEntry[] = [
       { to: '/qualifications', label: 'Qualifications', msIcon: 'health_and_safety', page: 'qualifications' },
     ],
   },
+  // Tasks are a general work queue (a task needs no trip), so they sit outside the Trips group. No bar slot: the bar holds four, so the phone reaches it through More.
+  { to: '/tasks', label: 'Tasks', msIcon: 'checklist', page: 'tasks' },
   // Every participant's budget for the funding period running now, sorted by risk (budget phase 2b). Money, so its own page key: SupportWorker's allow-list does not name it and ReadOnly is refused it.
   { to: '/budgets', label: 'Budgets', msIcon: 'account_balance_wallet', page: 'budgets' },
   { to: '/incidents', label: 'Incidents', msIcon: 'emergency', page: 'incidents', bar: { order: 5, audience: 'field' } },
@@ -222,10 +227,10 @@ export function resolveNav(entries: NavEntry[], access: NavAccess, visibility?: 
   const resolved: ResolvedEntry[] = []
   for (const entry of entries) {
     if (!isGroup(entry)) {
-      if (isLeafVisible(entry, access) && !isWorkspaceHidden(entry, visibility)) resolved.push({ kind: 'link', leaf: entry, bar: entry.bar })
+      if (isLeafVisible(entry, access) && !isWorkspaceHidden(entry, visibility) && !needsEmploymentHero(entry, visibility)) resolved.push({ kind: 'link', leaf: entry, bar: entry.bar })
       continue
     }
-    const children = entry.children.filter(child => isLeafVisible(child, access) && !isWorkspaceHidden(child, visibility))
+    const children = entry.children.filter(child => isLeafVisible(child, access) && !isWorkspaceHidden(child, visibility) && !needsEmploymentHero(child, visibility))
     if (children.length === 0) continue
     if (children.length === 1) resolved.push({ kind: 'link', leaf: children[0], bar: entry.bar ?? children[0].bar })
     else resolved.push({ kind: 'group', group: entry, children })
@@ -309,4 +314,9 @@ export const NAV_IDLE = 'text-[var(--color-secondary)] font-medium hover:bg-[var
 export function isWorkspaceHidden(leaf: NavLeaf, visibility?: ModuleVisibilityDto): boolean {
   return (leaf.page === 'accommodation' && visibility?.hiddenAccommodation === true)
     || (leaf.page === 'vehicles' && visibility?.hiddenVehicles === true)
+}
+
+/** A leaf only a connected organisation has. Hidden until the answer is known (`!== true`), so an unconnected organisation never sees it flash. Not a hidden workspace: AppLayout lists those under "other workspaces". */
+export function needsEmploymentHero(leaf: NavLeaf, visibility?: ModuleVisibilityDto): boolean {
+  return leaf.requiresEmploymentHero === true && visibility?.employmentHeroConnected !== true
 }

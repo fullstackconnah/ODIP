@@ -181,6 +181,24 @@ describe('PatternsPage — deactivating a pattern the server refuses', () => {
   })
 })
 
+// The panel has no Active control, so Save sends the flag the list row has now (a deactivation made since the panel opened stays).
+describe('PatternsPage — saving the panel keeps the current active flag', () => {
+  it("sends the list row's isActive, not the one the panel opened with", async () => {
+    const user = userEvent.setup()
+    mockUsePatterns.mockReturnValue({ data: [makePattern({ isActive: true })], isLoading: false, isError: false, refetch: vi.fn() })
+    mockUpdateMutateAsync.mockResolvedValue(makePattern())
+    const { rerender } = render(<MemoryRouter><PatternsPage /></MemoryRouter>)
+
+    await user.click(screen.getByRole('button', { name: "Edit Mia Chen's Monday 9am–5pm pattern" }))
+    mockUsePatterns.mockReturnValue({ data: [makePattern({ isActive: false })], isLoading: false, isError: false, refetch: vi.fn() })
+    rerender(<MemoryRouter><PatternsPage /></MemoryRouter>)
+    await user.type(screen.getByLabelText('Notes'), ' again')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-1', data: expect.objectContaining({ notes: 'Weekly respite again', isActive: false }) })
+  })
+})
+
 // Plan builder phase D: the patterns an approved agreement made are in the list like any other, badged with the version they came from and with what they ask of a worker.
 describe('PatternsPage — patterns made by an agreement', () => {
   const agreement = (overrides: Partial<ShiftPatternDto> = {}) => makePattern({

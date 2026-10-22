@@ -963,7 +963,8 @@ public class StaffAssignmentsController : ControllerBase
         // days, so they don't get a PUBLIC_HOLIDAY finding — so loading them for a trip assignment
         // check would be a pure-waste DB round trip. Leaving the parameter unset defaults it to null.
         var ctx = new RosterCheckContext(staff, null, staffShiftsInWindow, Array.Empty<Shift>(),
-            otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold);
+            otherTripAssignments, availability, CompatibilityLevel.Allowed,
+            RosterAvailability.WeeklyHoursFor(await RosterAvailability.WeeklyHoursAsync(_db, new[] { staff.TenantId }, ct), staff.TenantId));
 
         return _conflictService.CheckStaffAssignment(assignmentStart, assignmentEnd, excludeAssignmentId, ctx).ToList();
     }

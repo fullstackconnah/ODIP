@@ -34,7 +34,7 @@ public class ProviderSettingsController : ControllerBase
         var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
         if (s == null) return Ok(ApiResponse<ProviderSettingsDto?>.Ok(null));
 
-        // A Coordinator reads the settings but never the bank account: the UI hides it, and the API must not send it either.
+        // A Coordinator reads the settings without the bank account: Settings hides it and this API doesn't send it. Invoice PDFs still print it by design (payment details; InvoiceService).
         var hideBank = User?.IsInRole("Coordinator") == true && !User.IsInRole("Admin") && !User.IsInRole("SuperAdmin");
 
         return Ok(ApiResponse<ProviderSettingsDto>.Ok(new ProviderSettingsDto

@@ -1479,12 +1479,16 @@ public record UpdateStaffDto : CreateStaffDto { }
 public record AppSettingsDto
 {
     public int QualificationWarningDays { get; init; }
+    public int WeeklyHoursWarning { get; init; }
 }
 
 public record UpdateAppSettingsDto
 {
     [System.ComponentModel.DataAnnotations.Range(1, 365)]
     public int QualificationWarningDays { get; init; }
+    /// <summary>Whole hours a week before the roster warns; left out keeps the stored figure.</summary>
+    [System.ComponentModel.DataAnnotations.Range(1, 100)]
+    public int? WeeklyHoursWarning { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1702,8 +1706,8 @@ public record TaskDto
 
 public record CreateTaskDto
 {
-    [Required]
-    public Guid TripInstanceId { get; init; }
+    /// <summary>Optional: a task needs no trip (house upkeep, renewals). When sent it must be the caller's own trip.</summary>
+    public Guid? TripInstanceId { get; init; }
     public Guid? ParticipantBookingId { get; init; }
     public Guid? AccommodationReservationId { get; init; }
     public Guid? VehicleAssignmentId { get; init; }
@@ -2450,21 +2454,6 @@ public record UpdateAdminUserDto
     /// (<see cref="Odip.Application.Common.AddressConfirmation"/>). Without it such a change is refused with a 400; an address the row already holds never asks.
     /// </summary>
     public bool AddressConfirmed { get; init; }
-    public Position? Position { get; init; }
-    public string? Mobile { get; init; }
-    public string? Region { get; init; }
-    public bool IsDriverEligible { get; init; }
-    public bool IsFirstAidQualified { get; init; }
-    public bool IsMedicationCompetent { get; init; }
-    public bool IsManualHandlingCompetent { get; init; }
-    public bool IsOvernightEligible { get; init; }
-    public DateOnly? FirstAidExpiryDate { get; init; }
-    public DateOnly? DriverLicenceExpiryDate { get; init; }
-    public DateOnly? ManualHandlingExpiryDate { get; init; }
-    public DateOnly? MedicationCompetencyExpiryDate { get; init; }
-    public string? WorkerScreeningNumber { get; init; }
-    public DateOnly? WorkerScreeningExpiryDate { get; init; }
-    public string? Notes { get; init; }
 }
 
 // ── Tenant Summary DTO (includes user count) ──────────────────────────────
@@ -2559,6 +2548,8 @@ public record ModuleVisibilityDto
 {
     public bool HiddenAccommodation { get; init; }
     public bool HiddenVehicles { get; init; }
+    /// <summary>Whether payslips (and, later, payroll pages) apply: presentation only, the server refuses on its own.</summary>
+    public bool EmploymentHeroConnected { get; init; }
 }
 
 public record UpdateModuleVisibilityDto

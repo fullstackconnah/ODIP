@@ -30,6 +30,7 @@ namespace Odip.Api.Controllers;
 public class EmploymentHeroController : ControllerBase
 {
     public const string ChooseOrganisation = "Choose an organisation to view as first: an integration belongs to one organisation.";
+    public const string LinkOwnAccountMessage = "Ask another Admin to link your own account.";
 
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
@@ -190,6 +191,9 @@ public class EmploymentHeroController : ControllerBase
         var item = await _db.EmploymentHeroAttentions.FirstOrDefaultAsync(a => a.Id == id && a.TenantId == tenantId && a.Kind == EmploymentHeroAttentionKind.NotLinked, ct);
         var person = item?.UserId is { } userId ? await _db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId, ct) : null;
         if (item is null || person is null) return NotFound(ApiResponse<EmploymentHeroStatusDto>.Fail("That item is no longer waiting. Refresh the page."));
+        // My payslips shows a person the payslips of the EH employee they are linked to, so the link needs a second person behind it.
+        if (Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var callerId) && callerId == person.Id)
+            return StatusCode(403, ApiResponse<EmploymentHeroStatusDto>.Fail(LinkOwnAccountMessage));
         if (person.ExternalPayrollId is not null) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail($"{person.FullName} is already linked."));
         var holder = await _db.Users.FirstOrDefaultAsync(u => u.TenantId == tenantId && u.ExternalPayrollId == employeeId, ct);
         // The first sync may have added this person a second time (another name or email). While that duplicate has never signed in, Link takes the id from it.
@@ -219,6 +223,8 @@ public class EmploymentHeroController : ControllerBase
                 {
                     holder.ExternalPayrollId = null;
                     holder.IsActive = false;
+                    // The address stays unique even on an archived row, so it would block the person's own sync (EH's email is the duplicate's). Never signed in, so nothing relies on it.
+                    holder.Email = $"{holder.Username}@placeholder.local";
                     await _db.SaveChangesAsync(ct);   // first, on its own: the payroll-id index allows one holder at a time
                 }
                 person.ExternalPayrollId = employeeId;

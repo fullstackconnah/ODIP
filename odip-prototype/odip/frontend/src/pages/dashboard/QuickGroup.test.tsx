@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -6,6 +6,11 @@ import { ROW_ACTIONS_CARD } from '@/components/tapArea'
 import { QuickGroup } from './QuickGroup'
 import { useDecisionState } from './useDecisionState'
 import type { ActionOutcome, GroupModel, QuickForm, QuickRow, RowAction } from './quickGroupModel'
+
+// The bar and the table header switch on the house breakpoint hook; jsdom reads as a phone, so a desktop case flips this (SHAPE card42 §5).
+const screenSize = vi.hoisted(() => ({ belowMd: true }))
+vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => screenSize.belowMd }))
+beforeEach(() => { screenSize.belowMd = true })
 
 function Harness({ model }: { model: GroupModel }) {
   const state = useDecisionState()
@@ -453,7 +458,6 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))
     expect(all.indeterminate).toBe(true)
-    expect(screen.getByText('1 selected')).toBeInTheDocument()
     // Once ticked, the bar's box takes the row boxes' touch pad (size-4 + TAP_AREA), so the count sits where "Select all" was (finish fix 2).
     expect(all.closest('label')).toHaveClass('min-h-[var(--control-h)]')
 
@@ -481,6 +485,47 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     expect(screen.queryByRole('button', { name: /Approve \d+ selected/ })).not.toBeInTheDocument()
   })
 
+  it('selection never touches the table: the header holds only the box, the count, Clear and the action sit in the bar (card42 T3)', async () => {
+    screenSize.belowMd = false
+    const first = deferred()
+    const { unmount } = render(<Harness model={model({ count: 3, rows: [tapRow('a', () => first.promise), tapRow('b'), tapRow('c')] })} />)
+    const heads = () => screen.getAllByRole('columnheader').map((th) => th.textContent)
+    const before = heads()
+    expect(before).toEqual(['Select all shown leave requests', 'Staff', 'Type', 'Dates', 'Note', ''])
+    expect(screen.getByText('None selected')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))
+    expect(heads()).toEqual(before)
+    expect(screen.getByText('1 selected').closest('table')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Approve 1 selected leave request' }).closest('table')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Clear' }).closest('table')).toBeNull()
+    unmount()
+
+    screenSize.belowMd = true
+    // A fresh run of its own: the first render is unmounted, and nothing from it carries over.
+    const second = deferred()
+    render(<Harness model={model({ count: 3, rows: [tapRow('a', () => second.promise), tapRow('b'), tapRow('c')] })} />)
+    expect(screen.getAllByRole('columnheader')[0]).toHaveTextContent(/^Select$/)
+    expect(screen.queryByText('None selected')).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown leave requests' }))
+    expect(screen.queryByText(/^\d+ selected$/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 3 selected leave requests' }))
+    confirmRun('Approve 3')
+    await screen.findByRole('button', { name: 'Approving 1 of 3…' })
+    // On a phone Clear is not drawn while a run goes: the running label needs the room, and Clear is held then anyway.
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
+    await act(async () => { second.resolve({ announce: 'Approved Person a.' }) })
+  })
+
+  it('the bar still sticks below xl, and a tabbed-to control clears it (card42 T4)', () => {
+    render(<Harness model={model({ count: 2, rows: [tapRow('a'), tapRow('b')] })} />)
+    const bar = screen.getByRole('checkbox', { name: 'Select all shown leave requests' }).closest('.max-xl\\:sticky')
+    expect(bar).not.toBeNull()
+    expect(bar).toHaveClass('max-xl:top-12')
+    expect(document.querySelector('[data-quick-group]')!.className).toContain('max-xl:[&_:is(a,button,input,textarea)]:scroll-mt-[calc(3rem+var(--control-h)+1rem)]')
+  })
+
   it('runs the ticked rows one at a time in row order through their own taps, then ONE notice; decided rows leave together, a refused one stays', async () => {
     const first = deferred()
     const runA = vi.fn(() => first.promise)
@@ -503,7 +548,8 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     // The run holds the selection it took: every box, and the bar's controls (aria-disabled, so focus stays).
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person c' })).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: 'Select all shown leave requests' })).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByRole('button', { name: 'Clear' })).toHaveAttribute('aria-disabled', 'true')
+    // A phone does not draw Clear while a run goes (card42 §3.1); from md it stays, held (T3 covers both).
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
     await act(async () => first.resolve({ announce: 'Approved Person a.' }))
 
     await waitFor(() => expect(notice()).toHaveTextContent('Approved 2 leave requests'))
