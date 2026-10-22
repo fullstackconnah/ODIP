@@ -627,17 +627,20 @@ mutation hooks to it, so a decision here is the same decision as on the full pag
 - **A group** shows its first five rows and a link to the full page: "Open Leave" when every row is shown, "See all" when rows are cut. The link never
   carries a number; the pill does. A group at zero is a muted tab, named in one All clear row. A group still waiting (`awaitsData`) or failed is never
   clear: one line ("Loading leave requests…", or "Couldn't load leave requests." with Try again), and no rows until every request it makes has answered.
-- **The table** (from xl; house phone cards below it) is DataTable's box with one exception, this table's only: its header row is a Mist band
-  (`surface-container`, labels 12px/600 muted ink) and its subjects are 14px/600 (bolder, 2026-10-16). Whether DataTable follows is the owner's call.
+- **The table** (from md; house phone cards below it) is DataTable's own box: white, a 1px Ruled Line border, its standard header row (12px muted
+  labels, `--table-head-h`), subjects 14px/600. On a bulk tab the selection column's header is the select-all box from md (Bulk, below); the header row
+  holds nothing else of the selection, so ticking never changes a column.
 - **A row** is `--row-h` tall on one line from xl (subject, flags, facts, then at most two buttons at the right edge). Buttons are `Button size="sm"`,
   always visible, each named for its row. Olive means one tap decides: only Approve and Done are primary; Return, Decline, Review, Open and Update expiry
   are secondary.
 - **Bulk** (Completions, Leave, Tasks only; a row is safe when it has its olive one-tap button): a panel bar heads the tab, on the page paper 8px over the
-  table, its box over the row boxes and its button's right edge on the row buttons'. At rest: Select all (the shown safe rows) and **Complete all**
-  (`Button` md primary, one size up from the row buttons) with the true count of safe rows in the whole tab ("Approve all 12 clean", "Approve all 9",
-  "Mark all 7 done"; Completions sends the first 100 through approve-batch and says so). Ticked: the count, Clear and the one action valid for every ticked
-  row. A box column (the first track, 40px) carries a box only on safe rows; a row with its form open or a tap in flight has its box unticked and disabled.
-  Below xl the bar sticks under the app header inside its panel, with the Header Hairline shadow. Every run asks first (`ConfirmDialog`, the count in the
+  table; its content row is `--control-h` tall at rest, ticked and running, and its button's right edge sits on the row buttons'. Select all ticks the
+  shown safe rows only; there is no whole-tab action. ONE select-all box (`useIsBelowMd`, never a CSS-hidden twin): from md it heads the box column, its
+  label sr-only, and it is mixed while some rows are ticked; below md (no table header) it sits at the bar's left, "Select shown" at rest. At the bar's
+  right, in order: the status (13px muted, from md only: "None selected", "3 selected"), Clear (ghost, once ticked) and the one action valid for every ticked
+  row (`Button` md primary, "Approve 3", counting "Approving 1 of 3…" while it runs). A phone drops the status (the action carries the count) and does not
+  draw Clear while a run goes. A box column (the first track) carries a box only on safe rows; a row with its form open or a tap in flight has its box
+  unticked and disabled. Below xl the bar sticks under the app header inside its panel, with the Header Hairline shadow. Every run asks first (`ConfirmDialog`, the count in the
   title), counts on the bar's button, holds its rows, and ends in ONE notice (success when anything was decided; need review, stale and failures by name;
   Leave's overlaps rolled up) with focus moved onto it. No bulk Return or Decline: both take a reason.
 - **A tap** reads its "-ing" label and holds both buttons of its row (`aria-disabled`, so focus stays). On success the row leaves at once, the pill
@@ -662,7 +665,7 @@ terms, and a link to where it is fixed, a route that exists today:
 | Item | Tone | The line | The link |
 |---|---|---|---|
 | Qualification Issues (the Qualifications page) | danger | Expired, undated or due within 30 days, across 3 staff members. | Review qualifications, `/qualifications` |
-| Critical Participant Alerts (`canViewAlerts`) | danger | Critical alerts across 2 participants. | Review participants, `/participants` |
+| Critical Participant Alerts (`canViewAlerts`) | a tile only while its count is not known: the en dash, loading or "Couldn't load"; a zero is a name in the All clear row; a loaded count is the disclosure under the band (below), never a tile | Critical alerts across 2 participants. | Review participants, `/participants` |
 | Budgets at risk (`canViewAlerts` and the Budgets page) | danger when any pool is over, else warning | 2 participants: 1 over, 1 forecast to go over. A clause that is zero is dropped, and what is left is the whole line: "3 participants over", "1 participant forecast to go over". | Review budgets, `/budgets` |
 | Overdue | danger | Tasks past their due date and still open. | Open overdue tasks, `/tasks?status=Overdue` |
 | Missing Accommodation | warning | Trips start within 60 days with no accommodation reserved. | Open trips, `/trips` |
@@ -672,6 +675,8 @@ terms, and a link to where it is fixed, a route that exists today:
 | QSC Overdue | danger | Reportable incidents with no QSC report after 24 hours. | Review QSC reports, `/incidents?qsc=overdue` |
 | Pending Leave (`canApproveLeave`) | warning | Leave and unavailability requests waiting for a decision. | Review leave requests, `/rostering/leave` |
 | Shift Completions (`canReviewCompletions`) | warning | Submitted shifts waiting for review before they are billed. | Review completions, `/rostering/completions` |
+
+**Critical participant alerts** under the band (card42): a card whose header is an APG disclosure (`h3 > button[aria-expanded]`, collapsed on every visit, a 16px chevron turning 90° in 150ms), "Critical participant alerts" with the Critical severity pill and its count, then "across 2 participants" (13px muted, outside the heading, its own line on a phone) and View All (`/participants`, always visible). Open, it lists the first six alerts as before. It is drawn whenever alerts are held, so a failed refetch shows the "Couldn't load" tile above the held list, and the page is never all clear while it is drawn. With a loaded count the band has one tile fewer (10 at most).
 
 An item that became one of the viewer's decision groups (Qualification Issues: Staff compliance; Overdue: Tasks due; Open Incidents and QSC Overdue: Incidents; Pending Leave: Leave; Shift Completions: Shift completions) is left out for that viewer, and stays a tile for everyone else: ReadOnly keeps 7 possible tiles, a SuperAdmin with no organisation all 11, an Admin or Coordinator at most 5.
 
