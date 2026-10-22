@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ReceiptText } from 'lucide-react'
 import { useDownloadPayslip, useMyPayslips } from '@/api/hooks'
 import type { PortalPayslipDto } from '@/api/types'
@@ -29,13 +29,25 @@ export default function PortalPayslipsPage() {
   // One shared mutation holds only the latest press in `variables`, so the page keeps every in-flight pay run id itself.
   const [busy, setBusy] = useState<ReadonlySet<number>>(new Set())
   // The failed payslip is remembered with the list it failed under: a reloaded list clears it without an effect.
-  const [failed, setFailed] = useState<{ payslip: PortalPayslipDto; status?: number; list: unknown } | null>(null)
+  const [failed, setFailed] = useState<{ payslip: PortalPayslipDto; status?: number; message: string; list: unknown } | null>(null)
   const [announcement, setAnnouncement] = useState('')
 
   const { data, isLoading, error, refetch } = query
   const slips = data?.payslips ?? []
   const retrying = retryingAfterError(query)
   const failure = failed && failed.list === data ? failed : null
+
+  // The callout sits at the top, but the pressed row can be far down a long list (at 390 a card is ~138px): bring it into view, and only if it is off-screen.
+  const failureRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (failure) failureRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [failure])
+
+  // `failed.list === data` alone would keep the callout after a refresh that found the same list (react-query keeps the reference), so a settled refresh clears it.
+  async function refresh() {
+    await refetch()
+    setFailed(null)
+  }
 
   async function open(payslip: PortalPayslipDto) {
     if (busy.has(payslip.payRunId)) return
@@ -45,7 +57,7 @@ export default function PortalPayslipsPage() {
       setFailed(null)
       setAnnouncement(`${what(payslip).replace(/^p/, 'P')} downloaded.`)
     } catch (err) {
-      setFailed({ payslip, status: httpStatusOf(err), list: data })
+      setFailed({ payslip, status: httpStatusOf(err), message: extractErrorMessage(err, 'Try again in a few minutes.'), list: data })
       setAnnouncement('')
     } finally {
       setBusy(prev => {
@@ -115,13 +127,17 @@ export default function PortalPayslipsPage() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="My payslips" subtitle="From Employment Hero, newest first. ODIP doesn't keep a copy." />
       {failure && (
-        <Callout
-          tone="danger"
-          title={`Couldn't download the ${what(failure.payslip)}.`}
-          actions={<Button size="sm" variant="secondary" disabled={busy.has(failure.payslip.payRunId)} onClick={() => open(failure.payslip)}>Try again</Button>}
-        >
-          {failure.status === 404 ? 'Employment Hero no longer has it. Refresh the list.' : 'Try again in a few minutes.'}
-        </Callout>
+        <div ref={failureRef} className="max-xl:scroll-mt-16">
+          <Callout
+            tone="danger"
+            title={`Couldn't download the ${what(failure.payslip)}.`}
+            actions={failure.status === 404
+              ? <Button size="sm" variant="secondary" disabled={query.isFetching} onClick={refresh}>Refresh list</Button>
+              : <Button size="sm" variant="secondary" disabled={busy.has(failure.payslip.payRunId)} onClick={() => open(failure.payslip)}>Try again</Button>}
+          >
+            {failure.status === 404 ? 'Employment Hero no longer has it. Refresh the list.' : failure.message}
+          </Callout>
+        </div>
       )}
       {body}
       {/* Always mounted, so a screen reader hears the text change. */}

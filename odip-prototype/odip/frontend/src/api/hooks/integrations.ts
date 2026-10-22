@@ -19,12 +19,12 @@ export function useEmploymentHeroBusinesses() {
   return useMutation({ mutationFn: (apiKey: string) => apiPost<EmploymentHeroBusinessDto[]>(`${BASE}/businesses`, { apiKey }) })
 }
 
-/** A change to the connection or its staff: the card, the connected flag (provider settings) and the staff list all refresh. */
+/** A change to the connection or its staff: the card, the connected flag (provider settings), the staff list and the nav's module-visibility flag (My payslips) all refresh. */
 function useEmploymentHeroChange<V, R>(mutationFn: (variables: V) => Promise<R>) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn,
-    onSuccess: () => { for (const key of ['employment-hero', 'provider-settings', 'staff']) qc.invalidateQueries({ queryKey: [key] }) },
+    onSuccess: () => { for (const key of ['employment-hero', 'provider-settings', 'staff', 'module-visibility']) qc.invalidateQueries({ queryKey: [key] }) },
   })
 }
 

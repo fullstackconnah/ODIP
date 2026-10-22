@@ -136,15 +136,17 @@ describe('PortalPayslipsPage', () => {
     expect(screen.getByRole('button', { name: 'Downloading payslip paid 8 Oct 2026' })).toBeDisabled()
   })
 
-  it('names the payslip that failed, shows the reason, and retries the same one', async () => {
+  it('names the payslip that failed, shows the server reason, and retries the same one', async () => {
     const user = userEvent.setup()
-    mockDownload.mockRejectedValueOnce(httpError(404))
+    const reason = "Payslips can't be shown right now: an Admin needs to check the Employment Hero connection."
+    mockDownload.mockRejectedValueOnce(httpError(503, reason))
     renderPage()
 
     await user.click(downloadButton('Download PDF: payslip paid 8 Oct 2026'))
 
     expect(await screen.findByText("Couldn't download the payslip paid 8 Oct 2026.")).toBeInTheDocument()
-    expect(screen.getByText('Employment Hero no longer has it. Refresh the list.')).toBeInTheDocument()
+    expect(screen.getByText(reason)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh list' })).not.toBeInTheDocument()
     expect(downloadButton('Download PDF: payslip paid 8 Oct 2026')).toBeEnabled()
 
     await user.click(screen.getByRole('button', { name: 'Try again' }))
@@ -153,7 +155,7 @@ describe('PortalPayslipsPage', () => {
     await waitFor(() => expect(screen.queryByText(/Couldn't download/)).not.toBeInTheDocument())
   })
 
-  it('says to try again later for any other download failure', async () => {
+  it('says to try again later when the server sent no reason', async () => {
     const user = userEvent.setup()
     mockDownload.mockRejectedValueOnce(httpError(503))
     renderPage()
@@ -162,6 +164,40 @@ describe('PortalPayslipsPage', () => {
 
     expect(await screen.findByText("Couldn't download the payslip paid 24 Sep 2026.")).toBeInTheDocument()
     expect(screen.getByText('Try again in a few minutes.')).toBeInTheDocument()
+  })
+
+  it('on a 404 offers Refresh list, not Try again, and clears the failure when the refresh settles with the same list', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn().mockResolvedValue({})
+    mockUseMyPayslips.mockReturnValue({ ...ready(ROWS), refetch })   // the same data object on every render, as react-query's structural sharing gives
+    mockDownload.mockRejectedValueOnce(httpError(404))
+    renderPage()
+
+    await user.click(downloadButton('Download PDF: payslip paid 8 Oct 2026'))
+
+    expect(await screen.findByText('Employment Hero no longer has it. Refresh the list.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Refresh list' }))
+
+    expect(refetch).toHaveBeenCalledTimes(1)
+    expect(mockDownload).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.queryByText(/Couldn't download/)).not.toBeInTheDocument())
+  })
+
+  it('brings the failure into view when it appears, since the pressed row can be far down the list', async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    mockDownload.mockRejectedValueOnce(httpError(503))
+    renderPage()
+    expect(scrollIntoView).not.toHaveBeenCalled()
+
+    await user.click(downloadButton('Download PDF: payslip paid 24 Sep 2026'))
+
+    await screen.findByText("Couldn't download the payslip paid 24 Sep 2026.")
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(scrollIntoView.mock.contexts[0]).toHaveTextContent("Couldn't download the payslip paid 24 Sep 2026.")
   })
 
   it('announces a finished download', async () => {
