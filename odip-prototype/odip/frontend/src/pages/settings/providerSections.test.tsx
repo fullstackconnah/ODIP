@@ -77,6 +77,8 @@ function rowWithoutModes(row: ProviderSettingsDto, overrides: Partial<ProviderSe
   delete body.participantReadinessMode
   delete body.medicationCompetencyMode
   delete body.employmentHeroConnected
+  delete body.nextInvoiceDisplayNumber   // computed on GET (Xero PR1); never written
+  delete body.invoicesIssued
   return body
 }
 
@@ -270,6 +272,126 @@ describe('Billing details', () => {
     renderSection('billing')
     expect(await screen.findByRole('checkbox', { name: 'Registered for GST' })).toBeDisabled()
     expect(screen.queryByLabelText('Account name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+})
+
+// Xero PR1, SHAPE section 4: invoice numbering and payment terms live in Billing details, on the same shared row.
+describe('Billing details: invoice numbers and payment terms', () => {
+  const prefix = () => screen.getByLabelText('Invoice prefix')
+  const startNumber = () => screen.getByLabelText('First invoice number')
+  const daysToPay = () => screen.getByLabelText('Days to pay')
+  async function open() {
+    renderSection('billing')
+    await screen.findByLabelText('Invoice prefix')
+  }
+  async function retype(user: ReturnType<typeof userEvent.setup>, field: HTMLElement, text: string) {
+    await user.clear(field)
+    if (text) await user.type(field, text)
+  }
+
+  it('shows the defaults in two new groups between the bank account and tax, with their hints', async () => {
+    await open()
+    expect(prefix()).toHaveValue('INV-')
+    expect(screen.getByLabelText('Credit note prefix')).toHaveValue('CN-')
+    expect(startNumber()).toHaveValue(1)
+    expect(daysToPay()).toHaveValue(14)
+    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Bank account', 'Invoice numbers', 'Payment terms', 'Tax and claiming', 'Invoice note'])
+    expect(screen.getByText('Printed before the number, as in INV-0042. New invoices only.')).toBeInTheDocument()
+    expect(screen.getByText('As in CN-0007. New credit notes only.')).toBeInTheDocument()
+    expect(screen.getByText("Carry on from your old system's numbers. It can't change once an invoice is issued.")).toBeInTheDocument()
+    expect(screen.getByText("Each invoice is due this many days after it's issued. 0 means due on issue.")).toBeInTheDocument()
+    expect(screen.getByText("The bank account on your invoices, how they're numbered and when they're due, your GST and PACE status, and the note printed at the foot of every invoice.")).toBeInTheDocument()
+  })
+
+  it.each([
+    ['Invoice prefix', '', 'Enter a prefix, such as INV-.'],
+    ['Invoice prefix', 'IN V', 'No spaces.'],
+    ['Invoice prefix', 'INV/', 'Use letters, digits, - _ or . only.'],
+    ['Credit note prefix', 'CN/', 'Use letters, digits, - _ or . only.'],
+    ['First invoice number', '0', 'Enter a whole number from 1 to 99,999,999.'],
+    ['First invoice number', '1.5', 'Enter a whole number from 1 to 99,999,999.'],
+    ['First invoice number', '100000000', 'Enter a whole number from 1 to 99,999,999.'],
+    ['Days to pay', '366', 'Enter a whole number of days from 0 to 365.'],
+    ['Days to pay', '', 'Enter a whole number of days from 0 to 365.'],
+  ])('%s "%s" says "%s" and holds Save', async (label, text, words) => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, screen.getByLabelText(label), text)
+    expect(screen.getByText(words)).toBeInTheDocument()
+    expect(saveButton()).toBeDisabled()
+    expect(screen.getByText('Fix 1 field to save.')).toBeInTheDocument()
+  })
+
+  it('a prefix is at most 10 characters', async () => {
+    await open()
+    expect(prefix()).toHaveAttribute('maxLength', '10')
+    expect(screen.getByLabelText('Credit note prefix')).toHaveAttribute('maxLength', '10')
+  })
+
+  it('saves the whole row with the numbering fields changed, as numbers, and never the two read-only fields', async () => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, prefix(), 'OAS-')
+    await retype(user, startNumber(), '1001')
+    await retype(user, daysToPay(), '30')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { invoiceNumberPrefix: 'OAS-', invoiceStartNumber: 1001, paymentTermsDays: 30 }))
+    expect(putBody()).not.toHaveProperty('nextInvoiceDisplayNumber')
+    expect(putBody()).not.toHaveProperty('invoicesIssued')
+  })
+
+  it('after the first invoice the starting number cell reads "Next invoice", read-only, set by the invoices issued', async () => {
+    server = makeSettings({ invoicesIssued: true, nextInvoiceDisplayNumber: 'INV-0043', invoiceStartNumber: 42 })
+    await open()
+    const next = screen.getByLabelText('Next invoice')
+    expect(next).toHaveValue('INV-0043')
+    expect(next).toHaveAttribute('readonly')
+    expect(screen.getByText('Set by the invoices already issued.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('First invoice number')).not.toBeInTheDocument()
+    expect(prefix()).not.toHaveAttribute('readonly')
+  })
+
+  it("an invoice issued between load and save: shows the server's words, keeps what was typed, flips the cell, and the retry is accepted", async () => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, startNumber(), '1001')
+    await retype(user, daysToPay(), '30')
+    // Another person submits a claim meanwhile: the server now holds an invoice, and refuses a changed starting number.
+    server = makeSettings({ invoicesIssued: true, nextInvoiceDisplayNumber: 'INV-0002' })
+    mockApiPut.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ["An invoice has been issued, so the starting number can't change now."] } } })
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Not saved. An invoice has been issued, so the starting number can't change now.")
+    expect(daysToPay()).toHaveValue(30)
+    expect(await screen.findByLabelText('Next invoice')).toHaveValue('INV-0002')
+
+    await user.click(saveButton())
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toEqual(rowWithoutModes(makeSettings({ invoicesIssued: true }), { paymentTermsDays: 30 }))
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+  })
+
+  it('after the first invoice, saving Organisation profile sends the starting number back unchanged', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ invoicesIssued: true, nextInvoiceDisplayNumber: 'INV-0043', invoiceStartNumber: 42 })
+    renderSection('organisation')
+    const name = await screen.findByLabelText('Organisation name')
+    await user.type(name, '!')
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings({ invoiceStartNumber: 42 }), { organisationName: 'Sunrise Support Services!' }))
+  })
+
+  it('is read-only for a Coordinator, with no Save', async () => {
+    mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
+    await open()
+    expect(prefix()).toHaveAttribute('readonly')
+    expect(startNumber()).toHaveAttribute('readonly')
+    expect(daysToPay()).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 })

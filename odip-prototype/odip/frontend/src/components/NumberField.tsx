@@ -14,6 +14,8 @@ type NumberFieldProps = {
   /** `decimal` for money and kilometres, `numeric` (the default) for counts. */
   inputMode?: 'numeric' | 'decimal'
   disabled?: boolean
+  /** A locked settings form shows its values readable, as its text fields do. */
+  readOnly?: boolean
 }
 
 /**
