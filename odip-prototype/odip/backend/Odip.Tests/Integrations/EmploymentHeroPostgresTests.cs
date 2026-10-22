@@ -302,4 +302,28 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
 
         Assert.Equal(3, eh.Requests.Count(r => r.Method == HttpMethod.Post));
     }
+
+    [SkippableFact]
+    public async Task The_payroll_check_query_runs_on_Postgres()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        await SeedShiftsAsync(db, tenantId, 2);
+        var tenant = new Moq.Mock<Odip.Domain.Interfaces.ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        var controller = new EmploymentHeroPayrollController(db, tenant.Object, EhFixture.Keys, StubHttpHandler.Client(new StubHttpHandler()))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = ImportTestSupport.Admin() } },
+        };
+        var day = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+
+        var result = await controller.SendMissing(new PayrollRangeDto(day.AddDays(-3), day.AddDays(3)), CancellationToken.None);
+
+        var sent = Assert.IsType<OkObjectResult>(result.Result);
+        var data = Assert.IsType<Odip.Application.Common.ApiResponse<SendMissingResultDto>>(sent.Value).Data!;
+        Assert.Equal(2, data.Queued);
+        Assert.Equal(2, data.Check.Waiting);
+        Assert.Single(data.Check.Workers);
+    }
 }
