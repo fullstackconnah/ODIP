@@ -182,10 +182,13 @@ describe('Organisation profile', () => {
     await user.type(screen.getByLabelText('ABN'), '51824753556')
     await user.type(screen.getByLabelText('NDIS registration number'), '4050012345')
     await user.type(screen.getByRole('textbox', { name: 'Address' }), '1 Test St')
+    expect(saveButton()).toBeDisabled() // no state chosen yet
+    await user.click(screen.getByRole('button', { name: /State/ }))
+    await user.click(screen.getByRole('option', { name: 'WA' }))
     await user.click(saveButton())
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
-    expect(putBody()).toEqual({ organisationName: 'Sunrise Care', abn: '51824753556', registrationNumber: '4050012345', address: '1 Test St' })
+    expect(putBody()).toEqual({ organisationName: 'Sunrise Care', abn: '51824753556', registrationNumber: '4050012345', address: '1 Test St', state: 'WA' })
   })
 
   it('says which fields the server needs when it refuses a blank one without a message', async () => {

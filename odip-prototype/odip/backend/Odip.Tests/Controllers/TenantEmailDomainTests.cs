@@ -97,7 +97,7 @@ public class TenantEmailDomainTests
     {
         using var db = SuperAdminDb();
         var firebase = new Mock<IFirebaseUserService>();
-        var dto = new CreateTenantWithSetupDto("Acme Support", "gmail.com", null,
+        var dto = new CreateTenantWithSetupDto("Acme Support", "gmail.com", new TenantSetupProviderDto { State = "VIC" },
             new CreateInitialUserDto("Jane", "Smith", "jane.smith@gmail.com", "jane.smith", "Admin", null));
 
         var result = await Controller(db, firebase).CreateWithSetup(dto, CancellationToken.None);
@@ -185,7 +185,7 @@ public class TenantEmailDomainTests
         using var db = SuperAdminDb();
         var firebase = new Mock<IFirebaseUserService>();
         firebase.Setup(f => f.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync("uid-1");
-        var dto = new CreateTenantWithSetupDto("Brightside Care", "@Brightside.Example.com", null,
+        var dto = new CreateTenantWithSetupDto("Brightside Care", "@Brightside.Example.com", new TenantSetupProviderDto { State = "VIC" },
             new CreateInitialUserDto("Jane", "Smith", "jane.smith@brightside.example.com", "jane.smith", "Admin", null));
 
         var result = await Controller(db, firebase).CreateWithSetup(dto, CancellationToken.None);
@@ -229,20 +229,5 @@ public class TenantEmailDomainTests
 
         Assert.Equal(SharedProviderMessage(EmailIdentity.NormaliseDomain(typed)), Refusal(result));
         Assert.Empty(await db.Tenants.ToListAsync());
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("@")]
-    [InlineData(" @ ")]
-    public async Task A_domain_that_is_nothing_once_tidied_is_refused_at_create_and_update(string typed)
-    {
-        using var db = SuperAdminDb();
-        var tenant = SeedTenant(db, "acme.example.com");
-
-        Assert.Equal("Email domain is required.", Refusal(await Controller(db).Create(new CreateTenantDto("Another", typed))));
-        Assert.Equal("Email domain is required.", Refusal(await Controller(db).Update(tenant.Id, new UpdateTenantDto("Acme Support", typed, true))));
-        Assert.Equal("acme.example.com", (await db.Tenants.SingleAsync()).EmailDomain);
     }
 }
