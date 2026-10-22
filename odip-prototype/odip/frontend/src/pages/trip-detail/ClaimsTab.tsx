@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { useDeleteClaim, useUpdateClaim } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
+import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import GenerateClaimModal from '@/components/GenerateClaimModal'
 import { RejectClaimDialog } from '@/components/RejectClaimDialog'
@@ -157,14 +158,17 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
                 items: CLAIM_STATUS_ITEMS,
                 onBulkChange: (ids: string[], value: string) => (value === 'Rejected' ? askForNdiaCode(ids) : bulkUpdateClaimStatus(ids, value)),
               } } : {}),
-              render: (c: TripClaimListDto) => (
+              // No legal move (Paid, Cancelled): the status is just a word, so it is a badge at full strength rather than a disabled pill dimmed to 60%.
+              render: (c: TripClaimListDto) => !LEGAL_NEXT[c.status] ? (
+                <StatusBadge status={c.status} label={STATUS_LABEL[c.status]} />
+              ) : (
                 <Dropdown
                   variant="pill"
                   value={c.status}
                   onChange={val => (val === 'Rejected' ? askForNdiaCode([c.id]) : changeStatus(c.id, val as TripClaimStatus))}
                   colorClass={getStatusColor(c.status)}
                   items={[c.status, ...(LEGAL_NEXT[c.status] ?? [])].map(value => ({ value, label: STATUS_LABEL[value] }))}
-                  disabled={!canWrite || !LEGAL_NEXT[c.status]}
+                  disabled={!canWrite}
                 />
               ),
             },

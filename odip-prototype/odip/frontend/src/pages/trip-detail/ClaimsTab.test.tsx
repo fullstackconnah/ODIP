@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
+import { statusClass } from '@/lib/tone'
 import type { TripClaimListDto } from '@/api/types/claims'
 import type { TripDetailDto } from '@/api/types/trips'
 import ClaimsTab from './ClaimsTab'
@@ -205,14 +206,26 @@ describe('ClaimsTab: row actions', () => {
 })
 
 describe('ClaimsTab: guards on a claim that has gone to the NDIA', () => {
-  it('offers a claim\'s status pill only the statuses it can legally move to, and a Paid claim none', async () => {
+  it('offers a claim\'s status pill only the statuses it can legally move to', async () => {
     const user = userEvent.setup()
-    renderTab([claim('d', 'Draft'), claim('p', 'Paid')])
+    renderTab([claim('d', 'Draft')])
 
     await user.click(screen.getByRole('button', { name: 'Draft' }))
     expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Draft', 'Submitted'])
-    await user.keyboard('{Escape}')
-    expect(screen.getByRole('button', { name: 'Paid' })).toBeDisabled()
+  })
+
+  it('shows a Paid or Cancelled claim\'s status as a plain status badge, not a disabled pill', () => {
+    renderTab([claim('p', 'Paid'), claim('x', 'Cancelled')])
+
+    for (const [reference, word] of [['TC-p', 'Paid'], ['TC-x', 'Cancelled']] as const) {
+      const row = within(screen.getByText(reference).closest('tr') as HTMLElement)
+      expect(row.queryByRole('button', { name: word })).toBeNull()
+      expect(row.queryByRole('combobox')).toBeNull()
+      const badge = row.getByText(word)
+      expect(badge.tagName).toBe('SPAN')
+      expect(badge.className).toContain(statusClass(word))
+      expect(badge.className).not.toContain('opacity')
+    }
   })
 
   it("names an Approved claim's pill, and lists the legal targets of an Approved one", async () => {
