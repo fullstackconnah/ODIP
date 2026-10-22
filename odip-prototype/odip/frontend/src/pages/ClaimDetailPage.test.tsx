@@ -7,15 +7,16 @@ import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseClaim, mockUpdateClaim } = vi.hoisted(() => ({
+const { mockUseClaim, mockUpdateClaim, mockUpdateLineItem } = vi.hoisted(() => ({
   mockUseClaim: vi.fn(),
   mockUpdateClaim: vi.fn(),
+  mockUpdateLineItem: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useClaim: mockUseClaim,
   useUpdateClaim: () => ({ mutate: mockUpdateClaim, isPending: false }),
-  useUpdateClaimLineItem: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateClaimLineItem: () => ({ mutate: mockUpdateLineItem, isPending: false }),
 }))
 
 // ClaimDetailPage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker — that
@@ -497,5 +498,52 @@ describe('ClaimDetailPage — the total in the fact bar', () => {
     renderPage()
     expect(screen.queryByText('$1234.50')).toBeNull()
     expect(screen.getAllByText('$1,234.50')).toHaveLength(3)
+  })
+})
+
+// The server refuses a change to a line's figures or type once the claim has gone to the NDIA, so the page stops offering the buttons that make that change.
+describe('ClaimDetailPage — No Show and Mark Confirmed belong to a draft claim', () => {
+  it('offers No Show on a draft claim', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'No Show' })).toBeInTheDocument()
+  })
+
+  it.each(['Submitted', 'Paid', 'Rejected'] as const)('offers neither No Show nor Mark Confirmed on a %s claim, and still shows who was a no show', (status) => {
+    mockUseClaim.mockReturnValue({
+      data: { ...baseClaim([baseLineItem(), baseLineItem({ id: 'li-3', claimType: 'Cancellation', cancellationReason: 'Unwell' })]), status },
+      isLoading: false,
+    })
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'No Show' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mark Confirmed' })).not.toBeInTheDocument()
+    expect(screen.getByText('No Show · Unwell')).toBeInTheDocument()
+  })
+
+  it('offers Mark Confirmed on a draft claim', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ claimType: 'Cancellation', cancellationReason: 'Unwell' })]), isLoading: false })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'Mark Confirmed' })).toBeInTheDocument()
+  })
+
+  it("says, in the Mark as Submitted confirm, that the lines can't be changed after it", async () => {
+    const user = userEvent.setup()
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })   // a draft
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Mark as Submitted' }))
+
+    expect(screen.getByRole('alertdialog', { name: 'Mark as submitted?' })).toHaveTextContent("Mark this claim as submitted to the NDIA? You can't change its lines after this.")
+  })
+
+  it("shows the server's reason on the page when Mark Confirmed is refused (the claim moved on while the page was open)", async () => {
+    const user = userEvent.setup()
+    mockUpdateLineItem.mockImplementation((_vars, opts) => opts.onError({ response: { data: { errors: ["This claim has been submitted, so its lines can't be changed."] } } }))
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ claimType: 'Cancellation', cancellationReason: 'Unwell' })]), isLoading: false })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Mark Confirmed' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent("This claim has been submitted, so its lines can't be changed.")
   })
 })
