@@ -90,7 +90,7 @@ export default function BillingDetailsSection(frame: SectionFrame) {
                 {/* One cell for both states, as tall as the longer hint: the invisible skeleton keeps the height when it flips (SHAPE C10). */}
                 <div className={`grid ${span.short}`}>
                   {issued ? (
-                    <TextField label="Next invoice" hint="Set by the invoices already issued." className="[grid-area:1/1]" value={p.row!.nextInvoiceDisplayNumber} readOnly />
+                    <TextField label="Next invoice" hint="Set by the invoices already issued." className="[grid-area:1/1] [&_input]:bg-transparent" value={p.row!.nextInvoiceDisplayNumber} readOnly />
                   ) : (
                     <NumberField label="First invoice number" hint={START_HINT} min={1} max={99_999_999} step={1} className="[grid-area:1/1]" value={p.form.invoiceStartNumber} error={errors.invoiceStartNumber} readOnly={locked} onChange={n => p.edit({ invoiceStartNumber: n })} />
                   )}

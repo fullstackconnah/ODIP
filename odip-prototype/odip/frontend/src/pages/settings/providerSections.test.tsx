@@ -353,6 +353,7 @@ describe('Billing details: invoice numbers and payment terms', () => {
     const next = screen.getByLabelText('Next invoice')
     expect(next).toHaveValue('INV-0043')
     expect(next).toHaveAttribute('readonly')
+    expect(next.closest('[class*="bg-transparent"]')).not.toBeNull()   // the locked look: no Field Grey fill (SHAPE 4)
     expect(screen.getByText('Set by the invoices already issued.')).toBeInTheDocument()
     expect(screen.queryByLabelText('First invoice number')).not.toBeInTheDocument()
     expect(prefix()).not.toHaveAttribute('readonly')

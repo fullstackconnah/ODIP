@@ -148,27 +148,11 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 key: 'billTo',
                 header: 'Bill to',
                 render: (row: InvoiceRow) => (
-                  <div className="md:max-w-[24rem]">
+                  <div className="md:max-w-[16rem] xl:max-w-[24rem]">
                     <CellText className="text-sm text-[var(--color-foreground)]">{row.payer.billToName}</CellText>
                     <p className={MUTED_LINE}>{payerLine(row.payer)}</p>
                   </div>
                 ),
-              },
-              {
-                key: 'issueDate',
-                header: 'Issued',
-                mobile: 'meta',
-                render: (row: InvoiceRow) => (
-                  <span className="whitespace-nowrap tabular-nums">
-                    {row.invoice ? formatDateAu(row.invoice.issueDate) : state === 'legacy' ? formatInstantDateAu(claim.submittedDate) : '—'}
-                  </span>
-                ),
-              },
-              {
-                key: 'dueDate',
-                header: 'Due',
-                mobile: 'meta',
-                render: (row: InvoiceRow) => <span className="whitespace-nowrap tabular-nums">{row.invoice?.dueDate ? formatDateAu(row.invoice.dueDate) : '—'}</span>,
               },
               {
                 key: 'total',
@@ -188,20 +172,40 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 minWidth: '7rem',
                 render: (row: InvoiceRow) => row.invoice
                   ? <StatusBadge status={row.invoice.status} />
-                  : state === 'preview' ? <StatusBadge tone="neutral" label="Not issued" /> : <span className="text-[var(--color-muted-foreground)]">—</span>,
+                  : state === 'preview' ? <StatusBadge tone="neutral" label="Not issued" /> : <span className="text-[var(--color-muted-foreground)] max-md:hidden">—</span>,
+              },
+              {
+                key: 'issueDate',
+                header: 'Issued',
+                mobile: 'meta',
+                // An absent date is the bare dash string, which DataTable drops from the phone card (a labelled "—" would stay).
+                render: (row: InvoiceRow) => !row.invoice && state !== 'legacy' ? '—' : (
+                  <span className="whitespace-nowrap tabular-nums before:content-['Issued_'] md:before:hidden">
+                    {row.invoice ? formatDateAu(row.invoice.issueDate) : state === 'legacy' ? formatInstantDateAu(claim.submittedDate) : '—'}
+                  </span>
+                ),
+              },
+              {
+                key: 'dueDate',
+                header: 'Due',
+                mobile: 'meta',
+                render: (row: InvoiceRow) => row.invoice?.dueDate
+                  ? <span className="whitespace-nowrap tabular-nums before:content-['·_Due_'] md:before:hidden">{formatDateAu(row.invoice.dueDate)}</span>
+                  : '—',
               },
               {
                 key: 'actions',
                 header: '',
                 // Reserved for the widest pair (Download and "Issue credit note") in every state, so the column keeps its width when Void goes.
-                minWidth: canCorrectInvoices ? '20rem' : undefined,
+                minWidth: canCorrectInvoices ? '17rem' : undefined,
+                className: 'max-md:basis-full',
                 render: (row: InvoiceRow) => {
                   const target = file(row)
                   const busy = downloading === row.id
                   const invoice = row.invoice
                   const correctable = canCorrectInvoices && invoice?.kind === 'Invoice' && invoice.status === 'Issued'
                   return (
-                    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
+                    <div className={`flex items-center justify-end md:justify-start gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_CARD}`}>
                       <Button
                         data-download-id={row.id}
                         variant="secondary"
@@ -232,12 +236,14 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
         </>
       )}
 
-      {data && data.agencyCount > 0 && rows.length > 0 && (
-        <p className={`px-[var(--card-pad)] py-2 ${MUTED_LINE}`}>
-          {plural(data.agencyCount, 'agency-managed participant')} {data.agencyCount === 1 ? 'is' : 'are'} claimed in the BPR CSV, not invoiced.
-        </p>
+      {((data && data.agencyCount > 0 && rows.length > 0) || (anyIssued && !canCorrectInvoices)) && (
+        <div className={`flex flex-col gap-1 px-[var(--card-pad)] py-2 ${MUTED_LINE}`}>
+          {data && data.agencyCount > 0 && rows.length > 0 && (
+            <p>{plural(data.agencyCount, 'agency-managed participant')} {data.agencyCount === 1 ? 'is' : 'are'} claimed in the BPR CSV, not invoiced.</p>
+          )}
+          {anyIssued && !canCorrectInvoices && <p>Only an Admin can void an invoice or issue a credit note.</p>}
+        </div>
       )}
-      {anyIssued && !canCorrectInvoices && <p className={`px-[var(--card-pad)] py-2 ${MUTED_LINE}`}>Only an Admin can void an invoice or issue a credit note.</p>}
       {downloadError && <p role="alert" className={`px-[var(--card-pad)] py-2 text-[13px] ${TONE.danger.ink}`}>{downloadError}</p>}
 
       {correction && (

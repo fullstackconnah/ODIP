@@ -166,7 +166,7 @@ describe('InvoicesSection', () => {
 
     await screen.findByRole('button', { name: 'Preview invoice for Sam Lee' })
     const actionsHeader = screen.getAllByRole('columnheader').at(-1)!
-    expect(actionsHeader.style.getPropertyValue('--col-min')).toBe('20rem')
+    expect(actionsHeader.style.getPropertyValue('--col-min')).toBe('17rem')   // the measured widest pair: Download and "Issue credit note"
   })
 
   it('the Status column is reserved at one width, so a pill swap (Issued to Voided or Credited) never widens the table (SHAPE C3)', async () => {
@@ -193,6 +193,64 @@ describe('InvoicesSection', () => {
 
     // ROW_ACTIONS_CARD's 44px min-width outranks a plain utility below md; the reserve must win there.
     expect((await screen.findByRole('button', { name: 'Preview invoice for Sam Lee' })).className).toContain('min-w-[8.5rem]!')
+  })
+
+  it('Total and Status come before the dates, so only a date can ever sit under the pinned actions (finish 1)', async () => {
+    serveInvoices(issued)
+    renderSection()
+
+    await screen.findByRole('button', { name: 'Download INV-0042' })
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Number', 'Bill to', 'Total', 'Status', 'Issued', 'Due', ''])
+  })
+
+  it('Download holds one x across rows on desktop and every phone card ends in a full-width actions row (finish 2, 4)', async () => {
+    serveInvoices(issued)
+    renderSection()
+
+    const download = await screen.findByRole('button', { name: 'Download INV-0042' })
+    expect(download.parentElement!.className).toContain('md:justify-start')
+    expect(download.closest('td')!.className).toContain('max-md:basis-full')
+  })
+
+  it('the phone card labels its dates "Issued … · Due …" and a missing value drops out with no stray dash (finish 3)', async () => {
+    serveInvoices(issued)
+    renderSection()
+
+    const r42 = await waitFor(() => rowOf('INV-0042'))
+    expect(within(r42).getByText(formatDateAu('2026-10-22')).className).toContain("before:content-['Issued_']")
+    expect(within(r42).getByText(formatDateAu('2026-11-05')).className).toContain("before:content-['·_Due_']")
+    // The labels are phone-only: the desktop header already names the column.
+    expect(within(r42).getByText(formatDateAu('2026-10-22')).className).toContain('md:before:hidden')
+    // A credit note has no due date: its card keeps the issue date only.
+    const cn = rowOf('CN-0007')
+    expect(cn.querySelectorAll('td[data-card="meta"]')).toHaveLength(1)
+  })
+
+  it('a preview or legacy row shows no dash pill or date meta on the phone card (finish 3)', async () => {
+    serveInvoices({ invoiceState: 'preview', invoices: [], groups: [plan], agencyCount: 0 })
+    renderSection()
+    const preview = await waitFor(() => rowOf('Pat Morgan — Harbour Plan Co'))
+    expect(preview.querySelectorAll('td[data-card="meta"]')).toHaveLength(0)
+  })
+
+  it('a legacy row has its status dash hidden on the phone card (finish 3)', async () => {
+    serveInvoices({ invoiceState: 'legacy', invoices: [], groups: [plan], agencyCount: 0 })
+    renderSection()
+    const r = await waitFor(() => rowOf('Pat Morgan — Harbour Plan Co'))
+    const dashes = within(r).getAllByText('—')
+    expect(dashes.length).toBeGreaterThan(0)
+    expect(dashes.find(d => d.closest('td')!.getAttribute('data-card') === 'status')!.className).toContain('max-md:hidden')
+  })
+
+  it('a Coordinator has the two footnotes in one wrapper, so they sit together (finish 7)', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    serveInvoices({ ...issued, agencyCount: 2 })
+    renderSection()
+
+    const agency = await screen.findByText('2 agency-managed participants are claimed in the BPR CSV, not invoiced.')
+    const only = screen.getByText('Only an Admin can void an invoice or issue a credit note.')
+    expect(agency.parentElement).toBe(only.parentElement)
+    expect(agency.parentElement).not.toBe(agency.closest('section'))   // a wrapper of their own, not two bare children of the card
   })
 
   it('a Coordinator gets Download only, and the line saying who can correct', async () => {

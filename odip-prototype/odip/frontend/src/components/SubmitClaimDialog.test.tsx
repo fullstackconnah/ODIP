@@ -132,7 +132,7 @@ describe('SubmitClaimDialog', () => {
     expect(await screen.findByText(/Set up your organisation's invoice details in Settings first\./)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open Organisation profile' })).toHaveAttribute('href', '/settings?section=organisation')
     // A 44px floor on touch (SHAPE C2): the link is alone at the end of the note.
-    expect(screen.getByRole('link', { name: 'Open Organisation profile' }).className).toContain('min-h-[var(--tap-min)]')
+    expect(screen.getByRole('link', { name: 'Open Organisation profile' }).className).toContain('before:min-h-[var(--tap-min)]')   // TAP_AREA, so the sentence keeps its leading (finish 6)
     expect(confirmButton()).toBeDisabled()
   })
 
