@@ -101,7 +101,7 @@ internal sealed class InvoiceKit
     /// <summary>A trip claim with one line per entry: hours x price stored as the given 2dp total.</summary>
     public TripClaim TripClaim(TripInstance trip, TripClaimStatus status, params (ParticipantBooking Booking, decimal Hours, decimal Price, decimal Total, GSTCode Gst)[] lines)
     {
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = lines.Sum(l => l.Total) };
+        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = status, ClaimReference = RandomReference(), TotalAmount = lines.Sum(l => l.Total) };
         Db.TripClaims.Add(claim);
         foreach (var l in lines)
             Db.ClaimLineItems.Add(new ClaimLineItem
@@ -123,7 +123,7 @@ internal sealed class InvoiceKit
         var claim = new TripClaim
         {
             Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, PeriodFrom = new DateOnly(2026, 10, 1), PeriodTo = new DateOnly(2026, 10, 14),
-            Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = totals.Sum(),
+            Status = status, ClaimReference = RandomReference(), TotalAmount = totals.Sum(),
         };
         Db.TripClaims.Add(claim);
         foreach (var total in totals)
@@ -135,6 +135,9 @@ internal sealed class InvoiceKit
         Db.SaveChanges();
         return claim;
     }
+
+    /// <summary>"TC-" and 17 digits: digits only, because PDF text extraction ligatures letter pairs such as "fb" and a random hex reference then fails a text match at random.</summary>
+    private static string RandomReference() => $"TC-{Random.Shared.NextInt64(10_000_000_000_000_000L, 99_999_999_999_999_999L)}";
 
     public static int StatusOf<T>(ActionResult<ApiResponse<T>> r) => Assert.IsAssignableFrom<ObjectResult>(r.Result).StatusCode ?? 200;
     public static string RefusalOf<T>(ActionResult<ApiResponse<T>> r) => Assert.Single(Assert.IsType<ApiResponse<T>>(Assert.IsAssignableFrom<ObjectResult>(r.Result).Value).Errors!);
