@@ -86,7 +86,7 @@ export function generatedLine(organisationName: string | null | undefined) {
   return `Generated ${new Date().toLocaleDateString('en-AU')}${organisationName ? ` · ${organisationName}` : ''}`
 }
 
-function ItineraryDocument({ data, version }: { data: ItineraryDto; version: ExportVersion }) {
+export function ItineraryDocument({ data, version }: { data: ItineraryDto; version: ExportVersion }) {
   const isStaff = version === 'staff'
 
   return (
