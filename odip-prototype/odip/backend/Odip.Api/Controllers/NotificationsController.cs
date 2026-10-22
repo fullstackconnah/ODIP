@@ -77,7 +77,7 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// The bell (dashboard spec 2026-10-14): the caller's own newest items, newest first, and their unread count. Own rows are
+    /// The bell (dashboard spec 2026-10-14): the caller's own items, unread first and then newest first, and their unread count (unread first so "Mark all as read" always reaches the next unseen batch). Own rows are
     /// the JWT subject's, never X-View-As-User's (lead decision 1); the tenant filter applies as well. `take` is clamped to
     /// 1..50, and HasMore comes from asking for one row more than is returned.
     /// </summary>
@@ -90,7 +90,7 @@ public class NotificationsController : ControllerBase
         take = Math.Clamp(take, 1, 50);
         var mine = _db.InAppNotifications.Where(n => n.RecipientUserId == callerId.Value);
         var rows = await mine
-            .OrderByDescending(n => n.CreatedAt).ThenByDescending(n => n.Id)
+            .OrderBy(n => n.ReadAt != null).ThenByDescending(n => n.CreatedAt).ThenByDescending(n => n.Id)
             .Take(take + 1)
             .Select(n => new InAppNotificationDto { Id = n.Id, Title = n.Title, LinkTo = n.LinkTo, CreatedAt = n.CreatedAt, ReadAt = n.ReadAt })
             .ToListAsync(ct);

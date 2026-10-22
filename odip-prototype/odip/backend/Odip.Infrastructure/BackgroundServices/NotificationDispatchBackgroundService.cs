@@ -61,18 +61,26 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 _logger.LogError(ex, "Notification dispatch tick failed unexpectedly");
             }
 
-            // The bell's retention runs here, not in RunTickAsync: that returns early on an empty outbox and while
-            // Notifications:Enabled is false (live today), and the bell must not depend on either. Hourly is plenty.
+            // The bell's and the outbox's retention run here, not in RunTickAsync: that returns early on an empty outbox and while
+            // Notifications:Enabled is false (live today), and the purges must not depend on either. Hourly is plenty.
             if (DateTime.UtcNow >= nextPurgeAt)
             {
+                // Each purge has its own try, so one failing does not skip the other for the hour.
                 try
                 {
                     await PurgeExpiredInAppNotificationsAsync(DateTime.UtcNow, stoppingToken);
-                    await PurgeExpiredOutboxAsync(DateTime.UtcNow, stoppingToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _logger.LogError(ex, "In-app notification purge failed");
+                }
+                try
+                {
+                    await PurgeExpiredOutboxAsync(DateTime.UtcNow, stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Notification outbox purge failed");
                 }
                 nextPurgeAt = DateTime.UtcNow.AddHours(1);
             }
