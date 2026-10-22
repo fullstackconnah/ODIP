@@ -128,6 +128,6 @@ export function useRecordPrnOutcome() {
   return useMutation({
     mutationFn: ({ id, prnOutcome }: { id: string; prnOutcome: string }) =>
       apiPostRaw<AdministrationDto>(`/medications/administrations/${id}/outcome`, { prnOutcome }),
-    onSuccess: () => invalidateMedicationCaches(qc),
+    onSettled: () => invalidateMedicationCaches(qc),
   })
 }
