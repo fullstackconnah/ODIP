@@ -30,6 +30,9 @@ public static class MedicationErrorCodes
     /// which just waits milliseconds and then gets the winner's record). Nothing was written; look at the dose and try again. <c>data</c> is null.</summary>
     public const string AdministrationSlotBusy = "ADMINISTRATION_SLOT_BUSY";
 
+    /// <summary>409: a PRN dose already has its outcome; the outcome sent was not saved. Changing it is a coordinator correction (the amend API).</summary>
+    public const string PrnOutcomeAlreadyRecorded = "PRN_OUTCOME_ALREADY_RECORDED";
+
     /// <summary>409: the medication is OnHold or Ceased, so it can't be recorded from a shift.</summary>
     public const string MedicationNotActive = "MEDICATION_NOT_ACTIVE";
 }

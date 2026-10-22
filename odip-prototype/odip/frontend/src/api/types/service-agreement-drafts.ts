@@ -179,7 +179,7 @@ export interface CreateServiceAgreementDraftDto {
    * The version of the newest revision the plan was started from (0 when there was none). If somebody saved a newer one in the meantime the server refuses with 409 and the newer
    * version number, instead of making this plan the newest over their work.
    */
-  baseVersion?: number
+  baseVersion: number
 }
 
 /** The body of the 409 a save answers when somebody else saved a newer version first (`code` is "draft-version-conflict"). */

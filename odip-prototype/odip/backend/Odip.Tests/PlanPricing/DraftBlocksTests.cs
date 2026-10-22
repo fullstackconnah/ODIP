@@ -338,7 +338,7 @@ public class DraftBlocksTests
         foreach (var row in f.Db.SupportCatalogueItems.Where(i => i.ItemNumber == "04_104_0125_6_1")) row.PriceNational += 5m;
         await f.Db.SaveChangesAsync();
         var saturday = Block("sat", PlanSupportType.GroupActivity, DayOfWeek.Saturday, T(9), T(15), b => b with { ParticipantsPresent = 3 });
-        var second = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed()), Entry(saturday) }), "actor", CancellationToken.None);
+        var second = await f.Service.SaveAsync(f.TenantId, f.Participant.Id, Request(new[] { Entry(MonWed()), Entry(saturday) }) with { BaseVersion = 1 }, "actor", CancellationToken.None);
 
         Assert.Equal(2, second.Draft!.Version);
         Assert.Equal(before, await Snapshot(f.Db, 1));   // version 1 is byte for byte what it was
@@ -380,16 +380,17 @@ public class DraftBlocksTests
     }
 
     [Fact]
-    public async Task A_save_that_started_from_the_newest_version_is_accepted_and_one_that_names_no_version_is_not_checked()
+    public async Task A_save_that_started_from_the_newest_version_is_accepted_and_one_that_names_no_version_is_refused()
     {
         await using var f = await SetUpAsync();
 
         var first = await SaveFrom(f, 0, Entry(MonWed()));
         var second = await SaveFrom(f, 1, Entry(MonWed()));
-        var unchecked_ = await SaveFrom(f, null, Entry(MonWed()));       // a caller that predates the builder
+        var unbased = await SaveFrom(f, null, Entry(MonWed()));       // no version named, and revisions exist
 
-        Assert.Equal(new[] { 1, 2, 3 }, new[] { first.Draft!.Version, second.Draft!.Version, unchecked_.Draft!.Version });
-        Assert.Null(unchecked_.ConflictVersion);
+        Assert.Equal(new[] { 1, 2 }, new[] { first.Draft!.Version, second.Draft!.Version });
+        Assert.Null(unbased.Draft);
+        Assert.Equal(2, unbased.ConflictVersion);
     }
 
     [Fact]

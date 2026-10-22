@@ -244,11 +244,8 @@ export function RecordAdministrationModal({
       // separately and isn't reassignable through this form. Always sent back, so an amendment that no
       // longer needs a witness (e.g. changed to Refused) doesn't blank the one already recorded.
       witnessName,
-      // The backend unconditionally overwrites prnOutcome/prnOutcomeAt on PUT — pass through
-      // the existing values so amending an administration doesn't silently wipe a previously
-      // recorded PRN outcome.
-      prnOutcome: existingAdministration?.prnOutcome ?? undefined,
-      prnOutcomeAt: existingAdministration?.prnOutcomeAt ?? undefined,
+      // No outcome fields: the server keeps the stored PRN outcome when an amend sends none, so a copy cached when this modal
+      // opened can never wipe, or roll back, an outcome somebody recorded since.
     }
   }
 
