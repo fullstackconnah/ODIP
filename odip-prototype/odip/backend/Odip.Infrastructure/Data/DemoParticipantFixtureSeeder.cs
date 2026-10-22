@@ -60,6 +60,11 @@ public sealed class DemoParticipantFixtureSeeder
         var now = _clock.GetUtcNow().UtcDateTime;
         var today = DateOnly.FromDateTime(now);
 
+        // Take the transaction and an advisory lock before any existence check, so a concurrent run waits here, then finds the first run's rows.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(hashtext('demo-participant-fixtures'))", ct);
+        db.AuditActorName = ActorLabel;
+
         var hosts = await HostsAsync(db, tenantId, ct);
         var inquiries = Inquiries(tenantId, now);
         var participants = Participants(tenantId, now);
@@ -87,8 +92,7 @@ public sealed class DemoParticipantFixtureSeeder
         var newPractices = await Fresh(practices, x => x.Id, x => x.TenantId);
         if (rejected is not null) return new(DemoFixtureStatus.Rejected, rejected, new Dictionary<string, int>());
 
-        // 3. One transaction for the whole batch: any failure below rolls everything back.
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // 3. One transaction (begun above) for the whole batch: any failure below rolls everything back.
         db.ParticipantInquiries.AddRange(newInquiries);
         db.Participants.AddRange(newParticipants);
         db.ParticipantMedications.AddRange(newMeds);
@@ -100,6 +104,7 @@ public sealed class DemoParticipantFixtureSeeder
         // 4. An agreement draft for every active finalised participant with none: the same service the screen uses, so the lines are priced from the
         // catalogue and carry its provenance. A participant who already has any revision (manual or not) is left alone.
         var drafts = 0;
+        var unpriced = new List<Guid>();
         var eligible = await db.Participants.Where(p => p.TenantId == tenantId && p.IsActive && !p.IsDraft
                 && !db.ServiceAgreementDrafts.Any(d => d.TenantId == tenantId && d.ParticipantId == p.Id))
             .OrderBy(p => p.Id).ToListAsync(ct);
@@ -110,8 +115,12 @@ public sealed class DemoParticipantFixtureSeeder
             var saved = await service.SaveAsync(tenantId, p.Id, request, provisional ? FallbackActorLabel : ActorLabel, ct);
             if (saved.Draft is null)
                 throw new InvalidOperationException($"The agreement draft for participant {p.Id} was refused: {string.Join(" ", saved.Errors)}");
+            // A draft with no priced line (catalogue gap for the plan period) would be an empty agreement: refuse the run, so a dry run shows it.
+            if (saved.Draft.Lines.Count == 0) unpriced.Add(p.Id);
             drafts++;
         }
+        if (unpriced.Count > 0)
+            return new(DemoFixtureStatus.Rejected, $"{unpriced.Count} agreement draft(s) would have no priced line (the catalogue does not cover the plan period), first participant {unpriced[0]}. Nothing written.", new Dictionary<string, int>());
         toAdd[nameof(ServiceAgreementDraft)] = drafts;
 
         if (dryRun) await tx.RollbackAsync(ct);

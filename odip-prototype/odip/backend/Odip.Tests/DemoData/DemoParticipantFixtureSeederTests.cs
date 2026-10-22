@@ -430,4 +430,52 @@ public sealed class DemoParticipantFixtureSeederTests : IClassFixture<DemoDataPo
         var control = await new Env(connection).RunAsync();
         Assert.True(control.Total > 0);
     }
+
+    // ── Fix round: dry run must not hide unpriced drafts; audit actor; advisory lock ──────────────
+
+    [SkippableFact]
+    public async Task Postgres_ADraftThatWouldHaveNoPricedLine_RefusesTheRun_AndWritesNothing()
+    {
+        var env = await SeededAsync();
+        await using (var db = env.Admin()) await db.SupportCatalogueItems.ExecuteDeleteAsync();
+        var before = await env.SnapshotAsync();
+
+        var result = await env.RunAsync(dryRun: true);
+
+        Assert.Equal(DemoFixtureStatus.Rejected, result.Status);
+        Assert.Contains("no priced", result.Detail);
+        Assert.Empty(before.Diff(await env.SnapshotAsync()));
+    }
+
+    [SkippableFact]
+    public async Task Postgres_TheRowsTheRunCreates_CarryTheSeedersLabelAsAuditActor()
+    {
+        var env = await SeededAsync();
+        await using var before = env.Admin();
+        var known = (await before.AuditLogs.Select(a => a.Id).ToListAsync()).ToHashSet();
+
+        Assert.Equal(DemoFixtureStatus.Seeded, (await env.RunAsync()).Status);
+
+        await using var db = env.Admin();
+        var added = await db.AuditLogs.Where(a => !known.Contains(a.Id)).ToListAsync();
+        Assert.NotEmpty(added);
+        Assert.All(added, a => Assert.Equal(DemoParticipantFixtureSeeder.ActorLabel, a.ChangedByName));
+    }
+
+    [SkippableFact]
+    public async Task Postgres_ARunWaitsForTheAdvisoryLock_ThenFindsTheRowsAndAddsNothing()
+    {
+        var env = await SeededAsync();
+        await using var holder = env.Admin();
+        await using var tx = await holder.Database.BeginTransactionAsync();
+        await holder.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(hashtext('demo-participant-fixtures'))");
+        var runs = new[] { env.RunAsync(), env.RunAsync() };
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Assert.All(runs, r => Assert.False(r.IsCompleted, "a run must wait for the advisory lock before it reads or writes"));
+        await tx.CommitAsync();
+        var results = await Task.WhenAll(runs);
+        Assert.All(results, r => Assert.Equal(DemoFixtureStatus.Seeded, r.Status));
+        Assert.Equal(new[] { 0 }, results.Select(r => r.Total).Where(t => t == 0).ToArray());   // exactly one run added rows; the other found them
+        Assert.Contains(results, r => r.Total > 0);
+    }
 }
