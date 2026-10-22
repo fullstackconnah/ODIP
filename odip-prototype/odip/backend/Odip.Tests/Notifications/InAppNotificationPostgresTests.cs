@@ -148,7 +148,7 @@ public class InAppNotificationPostgresTests : IClassFixture<PostgresFixture>
             Assert.Equal(new[] { newest.Id, middle.Id, oldest.Id }, inbox.Items.Select(i => i.Id));
             Assert.Equal(3, inbox.UnreadCount);
 
-            Assert.IsType<NoContentResult>(await controller.MarkAllInboxRead(CancellationToken.None));
+            Assert.IsType<NoContentResult>(await controller.MarkAllInboxRead(null, CancellationToken.None));
             Assert.Equal(0, Inbox(await controller.GetInbox(30, CancellationToken.None)).UnreadCount);
         }
     }
@@ -196,6 +196,56 @@ public class InAppNotificationPostgresTests : IClassFixture<PostgresFixture>
         await using var check = PostgresFixture.NewContext(_pg.ConnectionString);
         var left = await check.InAppNotifications.Where(n => n.TenantId == a || n.TenantId == b).Select(n => n.Id).ToListAsync();
         Assert.Equal(new[] { keptA.Id, keptB.Id }.OrderBy(x => x), left.OrderBy(x => x));
+    }
+
+    private static NotificationOutbox Outbox(Guid tenantId, DateTime createdAt, NotificationOutboxStatus status) => new()
+    {
+        Id = Guid.NewGuid(), TenantId = tenantId, RecipientUserId = Guid.NewGuid(), EventType = NotificationEventType.ShiftAssigned,
+        EntityType = "Shift", EntityId = Guid.NewGuid(), PayloadJson = "{}", Status = status, NextAttemptAt = createdAt, CreatedAt = createdAt,
+    };
+
+    /// <summary>Outbox rows older than 90 days go whatever their status (live never sends, so Pending rows pile up); the delivery log is not touched.</summary>
+    [SkippableFact]
+    public async Task ThePurge_AlsoDeletesOutboxRowsOlderThan90Days_AnyStatus_AndKeepsTheRest_AndTheLoggedOnes_AndTheBellPurgeIsUnchanged()
+    {
+        RequirePostgres();
+        var now = DateTime.UtcNow;
+        var (setup, tenantId) = await _pg.NewTenantContextAsync();
+        await setup.DisposeAsync();
+        var oldPending = Outbox(tenantId, now.AddDays(-91), NotificationOutboxStatus.Pending);
+        var oldFailed = Outbox(tenantId, now.AddDays(-91), NotificationOutboxStatus.Failed);
+        var oldSent = Outbox(tenantId, now.AddDays(-91), NotificationOutboxStatus.Sent);   // has a delivery-log row: stays with it
+        var recent = Outbox(tenantId, now.AddDays(-89), NotificationOutboxStatus.Pending);
+        var oldBell = Row(tenantId, Guid.NewGuid(), now.AddDays(-91));
+        var keptBell = Row(tenantId, Guid.NewGuid(), now.AddDays(-89));
+        await using (var admin = PostgresFixture.NewContext(_pg.ConnectionString))
+        {
+            admin.NotificationOutbox.AddRange(oldPending, oldFailed, oldSent, recent);
+            admin.NotificationLogs.Add(new NotificationLog { Id = Guid.NewGuid(), TenantId = tenantId, OutboxId = oldSent.Id, Channel = NotificationChannelKind.Email, RecipientAddress = "a@example.com" });
+            admin.InAppNotifications.AddRange(oldBell, keptBell);
+            await admin.SaveChangesAsync();
+        }
+
+        var service = Dispatcher(_pg.ConnectionString, enabled: false);
+        Assert.True(await service.PurgeExpiredOutboxAsync(now, CancellationToken.None) >= 2);   // pending + failed
+        Assert.True(await service.PurgeExpiredInAppNotificationsAsync(now, CancellationToken.None) >= 1);
+
+        await using var check = PostgresFixture.NewContext(_pg.ConnectionString);
+        var ids = new[] { oldPending.Id, oldFailed.Id, oldSent.Id, recent.Id };
+        Assert.Equal(new[] { oldSent.Id, recent.Id }.OrderBy(x => x), (await check.NotificationOutbox.Where(o => ids.Contains(o.Id)).Select(o => o.Id).ToListAsync()).OrderBy(x => x));
+        Assert.Equal(new[] { keptBell.Id }, await check.InAppNotifications.Where(n => n.Id == oldBell.Id || n.Id == keptBell.Id).Select(n => n.Id).ToListAsync());
+    }
+
+    [SkippableFact]
+    public async Task TheOutboxDedupeIndex_LeadsWithEntityRecipientCreatedAt()
+    {
+        RequirePostgres();
+        await using var conn = new NpgsqlConnection(_pg.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand(
+            "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'NotificationOutbox' " +
+            "AND indexdef LIKE '%(\"EntityId\", \"RecipientUserId\", \"CreatedAt\")%'", conn);
+        Assert.NotNull(await cmd.ExecuteScalarAsync());
     }
 
     /// <summary>Review Focus 3: live has Notifications:Enabled=false and usually an empty outbox; the purge must still run.</summary>

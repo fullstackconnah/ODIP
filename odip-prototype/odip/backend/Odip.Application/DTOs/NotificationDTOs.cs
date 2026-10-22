@@ -84,3 +84,9 @@ public record InboxDto
     public int UnreadCount { get; init; }
     public bool HasMore { get; init; }
 }
+
+/// <summary>POST api/v1/notifications/inbox/read-all: the ids the bell shows. Omitted (an old client mid-deploy) means every unread item; at most 100.</summary>
+public record MarkInboxReadRequest
+{
+    public Guid[]? Ids { get; init; }
+}

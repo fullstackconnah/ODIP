@@ -148,7 +148,7 @@ public class InboxEndpointTests
             var controller = Controller(db, Guid.NewGuid());
             Assert.Empty(Body(await controller.GetInbox(30, CancellationToken.None)).Items);
             Assert.IsType<NotFoundObjectResult>(await controller.MarkInboxRead(theirs.Id, CancellationToken.None));
-            Assert.IsType<NoContentResult>(await controller.MarkAllInboxRead(CancellationToken.None));
+            Assert.IsType<NoContentResult>(await controller.MarkAllInboxRead(null, CancellationToken.None));
         }
 
         using var check = Context(store, null, superAdmin: true);
@@ -202,7 +202,7 @@ public class InboxEndpointTests
         var readAtBefore = alreadyRead.ReadAt;
         var store = Seed(Row(TenantA, me, 1), Row(TenantA, me, 2), alreadyRead, Row(TenantA, Guid.NewGuid(), 3), Row(TenantB, me, 4));
         using (var db = Context(store, TenantA))
-            Assert.IsType<NoContentResult>(await Controller(db, me).MarkAllInboxRead(CancellationToken.None));
+            Assert.IsType<NoContentResult>(await Controller(db, me).MarkAllInboxRead(null, CancellationToken.None));
 
         using var check = Context(store, null, superAdmin: true);
         var rows = await check.InAppNotifications.ToListAsync();
@@ -212,12 +212,44 @@ public class InboxEndpointTests
     }
 
     [Fact]
+    public async Task MarkAllInboxRead_WithIds_MarksOnlyThoseRows_SoUnseenOnesStayUnread()
+    {
+        var me = Guid.NewGuid();
+        var rows = Enumerable.Range(1, 45).Select(i => Row(TenantA, me, i)).ToArray();   // 45 unread, newest first
+        var someoneElses = Row(TenantA, Guid.NewGuid(), 1);
+        var store = Seed(rows.Append(someoneElses).ToArray());
+        var shown = rows.Take(30).Select(r => r.Id).Append(someoneElses.Id).ToArray();   // the panel shows 30; a foreign id rides along
+        using (var db = Context(store, TenantA))
+            Assert.IsType<NoContentResult>(await Controller(db, me).MarkAllInboxRead(new MarkInboxReadRequest { Ids = shown }, CancellationToken.None));
+
+        using var check = Context(store, null, superAdmin: true);
+        var all = await check.InAppNotifications.ToListAsync();
+        Assert.Equal(15, all.Count(r => r.RecipientUserId == me && r.ReadAt == null));
+        Assert.All(rows.Take(30), r => Assert.NotNull(all.Single(x => x.Id == r.Id).ReadAt));
+        Assert.Null(all.Single(x => x.Id == someoneElses.Id).ReadAt);
+    }
+
+    [Fact]
+    public async Task MarkAllInboxRead_WithMoreThan100Ids_Is400_AndChangesNothing()
+    {
+        var me = Guid.NewGuid();
+        var row = Row(TenantA, me, 1);
+        var store = Seed(row);
+        using (var db = Context(store, TenantA))
+            Assert.IsType<BadRequestObjectResult>(await Controller(db, me).MarkAllInboxRead(
+                new MarkInboxReadRequest { Ids = Enumerable.Range(0, 101).Select(_ => Guid.NewGuid()).ToArray() }, CancellationToken.None));
+
+        using var check = Context(store, null, superAdmin: true);
+        Assert.Null((await check.InAppNotifications.SingleAsync()).ReadAt);
+    }
+
+    [Fact]
     public async Task TheInbox_WithNoResolvableCaller_Is401()
     {
         using var db = Context(Seed(), TenantA);
         var controller = Controller(db, null);
         Assert.IsType<UnauthorizedObjectResult>((await controller.GetInbox(30, CancellationToken.None)).Result);
         Assert.IsType<UnauthorizedObjectResult>(await controller.MarkInboxRead(Guid.NewGuid(), CancellationToken.None));
-        Assert.IsType<UnauthorizedObjectResult>(await controller.MarkAllInboxRead(CancellationToken.None));
+        Assert.IsType<UnauthorizedObjectResult>(await controller.MarkAllInboxRead(null, CancellationToken.None));
     }
 }

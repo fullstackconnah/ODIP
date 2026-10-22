@@ -23,9 +23,9 @@ beforeEach(() => {
   mockApiGet.mockReset()
   mockApiPost.mockReset()
   mockApiGet.mockImplementation(async () => inbox(server))
-  mockApiPost.mockImplementation(async (url: string) => {
+  mockApiPost.mockImplementation(async (url: string, body?: { ids: string[] }) => {
     const readAt = new Date().toISOString()
-    server = server.map(n => (!n.readAt && (url.endsWith('/read-all') || url === `/notifications/inbox/${n.id}/read`) ? { ...n, readAt } : n))
+    server = server.map(n => (!n.readAt && ((url.endsWith('/read-all') && body?.ids.includes(n.id)) || url === `/notifications/inbox/${n.id}/read`) ? { ...n, readAt } : n))
   })
 })
 
@@ -146,7 +146,7 @@ describe('NotificationBell: the panel, from lg', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))
 
     expect(heading()).toHaveFocus()
-    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/notifications/inbox/read-all'))
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/notifications/inbox/read-all', { ids: ['n1', 'n2'] }))
     await waitFor(() => expect(bell()).toHaveAccessibleName('Notifications'))
     expect(screen.queryByRole('button', { name: 'Mark all as read' })).toBeNull()
     expect(screen.queryByText('Unread:', { exact: false })).toBeNull()

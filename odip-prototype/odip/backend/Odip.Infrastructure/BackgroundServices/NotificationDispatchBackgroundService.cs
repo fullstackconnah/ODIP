@@ -68,6 +68,7 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 try
                 {
                     await PurgeExpiredInAppNotificationsAsync(DateTime.UtcNow, stoppingToken);
+                    await PurgeExpiredOutboxAsync(DateTime.UtcNow, stoppingToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -99,6 +100,16 @@ public class NotificationDispatchBackgroundService : BackgroundService
         return await db.InAppNotifications.Where(n => n.CreatedAt < cutoff).ExecuteDeleteAsync(ct);
     }
 
+    /// <summary>Deletes outbox rows older than <see cref="InAppRetentionDays"/> whatever their status (live never sends, so Pending rows only pile up), in every organisation. The delivery log is the record of what was sent and is kept, and its FK to the outbox is Restrict, so a row that has a log entry stays too.</summary>
+    public async Task<int> PurgeExpiredOutboxAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbOptions = scope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>();
+        await using var db = new OdipDbContext(dbOptions, new Notifications.ScopedTenantOverride { IsSuperAdmin = true });
+        var cutoff = nowUtc.AddDays(-InAppRetentionDays);
+        return await db.NotificationOutbox.Where(o => o.CreatedAt < cutoff && !db.NotificationLogs.Any(l => l.OutboxId == o.Id)).ExecuteDeleteAsync(ct);
+    }
+
     public async Task RunTickAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -114,6 +125,9 @@ public class NotificationDispatchBackgroundService : BackgroundService
         var enabled = _config.GetValue("Notifications:Enabled", false);
         var baseUrl = _config.GetValue<string>("Notifications:PublicBaseUrl") ?? string.Empty;
 
+        // Disabled (live today): rows stay Pending and are never looked at, so don't SELECT them every tick.
+        if (!enabled) return;
+
         // 1. Batch-select (superadmin-scoped context, read-only): Pending rows due now, capped
         // and ordered oldest-first.
         await using var readDb = new OdipDbContext(dbOptions, new Notifications.ScopedTenantOverride { IsSuperAdmin = true });
@@ -125,13 +139,6 @@ public class NotificationDispatchBackgroundService : BackgroundService
             .ToListAsync(ct);
 
         if (batch.Count == 0) return;
-
-        // 2. Kill switch — rows stay Pending, never dropped, never even looked at further.
-        if (!enabled)
-        {
-            _logger.LogInformation("Notifications:Enabled is false — leaving {Count} pending rows untouched", batch.Count);
-            return;
-        }
 
         // 3. Group by TenantId; one tenant-scoped OdipDbContext per group.
         foreach (var group in batch.GroupBy(o => o.TenantId))

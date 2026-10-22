@@ -104,6 +104,25 @@ public class NotificationDispatchBackgroundServiceTests
         Assert.Equal("User preference disabled", row.LastError);
     }
 
+    /// <summary>Notifications:Enabled=false (live today) must not SELECT the batch every tick: the pointed-at PostgreSQL does not exist, so any query would throw.</summary>
+    [Fact]
+    public async Task WhenDisabled_TheTick_NeverQueriesTheDatabase()
+    {
+        NotificationDispatchBackgroundService Build(string enabled)
+        {
+            var services = new ServiceCollection();
+            services.AddDbContext<OdipDbContext>(o => o.UseNpgsql("Host=127.0.0.1;Port=1;Database=none;Username=x;Password=x;Timeout=1;Command Timeout=1"));
+            var email = new Mock<INotificationChannel>();
+            email.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+            services.AddSingleton<INotificationChannel>(email.Object);
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:Enabled"] = enabled }).Build();
+            return new NotificationDispatchBackgroundService(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), config, NullLogger<NotificationDispatchBackgroundService>.Instance);
+        }
+
+        await Build("false").RunTickAsync(CancellationToken.None);                                          // no query, no throw
+        await Assert.ThrowsAnyAsync<Exception>(() => Build("true").RunTickAsync(CancellationToken.None));   // the control: enabled does query
+    }
+
     [Fact]
     public async Task KillSwitch_LeavesRowsPending_NeverInvokesSendAsync()
     {

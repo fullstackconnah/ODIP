@@ -82,7 +82,7 @@ export default function NotificationBell() {
     if (navigates) setOpen(false)
   }
   const markAllRead = () => {
-    markAll.mutate()
+    markAll.mutate((inbox.data?.items ?? []).filter(n => !n.readAt).map(n => n.id))
     // The button is about to disappear: keep focus in the panel, on its heading, rather than dropping it to the page.
     ;(headingRef.current ?? slideOverTitleRef.current)?.focus()
   }
