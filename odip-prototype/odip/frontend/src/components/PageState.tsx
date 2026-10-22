@@ -62,7 +62,7 @@ function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
         tone="danger"
         actions={onRetry ? (
           <>
-            <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
+            <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="min-h-[var(--tap-min)] aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
               Try again
             </Button>
             {/* A fixed width, so the right-aligned button holds one x position in idle, pending and failed (the failed copy measures about 136px). */}

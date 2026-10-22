@@ -23,8 +23,8 @@ const WORD_LABEL: Record<PayrollShiftStatus, string> = { Sent: 'Sent', Waiting: 
 /** Worst first: what a worker's row says, and the order of the table. */
 const SEVERITY: PayrollShiftStatus[] = ['Changed', 'Failed', 'NotLinked', 'Waiting', 'Sent']
 const MUTED = 'text-sm text-[var(--color-muted-foreground)]'
-/** A word joiner after the en dash, so a line can't break straight after it. */
-const DASH = '–⁠'
+/** An en dash with no-break spaces, and a word joiner after it so a line can't break straight after the dash. */
+const DASH = ' –⁠ '
 
 function Word({ status }: { status: PayrollShiftStatus }) {
   return <StatusBadge status={status} label={WORD_LABEL[status]} tone={WORD_TONE[status]} />
@@ -49,18 +49,18 @@ const clock = (time: string) => {
 const periodKey = (p: PayPeriodDto) => `${p.payScheduleId}|${p.from}`
 
 function periodLabel(p: PayPeriodDto, showSchedule: boolean) {
-  const range = `${shortDate(p.from)} ${DASH}${shortDate(p.to, true)} · ${p.finalised ? 'Finalised' : 'Open'}`
+  const range = `${shortDate(p.from)}${DASH}${shortDate(p.to, true)} · ${p.finalised ? 'Finalised' : 'Open'}`
   return showSchedule ? `${p.scheduleName} · ${range}` : range
 }
 
 type WorkerRow = PayrollWorkerDto & { id: string; worst: PayrollShiftStatus; notSent: number }
 
 function shiftLine(s: PayrollShiftDto) {
-  const rostered = `Rostered ${clock(s.rosteredStart)} ${DASH}${clock(s.rosteredEnd)} (${hours(s.rosteredMinutes)})`
+  const rostered = `Rostered ${clock(s.rosteredStart)}${DASH}${clock(s.rosteredEnd)} (${hours(s.rosteredMinutes)})`
   if (s.nightType === 'Sleepover') return `${rostered} · Sleepover: rostered times sent`
   const time = (iso: string | null) => formatWithTimeZone(iso, s.timeZoneId, { hour: 'numeric', minute: '2-digit' })
   const actual = s.actualEnd
-    ? `Actual ${time(s.actualStart)} ${DASH}${time(s.actualEnd)}${s.breakMinutes > 0 ? `, ${s.breakMinutes} min break` : ''} (${hours(s.paidMinutes)})`
+    ? `Actual ${time(s.actualStart)}${DASH}${time(s.actualEnd)}${s.breakMinutes > 0 ? `, ${s.breakMinutes} min break` : ''} (${hours(s.paidMinutes)})`
     : 'Actual hours not recorded'
   const lead = s.nightType === 'ActiveNight' ? 'Active night · ' : s.nightType === 'PassiveNight' ? 'Passive night · ' : ''
   return `${lead}${rostered} · ${actual}`
@@ -152,7 +152,7 @@ export default function PayrollPage() {
         const open = isOpen(w)
         return (
           <Button
-            variant="ghost" size="sm"
+            variant="ghost" size="sm" className="min-h-[var(--tap-min)]"
             aria-label={`${open ? 'Hide' : 'Show'} shifts: ${w.name}`}
             aria-expanded={open}
             aria-controls={open ? `shifts-${w.id}` : undefined}
@@ -212,7 +212,7 @@ export default function PayrollPage() {
 
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-6">
           {/* One slot for the summary and the queued/updated line, a fixed height so neither makes the page jump. */}
-          <div className="flex min-h-[3rem] flex-col gap-0.5">
+          <div className="flex min-h-[4.5rem] flex-col md:min-h-[3rem] gap-0.5">
             <p className={`${data && data.approved > 0 && data.sent === data.approved ? 'text-[var(--color-success)]' : ''} [overflow-wrap:anywhere]`}>
               {data ? summaryText(data) : ' '}
             </p>
@@ -245,7 +245,7 @@ export default function PayrollPage() {
         {data && data.awaitingApproval > 0 && (
           <Callout
             tone="info"
-            actions={<Button to="/rostering/completions" variant="secondary" size="sm">Open Completions</Button>}
+            actions={<Button to="/rostering/completions" variant="secondary" size="sm" className="min-h-[var(--tap-min)]">Open Completions</Button>}
           >
             {plural(data.awaitingApproval, 'shift')} in this period {data.awaitingApproval === 1 ? "isn't" : "aren't"} approved yet, so {data.awaitingApproval === 1 ? "it can't" : "they can't"} go to payroll.
           </Callout>

@@ -208,7 +208,7 @@ function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
       ) : types.isError || !types.data ? (
         <Callout tone="danger">
           <p>{extractErrorMessage(types.error, "Employment Hero's work types couldn't be loaded.")}</p>
-          <Button variant="secondary" size="sm" onClick={() => types.refetch()}>Try again</Button>
+          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" onClick={() => types.refetch()}>Try again</Button>
         </Callout>
       ) : (
         <>
