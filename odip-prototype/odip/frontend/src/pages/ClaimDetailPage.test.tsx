@@ -7,8 +7,9 @@ import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseClaim, mockUpdateClaim, mockUpdateLineItem } = vi.hoisted(() => ({
+const { mockUseClaim, mockUpdateClaim, mockUpdateLineItem, mockUseClaimInvoices } = vi.hoisted(() => ({
   mockUseClaim: vi.fn(),
+  mockUseClaimInvoices: vi.fn(),
   mockUpdateClaim: vi.fn(),
   mockUpdateLineItem: vi.fn(),
 }))
@@ -17,7 +18,15 @@ vi.mock('@/api/hooks', () => ({
   useClaim: mockUseClaim,
   useUpdateClaim: () => ({ mutate: mockUpdateClaim, isPending: false }),
   useUpdateClaimLineItem: () => ({ mutate: mockUpdateLineItem, isPending: false }),
+  // The Invoices section (Xero PR1): its own query; InvoicesSection.test.tsx covers what it shows.
+  useClaimInvoices: mockUseClaimInvoices,
+  useVoidInvoice: () => ({ mutate: vi.fn(), isPending: false }),
+  useIssueCreditNote: () => ({ mutate: vi.fn(), isPending: false }),
 }))
+
+beforeEach(() => {
+  mockUseClaimInvoices.mockReturnValue({ data: { invoiceState: 'preview', invoices: [], groups: [], agencyCount: 0 }, isLoading: false })
+})
 
 // ClaimDetailPage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker — that
 // throws under a plain declarative <MemoryRouter>/<Routes>, so tests need a data router (same
@@ -183,6 +192,26 @@ describe('ClaimDetailPage — line item participant link', () => {
 
     expect(screen.getByText('Priya Nair')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Priya Nair' })).not.toBeInTheDocument()
+  })
+})
+
+describe('ClaimDetailPage — Invoices section (Xero PR1)', () => {
+  it('puts the Invoices card after the budget and before the notes, its h2 focusable for after a submit', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })
+    renderPage()
+
+    const heading = screen.getByRole('heading', { name: 'Invoices' })
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    const notes = screen.getByRole('button', { name: 'Add notes' })
+    expect(heading.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(mockUseClaimInvoices).toHaveBeenCalledWith('claim-1')
+  })
+
+  it.each(['PlanManaged', 'SelfManaged'] as const)('no longer offers a per-line Invoice download on a %s line: the Invoices card has one row per payer', planType => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ planType })]), isLoading: false })
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
   })
 })
 
