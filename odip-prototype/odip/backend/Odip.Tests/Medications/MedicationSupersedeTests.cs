@@ -154,7 +154,7 @@ public class MedicationSupersedeTests
         var replacement = Body(await second.RecordShiftDose(secondShiftId, med.Id, Given(), default)).Data!;
 
         var history = Assert.IsType<ApiResponse<List<AdministrationDto>>>(Assert.IsType<OkObjectResult>(
-            (await new MedicationsController(f.Db, f.Tenant.Object).GetParticipantAdministrations(f.Participant.Id, null, null, default)).Result).Value).Data!;
+            (await new MedicationsController(f.Db, f.Tenant.Object).GetParticipantAdministrations(f.Participant.Id, new DateTime(2020, 1, 1), null, default)).Result).Value).Data!;
 
         Assert.Equal(2, history.Count);
         Assert.Equal(replacement.Id, history.Single(a => a.Status == MedicationAdministrationStatus.Missed).SupersededByAdministrationId);
