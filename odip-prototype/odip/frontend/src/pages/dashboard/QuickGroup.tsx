@@ -12,6 +12,7 @@ import { NoticesRegion } from '@/components/NoticesRegion'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
 import { ROW_ACTIONS_CARD, TAP_FLOOR } from '@/components/tapArea'
+import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { formatRatio } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import { SHOWN_ROWS, isPresent, rowKey, shownCount, visibleRows, type ActionOutcome, type GroupModel, type QuickForm, type QuickRow, type RowAction } from './quickGroupModel'
@@ -144,6 +145,8 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
     return next
   })
   const detailId = useId()
+  // From md the select-all box heads the selection column; below md the thead is not shown (phone cards), so it stays in the bar.
+  const belowMd = useIsBelowMd()
   const groupRef = useRef<HTMLDivElement>(null)
   const allRef = useRef<HTMLInputElement>(null)
   const rows = visibleRows(model, state.gone)
@@ -362,8 +365,18 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
     } finally { setChecking(false) }
   }
 
+  // ONE select-all box, mounted in one place at a time, so its one ref (focus after Clear, the mixed state) is always the visible box.
+  const allBox = tickable.length > 0 && (
+    <span className="inline-flex" ref={element => { allRef.current = element?.querySelector('input') ?? null }}>
+      <CheckboxField label={ticked.length > 0 || !belowMd ? <span className="sr-only">Select all shown {model.noun}</span> : 'Select shown'}
+        className="[&_input]:m-0 [&_input]:size-4 [&_input]:accent-[var(--color-primary)] pointer-coarse:[&_label]:min-w-11"
+        aria-label={`Select all shown ${model.noun}`} checked={ticked.length > 0 && ticked.length === tickable.length}
+        aria-disabled={progress || checking ? true : undefined}
+        onChange={event => { if (!progress && !checking) setSelected(new Set(event.target.checked ? tickable.map(row => row.id) : [])) }} />
+    </span>
+  )
   const columns: Column<QuickRow>[] = [
-    ...(bar ? [{ key: 'selection', header: 'Select', pin: false as const, mobile: 'status' as const,
+    ...(bar ? [{ key: 'selection', header: (!belowMd && allBox) || 'Select', pin: false as const, mobile: 'status' as const,
       minWidth: 'calc(24px + var(--control-h))', render: (row: QuickRow) => {
         const action = tapOf(row)
         return action ? <CheckboxField label={<span className="sr-only">{selectName(action.name)}</span>}
@@ -422,38 +435,33 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
       {model.phase === 'loading' && <PageState kind="loading" noun={model.noun} />}
       {model.phase === 'error' && <PageState kind="error" noun={`${model.title.toLowerCase()} queue`} onRetry={() => model.refetch()} />}
       {bar && action && (
-        // The panel bar (SHAPE §4): Select shown at rest; the count, Clear and the selection's action once a box is ticked. Its box lines up
-        // over the row boxes and its button's right edge with the row buttons'. Below xl it sticks under the app header, inside its own panel.
-        <div className="mb-2 flex items-center justify-between gap-3 xl:h-[var(--control-h)] xl:px-[calc(1px+var(--cell-px))] max-xl:sticky max-xl:top-12 max-xl:z-20 max-xl:bg-[var(--color-background)] max-xl:px-[calc(1px+1rem)] max-xl:py-2 max-xl:shadow-[0_24px_32px_-12px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)]">
-          <div className="flex min-w-0 items-center gap-3">
-            {tickable.length > 0 && (
-              <div ref={element => { allRef.current = element?.querySelector('input') ?? null }}>
-                <CheckboxField label={ticked.length > 0 ? <span className="sr-only">Select all shown {model.noun}</span> : 'Select shown'}
-                  className="[&_input]:m-0 [&_input]:size-4 [&_input]:accent-[var(--color-primary)] pointer-coarse:[&_label]:min-w-11"
-                  aria-label={`Select all shown ${model.noun}`} checked={ticked.length > 0 && ticked.length === tickable.length}
-                  aria-disabled={progress || checking ? true : undefined}
-                  onChange={event => { if (!progress && !checking) setSelected(new Set(event.target.checked ? tickable.map(row => row.id) : [])) }} />
-              </div>
-            )}
-            {ticked.length > 0 && (
-              <>
-                <span className="whitespace-nowrap text-[13px] tabular-nums text-[var(--color-muted-foreground)]">{ticked.length} selected</span>
+        // The panel bar (card42): the selection's state and its action, upper right above the table, so ticking never reflows the columns. Its content row is
+        // --control-h at rest, ticked and running; below xl it sticks under the app header inside its own panel, and on a phone it carries the select-all box.
+        <div className="mb-2 xl:px-[calc(1px+var(--cell-px))] max-xl:sticky max-xl:top-12 max-xl:z-20 max-xl:bg-[var(--color-background)] max-xl:px-[calc(1px+1rem)] max-xl:py-2 max-xl:shadow-[0_24px_32px_-12px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)]">
+          <div data-bulk-bar className="flex h-[var(--control-h)] items-center gap-3">
+            {belowMd && allBox}
+            <div className="ml-auto flex min-w-0 items-center gap-3">
+              {/* Phones leave the count out: the action's label already carries it, and the row has no room for both (SHAPE card42 §3.1). */}
+              {!belowMd && !progress && (
+                <span className="whitespace-nowrap text-[13px] tabular-nums text-[var(--color-muted-foreground)]">{ticked.length > 0 ? `${ticked.length} selected` : 'None selected'}</span>
+              )}
+              {ticked.length > 0 && !(belowMd && progress) && (
                 <Button variant="ghost" aria-disabled={progress || checking ? true : undefined} className={progress ? HELD : undefined} onClick={() => { if (!progress && !checking) clear() }}>Clear</Button>
-              </>
-            )}
+              )}
+              {(count > 0 || progress) && (
+                <Button
+                  data-bulk-action
+                  // While running, the name is the visible count (label in name, WCAG 2.5.3).
+                  aria-label={progress ? undefined : action.name}
+                  aria-disabled={progress || checking ? true : undefined}
+                  className={`shrink-0 ${progress ? HELD : ''}`}
+                  onClick={() => { if (!progress && !checking) setConfirm(mode) }}
+                >
+                  {progress && bulkKey ? runningLabel(bulkKey, progress.done, progress.total) : action.label}
+                </Button>
+              )}
+            </div>
           </div>
-          {(count > 0 || progress) && (
-            <Button
-              data-bulk-action
-              // While running, the name is the visible count (label in name, WCAG 2.5.3).
-              aria-label={progress ? undefined : action.name}
-              aria-disabled={progress || checking ? true : undefined}
-              className={`shrink-0 ${progress ? HELD : ''}`}
-              onClick={() => { if (!progress && !checking) setConfirm(mode) }}
-            >
-              {progress && bulkKey ? runningLabel(bulkKey, progress.done, progress.total) : action.label}
-            </Button>
-          )}
         </div>
       )}
       {(needsCheck.size > 0 || held.size > 0) && (
