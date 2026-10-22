@@ -140,7 +140,7 @@ describe('StaffCreatePage create: an address the server wants checked', () => {
 
 describe('StaffCreatePage edit: a changed address the server wants checked', () => {
   it('asks the admin to check the new address, and on "Use this address" sends the update again with the confirmation', async () => {
-    mockUseStaffDetail.mockReturnValue({ data: staff(), isLoading: false })
+    mockUseStaffDetail.mockReturnValue({ data: staff(), isLoading: false, refetch: vi.fn().mockResolvedValue({ data: staff() }) })
     const u = renderPage('/staff/s1/edit')
     const email = await screen.findByLabelText(/^email/i)
     await waitFor(() => expect(email).toHaveValue('sam.staff@acme.example.com'))

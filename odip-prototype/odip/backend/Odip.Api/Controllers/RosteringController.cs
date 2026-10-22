@@ -541,7 +541,7 @@ public class RosteringController : ControllerBase
                 if (IsLockedForStaffChange(from.Status))
                     return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
                 // The person the page carried is no longer on the shift they left: never clear somebody else by surprise.
-                if (from.UserId != dto.StaffId) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+                if (from.UserId != dto.StaffId) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged));
             }
             var result = await CreateShiftCoreAsync(dto, from, ct);
             if (result.Result is OkObjectResult) await held.CommitAsync(ct);
@@ -803,7 +803,7 @@ public class RosteringController : ControllerBase
             return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
         // A drop names who the board showed (nobody, or the person the prompt offered to replace): someone changed the shift since, so say so rather than replace them by surprise.
         if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
-            return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+            return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged));
 
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftDto>.Fail("Staff member not found."));
@@ -858,13 +858,13 @@ public class RosteringController : ControllerBase
             if (IsLockedForStaffChange(from.Status) || IsLockedForStaffChange(to.Status))
                 return Conflict(ApiResponse<ShiftDto>.Fail(ShiftLockedForStaffMessage, ShiftErrorCodes.ShiftStatusLocked));
             // The person the page carried is no longer on the source (or nobody is): never move somebody else by surprise.
-            if (from.UserId is not { } mover || (dto.StaffId is { } carried && carried != mover)) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+            if (from.UserId is not { } mover || (dto.StaffId is { } carried && carried != mover)) return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged));
             if (to.UserId == mover) return BadRequest(ApiResponse<ShiftDto>.Fail("They are already on that shift."));
             // Drawn as Needs staff but filled since (Move), drawn filled but emptied since (Swap), or someone other than the person drawn there is on it now (Replace, Swap):
             // never take somebody off, or swap with somebody, by surprise.
             if ((dto.Mode == MoveStaffMode.Move && to.UserId is not null) || (dto.Mode == MoveStaffMode.Swap && to.UserId is null)
                 || (dto.Mode != MoveStaffMode.Move && dto.ExpectedToStaffId is { } shown && shown != to.UserId))
-                return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage));
+                return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged));
 
             var displaced = to.UserId;
             var back = dto.Mode == MoveStaffMode.Swap ? displaced : null;   // who lands on the source
@@ -1973,7 +1973,7 @@ public class RosteringController : ControllerBase
         if (shown is null || shown.ShiftPatternId != id || shown.ParticipantId != pattern.ParticipantId || shown.ServiceDate.DayOfWeek != pattern.DayOfWeek
             || shown.StartTime != pattern.StartTime || shown.EndTime != pattern.EndTime || shown.EndsNextDay != pattern.EndsNextDay
             || (dto.StaffId.HasValue && shown.UserId != dto.StaffId))
-            return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage));
+            return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged));
         if (!pattern.IsActive || pattern.EffectiveTo < await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct))
             return Conflict(ApiResponse<ShiftPatternDto>.Fail("This shift's agreement pattern has ended, so it has no regular to change.", PatternEndedCode));
         if (dto.StaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.StaffId.Value && s.IsActive, ct))
@@ -1981,7 +1981,7 @@ public class RosteringController : ControllerBase
         // shortcut: a client that omits ExpectedRegularId (a tab opened before this deploy) skips this check and can still send a stale Stop; the token below only catches a change between our load and save. Such tabs are protected after one reload; upgrade by requiring the field once old tabs are gone.
         // REV281B: the regular the coordinator was shown must still be the live one. DefaultUserId is also a concurrency token, so a change between this load and the save is refused at the UPDATE.
         if (dto.ExpectedRegularId is { } seen && (seen == Guid.Empty ? null : seen) != pattern.DefaultUserId)
-            return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage));
+            return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged));
         var was = pattern.DefaultUserId;
         pattern.DefaultUserId = dto.StaffId;
         // REV281B: a renewal's successor starts later and was copied this worker, and the next started week is made from it, so the change has to reach it too (in memory: the asks are jsonb).
@@ -1990,7 +1990,7 @@ public class RosteringController : ControllerBase
                 .Where(n => n.DefaultUserId == was && ServiceAgreementApprovalService.SameSupport(pattern, n)))   // only the approval's copy: a regular chosen on the renewal stays
                 next.DefaultUserId = dto.StaffId;
         try { await _db.SaveChangesAsync(ct); }
-        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage)); }
+        catch (DbUpdateConcurrencyException) { return Conflict(ApiResponse<ShiftPatternDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged)); }
         await held.CommitAsync(ct);
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }

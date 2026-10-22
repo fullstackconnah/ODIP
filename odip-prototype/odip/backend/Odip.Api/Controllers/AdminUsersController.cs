@@ -385,21 +385,7 @@ public class AdminUsersController : ControllerBase
         user.Username = dto.Username;
         user.Role = role;
         user.IsActive = dto.IsActive;
-        user.Position = dto.Position;
-        user.Mobile = dto.Mobile;
-        user.Region = dto.Region;
-        user.IsDriverEligible = dto.IsDriverEligible;
-        user.IsFirstAidQualified = dto.IsFirstAidQualified;
-        user.IsMedicationCompetent = dto.IsMedicationCompetent;
-        user.IsManualHandlingCompetent = dto.IsManualHandlingCompetent;
-        user.IsOvernightEligible = dto.IsOvernightEligible;
-        user.FirstAidExpiryDate = dto.FirstAidExpiryDate;
-        user.DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate;
-        user.ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate;
-        user.MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate;
-        user.WorkerScreeningNumber = dto.WorkerScreeningNumber;
-        user.WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate;
-        user.Notes = dto.Notes;
+        // The staff profile is owned by the Staff endpoint and this form does not send it, so it is left as stored.
         user.UpdatedAt = DateTime.UtcNow;
 
         try

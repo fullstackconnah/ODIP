@@ -255,6 +255,49 @@ public class AdminUsersControllerTests
     }
 
     [Fact]
+    public async Task Update_IdentityOnly_KeepsTheStaffProfileColumns()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDb(dbName);
+        var tenant = SeedTenant(db);
+        var user = SeedUser(db, tenant.Id, "existing@test.example.com", "existinguser");
+        // A staff member's profile, kept on the same row. The Users form does not show or send any of it.
+        user.Position = Odip.Domain.Enums.Position.Coordinator;
+        user.Mobile = "0400 000 000";
+        user.Region = "Hobart";
+        user.IsFirstAidQualified = true;
+        user.FirstAidExpiryDate = new DateOnly(2027, 3, 1);
+        user.WorkerScreeningNumber = "WS-12345";
+        user.Notes = "Prefers morning shifts.";
+        await db.SaveChangesAsync();
+
+        var firebase = new Mock<IFirebaseUserService>();
+        firebase.Setup(f => f.UpdateUserByEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, firebase.Object);
+
+        var dto = new UpdateAdminUserDto
+        {
+            FirstName = "Updated", LastName = "Name", Email = "existing@test.example.com",
+            Username = "existinguser", Role = "SupportWorker", IsActive = true,
+        };
+
+        var result = await controller.Update(user.Id, dto, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        var reloaded = await db.Users.IgnoreQueryFilters().SingleAsync(u => u.Id == user.Id);
+        Assert.Equal("Updated", reloaded.FirstName);
+        Assert.Equal(Odip.Domain.Enums.UserRole.SupportWorker, reloaded.Role);
+        Assert.Equal(Odip.Domain.Enums.Position.Coordinator, reloaded.Position);
+        Assert.Equal("0400 000 000", reloaded.Mobile);
+        Assert.Equal("Hobart", reloaded.Region);
+        Assert.True(reloaded.IsFirstAidQualified);
+        Assert.Equal(new DateOnly(2027, 3, 1), reloaded.FirstAidExpiryDate);
+        Assert.Equal("WS-12345", reloaded.WorkerScreeningNumber);
+        Assert.Equal("Prefers morning shifts.", reloaded.Notes);
+    }
+
+    [Fact]
     public async Task Update_FirebaseFails_ReturnsBadGatewayAndLeavesDbUnchanged()
     {
         // Previously the DB save happened FIRST, so a Firebase failure here (which, for the

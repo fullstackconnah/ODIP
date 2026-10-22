@@ -8,6 +8,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 
 namespace Odip.Api.Controllers;
 
@@ -70,6 +71,7 @@ public class SettingsController : ControllerBase
         {
             HiddenAccommodation = s?.HiddenAccommodation ?? false,
             HiddenVehicles = s?.HiddenVehicles ?? false,
+            EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, tenantId, ct),
         }));
     }
 
@@ -97,5 +99,10 @@ public class SettingsController : ControllerBase
         s.HiddenAccommodation = accommodation;
         s.HiddenVehicles = vehicles;
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<ModuleVisibilityDto>.Ok(new() { HiddenAccommodation = accommodation, HiddenVehicles = vehicles }));
+        return Ok(ApiResponse<ModuleVisibilityDto>.Ok(new()
+        {
+            HiddenAccommodation = accommodation,
+            HiddenVehicles = vehicles,
+            EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, tenantId, ct),
+        }));
     }}

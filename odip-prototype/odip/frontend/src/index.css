@@ -160,7 +160,7 @@
   }
 
   /* Prevent iOS zoom on input focus */
-  @media screen and (max-width: 767px) {
+  @media screen and (width < 48rem) {
     input, select, textarea {
       font-size: 16px !important;
     }
@@ -168,7 +168,7 @@
 }
 
 /* Mobile-friendly table card view */
-@media screen and (max-width: 767px) {
+@media screen and (width < 48rem) {
   .mobile-card-table thead {
     display: none;
   }
@@ -255,7 +255,7 @@
  * row action: 4.6px + 4px of hit area past their edges). The 8px between cells left those two overlapping by under a
  * pixel; 12px clears any such pair. Cards on a mouse keep 8px.
  */
-@media screen and (max-width: 767px) and (pointer: coarse) {
+@media screen and (width < 48rem) and (pointer: coarse) {
   .mobile-card-table tbody tr {
     gap: 0.75rem;
   }

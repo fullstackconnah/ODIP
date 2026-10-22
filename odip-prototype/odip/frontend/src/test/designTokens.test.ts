@@ -48,7 +48,7 @@ describe('mobile card-table captions (density polish)', () => {
   it('opens the gap between the cells of a card from 8px to 12px only for a touch phone, so two 44px hit areas never overlap', () => {
     // Base card: 0.5rem between cells (a mouse at a narrow window keeps it).
     expect(mobileBlock).toMatch(/\.mobile-card-table tbody tr\s*\{[^}]*gap:\s*0\.5rem/)
-    const touch = mobileBlock.match(/@media screen and \(max-width: 767px\) and \(pointer: coarse\)\s*\{\s*\.mobile-card-table tbody tr\s*\{([^}]*)\}/)
+    const touch = mobileBlock.match(/@media screen and \(width < 48rem\) and \(pointer: coarse\)\s*\{\s*\.mobile-card-table tbody tr\s*\{([^}]*)\}/)
     expect(touch).not.toBeNull()
     expect(touch![1]).toMatch(/gap:\s*0\.75rem/)
   })

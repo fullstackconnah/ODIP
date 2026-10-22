@@ -39,7 +39,7 @@ describe('DashboardPage — who decides what (SHAPE §3)', () => {
     asRole('Coordinator')
     renderPage()
 
-    expect(tileLabels()).toEqual(['Critical Participant Alerts', 'Budgets at risk', 'Missing Accommodation', 'Missing Vehicles', 'Missing Staff'])
+    expect(tileLabels()).toEqual(['Budgets at risk', 'Missing Accommodation', 'Missing Vehicles', 'Missing Staff'])
   })
 
   it('shows ReadOnly no decisions at all: no heading, no line', () => {
@@ -58,7 +58,7 @@ describe('DashboardPage — who decides what (SHAPE §3)', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: 'Needs your decision' })).toBeInTheDocument()
     expect(screen.getByText('Choose an organisation to see its approvals.')).toBeInTheDocument()
-    expect(tileLabels()).toHaveLength(11)
+    expect(tileLabels()).toHaveLength(10)
   })
 
   it('decides as an Admin does for a SuperAdmin viewing an organisation', () => {

@@ -256,6 +256,8 @@ builder.Services.AddSingleton<Odip.Infrastructure.Integrations.IntegrationKeyPro
 // The API key travels only in the Authorization header, which is kept out of HttpClient's own request logging.
 builder.Services.AddHttpClient<Odip.Infrastructure.Integrations.EmploymentHeroClient>(c => c.Timeout = TimeSpan.FromSeconds(30))
     .RedactLoggedHeaders(new[] { "Authorization" });
+// HttpClient logs each request URL at Information; for EH that names the employee and the pay run a staff member opened.
+Odip.Infrastructure.Integrations.EmploymentHeroClientLogging.QuietEmploymentHeroClient(builder.Logging);
 builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroStaffSync>();
 // Every 30 minutes, each connected organisation. EmploymentHero:Enabled (default true) switches the loop off; Sync now still works.
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroSyncBackgroundService>();

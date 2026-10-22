@@ -151,7 +151,8 @@ export default function TemplateFormPanel({
       ...values,
       standardDurationDays:
         values.standardDurationDays === '' ? undefined : Number(values.standardDurationDays),
-      isActive: true,
+      // No Active control here (Deactivate is its own action), so an edit keeps the flag the template has.
+      isActive: template?.isActive ?? true,
     }
     try {
       if (isEdit && template) {

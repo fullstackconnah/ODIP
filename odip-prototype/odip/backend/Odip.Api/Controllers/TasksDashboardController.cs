@@ -360,7 +360,7 @@ public class EventTemplatesController : ControllerBase
         e.FullyModifiedAccommodationNotes = dto.FullyModifiedAccommodationNotes;
         e.SemiModifiedAccommodationNotes = dto.SemiModifiedAccommodationNotes;
         e.WheelchairAccessNotes = dto.WheelchairAccessNotes; e.TypicalActivities = dto.TypicalActivities;
-        e.IsActive = dto.IsActive; e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedAt = DateTime.UtcNow; // IsActive is changed only by Deactivate (DELETE), so a stale edit cannot undo it
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<EventTemplateDto>.Ok(new EventTemplateDto { Id = e.Id, EventName = e.EventName }));

@@ -51,4 +51,16 @@ describe('Employment Hero hooks', () => {
     ])
     expect(mockDelete).toHaveBeenCalledWith(BASE)
   })
+
+  it('connecting or disconnecting marks the nav flag stale, so My payslips appears or goes without a reload', async () => {
+    for (const hook of [useConnectEmploymentHero, useDisconnectEmploymentHero]) {
+      const qc = new QueryClient()
+      qc.setQueryData(['module-visibility', 'tenant-1'], { employmentHero: true })
+      const { result } = renderHook(hook as () => { mutateAsync: (v: never) => Promise<unknown> }, {
+        wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>,
+      })
+      await result.current.mutateAsync(undefined as never)
+      expect(qc.getQueryState(['module-visibility', 'tenant-1'])?.isInvalidated).toBe(true)
+    }
+  })
 })
