@@ -385,6 +385,22 @@ public class DraftBlocksPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task ASaveThatNamesNoBaseVersion_AfterARevisionExists_IsRefused_AndTheColleaguesDraftSurvives()
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        await StoreAsync(cs, tenantId, participantId, 1);
+        await using var save = Open(cs, tenantId);
+
+        var result = await new ServiceAgreementDraftService(save).SaveAsync(tenantId, participantId, Request(Entry(MonWed("unbased"))) with { BaseVersion = null }, "me", CancellationToken.None);
+
+        Assert.Null(result.Draft);
+        Assert.Equal(1, result.ConflictVersion);
+        await using var read = Open(cs, tenantId);
+        Assert.Equal(1, Assert.Single(await read.ServiceAgreementDrafts.AsNoTracking().ToListAsync()).Version);   // the other coordinator's draft is still there
+    }
+
+    [SkippableFact]
     public async Task AWholeSecondSaveThatLandsFirst_MakesTheSlowerSaveAConflictWithTheNewerVersion_NotAServerError()
     {
         RequirePostgres();

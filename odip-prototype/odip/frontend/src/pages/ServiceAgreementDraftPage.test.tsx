@@ -616,6 +616,20 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
     expect(screen.queryByText('Approved for rostering')).not.toBeInTheDocument()   // the renewal is a draft, open to change
   })
 
+  it('renewing after a pattern change says the revision renewed covers only its last weeks and leaves its totals out', async () => {
+    // v2 ran 1 Jul to 1 Nov; a pattern change saved v3 from 1 Oct to the same end; the renewal v4 follows v3.
+    const tail = { ...ending, id: 'd-3', version: 3, agreementStartDate: '2026-10-01', isSummary: true }
+    showing({ ...renewal, id: 'd-4', version: 4 }, tail, { ...ending, isSummary: true })
+    oldDraft.mockReturnValue({ data: { ...tail, lines: [{ ...line, unitPrice: 70.23 }] }, isLoading: false, isError: false, refetch: vi.fn() })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(stepButton('Check'))
+
+    expect(await screen.findByText(/v3 only covers the end of the agreement \(Thu 1 Oct 2026 to Sun 1 Nov 2026; the agreement began on Wed 1 Jul 2026\), so its total is not compared with v4.s\. The unit prices are\./)).toBeInTheDocument()
+    expect(screen.queryByText(/came to/)).not.toBeInTheDocument()
+  })
+
   it('with no plan for the first day, says so, opens the editor after the plan that ends, and then leaves Renew to be pressed again', async () => {
     plans.mockReturnValue({ data: { plans: [{ id: 'f-1', participantId: 'p-1', planStart: '2025-11-02', planEnd: '2026-11-01' }] }, isLoading: false, isError: false })
     showing(ending)
