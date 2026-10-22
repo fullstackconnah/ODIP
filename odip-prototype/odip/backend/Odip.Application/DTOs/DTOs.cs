@@ -2501,20 +2501,30 @@ public record CreateTenantWithSetupDto(
 
 /// <summary>
 /// The organisation's provider row as typed at setup. Unlike <see cref="UpsertProviderSettingsDto"/> nothing here is required: the row is always made, and the
-/// registration number, ABN and address are filled in later under Organisation profile (whose own save still requires them). A blank State means none chosen.
+/// registration number, ABN and address are filled in later under Organisation profile (whose own save still requires them). The State is the exception: setup refuses a blank or unknown one.
 /// </summary>
 public record TenantSetupProviderDto
 {
+    // The same limits as UpsertProviderSettingsDto, so setup cannot store what the Organisation profile save would then refuse.
+    [StringLength(20)]
     public string RegistrationNumber { get; init; } = string.Empty;
+    [StringLength(20)]
     public string ABN { get; init; } = string.Empty;
+    [StringLength(200)]
     public string OrganisationName { get; init; } = string.Empty;
+    [StringLength(500)]
     public string Address { get; init; } = string.Empty;
+    [StringLength(10)]
     public string? State { get; init; }
     public bool GSTRegistered { get; init; }
     public bool IsPaceProvider { get; init; }
+    [StringLength(200)]
     public string? BankAccountName { get; init; }
+    [StringLength(10)]
     public string? BSB { get; init; }
+    [StringLength(20)]
     public string? AccountNumber { get; init; }
+    [StringLength(2000)]
     public string? InvoiceFooterNotes { get; init; }
     public MedicationCompetencyMode? MedicationCompetencyMode { get; init; }
 }

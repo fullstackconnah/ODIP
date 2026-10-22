@@ -43,7 +43,7 @@ public class TenantNoDomainTests
     {
         using var db = SuperAdminDb();
         Assert.IsType<CreatedAtActionResult>(await Controller(db).Create(new CreateTenantDto("Jo Care", blank)));
-        Assert.IsType<CreatedAtActionResult>(await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Sam Support", blank, null, null), CancellationToken.None));
+        Assert.IsType<CreatedAtActionResult>(await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Sam Support", blank, new TenantSetupProviderDto { State = "VIC" }, null), CancellationToken.None));
 
         var tenants = await db.Tenants.ToListAsync();
         Assert.Equal(2, tenants.Count);
@@ -77,7 +77,7 @@ public class TenantNoDomainTests
     public async Task Create_with_setup_always_makes_the_provider_row_named_after_the_organisation()
     {
         using var db = SuperAdminDb();
-        Assert.IsType<CreatedAtActionResult>(await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Jo Care", "", null, null), CancellationToken.None));
+        Assert.IsType<CreatedAtActionResult>(await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Jo Care", "jo.example.com", new TenantSetupProviderDto { State = "VIC" }, null), CancellationToken.None));
 
         var row = await db.ProviderSettings.IgnoreQueryFilters().SingleAsync();
         Assert.Equal((await db.Tenants.SingleAsync()).Id, row.TenantId);
@@ -85,13 +85,81 @@ public class TenantNoDomainTests
     }
 
     [Fact]
-    public async Task Create_with_setup_keeps_the_state_that_was_chosen()
+    public async Task Create_with_setup_falls_back_to_the_tenant_name_only_when_the_organisation_name_is_blank()
     {
         using var db = SuperAdminDb();
         var settings = new TenantSetupProviderDto { OrganisationName = "Jo Care Pty Ltd", State = "WA" };
         Assert.IsType<CreatedAtActionResult>(await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Jo Care", "", settings, null), CancellationToken.None));
 
-        Assert.Equal("WA", (await db.ProviderSettings.IgnoreQueryFilters().SingleAsync()).State);
+        Assert.Equal("Jo Care Pty Ltd", (await db.ProviderSettings.IgnoreQueryFilters().SingleAsync()).OrganisationName);
+    }
+
+    [Theory]
+    [InlineData("WA", "WA")]
+    [InlineData(" wa ", "WA")]
+    public async Task Create_with_setup_stores_the_state_that_was_chosen(string chosen, string stored)
+    {
+        using var db = SuperAdminDb();
+        var settings = new TenantSetupProviderDto { State = chosen };
+        Assert.IsType<CreatedAtActionResult>(await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Jo Care", "", settings, null), CancellationToken.None));
+
+        Assert.Equal(stored, (await db.ProviderSettings.IgnoreQueryFilters().SingleAsync()).State);
+    }
+
+    // Nobody is silently put on Victoria's prices and holidays: no state, or one that is not a state code, is refused and nothing is created.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("Victoria")]
+    public async Task Create_with_setup_refuses_a_blank_or_unknown_state_and_creates_nothing(string? state)
+    {
+        using var db = SuperAdminDb();
+        var result = await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Jo Care", "", new TenantSetupProviderDto { State = state }, null), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(await db.Tenants.ToListAsync());
+        Assert.Empty(await db.ProviderSettings.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_with_setup_refuses_a_request_with_no_provider_settings_at_all()
+    {
+        using var db = SuperAdminDb();
+        Assert.IsType<BadRequestObjectResult>(await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto("Jo Care", "", null, null), CancellationToken.None));
+        Assert.Empty(await db.Tenants.ToListAsync());
+    }
+
+    // The tenant name is copied into the 200-character column when no organisation name is typed, so an over-long one is a 400, not a database error.
+    [Fact]
+    public async Task Create_with_setup_refuses_a_tenant_name_too_long_to_become_the_organisation_name()
+    {
+        using var db = SuperAdminDb();
+        var result = await Controller(db).CreateWithSetup(new CreateTenantWithSetupDto(new string('x', 201), "", new TenantSetupProviderDto { State = "VIC" }, null), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(await db.Tenants.ToListAsync());
+    }
+
+    // [ApiController] runs these before the action, so an over-long value is a 400 and never reaches the column limit (PostgreSQL 22001 is a 500).
+    [Theory]
+    [InlineData(nameof(TenantSetupProviderDto.RegistrationNumber), 21)]
+    [InlineData(nameof(TenantSetupProviderDto.ABN), 21)]
+    [InlineData(nameof(TenantSetupProviderDto.OrganisationName), 201)]
+    [InlineData(nameof(TenantSetupProviderDto.Address), 501)]
+    [InlineData(nameof(TenantSetupProviderDto.State), 11)]
+    [InlineData(nameof(TenantSetupProviderDto.BSB), 11)]
+    [InlineData(nameof(TenantSetupProviderDto.AccountNumber), 21)]
+    [InlineData(nameof(TenantSetupProviderDto.BankAccountName), 201)]
+    [InlineData(nameof(TenantSetupProviderDto.InvoiceFooterNotes), 2001)]
+    public void The_setup_provider_fields_keep_the_column_limits_of_the_profile_save(string property, int length)
+    {
+        var dto = new TenantSetupProviderDto();
+        typeof(TenantSetupProviderDto).GetProperty(property)!.SetValue(dto, new string('x', length));
+
+        var errors = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        Assert.False(System.ComponentModel.DataAnnotations.Validator.TryValidateObject(dto, new System.ComponentModel.DataAnnotations.ValidationContext(dto), errors, validateAllProperties: true));
+        Assert.Contains(errors, e => e.MemberNames.Contains(property));
     }
 
     // ── The staff create still asks about an address when the organisation has no domain ──

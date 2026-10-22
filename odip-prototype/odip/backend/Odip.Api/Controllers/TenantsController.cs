@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
@@ -81,6 +82,16 @@ public class TenantsController : ControllerBase
         if (domain is not null && await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
 
+        // Prices and public holidays follow the state, so nobody is silently put on Victoria's: none, or one that is not a state code, is refused before anything is made.
+        var ps = dto.ProviderSettings;
+        var state = ps?.State?.Trim().ToUpperInvariant();
+        if (ps is null || state is null || !HolidayCalendar.StateCodes.Contains(state))
+            return BadRequest(ApiResponse<object>.Fail("Choose the organisation's state."));
+
+        // A blank organisation name falls back to the tenant's, which must then fit the column the same as one typed.
+        if (string.IsNullOrWhiteSpace(ps.OrganisationName) && dto.Name.Length > 200)
+            return BadRequest(ApiResponse<object>.Fail("The organisation name must be 200 characters or fewer."));
+
         if (dto.InitialUser is { } candidate)
         {
             // A typed password is a live credential (the account is verified from the start), so it is held to PasswordPolicy before anything
@@ -117,27 +128,23 @@ public class TenantsController : ControllerBase
         await _db.SaveChangesAsync();
 
         // Always made, so the state is a stored choice and the organisation's name has somewhere to live; a blank name falls back to the tenant's.
-        var ps = dto.ProviderSettings ?? new TenantSetupProviderDto();
+        _db.ProviderSettings.Add(new ProviderSettings
         {
-            var settings = new ProviderSettings
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenant.Id,
-                RegistrationNumber = ps.RegistrationNumber,
-                ABN = ps.ABN,
-                OrganisationName = string.IsNullOrWhiteSpace(ps.OrganisationName) ? dto.Name : ps.OrganisationName,
-                Address = ps.Address,
-                State = string.IsNullOrWhiteSpace(ps.State) ? new ProviderSettings().State : ps.State, // none chosen: the engines' own fallback
-                GSTRegistered = ps.GSTRegistered,
-                IsPaceProvider = ps.IsPaceProvider,
-                BankAccountName = ps.BankAccountName,
-                BSB = ps.BSB,
-                AccountNumber = ps.AccountNumber,
-                InvoiceFooterNotes = ps.InvoiceFooterNotes,
-                MedicationCompetencyMode = ps.MedicationCompetencyMode ?? MedicationCompetencyMode.Warn,
-            };
-            _db.ProviderSettings.Add(settings);
-        }
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            RegistrationNumber = ps.RegistrationNumber,
+            ABN = ps.ABN,
+            OrganisationName = string.IsNullOrWhiteSpace(ps.OrganisationName) ? dto.Name : ps.OrganisationName,
+            Address = ps.Address,
+            State = state,
+            GSTRegistered = ps.GSTRegistered,
+            IsPaceProvider = ps.IsPaceProvider,
+            BankAccountName = ps.BankAccountName,
+            BSB = ps.BSB,
+            AccountNumber = ps.AccountNumber,
+            InvoiceFooterNotes = ps.InvoiceFooterNotes,
+            MedicationCompetencyMode = ps.MedicationCompetencyMode ?? MedicationCompetencyMode.Warn,
+        });
 
         Guid? initialUserId = null;
         if (dto.InitialUser is { } iu)

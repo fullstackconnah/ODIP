@@ -28,7 +28,7 @@ internal static class EmailLayout
     public static string WithHeader(string htmlBody, string? organisationName = null) =>
         HeaderOpen +
         (string.IsNullOrWhiteSpace(organisationName) ? "" :
-            $"<tr><td style=\"padding:0 22px 14px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;color:#fbf9f5\">{WebUtility.HtmlEncode(organisationName.Trim())}</td></tr>") +
+            $"<tr><td style=\"padding:0 22px 14px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;color:#fbf9f5;word-wrap:break-word;overflow-wrap:anywhere\">{WebUtility.HtmlEncode(organisationName.Trim())}</td></tr>") +
         "</table>" + htmlBody;
 
     /// <summary>A fresh stream per message: a MailMessage disposes its linked resources' streams.</summary>

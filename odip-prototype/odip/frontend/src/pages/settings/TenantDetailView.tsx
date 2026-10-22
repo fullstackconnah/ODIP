@@ -6,6 +6,7 @@ import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
 import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
 import { Button } from '@/components/Button'
+import { StatusBadge } from '@/components/StatusBadge'
 import { formatInstantDateAu } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
@@ -184,9 +185,13 @@ export default function TenantDetailView({
           onClick={() => setProviderOpen(prev => !prev)}
           className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-[var(--color-accent)]/50 transition-colors"
         >
-          <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
-            Provider Settings
-          </h4>
+          <span className="flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
+              Provider Settings
+            </h4>
+            {/* Setup makes the row with these blank, so a row that exists is not a profile that has been filled in. */}
+            {providerSettings && (!providerSettings.registrationNumber.trim() || !providerSettings.abn.trim()) && <StatusBadge tone="warning" label="Incomplete" />}
+          </span>
           {providerOpen ? (
             <ChevronDown className="w-4 h-4 text-[var(--color-muted-foreground)]" />
           ) : (

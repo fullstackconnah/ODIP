@@ -258,7 +258,7 @@ public record UpsertProviderSettingsDto
     [Required, StringLength(500)]
     public string Address { get; init; } = string.Empty;
     [StringLength(10)]
-    public string State { get; init; } = "VIC";
+    public string State { get; init; } = string.Empty;
     public bool GSTRegistered { get; init; }
     public bool IsPaceProvider { get; init; }
     [StringLength(200)]

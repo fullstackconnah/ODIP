@@ -95,13 +95,13 @@ function ItineraryDocument({ data, version }: { data: ItineraryDto; version: Exp
         {/* Header */}
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View>
-              {data.organisationName && <Text style={[styles.meta, { marginBottom: 4 }]}>{data.organisationName}</Text>}
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              {data.organisationName && <Text style={[styles.subtitle, { marginBottom: 4 }]}>{data.organisationName}</Text>}
               <Text style={styles.title}>{data.tripName}</Text>
               <Text style={styles.subtitle}>{data.destination || 'Destination TBD'}{data.region ? ` · ${data.region}` : ''}</Text>
               <Text style={styles.meta}>{formatDateLong(data.startDate)} — {formatDateLong(data.endDate)}</Text>
             </View>
-            <View style={{ alignItems: 'flex-end' }}>
+            <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
               <Text style={styles.versionBadge}>{isStaff ? 'STAFF VERSION' : 'PARTICIPANT VERSION'}</Text>
               {data.tripCode && <Text style={[styles.meta, { marginTop: 4 }]}>{data.tripCode}</Text>}
             </View>

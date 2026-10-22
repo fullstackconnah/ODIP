@@ -101,6 +101,66 @@ public class NotificationDispatchBackgroundServiceTests
         Assert.Equal("Jo Care", sent!.OrganisationName);
     }
 
+    // Only another organisation has a profile row: an unscoped lookup would take its name, the recipient's own scope finds none.
+    [Fact]
+    public async Task The_message_carries_no_organisation_name_when_only_another_organisation_has_a_profile()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var (tenantId, otherId) = (Guid.NewGuid(), Guid.NewGuid());
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId);
+            SeedOutboxRow(db, tenantId, user.Id);
+            db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = otherId, OrganisationName = "Someone Else" });
+            db.SaveChanges();
+        }
+
+        NotificationMessage? sent = null;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, "id", null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        Assert.Null(sent!.OrganisationName);
+    }
+
+    // An intake payload whose provider name is blank (not missing) must fall back to the organisation's own name like any other message.
+    [Fact]
+    public async Task A_blank_provider_name_in_an_intake_payload_falls_back_to_the_organisations_name()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenantId = Guid.NewGuid();
+        using (var db = SeedDb(dbName))
+        {
+            var user = SeedUser(db, tenantId, "sam.lee@provider.example");
+            var payload = new IntakeVisitStaffPayload(IntakeWording.Booked, "sam.lee@provider.example", "Sam Lee", "Noah Fitzgerald",
+                new DateTime(2026, 10, 15, 23, 0, 0, DateTimeKind.Utc), 90, "Australia/Sydney", "12 Smith St", null, null, null, "Dana Smith",
+                "dana@provider.example", "", null, null, "abc@odip", 0, DateTime.UtcNow);
+            db.NotificationOutbox.Add(new NotificationOutbox
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, EventType = NotificationEventType.IntakeBooked, EntityType = "IntakeVisit", EntityId = Guid.NewGuid(),
+                RecipientUserId = user.Id, PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload),
+                Status = NotificationOutboxStatus.Pending, NextAttemptAt = DateTime.UtcNow.AddMinutes(-1), CreatedAt = DateTime.UtcNow.AddMinutes(-1),
+            });
+            db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Jo Care" });
+            db.SaveChanges();
+        }
+
+        NotificationMessage? sent = null;
+        var channel = new Mock<INotificationChannel>();
+        channel.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+        channel.Setup(c => c.SendAsync(It.IsAny<NotificationMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationMessage, CancellationToken>((m, _) => sent = m)
+            .ReturnsAsync(new ChannelSendResult(ChannelSendOutcome.Sent, "id", null));
+
+        await BuildService(dbName, channel.Object, BaseConfig()).RunTickAsync(CancellationToken.None);
+
+        Assert.Equal("Jo Care", sent!.OrganisationName);
+    }
+
     [Fact]
     public async Task DisabledPreference_SkipsWithoutCallingSendAsync()
     {

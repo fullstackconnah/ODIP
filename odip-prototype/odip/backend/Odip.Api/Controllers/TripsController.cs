@@ -280,8 +280,8 @@ public class TripsController : ControllerBase
         // Auto-create GenerateNdisClaims task when trip moves to Completed
         if (dto.Status.HasValue && dto.Status.Value == TripStatus.Completed && t.Status != TripStatus.Completed)
         {
-            // A row made at setup with nothing typed yet (no ABN) is not a profile that has been filled in.
-            var hasProviderSettings = await _db.ProviderSettings.AnyAsync(s => s.ABN != "", ct);
+            // A row made at setup with nothing typed yet (no ABN or registration number) is not a profile that has been filled in. Read for the trip's own organisation: a SuperAdmin's unfiltered query would find another one's.
+            var hasProviderSettings = await _db.ProviderSettings.AnyAsync(s => s.TenantId == t.TenantId && s.ABN != "" && s.RegistrationNumber != "", ct);
             var taskTitle = hasProviderSettings
                 ? $"Generate NDIS claims for {t.TripName}"
                 : $"Generate NDIS claims for {t.TripName} — fill in Settings › Organisation profile first";

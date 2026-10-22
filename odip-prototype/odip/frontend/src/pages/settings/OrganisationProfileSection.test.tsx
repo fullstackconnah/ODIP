@@ -38,12 +38,39 @@ describe('Organisation profile: state and manager', () => {
     expect(screen.getByRole('button', { name: /State/ })).toHaveTextContent('WA')
   })
 
-  it('does not pick Victoria when no state is stored', async () => {
-    api.get.mockResolvedValue({ ...row, state: '' })
+  // The real old case is an organisation with no provider row at all (the server answers null), not a row with a blank state.
+  it('does not pick Victoria for an organisation with no profile row yet', async () => {
+    api.get.mockResolvedValue(null)
     show()
-    await screen.findByDisplayValue('Jo Care')
-    expect(screen.getByRole('button', { name: /State/ })).not.toHaveTextContent('VIC')
-    expect(screen.getByRole('button', { name: /State/ })).toHaveTextContent('Select state')
+    const state = await screen.findByRole('button', { name: /State/ })
+    expect(state).not.toHaveTextContent('VIC')
+    expect(state).toHaveTextContent('Select state')
+    expect(state).toHaveAttribute('aria-required', 'true')
+  })
+
+  it('keeps Save off until a state is chosen, so no organisation is put on Victoria by saving', async () => {
+    api.get.mockResolvedValue(null)
+    const user = userEvent.setup()
+    show()
+    await user.type(await screen.findByLabelText('Organisation name'), 'Jo Care')
+    await user.type(screen.getByLabelText('ABN'), '51824753556')
+    await user.type(screen.getByLabelText('NDIS registration number'), '4050')
+    await user.type(screen.getByRole('textbox', { name: 'Address' }), '1 Example Street')
+    expect(screen.getByRole('button', { name: /^Save/ })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: /State/ }))
+    await user.click(screen.getByRole('option', { name: 'WA' }))
+    await user.click(screen.getByRole('button', { name: /^Save/ }))
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/provider-settings', expect.objectContaining({ state: 'WA', organisationName: 'Jo Care' })))
+  })
+
+  it('gives the manager fields the same examples as Safety checks, since it is one stored value', () => {
+    show()
+    return screen.findByDisplayValue('Priya Sharma').then(() => {
+      expect(screen.getByLabelText('Manager name')).toHaveAttribute('placeholder', 'For example: Priya Sharma')
+      expect(screen.getByLabelText('Manager phone')).toHaveAttribute('placeholder', 'For example: 0412 345 007')
+    })
   })
 
   it('saves an edited manager phone with the whole row unchanged otherwise', async () => {

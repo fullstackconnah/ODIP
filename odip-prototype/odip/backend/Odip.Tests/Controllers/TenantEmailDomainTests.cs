@@ -97,7 +97,7 @@ public class TenantEmailDomainTests
     {
         using var db = SuperAdminDb();
         var firebase = new Mock<IFirebaseUserService>();
-        var dto = new CreateTenantWithSetupDto("Acme Support", "gmail.com", null,
+        var dto = new CreateTenantWithSetupDto("Acme Support", "gmail.com", new TenantSetupProviderDto { State = "VIC" },
             new CreateInitialUserDto("Jane", "Smith", "jane.smith@gmail.com", "jane.smith", "Admin", null));
 
         var result = await Controller(db, firebase).CreateWithSetup(dto, CancellationToken.None);
@@ -185,7 +185,7 @@ public class TenantEmailDomainTests
         using var db = SuperAdminDb();
         var firebase = new Mock<IFirebaseUserService>();
         firebase.Setup(f => f.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync("uid-1");
-        var dto = new CreateTenantWithSetupDto("Brightside Care", "@Brightside.Example.com", null,
+        var dto = new CreateTenantWithSetupDto("Brightside Care", "@Brightside.Example.com", new TenantSetupProviderDto { State = "VIC" },
             new CreateInitialUserDto("Jane", "Smith", "jane.smith@brightside.example.com", "jane.smith", "Admin", null));
 
         var result = await Controller(db, firebase).CreateWithSetup(dto, CancellationToken.None);

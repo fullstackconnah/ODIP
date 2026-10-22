@@ -87,14 +87,28 @@ public class CrossTenantTripTests
         Assert.Equal(day.Id, Assert.Single(body.Data!).Id);
     }
 
+    // A SuperAdmin sees every row, so only the explicit key on the trip's own organisation picks the right one: organisation B's row is the only profile here.
     [Fact]
     public async Task Itinerary_NamesTheTripsOwnOrganisation_NotAnotherOnes()
     {
+        using var db = Db(isSuperAdmin: true);
+        var trip = Trip(db, A);
+        db.Tenants.Add(new Tenant { Id = A, Name = "Tenant A", IsActive = true, CreatedAt = DateTime.UtcNow });
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = B, OrganisationName = "Org B" });
+        db.SaveChanges();
+
+        var result = await Trips(db).GetItinerary(trip.Id, CancellationToken.None);
+
+        Assert.Equal("Tenant A", Assert.IsType<ApiResponse<ItineraryDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.OrganisationName);
+    }
+
+    [Fact]
+    public async Task Itinerary_NamesTheOrganisationFromItsProfile_WhenItHasOne()
+    {
         using var db = Db();
         var trip = Trip(db, A);
-        db.ProviderSettings.AddRange(
-            new ProviderSettings { Id = Guid.NewGuid(), TenantId = A, OrganisationName = "Org A" },
-            new ProviderSettings { Id = Guid.NewGuid(), TenantId = B, OrganisationName = "Org B" });
+        db.Tenants.Add(new Tenant { Id = A, Name = "Tenant A", IsActive = true, CreatedAt = DateTime.UtcNow });
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = A, OrganisationName = "Org A" });
         db.SaveChanges();
 
         var result = await Trips(db).GetItinerary(trip.Id, CancellationToken.None);
