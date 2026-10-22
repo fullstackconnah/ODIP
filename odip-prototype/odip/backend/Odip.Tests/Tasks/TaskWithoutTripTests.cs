@@ -77,7 +77,7 @@ public class TaskWithoutTripTests
     private static (OdipDbContext Db, TasksController Controller) TenantlessSuperAdmin()
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.TenantId).Returns((Guid?)A);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
         var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
         return (db, new TasksController(db, null, tenant.Object));

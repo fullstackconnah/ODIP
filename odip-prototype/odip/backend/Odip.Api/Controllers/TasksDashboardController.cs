@@ -154,7 +154,7 @@ public class TasksController : ControllerBase
                 ? await _db.ParticipantBookings.Where(b => b.Id == linkedBooking).Select(b => (Guid?)b.TripInstanceId).FirstOrDefaultAsync(ct)
                 : null);
         // The task belongs to its trip's organisation (a SuperAdmin with no organisation chosen has no ambient one to stamp); with no trip it needs the caller's.
-        var tenantId = tripId is { } linkedTrip ? await _db.TripInstances.Where(t => t.Id == linkedTrip).Select(t => (Guid?)t.TenantId).FirstOrDefaultAsync(ct) : _tenant?.TenantId;
+        var tenantId = tripId is { } linkedTrip ? await _db.TripInstances.Where(t => t.Id == linkedTrip).Select(t => (Guid?)t.TenantId).FirstOrDefaultAsync(ct) : _tenant is { IsSuperAdmin: false } ? _tenant.TenantId : null;
         if (tenantId is null && _tenant is not null) return BadRequest(ApiResponse<TaskDto>.Fail(ChooseOrganisation));
 
         var task = new BookingTask

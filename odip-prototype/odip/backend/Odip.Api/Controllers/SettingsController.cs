@@ -41,7 +41,7 @@ public class SettingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Update(
         [FromBody] UpdateAppSettingsDto dto, CancellationToken ct)
     {
-        if (_tenant.TenantId is null) return BadRequest(ApiResponse<AppSettingsDto>.Fail(ChooseOrganisation));
+        if (_tenant.IsSuperAdmin) return BadRequest(ApiResponse<AppSettingsDto>.Fail(ChooseOrganisation));
         var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
         if (s == null)
         {

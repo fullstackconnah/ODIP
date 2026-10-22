@@ -73,7 +73,7 @@ public class WeeklyHoursSettingTests
     public async Task Update_ForASuperAdminWhoHasNotChosenAnOrganisation_IsRefused()
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.TenantId).Returns((Guid?)A);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
         using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
         db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = A, WeeklyHoursWarning = 30 });
