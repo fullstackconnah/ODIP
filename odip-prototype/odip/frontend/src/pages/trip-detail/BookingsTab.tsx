@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useCreateBooking, useUpdateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, useDownloadClientOverviewPdf, PAYMENT_STATUS_ITEMS } from '@/api/hooks'
+import { useCreateBooking, usePatchBooking, useDeleteBooking, useCancelBooking, useDownloadClientOverviewPdf, PAYMENT_STATUS_ITEMS } from '@/api/hooks'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { DataTable } from '@/components/DataTable'
@@ -17,6 +17,7 @@ import type { BookingListDto } from '@/api/types/bookings'
 import type { ParticipantListDto } from '@/api/types/participants'
 import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
+import { EditBookingModal } from './EditBookingModal'
 import { Callout } from '@/components/Callout'
 
 // Create-form subset of BOOKING_STATUSES — Cancelled/Completed/NoLongerAttending are reached via
@@ -54,35 +55,6 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
   const [insuranceStatus, setInsuranceStatus] = useState('None')
 
   const [editingBooking, setEditingBooking] = useState<BookingListDto | null>(null)
-  const [editForm, setEditForm] = useState<{
-    bookingStatus: string
-    supportRatioOverride: string
-    wheelchairRequired: boolean
-    highSupportRequired: boolean
-    nightSupportRequired: boolean
-    hasRestrictivePracticeFlag: boolean
-    bookingNotes: string
-    insuranceStatus: string
-    insuranceProvider: string
-    insurancePolicyNumber: string
-    insuranceCoverageStart: string
-    insuranceCoverageEnd: string
-    [key: string]: unknown
-  }>({
-    bookingStatus: '',
-    supportRatioOverride: '',
-    wheelchairRequired: false,
-    highSupportRequired: false,
-    nightSupportRequired: false,
-    hasRestrictivePracticeFlag: false,
-    bookingNotes: '',
-    insuranceStatus: 'None',
-    insuranceProvider: '',
-    insurancePolicyNumber: '',
-    insuranceCoverageStart: '',
-    insuranceCoverageEnd: '',
-  })
-
   const [deletingBooking, setDeletingBooking] = useState<BookingListDto | null>(null)
   const [selectedBookingIds, setSelectedBookingIds] = useState<Set<string>>(new Set())
   const [bookingBulkLoading, setBookingBulkLoading] = useState(false)
@@ -94,7 +66,6 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
   const clearPatchErrorFor = (ids: string[]) => setPatchError(e => (e && e.ids.every(id => ids.includes(id)) ? null : e))
 
   const createBooking = useCreateBooking()
-  const updateBooking = useUpdateBooking()
   const patchBooking = usePatchBooking()
   const deleteBooking = useDeleteBooking()
   const cancelBooking = useCancelBooking()
@@ -193,50 +164,6 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
       onSuccess: response => {
         setShowAddBooking(false)
         resetForm()
-        setBudgetNotice(bookingBudgetNotice(response))
-      },
-    })
-  }
-
-  const openEditModal = (booking: BookingListDto) => {
-    setEditingBooking(booking)
-    const detail = booking as BookingListDto & Partial<import('@/api/types').BookingDetailDto>
-    setEditForm({
-      tripInstanceId: booking.tripInstanceId,
-      participantId: booking.participantId,
-      bookingStatus: booking.bookingStatus ?? 'Enquiry',
-      wheelchairRequired: booking.wheelchairRequired ?? false,
-      highSupportRequired: booking.highSupportRequired ?? false,
-      nightSupportRequired: booking.nightSupportRequired ?? false,
-      hasRestrictivePracticeFlag: booking.hasRestrictivePracticeFlag ?? false,
-      supportRatioOverride: booking.supportRatioOverride ?? '',
-      bookingNotes: detail.bookingNotes ?? '',
-      insuranceProvider: detail.insuranceProvider || '',
-      insurancePolicyNumber: detail.insurancePolicyNumber || '',
-      insuranceCoverageStart: detail.insuranceCoverageStart || '',
-      insuranceCoverageEnd: detail.insuranceCoverageEnd || '',
-      insuranceStatus: booking.insuranceStatus || 'None',
-    })
-  }
-
-  const handleUpdateBooking = () => {
-    if (!editingBooking) return
-    updateBooking.mutate({ id: editingBooking.id, data: {
-      ...editForm,
-      tripInstanceId: editingBooking.tripInstanceId as string,
-      participantId: editingBooking.participantId as string,
-      paymentStatus: editingBooking.paymentStatus as PaymentStatus,
-      actionRequired: editingBooking.actionRequired as boolean,
-      bookingStatus: (editForm.bookingStatus || undefined) as BookingStatus | undefined,
-      supportRatioOverride: (editForm.supportRatioOverride || undefined) as SupportRatio | undefined,
-      insuranceStatus: editForm.insuranceStatus as InsuranceStatus,
-      insuranceProvider: editForm.insuranceProvider ?? undefined,
-      insurancePolicyNumber: editForm.insurancePolicyNumber ?? undefined,
-      insuranceCoverageStart: editForm.insuranceCoverageStart || undefined,
-      insuranceCoverageEnd: editForm.insuranceCoverageEnd || undefined,
-    }}, {
-      onSuccess: response => {
-        setEditingBooking(null)
         setBudgetNotice(bookingBudgetNotice(response))
       },
     })
@@ -551,7 +478,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
                 <div className="flex items-center justify-center gap-2">
                   {b.actionRequired && <AlertTriangle className="w-4 h-4 text-[var(--color-warning)]" />}
                   {canWrite && (
-                    <Button variant="ghost" size="sm" iconOnly onClick={() => openEditModal(b)} title="Edit booking" aria-label={`Edit booking: ${who}`}>
+                    <Button variant="ghost" size="sm" iconOnly onClick={() => setEditingBooking(b)} title="Edit booking" aria-label={`Edit booking: ${who}`}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
                   )}
@@ -634,149 +561,14 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
 
       {/* Edit Booking Modal */}
       {editingBooking && (
-        <Modal
-          stickyFooter
-          open
+        <EditBookingModal
+          booking={editingBooking}
           onClose={() => setEditingBooking(null)}
-          title={`Edit Booking — ${editingBooking.participantName}`}
-          footer={
-            <>
-              <Button variant="secondary" onClick={() => setEditingBooking(null)}>
-                Cancel
-              </Button>
-              <Button onClick={handleUpdateBooking} disabled={updateBooking.isPending}>
-                {updateBooking.isPending ? 'Saving…' : 'Save'}
-              </Button>
-            </>
-          }
-        >
-          <div className="space-y-4">
-            {/* Booking Status */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Booking Status</label>
-              <Dropdown
-                variant="form"
-                value={editForm.bookingStatus}
-                onChange={val => setEditForm({ ...editForm, bookingStatus: val })}
-                items={statusItems(BOOKING_STATUSES, BOOKING_STATUS_LABELS)}
-              />
-            </div>
-
-            {/* Support Requirements */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Support Requirements</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={editForm.wheelchairRequired} onChange={e => setEditForm({ ...editForm, wheelchairRequired: e.target.checked })}
-                    className="rounded border-[var(--color-border)]" />
-                  Wheelchair
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={editForm.highSupportRequired} onChange={e => setEditForm({ ...editForm, highSupportRequired: e.target.checked })}
-                    className="rounded border-[var(--color-border)]" />
-                  High Support
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={editForm.nightSupportRequired} onChange={e => setEditForm({ ...editForm, nightSupportRequired: e.target.checked })}
-                    className="rounded border-[var(--color-border)]" />
-                  Night Support
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={editForm.hasRestrictivePracticeFlag} onChange={e => setEditForm({ ...editForm, hasRestrictivePracticeFlag: e.target.checked })}
-                    className="rounded border-[var(--color-border)]" />
-                  Restrictive Practice
-                </label>
-              </div>
-            </div>
-
-            {/* Support Ratio Override */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Support Ratio Override</label>
-              <Dropdown
-                variant="form"
-                value={editForm.supportRatioOverride}
-                onChange={val => setEditForm({ ...editForm, supportRatioOverride: val })}
-                label="No override"
-                items={[
-                  { value: '', label: 'No override' },
-                  { value: 'OneToOne', label: '1:1' },
-                  { value: 'OneToTwo', label: '1:2' },
-                  { value: 'OneToThree', label: '1:3' },
-                  { value: 'OneToFour', label: '1:4' },
-                  { value: 'OneToFive', label: '1:5' },
-                  { value: 'TwoToOne', label: '2:1' },
-                  { value: 'SharedSupport', label: 'Shared' },
-                  { value: 'Other', label: 'Other' },
-                ]}
-              />
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Booking Notes</label>
-              <textarea value={editForm.bookingNotes} onChange={e => setEditForm({ ...editForm, bookingNotes: e.target.value })} rows={3}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                placeholder="Optional notes..." />
-            </div>
-
-            {/* Insurance */}
-            <div className="border-t border-[var(--color-border)]/15 pt-4 mt-2">
-              <label className="block text-sm font-medium mb-3">Travel Insurance</label>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Status</label>
-                  <Dropdown
-                    variant="form"
-                    value={editForm.insuranceStatus}
-                    onChange={val => setEditForm({ ...editForm, insuranceStatus: val })}
-                    items={[
-                      { value: 'None', label: 'None' },
-                      { value: 'Pending', label: 'Pending' },
-                      { value: 'Confirmed', label: 'Confirmed' },
-                      { value: 'Expired', label: 'Expired' },
-                      { value: 'Cancelled', label: 'Cancelled' },
-                    ]}
-                  />
-                </div>
-                {editForm.insuranceStatus !== 'None' && (
-                  <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
-                        <input type="text" value={editForm.insuranceProvider} onChange={e => setEditForm({ ...editForm, insuranceProvider: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                          placeholder="e.g. Allianz" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
-                        <input type="text" value={editForm.insurancePolicyNumber} onChange={e => setEditForm({ ...editForm, insurancePolicyNumber: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                          placeholder="e.g. POL-12345" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
-                        <input type="date" value={editForm.insuranceCoverageStart} onChange={e => setEditForm({ ...editForm, insuranceCoverageStart: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
-                        <input type="date" value={editForm.insuranceCoverageEnd} onChange={e => setEditForm({ ...editForm, insuranceCoverageEnd: e.target.value })}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Error */}
-            {updateBooking.isError && (
-              <p className="text-sm text-[var(--color-destructive)]">Failed to update booking. Please try again.</p>
-            )}
-          </div>
-        </Modal>
+          onSaved={response => {
+            setEditingBooking(null)
+            setBudgetNotice(bookingBudgetNotice(response))
+          }}
+        />
       )}
 
       {/* Delete/Cancel Booking Confirmation */}
@@ -799,20 +591,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             <button
               onClick={() => {
                 if (!deletingBooking) return
-                const data: import('@/api/types/bookings').UpdateBookingDto = {
-                  tripInstanceId: deletingBooking.tripInstanceId,
-                  participantId: deletingBooking.participantId,
-                  bookingStatus: 'Cancelled',
-                  nightSupportRequired: deletingBooking.nightSupportRequired,
-                  wheelchairRequired: deletingBooking.wheelchairRequired,
-                  highSupportRequired: deletingBooking.highSupportRequired,
-                  hasRestrictivePracticeFlag: deletingBooking.hasRestrictivePracticeFlag,
-                  supportRatioOverride: deletingBooking.supportRatioOverride ?? undefined,
-                  paymentStatus: deletingBooking.paymentStatus,
-                  actionRequired: deletingBooking.actionRequired,
-                  insuranceStatus: deletingBooking.insuranceStatus,
-                }
-                cancelBooking.mutate({ id: deletingBooking.id, data }, { onSuccess: () => setDeletingBooking(null) })
+                cancelBooking.mutate(deletingBooking.id, { onSuccess: () => setDeletingBooking(null) })
               }}
               disabled={cancelBooking.isPending || deleteBooking.isPending}
               className="w-full px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-warning-container)]/60 text-sm font-medium hover:bg-[var(--color-warning-container)] transition-colors disabled:opacity-50 text-left">
