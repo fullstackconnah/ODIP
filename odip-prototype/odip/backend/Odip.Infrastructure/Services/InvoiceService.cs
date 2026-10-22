@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Odip.Application.DTOs;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -12,6 +14,9 @@ namespace Odip.Infrastructure.Services;
 
 /// <summary>One payer of a claim: a booking of a trip claim, or the participant of a shift claim. <see cref="GroupId"/> is that booking's or participant's id.</summary>
 public sealed record PayerGroup(Guid GroupId, Guid? BookingId, Participant Participant, PlanType PlanType, IReadOnlyList<ClaimLineItem> Lines);
+
+/// <summary>Issuing refused (no settings, say): the status change is refused with these words and nothing is written.</summary>
+public sealed class InvoiceRefusedException(string message) : InvalidOperationException(message);
 
 public class InvoiceService
 {
@@ -83,7 +88,8 @@ public class InvoiceService
     public static List<PayerGroup> GroupsOf(TripClaim claim)
     {
         if (claim.Kind == ClaimKind.Shift)
-            return claim.Participant is { } p ? [new PayerGroup(p.Id, null, p, p.PlanType, claim.LineItems.ToList())] : [];
+            // A claim with no lines has no payer to bill.
+            return claim.Participant is { } p && claim.LineItems.Count > 0 ? [new PayerGroup(p.Id, null, p, p.PlanType, claim.LineItems.ToList())] : [];
 
         // Shift-kind lines have no booking; a trip claim's lines all do.
         return claim.LineItems.Where(l => l.ParticipantBooking != null)
@@ -311,6 +317,113 @@ public class InvoiceService
                 });
             });
         }).GeneratePdf();
+    }
+
+    // ── Issue (Mark as Submitted) ──────────────────────────────
+
+    /// <summary>The claim's invoices that stand (Kind Invoice, Issued).</summary>
+    private Task<List<Invoice>> LiveInvoicesAsync(Guid claimId, CancellationToken ct) =>
+        _db.Invoices.Where(i => i.TripClaimId == claimId && i.Kind == InvoiceKind.Invoice && i.Status == InvoiceStatus.Issued).ToListAsync(ct);
+
+    /// <summary>The plan- and self-managed payers with no invoice standing: all of them on a first submit; on a resubmit only those whose invoice was voided or credited.</summary>
+    public static List<PayerGroup> DueGroups(TripClaim claim, IReadOnlyCollection<Invoice> live) =>
+        GroupsOf(claim).Where(g => IsInvoiced(g.PlanType) && !live.Any(i => (i.ParticipantBookingId ?? i.ParticipantId) == g.GroupId)).ToList();
+
+    /// <summary>
+    /// Issues the invoices of a claim that is being marked as submitted, inside the caller's claim-edit lock and transaction: settings checked first,
+    /// then one number per payer from the counter, then the rows. The caller saves once; a refusal throws <see cref="InvoiceRefusedException"/> before
+    /// anything is added, and a rolled-back save hands the numbers back.
+    /// </summary>
+    public async Task<List<Invoice>> IssueForSubmitAsync(Guid claimId, DateTime now, ClaimsPrincipal? actor, CancellationToken ct)
+    {
+        var claim = await LoadClaimAsync(claimId, ct) ?? throw new InvalidOperationException("Claim not found.");
+        var due = DueGroups(claim, await LiveInvoicesAsync(claimId, ct));
+        if (due.Count == 0) return [];
+
+        var tenantId = TenantOf(claim) ?? throw new InvalidOperationException("The claim has no organisation.");
+        var settings = await SettingsForAsync(tenantId, ct) ?? throw new InvoiceRefusedException("Set up your organisation's invoice details in Settings first.");
+        var issueDate = ProviderLocalTime.TodayIn(now, ProviderTimeZoneResolver.FromState(settings.State).Zone);
+        Guid? actorId = Guid.TryParse(actor?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
+
+        var issued = new List<Invoice>();
+        foreach (var group in due)
+        {
+            var number = await TakeNumberAsync(tenantId, InvoiceKind.Invoice, settings.InvoiceStartNumber, ct);
+            var invoice = BuildSnapshot(claim, group, settings);
+            // Explicit: SaveChanges stamps a TenantId only when one is in scope, and a SuperAdmin not viewing as an organisation has none.
+            invoice.TenantId = tenantId;
+            foreach (var line in invoice.Lines) line.TenantId = tenantId;
+            invoice.Number = number;
+            invoice.DisplayNumber = FormatNumber(settings.InvoiceNumberPrefix, number);
+            invoice.IssueDate = issueDate;
+            invoice.DueDate = issueDate.AddDays(settings.PaymentTermsDays);
+            invoice.CreatedAt = now;
+            invoice.CreatedById = actorId;
+            _db.Invoices.Add(invoice);
+            issued.Add(invoice);
+        }
+        return issued;
+    }
+
+    /// <summary>
+    /// Takes the organisation's next number of a kind. On PostgreSQL one statement does it atomically and its row lock is held to commit, so a second
+    /// issue in the organisation waits, and a rolled-back issue gives its number back. The unique index (TenantId, Kind, Number) is the backstop.
+    /// </summary>
+    internal async Task<int> TakeNumberAsync(Guid tenantId, InvoiceKind kind, int start, CancellationToken ct)
+    {
+        if (_db.Database.IsNpgsql())
+            // ToListAsync, not SingleAsync: EF composes SingleAsync into a sub-select, and an INSERT cannot sit inside one.
+            return (await _db.Database.SqlQuery<int>($"""
+                INSERT INTO "InvoiceNumberCounters" ("TenantId", "Kind", "NextNumber") VALUES ({tenantId}, {(int)kind}, {start + 1})
+                ON CONFLICT ("TenantId", "Kind") DO UPDATE SET "NextNumber" = "InvoiceNumberCounters"."NextNumber" + 1
+                RETURNING "NextNumber" - 1 AS "Value"
+                """).ToListAsync(ct)).Single();
+
+        // InMemory (unit tests): one writer at a time; the tracked row is saved with the invoices, or dropped with them.
+        var row = await _db.InvoiceNumberCounters.FindAsync(new object[] { tenantId, kind }, ct)
+            ?? _db.InvoiceNumberCounters.Add(new InvoiceNumberCounter { TenantId = tenantId, Kind = kind, NextNumber = start }).Entity;
+        return row.NextNumber++;
+    }
+
+    /// <summary>What marking the claim as submitted would issue now (the same <see cref="DueGroups"/>, no number taken): nothing unless it is Draft, Ready or Rejected.</summary>
+    public async Task<ClaimSubmitPreviewDto> SubmitPreviewAsync(Guid claimId, CancellationToken ct)
+    {
+        var claim = await LoadClaimAsync(claimId, ct) ?? throw new InvalidOperationException("Claim not found.");
+        var live = await LiveInvoicesAsync(claimId, ct);
+        if (claim.Status is not (TripClaimStatus.Draft or TripClaimStatus.Ready or TripClaimStatus.Rejected))
+            return new ClaimSubmitPreviewDto { ClaimId = claimId, AlreadyIssued = live.Count };
+
+        var due = DueGroups(claim, live);
+        var tenantId = TenantOf(claim);
+        var settings = due.Count == 0 ? null : await SettingsForAsync(tenantId, ct);
+        var next = settings == null ? 0
+            : await _db.InvoiceNumberCounters.IgnoreQueryFilters().Where(c => c.TenantId == tenantId && c.Kind == InvoiceKind.Invoice)
+                .Select(c => (int?)c.NextNumber).FirstOrDefaultAsync(ct) ?? settings.InvoiceStartNumber;
+        return new ClaimSubmitPreviewDto
+        {
+            ClaimId = claimId, AlreadyIssued = live.Count, MissingSettings = due.Count > 0 && settings == null,
+            ToIssue = due.Select((g, i) =>
+            {
+                var snapshot = BuildSnapshot(claim, g, settings ?? new ProviderSettings());
+                return new PendingInvoiceDto
+                {
+                    GroupId = g.GroupId, ParticipantName = snapshot.ParticipantName, BillToName = snapshot.BillToName, Total = snapshot.Total,
+                    PredictedNumber = settings == null ? null : FormatNumber(settings.InvoiceNumberPrefix, next + i),
+                };
+            }).ToList(),
+        };
+    }
+
+    /// <summary>An issued invoice or credit note's PDF, drawn from its snapshot only; null when the caller's organisation has no such row.</summary>
+    public async Task<(byte[] Content, string FileName)?> RenderStoredAsync(Guid invoiceId, CancellationToken ct)
+    {
+        var invoice = await _db.Invoices.AsNoTracking().Include(i => i.Lines).FirstOrDefaultAsync(i => i.Id == invoiceId, ct);
+        if (invoice == null) return null;
+        invoice.Lines = invoice.Lines.OrderBy(l => l.ServiceFrom).ThenBy(l => l.SupportItemCode, StringComparer.Ordinal).ThenBy(l => l.Id).ToList();
+        var creditNote = invoice.Status == InvoiceStatus.Credited
+            ? await _db.Invoices.AsNoTracking().Where(c => c.CreditsInvoiceId == invoice.Id).Select(c => new { c.DisplayNumber, c.IssueDate }).FirstOrDefaultAsync(ct)
+            : null;
+        return (Render(invoice, creditedBy: creditNote?.DisplayNumber, creditedOn: creditNote?.IssueDate), $"{invoice.DisplayNumber}.pdf");
     }
 
     /// <summary>"TAX INVOICE" only for a GST-registered provider; the date is the claim's own (submitted, else created) in the provider's zone, so a re-download never moves it.</summary>

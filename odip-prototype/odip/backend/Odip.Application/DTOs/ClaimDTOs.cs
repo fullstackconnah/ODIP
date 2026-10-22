@@ -220,6 +220,45 @@ public record ShiftClaimGeneratedDto : TripClaimListDto
 }
 
 // ══════════════════════════════════════════════════════════════
+// INVOICE DTOs (Xero PR1)
+// ══════════════════════════════════════════════════════════════
+
+/// <summary>The claims a submit confirm is about: one (claim detail, the trip tab's row) or a selection (the trip tab's bulk change), 1 to 100.</summary>
+public record SubmitPreviewRequestDto
+{
+    public List<Guid> ClaimIds { get; init; } = new();
+}
+
+/// <summary>What marking these claims as submitted would issue now. Numbers are predictions: a concurrent issue can take them first.</summary>
+public record SubmitPreviewDto
+{
+    public List<ClaimSubmitPreviewDto> Claims { get; init; } = new();
+    /// <summary>The invoices all of them would issue together.</summary>
+    public int InvoiceCount { get; init; }
+}
+
+public record ClaimSubmitPreviewDto
+{
+    public Guid ClaimId { get; init; }
+    /// <summary>Empty unless the claim is Draft, Ready or Rejected (only those move to Submitted).</summary>
+    public List<PendingInvoiceDto> ToIssue { get; init; } = new();
+    /// <summary>The claim's invoices that stand already and stay as they are.</summary>
+    public int AlreadyIssued { get; init; }
+    /// <summary>An invoice is due and the organisation has no settings row: submitting would be refused.</summary>
+    public bool MissingSettings { get; init; }
+}
+
+public record PendingInvoiceDto
+{
+    public Guid GroupId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string BillToName { get; init; } = string.Empty;
+    public decimal Total { get; init; }
+    /// <summary>Null when the settings are missing.</summary>
+    public string? PredictedNumber { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
 // PROVIDER SETTINGS DTOs
 // ══════════════════════════════════════════════════════════════
 

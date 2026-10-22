@@ -298,6 +298,13 @@ public class ClaimsController : ControllerBase
         }
 
         var now = _clock.GetUtcNow().UtcDateTime;
+        // A real move to Submitted issues the claim's invoices (Xero PR1), after every check above and in this lock's transaction: the lines freeze at
+        // this moment, and a refusal (no settings) writes nothing, the numbers it took rolling back with the transaction.
+        if (dto.Status == TripClaimStatus.Submitted && c.Status != TripClaimStatus.Submitted)
+        {
+            try { await _invoiceService.IssueForSubmitAsync(c.Id, now, User, ct); }
+            catch (InvoiceRefusedException ex) { return Conflict(ApiResponse<bool>.Fail(ex.Message)); }
+        }
         if (dto.AuthorisedByStaffId.HasValue) c.AuthorisedByUserId = dto.AuthorisedByStaffId;
         if (dto.Notes != null) c.Notes = dto.Notes;
         if (dto.Status.HasValue) ApplyStatus(c, dto.Status.Value, now);
@@ -502,5 +509,26 @@ public class ClaimsController : ControllerBase
         {
             return BadRequest(ApiResponse<bool>.Fail(ex.Message));
         }
+    }
+
+    // POST /api/v1/claims/submit-preview — a read (POST for the list of ids): what marking each claim as submitted would issue now.
+    [HttpPost("claims/submit-preview")]
+    public async Task<ActionResult<ApiResponse<SubmitPreviewDto>>> SubmitPreview([FromBody] SubmitPreviewRequestDto dto, CancellationToken ct)
+    {
+        var ids = dto.ClaimIds.Distinct().ToList();
+        if (ids.Count is < 1 or > 100) return BadRequest(ApiResponse<SubmitPreviewDto>.Fail("Choose between 1 and 100 claims."));
+        if (await TenantClaims().CountAsync(c => ids.Contains(c.Id), ct) != ids.Count) return NotFound(ApiResponse<SubmitPreviewDto>.Fail("Claim not found"));
+
+        var claims = new List<ClaimSubmitPreviewDto>();
+        foreach (var id in ids) claims.Add(await _invoiceService.SubmitPreviewAsync(id, ct));
+        return Ok(ApiResponse<SubmitPreviewDto>.Ok(new SubmitPreviewDto { Claims = claims, InvoiceCount = claims.Sum(c => c.ToIssue.Count) }));
+    }
+
+    // GET /api/v1/invoices/{invoiceId}/pdf — the issued invoice or credit note, from its snapshot only. Invoices is tenant-filtered, so another organisation's is not found.
+    [HttpGet("invoices/{invoiceId:guid}/pdf")]
+    public async Task<IActionResult> DownloadIssuedInvoice(Guid invoiceId, CancellationToken ct)
+    {
+        var pdf = await _invoiceService.RenderStoredAsync(invoiceId, ct);
+        return pdf is { } p ? File(p.Content, "application/pdf", p.FileName) : NotFound(ApiResponse<bool>.Fail("Invoice not found"));
     }
 }
