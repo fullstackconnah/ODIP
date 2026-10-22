@@ -23,10 +23,10 @@ afterEach(() => localStorage.clear())
 describe('navConfig — My payslips', () => {
   it('shows My payslips right after My shifts only when the organisation is connected', () => {
     expect(shape(resolveNav(navItems, accessFor('SupportWorker'), connected))).toEqual([
-      'My shifts', 'My payslips', 'Trips: Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
+      'My shifts', 'My payslips', 'Trips: Trips | Schedule', 'Participants: Participants | Medications', 'Tasks', 'Incidents',
     ])
     expect(shape(resolveNav(navItems, accessFor('SupportWorker'), notConnected))).toEqual([
-      'My shifts', 'Trips: Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
+      'My shifts', 'Trips: Trips | Schedule', 'Participants: Participants | Medications', 'Tasks', 'Incidents',
     ])
     expect(shape(resolveNav(navItems, accessFor('SupportWorker')))).not.toContain('My payslips')
     for (const role of ['Admin', 'ReadOnly']) {

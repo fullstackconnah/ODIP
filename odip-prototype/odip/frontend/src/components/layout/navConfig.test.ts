@@ -96,7 +96,7 @@ describe('navConfig — who sees what', () => {
 
   it('gives a SupportWorker only their pages, no Dashboard, and no group that has lost every child', () => {
     expect(shape(resolveNav(navItems, accessFor('SupportWorker')))).toEqual([
-      'My shifts', 'Trips: Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents',
+      'My shifts', 'Trips: Trips | Schedule', 'Participants: Participants | Medications', 'Tasks', 'Incidents',
     ])
   })
 
@@ -104,11 +104,20 @@ describe('navConfig — who sees what', () => {
     expect(shape(resolveNav(navItems, accessFor('ReadOnly')))).toEqual([
       'Dashboard',
       'My shifts',
-      'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+      'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
       'Participants: Participants | Medications',
       'Staff & roster: Staff | Qualifications',
+      'Tasks',
       'Incidents',
     ])
+  })
+
+  it('keeps Tasks out of the Trips group: it is a general work queue, one flat entry reached through More on the phone', () => {
+    const trips = navItems.find(entry => isGroup(entry) && entry.id === 'trips')
+    expect(trips && isGroup(trips) && trips.children.map(c => c.label)).not.toContain('Tasks')
+    const tasks = navItems.find(entry => !isGroup(entry) && entry.to === '/tasks')
+    expect(tasks).toBeDefined()
+    expect(tasks && !isGroup(tasks) && tasks.bar).toBeUndefined()
   })
 
   it('keeps the Dashboard for every role but a SupportWorker (hideForRoles), whatever the page access', () => {
@@ -123,9 +132,10 @@ describe('navConfig — who sees what', () => {
     expect(shape(resolveNav(navItems, accessFor('Admin')))).toEqual([
       'Dashboard',
       'My shifts',
-      'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+      'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
       'Participants: Participants | Medications | Caregiver forms',
       'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+      'Tasks',
       'Budgets',
       'Incidents',
       'Settings',
