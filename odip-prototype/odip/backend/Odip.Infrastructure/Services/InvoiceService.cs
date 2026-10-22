@@ -454,6 +454,40 @@ public class InvoiceService
         return row.NextNumber++;
     }
 
+    /// <summary>
+    /// A full credit note for an issued invoice (D11): its own number from the organisation's credit note counter, the invoice's seller, bill-to, lines and
+    /// amounts copied (stored positive; the PDF prints them negative), dated today in the invoice's own state. The invoice becomes Credited. The caller
+    /// holds the claim's lock and saves.
+    /// </summary>
+    public async Task<Invoice> CreditAsync(Invoice original, DateTime now, ClaimsPrincipal? actor, CancellationToken ct)
+    {
+        var prefix = (await SettingsForAsync(original.TenantId, ct))?.CreditNotePrefix ?? "CN-";
+        var number = await TakeNumberAsync(original.TenantId, InvoiceKind.CreditNote, 1, ct);
+        var note = new Invoice
+        {
+            Id = Guid.NewGuid(), TenantId = original.TenantId, Kind = InvoiceKind.CreditNote, Number = number, DisplayNumber = FormatNumber(prefix, number), Status = InvoiceStatus.Issued,
+            TripClaimId = original.TripClaimId, ClaimReference = original.ClaimReference, ParticipantBookingId = original.ParticipantBookingId, ParticipantId = original.ParticipantId,
+            ParticipantName = original.ParticipantName, NdisNumber = original.NdisNumber, ServiceReference = original.ServiceReference,
+            IssueDate = ProviderLocalTime.TodayIn(now, ProviderTimeZoneResolver.FromState(original.SellerState).Zone),
+            PayerKind = original.PayerKind, BillToName = original.BillToName, BillToAddress = original.BillToAddress, BillToEmail = original.BillToEmail,
+            SellerOrganisationName = original.SellerOrganisationName, SellerAbn = original.SellerAbn, SellerRegistrationNumber = original.SellerRegistrationNumber,
+            SellerAddress = original.SellerAddress, SellerState = original.SellerState, GstRegistered = original.GstRegistered,
+            BankAccountName = original.BankAccountName, Bsb = original.Bsb, AccountNumber = original.AccountNumber, FooterNotes = original.FooterNotes, PaymentTermsDays = original.PaymentTermsDays,
+            Subtotal = original.Subtotal, Gst = original.Gst, Total = original.Total,
+            CreditsInvoiceId = original.Id, CreditsDisplayNumber = original.DisplayNumber,
+            CreatedAt = now, CreatedById = Guid.TryParse(actor?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null,
+            // Explicit TenantId on every row: a SuperAdmin with no organisation in scope stamps none.
+            Lines = original.Lines.Select(l => new InvoiceLine
+            {
+                Id = Guid.NewGuid(), TenantId = original.TenantId, ClaimLineItemId = l.ClaimLineItemId, SupportItemCode = l.SupportItemCode, ServiceFrom = l.ServiceFrom, ServiceTo = l.ServiceTo,
+                Hours = l.Hours, UnitPrice = l.UnitPrice, LineTotal = l.LineTotal, GSTCode = l.GSTCode,
+            }).ToList(),
+        };
+        original.Status = InvoiceStatus.Credited;
+        _db.Invoices.Add(note);
+        return note;
+    }
+
     /// <summary>What marking the claim as submitted would issue now (the same <see cref="DueGroups"/>, no number taken): nothing unless it is Draft, Ready or Rejected.</summary>
     public async Task<ClaimSubmitPreviewDto> SubmitPreviewAsync(Guid claimId, CancellationToken ct)
     {

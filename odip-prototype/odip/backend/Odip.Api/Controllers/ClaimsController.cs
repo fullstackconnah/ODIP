@@ -7,6 +7,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
@@ -454,6 +455,11 @@ public class ClaimsController : ControllerBase
         if (claim.Status is not (TripClaimStatus.Draft or TripClaimStatus.Ready or TripClaimStatus.Rejected or TripClaimStatus.Cancelled))
             return BadRequest(ApiResponse<bool>.Fail("A claim that has gone to the NDIA can't be deleted unless it was rejected."));
 
+        // An invoice that stands must be voided first (Xero PR1, spec 5.5): its number never disappears. Voided and credited rows and credit notes stay after the delete, their claim link set null.
+        var live = await _db.Invoices.Where(i => i.TripClaimId == claimId && i.Kind == InvoiceKind.Invoice && i.Status == InvoiceStatus.Issued)
+            .OrderBy(i => i.Number).Select(i => i.DisplayNumber).ToListAsync(ct);
+        if (live.Count > 0) return Conflict(ApiResponse<bool>.Fail($"Void {JoinAnd(live)} first, then delete the claim."));
+
         // Reset participant bookings back to unclaimed. Shift-completion design spec, delivery
         // PR 3: Kind == Shift line items have ParticipantBookingId == null — filter those out
         // rather than passing nulls into the ParticipantBookings lookup (a shift becomes
@@ -539,4 +545,80 @@ public class ClaimsController : ControllerBase
         var pdf = await _invoiceService.RenderStoredAsync(invoiceId, ct);
         return pdf is { } p ? File(p.Content, "application/pdf", p.FileName) : NotFound(ApiResponse<bool>.Fail("Invoice not found"));
     }
+
+    // POST /api/v1/invoices/{invoiceId}/void — an invoice with no payment recorded; its number is kept and never used again.
+    [HttpPost("invoices/{invoiceId:guid}/void")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public Task<ActionResult<ApiResponse<InvoiceSummaryDto>>> VoidInvoice(Guid invoiceId, [FromBody] InvoiceReasonDto dto, CancellationToken ct) =>
+        CorrectInvoiceAsync(invoiceId, dto.Reason, credit: false, ct);
+
+    // POST /api/v1/invoices/{invoiceId}/credit-note — a full credit note (its own CN number); the invoice becomes Credited.
+    [HttpPost("invoices/{invoiceId:guid}/credit-note")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public Task<ActionResult<ApiResponse<InvoiceSummaryDto>>> IssueCreditNote(Guid invoiceId, [FromBody] InvoiceReasonDto dto, CancellationToken ct) =>
+        CorrectInvoiceAsync(invoiceId, dto.Reason, credit: true, ct);
+
+    /// <summary>
+    /// Void or credit (spec 5.5, D12): the reason is checked, then the invoice's kind and state (before any lock, so a row whose claim was deleted answers 409),
+    /// then the claim's edit lock is taken, the invoice and its claim's lines read again, and the change and its audit row saved together.
+    /// </summary>
+    private async Task<ActionResult<ApiResponse<InvoiceSummaryDto>>> CorrectInvoiceAsync(Guid invoiceId, string? reason, bool credit, CancellationToken ct)
+    {
+        reason = reason?.Trim();
+        if (string.IsNullOrEmpty(reason)) return BadRequest(ApiResponse<InvoiceSummaryDto>.Fail(credit ? "Say why it's being credited." : "Say why it's being voided."));
+        if (reason.Length > 500) return BadRequest(ApiResponse<InvoiceSummaryDto>.Fail("The reason is 500 characters at most."));
+        if (reason.Any(char.IsControl)) return BadRequest(ApiResponse<InvoiceSummaryDto>.Fail("The reason can't contain a line break, a tab or another control character."));
+
+        // Invoices is tenant-filtered: another organisation's is not found.
+        var found = await _db.Invoices.AsNoTracking().FirstOrDefaultAsync(i => i.Id == invoiceId, ct);
+        if (found == null) return NotFound(ApiResponse<InvoiceSummaryDto>.Fail("Invoice not found"));
+        if (StateRefusal(found) is { } refused) return Conflict(ApiResponse<InvoiceSummaryDto>.Fail(refused));
+        if (found.TripClaimId is not { } claimId) return Conflict(ApiResponse<InvoiceSummaryDto>.Fail($"{found.DisplayNumber} has no claim any more."));
+
+        var held = await LockClaimAsync(claimId, ct);
+        if (held == null) return Conflict(ApiResponse<InvoiceSummaryDto>.Fail("Another change to this claim is still being saved. Wait a moment, then try again."));
+        await using var _ = held;
+
+        var invoice = await _db.Invoices.Include(i => i.Lines).FirstAsync(i => i.Id == invoiceId, ct);
+        if (StateRefusal(invoice) is { } changed) return Conflict(ApiResponse<InvoiceSummaryDto>.Fail(changed));
+        var claim = await _db.TripClaims.Include(c => c.LineItems).FirstAsync(c => c.Id == claimId, ct);
+        var paid = InvoiceService.PaymentRecorded(invoice, claim.LineItems.ToDictionary(l => l.Id), claim.Status);
+        var now = _clock.GetUtcNow().UtcDateTime;
+
+        InvoiceSummaryDto result;
+        string change;
+        if (credit)
+        {
+            var note = await _invoiceService.CreditAsync(invoice, now, User, ct);
+            result = InvoiceService.Summary(note, null, false);
+            change = $"Credited by {note.DisplayNumber}: {reason}";
+        }
+        else
+        {
+            if (paid) return Conflict(ApiResponse<InvoiceSummaryDto>.Fail("A payment is recorded, so issue a credit note instead."));
+            invoice.Status = InvoiceStatus.Voided;
+            invoice.VoidedAt = now;
+            invoice.VoidedById = Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var actorId) ? actorId : null;
+            invoice.VoidReason = reason;
+            result = InvoiceService.Summary(invoice, null, false);
+            change = $"Void: {reason}";
+        }
+
+        // The claim's History shows it; never a bank field.
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(TripClaim), claimId, $"Invoice {invoice.DisplayNumber}", "Issued", change, User));
+        await _db.SaveChangesAsync(ct);
+        await held.CommitAsync(ct);
+        return Ok(ApiResponse<InvoiceSummaryDto>.Ok(result));
+    }
+
+    /// <summary>Why an invoice can't be voided or credited as it stands; null when it is an issued invoice.</summary>
+    private static string? StateRefusal(Invoice invoice) =>
+        invoice.Kind == InvoiceKind.CreditNote ? $"{invoice.DisplayNumber} is a credit note, so it stands as issued."
+        : invoice.Status == InvoiceStatus.Voided ? $"{invoice.DisplayNumber} is already void."
+        : invoice.Status == InvoiceStatus.Credited ? $"{invoice.DisplayNumber} is already credited."
+        : null;
+
+    /// <summary>"A", "A and B", "A, B and C".</summary>
+    private static string JoinAnd(IReadOnlyList<string> items) =>
+        items.Count == 1 ? items[0] : $"{string.Join(", ", items.Take(items.Count - 1))} and {items[^1]}";
 }
