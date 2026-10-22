@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NoShowModal } from '@/components/NoShowModal'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { SubmitClaimDialog } from '@/components/SubmitClaimDialog'
 import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import { ndiaCodeMeaning } from '@/lib/ndiaCodes'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
@@ -57,6 +58,14 @@ export default function ClaimDetailPage() {
   // The page's one polite announcement (invoice void and credit outcomes; the submit notice).
   const [announcement, setAnnouncement] = useState('')
   const invoicesHeadingRef = useRef<HTMLHeadingElement>(null)
+  const [submitting, setSubmitting] = useState(false)
+  // After a submit the Invoices heading takes focus, once the dialog has gone (its own cleanup hands focus back to the opener first).
+  const [focusInvoices, setFocusInvoices] = useState(false)
+  useEffect(() => {
+    if (!focusInvoices) return
+    invoicesHeadingRef.current?.focus()
+    setFocusInvoices(false)
+  }, [focusInvoices])
   // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the page can cancel it: left
   // running it fires setSaved into a tree that is gone.
   const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -120,8 +129,6 @@ export default function ClaimDetailPage() {
 
   function statusConfirmCopy(status: TripClaimStatus | null) {
     switch (status) {
-      case 'Submitted':
-        return { title: 'Mark as submitted?', message: "Mark this claim as submitted to the NDIA? You can't change its lines after this.", confirmLabel: 'Mark as Submitted', variant: 'default' as const }
       case 'Paid':
         return { title: 'Mark as paid?', message: 'Mark this claim as paid? This cannot be undone.', confirmLabel: 'Mark as Paid', variant: 'default' as const }
       default:
@@ -179,11 +186,12 @@ export default function ClaimDetailPage() {
               <Download className="w-4 h-4" />
               BPR CSV
             </Button>
-            {claim.status === 'Draft' && (
+            {/* The moves CanMove allows; from Rejected it is the reissue path, and a shift claim has no other way back. */}
+            {(claim.status === 'Draft' || claim.status === 'Ready' || claim.status === 'Rejected') && (
               <Button
                 variant="primary"
                 size="md"
-                onClick={() => { setStatusError(null); setStatusConfirmTarget('Submitted') }}
+                onClick={() => { setStatusError(null); setSubmitting(true) }}
                 disabled={updateClaim.isPending}
               >
                 <Check className="w-4 h-4" />
@@ -420,6 +428,13 @@ export default function ClaimDetailPage() {
           loading={updateClaim.isPending}
           onCancel={() => { if (!updateClaim.isPending) setStatusConfirmTarget(null) }}
           onConfirm={code => handleStatusChange('Rejected', code)}
+        />
+      )}
+      {submitting && id && (
+        <SubmitClaimDialog
+          claimId={id}
+          onCancel={() => setSubmitting(false)}
+          onSubmitted={announcement => { setSubmitting(false); setAnnouncement(announcement); setFocusInvoices(true) }}
         />
       )}
       {recordingCode && (

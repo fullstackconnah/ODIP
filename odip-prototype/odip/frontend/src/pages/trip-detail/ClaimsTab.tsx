@@ -6,6 +6,8 @@ import { Dropdown } from '@/components/Dropdown'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
+import { BulkSubmitDialog, SubmitClaimDialog } from '@/components/SubmitClaimDialog'
 import GenerateClaimModal from '@/components/GenerateClaimModal'
 import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import type { TripClaimStatus } from '@/api/types/enums'
@@ -53,6 +55,9 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
   const [rejecting, setRejecting] = useState<string[] | null>(null)
   const [rejectError, setRejectError] = useState<string | null>(null)
   const [rejectLoading, setRejectLoading] = useState(false)
+  // The claims being marked Submitted, while the confirm says what that issues (Xero PR1): nothing is written until Confirm.
+  const [submitting, setSubmitting] = useState<string[] | null>(null)
+  const [announcement, setAnnouncement] = useState('')
 
   /**
    * Writes the same change to each claim; settles when every one has been written, and refuses with the first refusal. Each claim is its own `mutateAsync` promise: `mutate` with callbacks reports
@@ -85,6 +90,11 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
   function askForNdiaCode(ids: string[]) {
     setRejectError(null)
     setRejecting(ids)
+  }
+
+  function askToSubmit(ids: string[]) {
+    setError(null)
+    setSubmitting(ids)
   }
 
   async function rejectClaims(ids: string[], code: string | null) {
@@ -121,6 +131,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
 
   return (
     <div className="space-y-4">
+      <AnnouncementRegion message={announcement} />
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-[var(--color-foreground)]">NDIS Claims</h2>
         {canWrite && (
@@ -156,7 +167,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
               sortable: true,
               ...(canWrite ? { bulkEditable: {
                 items: CLAIM_STATUS_ITEMS,
-                onBulkChange: (ids: string[], value: string) => (value === 'Rejected' ? askForNdiaCode(ids) : bulkUpdateClaimStatus(ids, value)),
+                onBulkChange: (ids: string[], value: string) => (value === 'Rejected' ? askForNdiaCode(ids) : value === 'Submitted' ? askToSubmit(ids) : bulkUpdateClaimStatus(ids, value)),
               } } : {}),
               // No legal move (Paid, Cancelled): the status is just a word, so it is a badge at full strength rather than a disabled pill dimmed to 60%.
               render: (c: TripClaimListDto) => !LEGAL_NEXT[c.status] ? (
@@ -165,7 +176,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
                 <Dropdown
                   variant="pill"
                   value={c.status}
-                  onChange={val => (val === 'Rejected' ? askForNdiaCode([c.id]) : changeStatus(c.id, val as TripClaimStatus))}
+                  onChange={val => (val === 'Rejected' ? askForNdiaCode([c.id]) : val === 'Submitted' ? askToSubmit([c.id]) : changeStatus(c.id, val as TripClaimStatus))}
                   colorClass={getStatusColor(c.status)}
                   items={[c.status, ...(LEGAL_NEXT[c.status] ?? [])].map(value => ({ value, label: STATUS_LABEL[value] }))}
                   disabled={!canWrite}
@@ -211,6 +222,20 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
           onConfirm={code => { void rejectClaims(rejecting, code) }}
         />
       )}
+
+      {submitting && (submitting.length === 1 ? (
+        <SubmitClaimDialog
+          claimId={submitting[0]}
+          onCancel={() => setSubmitting(null)}
+          onSubmitted={message => { setSubmitting(null); setSelectedClaimIds(new Set()); setAnnouncement(message) }}
+        />
+      ) : (
+        <BulkSubmitDialog
+          claimIds={submitting}
+          onCancel={() => setSubmitting(null)}
+          onConfirm={() => { setSubmitting(null); void bulkUpdateClaimStatus(submitting, 'Submitted') }}
+        />
+      ))}
 
       <ConfirmDialog
         open={deletingClaim !== null}

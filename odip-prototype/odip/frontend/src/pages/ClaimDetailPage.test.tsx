@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ClaimDetailPage from './ClaimDetailPage'
@@ -7,7 +7,8 @@ import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseClaim, mockUpdateClaim, mockUpdateLineItem, mockUseClaimInvoices } = vi.hoisted(() => ({
+const { mockUseClaim, mockUpdateClaim, mockUpdateLineItem, mockUseClaimInvoices, mockUseSubmitPreview } = vi.hoisted(() => ({
+  mockUseSubmitPreview: vi.fn(),
   mockUseClaim: vi.fn(),
   mockUseClaimInvoices: vi.fn(),
   mockUpdateClaim: vi.fn(),
@@ -22,10 +23,14 @@ vi.mock('@/api/hooks', () => ({
   useClaimInvoices: mockUseClaimInvoices,
   useVoidInvoice: () => ({ mutate: vi.fn(), isPending: false }),
   useIssueCreditNote: () => ({ mutate: vi.fn(), isPending: false }),
+  // The submit confirm (SubmitClaimDialog.test.tsx covers its words): one invoice to issue by default, so Confirm is not held.
+  useSubmitPreview: mockUseSubmitPreview,
 }))
 
 beforeEach(() => {
-  mockUseClaimInvoices.mockReturnValue({ data: { invoiceState: 'preview', invoices: [], groups: [], agencyCount: 0 }, isLoading: false })
+  const noInvoices = { invoiceState: 'preview', invoices: [], groups: [], agencyCount: 0 }
+  mockUseClaimInvoices.mockReturnValue({ data: noInvoices, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: noInvoices }) })
+  mockUseSubmitPreview.mockReturnValue({ data: { claims: [{ claimId: 'claim-1', toIssue: [{ groupId: 'b-1', participantName: 'Priya Nair', billToName: 'Priya Nair', total: 480, predictedNumber: 'INV-0042' }], alreadyIssued: 0, missingSettings: false }], invoiceCount: 1 }, isLoading: false })
 })
 
 // ClaimDetailPage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker — that
@@ -212,6 +217,35 @@ describe('ClaimDetailPage — Invoices section (Xero PR1)', () => {
     renderPage()
 
     expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Draft', 'Ready', 'Rejected'] as const)('offers Mark as Submitted on a %s claim (the moves CanMove allows; Rejected is the reissue path)', status => {
+    mockUseClaim.mockReturnValue({ data: { ...baseClaim([baseLineItem()]), status }, isLoading: false })
+    renderPage()
+    expect(screen.getByRole('button', { name: 'Mark as Submitted' })).toBeInTheDocument()
+  })
+
+  it.each(['Submitted', 'Paid'] as const)('does not offer Mark as Submitted on a %s claim', status => {
+    mockUseClaim.mockReturnValue({ data: { ...baseClaim([baseLineItem()]), status }, isLoading: false })
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'Mark as Submitted' })).not.toBeInTheDocument()
+  })
+
+  it('after a submit, announces the numbers issued and moves focus to the Invoices heading (the button that opened the dialog has gone)', async () => {
+    const user = userEvent.setup()
+    const after = { invoiceState: 'issued', groups: [], agencyCount: 0, invoices: [{ id: 'inv-42', kind: 'Invoice', number: 42, displayNumber: 'INV-0042', status: 'Issued', groupId: 'b-1', participantName: 'Priya Nair', billToName: 'Priya Nair', payerKind: 'SelfManaged', issueDate: '2026-10-22', total: 480, paymentRecorded: false }] }
+    mockUseClaimInvoices.mockReturnValue({ data: { invoiceState: 'preview', invoices: [], groups: [], agencyCount: 0 }, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: after }) })
+    mockUpdateClaim.mockImplementation((_vars, opts) => opts.onSuccess())
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Mark as Submitted' }))
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Mark as submitted?' })).getByRole('button', { name: 'Mark as Submitted' }))
+
+    expect(mockUpdateClaim.mock.calls[0][0]).toEqual({ claimId: 'claim-1', data: { status: 'Submitted' } })
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(screen.getAllByRole('status').some(el => el.textContent === 'Claim submitted. Issued INV-0042.')).toBe(true)
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Invoices' })).toHaveFocus())
   })
 })
 
@@ -464,11 +498,11 @@ describe('ClaimDetailPage — Mark as Rejected asks for the NDIA code', () => {
       expect(within(dialog).getByRole('alert')).toHaveTextContent('The NDIA code is at most 10 characters.')
     })
 
-    it('offers nothing more to do with the status', () => {
+    it('offers only the reissue: Mark as Submitted (Xero PR1, SHAPE section 3)', () => {
       mockUseClaim.mockReturnValue({ data: rejected({ rejectionCode: 'V27' }), isLoading: false })
       renderPage()
 
-      expect(screen.queryByRole('button', { name: /^Mark as/ })).not.toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /^Mark as/ }).map(b => b.textContent?.trim())).toEqual(['Mark as Submitted'])
     })
   })
 
