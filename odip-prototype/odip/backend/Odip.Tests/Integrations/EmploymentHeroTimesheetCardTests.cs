@@ -22,13 +22,13 @@ namespace Odip.Tests.Integrations;
 public class EmploymentHeroTimesheetCardTests
 {
     /// <summary>Throws a concurrency conflict from the first save that touches an outbox row, as a drain claiming it at that moment would.</summary>
-    private sealed class ConflictOnce : SaveChangesInterceptor
+    private sealed class ConflictOnce(int times = 1) : SaveChangesInterceptor
     {
         public int Thrown { get; private set; }
 
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
         {
-            if (Thrown == 0 && eventData.Context!.ChangeTracker.Entries<EmploymentHeroOutbox>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            if (Thrown < times && eventData.Context!.ChangeTracker.Entries<EmploymentHeroOutbox>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             {
                 Thrown++;
                 throw new DbUpdateConcurrencyException("claimed", new List<Microsoft.EntityFrameworkCore.Update.IUpdateEntry>());
@@ -173,6 +173,23 @@ public class EmploymentHeroTimesheetCardTests
     }
 
     [Fact]
+    public async Task A_disconnect_and_reconnect_to_the_same_business_keeps_the_first_cutoff()
+    {
+        var tenant = Guid.NewGuid();
+        await using var db = Db(Guid.NewGuid().ToString(), tenant);
+        var first = (await ConnectAsync(db, tenant)).ConnectedAt.AddMinutes(5);
+        db.EmploymentHeroSyncLogs.Add(new EmploymentHeroSyncLog { Id = Guid.NewGuid(), TenantId = tenant, BusinessId = Business, StartedAt = first, FinishedAt = first });
+        await db.SaveChangesAsync();
+        var eh = new StubHttpHandler().On("/api/v2/business/777", HttpStatusCode.OK, new { id = 777, name = "Acme Care" });
+
+        await Controller(db, tenant, eh).Disconnect(CancellationToken.None);
+        Assert.Empty(await db.EmploymentHeroConnections.ToListAsync());
+        await Controller(db, tenant, eh).Connect(new EmploymentHeroConnectDto(ApiKey, "777"), CancellationToken.None);
+
+        Assert.Equal(first, (await db.EmploymentHeroConnections.SingleAsync()).ConnectedAt);   // not today
+    }
+
+    [Fact]
     public async Task Reconnecting_to_another_business_clears_the_queue_and_the_same_business_keeps_it()
     {
         var tenant = Guid.NewGuid();
@@ -188,6 +205,29 @@ public class EmploymentHeroTimesheetCardTests
 
         await Controller(db, tenant, eh).Connect(new EmploymentHeroConnectDto(ApiKey, "888"), CancellationToken.None);
         Assert.Empty(await db.EmploymentHeroOutbox.ToListAsync());   // every Kind
+    }
+
+    [Fact]
+    public async Task A_second_claim_landing_meanwhile_answers_busy_not_500()
+    {
+        async Task<OdipDbContext> OrgWithPendingRowAsync(Guid tenant)
+        {
+            var db = DbWith(Guid.NewGuid().ToString(), tenant, new ConflictOnce(2));
+            await ConnectAsync(db, tenant);
+            db.EmploymentHeroOutbox.Add(Row(tenant, EmploymentHeroOutboxStatus.Pending));
+            await db.SaveChangesAsync();
+            return db;
+        }
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        await using var connectDb = await OrgWithPendingRowAsync(a);
+        await using var saveDb = await OrgWithPendingRowAsync(b);
+        var eh = new StubHttpHandler().On("/api/v2/business/888", HttpStatusCode.OK, new { id = 888, name = "Other" });
+
+        var connect = await Controller(connectDb, a, eh).Connect(new EmploymentHeroConnectDto(ApiKey, "888"), CancellationToken.None);
+        var save = await Controller(saveDb, b, WorkTypes()).SaveWorkTypes(new EmploymentHeroWorkTypesDto("7", null, null, null), CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(connect.Result);
+        Assert.IsType<ConflictObjectResult>(save.Result);
     }
 
     [Fact]

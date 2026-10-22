@@ -122,19 +122,29 @@ public partial class EmploymentHeroClient
         }
     }
 
-    /// <summary>A 400 is EH saying no to this line: its own words (ProblemDetails detail or title), clipped, never the request.</summary>
+    /// <summary>A 400 is EH saying no to this line: its own words (ProblemDetails detail or title, or a Web API 2 message or model state), clipped, never the request.</summary>
     private static async Task<EmploymentHeroException> RefusedAsync(HttpResponseMessage response, CancellationToken ct)
     {
         string? words = null;
         try
         {
             using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
-            foreach (var name in new[] { "detail", "title" })
-                if (words is null && doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(p.GetString()))
-                    words = p.GetString()!.Trim();
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object)
+                words = new[] { Text(root, "detail"), ModelStateWords(root), Text(root, "title"), Text(root, "message") }.FirstOrDefault(w => w is not null);
         }
         catch (JsonException) { }
         if (words is null) return new EmploymentHeroException(EmploymentHeroFailure.Refused, "Employment Hero refused it.");
         return new EmploymentHeroException(EmploymentHeroFailure.Refused, "Employment Hero refused it: " + (words.Length > RefusalWordsMax ? words[..RefusalWordsMax] : words));
     }
+
+    private static string? Text(JsonElement o, string name) =>
+        o.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(p.GetString()) ? p.GetString()!.Trim() : null;
+
+    /// <summary>The first message in an ASP.NET Web API 2 style body: {"message": "...", "modelState": {"field": ["why"]}}.</summary>
+    private static string? ModelStateWords(JsonElement o) =>
+        o.TryGetProperty("modelState", out var ms) && ms.ValueKind == JsonValueKind.Object
+            ? ms.EnumerateObject().Where(f => f.Value.ValueKind == JsonValueKind.Array).SelectMany(f => f.Value.EnumerateArray())
+                .Where(v => v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString())).Select(v => v.GetString()!.Trim()).FirstOrDefault()
+            : null;
 }

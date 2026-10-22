@@ -118,7 +118,7 @@ public sealed class EmploymentHeroTimesheetSender
             if (!data.TryGetValue(row.EntityId, out var d)) continue;
             var built = EmploymentHeroTimesheets.Build(d.Shift, d.Completion, d.Breaks, d.PayrollId, map, zone);
             if (built.Line is null) continue;
-            var hash = EmploymentHeroTimesheets.Hash(built.Line);
+            var hash = built.Hash;
             if (row.Status == EmploymentHeroOutboxStatus.Sent && hash != row.PayloadHash)
             {
                 row.Status = EmploymentHeroOutboxStatus.Pending;
@@ -228,7 +228,7 @@ public sealed class EmploymentHeroTimesheetSender
                 row.Status = EmploymentHeroOutboxStatus.Sent;
                 row.ExternalId = saved.Id.ToString(CultureInfo.InvariantCulture);
                 row.ExternalEmployeeId = employee;
-                row.PayloadHash = EmploymentHeroTimesheets.Hash(line);
+                row.PayloadHash = built.Hash;
                 row.SentAt = now;
                 row.Attempts = 0;
                 row.LastError = null;
@@ -297,7 +297,7 @@ public sealed class EmploymentHeroTimesheetSender
     /// <summary>
     /// The token always changes, even within one microsecond (all Postgres keeps), so a racing writer is always detected.
     /// </summary>
-    internal static DateTime Stamp(DateTime original, DateTime now) =>
+    public static DateTime Stamp(DateTime original, DateTime now) =>
         new(Math.Max(now.Ticks / 10 * 10, original.Ticks / 10 * 10 + 10), DateTimeKind.Utc);
 
     /// <summary>Saves one row. Another writer got there first: every entry in the failed save is detached and false is returned, so nothing else is lost or half-saved.</summary>

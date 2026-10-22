@@ -21,7 +21,7 @@ public static class EmploymentHeroTimesheets
     public const string KeyRefusedReason = "Employment Hero didn't accept the API key.";
 
     public sealed record TimesheetMapping(string? Standard, string? ActiveNight, string? PassiveNight, string? Sleepover);
-    public sealed record TimesheetBuild(EhTimesheetLine? Line, string? WaitReason);
+    public sealed record TimesheetBuild(EhTimesheetLine? Line, string? WaitReason, string? Hash = null);
 
     private const string Wire = "yyyy-MM-dd'T'HH:mm:ss";
 
@@ -48,29 +48,31 @@ public static class EmploymentHeroTimesheets
         }
         string start, end;
         var sent = new List<EhBreak>();
+        var instants = new List<string>();   // what the hash covers: the shift's own times, so a work-type or provider time-zone change never reads as an edit
         if (s.NightType == SleepoverType.Sleepover)   // a sleepover sends its rostered times (already local)
         {
             start = s.ServiceDate.ToDateTime(s.StartTime).ToString(Wire, CultureInfo.InvariantCulture);
             end = s.ServiceDate.AddDays(s.EndsNextDay ? 1 : 0).ToDateTime(s.EndTime).ToString(Wire, CultureInfo.InvariantCulture);
+            instants.AddRange([start, end]);
         }
         else
         {
             var to = c.ActualEnd ?? c.ActualStart;
             start = Local(c.ActualStart);
             end = Local(to);
+            instants.AddRange([Minute(c.ActualStart), Minute(to)]);
             foreach (var b in breaks.OrderBy(b => b.StartedAt))   // clamped exactly as ShiftBreakRules.NetWorked clamps
             {
                 var from = b.StartedAt < c.ActualStart ? c.ActualStart : b.StartedAt;
                 var until = b.EndedAt is { } e && e < to ? e : to;
-                if (until > from && Local(until) != Local(from)) sent.Add(new EhBreak(Local(from), Local(until), false));   // a sub-minute break would go zero-length
+                if (until > from && Local(until) != Local(from)) { sent.Add(new EhBreak(Local(from), Local(until), false)); instants.AddRange([Minute(from), Minute(until)]); }   // a sub-minute break would go zero-length
             }
         }
-        return new(new EhTimesheetLine(null, employeeId, start, end, sent, workTypeId, c.Id.ToString("D")), null);
+        var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new object[] { employeeId, s.NightType, instants }, EmploymentHeroClient.WireJson)));
+        return new(new EhTimesheetLine(null, employeeId, start, end, sent, workTypeId, c.Id.ToString("D")), null, hash);
     }
 
-    // shortcut: the hash covers the whole EhTimesheetLine shape, so adding a field later resends every line in the 62-day window; upgrade by hashing a fixed field list then.
-    public static string Hash(EhTimesheetLine line) =>
-        Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(line with { Id = null }, EmploymentHeroClient.WireJson)));
+    private static string Minute(DateTime utc) => (utc.Ticks / TimeSpan.TicksPerMinute).ToString(CultureInfo.InvariantCulture);
 
     /// <summary>The provider-local date the organisation connected on; shifts before it are never queued. Null when the organisation isn't connected.</summary>
     public static async Task<DateOnly?> CutoffAsync(OdipDbContext db, Guid tenantId, CancellationToken ct)

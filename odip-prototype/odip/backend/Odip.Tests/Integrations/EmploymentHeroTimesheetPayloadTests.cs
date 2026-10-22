@@ -114,14 +114,31 @@ public class EmploymentHeroTimesheetPayloadTests
         var same = Built(AShift(), c);
 
         Assert.Equal("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", line.ExternalId);
-        Assert.Equal(EmploymentHeroTimesheets.Hash(line), EmploymentHeroTimesheets.Hash(same));
-        Assert.Equal(EmploymentHeroTimesheets.Hash(line), EmploymentHeroTimesheets.Hash(line with { Id = 9001 }));
-        Assert.NotEqual(EmploymentHeroTimesheets.Hash(line), EmploymentHeroTimesheets.Hash(Built(AShift(), c, payrollId: "43")));
-        Assert.NotEqual(EmploymentHeroTimesheets.Hash(line), EmploymentHeroTimesheets.Hash(Built(AShift(SleepoverType.ActiveNight), c)));
+        Assert.Equal(HashOf(AShift(), c), HashOf(AShift(), c));
+        Assert.NotEqual(HashOf(AShift(), c), HashOf(AShift(), c, payrollId: "43"));
+        Assert.NotEqual(HashOf(AShift(), c), HashOf(AShift(SleepoverType.ActiveNight), c));
         var otherRatio = AShift();
         otherRatio.Ratio = SupportRatio.OneToTwo;
-        Assert.Equal(EmploymentHeroTimesheets.Hash(line), EmploymentHeroTimesheets.Hash(Built(otherRatio, c)));
+        Assert.Equal(HashOf(AShift(), c), HashOf(otherRatio, c));
+        var later = ACompletion();
+        later.ActualEnd = later.ActualEnd!.Value.AddMinutes(30);
+        Assert.NotEqual(HashOf(AShift(), c), HashOf(AShift(), later));
     }
+
+    [Fact]
+    public void A_work_type_mapping_or_provider_time_zone_change_does_not_change_the_hash()
+    {
+        var shift = AShift();
+        var noZone = ACompletion(zone: "");   // falls back to the provider zone
+        var brisbane = TimeZoneInfo.FindSystemTimeZoneById("Australia/Brisbane");
+
+        Assert.Equal(HashOf(shift, noZone), HashOf(shift, noZone, map: new("70", "80", "90", "100")));
+        Assert.Equal(HashOf(shift, noZone), EmploymentHeroTimesheets.Build(shift, noZone, [], "42", Mapped, brisbane).Hash);
+        Assert.NotEqual(Built(shift, noZone).StartTime, EmploymentHeroTimesheets.Build(shift, noZone, [], "42", Mapped, brisbane).Line!.StartTime);   // the strings do move
+    }
+
+    private static string? HashOf(Shift s, ShiftCompletion c, string? payrollId = "42", EmploymentHeroTimesheets.TimesheetMapping? map = null) =>
+        EmploymentHeroTimesheets.Build(s, c, [], payrollId, map ?? Mapped, Sydney).Hash;
 
     private static readonly DateTime Retry = new(2026, 10, 14, 1, 1, 0, DateTimeKind.Utc);   // 12:01 pm in Sydney
 

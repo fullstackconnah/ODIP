@@ -97,6 +97,20 @@ public class EmploymentHeroTimesheetClientTests
     }
 
     [Fact]
+    public async Task A_Web_API_400_gives_its_model_state_words_then_its_message()
+    {
+        var url = $"{Lines}?enforceUniqueExternalId=true";
+        var modelState = new StubHttpHandler().On(HttpMethod.Post, url, HttpStatusCode.BadRequest, new { message = "The request is invalid.", modelState = new Dictionary<string, string[]> { ["timesheet.endTime"] = ["The pay run is processed."] } });
+        var messageOnly = new StubHttpHandler().On(HttpMethod.Post, url, HttpStatusCode.BadRequest, new { message = "Employee is terminated" });
+
+        var a = await Assert.ThrowsAsync<EmploymentHeroException>(() => StubHttpHandler.Client(modelState).CreateTimesheetAsync(Key, "777", Line(), CancellationToken.None));
+        var b = await Assert.ThrowsAsync<EmploymentHeroException>(() => StubHttpHandler.Client(messageOnly).CreateTimesheetAsync(Key, "777", Line(), CancellationToken.None));
+
+        Assert.Equal("Employment Hero refused it: The pay run is processed.", a.Message);
+        Assert.Equal("Employment Hero refused it: Employee is terminated", b.Message);
+    }
+
+    [Fact]
     public async Task Get_and_delete_treat_404_as_gone()
     {
         var client = StubHttpHandler.Client(new StubHttpHandler());

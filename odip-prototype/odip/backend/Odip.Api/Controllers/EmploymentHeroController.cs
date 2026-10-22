@@ -96,31 +96,49 @@ public class EmploymentHeroController : ControllerBase
 
         var businessId = business.Id.ToString(CultureInfo.InvariantCulture);
         // Under the sync lock, read before anything else: a run in flight finishes (or sees the new business and skips) before the links change here.
-        var saved = await EmploymentHeroStaffSync.UnderSyncLockAsync(_db, tenantId, async () =>
+        bool saved;
+        try
         {
-            var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
-            var previousBusiness = conn?.BusinessId ?? await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId)
-                .OrderByDescending(l => l.StartedAt).Select(l => l.BusinessId).FirstOrDefaultAsync(ct);
-            // EH employee ids belong to one business. Links made against another business would match unrelated people.
-            if (previousBusiness is not null && previousBusiness != businessId) await ForgetLinksAsync(tenantId, ct);
+            saved = await EmploymentHeroStaffSync.UnderSyncLockAsync(_db, tenantId, async () =>
+            {
+                var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
+                var previousBusiness = conn?.BusinessId ?? await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId)
+                    .OrderByDescending(l => l.StartedAt).Select(l => l.BusinessId).FirstOrDefaultAsync(ct);
+                // EH employee ids belong to one business. Links made against another business would match unrelated people.
+                if (previousBusiness is not null && previousBusiness != businessId) await ForgetLinksAsync(tenantId, ct);
 
-            // The timesheet cutoff: a key rotation (same business) keeps it, so shifts queued since the first connect stay in range.
-            var newConnection = conn is null || conn.BusinessId != businessId;
-            if (conn is null) _db.EmploymentHeroConnections.Add(conn = new EmploymentHeroConnection { Id = Guid.NewGuid(), TenantId = tenantId });
-            (conn.ApiKeyCiphertext, conn.ApiKeyNonce) = _keys.Protect(apiKey, tenantId);
-            conn.BusinessId = businessId;
-            var name = (business.Name ?? "").Trim();
-            conn.BusinessName = name.Length > 200 ? name[..200] : name;
-            if (newConnection) conn.ConnectedAt = _clock.GetUtcNow().UtcDateTime;
-            conn.ConnectedById = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : null;
-            conn.ConnectedByName = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An Admin";
-            conn.LastSyncError = null;
-            // Never the key itself in AuditLog: only that it changed, and who changed it.
-            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, "API key", null, "changed", User));
-            await _db.SaveChangesAsync(ct);
-        }, ct);
+                // The timesheet cutoff: a key rotation or a disconnect and reconnect (same business) keeps it, so shifts since the first connect stay in range.
+                var newConnection = previousBusiness != businessId;
+                var firstConnected = conn is null && !newConnection ? await FirstConnectedAsync(tenantId, businessId, ct) : null;
+                if (conn is null) _db.EmploymentHeroConnections.Add(conn = new EmploymentHeroConnection { Id = Guid.NewGuid(), TenantId = tenantId });
+                (conn.ApiKeyCiphertext, conn.ApiKeyNonce) = _keys.Protect(apiKey, tenantId);
+                conn.BusinessId = businessId;
+                var name = (business.Name ?? "").Trim();
+                conn.BusinessName = name.Length > 200 ? name[..200] : name;
+                if (newConnection || conn.ConnectedAt == default) conn.ConnectedAt = firstConnected ?? _clock.GetUtcNow().UtcDateTime;
+                conn.ConnectedById = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : null;
+                conn.ConnectedByName = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An Admin";
+                conn.LastSyncError = null;
+                // Never the key itself in AuditLog: only that it changed, and who changed it.
+                _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, "API key", null, "changed", User));
+                await _db.SaveChangesAsync(ct);
+            }, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // A drain kept claiming rows: the same "busy" as a held lock, and the transaction rolled back.
+            return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
+        }
         if (!saved) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
+    }
+
+    /// <summary>When this business was first connected, from the oldest thing the connection left behind (a sync log or a queued line). Null if it left nothing.</summary>
+    private async Task<DateTime?> FirstConnectedAsync(Guid tenantId, string businessId, CancellationToken ct)
+    {
+        var log = await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId && l.BusinessId == businessId).Select(l => (DateTime?)l.StartedAt).MinAsync(ct);
+        var queued = await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId).Select(r => (DateTime?)r.CreatedAt).MinAsync(ct);
+        return log is null ? queued : queued is null ? log : log < queued ? log : queued;
     }
 
     /// <summary>Disconnects the organisation. The connection, its key and the Needs-attention items are deleted, and syncing stops. Staff keep their links, so reconnecting to the same business relinks them without duplicates.</summary>
@@ -205,7 +223,7 @@ public class EmploymentHeroController : ControllerBase
                          && r.Status == EmploymentHeroOutboxStatus.Pending && r.Attempts == 0).ToListAsync(ct))
             {
                 row.NextAttemptAt = at;
-                row.UpdatedAt = at > row.UpdatedAt ? at : row.UpdatedAt.AddTicks(10);
+                row.UpdatedAt = EmploymentHeroTimesheetSender.Stamp(row.UpdatedAt, at);
             }
             try
             {
@@ -216,6 +234,10 @@ public class EmploymentHeroController : ControllerBase
             {
                 // A drain claimed one of those rows between the read and the save: reload what collided and go round once more.
                 foreach (var entry in ex.Entries) await entry.ReloadAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
             }
         }
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));

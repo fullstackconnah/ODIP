@@ -95,11 +95,10 @@ public class EmploymentHeroTimesheetSenderTests
         // A shift older than the 62-day window is not looked at, whatever changed.
         var old = await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, worker, Day.AddDays(-63), Nine, Three);
         var map = new EmploymentHeroTimesheets.TimesheetMapping("7", "8", null, null);
-        var line = EmploymentHeroTimesheets.Build(old.Shift, old.Completion, [], "42", map, EhTimesheetFixture.Sydney).Line!;
         db.EmploymentHeroOutbox.Add(new EmploymentHeroOutbox
         {
             Id = Guid.NewGuid(), TenantId = tenant, Kind = EmploymentHeroOutboxKind.Timesheet, EntityId = old.Completion.Id, Status = EmploymentHeroOutboxStatus.Sent,
-            ExternalId = "9002", ExternalEmployeeId = "42", PayloadHash = EmploymentHeroTimesheets.Hash(line), SentAt = clock.GetUtcNow().UtcDateTime,
+            ExternalId = "9002", ExternalEmployeeId = "42", PayloadHash = EmploymentHeroTimesheets.Build(old.Shift, old.Completion, [], "42", map, EhTimesheetFixture.Sydney).Hash, SentAt = clock.GetUtcNow().UtcDateTime,
             CreatedAt = clock.GetUtcNow().UtcDateTime, UpdatedAt = clock.GetUtcNow().UtcDateTime,
         });
         old.Shift.NightType = SleepoverType.ActiveNight;
@@ -132,6 +131,34 @@ public class EmploymentHeroTimesheetSenderTests
         var row = await RowAsync(db);
         Assert.Equal(EmploymentHeroOutboxStatus.Sent, row.Status);
         Assert.NotEqual(firstHash, row.PayloadHash);
+    }
+
+    [Fact]
+    public async Task Changing_a_work_type_mapping_after_sending_neither_resends_nor_flags_the_line()
+    {
+        var (db, tenant, conn, clock) = await OrgAsync();
+        await using var _ = db;
+        var worker = await EhTimesheetFixture.WorkerAsync(db, tenant);
+        await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, worker, Day, Nine, Three);
+        var eh = Eh();
+        var sender = Sender(eh, clock);
+        await sender.RunAsync(db, tenant, false, default);
+
+        conn.WorkTypeStandard = "70";
+        await db.SaveChangesAsync();
+        clock.Set(clock.GetUtcNow().AddMinutes(1));
+        await sender.RunAsync(db, tenant, true, default);
+
+        Assert.Single(eh.Requests);   // nothing re-sent, so nothing can come back as "changed after the pay run was finalised"
+        Assert.Equal(EmploymentHeroOutboxStatus.Sent, (await RowAsync(db)).Status);
+
+        // A later edit of the shift's own end time is still re-sent.
+        var c = await db.ShiftCompletions.SingleAsync();
+        c.ActualEnd = c.ActualEnd!.Value.AddHours(1);
+        await db.SaveChangesAsync();
+        clock.Set(clock.GetUtcNow().AddMinutes(1));
+        await sender.RunAsync(db, tenant, true, default);
+        Assert.Equal(70, Body(eh, 2).GetProperty("workTypeId").GetInt32());   // the edited line takes today's mapping
     }
 
     [Fact]

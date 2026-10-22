@@ -36,11 +36,11 @@ public class EmploymentHeroPayrollControllerTests
                 : base.SavingChangesAsync(eventData, result, ct);
     }
 
-    private static EmploymentHeroPayrollController Controller(OdipDbContext db, Guid tenantId, StubHttpHandler eh)
+    private static EmploymentHeroPayrollController Controller(OdipDbContext db, Guid tenantId, StubHttpHandler eh, bool superAdmin = false)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(superAdmin);
         return new EmploymentHeroPayrollController(db, tenant.Object, Keys, StubHttpHandler.Client(eh), Clock())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = ImportTestSupport.Admin() } },
@@ -66,6 +66,23 @@ public class EmploymentHeroPayrollControllerTests
             ExternalId = externalId, NextAttemptAt = Clock().GetUtcNow().UtcDateTime.AddHours(1), CreatedAt = Clock().GetUtcNow().UtcDateTime, UpdatedAt = Clock().GetUtcNow().UtcDateTime,
             SentAt = status == EmploymentHeroOutboxStatus.Sent ? Clock().GetUtcNow().UtcDateTime : null,
         };
+
+    [Fact]
+    public async Task A_SuperAdmin_who_is_not_viewing_an_organisation_is_refused_and_queues_nothing()
+    {
+        var (db, tenant) = await OrgAsync();
+        await using var _ = db;
+        var worker = await EhTimesheetFixture.WorkerAsync(db, tenant);
+        await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, worker, new DateOnly(2026, 10, 14), Nine, Three);
+        var c = Controller(db, tenant, new StubHttpHandler(), superAdmin: true);
+
+        string Refusal<T>(ActionResult<ApiResponse<T>> r) => Assert.IsType<ApiResponse<T>>(Assert.IsType<BadRequestObjectResult>(r.Result).Value).Errors!.Single();
+
+        Assert.Equal(EmploymentHeroController.ChooseOrganisation, Refusal(await c.Periods(default)));
+        Assert.Equal(EmploymentHeroController.ChooseOrganisation, Refusal(await c.Check(From, To, default)));
+        Assert.Equal(EmploymentHeroController.ChooseOrganisation, Refusal(await c.SendMissing(new PayrollRangeDto(From, To), default)));
+        Assert.Empty(await db.EmploymentHeroOutbox.ToListAsync());
+    }
 
     [Fact]
     public async Task Periods_merge_pay_runs_and_the_next_period_newest_first()

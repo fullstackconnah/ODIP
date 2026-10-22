@@ -110,7 +110,7 @@ public class EmploymentHeroPayrollController : ControllerBase
             item.Row.Status = EmploymentHeroOutboxStatus.Pending;
             item.Row.LastError = null;
             item.Row.NextAttemptAt = now;
-            item.Row.UpdatedAt = now > item.Row.UpdatedAt ? now : item.Row.UpdatedAt.AddTicks(10);
+            item.Row.UpdatedAt = EmploymentHeroTimesheetSender.Stamp(item.Row.UpdatedAt, now);
         }
 
         try
