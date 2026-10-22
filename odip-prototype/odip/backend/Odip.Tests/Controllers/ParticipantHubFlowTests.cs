@@ -37,12 +37,13 @@ public class ParticipantHubFlowTests
         public ParticipantsController Participants { get; }
         public ParticipantInquiriesController Inquiries { get; }
 
-        public Caller(string store, Guid? tenantId, bool superAdmin = false, IInterceptor? interceptor = null)
+        public Caller(string store, Guid? tenantId, bool superAdmin = false, IInterceptor? interceptor = null, bool audited = false)
         {
             var tenant = new Mock<ICurrentTenant>();
             tenant.SetupGet(x => x.TenantId).Returns(tenantId);
             tenant.SetupGet(x => x.IsSuperAdmin).Returns(superAdmin);
             var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(store);
+            if (audited) options.AddInterceptors(new Odip.Infrastructure.Audit.AuditInterceptor(new HttpContextAccessor()));
             if (interceptor != null) options.AddInterceptors(interceptor);
             Db = new OdipDbContext(options.Options, tenant.Object);
             var http = new DefaultHttpContext
@@ -699,6 +700,29 @@ public class ParticipantHubFlowTests
         var row = await stale.Db.ParticipantInquiries.AsNoTracking().SingleAsync(x => x.Id == id);
         Assert.Equal("King", row.LastName);
         Assert.Equal(("booked@odip", 1), (row.IntakeUid, row.IntakeIcsSequence));
+    }
+
+    // A lost race costs one retry; the retry must not audit the same change a second time.
+    [Fact]
+    public async Task Saving_an_intake_after_one_retry_audits_the_participant_once()
+    {
+        var tenantId = Guid.NewGuid();
+        var store = Guid.NewGuid().ToString();
+        using var caller = new Caller(store, tenantId, audited: true);
+        var enquiry = await CaptureEnquiryAsync(caller);
+        var participantId = Ok(await caller.Inquiries.Convert(enquiry.Id, new ConvertParticipantInquiryDto(), CancellationToken.None)).ParticipantId!.Value;
+        var before = await caller.Db.AuditLogs.CountAsync(x => x.EntityId == participantId && x.Action == AuditAction.Updated);
+        using (var other = new Caller(store, tenantId))
+        {
+            var row = await other.Db.ParticipantInquiries.SingleAsync(x => x.Id == enquiry.Id);
+            row.IntakeUid = "booked@odip";
+            row.IntakeIcsSequence = 1;
+            await other.Db.SaveChangesAsync();
+        }
+
+        Ok(await caller.Participants.SaveIntake(participantId, IntakeBody("Ada", "King", complete: false), CancellationToken.None));
+
+        Assert.Equal(before + 1, await caller.Db.AuditLogs.CountAsync(x => x.EntityId == participantId && x.Action == AuditAction.Updated));
     }
 
     // Follow-ups (intake): the enquiry's email is the contact the intake visit's invite goes to. A booking may ask for it after Start intake and writes it to the enquiry only, so the
