@@ -376,7 +376,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
     </span>
   )
   const columns: Column<QuickRow>[] = [
-    ...(bar ? [{ key: 'selection', header: (!belowMd && allBox) || <span className="block min-h-[var(--control-h)]">Select</span>, pin: false as const, mobile: 'status' as const,
+    ...(bar ? [{ key: 'selection', header: (!belowMd && allBox) || <span className="inline-flex items-center min-h-[var(--control-h)]">Select</span>, pin: false as const, mobile: 'status' as const,
       minWidth: 'calc(24px + var(--control-h))', render: (row: QuickRow) => {
         const action = tapOf(row)
         return action ? <CheckboxField label={<span className="sr-only">{selectName(action.name)}</span>}
