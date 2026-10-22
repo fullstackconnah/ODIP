@@ -1331,7 +1331,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.LastError).HasMaxLength(2000);
 
             entity.HasIndex(e => new { e.Status, e.NextAttemptAt });                              // dispatcher poll
-            entity.HasIndex(e => new { e.TenantId, e.EventType, e.EntityId, e.RecipientUserId, e.CreatedAt });  // dedupe lookup
+            entity.HasIndex(e => new { e.EntityId, e.RecipientUserId, e.CreatedAt });  // dedupe lookup (NotificationRaiser)
         });
 
         modelBuilder.Entity<NotificationPreference>(entity =>
