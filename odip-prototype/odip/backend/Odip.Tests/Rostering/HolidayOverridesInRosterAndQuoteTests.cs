@@ -28,7 +28,7 @@ public class HolidayOverridesInRosterAndQuoteTests
     private static readonly DateOnly BoxingDay = new(2026, 12, 26);   // a Saturday the synced feed has no row for
     private static readonly Guid Tenant = Guid.NewGuid();
 
-    private static OdipDbContext CreateDb() => TestDb.Create();
+    private static OdipDbContext CreateDb() => TestDb.Create(viewingAs: Guid.Empty);
 
     private static (RosteringController Controller, CheckShiftDto Dto) ArrangeRoster(OdipDbContext db, string providerState, DateOnly serviceDate)
     {

@@ -26,7 +26,7 @@ public class MedicationsAdministeredByTests
     private static (OdipDbContext Db, Mock<ICurrentTenant> Tenant) CreateDb(Guid? viewAsUserId = null)
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.TenantId).Returns((Guid?)Guid.Empty);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
         tenant.Setup(t => t.ViewAsUserId).Returns(viewAsUserId);
 

@@ -448,7 +448,7 @@ public class MarProviderLocalTimeTests
     private static async Task<(MedicationsController Controller, Guid ParticipantId)> SeedAsync(string state, FakeClock clock)
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.TenantId).Returns((Guid?)Guid.Empty);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
         var db = new OdipDbContext(
             new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
