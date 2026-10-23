@@ -119,8 +119,7 @@ public class ClaimGenerationService
         if (overrides?.ReturnTime != null) trip.ReturnTime = overrides.ReturnTime;
         if (overrides?.ActiveHoursPerDay != null) trip.ActiveHoursPerDay = overrides.ActiveHoursPerDay.Value;
 
-        var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Provider settings are not configured.");
+        var settings = ProviderSettingsGuard.Require(await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == trip.TenantId, ct));
 
         var claimId = Guid.NewGuid();
         var claim = new TripClaim
@@ -189,8 +188,7 @@ public class ClaimGenerationService
     private async Task<(List<LineItemCalc> lineItems, ClaimCalcContext context)> CalculateClaimInternalAsync(
         TripInstance trip, ClaimPreviewRequestDto? overrides, CancellationToken ct)
     {
-        var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Provider settings are not configured. Please configure them in Settings before generating claims.");
+        var settings = ProviderSettingsGuard.Require(await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == trip.TenantId, ct));
 
         // Resolve effective parameters
         var departureTime = overrides?.DepartureTime ?? trip.DepartureTime ?? new TimeOnly(8, 0);

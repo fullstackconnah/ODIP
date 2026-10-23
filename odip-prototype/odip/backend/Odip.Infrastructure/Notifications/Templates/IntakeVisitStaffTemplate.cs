@@ -40,7 +40,7 @@ public static class IntakeVisitStaffTemplate
         var ics = IntakeIcs.Build(cancelled ? IntakeIcs.Cancel : IntakeIcs.Request, IntakeWording.Event(
             p.Uid, p.Sequence, p.StartsAtUtc, p.DurationMinutes, p.PersonFullName, p.Location, p.StaffFullName, p.ProviderName,
             p.ManagerName, p.ManagerPhone, p.BookedByName, OwnCopy(p) ? null : p.OrganizerEmail, p.StaffFullName, p.RecipientEmail, p.StampUtc, forContact: false));
-        return new NotificationMessage(p.RecipientEmail, subject, body.PlainText, body.HtmlText, ics, p.ReplyTo);
+        return new NotificationMessage(p.RecipientEmail, subject, body.PlainText, body.HtmlText, ics, p.ReplyTo, p.ProviderName);
     }
 
     // The booker going themselves: calendar apps treat an invite you organised as yours to send, not one to add, so their copy names no ORGANIZER.

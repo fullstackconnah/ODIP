@@ -75,6 +75,10 @@ public class ProviderSettingsController : ControllerBase
         if (dto.MedicationCompetencyMode is { } requestedCompetency && !Enum.IsDefined(requestedCompetency))
             return BadRequest(ApiResponse<bool>.Fail("The medication competency mode must be Warn or Enforce."));
 
+        // Prices and public holidays follow the state, so none is assumed (a body that omits it used to become Victoria).
+        if (string.IsNullOrWhiteSpace(dto.State))
+            return BadRequest(ApiResponse<bool>.Fail("Choose the organisation's state."));
+
         var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
         if (s == null)
         {

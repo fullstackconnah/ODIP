@@ -53,7 +53,7 @@ public sealed class StaffCreateService
         // Any address can sign in, so one at neither the tenant's own domain nor a common provider (a typo, another organisation's) is a live
         // login for whoever owns it: ask for a confirmation first (see AddressConfirmation).
         var tenantDomain = await TenantEmailDomainAsync(tenantId, ct);
-        if (tenantDomain is not null && !dto.AddressConfirmed && AddressConfirmation.Needed(emailLower, tenantDomain))
+        if (tenantId is not null && !dto.AddressConfirmed && AddressConfirmation.Needed(emailLower, tenantDomain))
             return new(null, AddressConfirmation.Message(emailLower, tenantDomain), AddressConfirmation.Code);
 
         // Collision-safe username handling: reuses the migration's own algorithm (StaffUserUnificationMapping.ResolveUsername).
@@ -122,7 +122,7 @@ public sealed class StaffCreateService
         // Tenants are written with their domain tidied (EmailIdentity.NormaliseDomain), but a row from before that rule may hold " Acme.com" or "@acme.com"
         // and must keep protecting its tenant, so the stored side is tidied the same way here. There are few tenants, so they are compared in memory
         // rather than by an expression the database has to translate.
-        var otherDomains = await _db.Tenants.Where(t => t.Id != own).Select(t => t.EmailDomain).ToListAsync(ct);
+        var otherDomains = await _db.Tenants.Where(t => t.Id != own && t.EmailDomain != null).Select(t => t.EmailDomain!).ToListAsync(ct);
         var belongsToAnother = otherDomains.Any(other => EmailIdentity.NormaliseDomain(other) == domain);
         return belongsToAnother ? OtherOrganisationMessage : null;
     }

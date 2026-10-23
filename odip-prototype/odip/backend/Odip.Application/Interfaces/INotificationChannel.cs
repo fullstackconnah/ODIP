@@ -10,7 +10,8 @@ public record ChannelSendResult(ChannelSendOutcome Outcome, string? ProviderMess
 public record IcsCalendar(string Method, string Content);
 
 /// <summary>One email. <see cref="Ics"/> and <see cref="ReplyTo"/> are optional; without them the message is sent exactly as before.</summary>
-public record NotificationMessage(string RecipientAddress, string Subject, string PlainTextBody, string HtmlBody, IcsCalendar? Ics = null, string? ReplyTo = null);
+public record NotificationMessage(string RecipientAddress, string Subject, string PlainTextBody, string HtmlBody, IcsCalendar? Ics = null, string? ReplyTo = null,
+    string? OrganisationName = null);
 
 /// <summary>
 /// One delivery channel (email, SMS, ...). <see cref="Odip.Infrastructure.Notifications.SmtpEmailChannel"/>

@@ -119,7 +119,7 @@ public class PasswordMinimumTests
     // ── Tenant first user ───────────────────────────────────────────────
 
     private static CreateTenantWithSetupDto TenantDto(string? password) => new(
-        "Brightside Care", "brightside.example.com", null,
+        "Brightside Care", "brightside.example.com", new TenantSetupProviderDto { State = "VIC" },
         new CreateInitialUserDto("Jane", "Smith", "jane.smith@brightside.example.com", "jane.smith", "Admin", password));
 
     [Fact]

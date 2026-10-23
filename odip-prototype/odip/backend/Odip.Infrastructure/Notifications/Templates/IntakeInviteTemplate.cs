@@ -59,6 +59,6 @@ public static class IntakeInviteTemplate
         var ics = IntakeIcs.Build(cancelled ? IntakeIcs.Cancel : IntakeIcs.Request, IntakeWording.Event(
             p.Uid, p.Sequence, p.StartsAtUtc, p.DurationMinutes, p.PersonFullName, p.Location, p.StaffFullName, p.ProviderName,
             p.ManagerName, p.ManagerPhone, p.OrganizerName, p.OrganizerEmail, p.RecipientFullName ?? p.RecipientEmail, p.RecipientEmail, p.StampUtc));
-        return new NotificationMessage(p.RecipientEmail, subject, body.PlainText, body.HtmlText, ics, p.ReplyTo);
+        return new NotificationMessage(p.RecipientEmail, subject, body.PlainText, body.HtmlText, ics, p.ReplyTo, p.ProviderName);
     }
 }

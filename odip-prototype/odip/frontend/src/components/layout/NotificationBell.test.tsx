@@ -23,9 +23,9 @@ beforeEach(() => {
   mockApiGet.mockReset()
   mockApiPost.mockReset()
   mockApiGet.mockImplementation(async () => inbox(server))
-  mockApiPost.mockImplementation(async (url: string) => {
+  mockApiPost.mockImplementation(async (url: string, body?: { ids: string[] }) => {
     const readAt = new Date().toISOString()
-    server = server.map(n => (!n.readAt && (url.endsWith('/read-all') || url === `/notifications/inbox/${n.id}/read`) ? { ...n, readAt } : n))
+    server = server.map(n => (!n.readAt && ((url.endsWith('/read-all') && body?.ids.includes(n.id)) || url === `/notifications/inbox/${n.id}/read`) ? { ...n, readAt } : n))
   })
 })
 
@@ -146,7 +146,7 @@ describe('NotificationBell: the panel, from lg', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }))
 
     expect(heading()).toHaveFocus()
-    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/notifications/inbox/read-all'))
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/notifications/inbox/read-all', { ids: ['n1', 'n2'] }))
     await waitFor(() => expect(bell()).toHaveAccessibleName('Notifications'))
     expect(screen.queryByRole('button', { name: 'Mark all as read' })).toBeNull()
     expect(screen.queryByText('Unread:', { exact: false })).toBeNull()
@@ -302,5 +302,64 @@ describe('NotificationBell: below lg', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Mark all as read' }))
 
     expect(screen.getByRole('heading', { level: 2, name: 'Notifications' })).toContainElement(document.activeElement as HTMLElement)
+  })
+})
+
+describe('NotificationBell: more unread than the panel holds', () => {
+  /** The server's rule: unread first, then newest, 30 at most; the count is over all of them. */
+  const serve = (items: InAppNotificationDto[]) => {
+    server = items
+    mockApiGet.mockImplementation(async () => {
+      const ordered = [...server].sort((a, b) => Number(!!a.readAt) - Number(!!b.readAt) || b.createdAt.localeCompare(a.createdAt))
+      return { items: ordered.slice(0, 30), unreadCount: server.filter(n => !n.readAt).length, hasMore: ordered.length > 30 } satisfies InboxDto
+    })
+  }
+  // u0 is the newest, u44 the oldest: the oldest 15 are past the newest 30.
+  const fortyFive = Array.from({ length: 45 }, (_, i): InAppNotificationDto => ({ id: `u${i}`, title: `Notice ${i}`, createdAt: minutesAgo(i + 1) }))
+  const ids = (from: number, to: number) => fortyFive.slice(from, to).map(n => n.id)
+
+  describe('from lg', () => {
+    beforeEach(desktop)
+
+    it('45 unread: a press clears the 30 shown, the older 15 come into the panel, a second press clears them, the badge reaches 0 and the button goes', async () => {
+      serve(fortyFive)
+      renderBell()
+      await screen.findByRole('button', { name: '45 unread, Notifications' })
+      fireEvent.click(bell())
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Mark all as read' }))
+
+      expect(heading()).toHaveFocus()
+      await waitFor(() => expect(mockApiPost).toHaveBeenLastCalledWith('/notifications/inbox/read-all', { ids: ids(0, 30) }))
+      await waitFor(() => expect(bell()).toHaveAccessibleName('15 unread, Notifications'))
+      expect(await screen.findByRole('button', { name: /Notice 44/ })).toBeInTheDocument() // the oldest is in the panel now
+      fireEvent.click(await screen.findByRole('button', { name: 'Mark all as read' }))
+
+      await waitFor(() => expect(mockApiPost).toHaveBeenLastCalledWith('/notifications/inbox/read-all', { ids: ids(30, 45) }))
+      await waitFor(() => expect(bell()).toHaveAccessibleName('Notifications'))
+      expect(screen.queryByRole('button', { name: 'Mark all as read' })).toBeNull()
+      expect(heading()).toHaveFocus()
+    })
+
+    it('shows Mark all as read only while the panel itself has an unread item, whatever the badge says', async () => {
+      mockApiGet.mockImplementation(async () => ({ items: [done], unreadCount: 2, hasMore: true }) satisfies InboxDto)
+      renderBell()
+      await screen.findByRole('button', { name: '2 unread, Notifications' })
+
+      fireEvent.click(bell())
+
+      expect(await screen.findByText('Showing 30, unread first.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Mark all as read' })).toBeNull()
+    })
+  })
+
+  it('below lg the SlideOver footer follows the panel too: no unread shown, no button', async () => {
+    mockApiGet.mockImplementation(async () => ({ items: [done], unreadCount: 2, hasMore: true }) satisfies InboxDto)
+    renderBell()
+    await screen.findByRole('button', { name: '2 unread, Notifications' })
+
+    fireEvent.click(bell())
+
+    expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Mark all as read' })).toBeNull()
   })
 })

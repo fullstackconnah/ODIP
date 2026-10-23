@@ -134,6 +134,20 @@ public class AddressChangeTests
     }
 
     [Fact]
+    public async Task Staff_update_asks_to_check_a_new_unusual_address_when_the_organisation_has_no_domain()
+    {
+        using var world = StaffWorld();
+        world.Tenant.EmailDomain = null;
+        await world.Db.SaveChangesAsync();
+        var staff = await SeedStaff(world, lastLoginAt: null);
+
+        var result = await StaffAs(world, "Admin", Guid.NewGuid()).Update(staff.Id, UpdateTo("sam@gmial.example.net"), CancellationToken.None);
+
+        Assert.Equal(AddressConfirmation.Code, Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Code);
+        Assert.Equal(OldAddress, (await world.Db.Users.SingleAsync()).Email);
+    }
+
+    [Fact]
     public async Task Staff_update_still_lets_a_Coordinator_edit_everything_else_about_someone_who_has_signed_in()
     {
         using var world = StaffWorld();

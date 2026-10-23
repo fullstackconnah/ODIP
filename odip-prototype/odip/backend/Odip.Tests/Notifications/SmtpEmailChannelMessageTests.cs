@@ -26,6 +26,21 @@ public class SmtpEmailChannelMessageTests
         Assert.Empty(mail.ReplyToList);
     }
 
+    [Fact]
+    public void The_header_names_the_organisation_and_encodes_it()
+    {
+        using var named = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>", OrganisationName: "Jo's <script>alert(\"x\")</script> Care"), From);
+        using var plain = SmtpEmailChannel.BuildMailMessage(new NotificationMessage("to@example.com", "S", "P", "<p>H</p>"), From);
+
+        string Html(System.Net.Mail.MailMessage m) => new System.IO.StreamReader(m.AlternateViews[0].ContentStream).ReadToEnd();
+        var html = Html(named);
+        Assert.Contains("Jo&#39;s &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; Care", html);
+        Assert.DoesNotContain("<script>", html);
+        Assert.Contains("cid:bunya-wordmark", html);
+        Assert.Equal(From, named.From!.Address);
+        Assert.DoesNotContain("Jo", Html(plain));
+    }
+
     // Bunya Support rebrand (owner, 2026-10-16): mail shows the product as its sender, unless the configured From already names one.
     [Fact]
     public void A_bare_from_address_is_sent_as_Bunya_Support()

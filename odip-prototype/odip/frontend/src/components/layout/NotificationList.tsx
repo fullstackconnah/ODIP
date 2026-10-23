@@ -76,7 +76,7 @@ export function NotificationList({ inbox, onChoose, markAllFailed }: Notificatio
           })}
         </ul>
       )}
-      {hasMore && <p className={`px-4 py-3 text-xs ${MUTED}`}>Showing the latest 30.</p>}
+      {hasMore && <p className={`px-4 py-3 text-xs ${MUTED}`}>Showing 30, unread first.</p>}
     </>
   )
 }

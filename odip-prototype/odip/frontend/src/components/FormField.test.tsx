@@ -144,3 +144,27 @@ describe('FormField hint API', () => {
     expect(checkbox).toHaveAttribute('aria-describedby', hint.id)
   })
 })
+
+describe('FormField keepHint', () => {
+  it('keeps the hint under an error and describes the control by both', () => {
+    render(
+      <FormField label="Hours" error="Enter a number" hint="38 unless you change it" keepHint>
+        <input id="hours" />
+      </FormField>,
+    )
+
+    const hint = screen.getByText('38 unless you change it')
+    expect(screen.getByLabelText('Hours')).toHaveAttribute('aria-describedby', `${hint.id} ${screen.getByText('Enter a number').id}`)
+  })
+
+  it('holds the error line while there is no error, hidden from assistive tech', () => {
+    const { container } = render(
+      <FormField label="Hours" hint="38 unless you change it" keepHint>
+        <input id="hours" />
+      </FormField>,
+    )
+
+    expect(container.querySelector('p[aria-hidden="true"]')).toHaveTextContent(/^\s*$/)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
