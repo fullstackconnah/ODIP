@@ -519,3 +519,33 @@ describe('HomeRoute', () => {
     expect(screen.getByText('Login page')).toBeInTheDocument()
   })
 })
+
+describe('usePermissions.canCorrectInvoices', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  function CorrectProbe() {
+    const { canCorrectInvoices } = usePermissions()
+    return <span data-testid="can-correct-invoices">{String(canCorrectInvoices)}</span>
+  }
+
+  function verdictFor(role: UserRole, viewingTenant?: string) {
+    setUserRole(role)
+    if (viewingTenant) localStorage.setItem('odip_viewing_tenant', viewingTenant)
+    const { unmount } = render(<CorrectProbe />)
+    const verdict = screen.getByTestId('can-correct-invoices').textContent
+    unmount()
+    localStorage.clear()
+    return verdict
+  }
+
+  it('is true for an Admin, and for a SuperAdmin only while viewing an organisation, as the void and credit-note routes admit', () => {
+    expect(verdictFor('Admin')).toBe('true')
+    expect(verdictFor('SuperAdmin')).toBe('false')
+    expect(verdictFor('SuperAdmin', 'tenant-1')).toBe('true')
+    expect(verdictFor('Coordinator')).toBe('false')
+    expect(verdictFor('Coordinator', 'tenant-1')).toBe('false')
+    expect(verdictFor('ReadOnly')).toBe('false')
+  })
+})

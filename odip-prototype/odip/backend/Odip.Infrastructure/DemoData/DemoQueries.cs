@@ -41,7 +41,7 @@ public static class DemoQueries
     public static IQueryable<Tenant> DemoTenantCandidates(OdipDbContext db) =>
         db.Tenants.AsNoTracking().Where(t => t.Name == DemoPeople.TenantName);
 
-    public static IQueryable<string> ProviderState(OdipDbContext db) => db.ProviderSettings.AsNoTracking().Select(p => p.State);
+    public static IQueryable<string> ProviderState(OdipDbContext db) => db.ScopedProviderSettings().AsNoTracking().Select(p => p.State);
 
     public static IQueryable<DemoParticipantRow> Participants(OdipDbContext db) =>
         db.Participants.Select(p => new DemoParticipantRow(p.Id, p.NdisNumber, p.FirstName, p.LastName, p.IsActive, p.IsDraft));

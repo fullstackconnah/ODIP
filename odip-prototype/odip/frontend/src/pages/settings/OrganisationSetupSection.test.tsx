@@ -19,6 +19,8 @@ const provider: ProviderSettingsDto = {
   organisationName: 'Synthetic Support', address: '1 Example Street', state: 'VIC', gstRegistered: true, isPaceProvider: true,
   bankAccountName: 'PRIVATE BANK NAME', bsb: '123-456', accountNumber: '987654321', invoiceFooterNotes: 'PRIVATE FOOTER',
   managerName: 'PRIVATE MANAGER', managerPhone: 'PRIVATE PHONE', participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce',
+  updatedAt: '2026-10-23T01:00:00.123456Z',
+  invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false,
 }
 const pricing: PlanPricingSettingsDto = {
   registrationGroupsHeld: ['0107'], registrationGroupsConfirmed: true, crossingPolicy: 'Split', claimProviderTravel: true,

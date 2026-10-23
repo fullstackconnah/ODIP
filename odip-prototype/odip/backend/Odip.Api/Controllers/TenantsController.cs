@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Services;
+using Odip.Infrastructure.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
@@ -261,6 +262,7 @@ public class TenantsController : ControllerBase
         if (ps is null)
             return Ok(ApiResponse<ProviderSettingsDto?>.Ok(null));
 
+        var (next, issued) = await InvoiceService.NumberingOfAsync(_db, ps, ct);
         return Ok(ApiResponse<ProviderSettingsDto>.Ok(new ProviderSettingsDto
         {
             Id = ps.Id, RegistrationNumber = ps.RegistrationNumber, ABN = ps.ABN,
@@ -269,7 +271,10 @@ public class TenantsController : ControllerBase
             BankAccountName = ps.BankAccountName, BSB = ps.BSB,
             AccountNumber = ps.AccountNumber, InvoiceFooterNotes = ps.InvoiceFooterNotes,
             State = ps.State, ParticipantReadinessMode = ps.ParticipantReadinessMode,
-            MedicationCompetencyMode = ps.MedicationCompetencyMode
+            MedicationCompetencyMode = ps.MedicationCompetencyMode,
+            InvoiceNumberPrefix = ps.InvoiceNumberPrefix, CreditNotePrefix = ps.CreditNotePrefix,
+            InvoiceStartNumber = ps.InvoiceStartNumber, PaymentTermsDays = ps.PaymentTermsDays,
+            NextInvoiceDisplayNumber = next, InvoicesIssued = issued,
         }));
     }
 }
