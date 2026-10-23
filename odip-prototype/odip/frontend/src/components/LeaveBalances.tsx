@@ -1,18 +1,13 @@
 import type { ReactNode } from 'react'
-import type { LeaveBalanceDto, LeaveBalancesDto } from '@/api/types'
+import type { LeaveBalancesDto } from '@/api/types'
+import { formatBalance } from '@/lib/leaveBalances'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { Button } from './Button'
 import { FactList } from './FactList'
 
 const MUTED = 'text-sm text-[var(--color-muted-foreground)]'
 /** The one line shown for every failure; EH's own words never reach staff. */
-export const BALANCES_UNAVAILABLE = "Balances aren't available right now."
-
-/** "76.0 hours", "−3.8 hours" (U+2212), "10.0 days": one decimal, en-AU, as EH reports it. */
-export function formatBalance(b: LeaveBalanceDto): string {
-  const n = b.amount.toLocaleString('en-AU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).replace('-', '−')
-  return `${n} ${b.unit.toLowerCase()}`
-}
+const BALANCES_UNAVAILABLE = "Balances aren't available right now."
 
 type BalancesQuery = {
   data?: LeaveBalancesDto

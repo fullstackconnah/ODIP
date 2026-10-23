@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { LeaveBalances, formatBalance } from './LeaveBalances'
+import { LeaveBalances } from './LeaveBalances'
+import { formatBalance } from '@/lib/leaveBalances'
 
 const base = { isLoading: false, isError: false, refetch: vi.fn() }
 const props = { noneMessage: 'None yet.', notLinked: 'Not linked.' }

@@ -8,7 +8,7 @@ import type { StaffDetailDto } from '@/api/types/staff'
 
 const { mockUseStaffOverview, mockUseSettings, mockVisibility, mockBalances } = vi.hoisted(() => ({
   mockVisibility: vi.fn(() => ({ data: { employmentHeroConnected: false } })),
-  mockBalances: vi.fn((..._args: unknown[]) => ({ data: undefined as unknown, isLoading: true, isError: false, refetch: vi.fn() })),
+  mockBalances: vi.fn<(id: string, enabled: boolean) => { data: unknown; isLoading: boolean; isError: boolean; refetch: () => unknown }>(() => ({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })),
   mockUseStaffOverview: vi.fn(),
   mockUseSettings: vi.fn(() => ({ data: { qualificationWarningDays: 30 } })),
 }))
