@@ -96,4 +96,18 @@ public class DoseRecorderSettingsOrgTests
 
         Assert.False(Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)).CanRecordDoses);
     }
+
+    [Fact]
+    public async Task FinishShift_HomeEnforceOrgWarn_BlocksOnAnUnrecordedDoseForAWorkerWithoutTheCredential()
+    {
+        // Warn lets the worker record (flagged), so the dose that has come due must have an outcome. Under the home org (Enforce) canRecord is false and Finish would close with it unrecorded.
+        var (f, med) = await Unscoped(MedicationCompetencyMode.Enforce, MedicationCompetencyMode.Warn, workerCompetent: false);
+
+        var body = Failure(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto { NothingToNote = true }, default), 422);
+
+        Assert.Equal(ShiftErrorCodes.ShiftFinishBlocked, body.Code);
+        var blocker = Assert.Single(body.Data!.FinishBlockers);
+        Assert.Equal(ShiftFinishBlockerCodes.DoseOutcomeMissing, blocker.Code);
+        Assert.Equal(med.Id, blocker.MedicationId);
+    }
 }
