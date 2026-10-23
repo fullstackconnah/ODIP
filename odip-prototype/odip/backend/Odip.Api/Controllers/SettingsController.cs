@@ -29,7 +29,10 @@ public class SettingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin,ReadOnly")]
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Get(CancellationToken ct)
     {
-        var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
+        // A SuperAdmin's query filter is off, so the row is picked by organisation: with none chosen they read the defaults, never another organisation's values.
+        var s = _tenant.TenantId is { } tenantId
+            ? await _db.AppSettings.Where(x => x.TenantId == tenantId).OrderBy(x => x.Id).FirstOrDefaultAsync(ct)
+            : null;
         return Ok(ApiResponse<AppSettingsDto>.Ok(new AppSettingsDto
         {
             QualificationWarningDays = s?.QualificationWarningDays ?? 30,

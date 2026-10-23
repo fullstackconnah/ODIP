@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react'
+import type { AriaAttributes, KeyboardEvent } from 'react'
 
 export type ToggleOption = {
   key: string
@@ -28,14 +28,14 @@ export type ToggleGroupProps = {
    * the user may read but not change. The selected option still reads as selected. There is no per-option disabled.
    */
   disabled?: boolean
-}
+} & Pick<AriaAttributes, 'aria-labelledby' | 'aria-required' | 'aria-invalid' | 'aria-describedby'> // what FormField clones onto its control
 
 // Every ToggleGroup caller passes a single tracked `value` and picks exactly one option — that's
 // single-select-from-a-set, i.e. a radio group, not a set of independent toggle buttons (which is
 // what aria-pressed communicates). role="radiogroup"/"radio" + aria-checked matches what this
 // actually is, and gets a roving tabindex with arrow-key movement per the ARIA APG radio pattern
 // (Tab enters/exits the group once; Left/Right/Up/Down move — and select — within it).
-export function ToggleGroup({ options, value, onChange, className, ariaLabel, ariaDescribedby, disabled }: ToggleGroupProps) {
+export function ToggleGroup({ options, value, onChange, className, ariaLabel, ariaDescribedby, disabled, ...aria }: ToggleGroupProps) {
   const selectedIndex = options.findIndex(opt => opt.key === value)
 
   function handleKeyDown(e: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -60,7 +60,7 @@ export function ToggleGroup({ options, value, onChange, className, ariaLabel, ar
   }
 
   return (
-    <div role="radiogroup" aria-label={ariaLabel} aria-describedby={ariaDescribedby} aria-disabled={disabled || undefined} className={`flex gap-2 ${className ?? ''}`}>
+    <div role="radiogroup" aria-label={ariaLabel} aria-describedby={ariaDescribedby} {...aria} aria-disabled={disabled || undefined} className={`flex gap-2 ${className ?? ''}`}>
       {options.map((opt, index) => {
         const checked = value === opt.key
         // Roving tabindex: only the checked option (or the first, if none matches) is a Tab stop;

@@ -70,7 +70,7 @@ describe('NotificationBell: the button', () => {
 
     expect(bell()).toHaveAccessibleName('Notifications')
     expect(bell()).toBeEnabled()
-    expect(bell()).toHaveClass(...TAP_AREA.split(' '), 'w-8', 'h-8')
+    expect(bell()).toHaveClass('w-8', 'h-8', 'pointer-coarse:size-[var(--tap-min)]')
     expect(bell()).toHaveTextContent(/^notifications$/) // the icon only: no badge yet
 
     await act(async () => answer(inbox(server)))

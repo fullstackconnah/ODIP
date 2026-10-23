@@ -5,7 +5,6 @@ import { useInbox, useMarkAllInboxRead, useMarkInboxRead } from '@/api/hooks'
 import type { InAppNotificationDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { SlideOver } from '@/components/SlideOver'
-import { TAP_AREA } from '@/components/tapArea'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { NotificationList } from '@/components/layout/NotificationList'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
@@ -106,7 +105,7 @@ export default function NotificationBell() {
         aria-expanded={open}
         aria-controls={!isBelowLg && open ? panelId : undefined}
         aria-haspopup={isBelowLg ? 'dialog' : undefined}
-        className={`${TAP_AREA} w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors`}
+        className="w-8 h-8 pointer-coarse:size-[var(--tap-min)] flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors"
       >
         {/* The badge sits on the icon exactly as the bottom bar places it. */}
         <span className="relative inline-flex">
