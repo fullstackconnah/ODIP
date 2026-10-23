@@ -13,7 +13,7 @@ vi.mock('@/api/hooks/admin', () => ({
 // A sole trader on a personal address has no email domain, and every new organisation chooses its state (nothing is pre-selected, so no one
 // is silently put on Victoria's prices and holidays). The provider row is always sent, with the organisation's name in it.
 
-const stateButton = () => screen.getByRole('button', { name: /State/ })
+const stateRadio = (name: string) => screen.getByRole('radio', { name })
 const create = () => screen.getByRole('button', { name: 'Create tenant' })
 
 beforeEach(() => {
@@ -24,8 +24,12 @@ describe('TenantFormPanel create: optional domain, required state', () => {
   it('says the domain can be left blank, and starts with no state chosen', () => {
     render(<TenantFormPanel isOpen onClose={vi.fn()} />)
     expect(screen.getByLabelText('Email Domain')).toHaveAccessibleDescription('Leave blank if your staff use personal addresses')
-    expect(stateButton()).toHaveTextContent('Select state...')
-    expect(stateButton()).toHaveAttribute('aria-required', 'true')
+    screen.getAllByRole('radio', { name: /^(ACT|NSW|NT|QLD|SA|TAS|VIC|WA)$/ }).forEach(r => expect(r).not.toBeChecked())
+  })
+
+  it('names the state group "State" and marks it required', () => {
+    render(<TenantFormPanel isOpen onClose={vi.fn()} />)
+    expect(screen.getByRole('radiogroup', { name: 'State' })).toBeRequired()
   })
 
   it('waits for a name and a state, but not for a domain', async () => {
@@ -33,8 +37,7 @@ describe('TenantFormPanel create: optional domain, required state', () => {
     render(<TenantFormPanel isOpen onClose={vi.fn()} />)
     await u.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Jo Care')
     expect(create()).toBeDisabled()
-    await u.click(stateButton())
-    await u.click(screen.getByRole('option', { name: 'WA' }))
+    await u.click(stateRadio('WA'))
     expect(create()).toBeEnabled()
   })
 
@@ -42,8 +45,7 @@ describe('TenantFormPanel create: optional domain, required state', () => {
     const u = userEvent.setup()
     render(<TenantFormPanel isOpen onClose={vi.fn()} />)
     await u.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Jo Care')
-    await u.click(stateButton())
-    await u.click(screen.getByRole('option', { name: 'WA' }))
+    await u.click(stateRadio('WA'))
     await u.click(create())
 
     expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
@@ -72,13 +74,12 @@ describe('TenantFormPanel create: optional domain, required state', () => {
     render(<TenantFormPanel isOpen onClose={vi.fn()} />)
     await u.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Jo Care')
     await u.type(screen.getByPlaceholderText('e.g. acme.com.au'), 'jo.example.com')
-    await u.click(stateButton())
-    await u.click(screen.getByRole('option', { name: 'SA' }))
+    await u.click(stateRadio('SA'))
     await u.click(create())
 
     expect(await screen.findByText('A tenant with this email domain already exists')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('e.g. Acme Travel Co')).toHaveValue('Jo Care')
     expect(screen.getByPlaceholderText('e.g. acme.com.au')).toHaveValue('jo.example.com')
-    expect(stateButton()).toHaveTextContent('SA')
+    expect(stateRadio('SA')).toBeChecked()
   })
 })

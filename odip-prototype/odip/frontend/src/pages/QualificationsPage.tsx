@@ -275,7 +275,7 @@ export default function QualificationsPage() {
                                 aria-label="Expiry date"
                                 className="border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                               />
-                              {saveError && <p className="text-xs text-[var(--color-destructive)]">{saveError}</p>}
+                              {saveError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{saveError}</p>}
                             </div>
                           ),
                         },
@@ -298,13 +298,13 @@ export default function QualificationsPage() {
                               <Button size="sm" onClick={() => handleSave(q)} disabled={isSaving || updateStaff.isPending}>
                                 {isSaving ? 'Saving…' : 'Save'}
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={closeEditor}>
+                              <Button variant="ghost" size="sm" onClick={closeEditor} disabled={savingKey === q.key}>
                                 Cancel
                               </Button>
                             </div>
                           ) : canWrite ? (
                             // Every row has one, so its name says whose credential it edits.
-                            <Button variant="ghost" size="sm" onClick={() => handleEdit(q)} aria-label={`Edit: ${q.qualification}, ${q.staffName}`}>
+                            <Button variant="ghost" size="sm" onClick={() => handleEdit(q)} disabled={updateStaff.isPending} aria-label={`Edit: ${q.qualification}, ${q.staffName}`}>
                               Edit
                             </Button>
                           ) : null

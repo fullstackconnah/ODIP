@@ -276,18 +276,19 @@ public class ProviderSettingsReadinessModeTests
     }
 
     [Fact]
-    public async Task Upsert_SuperAdminWithNoViewAsTenant_CannotChangeTheMode_ButOtherFieldsStillSave()
+    public async Task Upsert_SuperAdminWithNoViewAsTenant_IsRefusedWhole_SoNoOrganisationsRowIsTouched()
     {
         var (db, controller) = Create(tenantId: null, isSuperAdmin: true);
         using var _ = db;
         SeedSettings(db, TenantA);
 
         var refused = await controller.Upsert(Dto(ParticipantReadinessMode.Enforce), CancellationToken.None);
-        var allowed = await controller.Upsert(Dto() with { ManagerName = "Still works" }, CancellationToken.None);
+        var alsoRefused = await controller.Upsert(Dto() with { ManagerName = "Not saved" }, CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<bool>>(Assert.IsType<BadRequestObjectResult>(refused.Result).Value);
         Assert.Contains("view as", body.Errors![0], StringComparison.OrdinalIgnoreCase);
-        Assert.IsType<OkObjectResult>(allowed.Result);
+        Assert.IsType<BadRequestObjectResult>(alsoRefused.Result);   // no organisation in scope: nothing in the body may land on an arbitrary row
+        Assert.NotEqual("Not saved", (await db.ProviderSettings.IgnoreQueryFilters().SingleAsync()).ManagerName);
         Assert.Equal(ParticipantReadinessMode.Warn, await StoredMode(db, TenantA));
         Assert.Empty(await db.AuditLogs.ToListAsync());
     }
