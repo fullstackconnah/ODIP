@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261023060212_AddEmploymentHeroLeave")]
+    [Migration("20261023115829_AddEmploymentHeroLeave")]
     partial class AddEmploymentHeroLeave
     {
         /// <inheritdoc />
@@ -1361,6 +1361,241 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("TenantId", "InquiryId");
 
                     b.ToTable("InquiryContacts");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.Invoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccountNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("BankAccountName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BillToAddress")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("BillToEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BillToName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Bsb")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("ClaimReference")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreditsDisplayNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("CreditsInvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DisplayNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("FooterNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal>("Gst")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("GstRegistered")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("IssueDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NdisNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParticipantBookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ParticipantName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PayerKind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PaymentTermsDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SellerAbn")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SellerAddress")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("SellerOrganisationName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SellerRegistrationNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SellerState")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("ServiceReference")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("TripClaimId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("VoidReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("VoidedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("VoidedById")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreditsInvoiceId");
+
+                    b.HasIndex("ParticipantBookingId");
+
+                    b.HasIndex("ParticipantId");
+
+                    b.HasIndex("TripClaimId");
+
+                    b.HasIndex("TenantId", "Kind", "Number")
+                        .IsUnique();
+
+                    b.ToTable("Invoices");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.InvoiceLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClaimLineItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("GSTCode")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Hours")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("LineTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly>("ServiceFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("ServiceTo")
+                        .HasColumnType("date");
+
+                    b.Property<string>("SupportItemCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClaimLineItemId");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.ToTable("InvoiceLines");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.InvoiceNumberCounter", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NextNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("TenantId", "Kind");
+
+                    b.ToTable("InvoiceNumberCounters");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.MedicationAdministration", b =>
@@ -3253,12 +3488,31 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("CreditNotePrefix")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("CN-");
+
                     b.Property<bool>("GSTRegistered")
                         .HasColumnType("boolean");
 
                     b.Property<string>("InvoiceFooterNotes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("InvoiceNumberPrefix")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("INV-");
+
+                    b.Property<int>("InvoiceStartNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
 
                     b.Property<bool>("IsPaceProvider")
                         .HasColumnType("boolean");
@@ -3283,6 +3537,11 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
+
+                    b.Property<int>("PaymentTermsDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(14);
 
                     b.Property<string>("RegistrationNumber")
                         .IsRequired()
@@ -6404,6 +6663,33 @@ namespace Odip.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.Invoice", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("CreditsInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Odip.Domain.Entities.TripClaim", null)
+                        .WithMany()
+                        .HasForeignKey("TripClaimId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.InvoiceLine", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ClaimLineItem", null)
+                        .WithMany()
+                        .HasForeignKey("ClaimLineItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Odip.Domain.Entities.Invoice", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.MedicationAdministration", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
@@ -7389,6 +7675,11 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Injuries");
 
                     b.Navigation("Witnesses");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.Invoice", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.Participant", b =>
