@@ -141,7 +141,7 @@ public class RosterBoardDragDropTests
 
         var result = await Controller(db).AssignShift(shift.Id, new AssignShiftDto { StaffId = sam.Id, ExpectedStaffId = boardShowedAlex ? alex.Id : null }, default);
 
-        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("SHIFT_BOARD_CHANGED", Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
         Assert.Equal(jo.Id, (await Reload(db, shift.Id)).UserId);
         Assert.Empty(await db.NotificationOutbox.ToListAsync());
     }
@@ -595,7 +595,7 @@ public class RosterBoardDragDropTests
 
         var result = await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Move), default);
 
-        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("SHIFT_BOARD_CHANGED", Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
         Assert.Equal(sam.Id, (await Reload(db, from.Id)).UserId);
         Assert.Equal(alex.Id, (await Reload(db, to.Id)).UserId);
     }
@@ -632,7 +632,7 @@ public class RosterBoardDragDropTests
 
         var result = await Controller(db).MoveStaff(Move(from, to, MoveStaffMode.Move) with { StaffId = sam.Id }, default);
 
-        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("SHIFT_BOARD_CHANGED", Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
         Assert.Equal(jo.Id, (await Reload(db, from.Id)).UserId);
         Assert.Null((await Reload(db, to.Id)).UserId);
     }
@@ -709,7 +709,7 @@ public class RosterBoardDragDropTests
 
         var result = await Controller(db).CreateShift(NewShiftFor(mia.Id, sam.Id, Monday.AddDays(1), 9, 15, source.Id), default);
 
-        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("SHIFT_BOARD_CHANGED", Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
         Assert.Equal(jo.Id, (await Reload(db, source.Id)).UserId);
         Assert.Equal(1, await db.Shifts.CountAsync());
     }
