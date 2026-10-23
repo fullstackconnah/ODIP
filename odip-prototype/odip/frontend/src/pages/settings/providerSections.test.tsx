@@ -33,9 +33,14 @@ function makeSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSet
     id: 'ps-1', registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sunrise Support Services', address: '12 Wattle St, Brisbane QLD 4000',
     state: 'QLD', gstRegistered: true, isPaceProvider: false, bankAccountName: 'Sunrise Support', bsb: '064-000', accountNumber: '12345678',
     invoiceFooterNotes: 'Thank you for choosing Sunrise.', managerName: 'Priya Sharma', managerPhone: '0412 345 007',
-    participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', ...overrides,
+    participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', updatedAt: V1, ...overrides,
   }
 }
+
+// The row's version: the server moves it on every save, and refuses a PUT whose expectedUpdatedAt is not the current one (409).
+const V1 = '2026-10-23T01:00:00.123456Z'
+const V2 = '2026-10-23T01:05:00.654321Z'
+const CHANGED_BY_OTHER = 'Settings were changed by someone else. Reload and try again.'
 
 /** The fake server's row: what the next GET returns, and what a PUT merges the sent fields into. Null: the organisation has no row. */
 let server: ProviderSettingsDto | null
@@ -43,8 +48,10 @@ let server: ProviderSettingsDto | null
 beforeEach(() => {
   server = makeSettings()
   mockApiGet.mockReset().mockImplementation(async (url: string) => (url === '/provider-settings' ? server : []))
-  mockApiPut.mockReset().mockImplementation(async (_url: string, body: Partial<ProviderSettingsDto>) => {
-    server = { ...(server ?? ({} as ProviderSettingsDto)), ...body }
+  mockApiPut.mockReset().mockImplementation(async (_url: string, body: Partial<ProviderSettingsDto> & { expectedUpdatedAt?: string }) => {
+    const { expectedUpdatedAt, ...fields } = body
+    if (expectedUpdatedAt && expectedUpdatedAt !== server?.updatedAt) throw { response: { status: 409, data: { success: false, errors: [CHANGED_BY_OTHER] } } }
+    server = { ...(server ?? ({} as ProviderSettingsDto)), ...fields, updatedAt: `${new Date().toISOString().slice(0, -1)}000Z` }
     return true
   })
   mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
@@ -72,10 +79,13 @@ function putBody(nth = 0): Record<string, unknown> {
 
 /** The row as the server held it, as a section PUTs it back: every field except the two modes, which go only when changed. */
 function rowWithoutModes(row: ProviderSettingsDto, overrides: Partial<ProviderSettingsDto> = {}) {
-  const body: Partial<ProviderSettingsDto> = { ...row, ...overrides }
+  const body: Partial<ProviderSettingsDto> & { expectedUpdatedAt?: string } = { ...row, ...overrides }
   delete body.participantReadinessMode
   delete body.medicationCompetencyMode
   delete body.employmentHeroConnected
+  // The version the row was loaded at goes back as expectedUpdatedAt (never as updatedAt).
+  body.expectedUpdatedAt = row.updatedAt
+  delete (body as { updatedAt?: string }).updatedAt
   return body
 }
 
@@ -141,7 +151,8 @@ describe('Organisation profile', () => {
     await user.click(saveButton())
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
-    expect(putBody(1)).toEqual(rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }))
+    // The first save moved the version and the refetch that would say to what never lands, so the second save sends none rather than a stale one.
+    expect(putBody(1)).toEqual({ ...rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }), expectedUpdatedAt: undefined })
   })
 
   it('never writes back the Employment Hero flag the GET computes', async () => {
@@ -264,6 +275,32 @@ describe('Billing details', () => {
     expect(saveButton()).toBeEnabled()
     expect(putBody()).toEqual(rowWithoutModes(makeSettings(), { bsb: '063-000' }))
     expect(server?.bsb).toBe('064-000')
+  })
+
+  it("a save from an older form is refused with the server's words, keeps the edit, refetches, and the retry brings the other Admin's change along", async () => {
+    const user = userEvent.setup()
+    renderSection('billing')
+    const bsb = await screen.findByLabelText('BSB')
+    await user.clear(bsb)
+    await user.type(bsb, '063-000')
+    // Another Admin saves a new account number after this form loaded.
+    server = makeSettings({ accountNumber: '99999999', updatedAt: V2 })
+    const getsBefore = mockApiGet.mock.calls.filter(c => c[0] === '/provider-settings').length
+
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(`Not saved. ${CHANGED_BY_OTHER}`)
+    expect(putBody()).toMatchObject({ expectedUpdatedAt: V1, bsb: '063-000' })
+    expect(screen.getByLabelText('BSB')).toHaveValue('063-000')
+    expect(server?.bsb).toBe('064-000')
+    await waitFor(() => expect(mockApiGet.mock.calls.filter(c => c[0] === '/provider-settings').length).toBeGreaterThan(getsBefore))
+
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toMatchObject({ expectedUpdatedAt: V2, bsb: '063-000', accountNumber: '99999999' })
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
+    expect(server).toMatchObject({ bsb: '063-000', accountNumber: '99999999' })
   })
 
   it('hides the bank account from a Coordinator, and has no Save', async () => {
