@@ -470,8 +470,14 @@ export default function LeaveApprovalsPage() {
     } : undefined
   ), [editTarget])
 
+  // Leave entered in Employment Hero is read-only here: EH is where it changes.
+  const fromEh = (row: ApprovalRow) => row.rowKind === 'leave' && row.data.source === 'EmploymentHero'
+  // One decimal with a trailing ".0" dropped: 22.8 h, 36 h.
+  const hoursLabel = (h: number) => `${parseFloat(h.toFixed(1))} h`
+
   function rowRequestedBy(row: ApprovalRow) {
     if (row.rowKind === 'legacy') return '—'
+    if (fromEh(row)) return 'Entered in Employment Hero'
     const { requestedByUserId, userId, requestedAt } = row.data
     const who = requestedByUserId === userId ? 'Self' : (staffNameById.get(requestedByUserId) ?? 'Coordinator')
     // requestedAt is an INSTANT: the day it was requested is the viewer's local date, not the first ten characters (the UTC date).
@@ -499,6 +505,11 @@ export default function LeaveApprovalsPage() {
         {row.data.status === 'Declined' && row.data.decisionNote && (
           <p className="mt-1 text-xs text-[var(--color-muted-foreground)] md:max-w-[12rem] md:truncate" title={row.data.decisionNote}>{row.data.decisionNote}</p>
         )}
+        {row.rowKind === 'leave' && row.data.sentHours != null && (
+          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+            {`In Employment Hero · ${hoursLabel(row.data.sentHours)}${row.data.sentHoursDefaulted ? " (7.6 h a day: ODIP's default)" : ''}`}
+          </p>
+        )}
       </div>
     ) },
     ...(canApproveLeave ? [{
@@ -510,6 +521,7 @@ export default function LeaveApprovalsPage() {
             Edit
           </Button>
         )
+        if (fromEh(row)) return <span className="text-[13px] text-[var(--color-muted-foreground)]">Change it in Employment Hero</span>
         if (row.rowKind === 'legacy') {
           return (
             <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">

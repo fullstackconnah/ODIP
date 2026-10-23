@@ -6,7 +6,9 @@ import StaffDetailPage from './StaffDetailPage'
 import type { StaffOverviewDto } from '@/api/types/staff'
 import type { StaffDetailDto } from '@/api/types/staff'
 
-const { mockUseStaffOverview, mockUseSettings } = vi.hoisted(() => ({
+const { mockUseStaffOverview, mockUseSettings, mockVisibility, mockBalances } = vi.hoisted(() => ({
+  mockVisibility: vi.fn(() => ({ data: { employmentHeroConnected: false } })),
+  mockBalances: vi.fn((..._args: unknown[]) => ({ data: undefined as unknown, isLoading: true, isError: false, refetch: vi.fn() })),
   mockUseStaffOverview: vi.fn(),
   mockUseSettings: vi.fn(() => ({ data: { qualificationWarningDays: 30 } })),
 }))
@@ -14,6 +16,8 @@ const { mockUseStaffOverview, mockUseSettings } = vi.hoisted(() => ({
 vi.mock('@/api/hooks', () => ({
   useStaffOverview: mockUseStaffOverview,
   useSettings: mockUseSettings,
+  useModuleVisibility: mockVisibility,
+  useStaffLeaveBalances: mockBalances,
   useEnsureStaffSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
@@ -86,6 +90,8 @@ beforeEach(() => {
   mockUseStaffOverview.mockReset()
   mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 30 } })
   setUserRole('Admin')
+  mockVisibility.mockReturnValue({ data: { employmentHeroConnected: false } })
+  mockBalances.mockClear()
 })
 
 afterEach(() => {
@@ -495,5 +501,43 @@ describe('StaffDetailPage — the tab lives in the URL (useTabParam)', () => {
   it('reads an unknown ?tab= as the default tab', () => {
     renderWithUrl('/staff/x-1?tab=bogus')
     expect(screen.getByRole('tab', { name: 'Availability' })).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+describe('StaffDetailPage — leave balances', () => {
+  const ready = { data: { status: 'Ready', balances: [{ category: 'Annual Leave', amount: 76, unit: 'Hours' }] }, isLoading: false, isError: false, refetch: vi.fn() }
+
+  it('shows an Admin the balances of this person, read for this id', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    mockVisibility.mockReturnValue({ data: { employmentHeroConnected: true } })
+    mockBalances.mockReturnValue(ready)
+    renderAt('staff-1')
+    expect(screen.getByRole('heading', { name: 'Leave balances' })).toBeInTheDocument()
+    expect(screen.getByText('76.0 hours')).toBeInTheDocument()
+    expect(mockBalances).toHaveBeenCalledWith('staff-1', true)
+  })
+
+  it('says a person who is not linked is not linked, with a link to Integrations', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    mockVisibility.mockReturnValue({ data: { employmentHeroConnected: true } })
+    mockBalances.mockReturnValue({ data: { status: 'NotLinked', balances: [] }, isLoading: false, isError: false, refetch: vi.fn() })
+    renderAt('staff-1')
+    expect(screen.getByText("Not linked to Employment Hero, so ODIP can't show balances.")).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Link in Settings \u2192 Integrations' })).toHaveAttribute('href', '/settings?section=integrations')
+  })
+
+  it('shows a Coordinator no balances and reads none', () => {
+    setUserRole('Coordinator')
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    mockVisibility.mockReturnValue({ data: { employmentHeroConnected: true } })
+    renderAt('staff-1')
+    expect(screen.queryByRole('heading', { name: 'Leave balances' })).not.toBeInTheDocument()
+    expect(mockBalances).toHaveBeenCalledWith('staff-1', false)
+  })
+
+  it('shows nothing when the organisation is not connected', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    renderAt('staff-1')
+    expect(screen.queryByRole('heading', { name: 'Leave balances' })).not.toBeInTheDocument()
   })
 })
