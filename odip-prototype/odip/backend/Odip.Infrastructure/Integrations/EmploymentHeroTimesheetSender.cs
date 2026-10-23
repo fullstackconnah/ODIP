@@ -88,18 +88,20 @@ public sealed class EmploymentHeroTimesheetSender
         var missing = await db.ShiftCompletions
             .Where(c => c.TenantId == tenantId && c.IsActive && c.ReviewOutcome == ReviewOutcome.Approved && !have.Contains(c.Id)
                         && c.Shift!.Status == ShiftStatus.Completed && c.Shift.ServiceDate >= cutoff)
-            .Select(c => c.Id).OrderBy(id => id).Take(ScanSize).ToListAsync(ct);
-        if (missing.Count == 0) return;
-        // Ordered by Id: two scans insert the same unique keys in the same order, so one waits for the other instead of deadlocking.
-        db.EmploymentHeroOutbox.AddRange(missing.Select(id => EmploymentHeroTimesheets.NewRow(tenantId, id, now)));
-        try
+            .Select(c => c.Id).Take(ScanSize).ToListAsync(ct);
+        // One row per save: EF sorts a batch's inserts by their random row Ids, so two drains insert the same shifts in different orders and deadlock on the unique index.
+        foreach (var id in missing)
         {
-            await db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException ex)
-        {
-            db.ChangeTracker.Clear();
-            _logger.LogInformation("Employment Hero timesheet scan for organisation {TenantId} collided with another run ({Error})", tenantId, ex.GetType().Name);
+            db.EmploymentHeroOutbox.Add(EmploymentHeroTimesheets.NewRow(tenantId, id, now));
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException ex)
+            {
+                db.ChangeTracker.Clear();
+                _logger.LogInformation("Employment Hero timesheet scan for organisation {TenantId} collided with another run ({Error})", tenantId, ex.GetType().Name);
+            }
         }
     }
 
