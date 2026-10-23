@@ -3,12 +3,14 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import IntegrationsTab from './IntegrationsTab'
-import type { EmploymentHeroAttentionDto, EmploymentHeroEmployeeDto, EmploymentHeroStatusDto } from '@/api/types'
+import type { EmploymentHeroAttentionDto, EmploymentHeroEmployeeDto, EmploymentHeroLeaveProblemDto, EmploymentHeroStatusDto } from '@/api/types'
 
 const { state, calls } = vi.hoisted(() => ({
   state: { status: undefined as unknown, employees: [] as unknown[], dismissError: null as unknown, dismissVariables: undefined as string | undefined, disconnectError: null as unknown,
-    workTypes: [{ id: '5', name: 'Ordinary' }, { id: '6', name: 'Night' }] as unknown, workTypesError: false, workTypesLoading: false, saveError: null as unknown },
-  calls: { businesses: vi.fn(), connect: vi.fn(), sync: vi.fn(), disconnect: vi.fn(), link: vi.fn(), dismiss: vi.fn(), saveWorkTypes: vi.fn() },
+    workTypes: [{ id: '5', name: 'Ordinary' }, { id: '6', name: 'Night' }] as unknown, workTypesError: false, workTypesLoading: false, saveError: null as unknown,
+    leaveCats: [{ id: '5', name: 'Annual Leave' }, { id: '7', name: 'Personal/Carer\'s Leave' }] as unknown, leaveCatsError: false, leaveCatsLoading: false, leaveSaveError: null as unknown,
+    retryError: null as unknown, retryVariables: undefined as string | undefined, retryPending: false },
+  calls: { businesses: vi.fn(), connect: vi.fn(), sync: vi.fn(), disconnect: vi.fn(), link: vi.fn(), dismiss: vi.fn(), saveWorkTypes: vi.fn(), saveLeaveCats: vi.fn(), retryLeave: vi.fn() },
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -21,13 +23,17 @@ vi.mock('@/api/hooks', () => ({
   useLinkEmploymentHeroStaff: () => ({ mutate: calls.link, isPending: false, error: null }),
   useEmploymentHeroWorkTypes: () => ({ data: state.workTypesError || state.workTypesLoading ? undefined : state.workTypes, isLoading: state.workTypesLoading, isError: state.workTypesError, error: null, refetch: vi.fn() }),
   useSaveEmploymentHeroWorkTypes: () => ({ mutate: calls.saveWorkTypes, isPending: false, isSuccess: false, error: state.saveError }),
+  useEmploymentHeroLeaveCategories: () => ({ data: state.leaveCatsError || state.leaveCatsLoading ? undefined : state.leaveCats, isLoading: state.leaveCatsLoading, isError: state.leaveCatsError, error: null, refetch: vi.fn() }),
+  useSaveEmploymentHeroLeaveCategories: () => ({ mutate: calls.saveLeaveCats, isPending: false, isSuccess: false, error: state.leaveSaveError }),
+  useRetryEmploymentHeroLeave: () => ({ mutate: calls.retryLeave, isPending: state.retryPending, error: state.retryError, variables: state.retryVariables }),
   useDismissEmploymentHeroItem: () => ({ mutate: calls.dismiss, isPending: false, error: state.dismissError, variables: state.dismissVariables }),
 }))
 
 const status = (o: Partial<EmploymentHeroStatusDto> = {}): EmploymentHeroStatusDto => ({
   configured: true, connected: false, businessId: null, businessName: null, connectedAt: null, connectedByName: null,
   lastSyncAt: null, lastSyncError: null, staffLinked: 0, staffNotLinked: 0, timesheetsSent: 0, timesheetsWaiting: 0,
-  workTypes: { standard: null, activeNight: null, passiveNight: null, sleepover: null }, attention: [], ...o,
+  workTypes: { standard: null, activeNight: null, passiveNight: null, sleepover: null }, attention: [],
+  leaveSent: 0, leaveWaiting: 0, leaveCategories: { annual: null, sick: null, personal: null, other: null }, leaveProblems: [], ...o,
 })
 const connected = (o: Partial<EmploymentHeroStatusDto> = {}) => status({
   connected: true, businessId: '777', businessName: 'Acme Care', connectedAt: '2026-10-13T01:00:00Z', connectedByName: 'Ada Admin',
@@ -47,6 +53,12 @@ afterEach(() => {
   state.disconnectError = null
   state.workTypesError = false
   state.workTypesLoading = false
+  state.leaveCatsError = false
+  state.leaveCatsLoading = false
+  state.leaveSaveError = null
+  state.retryError = null
+  state.retryVariables = undefined
+  state.retryPending = false
   state.saveError = null
 })
 
@@ -272,7 +284,8 @@ describe('IntegrationsTab — timesheets and work types', () => {
   it('says none are sent yet when nothing has gone', () => {
     state.status = connected()
     renderTab()
-    expect(screen.getByText(/None sent yet/)).toBeInTheDocument()
+    // Timesheets and Leave both read this when nothing has gone.
+    expect(screen.getAllByText(/None sent yet/)).toHaveLength(2)
   })
 
   it('words the work types as the shape brief does', () => {
@@ -322,5 +335,125 @@ describe('IntegrationsTab — timesheets and work types', () => {
     state.workTypesError = true
     renderTab()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+})
+
+const problem = (o: Partial<EmploymentHeroLeaveProblemDto> = {}): EmploymentHeroLeaveProblemDto => ({
+  id: 'r1', leaveId: 'l1', name: 'Sam Lee', leaveType: 'Annual', startDate: '2026-11-03', endDate: '2026-11-05',
+  cancelling: false, waiting: false, reason: 'Employment Hero refused it: Overlaps existing leave. ', ...o,
+})
+
+describe('IntegrationsTab — leave', () => {
+  it('counts the leave sent and waiting, and says none when nothing has gone', () => {
+    state.status = connected({ leaveSent: 12, leaveWaiting: 1 })
+    renderTab()
+    expect(screen.getByText('12 sent, 1 waiting')).toBeInTheDocument()
+    cleanup()
+    state.status = connected({ leaveSent: 12 })
+    renderTab()
+    expect(screen.getByText('12 sent')).toBeInTheDocument()
+    cleanup()
+    state.status = connected()
+    renderTab()
+    expect(screen.getAllByText(/None sent yet/)).toHaveLength(2)
+  })
+
+  it('has no Leave fact, categories or problems when not connected', () => {
+    state.status = status({ connected: false })
+    renderTab()
+    expect(screen.queryByText('Leave categories')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Leave not sent/)).not.toBeInTheDocument()
+  })
+
+  it('words the leave categories as the shape brief does', () => {
+    state.status = connected()
+    renderTab()
+    expect(screen.getByText(/A change applies to leave not yet sent\.$/)).toBeInTheDocument()
+    for (const label of ['Annual leave', 'Sick leave', 'Personal leave', 'Other leave']) {
+      expect(within(screen.getByLabelText(label)).getByRole('option', { name: 'Not chosen' })).toBeInTheDocument()
+    }
+  })
+
+  it('reads the leave categories with the brief\'s words while loading', () => {
+    state.status = connected()
+    state.leaveCatsLoading = true
+    renderTab()
+    expect(screen.getByText("Reading Employment Hero's leave categories…")).toBeInTheDocument()
+  })
+
+  it('saves all four chosen ids, and only once something changed', async () => {
+    const user = userEvent.setup()
+    state.status = connected({ leaveCategories: { annual: '5', sick: null, personal: null, other: null } })
+    renderTab()
+    const save = screen.getByRole('button', { name: 'Save leave categories' })
+    expect(save).toBeDisabled()
+    await user.selectOptions(screen.getByLabelText('Personal leave'), '7')
+    await user.click(save)
+    expect(calls.saveLeaveCats).toHaveBeenCalledWith({ annual: '5', sick: null, personal: '7', other: null }, expect.anything())
+  })
+
+  it('flags a saved leave category that Employment Hero no longer lists', () => {
+    state.status = connected({ leaveCategories: { annual: '99', sick: null, personal: null, other: null } })
+    renderTab()
+    expect(screen.getByRole('option', { name: 'Not in Employment Hero any more' })).toBeInTheDocument()
+    expect(screen.getByText('Pick again.')).toBeInTheDocument()
+  })
+
+  it('shows the refusal and keeps every chosen value when the save fails', async () => {
+    const user = userEvent.setup()
+    state.status = connected({ leaveCategories: { annual: '5', sick: null, personal: null, other: null } })
+    state.leaveSaveError = new Error('boom')
+    renderTab()
+    await user.selectOptions(screen.getByLabelText('Sick leave'), '7')
+    expect(screen.getByText("The leave categories couldn't be saved. Try again.")).toBeInTheDocument()
+    expect(screen.getByLabelText('Annual leave')).toHaveValue('5')
+    expect(screen.getByLabelText('Sick leave')).toHaveValue('7')
+  })
+
+  it('keeps the error and offers Try again when the leave categories cannot be loaded', () => {
+    state.status = connected()
+    state.leaveCatsError = true
+    renderTab()
+    expect(screen.getByText("Employment Hero's leave categories couldn't be loaded.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
+  it('lists leave not sent, a cancellation, and Try again with a specific name', async () => {
+    const user = userEvent.setup()
+    state.status = connected({ leaveProblems: [problem(), problem({ id: 'r2', name: 'Ned Park', cancelling: true, reason: 'Employment Hero refused it: Already cancelled.' })] })
+    renderTab()
+    expect(screen.getByRole('heading', { name: 'Leave not sent (2)' })).toBeInTheDocument()
+    expect(screen.getByText(/^Annual leave · 3.5 Nov 2026$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Cancelling annual leave · /)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Try again: Sam Lee, 3.5 Nov 2026$/ }))
+    expect(calls.retryLeave).toHaveBeenCalledWith('r1', expect.anything())
+  })
+
+  it('shows a waiting item with its reason and no Try again', () => {
+    state.status = connected({ leaveProblems: [problem({ waiting: true, reason: 'Staff not linked to Employment Hero' })] })
+    renderTab()
+    expect(screen.getByText('Staff not linked to Employment Hero')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Try again: / })).not.toBeInTheDocument()
+  })
+
+  it('says Trying… while a retry runs and shows the refusal under that item only', () => {
+    state.status = connected({ leaveProblems: [problem(), problem({ id: 'r2', name: 'Ned Park' })] })
+    state.retryPending = true
+    state.retryVariables = 'r1'
+    renderTab()
+    expect(screen.getByRole('button', { name: /Try again: Sam Lee/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Try again: Sam Lee/ })).toHaveTextContent('Trying…')
+    expect(screen.getByRole('button', { name: /Try again: Ned Park/ })).toBeEnabled()
+    cleanup()
+    state.retryPending = false
+    state.retryError = new Error('boom')
+    renderTab()
+    expect(screen.getAllByText(/couldn't be tried again/)).toHaveLength(1)
+  })
+
+  it('has no Leave not sent block at zero', () => {
+    state.status = connected()
+    renderTab()
+    expect(screen.queryByText(/Leave not sent/)).not.toBeInTheDocument()
   })
 })
