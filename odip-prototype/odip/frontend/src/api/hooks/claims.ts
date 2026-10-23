@@ -13,6 +13,9 @@ import type {
   GenerateShiftClaimRequestDto,
   ShiftClaimPreviewResponseDto,
   ShiftClaimGeneratedDto,
+  ClaimInvoicesDto,
+  SubmitPreviewDto,
+  InvoiceSummaryDto,
 } from '../types'
 
 /** PP-61: `options.enabled` lets a caller (e.g. a tab that only needs this once visited) defer
@@ -92,6 +95,8 @@ export function useUpdateClaim() {
       const participants = claimParticipantIds(cachedClaim(qc, claimId))
       qc.invalidateQueries({ queryKey: ['claim', claimId] })
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
+      // Submitting issues the claim's invoices.
+      qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
       refreshLedgers(qc, participants)
       // Marking a claim Rejected (with the NDIA's code, which starts the "funds ran out" signal), Paid or back to Draft moves what the alerts, the dashboard's tile and the Budgets list say.
       refreshBudgetWarnings(qc)
@@ -132,11 +137,55 @@ export function useDeleteClaim() {
       // covered, so the same pre-invalidation read supplies who they were.
       const participants = claimParticipantIds(cachedClaim(qc, claimId))
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
+      qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
       refreshLedgers(qc, participants)
       refreshBudgetWarnings(qc)
     },
   })
 }
+
+// ══════════════════════════════════════════════════════════════
+// INVOICES (Xero PR1)
+// ══════════════════════════════════════════════════════════════
+
+/** GET /claims/{id}/invoices: the claim's Invoices section, its state and rows as the server says them. */
+export function useClaimInvoices(claimId: string | undefined) {
+  return useQuery({
+    queryKey: ['claim-invoices', claimId],
+    queryFn: () => apiGet<ClaimInvoicesDto>(`/claims/${claimId}/invoices`),
+    enabled: !!claimId,
+  })
+}
+
+/** POST /claims/submit-preview: what marking these claims as submitted would issue now. A read (POST for the id list); gcTime 0 so each open of
+ * a confirm asks again rather than showing predicted numbers from an earlier open. */
+export function useSubmitPreview(claimIds: string[], enabled: boolean) {
+  return useQuery({
+    queryKey: ['submit-preview', ...claimIds],
+    queryFn: () => apiPost<SubmitPreviewDto>('/claims/submit-preview', { claimIds }),
+    enabled: enabled && claimIds.length > 0,
+    gcTime: 0,
+    staleTime: 0,
+    retry: false,
+  })
+}
+
+type InvoiceCorrection = { invoiceId: string; claimId: string; reason: string }
+
+function useInvoiceCorrection(action: 'void' | 'credit-note') {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ invoiceId, reason }: InvoiceCorrection) => apiPost<InvoiceSummaryDto>(`/invoices/${invoiceId}/${action}`, { reason }),
+    // A refusal can mean the row moved under us (voided or credited elsewhere): read it again either way.
+    onSettled: (_, __, { claimId }) => qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] }),
+  })
+}
+
+/** POST /invoices/{id}/void with { reason }: Admin, or SuperAdmin viewing an organisation. Answers the voided invoice. */
+export const useVoidInvoice = () => useInvoiceCorrection('void')
+
+/** POST /invoices/{id}/credit-note with { reason }: answers the new credit note. */
+export const useIssueCreditNote = () => useInvoiceCorrection('credit-note')
 
 // ══════════════════════════════════════════════════════════════
 // PARTICIPANT CLAIMS / CLAIM-FROM-SHIFTS (shift-completion design spec §2/§4, PR 3)

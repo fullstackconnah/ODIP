@@ -1102,3 +1102,18 @@ public enum InquiryCloseOutcome
     NotGoingAhead = 1,
     Other = 2,
 }
+
+/// <summary>An invoice or a credit note (Xero PR1). Stored as int; append-only.</summary>
+public enum InvoiceKind
+{
+    Invoice = 0,
+    CreditNote = 1,
+}
+
+/// <summary>Issued stands; Voided and Credited keep their row and number for good. Stored as int; append-only.</summary>
+public enum InvoiceStatus
+{
+    Issued = 0,
+    Voided = 1,
+    Credited = 2,
+}

@@ -24,7 +24,7 @@ public class MedicationHistoryFrameTests : IClassFixture<PostgresFixture>
     private static async Task<(OdipDbContext Db, MedicationsController C, ParticipantMedication Med)> SetupAsync(string? state = null)
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.TenantId).Returns((Guid?)Guid.Empty);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
         var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
         if (state != null) db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = Guid.Empty, State = state });

@@ -48,7 +48,7 @@ internal sealed class ShiftPackageFixture
         MedicationCompetencyMode competencyMode = MedicationCompetencyMode.Warn)
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.TenantId).Returns(tenantId ?? Guid.Empty);
         tenant.Setup(t => t.IsSuperAdmin).Returns(tenantId is null);
         tenant.Setup(t => t.ViewAsUserId).Returns((Guid?)null);
 

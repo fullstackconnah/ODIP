@@ -4,10 +4,10 @@ import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
 import { Download, Check, DollarSign, XCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { apiClient } from '@/api/client'
 import { NoShowModal } from '@/components/NoShowModal'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { SubmitClaimDialog } from '@/components/SubmitClaimDialog'
 import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import { ndiaCodeMeaning } from '@/lib/ndiaCodes'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
@@ -22,6 +22,9 @@ import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
+import { downloadFile } from '@/lib/downloadFile'
+import { InvoicesSection } from './claim-detail/InvoicesSection'
 
 const inputClass = 'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
@@ -34,16 +37,6 @@ function planTypeLabel(planType: string) {
 /** The server's own words for why it refused a change of status or of the NDIA code, else a sentence of ours. */
 function refusalOf(err: unknown): string {
   return extractErrorMessage(err, "Couldn't update the claim status. Please try again.")
-}
-
-async function downloadFile(url: string, filename: string) {
-  const response = await apiClient.get(url, { responseType: 'blob' })
-  const blob = new Blob([response.data])
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(link.href)
 }
 
 export default function ClaimDetailPage() {
@@ -62,6 +55,18 @@ export default function ClaimDetailPage() {
   const [statusError, setStatusError] = useState<string | null>(null)
   // Recording the NDIA's code on a claim that is already rejected (the reason often arrives after the status was set): the same dialog, asking only for the code.
   const [recordingCode, setRecordingCode] = useState(false)
+  // The page's one polite announcement (invoice void and credit outcomes; the submit notice).
+  const [announcement, setAnnouncement] = useState('')
+  const invoicesHeadingRef = useRef<HTMLHeadingElement>(null)
+  const [submitting, setSubmitting] = useState(false)
+  // After a submit the Invoices heading takes focus, once the dialog has gone (its own cleanup hands focus back to the opener first).
+  // A ref, not state: the submit's own setSubmitting(false) is the render this waits for (react-hooks/set-state-in-effect).
+  const focusInvoices = useRef(false)
+  useEffect(() => {
+    if (!focusInvoices.current) return
+    focusInvoices.current = false
+    invoicesHeadingRef.current?.focus()
+  })
   // "Saved!" puts the label back after two seconds. The timer is kept so a newer save can replace it and leaving the page can cancel it: left
   // running it fires setSaved into a tree that is gone.
   const savedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -125,8 +130,6 @@ export default function ClaimDetailPage() {
 
   function statusConfirmCopy(status: TripClaimStatus | null) {
     switch (status) {
-      case 'Submitted':
-        return { title: 'Mark as submitted?', message: "Mark this claim as submitted to the NDIA? You can't change its lines after this.", confirmLabel: 'Mark as Submitted', variant: 'default' as const }
       case 'Paid':
         return { title: 'Mark as paid?', message: 'Mark this claim as paid? This cannot be undone.', confirmLabel: 'Mark as Paid', variant: 'default' as const }
       default:
@@ -142,6 +145,7 @@ export default function ClaimDetailPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
+      <AnnouncementRegion message={announcement} />
       {/* Breadcrumb — for Kind === 'Shift' claims there is no trip to link to (design spec §1/§2,
           PR 3: tripInstanceId is unset), so the period stands in place of the trip link. */}
       <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
@@ -178,16 +182,17 @@ export default function ClaimDetailPage() {
             <Button
               variant="secondary"
               size="md"
-              onClick={() => downloadFile(`/claims/${id}/bpr-csv`, `${claim.claimReference}-bpr.csv`)}
+              onClick={() => downloadFile(`/claims/${id}/bpr-csv`, `${claim.claimReference}-bpr.csv`, "Couldn't download the BPR CSV. Try again.").catch((err: Error) => setStatusError(err.message))}
             >
               <Download className="w-4 h-4" />
               BPR CSV
             </Button>
-            {claim.status === 'Draft' && (
+            {/* The moves CanMove allows; from Rejected it is the reissue path, and a shift claim has no other way back. */}
+            {(claim.status === 'Draft' || claim.status === 'Ready' || claim.status === 'Rejected') && (
               <Button
                 variant="primary"
                 size="md"
-                onClick={() => { setStatusError(null); setStatusConfirmTarget('Submitted') }}
+                onClick={() => { setStatusError(null); setSubmitting(true) }}
                 disabled={updateClaim.isPending}
               >
                 <Check className="w-4 h-4" />
@@ -252,6 +257,8 @@ export default function ClaimDetailPage() {
 
       {/* What this claim did to each participant's recorded plan, as of now. Absent when none of them has a plan that has started: no figure, not a zero. */}
       <ClaimBudgetBlock budget={claim.budget} />
+
+      <InvoicesSection claim={claim} onAnnounce={setAnnouncement} headingRef={invoicesHeadingRef} />
 
       {/* Empty notes stay available without taking attention from the claim's line items. */}
       {(notes || notesExpanded || notesEditorShown) ? <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] space-y-2">
@@ -393,15 +400,6 @@ export default function ClaimDetailPage() {
                         No Show
                       </button>
                     )}
-                    {(item.planType === 'PlanManaged' || item.planType === 'SelfManaged') && (
-                      <button
-                        onClick={() => downloadFile(`/claims/${id}/invoices/${item.participantBookingId}`, `invoice-${item.participantName.replace(/\s+/g, '-')}.pdf`)}
-                        className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
-                      >
-                        <Download className="w-3 h-3" />
-                        Invoice
-                      </button>
-                    )}
                   </div>
                 ),
             },
@@ -431,6 +429,13 @@ export default function ClaimDetailPage() {
           loading={updateClaim.isPending}
           onCancel={() => { if (!updateClaim.isPending) setStatusConfirmTarget(null) }}
           onConfirm={code => handleStatusChange('Rejected', code)}
+        />
+      )}
+      {submitting && id && (
+        <SubmitClaimDialog
+          claimId={id}
+          onCancel={() => setSubmitting(false)}
+          onSubmitted={announcement => { setSubmitting(false); setAnnouncement(announcement); focusInvoices.current = true }}
         />
       )}
       {recordingCode && (

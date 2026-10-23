@@ -8,6 +8,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Catalogue;
 using Odip.Tests.Postgres;
+using Odip.Tests.Support;
 using Xunit;
 
 namespace Odip.Tests.PlanPricing;
@@ -44,7 +45,7 @@ public class PlanPricingPostgresTests : IClassFixture<PostgresFixture>
         db.Tenants.Add(new Tenant { Id = tenantId, Name = "Live Provider", EmailDomain = $"{tenantId:N}.example.com" });
         db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Live Provider", State = "NSW", BSB = "062000", AccountNumber = "12345678" });
         db.PublicHolidays.Add(new PublicHoliday { Id = holidayId, Date = new DateOnly(2026, 10, 5), Name = "Labour Day", State = "NSW" });
-        await db.SaveChangesAsync();
+        await OlderSchemaSeeds.SaveWithLaterColumnsAsync(db);
 
         // 2. The migration applies without error and keeps every one of them as it was.
         await migrator.MigrateAsync();
