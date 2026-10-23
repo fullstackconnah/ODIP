@@ -77,22 +77,22 @@ export default function BillingDetailsSection(frame: SectionFrame) {
             {showBankDetails && (
               <SettingsGroup title="Bank account">
                 <div className={formGrid}>
-                  <TextField label="Account name" className={span.medium} value={p.form.bankAccountName} readOnly={locked} onChange={e => p.edit({ bankAccountName: e.target.value })} />
-                  <TextField label="BSB" hint="6 digits." inputMode="numeric" className={span.short} value={p.form.bsb} readOnly={locked} onChange={e => p.edit({ bsb: e.target.value })} />
-                  <TextField label="Account number" inputMode="numeric" className={span.short} value={p.form.accountNumber} readOnly={locked} onChange={e => p.edit({ accountNumber: e.target.value })} />
+                  <TextField label="Account name" hint={p.hint('bankAccountName')} className={span.medium} value={p.form.bankAccountName} readOnly={locked} onChange={e => p.edit({ bankAccountName: e.target.value })} />
+                  <TextField label="BSB" hint={p.hint('bsb', '6 digits.')} inputMode="numeric" className={span.short} value={p.form.bsb} readOnly={locked} onChange={e => p.edit({ bsb: e.target.value })} />
+                  <TextField label="Account number" hint={p.hint('accountNumber')} inputMode="numeric" className={span.short} value={p.form.accountNumber} readOnly={locked} onChange={e => p.edit({ accountNumber: e.target.value })} />
                 </div>
               </SettingsGroup>
             )}
             <SettingsGroup title="Invoice numbers">
               <div className={formGrid}>
-                <TextField label="Invoice prefix" hint="Printed before the number, as in INV-0042. New invoices only." maxLength={10} className={span.short} value={p.form.invoiceNumberPrefix} error={errors.invoiceNumberPrefix} readOnly={locked} onChange={e => p.edit({ invoiceNumberPrefix: e.target.value })} />
-                <TextField label="Credit note prefix" hint="As in CN-0007. New credit notes only." maxLength={10} className={span.short} value={p.form.creditNotePrefix} error={errors.creditNotePrefix} readOnly={locked} onChange={e => p.edit({ creditNotePrefix: e.target.value })} />
+                <TextField label="Invoice prefix" hint={p.hint('invoiceNumberPrefix', 'Printed before the number, as in INV-0042. New invoices only.')} maxLength={10} className={span.short} value={p.form.invoiceNumberPrefix} error={errors.invoiceNumberPrefix} readOnly={locked} onChange={e => p.edit({ invoiceNumberPrefix: e.target.value })} />
+                <TextField label="Credit note prefix" hint={p.hint('creditNotePrefix', 'As in CN-0007. New credit notes only.')} maxLength={10} className={span.short} value={p.form.creditNotePrefix} error={errors.creditNotePrefix} readOnly={locked} onChange={e => p.edit({ creditNotePrefix: e.target.value })} />
                 {/* One cell for both states, as tall as the longer hint: the invisible skeleton keeps the height when it flips (SHAPE C10). */}
                 <div className={`grid ${span.short}`}>
                   {issued ? (
                     <TextField label="Next invoice" hint="Set by the invoices already issued." className="[grid-area:1/1] [&_input]:bg-transparent" value={p.row!.nextInvoiceDisplayNumber} readOnly />
                   ) : (
-                    <NumberField label="First invoice number" hint={START_HINT} min={1} max={99_999_999} step={1} className="[grid-area:1/1]" value={p.form.invoiceStartNumber} error={errors.invoiceStartNumber} readOnly={locked} onChange={n => p.edit({ invoiceStartNumber: n })} />
+                    <NumberField label="First invoice number" hint={p.hint('invoiceStartNumber', START_HINT)} min={1} max={99_999_999} step={1} className="[grid-area:1/1]" value={p.form.invoiceStartNumber} error={errors.invoiceStartNumber} readOnly={locked} onChange={n => p.edit({ invoiceStartNumber: n })} />
                   )}
                   <div aria-hidden="true" className="invisible [grid-area:1/1]">
                     <span className={labelClass}>&nbsp;</span>
@@ -104,18 +104,19 @@ export default function BillingDetailsSection(frame: SectionFrame) {
             </SettingsGroup>
             <SettingsGroup title="Payment terms">
               <div className={formGrid}>
-                <NumberField label="Days to pay" hint="Each invoice is due this many days after it's issued. 0 means due on issue." min={0} max={365} step={1} className={span.short} value={p.form.paymentTermsDays} error={errors.paymentTermsDays} readOnly={locked} onChange={n => p.edit({ paymentTermsDays: n })} />
+                <NumberField label="Days to pay" hint={p.hint('paymentTermsDays', "Each invoice is due this many days after it's issued. 0 means due on issue.")} min={0} max={365} step={1} className={span.short} value={p.form.paymentTermsDays} error={errors.paymentTermsDays} readOnly={locked} onChange={n => p.edit({ paymentTermsDays: n })} />
               </div>
             </SettingsGroup>
             <SettingsGroup title="Tax and claiming">
-              <CheckboxField label="Registered for GST" checked={p.form.gstRegistered} disabled={locked} onChange={e => p.edit({ gstRegistered: e.target.checked })} />
-              <CheckboxField label="PACE provider" hint="Claim files use the 16-column PACE bulk payment request layout." checked={p.form.isPaceProvider} disabled={locked} onChange={e => p.edit({ isPaceProvider: e.target.checked })} />
+              <CheckboxField label="Registered for GST" hint={p.hint('gstRegistered')} checked={p.form.gstRegistered} disabled={locked} onChange={e => p.edit({ gstRegistered: e.target.checked })} />
+              <CheckboxField label="PACE provider" hint={p.hint('isPaceProvider', 'Claim files use the 16-column PACE bulk payment request layout.')} checked={p.form.isPaceProvider} disabled={locked} onChange={e => p.edit({ isPaceProvider: e.target.checked })} />
             </SettingsGroup>
             <SettingsGroup title="Invoice note">
               <TextAreaField
                 label="Note at the foot of every invoice"
                 rows={3}
                 placeholder="For example: All services are delivered in line with the NDIS Code of Conduct."
+                hint={p.hint('invoiceFooterNotes')}
                 value={p.form.invoiceFooterNotes}
                 readOnly={locked}
                 onChange={e => p.edit({ invoiceFooterNotes: e.target.value })}

@@ -33,10 +33,15 @@ function makeSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSet
     id: 'ps-1', registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sunrise Support Services', address: '12 Wattle St, Brisbane QLD 4000',
     state: 'QLD', gstRegistered: true, isPaceProvider: false, bankAccountName: 'Sunrise Support', bsb: '064-000', accountNumber: '12345678',
     invoiceFooterNotes: 'Thank you for choosing Sunrise.', managerName: 'Priya Sharma', managerPhone: '0412 345 007',
-    participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
+    participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', updatedAt: V1,
     invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false, ...overrides,
   }
 }
+
+// The row's version: the server moves it on every save, and refuses a PUT whose expectedUpdatedAt is not the current one (409).
+const V1 = '2026-10-23T01:00:00.123456Z'
+const V2 = '2026-10-23T01:05:00.654321Z'
+const CHANGED_BY_OTHER = 'Settings were changed by someone else. Reload and try again.'
 
 /** The fake server's row: what the next GET returns, and what a PUT merges the sent fields into. Null: the organisation has no row. */
 let server: ProviderSettingsDto | null
@@ -44,9 +49,11 @@ let server: ProviderSettingsDto | null
 beforeEach(() => {
   server = makeSettings()
   mockApiGet.mockReset().mockImplementation(async (url: string) => (url === '/provider-settings' ? server : []))
-  mockApiPut.mockReset().mockImplementation(async (_url: string, body: Partial<ProviderSettingsDto>) => {
-    server = { ...(server ?? ({} as ProviderSettingsDto)), ...body }
-    return true
+  mockApiPut.mockReset().mockImplementation(async (_url: string, body: Partial<ProviderSettingsDto> & { expectedUpdatedAt?: string }) => {
+    const { expectedUpdatedAt, ...fields } = body
+    if (expectedUpdatedAt && expectedUpdatedAt !== server?.updatedAt) throw { response: { status: 409, data: { success: false, errors: [CHANGED_BY_OTHER] } } }
+    server = { ...(server ?? ({} as ProviderSettingsDto)), ...fields, updatedAt: `${new Date().toISOString().slice(0, -1)}000Z` }
+    return server.updatedAt   // the PUT answers the row's new version
   })
   mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
   screenSize.belowMd = false
@@ -73,7 +80,7 @@ function putBody(nth = 0): Record<string, unknown> {
 
 /** The row as the server held it, as a section PUTs it back: every field except the two modes and the four numbering fields, which go only when changed (an override is a change). */
 function rowWithoutModes(row: ProviderSettingsDto, overrides: Partial<ProviderSettingsDto> = {}) {
-  const body: Partial<ProviderSettingsDto> = { ...row }
+  const body: Partial<ProviderSettingsDto> & { expectedUpdatedAt?: string } = { ...row }
   delete body.participantReadinessMode
   delete body.medicationCompetencyMode
   delete body.employmentHeroConnected
@@ -83,6 +90,9 @@ function rowWithoutModes(row: ProviderSettingsDto, overrides: Partial<ProviderSe
   delete body.creditNotePrefix
   delete body.invoiceStartNumber
   delete body.paymentTermsDays
+  // The version the row was loaded at goes back as expectedUpdatedAt (never as updatedAt).
+  body.expectedUpdatedAt = row.updatedAt
+  delete (body as { updatedAt?: string }).updatedAt
   return { ...body, ...overrides }
 }
 
@@ -141,6 +151,8 @@ describe('Organisation profile', () => {
     mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
     await user.click(saveButton())
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    const putVersion = server?.updatedAt
+    expect(putVersion).not.toBe(V1)
 
     const abn = screen.getByLabelText('ABN')
     await user.clear(abn)
@@ -148,7 +160,8 @@ describe('Organisation profile', () => {
     await user.click(saveButton())
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
-    expect(putBody(1)).toEqual(rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }))
+    // The first save moved the version and the refetch that would say to what never lands, so the second save carries the version the first PUT answered.
+    expect(putBody(1)).toEqual({ ...rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }), expectedUpdatedAt: putVersion })
   })
 
   it('never writes back the Employment Hero flag the GET computes', async () => {
@@ -273,6 +286,62 @@ describe('Billing details', () => {
     expect(server?.bsb).toBe('064-000')
   })
 
+  it("a save from an older form is refused in the section's words, reseeds from the refetched row keeping the edit, marks what moved, and the retry sends what the screen shows", async () => {
+    const user = userEvent.setup()
+    renderSection('billing')
+    const bsb = await screen.findByLabelText('BSB')
+    await user.clear(bsb)
+    await user.type(bsb, '063-000')
+    // Another Admin saves a new account number after this form loaded.
+    server = makeSettings({ accountNumber: '99999999', updatedAt: V2 })
+
+    await user.click(saveButton())
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Not saved. Someone else changed these settings. Their changes are shown and your edits kept; save again.')
+    expect(putBody()).toMatchObject({ expectedUpdatedAt: V1, bsb: '063-000' })
+    expect(server?.bsb).toBe('064-000')
+    // The refetch lands: the untouched field shows the other Admin's value and says so in its hint, the edited one keeps what was typed.
+    await waitFor(() => expect(screen.getByLabelText('Account number')).toHaveValue('99999999'))
+    expect(screen.getByLabelText('Account number')).toHaveAccessibleDescription('Changed by someone else.')
+    expect(screen.getByLabelText('BSB')).toHaveValue('063-000')
+    expect(screen.getByLabelText('BSB')).toHaveAccessibleDescription('6 digits.')
+    expect(saveButton()).toBeEnabled()
+
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toMatchObject({ expectedUpdatedAt: V2, bsb: '063-000', accountNumber: '99999999' })
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Account number')).not.toHaveAccessibleDescription()
+    expect(screen.getByLabelText('Account number')).toHaveValue('99999999')
+    expect(server).toMatchObject({ bsb: '063-000', accountNumber: '99999999' })
+  })
+
+  it('after a refused save, an edit to the same field the other Admin changed keeps the typed value and the hint still says so until it is edited', async () => {
+    const user = userEvent.setup()
+    renderSection('billing')
+    const account = await screen.findByLabelText('Account number')
+    await user.clear(account)
+    await user.type(account, '12345679')
+    server = makeSettings({ accountNumber: '99999999', bsb: '063-000', updatedAt: V2 })
+
+    await user.click(saveButton())
+
+    await waitFor(() => expect(screen.getByLabelText('BSB')).toHaveValue('063-000'))
+    expect(screen.getByLabelText('Account number')).toHaveValue('12345679')
+    expect(screen.getByLabelText('BSB')).toHaveAccessibleDescription('Changed by someone else. 6 digits.')
+    expect(screen.getByLabelText('Account number')).toHaveAccessibleDescription('Changed by someone else.')
+    await user.type(screen.getByLabelText('BSB'), '1')
+    expect(screen.getByLabelText('BSB')).toHaveAccessibleDescription('6 digits.')
+    await user.clear(screen.getByLabelText('BSB'))
+    await user.type(screen.getByLabelText('BSB'), '063-000')
+    await user.click(saveButton())
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toMatchObject({ expectedUpdatedAt: V2, bsb: '063-000', accountNumber: '12345679' })
+  })
+
   it('hides the bank account from a Coordinator, and has no Save', async () => {
     mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Coordinator)
     renderSection('billing')
@@ -287,6 +356,7 @@ describe('Billing details: invoice numbers and payment terms', () => {
   const prefix = () => screen.getByLabelText('Invoice prefix')
   const startNumber = () => screen.getByLabelText('First invoice number')
   const daysToPay = () => screen.getByLabelText('Days to pay')
+  const rowReads = () => mockApiGet.mock.calls.filter(([url]) => url === '/provider-settings').length
   async function open() {
     renderSection('billing')
     await screen.findByLabelText('Invoice prefix')
@@ -390,6 +460,58 @@ describe('Billing details: invoice numbers and payment terms', () => {
     // The typed start number is dropped once the cell flips: the row's own value goes back, which the server reads as unchanged.
     expect(putBody(1)).toEqual(rowWithoutModes(makeSettings({ invoicesIssued: true }), { paymentTermsDays: 30, invoiceStartNumber: 1 }))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
+  })
+
+  it('after a refused save, the four billing numbering fields the other Admin moved say so in their hints, and a field they left alone keeps its own', async () => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, screen.getByLabelText('BSB'), '063-000')
+    server = makeSettings({ invoiceNumberPrefix: 'OAS-', creditNotePrefix: 'OCN-', invoiceStartNumber: 500, paymentTermsDays: 30, updatedAt: V2 })
+
+    await user.click(saveButton())
+
+    await waitFor(() => expect(daysToPay()).toHaveValue(30))
+    expect(daysToPay()).toHaveAccessibleDescription("Changed by someone else. Each invoice is due this many days after it's issued. 0 means due on issue.")
+    expect(prefix()).toHaveAccessibleDescription('Changed by someone else. Printed before the number, as in INV-0042. New invoices only.')
+    expect(screen.getByLabelText('Credit note prefix')).toHaveAccessibleDescription('Changed by someone else. As in CN-0007. New credit notes only.')
+    expect(startNumber()).toHaveAccessibleDescription("Changed by someone else. Carry on from your old system's numbers. It can't change once an invoice is issued.")
+    expect(screen.getByLabelText('Account number')).not.toHaveAccessibleDescription()
+    await retype(user, daysToPay(), '45')
+    expect(daysToPay()).toHaveAccessibleDescription("Each invoice is due this many days after it's issued. 0 means due on issue.")
+  })
+
+  it("the stale-save code alone reseeds the form, whatever the server's sentence says (the copy was edited)", async () => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, screen.getByLabelText('BSB'), '063-000')
+    server = makeSettings({ accountNumber: '99999999', updatedAt: V2 })
+    mockApiPut.mockRejectedValueOnce({ response: { status: 409, data: { success: false, code: 'PROVIDER_SETTINGS_CHANGED', errors: ['Somebody reworded this sentence.'] } } })
+
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Someone else changed these settings. Their changes are shown and your edits kept; save again.')
+    await waitFor(() => expect(screen.getByLabelText('Account number')).toHaveValue('99999999'))
+    expect(screen.getByLabelText('Account number')).toHaveAccessibleDescription('Changed by someone else.')
+    expect(screen.getByLabelText('BSB')).toHaveValue('063-000')
+  })
+
+  it("a start-number 409 shows the server's words and leaves the form alone: no reseed, no hint", async () => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, startNumber(), '1001')
+    // Another Admin also changed the days to pay, so a reseed would show it; the start-number refusal must not.
+    server = makeSettings({ paymentTermsDays: 30, updatedAt: V2 })
+    const readsBefore = rowReads()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ["Invoice numbers have started, so the starting number can't change."] } } })
+
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Not saved. Invoice numbers have started, so the starting number can't change.")
+    await waitFor(() => expect(rowReads()).toBeGreaterThan(readsBefore))
+    expect(startNumber()).toHaveValue(1001)
+    expect(daysToPay()).toHaveValue(14)
+    expect(daysToPay()).toHaveAccessibleDescription("Each invoice is due this many days after it's issued. 0 means due on issue.")
+    expect(screen.queryByText(/Changed by someone else/)).not.toBeInTheDocument()
   })
 
   it('a save from another section sends none of the numbering fields from its cached row, so it cannot put back what another Admin set', async () => {
