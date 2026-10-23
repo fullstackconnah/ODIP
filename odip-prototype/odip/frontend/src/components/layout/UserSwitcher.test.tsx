@@ -292,5 +292,6 @@ describe('UserSwitcher — label stays on one line in the header bar', () => {
     expect(idle.className).toContain('whitespace-nowrap')
     expect(idle.className).toContain('truncate')
     expect(idle.className).toContain('min-w-0')
+    expect(idle.className).toContain('min-[1400px]:max-w-[20rem]')
   })
 })

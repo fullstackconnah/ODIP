@@ -164,5 +164,6 @@ describe('TenantSwitcher — label stays on one line in the header bar', () => {
     expect(label.className).toContain('whitespace-nowrap')
     expect(label.className).toContain('truncate')
     expect(label.className).toContain('min-w-0')
+    expect(label.className).toContain('min-[1400px]:max-w-[20rem]')
   })
 })

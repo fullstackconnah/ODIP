@@ -79,7 +79,7 @@ export default function UserSwitcher() {
         className={`flex min-h-[var(--tap-min)] items-center gap-1.5 ${TONE.warning.solid} border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 cursor-pointer hover:brightness-95 transition-[filter]`}
       >
         <span className="text-xs bg-[var(--color-on-warning-container)] text-[var(--color-card)] px-1.5 py-0.5 rounded font-bold tracking-wide">USR</span>
-        <span className="hidden min-w-0 max-w-[12rem] truncate whitespace-nowrap text-sm font-semibold sm:block">
+        <span className="hidden min-w-0 max-w-[12rem] min-[1400px]:max-w-[20rem] truncate whitespace-nowrap text-sm font-semibold sm:block">
           {currentViewUser?.fullName ?? 'View as user…'}
         </span>
         <span className="text-xs">▾</span>
