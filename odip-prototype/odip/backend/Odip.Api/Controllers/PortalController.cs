@@ -211,7 +211,7 @@ public class PortalController : ControllerBase
         // slots already fetched above, so the detail never queries them twice. In ENFORCE mode a worker without a current Medication
         // Competency cannot record a dose, so no dose blocks them; in WARN mode (the default) they can record (flagged), so doses block
         // them like anyone (see ShiftPackageService). A dose whose time has not arrived yet never blocks either.
-        var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, ct);
+        var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, shift.TenantId, ct);
         var finishBlockers = shift.Status == ShiftStatus.InProgress
             ? ShiftPackageService.BuildFinishBlockers(
                 doses.Slots, breakRunning: breakDtos.Any(b => b.IsRunning), access.CanRecord, NowUtc, provider.Zone)
@@ -474,7 +474,7 @@ public class PortalController : ControllerBase
         if (shift.Status == ShiftStatus.InProgress)
         {
             var checkedCompletion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
-            var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, ct);
+            var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, shift.TenantId, ct);
             var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, access.CanRecord, ct);
             if (blockers.Count > 0)
             {

@@ -79,21 +79,21 @@ public class UnscopedSuperAdminResolverTests
     [Fact]
     public async Task CompetencyMode_UnscopedSuperAdmin_IsTheDefaultWarn()
     {
-        var access = await new MedicationAdministrationRecorder(Create(null, true)).CheckRecordingAccessAsync(null, default);
+        var access = await new MedicationAdministrationRecorder(Create(null, true)).CheckRecordingAccessAsync(null, Guid.NewGuid(), default);
         Assert.Equal(MedicationCompetencyMode.Warn, access.Mode);
     }
 
     [Fact]
     public async Task CompetencyMode_SuperAdminViewingAsATenant_IsThatTenants()
     {
-        var access = await new MedicationAdministrationRecorder(Create(A, true)).CheckRecordingAccessAsync(null, default);
+        var access = await new MedicationAdministrationRecorder(Create(null, true)).CheckRecordingAccessAsync(null, A, default);
         Assert.Equal(MedicationCompetencyMode.Enforce, access.Mode);
     }
 
     [Fact]
     public async Task CompetencyMode_Admin_IsTheirOrganisations()
     {
-        var access = await new MedicationAdministrationRecorder(Create(B, false)).CheckRecordingAccessAsync(null, default);
+        var access = await new MedicationAdministrationRecorder(Create(B, false)).CheckRecordingAccessAsync(null, B, default);
         Assert.Equal(MedicationCompetencyMode.Enforce, access.Mode);
     }
 }
