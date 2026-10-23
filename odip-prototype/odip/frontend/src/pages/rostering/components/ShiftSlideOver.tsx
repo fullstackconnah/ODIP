@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Trash2, AlertTriangle, ChevronRight } from 'lucide-react'
 import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType, ShiftStatus } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES, COORDINATOR_SETTABLE_SHIFT_STATUSES } from '@/api/types'
@@ -250,6 +250,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   useEffect(() => {
     if (refusalKey !== null && canWrite) bringIntoView(gateBlockRef.current)
   }, [refusalKey, canWrite])
+
+  // The foot notice (a refusal, or the refreshed-board sentence) is at the end of a long form: a person who pressed Save from the top has to be shown why nothing happened.
+  // A stable callback ref runs when the notice mounts, not on every render.
+  const showFootNotice = useCallback((el: HTMLDivElement | null) => bringIntoView(el), [])
 
   if (!open) return null
 
@@ -677,12 +681,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {budgetNote && <p className="text-[13px] text-[var(--color-muted-foreground)]">{budgetNote}</p>}
 
         {footError && (
-          <div role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
+          <div ref={showFootNotice} role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
             {footError}
             {shownError?.boardChanged && <RefreshBoardAction announce={setRefreshSaid} onRefreshed={boardRefreshed} />}
           </div>
         )}
-        {refreshDone && <Callout tone={refreshDone.gone ? 'warning' : 'success'} announce={false}>{refreshDone.text}</Callout>}
+        {refreshDone && <div ref={showFootNotice}><Callout tone={refreshDone.gone ? 'warning' : 'success'} announce={false}>{refreshDone.text}</Callout></div>}
       </SlideOver>
 
       <ConfirmDialog

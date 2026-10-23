@@ -194,6 +194,39 @@ describe('the board-changed 409 offers Refresh the board (real QueryClient)', ()
     }
   })
 
+  it('keeps the success notice the size of the refusal it replaces, so the grid does not move when Refresh succeeds', async () => {
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
+    await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+    await screen.findByRole('button', { name: 'Dismiss notice' })
+    const notice = document.body
+    // jsdom has no layout: the measured check is the shots script. Here, the refusal's sentence and the action row sit invisible in the notice.
+    expect(notice.querySelector('[aria-hidden="true"][data-reserve]')).toHaveAttribute('data-reserve', BOARD_CHANGED)
+    expect(notice.querySelector('.invisible [aria-busy], .invisible button')).not.toBeNull()
+  })
+
+  it('holds the success notice while a staff member is being carried, and clears it a few seconds after the drop', async () => {
+    const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
+    const scrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn()   // dnd-kit's KeyboardSensor calls it when it lifts
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      await user.click(screen.getByRole('button', { name: 'Refresh the board' }))
+      await screen.findByRole('button', { name: 'Dismiss notice' })
+      screen.getByRole('button', { name: /^Sam Wilson, / }).focus()
+      await user.keyboard(' ')
+      await screen.findByText('Picked up Sam Wilson.')
+      act(() => { vi.advanceTimersByTime(20000) })
+      expect(screen.getByRole('button', { name: 'Dismiss notice' })).toBeInTheDocument()
+      await user.keyboard('{Escape}')
+      await screen.findByText('Cancelled. Nothing changed.')
+      act(() => { vi.advanceTimersByTime(6000) })
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Dismiss notice' })).not.toBeInTheDocument())
+    } finally {
+      vi.useRealTimers()
+      Element.prototype.scrollIntoView = scrollIntoView
+    }
+  })
+
   it('a refresh that resolves after a newer write began says nothing and takes no focus', async () => {
     const { user } = await refuse(u => pick(u, /^Kim Lee/), boardChanged())
     await waitFor(() => expect(boardGets()).toBeGreaterThanOrEqual(2))
@@ -272,6 +305,23 @@ describe('the shift panel: an empty-day move (POST shifts with moveFromShiftId)'
     expect(h.post).toHaveBeenCalledWith('/rostering/shifts', expect.objectContaining({ moveFromShiftId: 'sam-wed', staffId: 'staff-2' }))
     if (shows) expect(refreshButton()).toBeInTheDocument()
     else expect(refreshButton()).not.toBeInTheDocument()
+  })
+
+  it('brings the refusal at the foot of the panel into view when it appears', async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = Element.prototype.scrollIntoView
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy   // jsdom has no layout, so no scrollIntoView: the call is what is checked
+    try {
+      h.post.mockRejectedValue(boardChanged())
+      renderPanel()
+      await user.click(saveButton())
+      const notice = (await screen.findByText(BOARD_CHANGED)).closest('[role="alert"]')
+      expect(spy).toHaveBeenCalledWith({ block: 'nearest', behavior: 'auto' })   // instant: jsdom has no matchMedia, which reads as reduced motion
+      expect(spy.mock.contexts).toContain(notice)
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView
+    }
   })
 
   it('refreshes for real; with Sam still on the shift he was carried off, it says the board is up to date and Save keeps the move', async () => {
