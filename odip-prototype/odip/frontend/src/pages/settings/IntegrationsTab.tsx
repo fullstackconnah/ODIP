@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   useConnectEmploymentHero, useDisconnectEmploymentHero, useDismissEmploymentHeroItem, useEmploymentHeroBusinesses,
@@ -198,9 +198,9 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
 
 /** TanStack clears `error` the moment a retry starts; keep the last one so the banner keeps the server's words (and its height) through the retry. */
 function useLastError(error: unknown): unknown {
-  const last = useRef<unknown>(null)
-  if (error != null) last.current = error
-  return error ?? last.current
+  const [last, setLast] = useState<unknown>(null)
+  if (error != null && error !== last) setLast(error)
+  return error ?? last
 }
 
 const WORK_TYPE_FIELDS: { key: keyof EmploymentHeroWorkTypesDto; label: string; none: string }[] = [
