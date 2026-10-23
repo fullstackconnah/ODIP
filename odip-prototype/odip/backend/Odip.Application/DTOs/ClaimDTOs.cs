@@ -220,6 +220,96 @@ public record ShiftClaimGeneratedDto : TripClaimListDto
 }
 
 // ══════════════════════════════════════════════════════════════
+// INVOICE DTOs (Xero PR1)
+// ══════════════════════════════════════════════════════════════
+
+/// <summary>A claim's Invoices section (D19). InvoiceState is "preview" (not submitted, no rows), "issued" (has rows), "legacy" (submitted before numbering, no rows) or "none" (no plan- or self-managed payer).</summary>
+public record ClaimInvoicesDto
+{
+    public string InvoiceState { get; init; } = "none";
+    /// <summary>By number, each credit note directly under the invoice it credits.</summary>
+    public List<InvoiceSummaryDto> Invoices { get; init; } = new();
+    /// <summary>Every plan- and self-managed payer (the preview and legacy rows).</summary>
+    public List<PayerGroupDto> Groups { get; init; } = new();
+    /// <summary>The agency-managed participants on the claim (claimed in the BPR CSV, not invoiced).</summary>
+    public int AgencyCount { get; init; }
+}
+
+public record InvoiceSummaryDto
+{
+    public Guid Id { get; init; }
+    public InvoiceKind Kind { get; init; }
+    public int Number { get; init; }
+    public string DisplayNumber { get; init; } = string.Empty;
+    public InvoiceStatus Status { get; init; }
+    /// <summary>The booking (trip claim) or participant (shift claim) it bills for.</summary>
+    public Guid GroupId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string BillToName { get; init; } = string.Empty;
+    public PlanType PayerKind { get; init; }
+    public DateOnly IssueDate { get; init; }
+    public DateOnly? DueDate { get; init; }
+    public decimal Total { get; init; }
+    /// <summary>On a credit note: the invoice it credits.</summary>
+    public string? CreditsDisplayNumber { get; init; }
+    /// <summary>On a credited invoice: its credit note.</summary>
+    public string? CreditedByDisplayNumber { get; init; }
+    /// <summary>A payment is recorded against it (a covered line paid or part paid, or the claim marked paid): it can only be credited, never voided.</summary>
+    public bool PaymentRecorded { get; init; }
+}
+
+public record PayerGroupDto
+{
+    public Guid GroupId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string BillToName { get; init; } = string.Empty;
+    public PlanType PayerKind { get; init; }
+    /// <summary>Subtotal plus GST, as the invoice would be.</summary>
+    public decimal Total { get; init; }
+}
+
+/// <summary>Why an invoice is voided or credited: required, 1 to 500 characters; kept in the audit log, never printed.</summary>
+public record InvoiceReasonDto
+{
+    public string? Reason { get; init; }
+}
+
+/// <summary>The claims a submit confirm is about: one (claim detail, the trip tab's row) or a selection (the trip tab's bulk change), 1 to 100.</summary>
+public record SubmitPreviewRequestDto
+{
+    public List<Guid> ClaimIds { get; init; } = new();
+}
+
+/// <summary>What marking these claims as submitted would issue now. Numbers are predictions: a concurrent issue can take them first.</summary>
+public record SubmitPreviewDto
+{
+    public List<ClaimSubmitPreviewDto> Claims { get; init; } = new();
+    /// <summary>The invoices all of them would issue together.</summary>
+    public int InvoiceCount { get; init; }
+}
+
+public record ClaimSubmitPreviewDto
+{
+    public Guid ClaimId { get; init; }
+    /// <summary>Empty unless the claim is Draft, Ready or Rejected (only those move to Submitted).</summary>
+    public List<PendingInvoiceDto> ToIssue { get; init; } = new();
+    /// <summary>The claim's invoices that stand already and stay as they are.</summary>
+    public int AlreadyIssued { get; init; }
+    /// <summary>An invoice is due and the organisation has no settings row: submitting would be refused.</summary>
+    public bool MissingSettings { get; init; }
+}
+
+public record PendingInvoiceDto
+{
+    public Guid GroupId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string BillToName { get; init; } = string.Empty;
+    public decimal Total { get; init; }
+    /// <summary>Null when the settings are missing.</summary>
+    public string? PredictedNumber { get; init; }
+}
+
+// ══════════════════════════════════════════════════════════════
 // PROVIDER SETTINGS DTOs
 // ══════════════════════════════════════════════════════════════
 
@@ -248,6 +338,16 @@ public record ProviderSettingsDto
 
     /// <summary>The organisation's staff come from Employment Hero: the frontend hides "New staff member" and the staff import, and the server refuses them.</summary>
     public bool EmploymentHeroConnected { get; init; }
+
+    /// <summary>Invoice numbering and terms (Xero PR1).</summary>
+    public string InvoiceNumberPrefix { get; init; } = "INV-";
+    public string CreditNotePrefix { get; init; } = "CN-";
+    public int InvoiceStartNumber { get; init; } = 1;
+    public int PaymentTermsDays { get; init; } = 14;
+    /// <summary>Read-only: the number the next invoice will get ("INV-0043"), from the organisation's counter, else the start number.</summary>
+    public string NextInvoiceDisplayNumber { get; init; } = string.Empty;
+    /// <summary>Read-only: the organisation has issued an invoice, so the start number is locked.</summary>
+    public bool InvoicesIssued { get; init; }
 }
 
 public record UpsertProviderSettingsDto
@@ -289,6 +389,13 @@ public record UpsertProviderSettingsDto
     /// (it is last-write-wins: a form that re-sent a stale value would silently undo another admin's change). Only Warn and Enforce are accepted
     /// (400 otherwise). A change that actually alters the stored mode writes one audit row (ProviderSettings, MedicationCompetencyMode, old, new, who).</summary>
     public MedicationCompetencyMode? MedicationCompetencyMode { get; init; }
+
+    /// <summary>Each is applied only when sent and different from the stored value (every settings section echoes the whole row), and each change is
+    /// audited as one field change. A changed start number is refused (409) once the organisation has issued an invoice.</summary>
+    public string? InvoiceNumberPrefix { get; init; }
+    public string? CreditNotePrefix { get; init; }
+    public int? InvoiceStartNumber { get; init; }
+    public int? PaymentTermsDays { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════
