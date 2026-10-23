@@ -951,11 +951,11 @@ public class RosteringController : ControllerBase
                 var shifts = worker.OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ToList();
                 string NameOf(Shift s) => participantNames.GetValueOrDefault(s.ParticipantId) ?? "a participant";
                 var first = shifts[0];
-                // shortcut: the digest dedupes on its earliest shift, so a ShiftAssigned for that one shift in the last 5 minutes swallows it; give the digest an entity of its own if that bites.
+                // No dedupe: Publish week only publishes Drafts under the board lock, so a repeat publish finds none to tell about.
                 await _notificationRaiser.RaiseAsync(
                     Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", first.Id, new[] { worker.Key },
                     new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(email, NameOf(first), first.ServiceDate, first.StartTime, first.EndTime,
-                        shifts.Skip(1).Select(s => new Odip.Infrastructure.Notifications.Templates.ShiftAssignedLine(NameOf(s), s.ServiceDate, s.StartTime, s.EndTime)).ToList()), ct);
+                        shifts.Skip(1).Select(s => new Odip.Infrastructure.Notifications.Templates.ShiftAssignedLine(NameOf(s), s.ServiceDate, s.StartTime, s.EndTime)).ToList()), ct, dedupe: false);
             }
 
             await _db.SaveChangesAsync(ct);

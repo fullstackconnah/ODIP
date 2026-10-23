@@ -12,6 +12,7 @@ using Odip.Domain.Notifications;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Notifications;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Support;
@@ -821,6 +822,30 @@ public class RosterBoardDragDropTests
         Assert.Contains("2026-08-30", payload);
         Assert.Contains("16:00", payload);
         _ = alreadyOut;   // already Published: nobody is told again
+    }
+
+    [Fact]
+    public async Task PublishWeek_StillTellsAWorkerWhoseEarliestShiftWasJustAssigned()   // the 5-minute dedupe must not swallow the digest
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(dbName, tenant);
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var monday = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(6), startHour: 16, endHour: 20);
+        // Sam was told about Monday's shift a moment ago; Monday then went back to Draft, so this publish is his only notice of it.
+        await new NotificationRaiser(db).RaiseAsync(NotificationEventType.ShiftAssigned, "Shift", monday.Id, new[] { sam.Id }, new { }, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default));
+
+        Assert.Equal(1, result.Notified);
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, monday.Id)).Status);
+        Assert.Equal(2, await db.NotificationOutbox.CountAsync());   // the earlier notice, then this publish's digest
+        Assert.Equal(2, await db.InAppNotifications.CountAsync());
+        // The digest lists Sunday under MoreShifts.
+        Assert.Contains((await db.NotificationOutbox.ToListAsync()).Select(o => o.PayloadJson), p => p.Contains("2026-08-30"));
     }
 
     [Fact]
