@@ -295,7 +295,7 @@ export default function QualificationsPage() {
                           const isSaving = savingKey === q.key || (isEditing && rereading) // one editor is open at a time, so rereading belongs to it
                           return isEditing ? (
                             <div className="flex items-center gap-1.5 pointer-coarse:gap-2 justify-end">
-                              <Button size="sm" onClick={() => handleSave(q)} disabled={isSaving}>
+                              <Button size="sm" onClick={() => handleSave(q)} disabled={isSaving || updateStaff.isPending}>
                                 {isSaving ? 'Saving…' : 'Save'}
                               </Button>
                               <Button variant="ghost" size="sm" onClick={closeEditor}>

@@ -285,10 +285,18 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
     expect(screen.queryByText(/Failed to save/)).not.toBeInTheDocument()
   })
 
-  it('says Saving… only on the row being saved: Save of row B stays enabled while the PUT of row A is held', async () => {
+  it('says Saving… only on the row being saved, and holds the Save of every other row until the PUT of row A lands', async () => {
     await holdIvyPutThenOpenAnotherRow()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    const saveB = screen.getByRole('button', { name: 'Save' })
+    expect(saveB).toBeDisabled() // B would re-read the record before A landed and write A's old value back
     expect(screen.queryByRole('button', { name: 'Saving…' })).not.toBeInTheDocument()
+
+    mockApiGet.mockClear()
+    fireEvent.click(saveB)
+    await Promise.resolve()
+    expect(mockApiGet).not.toHaveBeenCalled()
+    expect(mockMutate).toHaveBeenCalledTimes(1) // still only A's PUT
+    expect(mockMutate.mock.calls[0][0].data).toEqual(expect.objectContaining({ isActive: true, medicationCompetencyExpiryDate: '2027-01-02' }))
   })
 
   it('falls back to the record loaded with the page when the re-read fails', async () => {
