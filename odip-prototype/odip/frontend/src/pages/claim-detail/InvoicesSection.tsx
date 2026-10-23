@@ -148,7 +148,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 key: 'billTo',
                 header: 'Bill to',
                 render: (row: InvoiceRow) => (
-                  <div className="md:max-w-[16rem] xl:max-w-[24rem]">
+                  <div className="md:max-w-[15rem] 2xl:max-w-[24rem]">
                     <CellText className="text-sm text-[var(--color-foreground)]">{row.payer.billToName}</CellText>
                     <p className={MUTED_LINE}>{payerLine(row.payer)}</p>
                   </div>
@@ -197,7 +197,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 key: 'actions',
                 header: '',
                 // Reserved for the widest pair (Download and "Issue credit note") in every state, so the column keeps its width when Void goes.
-                minWidth: canCorrectInvoices ? '17rem' : undefined,
+                minWidth: canCorrectInvoices ? '17.75rem' : undefined,
                 className: 'max-md:basis-full',
                 render: (row: InvoiceRow) => {
                   const target = file(row)

@@ -166,7 +166,7 @@ describe('InvoicesSection', () => {
 
     await screen.findByRole('button', { name: 'Preview invoice for Sam Lee' })
     const actionsHeader = screen.getAllByRole('columnheader').at(-1)!
-    expect(actionsHeader.style.getPropertyValue('--col-min')).toBe('17rem')   // the measured widest pair: Download and "Issue credit note"
+    expect(actionsHeader.style.getPropertyValue('--col-min')).toBe('17.75rem')   // the measured widest pair (Download and "Issue credit note") plus the cell padding: 282px
   })
 
   it('the Status column is reserved at one width, so a pill swap (Issued to Voided or Credited) never widens the table (SHAPE C3)', async () => {
