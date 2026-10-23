@@ -88,6 +88,17 @@ public class OdipDbContext : DbContext
     public DbSet<SupportActivityGroup> SupportActivityGroups => Set<SupportActivityGroup>();
     public DbSet<SupportCatalogueItem> SupportCatalogueItems => Set<SupportCatalogueItem>();
     public DbSet<ProviderSettings> ProviderSettings => Set<ProviderSettings>();
+
+    /// <summary>
+    /// The caller's own provider-settings row. A SuperAdmin's query filter is off, so a plain <c>FirstOrDefault</c> on <see cref="ProviderSettings"/> lands on an arbitrary
+    /// organisation: unscoped there is no row (callers use their no-row defaults), viewing as an organisation only that organisation's row. Everyone else is filtered as usual.
+    /// </summary>
+    public IQueryable<ProviderSettings> ScopedProviderSettings()
+    {
+        if (!_tenant.IsSuperAdmin) return ProviderSettings;
+        var tenantId = _tenant.TenantId;
+        return ProviderSettings.Where(p => tenantId != null && p.TenantId == tenantId);
+    }
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<PublicHolidayOverride> PublicHolidayOverrides => Set<PublicHolidayOverride>();
     public DbSet<PlanPricingSettings> PlanPricingSettings => Set<PlanPricingSettings>();
@@ -139,6 +150,7 @@ public class OdipDbContext : DbContext
     public DbSet<EmploymentHeroConnection> EmploymentHeroConnections => Set<EmploymentHeroConnection>();
     public DbSet<EmploymentHeroAttention> EmploymentHeroAttentions => Set<EmploymentHeroAttention>();
     public DbSet<EmploymentHeroSyncLog> EmploymentHeroSyncLogs => Set<EmploymentHeroSyncLog>();
+    public DbSet<EmploymentHeroOutbox> EmploymentHeroOutbox => Set<EmploymentHeroOutbox>();
 
     /// <summary>
     /// Who the audit rows this context writes name when no person did the work (the Employment Hero sync sets "Employment Hero sync"). When set it wins
@@ -1882,6 +1894,10 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.BusinessName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.ConnectedByName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.LastSyncError).HasMaxLength(300);
+            entity.Property(e => e.WorkTypeStandard).HasMaxLength(20);
+            entity.Property(e => e.WorkTypeActiveNight).HasMaxLength(20);
+            entity.Property(e => e.WorkTypePassiveNight).HasMaxLength(20);
+            entity.Property(e => e.WorkTypeSleepover).HasMaxLength(20);
             // One connection per organisation.
             entity.HasIndex(e => e.TenantId).IsUnique();
         });
@@ -1900,6 +1916,18 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.BusinessId).HasMaxLength(20).IsRequired();
             entity.Property(e => e.ErrorClass).HasMaxLength(50);
             entity.HasIndex(e => new { e.TenantId, e.StartedAt });
+        });
+        modelBuilder.Entity<EmploymentHeroOutbox>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.LastError).HasMaxLength(300);
+            entity.Property(e => e.PayloadHash).HasMaxLength(64);
+            entity.Property(e => e.ExternalId).HasMaxLength(50);
+            entity.Property(e => e.ExternalEmployeeId).HasMaxLength(20);
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+            entity.HasIndex(e => new { e.TenantId, e.Kind, e.EntityId }).IsUnique().HasDatabaseName(Domain.Integrations.EmploymentHeroOutbox.OneRowIndexName);
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt });
+            entity.HasIndex(e => e.TenantId);
         });
 
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────
@@ -2155,6 +2183,8 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<EmploymentHeroAttention>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<EmploymentHeroSyncLog>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<EmploymentHeroOutbox>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
     }
 

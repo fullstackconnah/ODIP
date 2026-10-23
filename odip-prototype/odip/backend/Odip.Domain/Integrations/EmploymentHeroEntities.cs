@@ -21,6 +21,11 @@ public class EmploymentHeroConnection : ITenantEntity
     public DateTime? LastSyncAt { get; set; }
     /// <summary>Why the last sync failed, in words for the Admin; null when it worked. Never the key, never a person's details.</summary>
     public string? LastSyncError { get; set; }
+    /// <summary>The EH work type ids sent on a timesheet line, by kind of shift. Null = none sent. Set on the Payroll settings; only EH pay categories are offered.</summary>
+    public string? WorkTypeStandard { get; set; }
+    public string? WorkTypeActiveNight { get; set; }
+    public string? WorkTypePassiveNight { get; set; }
+    public string? WorkTypeSleepover { get; set; }
 }
 
 /// <summary>What a Needs-attention item asks of the Admin. Append-only, stored as an int; the API sends the name.</summary>
@@ -53,12 +58,13 @@ public class EmploymentHeroAttention : ITenantEntity
     public DateTime? DismissedAt { get; set; }
 }
 
-/// <summary>One row per sync run per organisation: when, which business, what changed and, on failure, the error class. No keys, no pay data, no names.</summary>
+/// <summary>One row per sync or send run per organisation: when, which business, what changed and, on failure, the error class. No keys, no pay data, no names.</summary>
 public class EmploymentHeroSyncLog : ITenantEntity
 {
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public string BusinessId { get; set; } = string.Empty;
+    public EmploymentHeroSyncKind Kind { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime FinishedAt { get; set; }
     public int Linked { get; set; }
@@ -66,6 +72,45 @@ public class EmploymentHeroSyncLog : ITenantEntity
     public int Updated { get; set; }
     public int Archived { get; set; }
     public int NeedsAttention { get; set; }
+    /// <summary>Lines sent and lines that failed, on a Timesheets or Leave run; 0 on a Staff run.</summary>
+    public int Sent { get; set; }
+    public int Failed { get; set; }
     /// <summary>Null when the run worked; otherwise an EmploymentHeroFailure name, or "KeyUnreadable".</summary>
     public string? ErrorClass { get; set; }
+}
+
+/// <summary>What a sync log row records. Append-only, stored as an int.</summary>
+public enum EmploymentHeroSyncKind { Staff = 0, Timesheets = 1, Leave = 2 }
+
+/// <summary>What an outbox row sends to Employment Hero. Append-only, stored as an int.</summary>
+public enum EmploymentHeroOutboxKind { Timesheet = 0, Leave = 1, LeaveCancel = 2 }
+
+/// <summary>Where an outbox row is. Append-only, stored as an int; the Payroll page prints PayrollShiftStatus, derived from it.</summary>
+public enum EmploymentHeroOutboxStatus { Pending = 0, Sent = 1, Failed = 2, NeedsAttention = 3 }
+
+/// <summary>
+/// One row per entity for life, re-queued in place (the NotificationOutbox shape). For a Timesheet, EntityId is the ShiftCompletion id and is the
+/// externalId sent to EH. PR 3 adds Leave rows. Not audited: it holds a fingerprint and an EH id, never pay data. UpdatedAt is the concurrency token.
+/// </summary>
+public class EmploymentHeroOutbox : ITenantEntity
+{
+    public const string OneRowIndexName = "IX_EmploymentHeroOutbox_TenantId_Kind_EntityId";
+
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public EmploymentHeroOutboxKind Kind { get; set; }
+    public Guid EntityId { get; set; }
+    public EmploymentHeroOutboxStatus Status { get; set; } = EmploymentHeroOutboxStatus.Pending;
+    public int Attempts { get; set; }
+    public DateTime NextAttemptAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Why the last try failed, in words for the Admin. Never the key or a person's details.</summary>
+    public string? LastError { get; set; }
+    /// <summary>A fingerprint of the last payload sent, not data.</summary>
+    public string? PayloadHash { get; set; }
+    /// <summary>The EH timesheet id, once EH has the line.</summary>
+    public string? ExternalId { get; set; }
+    public string? ExternalEmployeeId { get; set; }
+    public DateTime? SentAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

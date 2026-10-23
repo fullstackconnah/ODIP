@@ -96,29 +96,50 @@ public class EmploymentHeroController : ControllerBase
 
         var businessId = business.Id.ToString(CultureInfo.InvariantCulture);
         // Under the sync lock, read before anything else: a run in flight finishes (or sees the new business and skips) before the links change here.
-        var saved = await EmploymentHeroStaffSync.UnderSyncLockAsync(_db, tenantId, async () =>
+        bool saved;
+        try
         {
-            var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
-            var previousBusiness = conn?.BusinessId ?? await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId)
-                .OrderByDescending(l => l.StartedAt).Select(l => l.BusinessId).FirstOrDefaultAsync(ct);
-            // EH employee ids belong to one business. Links made against another business would match unrelated people.
-            if (previousBusiness is not null && previousBusiness != businessId) await ForgetLinksAsync(tenantId, ct);
+            saved = await EmploymentHeroStaffSync.UnderSyncLockAsync(_db, tenantId, async () =>
+            {
+                var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
+                var previousBusiness = conn?.BusinessId ?? await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId)
+                    .OrderByDescending(l => l.StartedAt).Select(l => l.BusinessId).FirstOrDefaultAsync(ct);
+                // EH employee ids belong to one business. Links made against another business would match unrelated people.
+                if (previousBusiness is not null && previousBusiness != businessId) await ForgetLinksAsync(tenantId, ct);
 
-            if (conn is null) _db.EmploymentHeroConnections.Add(conn = new EmploymentHeroConnection { Id = Guid.NewGuid(), TenantId = tenantId });
-            (conn.ApiKeyCiphertext, conn.ApiKeyNonce) = _keys.Protect(apiKey, tenantId);
-            conn.BusinessId = businessId;
-            var name = (business.Name ?? "").Trim();
-            conn.BusinessName = name.Length > 200 ? name[..200] : name;
-            conn.ConnectedAt = _clock.GetUtcNow().UtcDateTime;
-            conn.ConnectedById = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : null;
-            conn.ConnectedByName = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An Admin";
-            conn.LastSyncError = null;
-            // Never the key itself in AuditLog: only that it changed, and who changed it.
-            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, "API key", null, "changed", User));
-            await _db.SaveChangesAsync(ct);
-        }, ct);
+                // The timesheet cutoff: a key rotation or a disconnect and reconnect (same business) keeps it, so shifts since the first connect stay in range.
+                var newConnection = previousBusiness != businessId;
+                var firstConnected = conn is null && !newConnection ? await FirstConnectedAsync(tenantId, businessId, ct) : null;
+                if (conn is null) _db.EmploymentHeroConnections.Add(conn = new EmploymentHeroConnection { Id = Guid.NewGuid(), TenantId = tenantId });
+                (conn.ApiKeyCiphertext, conn.ApiKeyNonce) = _keys.Protect(apiKey, tenantId);
+                conn.BusinessId = businessId;
+                var name = (business.Name ?? "").Trim();
+                conn.BusinessName = name.Length > 200 ? name[..200] : name;
+                if (newConnection || conn.ConnectedAt == default) conn.ConnectedAt = firstConnected ?? _clock.GetUtcNow().UtcDateTime;
+                conn.ConnectedById = Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : null;
+                conn.ConnectedByName = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An Admin";
+                conn.LastSyncError = null;
+                // Never the key itself in AuditLog: only that it changed, and who changed it.
+                _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, "API key", null, "changed", User));
+                await _db.SaveChangesAsync(ct);
+            }, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // A drain kept claiming rows: the same "busy" as a held lock, and the transaction rolled back.
+            return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
+        }
         if (!saved) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
+    }
+
+    /// <summary>When this business was first connected in its latest stint, from the oldest thing the connection left behind (a sync log or a queued line). Only what is newer than the last sync log of any other business counts: lines sent to that business must not be queued again. Null if it left nothing.</summary>
+    private async Task<DateTime?> FirstConnectedAsync(Guid tenantId, string businessId, CancellationToken ct)
+    {
+        var since = await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId && l.BusinessId != businessId).Select(l => (DateTime?)l.StartedAt).MaxAsync(ct);
+        var log = await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId && l.BusinessId == businessId && (since == null || l.StartedAt > since)).Select(l => (DateTime?)l.StartedAt).MinAsync(ct);
+        var queued = await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId && (since == null || r.CreatedAt > since)).Select(r => (DateTime?)r.CreatedAt).MinAsync(ct);
+        return log is null ? queued : queued is null ? log : log < queued ? log : queued;
     }
 
     /// <summary>Disconnects the organisation. The connection, its key and the Needs-attention items are deleted, and syncing stops. Staff keep their links, so reconnecting to the same business relinks them without duplicates.</summary>
@@ -137,6 +158,89 @@ public class EmploymentHeroController : ControllerBase
             await _db.SaveChangesAsync(ct);
         }, ct);
         if (!done) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
+        return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
+    }
+
+    /// <summary>The work types ODIP may send hours under, read live from EH (pay categories only; leave and shift conditions are not offered).</summary>
+    [HttpGet("work-types")]
+    public async Task<ActionResult<ApiResponse<List<EmploymentHeroWorkTypeDto>>>> WorkTypes(CancellationToken ct)
+    {
+        if (TenantId is not { } tenantId) return BadRequest(ApiResponse<List<EmploymentHeroWorkTypeDto>>.Fail(ChooseOrganisation));
+        if (await SavedKeyAsync(tenantId, ct) is not { } saved) return Conflict(ApiResponse<List<EmploymentHeroWorkTypeDto>>.Fail(EmploymentHeroStaffSync.KeyUnreadableMessage));
+        try
+        {
+            return Ok(ApiResponse<List<EmploymentHeroWorkTypeDto>>.Ok(await ListWorkTypesAsync(saved, ct)));
+        }
+        catch (EmploymentHeroException ex)
+        {
+            return Refused(ex);
+        }
+    }
+
+    private async Task<List<EmploymentHeroWorkTypeDto>> ListWorkTypesAsync((string BusinessId, string Key) saved, CancellationToken ct) =>
+        (await _client.ListWorkTypesAsync(saved.Key, saved.BusinessId, ct))
+            .Select(w => new EmploymentHeroWorkTypeDto(w.Id.ToString(CultureInfo.InvariantCulture), (w.Name ?? "").Trim()))
+            .OrderBy(w => w.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// Saves the four work types (audited, one row per changed field). Shifts waiting on a mapping that haven't been tried are sent on the next tick;
+    /// a claimed row (Attempts above 0) is the drain's, so it is left alone.
+    /// </summary>
+    [HttpPut("work-types")]
+    public async Task<ActionResult<ApiResponse<EmploymentHeroStatusDto>>> SaveWorkTypes([FromBody] EmploymentHeroWorkTypesDto dto, CancellationToken ct)
+    {
+        if (TenantId is not { } tenantId) return BadRequest(ApiResponse<EmploymentHeroStatusDto>.Fail(ChooseOrganisation));
+        if (await SavedKeyAsync(tenantId, ct) is not { } saved) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.KeyUnreadableMessage));
+        List<EmploymentHeroWorkTypeDto> live;
+        try
+        {
+            live = await ListWorkTypesAsync(saved, ct);
+        }
+        catch (EmploymentHeroException ex)
+        {
+            return StatusCode(ex.Failure is EmploymentHeroFailure.KeyRefused or EmploymentHeroFailure.BusinessNotFound ? 400 : 503, ApiResponse<EmploymentHeroStatusDto>.Fail(ex.Message));
+        }
+
+        string? Clean(string? id) => string.IsNullOrWhiteSpace(id) ? null : id.Trim();
+        var chosen = new[] { Clean(dto.Standard), Clean(dto.ActiveNight), Clean(dto.PassiveNight), Clean(dto.Sleepover) };
+        if (chosen.Any(id => id is not null && live.All(w => w.Id != id)))
+            return BadRequest(ApiResponse<EmploymentHeroStatusDto>.Fail("That work type isn't in Employment Hero any more. Pick again."));
+
+        string Name(string? id) => id is null ? "not set" : live.FirstOrDefault(w => w.Id == id)?.Name ?? id;
+        for (var attempt = 0; ; attempt++)
+        {
+            var conn = await _db.EmploymentHeroConnections.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
+            if (conn is null) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("Connect Employment Hero first."));
+            var fields = new[]
+            {
+                ("day and evening shifts", conn.WorkTypeStandard, chosen[0]), ("active nights", conn.WorkTypeActiveNight, chosen[1]),
+                ("passive nights", conn.WorkTypePassiveNight, chosen[2]), ("sleepovers", conn.WorkTypeSleepover, chosen[3]),
+            };
+            foreach (var (label, was, now) in fields.Where(f => f.Item2 != f.Item3))
+                _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(EmploymentHeroConnection), conn.Id, $"Employment Hero work type: {label}", Name(was), Name(now), User));
+            (conn.WorkTypeStandard, conn.WorkTypeActiveNight, conn.WorkTypePassiveNight, conn.WorkTypeSleepover) = (chosen[0], chosen[1], chosen[2], chosen[3]);
+            var at = _clock.GetUtcNow().UtcDateTime;
+            foreach (var row in await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet
+                         && r.Status == EmploymentHeroOutboxStatus.Pending && r.Attempts == 0).ToListAsync(ct))
+            {
+                row.NextAttemptAt = at;
+                row.UpdatedAt = EmploymentHeroTimesheetSender.Stamp(row.UpdatedAt, at);
+            }
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                break;
+            }
+            catch (DbUpdateConcurrencyException ex) when (attempt == 0)
+            {
+                // A drain claimed one of those rows between the read and the save: reload what collided and go round once more.
+                foreach (var entry in ex.Entries) await entry.ReloadAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
+            }
+        }
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
     }
 
@@ -283,10 +387,27 @@ public class EmploymentHeroController : ControllerBase
     private ObjectResult Refused(EmploymentHeroException ex) =>
         StatusCode(ex.Failure is EmploymentHeroFailure.KeyRefused or EmploymentHeroFailure.BusinessNotFound ? 400 : 503, ApiResponse<bool>.Fail(ex.Message));
 
+    /// <summary>
+    /// A different business: links, Needs-attention items and the whole timesheet queue (every Kind, including leave rows PR 3 adds) go, because their EH ids belong to the old business.
+    /// The rule "every outbox query names Kind == Timesheet" has this one exception. It saves on its own, and a drain that claimed a row meanwhile gets one retry.
+    /// </summary>
     private async Task ForgetLinksAsync(Guid tenantId, CancellationToken ct)
     {
-        foreach (var u in await _db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null).ToListAsync(ct)) u.ExternalPayrollId = null;
-        _db.EmploymentHeroAttentions.RemoveRange(await _db.EmploymentHeroAttentions.Where(a => a.TenantId == tenantId).ToListAsync(ct));
+        for (var attempt = 0; ; attempt++)
+        {
+            foreach (var u in await _db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null).ToListAsync(ct)) u.ExternalPayrollId = null;
+            _db.EmploymentHeroAttentions.RemoveRange(await _db.EmploymentHeroAttentions.Where(a => a.TenantId == tenantId).ToListAsync(ct));
+            _db.EmploymentHeroOutbox.RemoveRange(await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId).ToListAsync(ct));
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                return;
+            }
+            catch (DbUpdateConcurrencyException ex) when (attempt == 0)
+            {
+                foreach (var entry in ex.Entries) await entry.ReloadAsync(ct);
+            }
+        }
     }
 
     private async Task<EmploymentHeroStatusDto> StatusAsync(Guid tenantId, CancellationToken ct)
@@ -300,7 +421,10 @@ public class EmploymentHeroController : ControllerBase
             : await _db.EmploymentHeroAttentions.AsNoTracking().Where(a => a.TenantId == tenantId && a.DismissedAt == null)
                 .OrderBy(a => a.Kind).ThenBy(a => a.Name)
                 .Select(a => new EmploymentHeroAttentionDto(a.Id, a.Kind, a.UserId, a.ExternalEmployeeId, a.Name, a.Reason)).ToListAsync(ct);
+        var queued = await _db.EmploymentHeroOutbox.CountAsync(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet, ct);
+        var sent = await _db.EmploymentHeroOutbox.CountAsync(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet && r.Status == EmploymentHeroOutboxStatus.Sent, ct);
         return new EmploymentHeroStatusDto(_keys.IsConfigured, conn is not null, conn?.BusinessId, conn?.BusinessName, conn?.ConnectedAt, conn?.ConnectedByName,
-            conn?.LastSyncAt, conn?.LastSyncError, linked, notLinked, attention);
+            conn?.LastSyncAt, conn?.LastSyncError, linked, notLinked, attention, sent, queued - sent,
+            new EmploymentHeroWorkTypesDto(conn?.WorkTypeStandard, conn?.WorkTypeActiveNight, conn?.WorkTypePassiveNight, conn?.WorkTypeSleepover));
     }
 }

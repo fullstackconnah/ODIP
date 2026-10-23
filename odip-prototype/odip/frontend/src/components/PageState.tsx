@@ -14,6 +14,8 @@ export type PageStateProps =
       kind: 'error'
       /** Shows "Try again". Return the retry Promise (normally `refetch`) to hold the action until it settles; synchronous callbacks remain supported. */
       onRetry?: () => unknown
+      /** The server's own words for the failure: one muted line under the title. Omit it and the title stands alone. */
+      detail?: string
     })
   | (Common & {
       kind: 'not-found'
@@ -26,7 +28,7 @@ const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 const isFailedResult = (result: unknown) => !!result && typeof result === 'object' && ((result as { isError?: unknown }).isError === true || (result as { status?: unknown }).status === 'error')
 
-function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
+function RetryError({ noun, onRetry, detail }: Common & { onRetry?: () => unknown; detail?: string }) {
   const [state, setState] = useState<'idle' | 'pending' | 'failed'>('idle')
   const pending = useRef(false)
   const mounted = useRef(true)
@@ -62,7 +64,7 @@ function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
         tone="danger"
         actions={onRetry ? (
           <>
-            <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
+            <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="min-h-[var(--tap-min)] aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
               Try again
             </Button>
             {/* A fixed width, so the right-aligned button holds one x position in idle, pending and failed (the failed copy measures about 136px). */}
@@ -70,7 +72,8 @@ function RetryError({ noun, onRetry }: Common & { onRetry?: () => unknown }) {
           </>
         ) : undefined}
       >
-        Couldn't load this {noun}. Check your connection and try again.
+        Couldn't load this {noun}.{!detail && ' Check your connection and try again.'}
+        {detail && <span className="mt-1 block text-sm text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{detail}</span>}
       </Callout>
       <div role={state === 'idle' ? undefined : 'status'} aria-live="polite" aria-atomic="true" className="sr-only">{status}</div>
     </div>
@@ -105,7 +108,7 @@ export function PageState(props: PageStateProps) {
     )
   }
   if (props.kind === 'error') {
-    return <RetryError noun={noun} onRetry={props.onRetry} />
+    return <RetryError noun={noun} onRetry={props.onRetry} detail={props.detail} />
   }
   return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">

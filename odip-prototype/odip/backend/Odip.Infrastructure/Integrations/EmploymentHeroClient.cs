@@ -8,12 +8,14 @@ using Microsoft.Extensions.Configuration;
 namespace Odip.Infrastructure.Integrations;
 
 /// <summary>Why an Employment Hero call failed: the card's words come with it, and the sync log stores the name.</summary>
-public enum EmploymentHeroFailure { KeyRefused, BusinessNotFound, RateLimited, Unavailable }
+public enum EmploymentHeroFailure { KeyRefused, BusinessNotFound, RateLimited, Unavailable, Refused }
 
 /// <summary>A failed Employment Hero call. The message is for the Admin and never contains the key.</summary>
 public sealed class EmploymentHeroException(EmploymentHeroFailure failure, string message) : Exception(message)
 {
     public EmploymentHeroFailure Failure { get; } = failure;
+    /// <summary>How long EH asked for on a 429, when it said.</summary>
+    public TimeSpan? RetryAfter { get; init; }
 }
 
 public sealed record EhBusiness(int Id, string Name);
@@ -73,10 +75,19 @@ public partial class EmploymentHeroClient
         throw new EmploymentHeroException(EmploymentHeroFailure.Unavailable, NotEndingMessage);
     }
 
-    private async Task<T> GetAsync<T>(string apiKey, string path, CancellationToken ct)
+    private Task<T> GetAsync<T>(string apiKey, string path, CancellationToken ct) => SendAsync<T>(apiKey, HttpMethod.Get, path, null, ct);
+
+    private const int RefusalWordsMax = 200;
+
+    /// <summary>Body serialisation for writes: camelCase, and a null left out (a line with no work type sends none).</summary>
+    internal static readonly JsonSerializerOptions WireJson = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
+
+    /// <summary>One call: the key goes only into the Basic header, every failure becomes an EmploymentHeroException. A DELETE reads no body.</summary>
+    private async Task<T> SendAsync<T>(string apiKey, HttpMethod method, string path, object? body, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        using var request = new HttpRequestMessage(method, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(apiKey + ":")));
+        if (body is not null) request.Content = JsonContent.Create(body, options: WireJson);
         HttpResponseMessage response;
         try
         {
@@ -89,17 +100,17 @@ public partial class EmploymentHeroClient
 
         using (response)
         {
-            switch (response.StatusCode)
+            if (response.StatusCode == HttpStatusCode.BadRequest) throw await RefusedAsync(response, ct);
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                case HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden:
-                    throw new EmploymentHeroException(EmploymentHeroFailure.KeyRefused, "Employment Hero didn't accept the API key. Check it in Employment Hero and connect again.");
-                case HttpStatusCode.NotFound:
-                    throw new EmploymentHeroException(EmploymentHeroFailure.BusinessNotFound, "Employment Hero couldn't find that business or employee for this API key.");
-                case HttpStatusCode.TooManyRequests:
-                    throw new EmploymentHeroException(EmploymentHeroFailure.RateLimited, "Employment Hero is busy. ODIP tries again at the next sync.");
+                var after = response.Headers.RetryAfter;
+                throw new EmploymentHeroException(EmploymentHeroFailure.RateLimited, "Employment Hero is busy. ODIP tries again at the next sync.")
+                {
+                    RetryAfter = after?.Delta ?? (after?.Date is { } at ? at - DateTimeOffset.UtcNow : null),
+                };
             }
-            if (!response.IsSuccessStatusCode)
-                throw new EmploymentHeroException(EmploymentHeroFailure.Unavailable, $"Employment Hero answered with an error ({(int)response.StatusCode}). Try again in a few minutes.");
+            ThrowForStatus(response);
+            if (method == HttpMethod.Delete) return default!;
             try
             {
                 return await response.Content.ReadFromJsonAsync<T>(ct) ?? throw new JsonException("empty");
@@ -110,4 +121,30 @@ public partial class EmploymentHeroClient
             }
         }
     }
+
+    /// <summary>A 400 is EH saying no to this line: its own words (ProblemDetails detail or title, or a Web API 2 message or model state), clipped, never the request.</summary>
+    private static async Task<EmploymentHeroException> RefusedAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        string? words = null;
+        try
+        {
+            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object)
+                words = new[] { Text(root, "detail"), ModelStateWords(root), Text(root, "title"), Text(root, "message") }.FirstOrDefault(w => w is not null);
+        }
+        catch (JsonException) { }
+        if (words is null) return new EmploymentHeroException(EmploymentHeroFailure.Refused, "Employment Hero refused it.");
+        return new EmploymentHeroException(EmploymentHeroFailure.Refused, "Employment Hero refused it: " + (words.Length > RefusalWordsMax ? words[..RefusalWordsMax] : words));
+    }
+
+    private static string? Text(JsonElement o, string name) =>
+        o.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(p.GetString()) ? p.GetString()!.Trim() : null;
+
+    /// <summary>The first message in an ASP.NET Web API 2 style body: {"message": "...", "modelState": {"field": ["why"]}}.</summary>
+    private static string? ModelStateWords(JsonElement o) =>
+        o.TryGetProperty("modelState", out var ms) && ms.ValueKind == JsonValueKind.Object
+            ? ms.EnumerateObject().Where(f => f.Value.ValueKind == JsonValueKind.Array).SelectMany(f => f.Value.EnumerateArray())
+                .Where(v => v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString())).Select(v => v.GetString()!.Trim()).FirstOrDefault()
+            : null;
 }

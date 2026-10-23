@@ -55,4 +55,27 @@ public class EmploymentHeroModelTests
         Assert.Equal(a, (await db.EmploymentHeroAttentions.SingleAsync()).TenantId);
         Assert.Equal(a, (await db.EmploymentHeroSyncLogs.SingleAsync()).TenantId);
     }
+
+    [Fact]
+    public async Task The_outbox_is_tenant_filtered_and_keeps_one_row_per_entity_in_the_model()
+    {
+        var name = Guid.NewGuid().ToString();
+        Guid a = Guid.NewGuid(), b = Guid.NewGuid();
+        await using (var setup = TestDb.Create(name))
+        {
+            foreach (var t in new[] { a, b })
+                setup.EmploymentHeroOutbox.Add(new EmploymentHeroOutbox { Id = Guid.NewGuid(), TenantId = t, Kind = EmploymentHeroOutboxKind.Timesheet, EntityId = Guid.NewGuid() });
+            await setup.SaveChangesAsync();
+        }
+
+        await using var db = TestDb.ForTenant(name, a);
+        Assert.Equal(a, (await db.EmploymentHeroOutbox.SingleAsync()).TenantId);
+
+        var type = db.Model.FindEntityType(typeof(EmploymentHeroOutbox))!;
+        var one = Assert.Single(type.GetIndexes(), i => i.GetDatabaseName() == EmploymentHeroOutbox.OneRowIndexName);
+        Assert.True(one.IsUnique);
+        Assert.Equal(["TenantId", "Kind", "EntityId"], one.Properties.Select(p => p.Name));
+        Assert.Contains(type.GetIndexes(), i => i.Properties.Select(p => p.Name).SequenceEqual(["Status", "NextAttemptAt"]));
+        Assert.True(type.FindProperty(nameof(EmploymentHeroOutbox.UpdatedAt))!.IsConcurrencyToken);
+    }
 }

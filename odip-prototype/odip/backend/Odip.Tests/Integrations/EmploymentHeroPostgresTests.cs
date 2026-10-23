@@ -73,6 +73,29 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal("23505", Assert.IsType<PostgresException>(failure.InnerException).SqlState);
     }
 
+[SkippableFact]
+    public async Task The_outbox_refuses_a_second_row_for_one_entity_but_not_for_another_kind_or_organisation()
+    {
+        RequirePostgres();
+        var (dbA, tenantA) = await _pg.NewTenantContextAsync();
+        var (dbB, tenantB) = await _pg.NewTenantContextAsync();
+        await using var _a = dbA;
+        await using var _b = dbB;
+        var entity = Guid.NewGuid();
+        EmploymentHeroOutbox Row(Guid tenant, EmploymentHeroOutboxKind kind) => new() { Id = Guid.NewGuid(), TenantId = tenant, Kind = kind, EntityId = entity };
+
+        dbA.EmploymentHeroOutbox.Add(Row(tenantA, EmploymentHeroOutboxKind.Timesheet));
+        await dbA.SaveChangesAsync();
+        dbA.EmploymentHeroOutbox.Add(Row(tenantA, EmploymentHeroOutboxKind.Leave));
+        dbB.EmploymentHeroOutbox.Add(Row(tenantB, EmploymentHeroOutboxKind.Timesheet));
+        await dbA.SaveChangesAsync();
+        await dbB.SaveChangesAsync();
+
+        dbA.EmploymentHeroOutbox.Add(Row(tenantA, EmploymentHeroOutboxKind.Timesheet));
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => dbA.SaveChangesAsync());
+        Assert.Equal(EmploymentHeroOutbox.OneRowIndexName, Assert.IsType<PostgresException>(failure.InnerException).ConstraintName);
+    }
+
     private static async Task ConnectAsync(OdipDbContext db, Guid tenantId)
     {
         var (cipher, nonce) = EhFixture.Keys.Protect(EhFixture.ApiKey, tenantId);
@@ -232,5 +255,75 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         {
             await db.Database.ExecuteSqlRawAsync($"DROP TRIGGER IF EXISTS {fn} ON \"Users\"; DROP FUNCTION IF EXISTS {fn}();");
         }
+    }
+
+    private static StubHttpHandler EhLines() => new StubHttpHandler()
+        .On(HttpMethod.Post, "/api/v2/business/777/timesheet?enforceUniqueExternalId=true", HttpStatusCode.OK, new { id = 9001 });
+
+    private static async Task<(Guid, int)> SeedShiftsAsync(OdipDbContext db, Guid tenantId, int count)
+    {
+        await ConnectAsync(db, tenantId);
+        var conn = await db.EmploymentHeroConnections.IgnoreQueryFilters().SingleAsync(c => c.TenantId == tenantId);
+        conn.WorkTypeStandard = "7";
+        var worker = await EhTimesheetFixture.WorkerAsync(db, tenantId);
+        var day = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        for (var i = 0; i < count; i++) await EhTimesheetFixture.ApprovedShiftAsync(db, tenantId, worker, day, new TimeOnly(9, 0), new TimeOnly(15, 0));
+        await db.SaveChangesAsync();
+        return (tenantId, count);
+    }
+
+    [SkippableFact]
+    public async Task The_sender_runs_on_Postgres()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        await SeedShiftsAsync(db, tenantId, 2);
+        var eh = EhLines();
+
+        await new EmploymentHeroTimesheetSender(StubHttpHandler.Client(eh), EhFixture.Keys, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<EmploymentHeroTimesheetSender>.Instance, TimeSpan.Zero)
+            .RunAsync(db, tenantId, true, CancellationToken.None);
+
+        Assert.Equal(2, await db.EmploymentHeroOutbox.IgnoreQueryFilters().CountAsync(r => r.TenantId == tenantId && r.Status == EmploymentHeroOutboxStatus.Sent));
+    }
+
+    [SkippableFact]
+    public async Task Two_drains_at_once_post_each_shift_once_on_Postgres()
+    {
+        RequirePostgres();
+        var (db1, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _1 = db1;
+        await SeedShiftsAsync(db1, tenantId, 3);
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+        var eh = EhLines();
+        EmploymentHeroTimesheetSender Sender() => new(StubHttpHandler.Client(eh), EhFixture.Keys, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<EmploymentHeroTimesheetSender>.Instance, TimeSpan.Zero);
+
+        await Task.WhenAll(Sender().RunAsync(db1, tenantId, false, CancellationToken.None), Sender().RunAsync(db2, tenantId, false, CancellationToken.None));
+
+        Assert.Equal(3, eh.Requests.Count(r => r.Method == HttpMethod.Post));
+    }
+
+    [SkippableFact]
+    public async Task The_payroll_check_query_runs_on_Postgres()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        await SeedShiftsAsync(db, tenantId, 2);
+        var tenant = new Moq.Mock<Odip.Domain.Interfaces.ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        var controller = new EmploymentHeroPayrollController(db, tenant.Object, EhFixture.Keys, StubHttpHandler.Client(new StubHttpHandler()))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = ImportTestSupport.Admin() } },
+        };
+        var day = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+
+        var result = await controller.SendMissing(new PayrollRangeDto(day.AddDays(-3), day.AddDays(3)), CancellationToken.None);
+
+        var sent = Assert.IsType<OkObjectResult>(result.Result);
+        var data = Assert.IsType<Odip.Application.Common.ApiResponse<SendMissingResultDto>>(sent.Value).Data!;
+        Assert.Equal(2, data.Queued);
+        Assert.Equal(2, data.Check.Waiting);
+        Assert.Single(data.Check.Workers);
     }
 }

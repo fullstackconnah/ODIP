@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiDelete, apiGet, apiPost } from '../client'
-import type { EmploymentHeroBusinessDto, EmploymentHeroEmployeeDto, EmploymentHeroStatusDto } from '../types'
+import { apiDelete, apiGet, apiPost, apiPut } from '../client'
+import type {
+  EmploymentHeroBusinessDto, EmploymentHeroEmployeeDto, EmploymentHeroStatusDto, EmploymentHeroWorkTypeDto, EmploymentHeroWorkTypesDto,
+  PayPeriodsDto, PayrollCheckDto, PayrollRangeDto, SendMissingResultDto,
+} from '../types'
 
 const BASE = '/integrations/employment-hero'
 
@@ -37,3 +40,37 @@ export const useLinkEmploymentHeroStaff = () =>
     apiPost<EmploymentHeroStatusDto>(`${BASE}/attention/${itemId}/link`, { employeeId }))
 export const useDismissEmploymentHeroItem = () =>
   useEmploymentHeroChange((itemId: string) => apiPost<EmploymentHeroStatusDto>(`${BASE}/attention/${itemId}/dismiss`))
+
+/** The work types ODIP may send hours under, read live from EH for the card's pickers. */
+export function useEmploymentHeroWorkTypes(enabled: boolean) {
+  return useQuery({ queryKey: ['employment-hero', 'work-types'], queryFn: () => apiGet<EmploymentHeroWorkTypeDto[]>(`${BASE}/work-types`), enabled })
+}
+export const useSaveEmploymentHeroWorkTypes = () =>
+  useEmploymentHeroChange((body: EmploymentHeroWorkTypesDto) => apiPut<EmploymentHeroStatusDto>(`${BASE}/work-types`, body))
+
+const PAYROLL = `${BASE}/payroll`
+
+/** The pay periods EH offers (finalised runs and the next period). Not connected answers an empty list. */
+export function usePayPeriods() {
+  return useQuery({ queryKey: ['employment-hero', 'payroll', 'periods'], queryFn: () => apiGet<PayPeriodsDto>(`${PAYROLL}/periods`) })
+}
+
+/** The Payroll page's check: every approved shift in the range, by worker, with its word. */
+export function usePayrollCheck(range: { from: string; to: string } | null) {
+  return useQuery({
+    queryKey: ['employment-hero', 'payroll', 'check', range?.from, range?.to],
+    queryFn: () => apiGet<PayrollCheckDto>(PAYROLL, { from: range!.from, to: range!.to }),
+    enabled: range !== null,
+    // Rows still moving (Waiting or Failed) refresh every minute; a settled period only on focus.
+    refetchInterval: (q: { state: { data?: PayrollCheckDto } }) => (q.state.data && q.state.data.waiting + q.state.data.failed > 0 ? 60_000 : false),
+  })
+}
+
+/** Queue every shift the check marks Sendable (Admin only). The answer carries the re-read check. */
+export function useSendMissingTimesheets() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (range: PayrollRangeDto) => apiPost<SendMissingResultDto>(`${PAYROLL}/send-missing`, range),
+    onSuccess: ({ check }) => { qc.setQueryData(['employment-hero', 'payroll', 'check', check.from, check.to], check) },
+  })
+}

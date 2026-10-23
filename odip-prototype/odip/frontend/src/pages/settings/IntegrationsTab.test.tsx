@@ -6,8 +6,9 @@ import IntegrationsTab from './IntegrationsTab'
 import type { EmploymentHeroAttentionDto, EmploymentHeroEmployeeDto, EmploymentHeroStatusDto } from '@/api/types'
 
 const { state, calls } = vi.hoisted(() => ({
-  state: { status: undefined as unknown, employees: [] as unknown[], dismissError: null as unknown, dismissVariables: undefined as string | undefined, disconnectError: null as unknown },
-  calls: { businesses: vi.fn(), connect: vi.fn(), sync: vi.fn(), disconnect: vi.fn(), link: vi.fn(), dismiss: vi.fn() },
+  state: { status: undefined as unknown, employees: [] as unknown[], dismissError: null as unknown, dismissVariables: undefined as string | undefined, disconnectError: null as unknown,
+    workTypes: [{ id: '5', name: 'Ordinary' }, { id: '6', name: 'Night' }] as unknown, workTypesError: false, workTypesLoading: false, saveError: null as unknown },
+  calls: { businesses: vi.fn(), connect: vi.fn(), sync: vi.fn(), disconnect: vi.fn(), link: vi.fn(), dismiss: vi.fn(), saveWorkTypes: vi.fn() },
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -18,12 +19,15 @@ vi.mock('@/api/hooks', () => ({
   useDisconnectEmploymentHero: () => ({ mutate: calls.disconnect, isPending: false, error: state.disconnectError }),
   useEmploymentHeroEmployees: () => ({ data: state.employees, isLoading: false, isError: false, error: null }),
   useLinkEmploymentHeroStaff: () => ({ mutate: calls.link, isPending: false, error: null }),
+  useEmploymentHeroWorkTypes: () => ({ data: state.workTypesError || state.workTypesLoading ? undefined : state.workTypes, isLoading: state.workTypesLoading, isError: state.workTypesError, error: null, refetch: vi.fn() }),
+  useSaveEmploymentHeroWorkTypes: () => ({ mutate: calls.saveWorkTypes, isPending: false, isSuccess: false, error: state.saveError }),
   useDismissEmploymentHeroItem: () => ({ mutate: calls.dismiss, isPending: false, error: state.dismissError, variables: state.dismissVariables }),
 }))
 
 const status = (o: Partial<EmploymentHeroStatusDto> = {}): EmploymentHeroStatusDto => ({
   configured: true, connected: false, businessId: null, businessName: null, connectedAt: null, connectedByName: null,
-  lastSyncAt: null, lastSyncError: null, staffLinked: 0, staffNotLinked: 0, attention: [], ...o,
+  lastSyncAt: null, lastSyncError: null, staffLinked: 0, staffNotLinked: 0, timesheetsSent: 0, timesheetsWaiting: 0,
+  workTypes: { standard: null, activeNight: null, passiveNight: null, sleepover: null }, attention: [], ...o,
 })
 const connected = (o: Partial<EmploymentHeroStatusDto> = {}) => status({
   connected: true, businessId: '777', businessName: 'Acme Care', connectedAt: '2026-10-13T01:00:00Z', connectedByName: 'Ada Admin',
@@ -41,6 +45,9 @@ afterEach(() => {
   state.dismissError = null
   state.dismissVariables = undefined
   state.disconnectError = null
+  state.workTypesError = false
+  state.workTypesLoading = false
+  state.saveError = null
 })
 
 describe('IntegrationsTab — connecting', () => {
@@ -251,5 +258,69 @@ describe('IntegrationsTab — the review fixes', () => {
     expect(within(picker).queryByText(/added by the sync/)).toBeNull()   // the hint shows only once that employee is chosen
     await user.selectOptions(within(picker).getByLabelText('Employment Hero employee'), '302')
     expect(within(picker).getByText("The sync added Robert Smith as a new staff member, and they have never signed in. Linking gives this record to Jane Smith and archives that account.")).toBeInTheDocument()
+  })
+})
+
+describe('IntegrationsTab — timesheets and work types', () => {
+  it('counts the timesheets and links to the Payroll page', () => {
+    state.status = connected({ timesheetsSent: 1284, timesheetsWaiting: 3 })
+    renderTab()
+    expect(screen.getByText(/1,284 sent, 3 waiting/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Check pay periods' })).toHaveAttribute('href', '/rostering/payroll')
+  })
+
+  it('says none are sent yet when nothing has gone', () => {
+    state.status = connected()
+    renderTab()
+    expect(screen.getByText(/None sent yet/)).toBeInTheDocument()
+  })
+
+  it('words the work types as the shape brief does', () => {
+    state.status = connected()
+    renderTab()
+    expect(screen.getByText('Which Employment Hero work type each kind of shift is paid as. Night shifts wait until theirs is chosen.')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Day and evening shifts')).getByRole('option', { name: 'Usual pay (no work type)' })).toBeInTheDocument()
+  })
+
+  it("reads the work types with the brief's words while loading", () => {
+    state.status = connected()
+    state.workTypesLoading = true
+    renderTab()
+    expect(screen.getByText("Reading Employment Hero's work types…")).toBeInTheDocument()
+  })
+
+  it('saves exactly the chosen ids, and only once something changed', async () => {
+    const user = userEvent.setup()
+    state.status = connected({ workTypes: { standard: '5', activeNight: null, passiveNight: null, sleepover: null } })
+    renderTab()
+    const save = screen.getByRole('button', { name: 'Save work types' })
+    expect(save).toBeDisabled()
+    await user.selectOptions(screen.getByLabelText('Active nights'), '6')
+    expect(save).toBeEnabled()
+    await user.click(save)
+    expect(calls.saveWorkTypes).toHaveBeenCalledWith(
+      { standard: '5', activeNight: '6', passiveNight: null, sleepover: null }, expect.anything(),
+    )
+  })
+
+  it('flags a saved work type that Employment Hero no longer lists', () => {
+    state.status = connected({ workTypes: { standard: '99', activeNight: null, passiveNight: null, sleepover: null } })
+    renderTab()
+    expect(screen.getByRole('option', { name: 'Not in Employment Hero any more' })).toBeInTheDocument()
+    expect(screen.getByText('Pick again.')).toBeInTheDocument()
+  })
+
+  it('shows the refusal and keeps the choices when the save fails', () => {
+    state.status = connected()
+    state.saveError = new Error("boom")
+    renderTab()
+    expect(screen.getByText("The work types couldn't be saved. Try again.")).toBeInTheDocument()
+  })
+
+  it('offers a retry when the work types cannot be loaded', () => {
+    state.status = connected()
+    state.workTypesError = true
+    renderTab()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 })
