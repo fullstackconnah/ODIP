@@ -125,3 +125,15 @@ describe('ToggleGroup disabled', () => {
     expect(screen.getByRole('radio', { name: 'Option B' }).className).not.toMatch(/cursor-not-allowed|opacity-60/)
   })
 })
+
+describe('ToggleGroup — keyboard focus ring is visible on every option', () => {
+  it('offsets the ring from the chip so it shows against the checked fill as well as an unchecked chip', () => {
+    render(<ToggleGroup options={options} value="b" onChange={vi.fn()} />)
+
+    for (const name of ['Option A', 'Option B']) {
+      const cls = screen.getByRole('radio', { name }).className
+      expect(cls).toContain('focus-visible:ring-2')
+      expect(cls).toContain('focus-visible:ring-offset-2')
+    }
+  })
+})
