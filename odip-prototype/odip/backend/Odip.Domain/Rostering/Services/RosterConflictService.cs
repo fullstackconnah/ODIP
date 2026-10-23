@@ -260,7 +260,11 @@ public sealed class RosterConflictService
     }
 
     private static void CheckDoubleBookedTrip(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
-        => CheckDoubleBookedTripForRange(candidate.ServiceDate, candidate.ServiceDate, Guid.Empty, ctx, findings);
+    {
+        // An overnight shift runs into the next day; ending exactly at 00:00 does not touch it.
+        var rangeEnd = candidate.EndsNextDay && candidate.EndTime > TimeOnly.MinValue ? candidate.ServiceDate.AddDays(1) : candidate.ServiceDate;
+        CheckDoubleBookedTripForRange(candidate.ServiceDate, rangeEnd, Guid.Empty, ctx, findings);
+    }
 
     /// <summary>Core overlap rule, decoupled from Shift so CheckStaffAssignment can reuse it against a
     /// multi-day AssignmentStart..AssignmentEnd range; excludeAssignmentId skips the assignment's own
