@@ -65,7 +65,7 @@ public class ProviderSettingsController : ControllerBase
 
     [HttpPut]
     [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<ActionResult<ApiResponse<bool>>> Upsert([FromBody] UpsertProviderSettingsDto dto, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<DateTime>>> Upsert([FromBody] UpsertProviderSettingsDto dto, CancellationToken ct)
     {
         // Each mode changes ONLY when the request carries it, so a client that does not know about it (or a stale tab saving an unrelated
         // field) can never revert it. Validate before anything is touched, so a refused request writes nothing.
@@ -146,6 +146,7 @@ public class ProviderSettingsController : ControllerBase
         {
             return Conflict(ApiResponse<bool>.Fail(ChangedByOther));
         }
-        return Ok(ApiResponse<bool>.Ok(true));
+        // The row's new version, so the form can send it with its next save without waiting for a refetch.
+        return Ok(ApiResponse<DateTime>.Ok(s.UpdatedAt));
     }
 }

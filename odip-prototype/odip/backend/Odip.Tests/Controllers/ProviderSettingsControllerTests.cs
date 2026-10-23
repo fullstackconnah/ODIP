@@ -389,7 +389,9 @@ public class ProviderSettingsControllerTests
         var loadedB = await LoadedUpdatedAtAsync(dbB);
 
         var first = await new ProviderSettingsController(dbA).Upsert(MinimalUpsertDto() with { AccountNumber = "222", ExpectedUpdatedAt = loadedA }, CancellationToken.None);
-        var second = await new ProviderSettingsController(dbB).Upsert(MinimalUpsertDto() with { AccountNumber = "111", ManagerPhone = "0412345007", ExpectedUpdatedAt = loadedB }, CancellationToken.None);
+        // A fresh context, so EF holds no tracked original: only ExpectedUpdatedAt can make this a 409.
+        using var dbB2 = CreateDb(name);
+        var second = await new ProviderSettingsController(dbB2).Upsert(MinimalUpsertDto() with { AccountNumber = "111", ManagerPhone = "0412345007", ExpectedUpdatedAt = loadedB }, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(first.Result);
         var conflict = Assert.IsType<ConflictObjectResult>(second.Result);
@@ -398,6 +400,18 @@ public class ProviderSettingsControllerTests
         var row = await check.ProviderSettings.SingleAsync();
         Assert.Equal("222", row.AccountNumber);
         Assert.Null(row.ManagerPhone);
+    }
+
+    [Fact]
+    public async Task Upsert_AnswersTheRowsNewUpdatedAt_SoTheFormCanSendItWithTheNextSave()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+
+        var result = await new ProviderSettingsController(db).Upsert(MinimalUpsertDto(), CancellationToken.None);
+
+        var answered = Assert.IsType<ApiResponse<DateTime>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data;
+        Assert.NotEqual(default, answered);
+        Assert.Equal(await LoadedUpdatedAtAsync(db), answered);
     }
 
     [Fact]
