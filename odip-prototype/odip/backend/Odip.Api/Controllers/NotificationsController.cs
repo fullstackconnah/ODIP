@@ -20,6 +20,8 @@ namespace Odip.Api.Controllers;
 [Route("api/v1/notifications")]
 public class NotificationsController : ControllerBase
 {
+    private const int MaxReadAllIds = 100;
+
     private readonly OdipDbContext _db;
     public NotificationsController(OdipDbContext db) => _db = db;
 
@@ -75,7 +77,7 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// The bell (dashboard spec 2026-10-14): the caller's own newest items, newest first, and their unread count. Own rows are
+    /// The bell (dashboard spec 2026-10-14): the caller's own items, unread first and then newest first, and their unread count (unread first so "Mark all as read" always reaches the next unseen batch). Own rows are
     /// the JWT subject's, never X-View-As-User's (lead decision 1); the tenant filter applies as well. `take` is clamped to
     /// 1..50, and HasMore comes from asking for one row more than is returned.
     /// </summary>
@@ -88,7 +90,7 @@ public class NotificationsController : ControllerBase
         take = Math.Clamp(take, 1, 50);
         var mine = _db.InAppNotifications.Where(n => n.RecipientUserId == callerId.Value);
         var rows = await mine
-            .OrderByDescending(n => n.CreatedAt).ThenByDescending(n => n.Id)
+            .OrderBy(n => n.ReadAt != null).ThenByDescending(n => n.CreatedAt).ThenByDescending(n => n.Id)
             .Take(take + 1)
             .Select(n => new InAppNotificationDto { Id = n.Id, Title = n.Title, LinkTo = n.LinkTo, CreatedAt = n.CreatedAt, ReadAt = n.ReadAt })
             .ToListAsync(ct);
@@ -112,16 +114,19 @@ public class NotificationsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Marks every unread item of the caller's read.</summary>
+    /// <summary>Marks the caller's unread items read: only the ids the bell shows when it sends them (other people's ids are ignored; more than 100 is 400), every unread item when it sends none (an old client mid-deploy).</summary>
     [HttpPost("inbox/read-all")]
-    public async Task<IActionResult> MarkAllInboxRead(CancellationToken ct)
+    public async Task<IActionResult> MarkAllInboxRead([FromBody] MarkInboxReadRequest? request, CancellationToken ct)
     {
         var callerId = ResolveCallerId();
         if (callerId is null) return Unauthorized(ApiResponse<object>.Fail("Caller identity could not be resolved."));
 
+        if (request?.Ids is { Length: > MaxReadAllIds }) return BadRequest(ApiResponse<object>.Fail($"At most {MaxReadAllIds} ids."));
+
         // shortcut: loads every unread row, because EF InMemory (the controller tests) has no ExecuteUpdate; move to ExecuteUpdateAsync if inboxes reach thousands unread.
         var now = DateTime.UtcNow;
-        foreach (var row in await _db.InAppNotifications.Where(n => n.RecipientUserId == callerId.Value && n.ReadAt == null).ToListAsync(ct))
+        var ids = request?.Ids;
+        foreach (var row in await _db.InAppNotifications.Where(n => n.RecipientUserId == callerId.Value && n.ReadAt == null && (ids == null || ids.Contains(n.Id))).ToListAsync(ct))
             row.ReadAt = now;
         await _db.SaveChangesAsync(ct);
         return NoContent();

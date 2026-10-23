@@ -13,5 +13,5 @@ namespace Odip.Application.Interfaces;
 public interface INotificationRaiser
 {
     Task RaiseAsync(NotificationEventType type, string entityType, Guid entityId,
-        IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default);
+        IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default, bool dedupe = true);
 }

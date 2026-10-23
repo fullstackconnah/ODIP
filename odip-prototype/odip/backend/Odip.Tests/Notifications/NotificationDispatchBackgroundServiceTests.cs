@@ -191,6 +191,43 @@ public class NotificationDispatchBackgroundServiceTests
         Assert.Equal("User preference disabled", row.LastError);
     }
 
+    /// <summary>Notifications:Enabled=false (live today) must not SELECT the batch every tick: the pointed-at PostgreSQL does not exist, so any query would throw.</summary>
+    [Fact]
+    public async Task WhenDisabled_TheTick_NeverQueriesTheDatabase()
+    {
+        NotificationDispatchBackgroundService Build(string enabled)
+        {
+            var services = new ServiceCollection();
+            services.AddDbContext<OdipDbContext>(o => o.UseNpgsql("Host=127.0.0.1;Port=1;Database=none;Username=x;Password=x;Timeout=1;Command Timeout=1"));
+            var email = new Mock<INotificationChannel>();
+            email.SetupGet(c => c.Kind).Returns(NotificationChannelKind.Email);
+            services.AddSingleton<INotificationChannel>(email.Object);
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:Enabled"] = enabled }).Build();
+            return new NotificationDispatchBackgroundService(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), config, NullLogger<NotificationDispatchBackgroundService>.Instance);
+        }
+
+        await Build("false").RunTickAsync(CancellationToken.None);                                          // no query, no throw
+        await Assert.ThrowsAnyAsync<Exception>(() => Build("true").RunTickAsync(CancellationToken.None));   // the control: enabled does query
+    }
+
+    /// <summary>The hourly purges are independent: when the bell purge throws, the outbox purge still runs (each one opens its own scope, so the scope count shows it).</summary>
+    [Fact]
+    public async Task WhenTheBellPurgeThrows_TheOutboxPurge_StillRuns()
+    {
+        var scopes = 0;
+        var factory = new Mock<IServiceScopeFactory>();
+        factory.Setup(f => f.CreateScope()).Returns(() => throw new InvalidOperationException($"scope {Interlocked.Increment(ref scopes)}"));
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:DispatchIntervalSeconds"] = "3600" }).Build();
+        var service = new NotificationDispatchBackgroundService(factory.Object, config, NullLogger<NotificationDispatchBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        // Scope 1 is the tick, 2 the bell purge, 3 the outbox purge (never reached when they share a try block).
+        for (var i = 0; i < 50 && Volatile.Read(ref scopes) < 3; i++) await Task.Delay(100);
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.True(Volatile.Read(ref scopes) >= 3, $"the outbox purge never ran ({scopes} scope(s) opened)");
+    }
+
     [Fact]
     public async Task KillSwitch_LeavesRowsPending_NeverInvokesSendAsync()
     {
