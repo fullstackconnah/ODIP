@@ -136,8 +136,8 @@ internal sealed class InvoiceKit
         return claim;
     }
 
-    /// <summary>"TC-" and 17 digits: digits only, because PDF text extraction ligatures letter pairs such as "fb" and a random hex reference then fails a text match at random.</summary>
-    private static string RandomReference() => $"TC-{Random.Shared.NextInt64(10_000_000_000_000_000L, 99_999_999_999_999_999L)}";
+    /// <summary>"TC-" and 8 digits. Digits only, because PDF text extraction ligatures letter pairs such as "fb"; short, because the legacy number (INV-, the reference, 8 hex) sits in a 170pt header column and a longer one wraps at a hyphen, so the extracted words interleave with the address.</summary>
+    private static string RandomReference() => $"TC-{Random.Shared.Next(10_000_000, 99_999_999)}";
 
     public static int StatusOf<T>(ActionResult<ApiResponse<T>> r) => Assert.IsAssignableFrom<ObjectResult>(r.Result).StatusCode ?? 200;
     public static string RefusalOf<T>(ActionResult<ApiResponse<T>> r) => Assert.Single(Assert.IsType<ApiResponse<T>>(Assert.IsAssignableFrom<ObjectResult>(r.Result).Value).Errors!);
