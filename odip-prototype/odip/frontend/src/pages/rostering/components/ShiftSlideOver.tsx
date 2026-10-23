@@ -146,8 +146,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // The done sentence, shown as well as said (the region is sr-only, and the refusal that was on screen is gone). gone: the refreshed board no longer has the carried
   // person on the shift they were carried off, so the server would refuse the move again; the sentence says so and Save adds the shift without it.
   const [refreshDone, setRefreshDone] = useState<{ text: string; gone: boolean } | null>(null)
+  // The text of the foot notice last scrolled to (see showFootNotice).
+  const lastNoticeScrolled = useRef<string | null>(null)
   // The panel stays mounted while closed: a reopened one must not mount its announcement region already holding the last done line.
-  useEffect(() => { setRefreshSaid(''); setRefreshDone(null) }, [target])
+  useEffect(() => { setRefreshSaid(''); setRefreshDone(null); lastNoticeScrolled.current = null }, [target])
   // The live dry-run below runs the same readiness gate as the save, so in Enforce mode (or for an inactive participant, in either
   // mode) the server refuses it with the same 400 message. That is shown as soon as the preview says so, not only at Save. It is tied
   // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an
@@ -252,8 +254,13 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   }, [refusalKey, canWrite])
 
   // The foot notice (a refusal, or the refreshed-board sentence) is at the end of a long form: a person who pressed Save from the top has to be shown why nothing happened.
-  // A stable callback ref runs when the notice mounts, not on every render.
-  const showFootNotice = useCallback((el: HTMLDivElement | null) => bringIntoView(el), [])
+  // A stable callback ref runs when the notice mounts, not on every render. It scrolls only for text it has not scrolled to yet: every field edit re-keys the form and unmounts the notice, and the live check
+  // brings the same refusal back 400 ms later, which must not pull the field being edited off screen (as with refusalKey above).
+  const showFootNotice = useCallback((el: HTMLDivElement | null, text: string) => {
+    if (!el || lastNoticeScrolled.current === text) return
+    lastNoticeScrolled.current = text
+    bringIntoView(el)
+  }, [])
 
   if (!open) return null
 
@@ -330,6 +337,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   }
 
   async function handleSave() {
+    lastNoticeScrolled.current = null   // pressing Save asks again: a repeat of the last failure is shown, not skipped as already seen
     setError(null)
     setRefreshSaid('')
     setRefreshDone(done => (done?.gone ? done : null))   // the note that the move is gone stays: it is why Save sends none
@@ -681,12 +689,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {budgetNote && <p className="text-[13px] text-[var(--color-muted-foreground)]">{budgetNote}</p>}
 
         {footError && (
-          <div ref={showFootNotice} role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
+          <div ref={el => showFootNotice(el, footError)} role="alert" className="scroll-mb-[var(--card-pad)] rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
             {footError}
             {shownError?.boardChanged && <RefreshBoardAction announce={setRefreshSaid} onRefreshed={boardRefreshed} />}
           </div>
         )}
-        {refreshDone && <div ref={showFootNotice}><Callout tone={refreshDone.gone ? 'warning' : 'success'} announce={false}>{refreshDone.text}</Callout></div>}
+        {refreshDone && <div ref={el => showFootNotice(el, refreshDone.text)} className="scroll-mb-[var(--card-pad)]"><Callout tone={refreshDone.gone ? 'warning' : 'success'} announce={false}>{refreshDone.text}</Callout></div>}
       </SlideOver>
 
       <ConfirmDialog
