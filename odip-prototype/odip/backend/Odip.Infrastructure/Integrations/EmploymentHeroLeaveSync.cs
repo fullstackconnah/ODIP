@@ -56,14 +56,17 @@ public sealed class EmploymentHeroLeaveSync
             await ScanAsync(db, tenantId, EmploymentHeroLeave.Cutoff(conn.ConnectedAt), today, now, ct);
             await CheckChangesAsync(db, tenantId, map, today, now, ct);
             var drain = await DrainAsync(db, tenantId, key, conn.BusinessId, map, now, ct);
+            var pulled = pull && drain.StoppedBy is null ? await PullAsync(db, tenantId, key, conn.BusinessId, map, today, now, ct) : new PullResult(0, 0);
 
             if (drain.Flagged > 0)
                 await EmploymentHeroStaffSync.AlertAdminsAsync(db, tenantId, nameof(EmploymentHeroSyncLog), log.Id,
                     $"{drain.Flagged} leave requests couldn't be sent to Employment Hero. Settings → Integrations lists them.", ct);
-            if (drain.Sent + drain.Failed + drain.Flagged == 0 && drain.StoppedBy is null) return null;
+            if (drain.Sent + drain.Failed + drain.Flagged + pulled.Created + pulled.Updated == 0 && drain.StoppedBy is null) return null;
 
             log.FinishedAt = Now();
             log.Sent = drain.Sent;
+            log.Created = pulled.Created;
+            log.Updated = pulled.Updated;
             log.Failed = drain.Failed;
             log.NeedsAttention = drain.Flagged;
             log.ErrorClass = drain.StoppedBy?.ToString();
@@ -143,6 +146,149 @@ public sealed class EmploymentHeroLeaveSync
         var workerIds = leaves.Select(l => l.UserId).Distinct().ToList();
         var payroll = await db.Users.Where(u => u.TenantId == tenantId && workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.ExternalPayrollId, ct);
         return leaves.ToDictionary(l => l.Id, l => new RowData(l, payroll.GetValueOrDefault(l.UserId)));
+    }
+
+    private sealed record PullResult(int Created, int Updated);
+
+    /// <summary>
+    /// EH to ODIP, one list call (Decision 8): EH's Rejected or Cancelled closes an Approved ODIP leave (never the other way), approved EH-entered leave comes in
+    /// read-only and follows EH, ODIP's own sends are linked by marker and never imported. One save at the end, dropped if the connection changed meanwhile.
+    /// </summary>
+    private async Task<PullResult> PullAsync(OdipDbContext db, Guid tenantId, string key, string businessId, EmploymentHeroLeave.LeaveMapping map, DateOnly today, DateTime now, CancellationToken ct)
+    {
+        var windowFrom = today.AddDays(-WindowDays);
+        var windowTo = today.AddDays(366);
+        List<EhLeaveRef> listed;
+        try
+        {
+            listed = await _client.ListLeaveRequestsAsync(key, businessId, windowFrom, windowTo, null, ct);
+        }
+        catch (EmploymentHeroException)
+        {
+            return new(0, 0);
+        }
+
+        string Id(int n) => n.ToString(CultureInfo.InvariantCulture);
+        var ids = listed.Select(r => Id(r.Id)).ToList();
+        var linked = await db.Users.Where(u => u.TenantId == tenantId && u.ExternalPayrollId != null).Select(u => new { u.Id, Payroll = u.ExternalPayrollId! }).ToListAsync(ct);
+        var userByPayroll = linked.GroupBy(u => u.Payroll).ToDictionary(g => g.Key, g => g.First().Id);
+        var payrollByUser = linked.GroupBy(u => u.Id).ToDictionary(g => g.Key, g => g.First().Payroll);
+        var known = await db.LeaveRequests.Where(l => l.TenantId == tenantId && l.ExternalLeaveId != null && ids.Contains(l.ExternalLeaveId)).ToListAsync(ct);
+        var knownById = known.GroupBy(l => l.ExternalLeaveId!).ToDictionary(g => g.Key, g => g.First());
+        var cancelPending = (await db.EmploymentHeroOutbox.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.LeaveCancel && r.Status != EmploymentHeroOutboxStatus.Sent).Select(r => r.EntityId).ToListAsync(ct)).ToHashSet();
+        var rows = (await db.EmploymentHeroOutbox.AsNoTracking().Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Leave).ToListAsync(ct))
+            .GroupBy(r => r.EntityId).ToDictionary(g => g.Key, g => g.First());
+        var markerIds = listed.Select(r => EmploymentHeroLeave.TryParseMarker(r.Notes, out var m) ? m : (Guid?)null).OfType<Guid>().ToList();
+        var marked = markerIds.Count == 0 ? new Dictionary<Guid, LeaveRequest>()
+            : (await db.LeaveRequests.Where(l => l.TenantId == tenantId && l.Source == LeaveSource.Odip && markerIds.Contains(l.Id)).ToListAsync(ct)).ToDictionary(l => l.Id);
+        var unlinked = await db.LeaveRequests.Where(l => l.TenantId == tenantId && l.Status == LeaveStatus.Approved && l.Source == LeaveSource.Odip && l.ExternalLeaveId == null
+                                                         && l.EndDate >= windowFrom && l.StartDate <= windowTo).ToListAsync(ct);
+
+        // The drain owns an ODIP leave until its DELETE and re-POST land (Decision 6, S3).
+        bool Skipped(LeaveRequest l) => cancelPending.Contains(l.Id)
+            || (l.Source == LeaveSource.Odip && rows.TryGetValue(l.Id, out var row) && row.ExternalId is not null
+                && (!payrollByUser.TryGetValue(l.UserId, out var p) || row.ExternalEmployeeId != p));
+
+        var closures = new List<(LeaveRequest Leave, LeaveStatus To)>();
+        var created = new List<LeaveRequest>();
+        var changed = 0;
+        LeaveStatus? Verdict(string? status) => string.Equals(status, "Rejected", StringComparison.OrdinalIgnoreCase) ? LeaveStatus.Declined
+            : string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase) ? LeaveStatus.Cancelled : null;
+
+        foreach (var r in listed)
+        {
+            var eh = Id(r.Id);
+            var approved = string.Equals(r.Status, "Approved", StringComparison.OrdinalIgnoreCase);
+            var from = DateOnly.FromDateTime(r.FromDate);
+            var to = DateOnly.FromDateTime(r.ToDate);
+            var userId = userByPayroll.TryGetValue(Id(r.EmployeeId), out var u) ? (Guid?)u : null;
+
+            if (knownById.TryGetValue(eh, out var leave))                                    // rule 1
+            {
+                if (leave.Status != LeaveStatus.Approved || Skipped(leave)) continue;
+                if (Verdict(r.Status) is { } to2) closures.Add((leave, to2));
+                else if (leave.Source == LeaveSource.EmploymentHero && approved)
+                {
+                    var type = EmploymentHeroLeave.TypeFor(r.LeaveCategoryId, map);
+                    if (leave.StartDate != from || leave.EndDate != to || leave.LeaveType != type)
+                    {
+                        (leave.StartDate, leave.EndDate, leave.LeaveType, leave.UpdatedAt) = (from, to, type, now);
+                        changed++;
+                    }
+                }
+                continue;
+            }
+            if (EmploymentHeroLeave.TryParseMarker(r.Notes, out var markedId))               // rule 2
+            {
+                if (marked.TryGetValue(markedId, out var mine) && mine.ExternalLeaveId is null && !knownById.ContainsKey(eh)) { mine.ExternalLeaveId = eh; knownById[eh] = mine; unlinked.Remove(mine); }
+                continue;
+            }
+            if (!approved || userId is not { } owner) continue;
+            var twin = unlinked.FirstOrDefault(l => l.UserId == owner && l.StartDate == from && l.EndDate == to && !rows.ContainsKey(l.Id));   // rule 3
+            twin ??= unlinked.FirstOrDefault(l => l.UserId == owner && l.StartDate == from && l.EndDate == to                                    // rule 4
+                && rows.TryGetValue(l.Id, out var sending) && sending.ExternalId is null && sending.Attempts > 0
+                && EmploymentHeroLeave.Build(l, payrollByUser[owner], map).Line?.LeaveCategoryId == r.LeaveCategoryId);
+            if (twin is not null) { twin.ExternalLeaveId = eh; knownById[eh] = twin; unlinked.Remove(twin); continue; }
+            var added = new LeaveRequest                                                      // rule 5
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, UserId = owner, LeaveType = EmploymentHeroLeave.TypeFor(r.LeaveCategoryId, map), StartDate = from, EndDate = to,
+                Status = LeaveStatus.Approved, Source = LeaveSource.EmploymentHero, ExternalLeaveId = eh, RequestedByUserId = owner, RequestedAt = now, DecidedAt = now,
+                CreatedAt = now, UpdatedAt = now,
+            };
+            created.Add(added);
+            knownById[eh] = added;
+        }
+
+        // Known Approved leave EH didn't list gets a GET each, at most ten a pull.
+        var missing = await db.LeaveRequests.Where(l => l.TenantId == tenantId && l.Status == LeaveStatus.Approved && l.ExternalLeaveId != null
+                                                        && l.EndDate >= windowFrom && l.StartDate <= windowTo && !ids.Contains(l.ExternalLeaveId)).OrderBy(l => l.StartDate).ToListAsync(ct);
+        foreach (var l in missing.Where(m => !Skipped(m)).Take(10))
+        {
+            var employee = l.Source == LeaveSource.Odip && rows.TryGetValue(l.Id, out var sent) && sent.ExternalEmployeeId is not null ? sent.ExternalEmployeeId
+                : payrollByUser.GetValueOrDefault(l.UserId);
+            if (!int.TryParse(employee, NumberStyles.None, CultureInfo.InvariantCulture, out var employeeId) || !int.TryParse(l.ExternalLeaveId, NumberStyles.None, CultureInfo.InvariantCulture, out var leaveId)) continue;
+            try
+            {
+                var found = await _client.GetLeaveRequestAsync(key, businessId, employeeId, leaveId, ct);
+                if (found is null) closures.Add((l, LeaveStatus.Cancelled));
+                else if (Verdict(found.Status) is { } verdict) closures.Add((l, verdict));
+            }
+            catch (EmploymentHeroException)
+            {
+                break;
+            }
+        }
+
+        // S6, S7: a reconnect or disconnect while EH was being read drops the batch. N1: a decision made meanwhile is not overwritten.
+        var current = await db.EmploymentHeroConnections.AsNoTracking().Where(c => c.TenantId == tenantId).Select(c => c.BusinessId).FirstOrDefaultAsync(ct);
+        if (current != businessId)
+        {
+            db.ChangeTracker.Clear();
+            return new(0, 0);
+        }
+        var closeIds = closures.Select(c => c.Leave.Id).ToList();
+        var stillApproved = (await db.LeaveRequests.AsNoTracking().Where(l => closeIds.Contains(l.Id) && l.Status == LeaveStatus.Approved).Select(l => l.Id).ToListAsync(ct)).ToHashSet();
+        var tasks = new Odip.Infrastructure.Tasks.ObligationTaskService(db, _clock);
+        foreach (var (l, to) in closures.Where(c => stillApproved.Contains(c.Leave.Id)))
+        {
+            (l.Status, l.DecidedByUserId, l.DecidedAt, l.UpdatedAt) = (to, null, now, now);
+            if (to == LeaveStatus.Declined) l.DecisionNote = "Changed in Employment Hero";
+            await tasks.CompleteByLeaveAsync(l.Id, ct);
+            changed++;
+        }
+        db.LeaveRequests.AddRange(created);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            db.ChangeTracker.Clear();
+            _logger.LogInformation("Employment Hero leave pull for organisation {TenantId} collided with another run ({Error})", tenantId, ex.GetType().Name);
+            return new(0, 0);
+        }
+        return new(created.Count, changed);
     }
 
     private sealed record DrainResult(int Sent, int Failed, int Flagged, EmploymentHeroFailure? StoppedBy);

@@ -346,6 +346,50 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(1, eh.Requests.Count(r => r.Method == HttpMethod.Post && r.RequestUri!.AbsolutePath == EhLeaveFixture.Requests42));
     }
 
+    private static StubHttpHandler EhHolding(string fromDate, string toDate, string? notes) =>
+        EhLeaveFixture.Eh().OnAnyQuery("/api/v2/business/777/leaverequest", HttpStatusCode.OK,
+            new[] { new { id = 9001, employeeId = 42, leaveCategoryId = 5, fromDate, toDate, status = "Approved", notes } });
+
+    [SkippableFact]
+    public async Task A_pull_and_a_drain_on_one_EH_leave_keep_one_row_on_Postgres()
+    {
+        RequirePostgres();
+        var (db1, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _1 = db1;
+        var leave = await SeedLeaveAsync(db1, tenantId);
+        var now = DateTime.UtcNow;
+        var row = EmploymentHeroLeave.NewRow(tenantId, EmploymentHeroOutboxKind.Leave, leave.Id, now.AddMinutes(-20));
+        (row.Attempts, row.NextAttemptAt) = (1, now.AddMinutes(-10));
+        db1.EmploymentHeroOutbox.Add(row);
+        await db1.SaveChangesAsync();
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+        var eh = EhHolding(leave.StartDate.ToString("yyyy-MM-dd") + "T00:00:00", leave.EndDate.ToString("yyyy-MM-dd") + "T00:00:00", EmploymentHeroLeave.Marker(leave.Id));
+
+        await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, true, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, false, CancellationToken.None));
+
+        Assert.Equal(0, eh.Requests.Count(r => r.Method == HttpMethod.Post && r.RequestUri!.AbsolutePath == EhLeaveFixture.Requests42));
+        var all = await db1.LeaveRequests.AsNoTracking().ToListAsync();
+        Assert.Equal(("9001", LeaveSource.Odip), (Assert.Single(all).ExternalLeaveId, all[0].Source));
+    }
+
+    [SkippableFact]
+    public async Task Two_pulls_at_once_import_each_EH_leave_once_on_Postgres()
+    {
+        RequirePostgres();
+        var (db1, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _1 = db1;
+        await ConnectAsync(db1, tenantId);
+        await EhTimesheetFixture.WorkerAsync(db1, tenantId);
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+        var day = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(3).ToString("yyyy-MM-dd") + "T00:00:00";
+        var eh = EhHolding(day, day, null);
+        eh.BeforeAnswer = _ => Thread.Sleep(50);
+
+        await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, true, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, true, CancellationToken.None));
+
+        Assert.Equal(1, await db1.LeaveRequests.IgnoreQueryFilters().CountAsync(l => l.TenantId == tenantId && l.ExternalLeaveId == "9001"));
+    }
+
     [SkippableFact]
     public async Task Two_drains_at_once_post_each_shift_once_on_Postgres()
     {
