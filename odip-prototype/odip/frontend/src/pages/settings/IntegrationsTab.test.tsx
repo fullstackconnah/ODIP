@@ -7,7 +7,7 @@ import type { EmploymentHeroAttentionDto, EmploymentHeroEmployeeDto, EmploymentH
 
 const { state, calls } = vi.hoisted(() => ({
   state: { status: undefined as unknown, employees: [] as unknown[], dismissError: null as unknown, dismissVariables: undefined as string | undefined, disconnectError: null as unknown,
-    workTypes: [{ id: '5', name: 'Ordinary' }, { id: '6', name: 'Night' }] as unknown, workTypesError: false, saveError: null as unknown },
+    workTypes: [{ id: '5', name: 'Ordinary' }, { id: '6', name: 'Night' }] as unknown, workTypesError: false, workTypesLoading: false, saveError: null as unknown },
   calls: { businesses: vi.fn(), connect: vi.fn(), sync: vi.fn(), disconnect: vi.fn(), link: vi.fn(), dismiss: vi.fn(), saveWorkTypes: vi.fn() },
 }))
 
@@ -19,7 +19,7 @@ vi.mock('@/api/hooks', () => ({
   useDisconnectEmploymentHero: () => ({ mutate: calls.disconnect, isPending: false, error: state.disconnectError }),
   useEmploymentHeroEmployees: () => ({ data: state.employees, isLoading: false, isError: false, error: null }),
   useLinkEmploymentHeroStaff: () => ({ mutate: calls.link, isPending: false, error: null }),
-  useEmploymentHeroWorkTypes: () => ({ data: state.workTypesError ? undefined : state.workTypes, isLoading: false, isError: state.workTypesError, error: null, refetch: vi.fn() }),
+  useEmploymentHeroWorkTypes: () => ({ data: state.workTypesError || state.workTypesLoading ? undefined : state.workTypes, isLoading: state.workTypesLoading, isError: state.workTypesError, error: null, refetch: vi.fn() }),
   useSaveEmploymentHeroWorkTypes: () => ({ mutate: calls.saveWorkTypes, isPending: false, isSuccess: false, error: state.saveError }),
   useDismissEmploymentHeroItem: () => ({ mutate: calls.dismiss, isPending: false, error: state.dismissError, variables: state.dismissVariables }),
 }))
@@ -46,6 +46,7 @@ afterEach(() => {
   state.dismissVariables = undefined
   state.disconnectError = null
   state.workTypesError = false
+  state.workTypesLoading = false
   state.saveError = null
 })
 
@@ -272,6 +273,20 @@ describe('IntegrationsTab — timesheets and work types', () => {
     state.status = connected()
     renderTab()
     expect(screen.getByText(/None sent yet/)).toBeInTheDocument()
+  })
+
+  it('words the work types as the shape brief does', () => {
+    state.status = connected()
+    renderTab()
+    expect(screen.getByText('Which Employment Hero work type each kind of shift is paid as. Night shifts wait until theirs is chosen.')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Day and evening shifts')).getByRole('option', { name: 'Usual pay (no work type)' })).toBeInTheDocument()
+  })
+
+  it("reads the work types with the brief's words while loading", () => {
+    state.status = connected()
+    state.workTypesLoading = true
+    renderTab()
+    expect(screen.getByText("Reading Employment Hero's work types…")).toBeInTheDocument()
   })
 
   it('saves exactly the chosen ids, and only once something changed', async () => {

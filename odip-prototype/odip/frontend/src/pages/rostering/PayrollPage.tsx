@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Plug, CalendarX } from 'lucide-react'
 import { usePayPeriods, usePayrollCheck, useSendMissingTimesheets } from '@/api/hooks'
 import type { PayPeriodDto, PayrollShiftDto, PayrollWorkerDto } from '@/api/types'
@@ -42,9 +43,11 @@ const hours = (minutes: number) => {
   const m = minutes % 60
   return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${m} min`
 }
+/** A no-break space before am/pm, so a time never splits from it at 390. */
+const keepAmPm = (t: string) => t.replace(/(?<=\d)\s+(?=[ap]m\b)/gi, '\u00A0')
 const clock = (time: string) => {
   const [h, m] = time.split(':').map(Number)
-  return new Date(2000, 0, 1, h, m).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })
+  return keepAmPm(new Date(2000, 0, 1, h, m).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }))
 }
 const periodKey = (p: PayPeriodDto) => `${p.payScheduleId}|${p.from}`
 
@@ -58,7 +61,7 @@ type WorkerRow = PayrollWorkerDto & { id: string; worst: PayrollShiftStatus; not
 function shiftLine(s: PayrollShiftDto) {
   const rostered = `Rostered ${clock(s.rosteredStart)}${DASH}${clock(s.rosteredEnd)} (${hours(s.rosteredMinutes)})`
   if (s.nightType === 'Sleepover') return `${rostered} · Sleepover: rostered times sent`
-  const time = (iso: string | null) => formatWithTimeZone(iso, s.timeZoneId, { hour: 'numeric', minute: '2-digit' })
+  const time = (iso: string | null) => keepAmPm(formatWithTimeZone(iso, s.timeZoneId, { hour: 'numeric', minute: '2-digit' }))
   const actual = s.actualEnd
     ? `Actual ${time(s.actualStart)}${DASH}${time(s.actualEnd)}${s.breakMinutes > 0 ? `, ${s.breakMinutes} min break` : ''} (${hours(s.paidMinutes)})`
     : 'Actual hours not recorded'
@@ -66,7 +69,7 @@ function shiftLine(s: PayrollShiftDto) {
   return `${lead}${rostered} · ${actual}`
 }
 
-function ShiftLines({ id, shifts }: { id: string; shifts: PayrollShiftDto[] }) {
+function ShiftLines({ id, shifts, canLink }: { id: string; shifts: PayrollShiftDto[]; canLink: boolean }) {
   return (
     <ul id={id} className="flex flex-col gap-3 py-1">
       {shifts.map(s => (
@@ -78,10 +81,13 @@ function ShiftLines({ id, shifts }: { id: string; shifts: PayrollShiftDto[] }) {
             <Word status={s.status} />
           </div>
           <span className="text-[13px] text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{shiftLine(s)}</span>
-          {s.status !== 'Sent' && s.reason && <span className="text-[13px] [overflow-wrap:anywhere]">{s.reason}</span>}
+          {s.status !== 'Sent' && s.reason && <span className="text-[13px] [overflow-wrap:anywhere]">{keepAmPm(s.reason)}</span>}
+          {s.status === 'NotLinked' && canLink && (
+            <Link className="flex w-fit items-center text-[13px] underline pointer-coarse:min-h-[var(--tap-min)]" to="/settings?section=integrations">Link in Settings → Integrations</Link>
+          )}
           {s.status === 'Sent' && s.sentAt && (
             <span className="text-[13px] text-[var(--color-muted-foreground)]">
-              Sent {formatWithTimeZone(s.sentAt, undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+              Sent {keepAmPm(formatWithTimeZone(s.sentAt, undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }))}
             </span>
           )}
         </li>
@@ -100,13 +106,17 @@ function summaryText(c: { approved: number; sent: number; waiting: number; faile
 
 /** Rostering → Payroll: has every approved shift in a pay period reached Employment Hero as worked, and if not, why. */
 export default function PayrollPage() {
-  const { isAdmin, isSuperAdmin } = usePermissions()
+  const { isAdmin, isSuperAdmin, canManageIntegrations } = usePermissions()
   const canSend = isAdmin || isSuperAdmin
   const periods = usePayPeriods()
   const [picked, setPicked] = useState<string | null>(null)
   const [toggled, setToggled] = useState<Record<string, boolean>>({})
   const [queued, setQueued] = useState<{ key: string; text: string } | null>(null)
   const send = useSendMissingTimesheets()
+  // The query drops its error while a retry runs; keep the server's words on screen through it.
+  const [periodsDetail, setPeriodsDetail] = useState('')
+  const periodsMessage = extractErrorMessage(periods.error, '')
+  if (periodsMessage && periodsMessage !== periodsDetail) setPeriodsDetail(periodsMessage)
 
   const list = periods.data?.periods ?? []
   const showSchedule = new Set(list.map(p => p.payScheduleId)).size > 1
@@ -135,12 +145,12 @@ export default function PayrollPage() {
       ),
     },
     { key: 'shifts', header: 'Shifts', mobile: 'meta', render: w => plural(w.shifts.length, 'shift') },
-    { key: 'rostered', header: 'Rostered', mobile: 'meta', render: w => `Rostered ${hours(w.rosteredMinutes)}` },
-    { key: 'paid', header: 'Actual', mobile: 'meta', render: w => `Actual ${hours(w.paidMinutes)}` },
+    { key: 'rostered', header: 'Rostered', mobile: 'meta', render: w => <span><span className="md:hidden">Rostered </span>{hours(w.rosteredMinutes)}</span> },
+    { key: 'paid', header: 'Actual', mobile: 'meta', render: w => <span><span className="md:hidden">Actual </span>{hours(w.paidMinutes)}</span> },
     {
       key: 'status', header: 'Status', mobile: 'status',
       render: w => (
-        <span className="inline-flex flex-wrap items-center gap-2">
+        <span className="inline-flex flex-wrap items-center gap-2 md:flex-nowrap">
           <Word status={w.worst} />
           {w.notSent > 0 && <span className={MUTED}>{w.notSent} of {w.shifts.length} not sent</span>}
         </span>
@@ -169,7 +179,7 @@ export default function PayrollPage() {
   const header = <PageHeader title="Payroll" subtitle="Approved hours and what Employment Hero has, by pay period." />
 
   if (periods.isLoading && !retryingAfterError(periods)) return <>{header}<PageState kind="loading" noun="payroll" /></>
-  if (!periods.data) return <>{header}<PageState kind="error" noun="payroll" onRetry={() => periods.refetch()} /></>
+  if (!periods.data) return <>{header}<PageState kind="error" noun="payroll" detail={periodsDetail || undefined} onRetry={() => periods.refetch()} /></>
   if (!periods.data.connected) {
     return (
       <>
@@ -195,13 +205,13 @@ export default function PayrollPage() {
   const sendable = data?.sendable ?? 0
   const pendingMessage = queued && current && queued.key === periodKey(current) ? queued.text : null
   const updated = check.dataUpdatedAt
-    ? `Updated ${new Date(check.dataUpdatedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`
+    ? `Updated ${keepAmPm(new Date(check.dataUpdatedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }))}`
     : ''
 
   return (
     <>
       {header}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 pt-[var(--section-gap)]">
         <SelectField
           label="Pay period"
           className="w-full max-w-[24rem]"
@@ -222,16 +232,17 @@ export default function PayrollPage() {
             <div className="flex flex-col gap-1 md:items-end">
               <Button
                 className="min-w-[10.5rem] max-md:w-full"
-                disabled={send.isPending || sendable === 0 || !current}
-                aria-describedby={sendable === 0 ? 'send-missing-none' : undefined}
+                disabled={send.isPending || !data || sendable === 0 || !current}
+                aria-describedby={data && sendable === 0 ? 'send-missing-none' : undefined}
                 onClick={() => current && send.mutate(
                   { from: current.from, to: current.to },
                   { onSuccess: r => setQueued({ key: periodKey(current), text: `Queued ${plural(r.queued, 'shift')}. ODIP sends about 25 a minute.` }) },
                 )}
               >
-                {send.isPending ? 'Sending…' : `Send missing (${sendable})`}
+                {send.isPending ? 'Sending…' : data ? `Send missing (${sendable})` : 'Send missing'}
               </Button>
-              {sendable === 0 && <span id="send-missing-none" className={MUTED}>Nothing to send.</span>}
+              {/* A reserved line, so the row holds its height whether the check is loading, failed or answered. */}
+              <span id="send-missing-none" className={`${MUTED} min-h-5`}>{data && sendable === 0 ? 'Nothing to send.' : ''}</span>
             </div>
           ) : (
             <p className={MUTED}>An Admin can send missing hours.</p>
@@ -259,7 +270,7 @@ export default function PayrollPage() {
           error={check.isError}
           onRetry={() => check.refetch()}
           emptyMessage="Nothing to check for these dates."
-          rowDetail={w => (isOpen(w) ? <ShiftLines id={`shifts-${w.id}`} shifts={w.shifts} /> : null)}
+          rowDetail={w => (isOpen(w) ? <ShiftLines id={`shifts-${w.id}`} shifts={w.shifts} canLink={canManageIntegrations} /> : null)}
         />
       </div>
     </>

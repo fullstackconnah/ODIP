@@ -186,7 +186,7 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
 }
 
 const WORK_TYPE_FIELDS: { key: keyof EmploymentHeroWorkTypesDto; label: string; none: string }[] = [
-  { key: 'standard', label: 'Day and evening shifts', none: "The employee's usual pay (no work type)" },
+  { key: 'standard', label: 'Day and evening shifts', none: 'Usual pay (no work type)' },
   { key: 'activeNight', label: 'Active nights', none: 'Not chosen' },
   { key: 'passiveNight', label: 'Passive nights', none: 'Not chosen' },
   { key: 'sleepover', label: 'Sleepovers', none: 'Not chosen' },
@@ -202,9 +202,9 @@ function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
   return (
     <section aria-labelledby="eh-work-types" className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-[var(--section-gap)]">
       <h4 id="eh-work-types" className="text-sm font-semibold">Work types</h4>
-      <p className={MUTED}>Approved hours go to Employment Hero under these work types. Night and sleepover hours wait until their type is chosen.</p>
+      <p className={MUTED}>Which Employment Hero work type each kind of shift is paid as. Night shifts wait until theirs is chosen.</p>
       {types.isLoading && !retryingAfterError(types) ? (
-        <p className={MUTED}>Loading work types…</p>
+        <p className={MUTED} role="status">Reading Employment Hero's work types…</p>
       ) : types.isError || !types.data ? (
         <Callout tone="danger">
           <p>{extractErrorMessage(types.error, "Employment Hero's work types couldn't be loaded.")}</p>
@@ -235,10 +235,10 @@ function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
           </div>
           {save.error != null && <Callout tone="danger">{extractErrorMessage(save.error, "The work types couldn't be saved. Try again.")}</Callout>}
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" disabled={draft === null || save.isPending} onClick={() => draft && save.mutate(draft, { onSuccess: () => setDraft(null) })}>
+            <Button variant="secondary" className="min-w-[10rem]" disabled={draft === null || save.isPending} onClick={() => draft && save.mutate(draft, { onSuccess: () => setDraft(null) })}>
               {save.isPending ? 'Saving…' : 'Save work types'}
             </Button>
-            <span className={MUTED} role="status">{save.isSuccess && draft === null ? 'Work types saved. Waiting shifts are queued to send.' : ''}</span>
+            <span className={`${MUTED} min-h-5 basis-full`} role="status">{save.isSuccess && draft === null ? 'Work types saved. Waiting shifts are queued to send.' : ''}</span>
           </div>
         </>
       )}

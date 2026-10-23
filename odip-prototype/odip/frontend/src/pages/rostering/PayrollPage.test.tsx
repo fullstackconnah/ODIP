@@ -6,19 +6,19 @@ import PayrollPage from './PayrollPage'
 import type { PayrollCheckDto, PayrollShiftDto, PayrollWorkerDto } from '@/api/types'
 
 const { state, calls } = vi.hoisted(() => ({
-  state: { periods: undefined as unknown, check: undefined as unknown, admin: true, checkError: false },
+  state: { periods: undefined as unknown, check: undefined as unknown, admin: true, checkError: false, checkLoading: false, periodsError: null as unknown },
   calls: { send: vi.fn(), checkRange: vi.fn() },
 }))
 
 vi.mock('@/api/hooks', () => ({
-  usePayPeriods: () => ({ data: state.periods, isLoading: false, isError: !state.periods, refetch: vi.fn() }),
+  usePayPeriods: () => ({ data: state.periods, isLoading: false, isError: !state.periods, error: state.periodsError, refetch: vi.fn() }),
   usePayrollCheck: (range: unknown) => {
     calls.checkRange(range)
-    return { data: state.check, isLoading: false, isError: state.checkError, refetch: vi.fn(), dataUpdatedAt: 0 }
+    return { data: state.check, isLoading: state.checkLoading, isError: state.checkError, refetch: vi.fn(), dataUpdatedAt: 0 }
   },
   useSendMissingTimesheets: () => ({ mutate: calls.send, isPending: false, isError: false, error: null, reset: vi.fn() }),
 }))
-vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ isAdmin: state.admin, isSuperAdmin: false }) }))
+vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ isAdmin: state.admin, isSuperAdmin: false, canManageIntegrations: state.admin }) }))
 
 const period = (o = {}) => ({ payScheduleId: 1, scheduleName: 'Fortnightly', from: '2026-10-06', to: '2026-10-19', finalised: false, ...o })
 const shift = (o: Partial<PayrollShiftDto> = {}): PayrollShiftDto => ({
@@ -44,6 +44,8 @@ afterEach(() => {
   vi.clearAllMocks()
   state.admin = true
   state.checkError = false
+  state.checkLoading = false
+  state.periodsError = null
 })
 
 describe('PayrollPage', () => {
@@ -103,5 +105,46 @@ describe('PayrollPage', () => {
   it('offers Open Integrations to an Admin when Employment Hero is not connected', () => {
     setup(check(), { connected: false, today: '2026-10-14', periods: [] })
     expect(screen.getByRole('link', { name: 'Open Integrations' })).toHaveAttribute('href', '/settings?section=integrations')
+  })
+  it.each([['loading', true, false], ['failed', false, true]])('claims no count while the check is %s', (_n, loading, failed) => {
+    state.periods = { connected: true, today: '2026-10-14', periods: [period()] }
+    state.check = undefined
+    state.checkLoading = loading
+    state.checkError = failed
+    render(<MemoryRouter><PayrollPage /></MemoryRouter>)
+    expect(screen.getByRole('button', { name: 'Send missing' })).toBeDisabled()
+    expect(screen.queryByText('Nothing to send.')).toBeNull()
+  })
+
+  it("shows the server's words when the pay periods cannot be loaded", () => {
+    state.periods = undefined
+    state.periodsError = { response: { data: { message: 'Employment Hero refused the API key.' } } }
+    render(<MemoryRouter><PayrollPage /></MemoryRouter>)
+    expect(screen.getByText('Employment Hero refused the API key.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
+  it('offers an Admin the Integrations link on a Not linked shift, and a Coordinator only the reason', () => {
+    const c = check({ workers: [worker({ linked: false, shifts: [shift({ status: 'NotLinked', reason: 'Not linked to Employment Hero.' })] })] })
+    setup(c)
+    expect(screen.getByRole('link', { name: 'Link in Settings → Integrations' })).toHaveAttribute('href', '/settings?section=integrations')
+    cleanup()
+    state.admin = false
+    setup(c)
+    expect(screen.getByText('Not linked to Employment Hero.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Link in Settings/ })).toBeNull()
+  })
+
+  it('keeps each time with its am or pm', () => {
+    setup(check({ approved: 1, sent: 0, waiting: 1, sendable: 1, workers: [worker({ shifts: [shift({ status: 'Waiting', reason: 'Queued. ODIP tries again at 9:15 am.' })] })] }))
+    expect(document.body.textContent).toMatch(/Rostered 9:00\u00A0am/)
+    expect(document.body.textContent).toMatch(/at 9:15\u00A0am/)
+    expect(document.body.textContent).not.toMatch(/\d:\d\d[ \u202F][ap]m/)
+  })
+
+  it('puts the Rostered and Actual prefixes on the phone card only', () => {
+    setup(check())
+    const prefixes = [...document.querySelectorAll('td span[class~="md:hidden"]')].map(e => e.textContent?.trim())
+    expect(prefixes).toEqual(['Rostered', 'Actual'])
   })
 })

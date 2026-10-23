@@ -151,6 +151,16 @@ describe('PageState: error', () => {
   })
 })
 
+describe('PageState: error detail', () => {
+  it('shows the given detail as one line under the title, and nothing extra without it', () => {
+    const { rerender } = renderState(<PageState kind="error" noun="payroll" detail="Employment Hero refused the API key." />)
+    expect(screen.getByText('Employment Hero refused the API key.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this payroll.")
+    rerender(<MemoryRouter><PageState kind="error" noun="payroll" /></MemoryRouter>)
+    expect(screen.getByRole('alert')).toHaveTextContent(/^Couldn't load this payroll\. Check your connection and try again\.$/)
+  })
+})
+
 describe('PageState: not found', () => {
   it('says the record is missing, with the noun capitalised', () => {
     renderState(<PageState kind="not-found" noun="staff member" />)
