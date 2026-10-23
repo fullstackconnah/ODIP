@@ -52,6 +52,7 @@ async function submitTenantWithFirstUser() {
   render(<TenantFormPanel isOpen onClose={onClose} />)
   await u.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Brightside Care')
   await u.type(screen.getByPlaceholderText('e.g. acme.com.au'), 'brightside.example.com')
+  await u.click(screen.getByRole('radio', { name: 'NSW' }))
   await u.click(screen.getByRole('button', { name: /initial admin user/i }))
   await u.type(screen.getByLabelText('First Name'), 'Jane')
   await u.type(screen.getByLabelText('Last Name'), 'Smith')
@@ -84,7 +85,7 @@ describe('TenantFormPanel create: a first user address the server wants checked'
 
     await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(2))
     expect(mockCreate.mock.calls[1][0]).toEqual({
-      name: 'Brightside Care', emailDomain: 'brightside.example.com', providerSettings: null, initialUser: firstUser({ addressConfirmed: true }),
+      name: 'Brightside Care', emailDomain: 'brightside.example.com', providerSettings: expect.objectContaining({ state: 'NSW', organisationName: 'Brightside Care' }), initialUser: firstUser({ addressConfirmed: true }),
     })
     expect(await screen.findByText('Brightside Care was created.', { selector: 'p' })).toBeInTheDocument()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()

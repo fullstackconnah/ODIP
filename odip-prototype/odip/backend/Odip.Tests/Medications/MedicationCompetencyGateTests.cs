@@ -96,7 +96,7 @@ public class MedicationCompetencyGateTests
         MedicationCompetencyMode mode = MedicationCompetencyMode.Enforce, bool withSettingsRow = true)
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.TenantId).Returns((Guid?)Guid.Empty);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
         var db = new OdipDbContext(
             new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);

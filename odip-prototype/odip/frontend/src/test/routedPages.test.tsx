@@ -35,6 +35,10 @@ const WRAPPED: [RegExp, unknown][] = [
   [new RegExp(`/inquiries/${ID}/onboarding$`), { ...RECORD, items: [] }],
   // The dashboard summary is an object, not a list: with the list shape the page crashed on `upcomingTrips` as soon as it arrived (a race this test used to win).
   [/\/dashboard\/summary$/, { upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0, overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [] }],
+  // Not connected: the Payroll page reads an object, and its not-connected state is its quiet default.
+  [/\/payroll\/periods$/, { connected: false, today: '2026-10-14', periods: [] }],
+  // The payslip list is an object ($ keeps /portal/payslips/9001/pdf out).
+  [/\/portal\/payslips$/, { status: 'Ready', payslips: [] }],
 ]
 
 function answer(url: string): unknown {
@@ -92,6 +96,7 @@ const ROUTES: Route[] = [
   { path: '/rostering/compatibility', url: '/rostering/compatibility', load: () => import('@/pages/rostering/CompatibilityPage') },
   { path: '/rostering/leave', url: '/rostering/leave', load: () => import('@/pages/rostering/LeaveApprovalsPage') },
   { path: '/rostering/completions', url: '/rostering/completions', load: () => import('@/pages/rostering/CompletionReviewPage') },
+  { path: '/rostering/payroll', url: '/rostering/payroll', load: () => import('@/pages/rostering/PayrollPage') },
   { path: '/medications', url: '/medications', load: () => import('@/pages/MedicationsPage') },
   { path: '/medications/new', url: `/medications/new?participantId=${ID}`, load: () => import('@/pages/MedicationFormPage') },
   { path: '/medications/:id/edit', url: `/medications/${ID}/edit`, load: () => import('@/pages/MedicationFormPage') },
@@ -99,6 +104,7 @@ const ROUTES: Route[] = [
   { path: '/portal/shifts/:id', url: `/portal/shifts/${ID}`, load: () => import('@/pages/portal/PortalShiftDetailPage') },
   { path: '/portal/witness-approvals', url: '/portal/witness-approvals', load: () => import('@/pages/portal/PortalWitnessApprovalsPage') },
   { path: '/portal/leave', url: '/portal/leave', load: () => import('@/pages/portal/PortalLeavePage') },
+  { path: '/portal/payslips', url: '/portal/payslips', load: () => import('@/pages/portal/PortalPayslipsPage') },
   { path: '/accessibility', url: '/accessibility', load: () => import('@/pages/AccessibilityPage') },
   { path: '*', url: '/no-such-page', load: () => import('@/pages/NotFoundPage') },
 ]
@@ -118,8 +124,8 @@ const ALLOWED: Record<string, string> = {
 
 // These titles were renamed (or their nav label was) so the two match; this keeps them there.
 const RENAMED_TO_NAV_LABEL = [
-  '/incidents', '/schedule', '/qualifications', '/rostering', '/portal',
-  '/trips', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions',
+  '/incidents', '/schedule', '/qualifications', '/rostering', '/portal', '/portal/payslips',
+  '/trips', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/rostering/payroll',
 ]
 
 let previousAdapter: typeof apiClient.defaults.adapter

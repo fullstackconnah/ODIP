@@ -18,4 +18,7 @@ public static class EmailIdentity
     /// lower-case with the invariant culture. An address's own domain (the part after its "@") is already in this form once the address is normalised.
     /// </summary>
     public static string NormaliseDomain(string domain) => domain.Trim().TrimStart('@').Trim().ToLowerInvariant();
+
+    /// <summary>The tidied domain, or null when nothing is left (the domain is optional).</summary>
+    public static string? NormaliseDomainOrNull(string? domain) => domain is null || NormaliseDomain(domain) is not { Length: > 0 } d ? null : d;
 }

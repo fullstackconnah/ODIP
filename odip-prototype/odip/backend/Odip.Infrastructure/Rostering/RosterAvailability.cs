@@ -31,8 +31,24 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         var compatibility = await db.StaffParticipantCompatibilities
             .Where(c => userIds.Contains(c.UserId) && participantIds.Contains(c.ParticipantId))
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
-        return new Snapshot(staff, participants, shifts, trips, windows, compatibility, await PublicHolidaysAsync(from, to, ct));
+        return new Snapshot(staff, participants, shifts, trips, windows, compatibility, await PublicHolidaysAsync(from, to, ct),
+            await WeeklyHoursAsync(db, staff.Select(u => u.TenantId), ct));
     }
+
+    /// <summary>
+    /// Each organisation's weekly-hours warning (Settings > Alert windows), by tenant id. Read by explicit tenant id rather than the ambient filter so a SuperAdmin's mixed board
+    /// judges each worker by their own organisation's figure. An organisation with no settings row is absent: callers fall back to <see cref="RosterConflictService.DefaultWeeklyHoursThreshold"/>.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<Guid, int>> WeeklyHoursAsync(OdipDbContext db, IEnumerable<Guid> tenantIds, CancellationToken ct)
+    {
+        var ids = tenantIds.Distinct().ToList();
+        var rows = await db.AppSettings.IgnoreQueryFilters().Where(s => ids.Contains(s.TenantId)).OrderBy(s => s.Id).Select(s => new { s.TenantId, s.WeeklyHoursWarning }).ToListAsync(ct);
+        return rows.GroupBy(r => r.TenantId).ToDictionary(g => g.Key, g => g.First().WeeklyHoursWarning);
+    }
+
+    /// <summary>The organisation's figure from <see cref="WeeklyHoursAsync"/>, or the 38 hours that used to be fixed.</summary>
+    public static decimal WeeklyHoursFor(IReadOnlyDictionary<Guid, int>? byTenant, Guid tenantId) =>
+        byTenant is not null && byTenant.TryGetValue(tenantId, out var hours) ? hours : RosterConflictService.DefaultWeeklyHoursThreshold;
 
     /// <summary>
     /// PUBLIC_HOLIDAY source of truth (connection-map item 8): the same holidays as the claim engines
@@ -44,7 +60,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
     /// </summary>
     public async Task<List<PublicHolidayRef>> PublicHolidaysAsync(DateOnly start, DateOnly end, CancellationToken ct)
     {
-        var state = await db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct);
+        var state = await db.ScopedProviderSettings().Select(s => s.State).FirstOrDefaultAsync(ct);
         return PublicHolidayLoader.RosterRefsFor(await PublicHolidayLoader.LoadAsync(db, start, end, includePartDay: false, ct), state);
     }
 
@@ -76,7 +92,8 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
 
     /// <summary>What the rules read for a set of shifts, held in memory; <see cref="Check"/> builds each shift's <see cref="RosterCheckContext"/> as the controller's check did.</summary>
     public sealed class Snapshot(IEnumerable<User> staff, IEnumerable<Participant> participants, IEnumerable<Shift> shifts, IReadOnlyList<StaffAssignment> trips,
-        IReadOnlyList<UnavailabilityWindow> windows, IReadOnlyDictionary<(Guid UserId, Guid ParticipantId), CompatibilityLevel> compatibility, IReadOnlyList<PublicHolidayRef> holidays)
+        IReadOnlyList<UnavailabilityWindow> windows, IReadOnlyDictionary<(Guid UserId, Guid ParticipantId), CompatibilityLevel> compatibility, IReadOnlyList<PublicHolidayRef> holidays,
+        IReadOnlyDictionary<Guid, int>? weeklyHours = null)
     {
         // L5 and L-b: what makes a regular "away", as the short reason the chip shows. Pending leave is not away; an expired screening (R3) is.
         private static readonly Dictionary<string, string> AwayReasons = new()
@@ -125,7 +142,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
                 trips.Where(a => a.UserId == userId).ToList(),
                 windows.Where(w => w.UserId == userId).ToList(),
                 compatibility.TryGetValue((userId, candidate.ParticipantId), out var level) ? level : CompatibilityLevel.Allowed,
-                RosterConflictService.DefaultWeeklyHoursThreshold, holidays);
+                WeeklyHoursFor(weeklyHours, worker.TenantId), holidays);
             return _rules.Check(candidate, ctx).ToList();
         }
     }

@@ -38,6 +38,7 @@ async function openFirstUser() {
   render(<TenantFormPanel isOpen onClose={vi.fn()} />)
   await u.type(screen.getByPlaceholderText('e.g. Acme Travel Co'), 'Brightside Care')
   await u.type(screen.getByPlaceholderText('e.g. acme.com.au'), 'brightside.example.com')
+  await u.click(screen.getByRole('radio', { name: 'NSW' }))
   await u.click(screen.getByRole('button', { name: /initial admin user/i }))
   return u
 }
@@ -124,7 +125,7 @@ describe('TenantFormPanel: the first user\'s password', () => {
     expect(mockCreate).toHaveBeenCalledWith({
       name: 'Brightside Care',
       emailDomain: 'brightside.example.com',
-      providerSettings: null,
+      providerSettings: expect.objectContaining({ state: 'NSW', organisationName: 'Brightside Care' }),
       initialUser: {
         firstName: 'Jane', lastName: 'Smith', email: 'jane.smith@brightside.example.com', username: 'jane.smith', role: 'Admin', password: 'Winter-2026!',
       },

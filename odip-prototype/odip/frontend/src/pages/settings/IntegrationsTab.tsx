@@ -1,9 +1,13 @@
 import { useId, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   useConnectEmploymentHero, useDisconnectEmploymentHero, useDismissEmploymentHeroItem, useEmploymentHeroBusinesses,
-  useEmploymentHeroEmployees, useEmploymentHeroStatus, useLinkEmploymentHeroStaff, useSyncEmploymentHero,
+  useEmploymentHeroEmployees, useEmploymentHeroStatus, useEmploymentHeroWorkTypes, useLinkEmploymentHeroStaff,
+  useSaveEmploymentHeroWorkTypes, useSyncEmploymentHero,
 } from '@/api/hooks'
-import type { EmploymentHeroAttentionDto, EmploymentHeroAttentionKind, EmploymentHeroBusinessDto, EmploymentHeroStatusDto } from '@/api/types'
+import type {
+  EmploymentHeroAttentionDto, EmploymentHeroAttentionKind, EmploymentHeroBusinessDto, EmploymentHeroStatusDto, EmploymentHeroWorkTypesDto,
+} from '@/api/types'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -134,6 +138,15 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
             : 'Not yet. The first sync runs within 30 minutes, or press Sync now.',
         },
         { label: 'Staff', value: `${plural(eh.staffLinked, 'staff member')} linked, ${eh.staffNotLinked} not linked` },
+        {
+          label: 'Timesheets',
+          value: (
+            <>
+              {eh.timesheetsSent + eh.timesheetsWaiting === 0 ? 'None sent yet' : `${eh.timesheetsSent.toLocaleString('en-AU')} sent, ${eh.timesheetsWaiting} waiting`}
+              {' \u00b7 '}<Link className="underline" to="/rostering/payroll">Check pay periods</Link>
+            </>
+          ),
+        },
       ]} />
       {/* Failures sit under the facts and above the buttons, never at the bottom of the card. */}
       {eh.lastSyncError && (
@@ -150,6 +163,7 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
         <Button variant="secondary" className="sm:ml-auto" onClick={() => setConfirming(true)}>Disconnect</Button>
       </div>
       <AnnouncementRegion message={sync.isSuccess ? 'Sync finished.' : ''} />
+      <WorkTypes saved={eh.workTypes} />
       {(eh.lastSyncAt || eh.attention.length > 0) && <Attention items={eh.attention} />}
       <ConfirmDialog
         open={confirming}
@@ -168,6 +182,67 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
         onConfirm={() => disconnect.mutate(undefined, { onSuccess: () => setConfirming(false) })}
       />
     </div>
+  )
+}
+
+const WORK_TYPE_FIELDS: { key: keyof EmploymentHeroWorkTypesDto; label: string; none: string }[] = [
+  { key: 'standard', label: 'Day and evening shifts', none: 'Usual pay (no work type)' },
+  { key: 'activeNight', label: 'Active nights', none: 'Not chosen' },
+  { key: 'passiveNight', label: 'Passive nights', none: 'Not chosen' },
+  { key: 'sleepover', label: 'Sleepovers', none: 'Not chosen' },
+]
+
+/** Which Employment Hero work type each kind of approved hours is sent under. Read live from EH; saving queues the waiting shifts. */
+function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
+  const types = useEmploymentHeroWorkTypes(true)
+  const save = useSaveEmploymentHeroWorkTypes()
+  const [draft, setDraft] = useState<EmploymentHeroWorkTypesDto | null>(null)
+  const value = draft ?? saved
+  const known = new Set((types.data ?? []).map(t => t.id))
+  return (
+    <section aria-labelledby="eh-work-types" className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-[var(--section-gap)]">
+      <h4 id="eh-work-types" className="text-sm font-semibold">Work types</h4>
+      <p className={MUTED}>Which Employment Hero work type each kind of shift is paid as. Night shifts wait until theirs is chosen.</p>
+      {types.isLoading && !retryingAfterError(types) ? (
+        <p className={MUTED} role="status">Reading Employment Hero's work types…</p>
+      ) : types.isError || !types.data ? (
+        <Callout tone="danger">
+          <p>{extractErrorMessage(types.error, "Employment Hero's work types couldn't be loaded.")}</p>
+          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" onClick={() => types.refetch()}>Try again</Button>
+        </Callout>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            {WORK_TYPE_FIELDS.map(f => {
+              const id = value[f.key]
+              const gone = id != null && !known.has(id)
+              return (
+                <SelectField
+                  key={f.key}
+                  className={FIELD_WIDTH}
+                  label={f.label}
+                  value={id ?? ''}
+                  error={gone ? 'Pick again.' : undefined}
+                  onChange={e => setDraft({ ...value, [f.key]: e.target.value || null })}
+                  options={[
+                    { value: '', label: f.none },
+                    ...(gone ? [{ value: id, label: 'Not in Employment Hero any more' }] : []),
+                    ...types.data.map(t => ({ value: t.id, label: t.name })),
+                  ]}
+                />
+              )
+            })}
+          </div>
+          {save.error != null && <Callout tone="danger">{extractErrorMessage(save.error, "The work types couldn't be saved. Try again.")}</Callout>}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="secondary" className="min-w-[10rem]" disabled={draft === null || save.isPending} onClick={() => draft && save.mutate(draft, { onSuccess: () => setDraft(null) })}>
+              {save.isPending ? 'Saving…' : 'Save work types'}
+            </Button>
+            <span className={`${MUTED} min-h-5 basis-full`} role="status">{save.isSuccess && draft === null ? 'Work types saved. Waiting shifts are queued to send.' : ''}</span>
+          </div>
+        </>
+      )}
+    </section>
   )
 }
 

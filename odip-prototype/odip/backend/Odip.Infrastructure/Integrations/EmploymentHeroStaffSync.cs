@@ -180,7 +180,7 @@ public sealed class EmploymentHeroStaffSync
     /// Raises one IntegrationDegraded email per active Admin of this organisation (named explicitly, as every query here is: a SuperAdmin context would
     /// otherwise reach every organisation's Admins). It goes into the caller's SaveChanges, because NotificationRaiser never saves.
     /// </summary>
-    private static async Task AlertAdminsAsync(OdipDbContext db, Guid tenantId, string entityType, Guid entityId, string problem, CancellationToken ct)
+    internal static async Task AlertAdminsAsync(OdipDbContext db, Guid tenantId, string entityType, Guid entityId, string problem, CancellationToken ct)
     {
         var admins = await db.Users.Where(u => u.TenantId == tenantId && u.IsActive && u.Role == UserRole.Admin).Select(u => new { u.Id, u.Email }).ToListAsync(ct);
         var raiser = new NotificationRaiser(db);

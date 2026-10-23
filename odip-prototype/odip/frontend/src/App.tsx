@@ -54,12 +54,14 @@ const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
 const LeaveApprovalsPage = React.lazy(() => import('@/pages/rostering/LeaveApprovalsPage'))
 const CompletionReviewPage = React.lazy(() => import('@/pages/rostering/CompletionReviewPage'))
+const PayrollPage = React.lazy(() => import('@/pages/rostering/PayrollPage'))
 const MedicationsPage = React.lazy(() => import('@/pages/MedicationsPage'))
 const MedicationFormPage = React.lazy(() => import('@/pages/MedicationFormPage'))
 const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPage'))
 const PortalShiftDetailPage = React.lazy(() => import('@/pages/portal/PortalShiftDetailPage'))
 const PortalWitnessApprovalsPage = React.lazy(() => import('@/pages/portal/PortalWitnessApprovalsPage'))
 const PortalLeavePage = React.lazy(() => import('@/pages/portal/PortalLeavePage'))
+const PortalPayslipsPage = React.lazy(() => import('@/pages/portal/PortalPayslipsPage'))
 const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage'))
 const AccessibilityPage = React.lazy(() => import('@/pages/AccessibilityPage'))
 
@@ -172,6 +174,8 @@ const router = createBrowserRouter(
         <Route path="/rostering/compatibility" element={<PrivateRoute page="rostering"><CompatibilityPage /></PrivateRoute>} />
         <Route path="/rostering/leave" element={<PrivateRoute page="leave-approvals"><LeaveApprovalsPage /></PrivateRoute>} />
         <Route path="/rostering/completions" element={<PrivateRoute page="rostering"><CompletionReviewPage /></PrivateRoute>} />
+
+        <Route path="/rostering/payroll" element={<PrivateRoute page="rostering"><PayrollPage /></PrivateRoute>} />
         <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
         <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
         <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite viewableByReadOnly><MedicationFormPage /></PrivateRoute>} />
@@ -179,6 +183,7 @@ const router = createBrowserRouter(
         <Route path="/portal/shifts/:id" element={<PrivateRoute page="portal"><PortalShiftDetailPage /></PrivateRoute>} />
         <Route path="/portal/witness-approvals" element={<PrivateRoute page="portal"><PortalWitnessApprovalsPage /></PrivateRoute>} />
         <Route path="/portal/leave" element={<PrivateRoute page="portal-leave"><PortalLeavePage /></PrivateRoute>} />
+        <Route path="/portal/payslips" element={<PrivateRoute page="portal-payslips"><PortalPayslipsPage /></PrivateRoute>} />
         {/* Any other URL: a not-found page inside the shell (L5-11), never React Router's bare default error page. */}
         <Route path="*" element={<NotFoundPage />} />
       </Route>

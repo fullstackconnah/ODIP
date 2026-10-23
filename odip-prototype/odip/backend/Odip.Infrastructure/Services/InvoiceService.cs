@@ -79,8 +79,7 @@ public class InvoiceService
             ?? throw new InvalidOperationException("Booking not found in this claim.");
         if (group.PlanType == PlanType.AgencyManaged)
             throw new InvalidOperationException("Agency-managed participants use the BPR CSV, not invoices.");
-        var settings = await SettingsForAsync(TenantOf(claim), ct)
-            ?? throw new InvalidOperationException("Provider settings not configured.");
+        var settings = ProviderSettingsGuard.Require(await SettingsForAsync(TenantOf(claim), ct));
         return (claim, group, settings);
     }
 

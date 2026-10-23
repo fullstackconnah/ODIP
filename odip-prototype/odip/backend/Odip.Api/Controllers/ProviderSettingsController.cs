@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
@@ -29,10 +30,18 @@ public class ProviderSettingsController : ControllerBase
         _tenant = tenant;
     }
 
+    private bool NoOrganisationInScope => _tenant is { IsSuperAdmin: true, TenantId: null };
+
+    // A SuperAdmin's query filter is off, so the row is chosen by organisation here.
+    private IQueryable<ProviderSettings> ScopedSettings() =>
+        _tenant?.TenantId is { } tenantId ? _db.ProviderSettings.Where(p => p.TenantId == tenantId) : _db.ProviderSettings;
+
     [HttpGet]
     public async Task<ActionResult<ApiResponse<ProviderSettingsDto>>> Get(CancellationToken ct)
     {
-        var s = await OwnRow().FirstOrDefaultAsync(ct);
+        // A SuperAdmin with no organisation chosen has no settings in scope; the lookup must never land on an arbitrary organisation's row.
+        if (NoOrganisationInScope) return Ok(ApiResponse<ProviderSettingsDto?>.Ok(null));
+        var s = await ScopedSettings().FirstOrDefaultAsync(ct);
         if (s == null) return Ok(ApiResponse<ProviderSettingsDto?>.Ok(null));
         var (next, issued) = await InvoiceService.NumberingOfAsync(_db, s, ct);
 
@@ -85,7 +94,15 @@ public class ProviderSettingsController : ControllerBase
             ?? (dto.PaymentTermsDays is < 0 or > 365 ? "Enter a whole number of days from 0 to 365." : null);
         if (bad != null) return BadRequest(ApiResponse<bool>.Fail(bad));
 
-        var s = await OwnRow().FirstOrDefaultAsync(ct);
+        // Prices and public holidays follow the state, so none is assumed (a body that omits it used to become Victoria).
+        var state = dto.State?.Trim().ToUpperInvariant();
+        if (state is null || !HolidayCalendar.StateCodes.Contains(state))
+            return BadRequest(ApiResponse<bool>.Fail("Choose the organisation's state."));
+
+        if (NoOrganisationInScope)
+            return BadRequest(ApiResponse<bool>.Fail(SettingsController.ChooseOrganisation));
+
+        var s = await ScopedSettings().FirstOrDefaultAsync(ct);
         if (s == null)
         {
             s = new ProviderSettings { Id = Guid.NewGuid() };
@@ -97,8 +114,6 @@ public class ProviderSettingsController : ControllerBase
         var cnPrefixChanged = dto.CreditNotePrefix is { } cp && cp != s.CreditNotePrefix;
         var startChanged = dto.InvoiceStartNumber is { } st && st != s.InvoiceStartNumber;
         var termsChanged = dto.PaymentTermsDays is { } td && td != s.PaymentTermsDays;
-        if ((prefixChanged || cnPrefixChanged || startChanged || termsChanged) && _tenant?.TenantId is null)
-            return BadRequest(ApiResponse<bool>.Fail("Choose an organisation to view as before changing how invoices are numbered."));
         // shortcut: a start number changed during the very first issue is ignored; Settings then shows the counter's real next number.
         if (startChanged)
         {
@@ -116,7 +131,7 @@ public class ProviderSettingsController : ControllerBase
         s.GSTRegistered = dto.GSTRegistered; s.IsPaceProvider = dto.IsPaceProvider;
         s.BankAccountName = dto.BankAccountName; s.BSB = dto.BSB;
         s.AccountNumber = dto.AccountNumber; s.InvoiceFooterNotes = dto.InvoiceFooterNotes;
-        s.State = dto.State; s.ManagerName = dto.ManagerName; s.ManagerPhone = dto.ManagerPhone;
+        s.State = state; s.ManagerName = dto.ManagerName; s.ManagerPhone = dto.ManagerPhone;
 
         // Each mode is applied, and audited, independently and only when sent and different. ProviderSettings is deliberately NOT an audited
         // entity: the generic interceptor would copy the bank details into AuditLog, so each change is recorded here on its own, as exactly
@@ -161,13 +176,6 @@ public class ProviderSettingsController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
-    }
-
-    /// <summary>The caller's organisation's row; with no organisation in scope (a SuperAdmin not viewing as one) the first row, in a stable order.</summary>
-    private IQueryable<ProviderSettings> OwnRow()
-    {
-        var tenantId = _tenant?.TenantId;
-        return _db.ProviderSettings.Where(s => tenantId == null || s.TenantId == tenantId).OrderBy(s => s.Id);
     }
 
     /// <summary>A prefix ends up in the PDF's file name: 1 to 10 letters, digits, - _ or . (null = not sent).</summary>

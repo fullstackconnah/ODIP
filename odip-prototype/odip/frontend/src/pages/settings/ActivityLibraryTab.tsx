@@ -56,7 +56,9 @@ export default function ActivityLibraryTab() {
   function submit() {
     if (!form) return
     if (!form.activityName.trim()) { setNameError('Required'); nameRef.current?.focus(); return }
-    save(editing?.id, { ...form, activityName: form.activityName.trim() })
+    // Save has no Active control, so it sends the flag the list row has now: a deactivation made since the panel opened is not undone.
+    const isActive = activities.find(a => a.id === editing?.id)?.isActive ?? form.isActive
+    save(editing?.id, { ...form, activityName: form.activityName.trim(), isActive })
   }
 
   // Deactivating and reactivating save the stored record with only isActive flipped, as the Templates panel's Deactivate does.

@@ -1479,12 +1479,16 @@ public record UpdateStaffDto : CreateStaffDto { }
 public record AppSettingsDto
 {
     public int QualificationWarningDays { get; init; }
+    public int WeeklyHoursWarning { get; init; }
 }
 
 public record UpdateAppSettingsDto
 {
     [System.ComponentModel.DataAnnotations.Range(1, 365)]
     public int QualificationWarningDays { get; init; }
+    /// <summary>Whole hours a week before the roster warns; left out keeps the stored figure.</summary>
+    [System.ComponentModel.DataAnnotations.Range(1, 100)]
+    public int? WeeklyHoursWarning { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1702,8 +1706,8 @@ public record TaskDto
 
 public record CreateTaskDto
 {
-    [Required]
-    public Guid TripInstanceId { get; init; }
+    /// <summary>Optional: a task needs no trip (house upkeep, renewals). When sent it must be the caller's own trip.</summary>
+    public Guid? TripInstanceId { get; init; }
     public Guid? ParticipantBookingId { get; init; }
     public Guid? AccommodationReservationId { get; init; }
     public Guid? VehicleAssignmentId { get; init; }
@@ -1823,6 +1827,8 @@ public record ItineraryDto
 {
     public Guid TripId { get; init; }
     public string TripName { get; init; } = string.Empty;
+    /// <summary>The trip's own organisation, named on the exported PDF.</summary>
+    public string? OrganisationName { get; init; }
     public string? TripCode { get; init; }
     public string? Destination { get; init; }
     public string? Region { get; init; }
@@ -2340,17 +2346,17 @@ public record UpdateIncidentDto : CreateIncidentDto
 public record TenantDto(
     Guid Id,
     string Name,
-    string EmailDomain,
+    string? EmailDomain,
     bool IsActive,
     DateTime CreatedAt);
 
 public record CreateTenantDto(
     string Name,
-    string EmailDomain);
+    string? EmailDomain);
 
 public record UpdateTenantDto(
     string Name,
-    string EmailDomain,
+    string? EmailDomain,
     bool IsActive);
 
 public record TenantUserDto(
@@ -2448,21 +2454,6 @@ public record UpdateAdminUserDto
     /// (<see cref="Odip.Application.Common.AddressConfirmation"/>). Without it such a change is refused with a 400; an address the row already holds never asks.
     /// </summary>
     public bool AddressConfirmed { get; init; }
-    public Position? Position { get; init; }
-    public string? Mobile { get; init; }
-    public string? Region { get; init; }
-    public bool IsDriverEligible { get; init; }
-    public bool IsFirstAidQualified { get; init; }
-    public bool IsMedicationCompetent { get; init; }
-    public bool IsManualHandlingCompetent { get; init; }
-    public bool IsOvernightEligible { get; init; }
-    public DateOnly? FirstAidExpiryDate { get; init; }
-    public DateOnly? DriverLicenceExpiryDate { get; init; }
-    public DateOnly? ManualHandlingExpiryDate { get; init; }
-    public DateOnly? MedicationCompetencyExpiryDate { get; init; }
-    public string? WorkerScreeningNumber { get; init; }
-    public DateOnly? WorkerScreeningExpiryDate { get; init; }
-    public string? Notes { get; init; }
 }
 
 // ── Tenant Summary DTO (includes user count) ──────────────────────────────
@@ -2470,7 +2461,7 @@ public record UpdateAdminUserDto
 public record TenantSummaryDto(
     Guid Id,
     string Name,
-    string EmailDomain,
+    string? EmailDomain,
     bool IsActive,
     DateTime CreatedAt,
     int UserCount);
@@ -2482,7 +2473,7 @@ public record TenantSummaryDto(
 public record TenantCreatedDto(
     Guid Id,
     string Name,
-    string EmailDomain,
+    string? EmailDomain,
     bool IsActive,
     DateTime CreatedAt,
     int UserCount,
@@ -2493,9 +2484,39 @@ public record TenantCreatedDto(
 
 public record CreateTenantWithSetupDto(
     string Name,
-    string EmailDomain,
-    UpsertProviderSettingsDto? ProviderSettings,
+    string? EmailDomain,
+    TenantSetupProviderDto? ProviderSettings,
     CreateInitialUserDto? InitialUser);
+
+/// <summary>
+/// The organisation's provider row as typed at setup. Unlike <see cref="UpsertProviderSettingsDto"/> nothing here is required: the row is always made, and the
+/// registration number, ABN and address are filled in later under Organisation profile (whose own save still requires them). The State is the exception: setup refuses a blank or unknown one.
+/// </summary>
+public record TenantSetupProviderDto
+{
+    // The same limits as UpsertProviderSettingsDto, so setup cannot store what the Organisation profile save would then refuse.
+    [StringLength(20)]
+    public string RegistrationNumber { get; init; } = string.Empty;
+    [StringLength(20)]
+    public string ABN { get; init; } = string.Empty;
+    [StringLength(200)]
+    public string OrganisationName { get; init; } = string.Empty;
+    [StringLength(500)]
+    public string Address { get; init; } = string.Empty;
+    [StringLength(10)]
+    public string? State { get; init; }
+    public bool GSTRegistered { get; init; }
+    public bool IsPaceProvider { get; init; }
+    [StringLength(200)]
+    public string? BankAccountName { get; init; }
+    [StringLength(10)]
+    public string? BSB { get; init; }
+    [StringLength(20)]
+    public string? AccountNumber { get; init; }
+    [StringLength(2000)]
+    public string? InvoiceFooterNotes { get; init; }
+    public MedicationCompetencyMode? MedicationCompetencyMode { get; init; }
+}
 
 public record CreateInitialUserDto(
     string FirstName,
@@ -2527,6 +2548,8 @@ public record ModuleVisibilityDto
 {
     public bool HiddenAccommodation { get; init; }
     public bool HiddenVehicles { get; init; }
+    /// <summary>Whether payslips (and, later, payroll pages) apply: presentation only, the server refuses on its own.</summary>
+    public bool EmploymentHeroConnected { get; init; }
 }
 
 public record UpdateModuleVisibilityDto

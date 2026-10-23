@@ -1307,6 +1307,36 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
       expect(payload.shiftId).toBeUndefined()
       expect(payload.shiftNoteId).toBeUndefined()
     })
+
+    // The form never shows the legacy witness text, so an edit must not send it: the server leaves the stored columns alone (IncidentsController.Update).
+    it('sends no legacy witness text on an edit, so saving a title change keeps it', async () => {
+      mockUseIncident.mockReturnValue({
+        data: { ...existingIncidentWithWitnesses, witnessNames: 'Mei Zhang', witnessStatements: 'slip' },
+      })
+      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+      const title = await screen.findByPlaceholderText('Brief incident summary')
+      await user.clear(title)
+      await user.type(title, 'Edited title')
+      await user.click(screen.getByRole('button', { name: /Review$/i }))
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+      expect(payload.title).toBe('Edited title')
+      expect(Object.keys(payload).sort()).toEqual([
+        'correctiveActions', 'description', 'emergencyServicesDetails', 'familyNotified', 'familyNotifiedAt',
+        'immediateActionsTaken', 'incidentDateTime', 'incidentType', 'injuries', 'involvedParticipantId',
+        'involvedStaffId', 'location', 'medicationAdministrationId', 'otherTypeSpecify', 'participantBookingId',
+        'qscReferenceNumber', 'qscReportedAt', 'qscReportingStatus', 'reportedByStaffId', 'restrictivePracticeId',
+        'restrictivePracticeType', 'reviewNotes', 'reviewedByStaffId', 'serviceType', 'severity', 'shiftId',
+        'shiftNoteId', 'status', 'supportCoordinatorNotified', 'supportCoordinatorNotifiedAt', 'title',
+        'tripInstanceId', 'unapprovedRestrictivePracticeDetails', 'usedWithoutAuthorisation',
+        'wereEmergencyServicesCalled', 'witnesses',
+      ])
+    })
   })
 })
 

@@ -6,8 +6,13 @@ export function useSettings() {
   return useQuery({
     queryKey: ['settings'],
     queryFn: () =>
-      apiGetWithDefault<AppSettingsDto>('/settings', { qualificationWarningDays: 30 }),
+      apiGetWithDefault<AppSettingsDto>('/settings', { qualificationWarningDays: 30, weeklyHoursWarning: 38 }),
   })
+}
+
+/** The organisation's weekly-hours warning (Settings > Alert windows); 38 until the settings load, as the server's default. */
+export function useWeeklyHoursWarning(): number {
+  return useSettings().data?.weeklyHoursWarning ?? 38
 }
 
 export function useUpdateSettings() {

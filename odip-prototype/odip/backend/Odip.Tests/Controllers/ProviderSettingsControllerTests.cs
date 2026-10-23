@@ -37,6 +37,28 @@ public class ProviderSettingsControllerTests
         State = "VIC",
     };
 
+    // Nobody is silently put on Victoria's prices and holidays: an organisation with no row yet saves with no state chosen (the form sends "") or omits it, and both are refused.
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task Upsert_RefusesABlankState_AndStoresNothing(string state)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+
+        var result = await new ProviderSettingsController(db).Upsert(MinimalUpsertDto() with { State = state }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.ProviderSettings.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
+    public void AnUpsertBodyThatOmitsTheState_HasNoState_NotVictoria()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        Assert.Equal("", JsonSerializer.Deserialize<UpsertProviderSettingsDto>("{\"registrationNumber\":\"R\"}", options)!.State);
+    }
+
     [Fact]
     public async Task Get_NoRowYet_ReturnsNullData()
     {

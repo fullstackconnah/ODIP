@@ -61,10 +61,11 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 _logger.LogError(ex, "Notification dispatch tick failed unexpectedly");
             }
 
-            // The bell's retention runs here, not in RunTickAsync: that returns early on an empty outbox and while
-            // Notifications:Enabled is false (live today), and the bell must not depend on either. Hourly is plenty.
+            // The bell's and the outbox's retention run here, not in RunTickAsync: that returns early on an empty outbox and while
+            // Notifications:Enabled is false (live today), and the purges must not depend on either. Hourly is plenty.
             if (DateTime.UtcNow >= nextPurgeAt)
             {
+                // Each purge has its own try, so one failing does not skip the other for the hour.
                 try
                 {
                     await PurgeExpiredInAppNotificationsAsync(DateTime.UtcNow, stoppingToken);
@@ -72,6 +73,14 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _logger.LogError(ex, "In-app notification purge failed");
+                }
+                try
+                {
+                    await PurgeExpiredOutboxAsync(DateTime.UtcNow, stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Notification outbox purge failed");
                 }
                 nextPurgeAt = DateTime.UtcNow.AddHours(1);
             }
@@ -99,6 +108,16 @@ public class NotificationDispatchBackgroundService : BackgroundService
         return await db.InAppNotifications.Where(n => n.CreatedAt < cutoff).ExecuteDeleteAsync(ct);
     }
 
+    /// <summary>Deletes outbox rows older than <see cref="InAppRetentionDays"/> whatever their status (live never sends, so Pending rows only pile up), in every organisation. The delivery log is the record of what was sent and is kept, and its FK to the outbox is Restrict, so a row that has a log entry stays too.</summary>
+    public async Task<int> PurgeExpiredOutboxAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbOptions = scope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>();
+        await using var db = new OdipDbContext(dbOptions, new Notifications.ScopedTenantOverride { IsSuperAdmin = true });
+        var cutoff = nowUtc.AddDays(-InAppRetentionDays);
+        return await db.NotificationOutbox.Where(o => o.CreatedAt < cutoff && !db.NotificationLogs.Any(l => l.OutboxId == o.Id)).ExecuteDeleteAsync(ct);
+    }
+
     public async Task RunTickAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -114,6 +133,9 @@ public class NotificationDispatchBackgroundService : BackgroundService
         var enabled = _config.GetValue("Notifications:Enabled", false);
         var baseUrl = _config.GetValue<string>("Notifications:PublicBaseUrl") ?? string.Empty;
 
+        // Disabled (live today): rows stay Pending and are never looked at, so don't SELECT them every tick.
+        if (!enabled) return;
+
         // 1. Batch-select (superadmin-scoped context, read-only): Pending rows due now, capped
         // and ordered oldest-first.
         await using var readDb = new OdipDbContext(dbOptions, new Notifications.ScopedTenantOverride { IsSuperAdmin = true });
@@ -125,13 +147,6 @@ public class NotificationDispatchBackgroundService : BackgroundService
             .ToListAsync(ct);
 
         if (batch.Count == 0) return;
-
-        // 2. Kill switch — rows stay Pending, never dropped, never even looked at further.
-        if (!enabled)
-        {
-            _logger.LogInformation("Notifications:Enabled is false — leaving {Count} pending rows untouched", batch.Count);
-            return;
-        }
 
         // 3. Group by TenantId; one tenant-scoped OdipDbContext per group.
         foreach (var group in batch.GroupBy(o => o.TenantId))
@@ -188,6 +203,9 @@ public class NotificationDispatchBackgroundService : BackgroundService
         try
         {
             message = RenderTemplate(row.EventType, row.PayloadJson, baseUrl);
+            // The organisation's own name goes in the header; db is scoped to the recipient's organisation.
+            if (string.IsNullOrWhiteSpace(message.OrganisationName))
+                message = message with { OrganisationName = await db.ProviderSettings.Select(s => s.OrganisationName).FirstOrDefaultAsync(ct) };
         }
         catch (Exception ex)
         {

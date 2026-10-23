@@ -1,7 +1,7 @@
 export interface TenantDto {
   id: string
   name: string
-  emailDomain: string
+  emailDomain: string | null
   isActive: boolean
   createdAt: string
 }
@@ -27,7 +27,7 @@ export interface UpdateTenantDto {
 export interface TenantSummaryDto {
   id: string
   name: string
-  emailDomain: string
+  emailDomain: string | null
   isActive: boolean
   createdAt: string
   userCount: number

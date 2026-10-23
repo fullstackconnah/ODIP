@@ -321,7 +321,7 @@ public class AddressConfirmationTests
     // ── A tenant's first user ───────────────────────────────────────────
 
     private static CreateTenantWithSetupDto TenantWithFirstUserAt(string email, bool confirmed = false) => new(
-        "Brightside Care", "brightside.example.com", null,
+        "Brightside Care", "brightside.example.com", new TenantSetupProviderDto { State = "VIC" },
         new CreateInitialUserDto("Jane", "Smith", email, "jane.smith", "Admin", null, confirmed));
 
     [Fact]

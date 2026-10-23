@@ -4,11 +4,11 @@ import userEvent from '@testing-library/user-event'
 import TemplateFormPanel from './TemplateFormPanel'
 import type { EventTemplateDto } from '@/api/types'
 
-const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }))
+const { mockCreate, mockUpdate } = vi.hoisted(() => ({ mockCreate: vi.fn(), mockUpdate: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
   useCreateEventTemplate: () => ({ mutateAsync: mockCreate, isPending: false }),
-  useUpdateEventTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateEventTemplate: () => ({ mutateAsync: mockUpdate, isPending: false }),
   useDeactivateEventTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useTrips: () => ({ data: [{ id: 'trip-1', tripName: 'Gold Coast Beach Break', tripCode: 'GC-01', destination: 'Gold Coast', region: 'QLD', durationDays: 5 }] }),
 }))
@@ -94,5 +94,16 @@ describe('TemplateFormPanel as a dialog', () => {
     await user.type(screen.getByLabelText('Event name *'), ' 2')
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  // The panel shows no Active control, so an edit must send the flag the template already has (a deactivation made elsewhere stays).
+  it("an edit sends the template's own isActive, not true", async () => {
+    const user = userEvent.setup()
+    mockUpdate.mockResolvedValue({})
+    render(<TemplateFormPanel isOpen onClose={() => {}} template={{ ...template, isActive: false }} />)
+    await user.type(screen.getByLabelText('Event name *'), ' 2')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Template updated')).toBeInTheDocument()
+    expect(mockUpdate).toHaveBeenCalledWith({ id: 'tpl-1', data: expect.objectContaining({ eventName: 'Gold Coast Beach Break 2', isActive: false }) })
   })
 })

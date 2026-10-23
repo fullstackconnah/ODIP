@@ -278,6 +278,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("WeeklyHoursWarning")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId");
@@ -4469,7 +4472,6 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("EmailDomain")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<bool>("IsActive")
@@ -5281,12 +5283,91 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("WorkTypeActiveNight")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("WorkTypePassiveNight")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("WorkTypeSleepover")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("WorkTypeStandard")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId")
                         .IsUnique();
 
                     b.ToTable("EmploymentHeroConnections");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Integrations.EmploymentHeroOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalEmployeeId")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("PayloadHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("Status", "NextAttemptAt");
+
+                    b.HasIndex("TenantId", "Kind", "EntityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_EmploymentHeroOutbox_TenantId_Kind_EntityId");
+
+                    b.ToTable("EmploymentHeroOutbox");
                 });
 
             modelBuilder.Entity("Odip.Domain.Integrations.EmploymentHeroSyncLog", b =>
@@ -5310,13 +5391,22 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("FinishedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Linked")
                         .HasColumnType("integer");
 
                     b.Property<int>("NeedsAttention")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Sent")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("StartedAt")
@@ -5472,7 +5562,7 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("Status", "NextAttemptAt");
 
-                    b.HasIndex("TenantId", "EventType", "EntityId", "RecipientUserId", "CreatedAt");
+                    b.HasIndex("EntityId", "RecipientUserId", "CreatedAt");
 
                     b.ToTable("NotificationOutbox");
                 });

@@ -64,18 +64,18 @@ describe('useMarkInboxRead', () => {
 })
 
 describe('useMarkAllInboxRead', () => {
-  it('posts read-all, and clears every dot and the count at once', async () => {
+  it('posts the ids it is given, and clears only those dots; unread items the panel never showed keep the count up', async () => {
     const qc = client()
-    qc.setQueryData(INBOX_KEY, inbox([item('a'), item('b', true), item('c')], true))
+    qc.setQueryData(INBOX_KEY, { ...inbox([item('a'), item('b', true), item('c')], true), unreadCount: 5 })   // 5 unread on the server, 2 of them shown
     mockApiPost.mockReturnValue(new Promise(() => {}))
     const { result } = renderHook(() => useMarkAllInboxRead(), { wrapper: wrapper(qc) })
 
-    act(() => result.current.mutate())
+    act(() => result.current.mutate(['a', 'c']))
 
-    await waitFor(() => expect(cached(qc)?.unreadCount).toBe(0))
+    await waitFor(() => expect(cached(qc)?.unreadCount).toBe(3))
     expect(cached(qc)?.items.every(n => n.readAt)).toBe(true)
     expect(cached(qc)?.hasMore).toBe(true)
-    expect(mockApiPost).toHaveBeenCalledWith('/notifications/inbox/read-all')
+    expect(mockApiPost).toHaveBeenCalledWith('/notifications/inbox/read-all', { ids: ['a', 'c'] })
   })
 
   it('puts the dots back when the server refuses', async () => {
@@ -85,7 +85,7 @@ describe('useMarkAllInboxRead', () => {
     mockApiPost.mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() => useMarkAllInboxRead(), { wrapper: wrapper(qc) })
 
-    act(() => result.current.mutate())
+    act(() => result.current.mutate(['a']))
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(cached(qc)).toEqual(before)
@@ -104,7 +104,7 @@ describe('useMarkAllInboxRead', () => {
     let answerPost!: () => void
     mockApiPost.mockReturnValue(new Promise<void>(resolve => { answerPost = resolve }))
 
-    act(() => result.current.markAll.mutate())
+    act(() => result.current.markAll.mutate(['a', 'b']))
     await waitFor(() => expect(result.current.inbox.data?.unreadCount).toBe(0))
 
     await act(async () => { answerPoll(inbox([item('a'), item('b')])) })   // the stale answer lands while the POST is out

@@ -150,7 +150,7 @@ public class ProviderSettingsNumberingTests
     public async Task ComputedFields_AreTheRowsOwnTenant()
     {
         var name = Guid.NewGuid().ToString();
-        var (db, c) = Create(null, true, name);
+        var (db, c) = Create(TenantB, true, name);
         SeedInvoice(db, TenantA);   // A has issued invoices and no settings row
         SeedSettings(db, TenantB);
 
