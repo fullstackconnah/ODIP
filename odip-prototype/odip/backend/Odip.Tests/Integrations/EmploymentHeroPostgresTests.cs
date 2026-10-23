@@ -307,7 +307,7 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
     public async Task Two_drains_queueing_the_same_shifts_never_deadlock_on_Postgres()
     {
         RequirePostgres();
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 50; i++)
         {
             var (db1, tenantId) = await _pg.NewTenantContextAsync();
             await using var _1 = db1;

@@ -90,6 +90,7 @@ public sealed class EmploymentHeroTimesheetSender
                         && c.Shift!.Status == ShiftStatus.Completed && c.Shift.ServiceDate >= cutoff)
             .Select(c => c.Id).Take(ScanSize).ToListAsync(ct);
         // One row per save: EF sorts a batch's inserts by their random row Ids, so two drains insert the same shifts in different orders and deadlock on the unique index.
+        var collided = 0;
         foreach (var id in missing)
         {
             db.EmploymentHeroOutbox.Add(EmploymentHeroTimesheets.NewRow(tenantId, id, now));
@@ -97,12 +98,13 @@ public sealed class EmploymentHeroTimesheetSender
             {
                 await db.SaveChangesAsync(ct);
             }
-            catch (DbUpdateException ex)
+            catch (DbUpdateException)
             {
                 db.ChangeTracker.Clear();
-                _logger.LogInformation("Employment Hero timesheet scan for organisation {TenantId} collided with another run ({Error})", tenantId, ex.GetType().Name);
+                collided++;
             }
         }
+        if (collided > 0) _logger.LogInformation("Employment Hero timesheet scan for organisation {TenantId} collided with another run on {Collided} shifts", tenantId, collided);
     }
 
     /// <summary>Re-builds sent rows from today's data: an edit puts the row back in the queue, and a Changed row whose data matches what was sent again is Sent.</summary>
