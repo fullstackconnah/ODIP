@@ -479,12 +479,12 @@ public sealed class EmploymentHeroLeaveSync
         await db.LeaveRequests.AsNoTracking().AnyAsync(l => l.Id == leaveId && l.TenantId == tenantId && l.Status == LeaveStatus.Approved, ct)
         && !await db.EmploymentHeroOutbox.AsNoTracking().AnyAsync(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.LeaveCancel && r.EntityId == leaveId, ct);
 
-    /// <summary>The request ODIP's earlier try created: the one holding this leave's marker, else the first with the same category and dates.</summary>
+    /// <summary>The request ODIP's earlier try created: the one holding this leave's marker, else the first unmarked one with the same category and dates (a marked one belongs to another ODIP leave).</summary>
     private async Task<EhLeaveRef?> FindAsync(string key, string biz, LeaveRequest leave, int employeeId, int? categoryId, CancellationToken ct)
     {
         var list = await _client.ListLeaveRequestsAsync(key, biz, leave.StartDate, leave.EndDate, employeeId, ct);
         return list.FirstOrDefault(r => EmploymentHeroLeave.TryParseMarker(r.Notes, out var id) && id == leave.Id)
-               ?? list.FirstOrDefault(r => r.LeaveCategoryId == categoryId && DateOnly.FromDateTime(r.FromDate) == leave.StartDate && DateOnly.FromDateTime(r.ToDate) == leave.EndDate);
+               ?? list.FirstOrDefault(r => !EmploymentHeroLeave.TryParseMarker(r.Notes, out _) && r.LeaveCategoryId == categoryId && DateOnly.FromDateTime(r.FromDate) == leave.StartDate && DateOnly.FromDateTime(r.ToDate) == leave.EndDate);
     }
 
     /// <summary>Takes cancelled leave back out of EH. Shares the Leave drain's 10-row budget and 10 s.</summary>
