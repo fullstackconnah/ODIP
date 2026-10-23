@@ -90,7 +90,7 @@ public class ProviderSettingsController : ControllerBase
             return BadRequest(ApiResponse<bool>.Fail("Choose the organisation's state."));
 
         if (NoOrganisationInScope)
-            return BadRequest(ApiResponse<bool>.Fail("Choose an organisation to view as before changing settings: settings belong to one organisation."));
+            return BadRequest(ApiResponse<bool>.Fail(SettingsController.ChooseOrganisation));
 
         var s = await ScopedSettings().FirstOrDefaultAsync(ct);
         if (s == null)

@@ -5,6 +5,7 @@ using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -25,8 +26,8 @@ public class UnscopedSuperAdminSettingsTests
         var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
         db.AppSettings.Add(new AppSettings { Id = new Guid("00000000-0000-0000-0000-000000000001"), TenantId = B, QualificationWarningDays = 5, WeeklyHoursWarning = 11 });
         db.AppSettings.Add(new AppSettings { Id = new Guid("00000000-0000-0000-0000-000000000002"), TenantId = A, QualificationWarningDays = 7, WeeklyHoursWarning = 22 });
-        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = B, OrganisationName = "Org B", State = "WA" });
-        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = A, OrganisationName = "Org A", State = "VIC" });
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = B, OrganisationName = "Org B", State = "WA", RegistrationNumber = "R", ABN = "1", ManagerName = "Manager B", ManagerPhone = "0811111111" });
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = A, OrganisationName = "Org A", State = "VIC", RegistrationNumber = "R", ABN = "1", ManagerName = "Manager A", ManagerPhone = "0299990000" });
         db.SaveChanges();
         return (db, tenant.Object);
     }
@@ -106,13 +107,38 @@ public class UnscopedSuperAdminSettingsTests
         Assert.Equal("VIC", (await db.ProviderSettings.SingleAsync(p => p.TenantId == A)).State);
     }
 
+    // Generation would succeed (complete settings exist, the claim has a line), so only the missing organisation can make it refuse.
     [Fact]
     public async Task BprCsv_ClaimWithNeitherTripNorParticipant_IsNotFound_InsteadOfReadingAnyOrganisationsSettings()
     {
         var (db, _) = Create(null, true);
         var claim = new TripClaim { Id = Guid.NewGuid(), ClaimReference = "C1" };
         db.TripClaims.Add(claim);
+        db.ClaimLineItems.Add(new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = claim.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = new DateOnly(2026, 9, 7), SupportsDeliveredTo = new DateOnly(2026, 9, 7), Hours = 1m, UnitPrice = 40m, TotalAmount = 40m,
+        });
         db.SaveChanges();
         await Assert.ThrowsAsync<KeyNotFoundException>(() => new BprCsvService(db).GenerateBprCsvAsync(claim.Id));
+    }
+
+    [Fact]
+    public async Task MissedGuidanceContact_UnscopedSuperAdmin_ReturnsNoOrganisationsManager()
+    {
+        var (db, tenant) = Create(null, true);
+        var r = await new MedicationsController(db, tenant).GetMissedGuidanceContact(default);
+        Assert.Null(Assert.IsType<ApiResponse<MissedMedicationContactDto?>>(Assert.IsType<OkObjectResult>(r.Result).Value).Data);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MissedGuidanceContact_InAnOrganisation_ReturnsThatOrganisationsManager(bool superAdminViewingAs)
+    {
+        var (db, tenant) = Create(A, superAdminViewingAs);
+        var r = await new MedicationsController(db, tenant).GetMissedGuidanceContact(default);
+        var data = Assert.IsType<ApiResponse<MissedMedicationContactDto>>(Assert.IsType<OkObjectResult>(r.Result).Value).Data!;
+        Assert.Equal(("Manager A", "0299990000"), (data.ManagerName, data.ManagerPhone));
     }
 }
