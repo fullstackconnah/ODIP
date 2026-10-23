@@ -88,6 +88,17 @@ public class OdipDbContext : DbContext
     public DbSet<SupportActivityGroup> SupportActivityGroups => Set<SupportActivityGroup>();
     public DbSet<SupportCatalogueItem> SupportCatalogueItems => Set<SupportCatalogueItem>();
     public DbSet<ProviderSettings> ProviderSettings => Set<ProviderSettings>();
+
+    /// <summary>
+    /// The caller's own provider-settings row. A SuperAdmin's query filter is off, so a plain <c>FirstOrDefault</c> on <see cref="ProviderSettings"/> lands on an arbitrary
+    /// organisation: unscoped there is no row (callers use their no-row defaults), viewing as an organisation only that organisation's row. Everyone else is filtered as usual.
+    /// </summary>
+    public IQueryable<ProviderSettings> ScopedProviderSettings()
+    {
+        if (!_tenant.IsSuperAdmin) return ProviderSettings;
+        var tenantId = _tenant.TenantId;
+        return ProviderSettings.Where(p => tenantId != null && p.TenantId == tenantId);
+    }
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<PublicHolidayOverride> PublicHolidayOverrides => Set<PublicHolidayOverride>();
     public DbSet<PlanPricingSettings> PlanPricingSettings => Set<PlanPricingSettings>();
