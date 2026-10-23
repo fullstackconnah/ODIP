@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Integrations;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 
@@ -82,6 +83,37 @@ public static class EmploymentHeroLeave
         await db.EmploymentHeroConnections.IgnoreQueryFilters().AsNoTracking().Where(c => c.TenantId == tenantId)
             .Select(c => new LeaveMapping(c.LeaveCategoryAnnual, c.LeaveCategorySick, c.LeaveCategoryPersonal, c.LeaveCategoryOther)).FirstOrDefaultAsync(ct)
         ?? new LeaveMapping(null, null, null, null);
+
+    public static EmploymentHeroOutbox NewRow(Guid tenantId, EmploymentHeroOutboxKind kind, Guid entityId, DateTime now) => new()
+    {
+        Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, EntityId = entityId, NextAttemptAt = now, CreatedAt = now, UpdatedAt = now,
+    };
+
+    /// <summary>Queues an approved ODIP-sourced leave for EH, in the caller's save. Nothing when the organisation isn't connected or the leave was decided before the cutoff.</summary>
+    public static async Task EnqueueAsync(OdipDbContext db, LeaveRequest leave, DateTime now, CancellationToken ct)
+    {
+        if (leave.Source != LeaveSource.Odip || leave.DecidedAt is not { } decidedAt) return;
+        var tenantId = await db.Users.IgnoreQueryFilters().AsNoTracking().Where(u => u.Id == leave.UserId).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
+        if (tenantId is not { } tenant) return;
+        var connectedAt = await db.EmploymentHeroConnections.IgnoreQueryFilters().AsNoTracking().Where(c => c.TenantId == tenant)
+            .Select(c => (DateTime?)c.ConnectedAt).FirstOrDefaultAsync(ct);
+        if (connectedAt is not { } at || decidedAt < Cutoff(at)) return;
+        db.EmploymentHeroOutbox.Add(NewRow(tenant, EmploymentHeroOutboxKind.Leave, leave.Id, now));
+    }
+
+    /// <summary>Takes a leave back from EH, in the caller's save: only when ODIP queued or sent it (a Leave row, or an adopted EH id). EH-entered leave is never withdrawn from here.</summary>
+    public static async Task WithdrawAsync(OdipDbContext db, LeaveRequest leave, DateTime now, CancellationToken ct)
+    {
+        var tenantId = await db.Users.IgnoreQueryFilters().AsNoTracking().Where(u => u.Id == leave.UserId).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
+        if (tenantId is not { } tenant) return;
+        var queued = leave.ExternalLeaveId is not null || await db.EmploymentHeroOutbox.IgnoreQueryFilters().AsNoTracking()
+            .AnyAsync(r => r.TenantId == tenant && r.Kind == EmploymentHeroOutboxKind.Leave && r.EntityId == leave.Id, ct);
+        if (queued) db.EmploymentHeroOutbox.Add(NewRow(tenant, EmploymentHeroOutboxKind.LeaveCancel, leave.Id, now));
+    }
+
+    /// <summary>A second decision racing this one hit the outbox's one-row-per-leave index.</summary>
+    public static bool IsOutboxCollision(DbUpdateException ex) =>
+        ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation } pg && pg.ConstraintName == EmploymentHeroOutbox.OneRowIndexName;
 
     /// <summary>True for <see cref="Build"/>'s own wait reasons (a missing category, an unreadable id): the card lists those without Try again.</summary>
     public static bool IsWaiting(string? lastError) => lastError is not null && (lastError == UnreadableIdReason || lastError.StartsWith(CategoryReasonStart, StringComparison.Ordinal));

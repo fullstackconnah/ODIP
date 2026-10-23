@@ -1461,6 +1461,7 @@ public class PortalController : ControllerBase
         StartDate = l.StartDate, EndDate = l.EndDate, Status = l.Status, Reason = l.Reason,
         RequestedByUserId = l.RequestedByUserId, RequestedAt = l.RequestedAt,
         DecidedByUserId = l.DecidedByUserId, DecidedAt = l.DecidedAt, DecisionNote = l.DecisionNote,
+        Source = l.Source, SentHours = l.SentHours, SentHoursDefaulted = l.SentHoursDefaulted,
     };
 
     private static RecurringUnavailabilityDto ToUnavailabilityDto(RecurringUnavailability r) => new()
