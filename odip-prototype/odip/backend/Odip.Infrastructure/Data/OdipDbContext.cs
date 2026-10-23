@@ -933,6 +933,10 @@ public class OdipDbContext : DbContext
                 .HasDefaultValue(ParticipantReadinessMode.Warn);
             // NOT NULL DEFAULT 0 (= Warn): a constant default, so the column is added without rewriting the table.
             entity.Property(e => e.MedicationCompetencyMode).HasDefaultValue(MedicationCompetencyMode.Warn);
+            // The row's version, as on ParticipantInquiry: a save from a form loaded before another Admin's save matches no row and gets a 409.
+            // The migration adds the column with a constant default, so existing rows are metadata-only and every one reads 0001-01-01 until first saved.
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+
             // Invoice numbering and terms (Xero PR1): NOT NULL with constant defaults, so adding them is deploy-safe.
             entity.Property(e => e.InvoiceNumberPrefix).HasMaxLength(10).IsRequired().HasDefaultValue("INV-");
             entity.Property(e => e.CreditNotePrefix).HasMaxLength(10).IsRequired().HasDefaultValue("CN-");

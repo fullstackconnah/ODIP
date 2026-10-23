@@ -368,6 +368,7 @@ public class PortalController : ControllerBase
         var completion = new ShiftCompletion
         {
             Id = Guid.NewGuid(),
+            TenantId = shift.TenantId,
             ShiftId = shift.Id,
             ActualStart = now,
             TimeZoneId = timeZoneId,
@@ -521,6 +522,7 @@ public class PortalController : ControllerBase
             completion = new ShiftCompletion
             {
                 Id = Guid.NewGuid(),
+                TenantId = shift.TenantId,
                 ShiftId = shift.Id,
                 ActualStart = actualStartUtc,
                 TimeZoneId = timeZoneId,
@@ -1020,13 +1022,15 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 
-        var owns = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
-        if (!owns)
+        var shiftTenantId = await _db.Shifts.Where(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft)   // L1: a Draft is invisible
+            .Select(s => (Guid?)s.TenantId).FirstOrDefaultAsync(ct);
+        if (shiftTenantId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 
         var note = new ShiftNote
         {
             Id = Guid.NewGuid(),
+            TenantId = shiftTenantId.Value,   // the shift's organisation: an unscoped SuperAdmin has no current tenant to stamp it from
             ShiftId = id,
             AuthorUserId = staffId.Value,
             AuthorName = GetCallerName(),
@@ -1145,9 +1149,9 @@ public class PortalController : ControllerBase
                 SourceKey: $"flagged-note:{note.Id}",
                 Type: TaskType.FlaggedNoteFollowUp,
                 Title: $"Flagged shift note ({categories}) — decide whether an incident is needed",
-                DueDate: (await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct)).AddDays(1),
+                DueDate: (await ProviderTimeZoneResolver.TodayAsync(_db, note.TenantId, _clock, ct)).AddDays(1),
                 LinkTo: "/incidents?view=flagged-notes",
-                ShiftNoteId: note.Id, ShiftId: note.ShiftId), ct);
+                ShiftNoteId: note.Id, ShiftId: note.ShiftId, TenantId: note.TenantId), ct);
         }
     }
 
