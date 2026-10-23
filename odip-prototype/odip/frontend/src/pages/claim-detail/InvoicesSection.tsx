@@ -190,12 +190,14 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 header: 'Due',
                 mobile: 'meta',
                 render: (row: InvoiceRow) => row.invoice?.dueDate
-                  ? <span className="whitespace-nowrap tabular-nums before:content-['·_Due_'] md:before:hidden">{formatDateAu(row.invoice.dueDate)}</span>
+                  ? <span className="whitespace-nowrap tabular-nums before:content-['Due_'] md:before:hidden">{formatDateAu(row.invoice.dueDate)}</span>
                   : '—',
               },
               {
                 key: 'actions',
                 header: '',
+                // An Admin's pair is too wide to pin at 1024: scrolling it keeps Total and Status whole (the cut lands in a date).
+                pin: canCorrectInvoices ? false : undefined,
                 // Reserved for the widest pair (Download and "Issue credit note") in every state, so the column keeps its width when Void goes.
                 minWidth: canCorrectInvoices ? '17.75rem' : undefined,
                 className: 'max-md:basis-full',

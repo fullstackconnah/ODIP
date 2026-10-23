@@ -1,7 +1,7 @@
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { AxiosError } from 'axios'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
@@ -212,13 +212,13 @@ describe('InvoicesSection', () => {
     expect(download.closest('td')!.className).toContain('max-md:basis-full')
   })
 
-  it('the phone card labels its dates "Issued … · Due …" and a missing value drops out with no stray dash (finish 3)', async () => {
+  it('the phone card labels its dates "Issued … Due …" and a missing value drops out with no stray dash (finish 3)', async () => {
     serveInvoices(issued)
     renderSection()
 
     const r42 = await waitFor(() => rowOf('INV-0042'))
     expect(within(r42).getByText(formatDateAu('2026-10-22')).className).toContain("before:content-['Issued_']")
-    expect(within(r42).getByText(formatDateAu('2026-11-05')).className).toContain("before:content-['·_Due_']")
+    expect(within(r42).getByText(formatDateAu('2026-11-05')).className).toContain("before:content-['Due_']")
     // The labels are phone-only: the desktop header already names the column.
     expect(within(r42).getByText(formatDateAu('2026-10-22')).className).toContain('md:before:hidden')
     // A credit note has no due date: its card keeps the issue date only.
@@ -251,6 +251,19 @@ describe('InvoicesSection', () => {
     const only = screen.getByText('Only an Admin can void an invoice or issue a credit note.')
     expect(agency.parentElement).toBe(only.parentElement)
     expect(agency.parentElement).not.toBe(agency.closest('section'))   // a wrapper of their own, not two bare children of the card
+  })
+
+  it('the Admin\x27s actions scroll with the row so Total and Status stay whole at 1024; a Coordinator\x27s stay pinned (round 2)', async () => {
+    serveInvoices(issued)
+    renderSection()
+    const admin = (await screen.findByRole('button', { name: 'Download INV-0042' })).closest('td')!
+    expect(admin.className).not.toContain('md:sticky')
+    cleanup()
+
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderSection()
+    const coordinator = (await screen.findByRole('button', { name: 'Download INV-0042' })).closest('td')!
+    expect(coordinator.className).toContain('md:sticky')
   })
 
   it('a Coordinator gets Download only, and the line saying who can correct', async () => {
