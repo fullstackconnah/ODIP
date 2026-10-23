@@ -452,6 +452,23 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task Two_drains_queueing_the_same_shifts_never_deadlock_on_Postgres()
+    {
+        RequirePostgres();
+        for (var i = 0; i < 50; i++)
+        {
+            var (db1, tenantId) = await _pg.NewTenantContextAsync();
+            await using var _1 = db1;
+            await SeedShiftsAsync(db1, tenantId, 10);
+            await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+            var eh = EhLines();
+            EmploymentHeroTimesheetSender Sender() => new(StubHttpHandler.Client(eh), EhFixture.Keys, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<EmploymentHeroTimesheetSender>.Instance, TimeSpan.Zero);
+            await Task.WhenAll(Sender().RunAsync(db1, tenantId, false, CancellationToken.None), Sender().RunAsync(db2, tenantId, false, CancellationToken.None));
+            Assert.Equal(10, eh.Requests.Count(r => r.Method == HttpMethod.Post));
+        }
+    }
+
+    [SkippableFact]
     public async Task The_payroll_check_query_runs_on_Postgres()
     {
         RequirePostgres();
