@@ -267,6 +267,23 @@ describe('InvoicesSection', () => {
     expect(coordinator.className).toContain('md:sticky')
   })
 
+  it('no cell is pinned for an Admin, so a scrolled table never hides the sign of a credit note; a Coordinator keeps Number and actions pinned (round 4)', async () => {
+    const pinned = (table: HTMLElement) => [...table.querySelectorAll('th, td')].filter((el) => el.className.includes('md:sticky'))
+    serveInvoices(issued)
+    renderSection()
+    const adminTable = (await screen.findByRole('button', { name: 'Download INV-0042' })).closest('table')!
+    expect(pinned(adminTable)).toHaveLength(0)   // Number unpinned must not hand the start pin to Bill to
+    cleanup()
+
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
+    renderSection()
+    const table = (await screen.findByRole('button', { name: 'Download INV-0042' })).closest('table')!
+    const heads = [...table.querySelectorAll('thead th')]
+    expect(heads[0]).toHaveClass('md:sticky', 'md:left-0')
+    expect(heads[1].className).not.toContain('md:sticky')
+    expect(heads.at(-1)).toHaveClass('md:sticky', 'md:right-0')
+  })
+
   it('a Coordinator gets Download only, and the line saying who can correct', async () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     serveInvoices(issued)
