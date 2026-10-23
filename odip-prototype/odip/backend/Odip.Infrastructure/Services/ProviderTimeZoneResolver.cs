@@ -17,7 +17,7 @@ public static class ProviderTimeZoneResolver
 {
     public static async Task<ProviderTimeZone> ResolveAsync(OdipDbContext db, CancellationToken ct)
     {
-        var state = await db.ProviderSettings.Select(p => p.State).FirstOrDefaultAsync(ct);
+        var state = await db.ScopedProviderSettings().Select(p => p.State).FirstOrDefaultAsync(ct);
         return FromState(state);
     }
 
