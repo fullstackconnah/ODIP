@@ -182,7 +182,7 @@ export default function StaffDetailPage() {
           <LeaveBalances
             query={balances}
             noneMessage="Employment Hero has no leave balances for this person yet."
-            loadingMessage="Reading balances from Employment Hero…"
+            headingLevel={3}
             notLinked={
               <>
                 <span>Not linked to Employment Hero, so ODIP can't show balances.</span>

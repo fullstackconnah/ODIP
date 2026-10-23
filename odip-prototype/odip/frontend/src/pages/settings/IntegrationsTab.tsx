@@ -341,7 +341,7 @@ function LeaveNotSent({ items }: { items: EmploymentHeroLeaveProblemDto[] }) {
                   <p className={`${MUTED} break-words`}>{item.reason}</p>
                 </div>
                 {!item.waiting && (
-                  <Button size="sm" variant="secondary" className="min-h-[var(--tap-min)] min-w-[6rem]" disabled={busy} aria-label={`Try again: ${item.name}, ${range}`}
+                  <Button size="sm" variant="secondary" className="min-h-[var(--tap-min)] min-w-[6rem] w-full sm:w-auto" disabled={busy} aria-label={`Try again: ${item.name}, ${range}`}
                     onClick={() => retry.mutate(item.id, { onSuccess: afterRetry })}>
                     {busy ? 'Trying…' : 'Try again'}
                   </Button>
