@@ -65,8 +65,8 @@ public class MedicationsController : ControllerBase
             query = query.Where(m => m.Status != MedicationStatus.Ceased);
 
         var items = await query.OrderBy(m => m.Name).ToListAsync(ct);
-        var providerToday = await ProviderTodayAsync(ct);
-        var result = items.Select(m => ToListDto(m, FullName(m.Participant), providerToday)).ToList();
+        var todays = await ProviderTodaysAsync(items.Select(m => m.TenantId), ct);
+        var result = items.Select(m => ToListDto(m, FullName(m.Participant), todays[m.TenantId])).ToList();
         return Ok(ApiResponse<List<MedicationListDto>>.Ok(result));
     }
 
@@ -95,7 +95,7 @@ public class MedicationsController : ControllerBase
         _db.ParticipantMedications.Add(med);
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(participant), 0, await ProviderTodayAsync(ct))));
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(participant), 0, await ProviderTodayAsync(participant.TenantId, ct))));
     }
 
     // ── Single medication ──────────────────────────────────────────
@@ -107,7 +107,7 @@ public class MedicationsController : ControllerBase
         if (med == null) return NotFound(ApiResponse<MedicationDetailDto>.Fail("Medication not found"));
 
         var prnCount = await GetPrnDosesInLast24hAsync(med.Id, ct);
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(ct))));
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(med.TenantId, ct))));
     }
 
     [HttpPut("medications/{id:guid}")]
@@ -129,7 +129,7 @@ public class MedicationsController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         var prnCount = await GetPrnDosesInLast24hAsync(med.Id, ct);
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(ct))));
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(med.TenantId, ct))));
     }
 
     // ── Register (across participants) ─────────────────────────────
@@ -167,11 +167,11 @@ public class MedicationsController : ControllerBase
 
         var totalCount = await ordered.CountAsync(ct);
         var pageItems = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
-        var providerToday = await ProviderTodayAsync(ct);
+        var todays = await ProviderTodaysAsync(pageItems.Select(m => m.TenantId), ct);
 
         var result = new PagedResult<MedicationListDto>
         {
-            Items = pageItems.Select(m => ToListDto(m, FullName(m.Participant), providerToday)).ToList(),
+            Items = pageItems.Select(m => ToListDto(m, FullName(m.Participant), todays[m.TenantId])).ToList(),
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize,
@@ -207,7 +207,8 @@ public class MedicationsController : ControllerBase
         // The MAR's "one calendar day" is the provider-local window [00:00, next 00:00). "Today" (when no
         // date is supplied) and "overdue" are both the PROVIDER's local notion, never UTC: a slot is an
         // unrecorded dose more than 60 minutes past its provider-local time.
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        // shortcut: with no participant the window spans every organisation the caller can see but takes one zone (the scoped one); add a per-slot zone if a SuperAdmin needs the all-orgs MAR.
+        var provider = await ParticipantZoneAsync(participantId, ct);
         var targetDate = date ?? DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(_slots.UtcNow, provider.Zone));
         var dateStart = targetDate.ToDateTime(TimeOnly.MinValue);
         var dateEndExclusive = targetDate.AddDays(1).ToDateTime(TimeOnly.MinValue);
@@ -440,9 +441,9 @@ public class MedicationsController : ControllerBase
             .Where(a => a.ParticipantId == participantId);
 
         // Unpaged, so an omitted from is the last 90 days rather than the whole history.
-        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(from, to, ct);
+        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(participantId, from, to, ct);
         fromUtc ??= _slots.UtcNow.AddDays(-90);
-        var fromLocal = from?.Date ?? ProviderLocalTime.UtcToLocal(fromUtc.Value, (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone);
+        var fromLocal = from?.Date ?? ProviderLocalTime.UtcToLocal(fromUtc.Value, (await ParticipantZoneAsync(participantId, ct)).Zone);
         query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt >= fromUtc : a.ScheduledAt != null ? a.ScheduledAt >= fromLocal : a.CreatedAt >= fromUtc);
         if (to.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt < toUtcExclusive : a.ScheduledAt != null ? a.ScheduledAt < to.Value.Date.AddDays(1) : a.CreatedAt < toUtcExclusive);
 
@@ -477,7 +478,7 @@ public class MedicationsController : ControllerBase
             .AsQueryable();
 
         if (participantId.HasValue) query = query.Where(a => a.ParticipantId == participantId.Value);
-        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(from, to, ct);
+        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(participantId, from, to, ct);
         if (from.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt >= fromUtc : a.ScheduledAt != null ? a.ScheduledAt >= from.Value.Date : a.CreatedAt >= fromUtc);
         if (to.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt < toUtcExclusive : a.ScheduledAt != null ? a.ScheduledAt < to.Value.Date.AddDays(1) : a.CreatedAt < toUtcExclusive);
 
@@ -506,9 +507,9 @@ public class MedicationsController : ControllerBase
     /// UTC instants): from is the start of its day, to the start of the NEXT day (exclusive), both as UTC. shortcut: a time of day on
     /// either is ignored; the only callers send dates, so add a time-aware range when one needs it.
     /// </summary>
-    private async Task<(DateTime? FromUtc, DateTime? ToUtcExclusive)> DayRangeUtcAsync(DateTime? from, DateTime? to, CancellationToken ct)
+    private async Task<(DateTime? FromUtc, DateTime? ToUtcExclusive)> DayRangeUtcAsync(Guid? participantId, DateTime? from, DateTime? to, CancellationToken ct)
     {
-        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, ct)).Zone;
+        var zone = (await ParticipantZoneAsync(participantId, ct)).Zone;
         return (from.HasValue ? ProviderLocalTime.LocalToUtc(from.Value.Date, zone) : null,
                 to.HasValue ? ProviderLocalTime.LocalToUtc(to.Value.Date.AddDays(1), zone) : null);
     }
@@ -643,10 +644,23 @@ public class MedicationsController : ControllerBase
     /// The provider's calendar date now, the MAR's own "today": a review is overdue from the day AFTER its due day, judged on the
     /// provider's calendar, not the UTC date (which is still yesterday until 10:00 or 11:00 in Sydney).
     /// </summary>
-    private async Task<DateOnly> ProviderTodayAsync(CancellationToken ct)
+    private async Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct) =>
+        ProviderLocalTime.TodayIn(_slots.UtcNow, (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone);
+
+    /// <summary>Each row's own organisation's today: an unscoped SuperAdmin's list can span organisations, and the scoped zone is their home one.</summary>
+    private async Task<Dictionary<Guid, DateOnly>> ProviderTodaysAsync(IEnumerable<Guid> tenantIds, CancellationToken ct)
     {
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
-        return ProviderLocalTime.TodayIn(_slots.UtcNow, provider.Zone);
+        var todays = new Dictionary<Guid, DateOnly>();
+        foreach (var id in tenantIds.Distinct()) todays[id] = await ProviderTodayAsync(id, ct);
+        return todays;
+    }
+
+    /// <summary>The zone of the named participant's organisation; with none named (or found) the scoped zone, which is all a list across organisations has.</summary>
+    private async Task<ProviderTimeZone> ParticipantZoneAsync(Guid? participantId, CancellationToken ct)
+    {
+        var tenantId = participantId is null ? null
+            : await _db.Participants.Where(p => p.Id == participantId).Select(p => (Guid?)p.TenantId).FirstOrDefaultAsync(ct);
+        return tenantId is { } t ? await ProviderTimeZoneResolver.ResolveAsync(_db, t, ct) : await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
     }
 
     private static MedicationListDto ToListDto(ParticipantMedication m, string participantName, DateOnly providerToday)

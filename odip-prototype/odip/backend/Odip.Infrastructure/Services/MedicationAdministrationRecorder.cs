@@ -309,10 +309,9 @@ public sealed class MedicationAdministrationRecorder
 
             if (dto.WitnessStaffId.HasValue)
             {
-                // Same-tenant scoping comes for free here: _db.Users is ambient-tenant-filtered
-                // by OdipDbContext for any non-SuperAdmin caller, so a cross-tenant witness id
-                // simply resolves to no row, same as "not found" (§4.4).
-                witnessStaff = await _db.Users.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value && s.IsActive, ct);
+                // Scoped callers get same-tenant scoping from the _db.Users filter; an unscoped SuperAdmin has none, so the
+                // medication's own organisation is matched here. Either way a cross-tenant id reads as "not found" (§4.4).
+                witnessStaff = await _db.Users.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value && s.IsActive && s.TenantId == med.TenantId, ct);
                 if (witnessStaff == null)
                     return Fail(RecordAdministrationOutcome.Invalid, "Selected witness staff member was not found.");
 
