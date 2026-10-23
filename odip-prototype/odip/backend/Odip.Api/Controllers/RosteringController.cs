@@ -137,7 +137,7 @@ public class RosteringController : ControllerBase
         var weekTripAssignments = await _db.StaffAssignments
             .Include(a => a.TripInstance)
             .Where(a => staffIds.Contains(a.UserId) && a.Status != AssignmentStatus.Cancelled
-                        && a.AssignmentStart <= end && a.AssignmentEnd >= start)
+                        && a.AssignmentStart <= end.AddDays(1) && a.AssignmentEnd >= start) // +1 day: Sunday's overnight shift can meet Monday's trip; only findings see it (bars filter below)
             .ToListAsync(ct);
 
         var weekWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, start, end, ct);
@@ -362,7 +362,7 @@ public class RosteringController : ControllerBase
                 var (complianceLevel, complianceNotes) = ComputeCompliance(staff, start);
                 var rosteredHours = staffShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => s.DurationHours);
 
-                var myTripBars = weekTripAssignments.Where(a => a.UserId == staff.Id).Select(a => new TripBarDto
+                var myTripBars = weekTripAssignments.Where(a => a.UserId == staff.Id && a.AssignmentStart <= end).Select(a => new TripBarDto
                 {
                     TripInstanceId = a.TripInstanceId, TripCode = a.TripInstance.TripCode, TripName = a.TripInstance.TripName,
                     StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd, IsDriver = a.IsDriver

@@ -118,7 +118,7 @@ internal sealed class LiveCaster
         var compatibility = (await DemoQueries.CompatibilityLevels(_run.Db, staffIds).ToListAsync(ct))
             .ToDictionary(c => (c.UserId, c.ParticipantId), c => c.Level);
         var holidays = (await DemoQueries.HolidaysOf(_run.Db, _state, from, to).ToListAsync(ct)).Select(h => new PublicHolidayRef(h.Date, h.Name)).ToList();
-        var assignments = await DemoQueries.TripAssignmentsOf(_run.Db, staffIds, from, to).ToListAsync(ct);
+        var assignments = await DemoQueries.TripAssignmentsOf(_run.Db, staffIds, from, to.AddDays(1)).ToListAsync(ct);
 
         return _weeks[from] = new WeekData(shifts, windows, compatibility, holidays, assignments);
     }
