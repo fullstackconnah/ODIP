@@ -141,7 +141,7 @@ public static class ExportTables
         Own<User>("staff.csv", "Staff and other users: name, contact details, role, qualifications with their expiry dates, and worker screening number."),
         Via("staff-availability.csv", "Staff availability and unavailability from the older availability screen.",
             (db, t) => { var staff = Staff(db, t); return db.StaffAvailabilities.Where(a => staff.Any(u => u.Id == a.UserId)); }),
-        Own<LeaveRequest>("leave-requests.csv", "Leave requests and their decisions."),
+        Own<LeaveRequest>("leave-requests.csv", "Leave requests and their decisions, including leave entered in Employment Hero and the hours sent to it."),
         Own<RecurringUnavailability>("recurring-unavailability.csv", "Regular times staff can't work, and their decisions."),
         Own<NotificationPreference>("notification-preferences.csv", "Which emails and text messages each person has turned on."),
         Own<NotificationLog>("notification-log.csv", "Emails and text messages sent: when, how and to which address."),

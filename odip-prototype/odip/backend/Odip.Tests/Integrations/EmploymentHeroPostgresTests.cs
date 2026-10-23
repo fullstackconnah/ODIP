@@ -8,6 +8,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
 using Odip.Tests.Imports;
@@ -325,5 +326,43 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(2, data.Queued);
         Assert.Equal(2, data.Check.Waiting);
         Assert.Single(data.Check.Workers);
+    }
+
+    [SkippableFact]
+    public async Task An_EH_leave_id_is_unique_per_organisation_only_when_set()
+    {
+        RequirePostgres();
+        var (dbA, tenantA) = await _pg.NewTenantContextAsync();
+        var (dbB, tenantB) = await _pg.NewTenantContextAsync();
+        await using var _a = dbA;
+        await using var _b = dbB;
+        LeaveRequest Leave(Guid tenantId, string? ehId) => new()
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, UserId = Guid.NewGuid(), RequestedByUserId = Guid.NewGuid(), ExternalLeaveId = ehId,
+            StartDate = new DateOnly(2026, 11, 2), EndDate = new DateOnly(2026, 11, 6),
+        };
+        var userA = Person(tenantA, "ann", null);
+        var userB = Person(tenantB, "bob", null);
+        dbA.Users.Add(userA);
+        dbB.Users.Add(userB);
+        await dbA.SaveChangesAsync();
+        await dbB.SaveChangesAsync();
+
+        // Any number without an id, and the same id in two organisations: allowed.
+        var l1 = Leave(tenantA, null); l1.UserId = userA.Id;
+        var l2 = Leave(tenantA, null); l2.UserId = userA.Id;
+        var l3 = Leave(tenantA, "9001"); l3.UserId = userA.Id;
+        var l4 = Leave(tenantB, "9001"); l4.UserId = userB.Id;
+        dbA.LeaveRequests.AddRange(l1, l2, l3);
+        dbB.LeaveRequests.Add(l4);
+        await dbA.SaveChangesAsync();
+        await dbB.SaveChangesAsync();
+
+        var again = Leave(tenantA, "9001"); again.UserId = userA.Id;
+        dbA.LeaveRequests.Add(again);
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => dbA.SaveChangesAsync());
+        var pg = Assert.IsType<PostgresException>(failure.InnerException);
+        Assert.Equal("23505", pg.SqlState);
+        Assert.Equal(LeaveRequest.ExternalLeaveIdIndexName, pg.ConstraintName);
     }
 }
