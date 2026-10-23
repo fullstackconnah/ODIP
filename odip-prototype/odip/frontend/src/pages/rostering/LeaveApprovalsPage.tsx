@@ -506,7 +506,7 @@ export default function LeaveApprovalsPage() {
           <p className="mt-1 text-xs text-[var(--color-muted-foreground)] md:max-w-[12rem] md:truncate" title={row.data.decisionNote}>{row.data.decisionNote}</p>
         )}
         {row.rowKind === 'leave' && row.data.sentHours != null && (
-          <p className="mt-1 whitespace-normal text-xs text-[var(--color-muted-foreground)]">
+          <p className="mt-1 whitespace-normal text-xs text-[var(--color-muted-foreground)] md:min-w-[14rem]">
             {`In Employment Hero · ${hoursLabel(row.data.sentHours)}${row.data.sentHoursDefaulted ? " (7.6 h a day: ODIP's default)" : ''}`}
           </p>
         )}
