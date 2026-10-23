@@ -262,6 +262,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroStaffS
 // Every 30 minutes, each connected organisation. EmploymentHero:Enabled (default true) switches the loop off; Sync now still works.
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroSyncBackgroundService>();
 builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroTimesheetSender>();
+builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroLeaveSync>();
 // Every minute, each connected organisation: approved hours go to Employment Hero as timesheets. Same EmploymentHero:Enabled switch.
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroTimesheetBackgroundService>();
 
