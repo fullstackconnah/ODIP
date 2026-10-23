@@ -16,11 +16,11 @@ internal static class CrossTenant
     public static readonly Guid A = Guid.NewGuid();
     public static readonly Guid B = Guid.NewGuid();
 
-    public static OdipDbContext Db(Guid? tenantId = null)
+    public static OdipDbContext Db(Guid? tenantId = null, bool isSuperAdmin = false)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId ?? A);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(isSuperAdmin);
         var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         return new OdipDbContext(options, tenant.Object);
     }

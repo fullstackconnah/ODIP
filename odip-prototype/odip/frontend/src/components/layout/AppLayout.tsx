@@ -5,7 +5,6 @@ import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
 import { Suspense, useState, useRef } from 'react'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import { TAP_AREA } from '@/components/tapArea'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import NotificationBell from '@/components/layout/NotificationBell'
@@ -334,9 +333,9 @@ export default function AppLayout() {
         {/* Top bar — fixed 48px */}
         <header className="sticky top-0 z-30 h-12 bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
           <div className="flex items-center justify-between h-full px-[var(--gutter,20px)]">
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 items-center gap-4">
               <button
-                className={`${TAP_AREA} lg:hidden p-2 rounded-md hover:bg-[var(--color-accent)] transition-colors`}
+                className="flex items-center justify-center lg:hidden p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
@@ -346,7 +345,7 @@ export default function AppLayout() {
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
               {user.tenantName && (
-                <span className="hidden sm:inline-flex text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium">
+                <span title={user.tenantName} className={`${isSuperAdmin ? 'hidden sm:inline-block' : 'inline-block'} max-w-[7.5rem] truncate sm:max-w-none text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium`}>
                   {user.tenantName}
                 </span>
               )}

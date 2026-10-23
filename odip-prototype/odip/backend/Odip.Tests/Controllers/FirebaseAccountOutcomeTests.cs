@@ -107,7 +107,7 @@ public class FirebaseAccountOutcomeTests
     // ── Tenant first user ───────────────────────────────────────────────
 
     private static CreateTenantWithSetupDto TenantDto(bool withFirstUser = true) => new(
-        "Brightside Care", "brightside.example.com", null,
+        "Brightside Care", "brightside.example.com", new TenantSetupProviderDto { State = "VIC" },
         withFirstUser ? new CreateInitialUserDto("Jane", "Smith", "jane.smith@brightside.example.com", "jane.smith", "Admin", null) : null);
 
     private static async Task<(TenantCreatedDto Dto, OdipDbContext Db)> CreateTenant(Mock<IFirebaseUserService> firebase, bool withFirstUser = true)

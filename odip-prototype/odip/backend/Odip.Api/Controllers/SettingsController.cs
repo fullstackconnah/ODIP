@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
 
@@ -19,6 +20,8 @@ public class SettingsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _tenant;
+
+    public const string ChooseOrganisation = "Choose an organisation to view as before changing settings: settings belong to one organisation.";
     public SettingsController(OdipDbContext db, ICurrentTenant tenant) { _db = db; _tenant = tenant; }
 
     // The one setting is the qualification warning window: ReadOnly reads it so its Qualifications, Staff and Dashboard figures match everyone else's.
@@ -26,10 +29,14 @@ public class SettingsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin,ReadOnly")]
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Get(CancellationToken ct)
     {
-        var s = await _db.AppSettings.FirstOrDefaultAsync(ct);
+        // A SuperAdmin's query filter is off, so the row is picked by organisation: with none chosen they read the defaults, never another organisation's values.
+        var s = _tenant.TenantId is { } tenantId
+            ? await _db.AppSettings.Where(x => x.TenantId == tenantId).OrderBy(x => x.Id).FirstOrDefaultAsync(ct)
+            : null;
         return Ok(ApiResponse<AppSettingsDto>.Ok(new AppSettingsDto
         {
-            QualificationWarningDays = s?.QualificationWarningDays ?? 30
+            QualificationWarningDays = s?.QualificationWarningDays ?? 30,
+            WeeklyHoursWarning = s?.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold
         }));
     }
 
@@ -38,20 +45,23 @@ public class SettingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Update(
         [FromBody] UpdateAppSettingsDto dto, CancellationToken ct)
     {
-        var s = await _db.AppSettings.FirstOrDefaultAsync(ct);
+        if (_tenant.IsSuperAdmin) return BadRequest(ApiResponse<AppSettingsDto>.Fail(ChooseOrganisation));
+        var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
         if (s == null)
         {
-            s = new AppSettings { QualificationWarningDays = dto.QualificationWarningDays };
+            s = new AppSettings { QualificationWarningDays = dto.QualificationWarningDays, WeeklyHoursWarning = dto.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold };
             _db.AppSettings.Add(s);
         }
         else
         {
             s.QualificationWarningDays = dto.QualificationWarningDays;
+            if (dto.WeeklyHoursWarning is { } hours) s.WeeklyHoursWarning = hours;
         }
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<AppSettingsDto>.Ok(new AppSettingsDto
         {
-            QualificationWarningDays = s.QualificationWarningDays
+            QualificationWarningDays = s.QualificationWarningDays,
+            WeeklyHoursWarning = s.WeeklyHoursWarning
         }));
     }
     [HttpGet("module-visibility")]

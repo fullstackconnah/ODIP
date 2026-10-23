@@ -87,6 +87,15 @@ public class RosterConflictServiceTests
     private static bool HasCode(IReadOnlyList<RosterFinding> findings, string code) =>
         findings.Any(f => f.Code == code);
 
+    private static StaffAssignment TripBetween(User staff, DateOnly start, DateOnly end) => new()
+    {
+        Id = Guid.NewGuid(),
+        UserId = staff.Id,
+        User = staff,
+        AssignmentStart = start,
+        AssignmentEnd = end,
+    };
+
     // ── WSC_EXPIRED / WSC_MISSING ─────────────────────────────
 
     [Fact]
@@ -302,6 +311,58 @@ public class RosterConflictServiceTests
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { assignment }));
 
         Assert.False(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+    }
+
+    [Fact]
+    public void Overnight_shift_running_into_a_trips_first_day_fires_double_booked_trip()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, new DateOnly(2026, 10, 19), new TimeOnly(22, 0), new TimeOnly(6, 0), endsNextDay: true);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { TripBetween(staff, new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 22)) }));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.DoubleBookedTrip);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.Equal($"{staff.FullName} is assigned to a trip covering 20 Oct 2026.", finding.Message);
+    }
+
+    [Fact]
+    public void Same_shift_not_overnight_the_day_before_a_trip_does_not_fire_double_booked_trip()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, new DateOnly(2026, 10, 19), new TimeOnly(14, 0), new TimeOnly(22, 0));
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { TripBetween(staff, new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 22)) }));
+
+        Assert.False(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+    }
+
+    [Fact]
+    public void Overnight_shift_ending_exactly_at_midnight_into_a_trip_does_not_fire_double_booked_trip()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, new DateOnly(2026, 10, 19), new TimeOnly(18, 0), TimeOnly.MinValue, endsNextDay: true);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { TripBetween(staff, new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 22)) }));
+
+        Assert.False(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+    }
+
+    [Fact]
+    public void Overnight_shift_on_a_trips_last_day_fires_one_double_booked_trip_not_two()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, new DateOnly(2026, 10, 22), new TimeOnly(22, 0), new TimeOnly(6, 0), endsNextDay: true);
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { TripBetween(staff, new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 22)) }));
+
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.DoubleBookedTrip);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.Equal($"{staff.FullName} is assigned to a trip covering 22 Oct 2026.", finding.Message);
     }
 
     // ── STAFF_UNAVAILABLE ────────────────────────────────────
@@ -833,7 +894,8 @@ public class RosterConflictServiceTests
         var findings = new RosterConflictService().CheckStaffAssignment(
             new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
 
-        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.DoubleBookedTrip);
+        Assert.Equal($"{staff.FullName} is assigned to a trip covering 11 Sep 2026-12 Sep 2026.", finding.Message);
     }
 
     [Fact]

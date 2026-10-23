@@ -34,7 +34,7 @@ public class TenantSetupStarterActivitiesTests
     private static async Task<Guid> SetUpAsync(OdipDbContext db, string domain = "brightside.example.com")
     {
         var result = await new TenantsController(db, new Mock<IFirebaseUserService>().Object)
-            .CreateWithSetup(new CreateTenantWithSetupDto("Brightside Care", domain, null, null), CancellationToken.None);
+            .CreateWithSetup(new CreateTenantWithSetupDto("Brightside Care", domain, new TenantSetupProviderDto { State = "VIC" }, null), CancellationToken.None);
         return Assert.IsType<ApiResponse<TenantCreatedDto>>(Assert.IsType<CreatedAtActionResult>(result).Value).Data!.Id;
     }
 
@@ -93,14 +93,14 @@ public class TenantSetupStarterActivitiesPostgresTests : IClassFixture<PostgresF
 
         await using (var db = PostgresFixture.NewContext(cs))
         {
-            var created = await new TenantsController(db, firebase.Object).CreateWithSetup(new CreateTenantWithSetupDto("Brightside Care", "brightside.example.com", null, null), CancellationToken.None);
+            var created = await new TenantsController(db, firebase.Object).CreateWithSetup(new CreateTenantWithSetupDto("Brightside Care", "brightside.example.com", new TenantSetupProviderDto { State = "VIC" }, null), CancellationToken.None);
             Assert.IsType<CreatedAtActionResult>(created);
         }
 
         // The initial user's role is checked after the tenant and its activities were saved: the whole set-up rolls back with the transaction.
         await using (var db = PostgresFixture.NewContext(cs))
         {
-            var refused = await new TenantsController(db, firebase.Object).CreateWithSetup(new CreateTenantWithSetupDto("Seaside Care", "seaside.example.com", null,
+            var refused = await new TenantsController(db, firebase.Object).CreateWithSetup(new CreateTenantWithSetupDto("Seaside Care", "seaside.example.com", new TenantSetupProviderDto { State = "VIC" },
                 new CreateInitialUserDto("Jane", "Smith", "jane@seaside.example.com", "jane.smith", "SuperAdmin", null)), CancellationToken.None);
             Assert.IsType<BadRequestObjectResult>(refused);
         }

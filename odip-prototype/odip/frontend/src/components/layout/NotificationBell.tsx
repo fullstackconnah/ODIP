@@ -5,7 +5,6 @@ import { useInbox, useMarkAllInboxRead, useMarkInboxRead } from '@/api/hooks'
 import type { InAppNotificationDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { SlideOver } from '@/components/SlideOver'
-import { TAP_AREA } from '@/components/tapArea'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { NotificationList } from '@/components/layout/NotificationList'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
@@ -68,6 +67,8 @@ export default function NotificationBell() {
   }, [open, isBelowLg])
 
   const unread = inbox.data?.unreadCount ?? 0
+  // The button follows what the panel shows, not the badge: it only clears items the person can see.
+  const panelHasUnread = (inbox.data?.items ?? []).some(n => !n.readAt)
   const name = unread > 0 ? `${unread} unread, Notifications` : 'Notifications'
 
   const toggle = () => {
@@ -82,8 +83,8 @@ export default function NotificationBell() {
     if (navigates) setOpen(false)
   }
   const markAllRead = () => {
-    markAll.mutate()
-    // The button is about to disappear: keep focus in the panel, on its heading, rather than dropping it to the page.
+    markAll.mutate((inbox.data?.items ?? []).filter(n => !n.readAt).map(n => n.id))
+    // Every unread item shown is cleared, so the button is about to disappear: keep focus in the panel, on its heading, rather than dropping it to the page.
     ;(headingRef.current ?? slideOverTitleRef.current)?.focus()
   }
   // Focus leaving for another control (Tab, or a click on one) closes the panel and stays where the user put it. A blur with
@@ -104,7 +105,7 @@ export default function NotificationBell() {
         aria-expanded={open}
         aria-controls={!isBelowLg && open ? panelId : undefined}
         aria-haspopup={isBelowLg ? 'dialog' : undefined}
-        className={`${TAP_AREA} w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors`}
+        className="w-8 h-8 pointer-coarse:size-[var(--tap-min)] flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors"
       >
         {/* The badge sits on the icon exactly as the bottom bar places it. */}
         <span className="relative inline-flex">
@@ -126,7 +127,7 @@ export default function NotificationBell() {
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
             <h2 ref={headingRef} tabIndex={-1} className="font-display text-base font-semibold text-foreground focus:outline-none">Notifications</h2>
-            {unread > 0 && <Button variant="ghost" size="sm" onClick={markAllRead}>Mark all as read</Button>}
+            {panelHasUnread && <Button variant="ghost" size="sm" onClick={markAllRead}>Mark all as read</Button>}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">{list}</div>
         </div>
@@ -138,7 +139,7 @@ export default function NotificationBell() {
           open={open}
           onClose={() => setOpen(false)}
           title={<span ref={slideOverTitleRef} tabIndex={-1} className="focus:outline-none">Notifications</span>}
-          footer={unread > 0 ? <Button variant="secondary" onClick={markAllRead}>Mark all as read</Button> : undefined}
+          footer={panelHasUnread ? <Button variant="secondary" onClick={markAllRead}>Mark all as read</Button> : undefined}
           bodyClassName="p-0"
         >
           {list}

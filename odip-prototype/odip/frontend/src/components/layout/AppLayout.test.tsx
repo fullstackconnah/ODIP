@@ -5,7 +5,6 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import AppLayout from './AppLayout'
-import { TAP_AREA } from '@/components/tapArea'
 
 // AppLayout renders the portal nav's pending-witness-count badge and the Rostering nav's
 // pending-leave-count badge via TanStack Query hooks — stub just those exports (keeping the
@@ -130,6 +129,25 @@ describe('platform page finder', () => {
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).queryAllByRole('link')).toHaveLength(0)
     expect(within(dialog).getByText('No platform pages are available for this account.')).toBeInTheDocument()
+  })
+})
+
+describe('AppLayout — the organisation name in the header', () => {
+  afterEach(() => localStorage.clear())
+
+  it('is shown on a phone too: not hidden below the sm breakpoint, and trimmed with an ellipsis instead of crowding the bar', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    const name = screen.getByText('Jo Care Support Services')
+    expect(name).not.toHaveClass('hidden')
+    expect(name).toHaveClass('truncate')
+    expect(name).toHaveAttribute('title', 'Jo Care Support Services')
+  })
+
+  it('is hidden on a phone for a SuperAdmin, whose tenant switcher already names the organisation and needs the room', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    expect(screen.getByText('Jo Care Support Services')).toHaveClass('hidden', 'sm:inline-block')
   })
 })
 
@@ -358,23 +376,24 @@ describe('AppLayout — participant lifecycle navigation', () => {
 // changing size. jsdom has no layout or media queries, so these pin the class contract; the token floors are 0px
 // on a mouse, so the desktop shell is unchanged.
 describe('AppLayout — 44px coarse-pointer hit areas', () => {
-  const pad = TAP_AREA.split(' ')
+  // The header controls are 44px boxes under touch, not 36/32px boxes with an invisible pad: what is measured is what is tappable.
+  const box = ['pointer-coarse:size-[var(--tap-min)]']
 
   afterEach(() => {
     localStorage.clear()
   })
 
-  it('pads the header "Open menu" toggle (36px) and keeps the pad when it becomes "Close menu"', () => {
+  it('gives the header "Open menu" toggle (36px) a real 44px box under touch and keeps it when it becomes "Close menu"', () => {
     renderAt('/trips')
-    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass(...pad, 'p-2', 'lg:hidden')
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('p-2', 'lg:hidden', ...box)
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
-    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...pad)
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...box)
   })
 
-  it('pads the header "Notifications" bell (32px), a working button now', () => {
+  it('gives the header "Notifications" bell (32px) a real 44px box under touch, a working button now', () => {
     renderAt('/trips')
     const bell = screen.getByRole('button', { name: 'Notifications' })
-    expect(bell).toHaveClass(...pad, 'w-8', 'h-8')
+    expect(bell).toHaveClass('w-8', 'h-8', ...box)
     expect(bell).toBeEnabled()
   })
 
@@ -642,10 +661,10 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
 
     expect(hrefs(mainNav())).toEqual([
       '/', '/portal',
-      '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles', '/tasks',
+      '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
       '/participants', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
-      '/budgets',
+      '/tasks', '/budgets',
       '/incidents', '/settings',
     ])
   })
@@ -658,9 +677,9 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     // home is My shifts).
     expect(hrefs(mainNav())).toEqual([
       '/portal',
-      '/trips', '/schedule', '/tasks',
+      '/trips', '/schedule',
       '/participants', '/medications',
-      '/incidents',
+      '/tasks', '/incidents',
     ])
   })
 })
@@ -700,23 +719,25 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
   const FULL_MENU = [
     'Dashboard',
     'My shifts',
-    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
     'Participants: Participants | Medications | Caregiver forms',
     'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+    'Tasks',
     'Budgets',
     'Incidents',
     'Settings',
   ]
   // A SupportWorker starts from My shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
-  const SUPPORT_WORKER_MENU = ['My shifts', 'Trips: Trips | Schedule | Tasks', 'Participants: Participants | Medications', 'Incidents']
+  const SUPPORT_WORKER_MENU = ['My shifts', 'Trips: Trips | Schedule', 'Participants: Participants | Medications', 'Tasks', 'Incidents']
   // ReadOnly reads most of the app but its API refuses Rostering (all five pages), Budgets, Caregiver forms and
   // Settings, so the menu does not offer them: Budgets and Settings disappear, Staff & roster is down to Staff and Qualifications.
   const READ_ONLY_MENU = [
     'Dashboard',
     'My shifts',
-    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles | Tasks',
+    'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
     'Participants: Participants | Medications',
     'Staff & roster: Staff | Qualifications',
+    'Tasks',
     'Incidents',
   ]
 
@@ -851,12 +872,12 @@ describe('AppLayout — open groups are remembered (U1)', () => {
     localStorage.setItem(KEY, JSON.stringify(['gone-group', 42, 'trips']))
     const { unmount } = renderAt('/')
     expect(expanded(/Trips$/)).toBe('true')
-    expect(navShape()).toHaveLength(8)
+    expect(navShape()).toHaveLength(9)
     unmount()
 
     localStorage.setItem(KEY, '{not json')
     renderAt('/')
-    expect(navShape()).toHaveLength(8)
+    expect(navShape()).toHaveLength(9)
     expect(expanded(/Trips$/)).toBe('false')
   })
 
@@ -997,7 +1018,7 @@ describe('AppLayout — the bottom bar is generated from the same config (U6)', 
   it('lights the cell of the section that holds the page, not only the cell that links to it exactly', () => {
     signIn('Coordinator')
     for (const [path, expected] of [
-      ['/', 'Dashboard'], ['/trips/t-1', 'Trips'], ['/schedule', 'Trips'], ['/vehicles', 'Trips'], ['/tasks', 'Trips'],
+      ['/', 'Dashboard'], ['/trips/t-1', 'Trips'], ['/schedule', 'Trips'], ['/vehicles', 'Trips'], ['/tasks', 'menuMore'],
       ['/rostering/leave', 'Roster'], ['/staff', 'Roster'], ['/qualifications', 'Roster'],
       ['/participants/p-1', 'Participants'], ['/onboarding/p-1', 'Participants'], ['/medications', 'Participants'],
     ] as const) {

@@ -10,14 +10,18 @@ public class BprCsvService(OdipDbContext db)
     public async Task<(byte[] Content, string FileName)> GenerateBprCsvAsync(Guid claimId, CancellationToken ct = default)
     {
         var claim = await db.TripClaims
+            .Include(c => c.TripInstance)
+            .Include(c => c.Participant)
             .Include(c => c.LineItems)
                 .ThenInclude(li => li.ParticipantBooking)
                     .ThenInclude(pb => pb.Participant)
             .FirstOrDefaultAsync(c => c.Id == claimId, ct)
             ?? throw new KeyNotFoundException($"Claim {claimId} not found");
 
-        var settings = await db.ProviderSettings.FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Provider settings not configured");
+        // A claim always belongs to a trip or a participant; with neither there is no organisation to read settings for.
+        var tenantId = claim.TripInstance?.TenantId ?? claim.Participant?.TenantId
+            ?? throw new KeyNotFoundException($"Claim {claimId} not found");
+        var settings = ProviderSettingsGuard.Require(await db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct));
 
         // Nullability audit (shift-completion design spec, delivery PR 3): Kind == Shift claim
         // lines have ParticipantBooking == null — a shift-kind line is excluded here rather than

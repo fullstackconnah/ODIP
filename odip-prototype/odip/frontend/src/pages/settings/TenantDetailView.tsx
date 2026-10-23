@@ -6,6 +6,7 @@ import { useAdminTenantProviderSettings } from '@/api/hooks/admin'
 import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
 import { Button } from '@/components/Button'
+import { StatusBadge } from '@/components/StatusBadge'
 import { formatInstantDateAu } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
@@ -75,7 +76,7 @@ export default function TenantDetailView({
             </span>
           </div>
           <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-            {tenant.emailDomain}
+            {tenant.emailDomain ?? 'No email domain'}
           </p>
         </div>
 
@@ -90,7 +91,7 @@ export default function TenantDetailView({
       </div>
 
       {/* ── Summary Cards ──────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
         <SummaryCard
           icon={<Users className="w-5 h-5 text-[var(--color-secondary)]" />}
           value={users.length}
@@ -108,6 +109,7 @@ export default function TenantDetailView({
           value={formatInstantDateAu(tenant.createdAt)}
           label="Created"
           loading={false}
+          className="col-span-2 xl:col-span-1"
         />
       </div>
 
@@ -184,9 +186,13 @@ export default function TenantDetailView({
           onClick={() => setProviderOpen(prev => !prev)}
           className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-[var(--color-accent)]/50 transition-colors"
         >
-          <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
-            Provider Settings
-          </h4>
+          <span className="flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
+              Provider Settings
+            </h4>
+            {/* Setup makes the row with these blank, so a row that exists is not a profile that has been filled in. */}
+            {providerSettings && (!providerSettings.registrationNumber.trim() || !providerSettings.abn.trim()) && <StatusBadge tone="warning" label="Incomplete" />}
+          </span>
           {providerOpen ? (
             <ChevronDown className="w-4 h-4 text-[var(--color-muted-foreground)]" />
           ) : (
@@ -223,22 +229,24 @@ function SummaryCard({
   value,
   label,
   loading,
+  className,
 }: {
   icon: React.ReactNode
   value: string | number
   label: string
   loading: boolean
+  className?: string
 }) {
   return (
-    <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex items-center gap-4">
-      <div className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-accent)]">
+    <div className={`bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex items-center gap-4 ${className ?? ''}`}>
+      <div className="flex shrink-0 items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-accent)]">
         {icon}
       </div>
-      <div>
+      <div className="min-w-0">
         {loading ? (
           <div className="h-6 w-10 rounded bg-[var(--color-accent)] animate-pulse" />
         ) : (
-          <p className="text-xl font-bold text-[var(--color-foreground)]">{value}</p>
+          <p className="text-xl font-bold text-[var(--color-foreground)] break-words">{value}</p>
         )}
         <p className="text-xs text-[var(--color-muted-foreground)]">{label}</p>
       </div>

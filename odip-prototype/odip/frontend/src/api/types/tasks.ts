@@ -60,7 +60,8 @@ export interface TaskDto {
 }
 
 export interface CreateTaskDto {
-  tripInstanceId: string
+  /** Optional: a task needs no trip. */
+  tripInstanceId?: string | null
   participantBookingId?: string
   accommodationReservationId?: string
   vehicleAssignmentId?: string

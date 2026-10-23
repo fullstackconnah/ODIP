@@ -47,8 +47,7 @@ public class InvoiceService
         if (planType == PlanType.AgencyManaged)
             throw new InvalidOperationException("Agency-managed participants use the BPR CSV, not invoices.");
 
-        var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Provider settings not configured.");
+        var settings = ProviderSettingsGuard.Require(await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == booking.Participant.TenantId, ct));
 
         var lineItems = claim.LineItems
             .Where(l => l.ParticipantBookingId == bookingId)

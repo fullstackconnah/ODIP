@@ -138,7 +138,7 @@ public class RosteringController : ControllerBase
         var weekTripAssignments = await _db.StaffAssignments
             .Include(a => a.TripInstance)
             .Where(a => staffIds.Contains(a.UserId) && a.Status != AssignmentStatus.Cancelled
-                        && a.AssignmentStart <= end && a.AssignmentEnd >= start)
+                        && a.AssignmentStart <= end.AddDays(1) && a.AssignmentEnd >= start) // +1 day: Sunday's overnight shift can meet Monday's trip; only findings see it (bars filter below)
             .ToListAsync(ct);
 
         var weekWindows = await _unavailabilityQuery.GetWindowsAsync(staffIds, start, end, ct);
@@ -191,7 +191,8 @@ public class RosteringController : ControllerBase
             .Where(c => staffIds.Contains(c.UserId) && allParticipantIds.Contains(c.ParticipantId))
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
 
-        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays);
+        var weeklyHours = await RosterAvailability.WeeklyHoursAsync(_db, activeStaff.Select(u => u.TenantId), ct);
+        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours);
 
         List<RosterFinding> FindingsFor(Shift shift)
         {
@@ -362,7 +363,7 @@ public class RosteringController : ControllerBase
                 var (complianceLevel, complianceNotes) = ComputeCompliance(staff, start);
                 var rosteredHours = staffShifts.Where(s => s.Status != ShiftStatus.Cancelled).Sum(s => s.DurationHours);
 
-                var myTripBars = weekTripAssignments.Where(a => a.UserId == staff.Id).Select(a => new TripBarDto
+                var myTripBars = weekTripAssignments.Where(a => a.UserId == staff.Id && a.AssignmentStart <= end).Select(a => new TripBarDto
                 {
                     TripInstanceId = a.TripInstanceId, TripCode = a.TripInstance.TripCode, TripName = a.TripInstance.TripName,
                     StartDate = a.AssignmentStart, EndDate = a.AssignmentEnd, IsDriver = a.IsDriver
@@ -391,7 +392,7 @@ public class RosteringController : ControllerBase
                 {
                     StaffId = staff.Id, FullName = staff.FullName, Role = staff.Position ?? Position.SupportWorker,
                     Compliance = complianceLevel, ComplianceNotes = complianceNotes,
-                    RosteredHours = rosteredHours, TargetHours = RosterConflictService.DefaultWeeklyHoursThreshold,
+                    RosteredHours = rosteredHours, TargetHours = RosterAvailability.WeeklyHoursFor(weeklyHours, staff.TenantId),
                     Shifts = shiftDtos, TripBars = myTripBars, Leave = myLeave
                 });
             }
@@ -951,11 +952,11 @@ public class RosteringController : ControllerBase
                 var shifts = worker.OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ToList();
                 string NameOf(Shift s) => participantNames.GetValueOrDefault(s.ParticipantId) ?? "a participant";
                 var first = shifts[0];
-                // shortcut: the digest dedupes on its earliest shift, so a ShiftAssigned for that one shift in the last 5 minutes swallows it; give the digest an entity of its own if that bites.
+                // No dedupe: Publish week only publishes Drafts under the board lock, so a repeat publish finds none to tell about.
                 await _notificationRaiser.RaiseAsync(
                     Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", first.Id, new[] { worker.Key },
                     new Odip.Infrastructure.Notifications.Templates.ShiftAssignedPayload(email, NameOf(first), first.ServiceDate, first.StartTime, first.EndTime,
-                        shifts.Skip(1).Select(s => new Odip.Infrastructure.Notifications.Templates.ShiftAssignedLine(NameOf(s), s.ServiceDate, s.StartTime, s.EndTime)).ToList()), ct);
+                        shifts.Skip(1).Select(s => new Odip.Infrastructure.Notifications.Templates.ShiftAssignedLine(NameOf(s), s.ServiceDate, s.StartTime, s.EndTime)).ToList()), ct, dedupe: false);
             }
 
             await _db.SaveChangesAsync(ct);

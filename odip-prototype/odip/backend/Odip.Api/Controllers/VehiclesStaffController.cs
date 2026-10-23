@@ -568,7 +568,7 @@ public class StaffController : ControllerBase
         if (addressChanged && !dto.AddressConfirmed)
         {
             var rowTenantDomain = await TenantEmailDomainAsync(s.TenantId, ct);
-            if (rowTenantDomain is not null && AddressConfirmation.Needed(emailLower, rowTenantDomain))
+            if (AddressConfirmation.Needed(emailLower, rowTenantDomain))
                 return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, rowTenantDomain), AddressConfirmation.Code));
         }
 
@@ -963,7 +963,8 @@ public class StaffAssignmentsController : ControllerBase
         // days, so they don't get a PUBLIC_HOLIDAY finding — so loading them for a trip assignment
         // check would be a pure-waste DB round trip. Leaving the parameter unset defaults it to null.
         var ctx = new RosterCheckContext(staff, null, staffShiftsInWindow, Array.Empty<Shift>(),
-            otherTripAssignments, availability, CompatibilityLevel.Allowed, RosterConflictService.DefaultWeeklyHoursThreshold);
+            otherTripAssignments, availability, CompatibilityLevel.Allowed,
+            RosterAvailability.WeeklyHoursFor(await RosterAvailability.WeeklyHoursAsync(_db, new[] { staff.TenantId }, ct), staff.TenantId));
 
         return _conflictService.CheckStaffAssignment(assignmentStart, assignmentEnd, excludeAssignmentId, ctx).ToList();
     }

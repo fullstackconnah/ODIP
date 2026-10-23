@@ -8,7 +8,8 @@ import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
 import { formatHoursMeter, formatShiftTimeRange } from '../lib/roster'
-import { WEEK_TARGET_HOURS, firstName, moveLine, pickName, pickOptionName, pickerGroups, pickerPlacement, swapCandidates, swapOptionName, type PickRow } from '../lib/rosterDrag'
+import { useWeeklyHoursWarning } from '@/api/hooks/settings'
+import { firstName, moveLine, pickName, pickOptionName, pickerGroups, pickerPlacement, swapCandidates, swapOptionName, type PickRow } from '../lib/rosterDrag'
 
 export type StaffPickerProps = {
   /** The Needs staff shift being filled. Null: closed. */
@@ -296,14 +297,15 @@ function SwapBody({ source, shifts, onPick, inputRef }: { source: ShiftDto; shif
 /** One person: the strip puck's language (StaffStrip). The flag, the name and "12 / 38 h". Then the leave badge and the Move line, when there is one. Then "Published: tells {name}" when that shift is out. */
 function PickOption({ id, row, active, onPick, onHover }: { id: string; row: PickRow; active: boolean; onPick: (row: PickRow) => void; onHover: () => void }) {
   const { person, source } = row
-  // Past 38 the figure takes the warning ink. The strip shows the same with its amber meter; a list of meters would read as a bar chart.
-  const over = row.hours > WEEK_TARGET_HOURS
+  const weeklyHours = useWeeklyHoursWarning()
+  // Past the organisation's weekly figure the hours take the warning ink. The strip shows the same with its amber meter; a list of meters would read as a bar chart.
+  const over = row.hours > weeklyHours
   return (
     <div
       id={id}
       role="option"
       aria-selected={active}
-      aria-label={pickOptionName(row)}
+      aria-label={pickOptionName(row, weeklyHours)}
       // Focus stays in the search: the browser's mousedown would take it before the click picks (SearchableSelect).
       onMouseDown={e => e.preventDefault()}
       onClick={() => onPick(row)}
@@ -313,7 +315,7 @@ function PickOption({ id, row, active, onPick, onHover }: { id: string; row: Pic
       <span className="flex items-center gap-1.5">
         {person.hasExpiredQualifications && <AlertTriangle className="h-3 w-3 shrink-0 text-[var(--color-on-warning-container)]" aria-hidden="true" />}
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={person.fullName}>{person.fullName}</span>
-        <span className={`shrink-0 text-xs tabular-nums ${over ? TONE.warning.ink : 'text-muted-foreground'}`}>{formatHoursMeter(row.hours, WEEK_TARGET_HOURS)}</span>
+        <span className={`shrink-0 text-xs tabular-nums ${over ? TONE.warning.ink : 'text-muted-foreground'}`}>{formatHoursMeter(row.hours, weeklyHours)}</span>
       </span>
       {(row.leave || source) && (
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">

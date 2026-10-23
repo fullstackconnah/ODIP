@@ -88,7 +88,7 @@ describe('Organisation profile', () => {
     expect(screen.getByLabelText('ABN')).toHaveValue('51824753556')
     expect(screen.getByLabelText('NDIS registration number')).toHaveValue('4050012345')
     expect(screen.getByRole('textbox', { name: 'Address' })).toHaveValue('12 Wattle St, Brisbane QLD 4000')
-    expect(screen.getByRole('button', { name: /State/ })).toHaveTextContent('QLD')
+    expect(screen.getByRole('radio', { name: 'QLD' })).toBeChecked()
     expect(screen.getByRole('heading', { level: 3, name: 'Name and registration' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: 'Address' })).toBeInTheDocument()
   })
@@ -182,10 +182,12 @@ describe('Organisation profile', () => {
     await user.type(screen.getByLabelText('ABN'), '51824753556')
     await user.type(screen.getByLabelText('NDIS registration number'), '4050012345')
     await user.type(screen.getByRole('textbox', { name: 'Address' }), '1 Test St')
+    expect(saveButton()).toBeDisabled() // no state chosen yet
+    await user.click(screen.getByRole('radio', { name: 'WA' }))
     await user.click(saveButton())
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
-    expect(putBody()).toEqual({ organisationName: 'Sunrise Care', abn: '51824753556', registrationNumber: '4050012345', address: '1 Test St' })
+    expect(putBody()).toEqual({ organisationName: 'Sunrise Care', abn: '51824753556', registrationNumber: '4050012345', address: '1 Test St', state: 'WA' })
   })
 
   it('says which fields the server needs when it refuses a blank one without a message', async () => {
@@ -206,7 +208,7 @@ describe('Organisation profile', () => {
     const abn = await screen.findByLabelText('ABN')
     expect(abn).toHaveAttribute('readonly')
     expect(abn).toHaveValue('51824753556')
-    expect(screen.getByRole('button', { name: /State/ })).toBeDisabled()
+    screen.getAllByRole('radio').forEach(r => expect(r).toBeDisabled())
     expect(screen.getByText(/only an admin can change these/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })

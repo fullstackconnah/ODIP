@@ -96,8 +96,7 @@ public class ShiftClaimGenerationService
 
         var (lineItems, leftOut, participant) = await CalculateAsync(participantId, from, to, ct);
 
-        var settings = await _db.ProviderSettings.FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Provider settings are not configured.");
+        var settings = ProviderSettingsGuard.Require(await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == participant.TenantId, ct));
 
         // shortcut: no per-item GST flag; P1 only via legacy lines; add a catalogue GST flag if a taxable support appears
         var gstCode = GSTCode.P2;
@@ -179,7 +178,7 @@ public class ShiftClaimGenerationService
         // ShiftPriceEstimator.StateFor normalises the case, so "Nsw" prices in NSW's column
         // and finds NSW's holidays here exactly as the budget ledger's estimate does
         // (one rule for both, so the claim and the estimate cannot drift apart).
-        var providerState = string.IsNullOrWhiteSpace(participant.AddressState) ? (await _db.ProviderSettings.FirstOrDefaultAsync(ct))?.State : null;
+        var providerState = string.IsNullOrWhiteSpace(participant.AddressState) ? (await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == participant.TenantId, ct))?.State : null;
         var state = ShiftPriceEstimator.StateFor(participant.AddressState, providerState);
 
         // The shared holiday loader: the synced feed AND the maintained whole-day override rows (the feed misses days such as Boxing Day 2026), every state read and the state matched in any

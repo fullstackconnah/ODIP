@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
@@ -20,7 +21,6 @@ public class TenantsController : ControllerBase
     private readonly IFirebaseUserService _firebaseUserService;
     private readonly ILogger<TenantsController>? _logger;
 
-    private const string DomainRequiredMessage = "Email domain is required.";
 
     // IFirebaseUserService is intentionally NOT registered in Program.cs — see AdminUsersController: ActivatorUtilities falls back to
     // the parameter's default, so production needs no DI change while a unit test injects a mock.
@@ -49,15 +49,12 @@ public class TenantsController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateTenantDto dto)
     {
         // Stored and compared in one tidied form (see EmailIdentity.NormaliseDomain): an address's own domain never matches a row typed "@acme.com.au".
-        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
+        var domain = EmailIdentity.NormaliseDomainOrNull(dto.EmailDomain);
 
-        if (domain.Length == 0)
-            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
-
-        if (CommonEmailProviders.Covers(domain))
+        if (domain is not null && CommonEmailProviders.Covers(domain))
             return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
 
-        if (await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
+        if (domain is not null && await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
 
         var tenant = new Tenant
@@ -77,16 +74,23 @@ public class TenantsController : ControllerBase
     [HttpPost("with-setup")]
     public async Task<IActionResult> CreateWithSetup([FromBody] CreateTenantWithSetupDto dto, CancellationToken ct = default)
     {
-        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
+        var domain = EmailIdentity.NormaliseDomainOrNull(dto.EmailDomain);
 
-        if (domain.Length == 0)
-            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
-
-        if (CommonEmailProviders.Covers(domain))
+        if (domain is not null && CommonEmailProviders.Covers(domain))
             return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
 
-        if (await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
+        if (domain is not null && await _db.Tenants.AnyAsync(t => t.EmailDomain == domain))
             return Conflict("A tenant with this email domain already exists");
+
+        // Prices and public holidays follow the state, so nobody is silently put on Victoria's: none, or one that is not a state code, is refused before anything is made.
+        var ps = dto.ProviderSettings;
+        var state = ps?.State?.Trim().ToUpperInvariant();
+        if (ps is null || state is null || !HolidayCalendar.StateCodes.Contains(state))
+            return BadRequest(ApiResponse<object>.Fail("Choose the organisation's state."));
+
+        // A blank organisation name falls back to the tenant's, which must then fit the column the same as one typed.
+        if (string.IsNullOrWhiteSpace(ps.OrganisationName) && dto.Name.Length > 200)
+            return BadRequest(ApiResponse<object>.Fail("The organisation name must be 200 characters or fewer."));
 
         if (dto.InitialUser is { } candidate)
         {
@@ -123,27 +127,24 @@ public class TenantsController : ControllerBase
         _db.Activities.AddRange(StarterActivities.For(tenant.Id));
         await _db.SaveChangesAsync();
 
-        if (dto.ProviderSettings is { } ps)
+        // Always made, so the state is a stored choice and the organisation's name has somewhere to live; a blank name falls back to the tenant's.
+        _db.ProviderSettings.Add(new ProviderSettings
         {
-            var settings = new ProviderSettings
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenant.Id,
-                RegistrationNumber = ps.RegistrationNumber,
-                ABN = ps.ABN,
-                OrganisationName = ps.OrganisationName,
-                Address = ps.Address,
-                State = ps.State,
-                GSTRegistered = ps.GSTRegistered,
-                IsPaceProvider = ps.IsPaceProvider,
-                BankAccountName = ps.BankAccountName,
-                BSB = ps.BSB,
-                AccountNumber = ps.AccountNumber,
-                InvoiceFooterNotes = ps.InvoiceFooterNotes,
-                MedicationCompetencyMode = ps.MedicationCompetencyMode ?? MedicationCompetencyMode.Warn,
-            };
-            _db.ProviderSettings.Add(settings);
-        }
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            RegistrationNumber = ps.RegistrationNumber,
+            ABN = ps.ABN,
+            OrganisationName = string.IsNullOrWhiteSpace(ps.OrganisationName) ? dto.Name : ps.OrganisationName,
+            Address = ps.Address,
+            State = state,
+            GSTRegistered = ps.GSTRegistered,
+            IsPaceProvider = ps.IsPaceProvider,
+            BankAccountName = ps.BankAccountName,
+            BSB = ps.BSB,
+            AccountNumber = ps.AccountNumber,
+            InvoiceFooterNotes = ps.InvoiceFooterNotes,
+            MedicationCompetencyMode = ps.MedicationCompetencyMode ?? MedicationCompetencyMode.Warn,
+        });
 
         Guid? initialUserId = null;
         if (dto.InitialUser is { } iu)
@@ -211,17 +212,14 @@ public class TenantsController : ControllerBase
         if (tenant is null)
             return NotFound();
 
-        var domain = EmailIdentity.NormaliseDomain(dto.EmailDomain);
-        if (domain.Length == 0)
-            return BadRequest(ApiResponse<object>.Fail(DomainRequiredMessage));
-
+        var domain = EmailIdentity.NormaliseDomainOrNull(dto.EmailDomain);
         // Only a CHANGE to a shared provider is refused: a row that already holds one stays editable (renamed, switched off), and the domain is
         // simply nobody's own, so it blocks no other tenant's staff (see StaffController.OtherOrganisationAddressErrorAsync).
         var domainChanged = tenant.EmailDomain != domain;
-        if (domainChanged && CommonEmailProviders.Covers(domain))
+        if (domainChanged && domain is not null && CommonEmailProviders.Covers(domain))
             return BadRequest(ApiResponse<object>.Fail(CommonEmailProviders.SharedDomainMessage(domain)));
 
-        if (domainChanged && await _db.Tenants.AnyAsync(t => t.EmailDomain == domain && t.Id != id))
+        if (domainChanged && domain is not null && await _db.Tenants.AnyAsync(t => t.EmailDomain == domain && t.Id != id))
             return Conflict("A tenant with this email domain already exists");
 
         tenant.Name = dto.Name;

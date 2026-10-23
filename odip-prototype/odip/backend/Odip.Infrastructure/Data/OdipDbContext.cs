@@ -1332,7 +1332,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.LastError).HasMaxLength(2000);
 
             entity.HasIndex(e => new { e.Status, e.NextAttemptAt });                              // dispatcher poll
-            entity.HasIndex(e => new { e.TenantId, e.EventType, e.EntityId, e.RecipientUserId, e.CreatedAt });  // dedupe lookup
+            entity.HasIndex(e => new { e.EntityId, e.RecipientUserId, e.CreatedAt });  // dedupe lookup (NotificationRaiser)
         });
 
         modelBuilder.Entity<NotificationPreference>(entity =>
@@ -2012,7 +2012,7 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<BudgetSettings>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
-        // Tenants table — unique index on EmailDomain
+        // Tenants table — unique index on EmailDomain (null for an organisation with none; PostgreSQL treats NULLs as distinct)
         modelBuilder.Entity<Tenant>()
             .HasIndex(t => t.EmailDomain).IsUnique();
 

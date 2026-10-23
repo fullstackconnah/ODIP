@@ -331,9 +331,9 @@ describe('the picker words', () => {
   })
 
   it("names an option in the strip puck's style, adding only what applies", () => {
-    expect(pickOptionName({ key: 's-3:b-1', person: jack, hours: 15, leave: 'Pending', source: liamMon }))
+    expect(pickOptionName({ key: 's-3:b-1', person: jack, hours: 15, leave: 'Pending', source: liamMon }, 38))
       .toBe("Jack O'Sullivan, 15 of 38 hours this week, qualifications expired, leave pending, move from Monday 8am to 5pm with Liam, published: tells Jack")
-    expect(pickOptionName({ key: 's-6', person: { ...jack, id: 's-6', fullName: 'Kim Lee', hasExpiredQualifications: false }, hours: 7.5, leave: null }))
+    expect(pickOptionName({ key: 's-6', person: { ...jack, id: 's-6', fullName: 'Kim Lee', hasExpiredQualifications: false }, hours: 7.5, leave: null }, 38))
       .toBe('Kim Lee, 7.5 of 38 hours this week')
     expect(hoursText(12)).toBe('12')
   })
