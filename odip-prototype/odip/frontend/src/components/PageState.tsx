@@ -72,8 +72,8 @@ function RetryError({ noun, onRetry, detail }: Common & { onRetry?: () => unknow
           </>
         ) : undefined}
       >
-        Couldn't load this {noun}. Check your connection and try again.
-        {detail && <span className="mt-1 block text-sm [overflow-wrap:anywhere]">{detail}</span>}
+        Couldn't load this {noun}.{!detail && ' Check your connection and try again.'}
+        {detail && <span className="mt-1 block text-sm text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{detail}</span>}
       </Callout>
       <div role={state === 'idle' ? undefined : 'status'} aria-live="polite" aria-atomic="true" className="sr-only">{status}</div>
     </div>
