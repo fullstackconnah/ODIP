@@ -103,7 +103,7 @@ public sealed class ShiftHandoverService
         var now = _clock.GetUtcNow().UtcDateTime;
         var ack = new HandoverAcknowledgement
         {
-            Id = Guid.NewGuid(), SourceCompletionId = view.Latest.CompletionId, ShiftId = shift.Id, UserId = readerUserId,
+            Id = Guid.NewGuid(), TenantId = shift.TenantId, SourceCompletionId = view.Latest.CompletionId, ShiftId = shift.Id, UserId = readerUserId,
             AcknowledgedAt = now, CreatedAt = now, UpdatedAt = now,
         };
         _db.HandoverAcknowledgements.Add(ack);

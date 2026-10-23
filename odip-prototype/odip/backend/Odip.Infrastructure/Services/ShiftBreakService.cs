@@ -87,7 +87,7 @@ public sealed class ShiftBreakService
 
         var created = new ShiftBreak
         {
-            Id = Guid.NewGuid(), ShiftCompletionId = completion.Id, StartedAt = now, CreatedByUserId = userId,
+            Id = Guid.NewGuid(), TenantId = completion.TenantId, ShiftCompletionId = completion.Id, StartedAt = now, CreatedByUserId = userId,
             CreatedAt = now, UpdatedAt = now,
         };
         _db.ShiftBreaks.Add(created);

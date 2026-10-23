@@ -613,7 +613,7 @@ public class PortalController : ControllerBase
         var workerName = await _db.Users.Where(u => u.Id == shift.UserId!.Value)
             .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
         var reviewRecipients = await _db.Users
-            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .Where(u => u.TenantId == shift.TenantId && u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
             .ToListAsync(ct);
         foreach (var recipient in reviewRecipients)
         {
@@ -1325,9 +1325,10 @@ public class PortalController : ControllerBase
             && l.EndDate == dto.EndDate && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined, ct);
         if (duplicate) return Conflict(ApiResponse<LeaveRequestDto>.Fail("An identical request already exists."));
 
+        var staffTenantId = await StaffTenantIdAsync(staffId.Value, ct);
         var leave = new LeaveRequest
         {
-            Id = Guid.NewGuid(), UserId = staffId.Value, LeaveType = dto.LeaveType,
+            Id = Guid.NewGuid(), TenantId = staffTenantId, UserId = staffId.Value, LeaveType = dto.LeaveType,
             StartDate = dto.StartDate, EndDate = dto.EndDate, Reason = dto.Reason,
             Status = LeaveStatus.Pending, RequestedByUserId = staffId.Value, RequestedAt = DateTime.UtcNow,
         };
@@ -1339,7 +1340,7 @@ public class PortalController : ControllerBase
         var requesterName = await _db.Users.Where(u => u.Id == staffId.Value)
             .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
         var leaveRecipients = await _db.Users
-            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .Where(u => u.TenantId == staffTenantId && u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
             .ToListAsync(ct);
         foreach (var recipient in leaveRecipients)
         {
@@ -1397,7 +1398,7 @@ public class PortalController : ControllerBase
 
         var rule = new RecurringUnavailability
         {
-            Id = Guid.NewGuid(), UserId = staffId.Value, DayOfWeek = dto.DayOfWeek,
+            Id = Guid.NewGuid(), TenantId = await StaffTenantIdAsync(staffId.Value, ct), UserId = staffId.Value, DayOfWeek = dto.DayOfWeek,
             StartTime = dto.StartTime, EndTime = dto.EndTime, EffectiveFrom = dto.EffectiveFrom,
             EffectiveTo = dto.EffectiveTo, Notes = dto.Notes,
             Status = LeaveStatus.Pending, RequestedByUserId = staffId.Value, RequestedAt = DateTime.UtcNow,
@@ -1450,6 +1451,10 @@ public class PortalController : ControllerBase
         var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
         return exists ? userId : null;
     }
+
+    /// <summary>The staff user's own organisation: an unscoped SuperAdmin has no current tenant for the context to stamp a new row from.</summary>
+    private Task<Guid> StaffTenantIdAsync(Guid staffId, CancellationToken ct) =>
+        _db.Users.Where(u => u.Id == staffId).Select(u => u.TenantId).FirstAsync(ct);
 
     private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(
         s.Id, s.ParticipantId, s.Participant?.FullName ?? string.Empty, s.ServiceDate, s.StartTime, s.EndTime,
