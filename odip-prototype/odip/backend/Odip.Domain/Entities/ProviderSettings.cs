@@ -45,4 +45,13 @@ public class ProviderSettings : ITenantEntity
     /// every existing provider keeps today's recording behaviour until an Admin chooses Enforce.
     /// </summary>
     public MedicationCompetencyMode MedicationCompetencyMode { get; set; } = MedicationCompetencyMode.Warn;
+
+    /// <summary>Printed before an invoice's number (INV-0042). Letters, digits, - _ . only: it is also the PDF's file name. New invoices only.</summary>
+    public string InvoiceNumberPrefix { get; set; } = "INV-";
+    /// <summary>Printed before a credit note's number (CN-0007).</summary>
+    public string CreditNotePrefix { get; set; } = "CN-";
+    /// <summary>The first invoice number; it can change only until the organisation's first invoice is issued.</summary>
+    public int InvoiceStartNumber { get; set; } = 1;
+    /// <summary>An invoice is due this many days after it is issued (0 = on issue).</summary>
+    public int PaymentTermsDays { get; set; } = 14;
 }

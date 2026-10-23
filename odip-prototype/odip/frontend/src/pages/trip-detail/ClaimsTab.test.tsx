@@ -19,11 +19,14 @@ interface Call { method: string; url: string; body: unknown }
 const calls: Call[] = []
 let refuse: ((call: Call) => boolean) | null = null
 let refusalText = 'The NDIA code is at most 10 characters.'
+// Xero PR1: the submit confirm asks what a submit would issue (one preview call), and reads each claim's invoices.
+let invoiceCount = 1
 
 beforeEach(() => {
   calls.length = 0
   refuse = null
   refusalText = 'The NDIA code is at most 10 characters.'
+  invoiceCount = 1
   const adapter: AxiosAdapter = async (config: InternalAxiosRequestConfig): Promise<AxiosResponse> => {
     const call: Call = { method: String(config.method ?? 'get').toLowerCase(), url: String(config.url ?? ''), body: typeof config.data === 'string' ? JSON.parse(config.data) : config.data }
     calls.push(call)
@@ -31,7 +34,10 @@ beforeEach(() => {
       const error = Object.assign(new Error('Request failed with status code 400'), { isAxiosError: true, response: { status: 400, data: { errors: [refusalText] } } })
       throw error
     }
-    return { data: { data: true }, status: 200, statusText: 'OK', headers: {}, config: { headers: {} as never } } as AxiosResponse
+    const body = call.url === '/claims/submit-preview'
+      ? { claims: ((call.body as { claimIds: string[] }).claimIds).map(claimId => ({ claimId, toIssue: [{ groupId: `g-${claimId}`, participantName: 'Ava Nguyen', billToName: 'Ava Nguyen', total: 100, predictedNumber: 'INV-0042' }], alreadyIssued: 0, missingSettings: false })), invoiceCount }
+      : call.method === 'get' && call.url.endsWith('/invoices') ? { invoiceState: 'preview', invoices: [], groups: [], agencyCount: 0 } : true
+    return { data: { data: body }, status: 200, statusText: 'OK', headers: {}, config: { headers: {} as never } } as AxiosResponse
   }
   apiClient.defaults.adapter = adapter
 })
@@ -293,3 +299,89 @@ describe('ClaimsTab: guards on a claim that has gone to the NDIA', () => {
 async function selectBoth(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('checkbox', { name: 'Select all rows' }))
 }
+
+describe('ClaimsTab: marking claims as submitted goes through the submit confirm (Xero PR1)', () => {
+  const previews = () => calls.filter(call => call.url === '/claims/submit-preview')
+  const submitDialog = () => screen.getByRole('alertdialog', { name: 'Mark as submitted?' })
+
+  it('the status pill opens "Mark as submitted?" and writes nothing; Cancel leaves the claim as it was', async () => {
+    const user = userEvent.setup()
+    renderTab([claim('c1', 'Draft')])
+
+    await choose(user, 'Draft', 'Submitted')
+    expect(await within(submitDialog()).findByText('This issues invoice INV-0042.')).toBeInTheDocument()
+    expect(puts()).toEqual([])
+    expect(previews()).toEqual([{ method: 'post', url: '/claims/submit-preview', body: { claimIds: ['c1'] } }])
+
+    await user.click(within(submitDialog()).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(puts()).toEqual([])
+    expect(screen.getByRole('button', { name: 'Draft' })).toBeInTheDocument()
+  })
+
+  it('writes { status: "Submitted" } once Confirm is pressed', async () => {
+    const user = userEvent.setup()
+    renderTab([claim('c1', 'Rejected')])
+
+    await choose(user, 'Rejected', 'Submitted')
+    await within(submitDialog()).findByText('This issues invoice INV-0042.')
+    await user.click(within(submitDialog()).getByRole('button', { name: 'Mark as Submitted' }))
+
+    await waitFor(() => expect(puts()).toEqual([{ method: 'put', url: '/claims/c1', body: { status: 'Submitted' } }]))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+  })
+
+  it('bulk: asks ONE preview with every selected claim, says the count, writes nothing until Confirm, then one PUT per claim', async () => {
+    const user = userEvent.setup()
+    invoiceCount = 5
+    renderTab([claim('c1', 'Draft'), claim('c2', 'Draft'), claim('c3', 'Ready')])
+
+    await selectBoth(user)
+    await user.click(screen.getByRole('button', { name: '3 rows' }))
+    await user.click(screen.getByRole('option', { name: 'Submitted' }))
+    const bulk = screen.getByRole('alertdialog', { name: 'Mark 3 claims as submitted?' })
+    expect(await within(bulk).findByText("This issues 5 invoices. You can't change their lines after this.")).toBeInTheDocument()
+    expect(previews()).toEqual([{ method: 'post', url: '/claims/submit-preview', body: { claimIds: ['c1', 'c2', 'c3'] } }])
+    expect(puts()).toEqual([])
+
+    await user.click(within(bulk).getByRole('button', { name: 'Mark as Submitted' }))
+
+    // The PUTs run side by side (N9): their order is not asserted.
+    await waitFor(() => expect(puts()).toHaveLength(3))
+    expect(puts().map(call => call.url).sort()).toEqual(['/claims/c1', '/claims/c2', '/claims/c3'])
+    expect(puts().every(call => JSON.stringify(call.body) === JSON.stringify({ status: 'Submitted' }))).toBe(true)
+    expect(previews()).toHaveLength(1)
+  })
+
+  it("bulk, partly refused: says how many changed and the first refusal's words", async () => {
+    const user = userEvent.setup()
+    refuse = call => call.method === 'put' && call.url === '/claims/c2'
+    refusalText = "Set up your organisation's invoice details in Settings first."
+    renderTab([claim('c1', 'Draft'), claim('c2', 'Draft'), claim('c3', 'Draft')])
+
+    await selectBoth(user)
+    await user.click(screen.getByRole('button', { name: '3 rows' }))
+    await user.click(screen.getByRole('option', { name: 'Submitted' }))
+    const bulk = screen.getByRole('alertdialog', { name: 'Mark 3 claims as submitted?' })
+    await within(bulk).findByText(/This issues/)
+    await user.click(within(bulk).getByRole('button', { name: 'Mark as Submitted' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("2 of 3 claims changed. Set up your organisation's invoice details in Settings first.")
+  })
+
+  it.each([
+    ['one invoice', 'Void INV-0042 first, then delete the claim.'],
+    ['two invoices', 'Void INV-0042 and INV-0043 first, then delete the claim.'],
+  ])("a delete refused because of %s shows the server's words above the table", async (_, words) => {
+    const user = userEvent.setup()
+    refuse = call => call.method === 'delete'
+    refusalText = words
+    renderTab([claim('c1', 'Rejected')])
+
+    await user.click(screen.getByRole('button', { name: 'Delete: TC-c1' }))
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete Claim' })).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(words)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+})
