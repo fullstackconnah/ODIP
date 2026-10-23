@@ -1186,7 +1186,7 @@ public class RosteringController : ControllerBase
             .Take(pageSize)
             .Select(x => new
             {
-                x.Outlier, x.Shift.Id, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount, x.Shift.ParticipantId,
+                x.Outlier, x.Shift.Id, x.Shift.TenantId, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount, x.Shift.ParticipantId,
                 ParticipantName = x.Shift.Participant != null ? x.Shift.Participant.FullName : string.Empty,
                 StaffName = x.Shift.User != null ? x.Shift.User.FullName : string.Empty,
                 CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
@@ -1199,7 +1199,7 @@ public class RosteringController : ControllerBase
         var extras = await ShiftCompletionMapper.QueueExtrasAsync(
             _db,
             pageRows.Select(r => new ShiftCompletionMapper.QueueExtrasInput(
-                r.Id, r.CompletionId, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay, r.ActualStart, r.ActualEnd)).ToList(),
+                r.Id, r.TenantId, r.CompletionId, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay, r.ActualStart, r.ActualEnd)).ToList(),
             ct);
 
         var items = pageRows.Select(row =>

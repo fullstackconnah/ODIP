@@ -41,7 +41,7 @@ public static class ShiftCompletionMapper
 
     /// <summary>The inputs <see cref="QueueExtrasAsync"/> needs for one queue row.</summary>
     public sealed record QueueExtrasInput(
-        Guid ShiftId, Guid CompletionId, Guid ParticipantId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay,
+        Guid ShiftId, Guid TenantId, Guid CompletionId, Guid ParticipantId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay,
         DateTime ActualStart, DateTime? ActualEnd);
 
     /// <summary>The per-completion figures the review queue adds to each row.</summary>
@@ -69,7 +69,10 @@ public static class ShiftCompletionMapper
             .GroupBy(i => i.ShiftId!.Value)
             .Select(g => new { ShiftId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ShiftId, x => x.Count, ct);
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(db, ct);
+        // Each row's own organisation: an unscoped SuperAdmin's context settings are their HOME organisation's, and a page can mix organisations.
+        var zones = new Dictionary<Guid, TimeZoneInfo>();
+        foreach (var tenantId in rows.Select(r => r.TenantId).Distinct())
+            zones[tenantId] = (await ProviderTimeZoneResolver.ResolveAsync(db, tenantId, ct)).Zone;
         var slots = new MedicationSlotService(db);
         var nowUtc = DateTime.UtcNow;
 
@@ -82,7 +85,7 @@ public static class ShiftCompletionMapper
             {
                 ServiceDate = row.ServiceDate, StartTime = row.StartTime, EndTime = row.EndTime, EndsNextDay = row.EndsNextDay,
             });
-            var due = await slots.GetWindowAsync(window.Item1, window.Item2, row.ParticipantId, provider.Zone, includePrn: false, ct);
+            var due = await slots.GetWindowAsync(window.Item1, window.Item2, row.ParticipantId, zones[row.TenantId], includePrn: false, ct);
             var withoutOutcome = due.Slots.DistinctBy(s => (s.Medication.Id, s.ScheduledAt)).Count(s => s.Administration is null);
             result[row.CompletionId] = new QueueExtras(withoutOutcome, breakMinutes, incidentsByShift.GetValueOrDefault(row.ShiftId));
         }
@@ -105,7 +108,7 @@ public static class ShiftCompletionMapper
         OdipDbContext db, IReadOnlyCollection<(Shift Shift, ShiftCompletion Completion)> rows, int thresholdMinutes, CancellationToken ct)
     {
         var extras = await QueueExtrasAsync(db, rows.Select(r => new QueueExtrasInput(
-            r.Shift.Id, r.Completion.Id, r.Shift.ParticipantId, r.Shift.ServiceDate, r.Shift.StartTime, r.Shift.EndTime, r.Shift.EndsNextDay,
+            r.Shift.Id, r.Shift.TenantId, r.Completion.Id, r.Shift.ParticipantId, r.Shift.ServiceDate, r.Shift.StartTime, r.Shift.EndTime, r.Shift.EndsNextDay,
             r.Completion.ActualStart, r.Completion.ActualEnd)).ToList(), ct);
         return rows.Where(r => NeedsReview(
                 extras[r.Completion.Id],
@@ -130,7 +133,7 @@ public static class ShiftCompletionMapper
         var shiftRows = await shiftQuery
             .Select(s => new
             {
-                s.Id, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.ReturnCount, s.ParticipantId,
+                s.Id, s.TenantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.ReturnCount, s.ParticipantId,
                 ParticipantName = s.Participant != null ? s.Participant.FullName : string.Empty,
                 StaffName = s.User != null ? s.User.FullName : string.Empty,
             })
@@ -144,7 +147,7 @@ public static class ShiftCompletionMapper
             db,
             shiftRows.Where(r => completionsByShiftId.ContainsKey(r.Id))
                 .Select(r => new QueueExtrasInput(
-                    r.Id, completionsByShiftId[r.Id].Id, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay,
+                    r.Id, r.TenantId, completionsByShiftId[r.Id].Id, r.ParticipantId, r.ServiceDate, r.StartTime, r.EndTime, r.EndsNextDay,
                     completionsByShiftId[r.Id].ActualStart, completionsByShiftId[r.Id].ActualEnd))
                 .ToList(),
             ct);
