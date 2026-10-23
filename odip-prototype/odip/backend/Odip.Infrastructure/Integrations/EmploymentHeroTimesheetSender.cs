@@ -88,8 +88,9 @@ public sealed class EmploymentHeroTimesheetSender
         var missing = await db.ShiftCompletions
             .Where(c => c.TenantId == tenantId && c.IsActive && c.ReviewOutcome == ReviewOutcome.Approved && !have.Contains(c.Id)
                         && c.Shift!.Status == ShiftStatus.Completed && c.Shift.ServiceDate >= cutoff)
-            .Select(c => c.Id).Take(ScanSize).ToListAsync(ct);
+            .Select(c => c.Id).OrderBy(id => id).Take(ScanSize).ToListAsync(ct);
         if (missing.Count == 0) return;
+        // Ordered by Id: two scans insert the same unique keys in the same order, so one waits for the other instead of deadlocking.
         db.EmploymentHeroOutbox.AddRange(missing.Select(id => EmploymentHeroTimesheets.NewRow(tenantId, id, now)));
         try
         {
