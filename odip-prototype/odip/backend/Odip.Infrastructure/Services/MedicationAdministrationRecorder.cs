@@ -344,6 +344,7 @@ public sealed class MedicationAdministrationRecorder
         var admin = new MedicationAdministration
         {
             Id = Guid.NewGuid(),
+            TenantId = med.TenantId,   // an unscoped SuperAdmin has no current tenant to stamp it from, and the replay checks look it up by med.TenantId
             ParticipantMedicationId = med.Id,
             ParticipantId = med.ParticipantId,
             TripInstanceId = dto.TripInstanceId,
@@ -391,9 +392,9 @@ public sealed class MedicationAdministrationRecorder
                 SourceKey: $"med-witness:{admin.Id}",
                 Type: TaskType.MedicationWitness,
                 Title: $"Witness sign-off needed: {med.Name} for {participantName}",
-                DueDate: providerToday.AddDays(1),
+                DueDate: (await ProviderTimeZoneResolver.TodayAsync(_db, med.TenantId, _clock, ct)).AddDays(1),
                 LinkTo: "/portal/witness-approvals",
-                MedicationAdministrationId: admin.Id), ct);
+                MedicationAdministrationId: admin.Id, TenantId: med.TenantId), ct);
         }
 
         try

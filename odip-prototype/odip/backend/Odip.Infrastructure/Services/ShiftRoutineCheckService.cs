@@ -62,7 +62,7 @@ public sealed class ShiftRoutineCheckService
         var now = _clock.GetUtcNow().UtcDateTime;
         var created = new ShiftRoutineCheck
         {
-            Id = Guid.NewGuid(), ShiftCompletionId = completion.Id, ParticipantRoutineId = routineId, ScheduledAt = occurrence.OccursAtLocal,
+            Id = Guid.NewGuid(), TenantId = completion.TenantId, ShiftCompletionId = completion.Id, ParticipantRoutineId = routineId, ScheduledAt = occurrence.OccursAtLocal,
             RoutineTitle = occurrence.Routine.Title, CheckedByUserId = userId, CheckedAt = now, CreatedAt = now, UpdatedAt = now,
         };
         _db.ShiftRoutineChecks.Add(created);
