@@ -45,4 +45,12 @@ public class ProviderSettings : ITenantEntity
     /// every existing provider keeps today's recording behaviour until an Admin chooses Enforce.
     /// </summary>
     public MedicationCompetencyMode MedicationCompetencyMode { get; set; } = MedicationCompetencyMode.Warn;
+
+    /// <summary>
+    /// The row's version as well as its last change: a concurrency token (OdipDbContext), as on ParticipantInquiry. Held in whole microseconds, as PostgreSQL
+    /// stores it, so the value GET sends, returned by the form as ExpectedUpdatedAt, still matches the stored one.
+    /// </summary>
+    public DateTime UpdatedAt { get => _updatedAt; set => _updatedAt = Micro(value); }
+    private DateTime _updatedAt = Micro(DateTime.UtcNow);
+    private static DateTime Micro(DateTime value) => new(value.Ticks - value.Ticks % 10, value.Kind);
 }

@@ -371,4 +371,57 @@ public class ProviderSettingsControllerTests
         Assert.Equal(MedicationCompetencyMode.Enforce, (await ReadAsync(controllerA)).MedicationCompetencyMode);
         Assert.Equal(MedicationCompetencyMode.Warn, (await ReadAsync(controllerB)).MedicationCompetencyMode);
     }
+
+    // Lost update: two Admins load the same row, the first saves a new account number, and the second saves from the older form.
+    // The second must be refused (409) rather than silently bringing the old account number back.
+    private static async Task<DateTime> LoadedUpdatedAtAsync(OdipDbContext db) =>
+        Assert.IsType<ApiResponse<ProviderSettingsDto>>(Assert.IsType<OkObjectResult>((await new ProviderSettingsController(db).Get(CancellationToken.None)).Result).Value).Data!.UpdatedAt;
+
+    [Fact]
+    public async Task Upsert_FromAnOlderForm_Is409_AndTheRowKeepsTheFirstAdminsAccountNumber()
+    {
+        var name = Guid.NewGuid().ToString();
+        using (var seed = CreateDb(name))
+            await new ProviderSettingsController(seed).Upsert(MinimalUpsertDto() with { AccountNumber = "111" }, CancellationToken.None);
+        using var dbA = CreateDb(name);
+        using var dbB = CreateDb(name);
+        var loadedA = await LoadedUpdatedAtAsync(dbA);
+        var loadedB = await LoadedUpdatedAtAsync(dbB);
+
+        var first = await new ProviderSettingsController(dbA).Upsert(MinimalUpsertDto() with { AccountNumber = "222", ExpectedUpdatedAt = loadedA }, CancellationToken.None);
+        var second = await new ProviderSettingsController(dbB).Upsert(MinimalUpsertDto() with { AccountNumber = "111", ManagerPhone = "0412345007", ExpectedUpdatedAt = loadedB }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(first.Result);
+        var conflict = Assert.IsType<ConflictObjectResult>(second.Result);
+        Assert.Equal(["Settings were changed by someone else. Reload and try again."], Assert.IsType<ApiResponse<bool>>(conflict.Value).Errors);
+        using var check = CreateDb(name);
+        var row = await check.ProviderSettings.SingleAsync();
+        Assert.Equal("222", row.AccountNumber);
+        Assert.Null(row.ManagerPhone);
+    }
+
+    [Fact]
+    public async Task Upsert_WithoutExpectedUpdatedAt_StillSaves_AndMovesTheVersion()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ProviderSettingsController(db);
+        await controller.Upsert(MinimalUpsertDto(), CancellationToken.None);
+        var before = await LoadedUpdatedAtAsync(db);
+        await Task.Delay(5);
+
+        var result = await controller.Upsert(MinimalUpsertDto() with { AccountNumber = "333" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.True(await LoadedUpdatedAtAsync(db) > before);
+    }
+
+    [Fact]
+    public async Task Get_ReturnsTheRowsUpdatedAt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        await new ProviderSettingsController(db).Upsert(MinimalUpsertDto(), CancellationToken.None);
+
+        Assert.Equal((await db.ProviderSettings.SingleAsync()).UpdatedAt, await LoadedUpdatedAtAsync(db));
+        Assert.NotEqual(default, await LoadedUpdatedAtAsync(db));
+    }
 }
