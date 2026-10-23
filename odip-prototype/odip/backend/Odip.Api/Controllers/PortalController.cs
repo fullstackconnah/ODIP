@@ -343,7 +343,7 @@ public class PortalController : ControllerBase
                 "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
         }
 
-        var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        var providerSettings = await _db.ScopedProviderSettings().FirstOrDefaultAsync(ct);
         var now = NowUtc;
         var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
 
@@ -493,7 +493,7 @@ public class PortalController : ControllerBase
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                     "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
 
-            var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+            var providerSettings = await _db.ScopedProviderSettings().FirstOrDefaultAsync(ct);
             var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
 
             // F4: Legacy Npgsql timestamp behaviour persists Kind verbatim; treat unsuffixed values as UTC.
