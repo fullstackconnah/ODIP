@@ -1,11 +1,15 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Portal.ShiftPackageFixture;
@@ -109,5 +113,34 @@ public class DoseRecorderSettingsOrgTests
         var blocker = Assert.Single(body.Data!.FinishBlockers);
         Assert.Equal(ShiftFinishBlockerCodes.DoseOutcomeMissing, blocker.Code);
         Assert.Equal(med.Id, blocker.MedicationId);
+    }
+
+    [Fact]
+    public async Task FinishShift_TheDoseBlockersFollowTheShiftsOrganisationsZone()
+    {
+        // 00:00 UTC on the 14th is 08:00 in Perth but 10:00 in Sydney: the 09:00 dose is not yet due on the shift's Perth clock, so Finish is clear (the home Sydney zone would block it).
+        var (f, _) = await Unscoped(MedicationCompetencyMode.Warn, MedicationCompetencyMode.Warn, now: new DateTimeOffset(2026, 7, 14, 0, 0, 0, TimeSpan.Zero));
+
+        Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto { NothingToNote = true }, default));
+    }
+
+    [Fact]
+    public async Task CompletionReview_ListsTheDosesInTheShiftsOrganisationsZone()
+    {
+        // 01:30 UTC on the 14th is 09:30 in Perth (the 09:00 dose is Due) but 11:30 in Sydney (Overdue, over 60 minutes late).
+        var (f, _) = await Unscoped(MedicationCompetencyMode.Warn, MedicationCompetencyMode.Warn, now: new DateTimeOffset(2026, 7, 14, 1, 30, 0, TimeSpan.Zero));
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test");
+        var rostering = new RosteringController(
+            f.Db, new StaffCompatibilityLinkService(f.Db), new StaffUnavailabilityQuery(f.Db),
+            package: new ShiftPackageService(f.Db, new MedicationSlotService(f.Db, f.Clock)), clock: f.Clock)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
+        };
+
+        var result = await rostering.GetShiftCompletionReview(f.Shift.Id, default);
+
+        var review = Assert.IsType<ApiResponse<ShiftCompletionReviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal("Australia/Perth", review.TimeZoneId);
+        Assert.Equal(PortalDoseState.Due, Assert.Single(review.Doses).State);
     }
 }

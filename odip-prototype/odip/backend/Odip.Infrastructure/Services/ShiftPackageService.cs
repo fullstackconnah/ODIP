@@ -58,7 +58,7 @@ public sealed class ShiftPackageService
         var breakRunning = completion is not null
             && await _db.ShiftBreaks.AnyAsync(b => b.ShiftCompletionId == completion.Id && b.EndedAt == null, ct);
 
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, shift.TenantId, ct);
         var doses = canRecordDoses
             ? await GetDosesAsync(shift, provider, includePrn: false, ct)
             : new ShiftDoses(Array.Empty<PortalDoseSlotDto>(), Array.Empty<PortalPrnDto>());
@@ -311,7 +311,7 @@ public sealed class ShiftPackageService
     public async Task<ShiftCompletionReviewDto> BuildReviewAsync(
         Shift shift, ShiftCompletion completion, ShiftCompletionDto completionDto, CancellationToken ct)
     {
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, shift.TenantId, ct);
         var doses = await GetDosesAsync(shift, provider, includePrn: false, ct);
 
         // "As needed" doses this WORKER gave during the actual shift: PRN medications only (an unscheduled record against a Regular
