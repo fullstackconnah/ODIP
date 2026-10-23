@@ -12,7 +12,7 @@ const REQUIRED_FIELDS = 'Fill in the registration number, ABN, organisation name
  * field from the body, so a section sends the row as the server last gave it with only the fields it changed replaced: an untouched null
  * stays null, and another section's fields go back exactly as they came. The query refetches when a section opens (the form seeds only
  * after that), a save writes what it sent into the cache, and the cache refetches after every save; so "as the server last gave it" is
- * that cache (another Admin saving in between can still be overwritten, as before). The two modes are never echoed: Safety checks adds
+ * that cache. It also carries the row's version back as expectedUpdatedAt, so a save from a form that another Admin has since outdated is refused (409, "Not saved. Settings were changed by someone else..."), the row is refetched, and the retry sends the person's changed fields over the fresh row. The two modes are never echoed: Safety checks adds
  * one through `extra` only when the person changed it.
  */
 export function useProviderRow<F extends Record<string, string | boolean>>(pick: (row: ProviderSettingsDto | null) => F) {
@@ -38,9 +38,10 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
     delete body.participantReadinessMode
     delete body.medicationCompetencyMode
     delete body.employmentHeroConnected   // computed by the server on GET; never written
+    delete body.updatedAt   // the version goes back as expectedUpdatedAt
     for (const k of changed) Object.assign(body, { [k]: form[k] })
     setResult(null)
-    upsert.mutate({ ...body, ...extra } as UpsertProviderSettingsDto, {
+    upsert.mutate({ ...body, ...extra, expectedUpdatedAt: row?.updatedAt } as UpsertProviderSettingsDto, {
       onSuccess: () => { setBase(form); setResult('saved') },
       onError: e => setResult({ error: notSavedText(e, REQUIRED_FIELDS) }),
     })

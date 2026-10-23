@@ -25,13 +25,16 @@ export function useUpsertProviderSettings() {
   return useMutation({
     mutationFn: (data: UpsertProviderSettingsDto) =>
       apiPut<ProviderSettingsDto>('/provider-settings', data),
-    onSuccess: (_saved, sent) => {
+    onSuccess: (_saved, { expectedUpdatedAt: _version, ...sent }) => {
       // The PUT answers true, not the row: write what was sent into the cache at once, so a second save before the refetch lands
-      // starts from this one, and nothing on screen waits for the refetch to say it is saved.
-      qc.setQueryData<ProviderSettingsDto | null>(['provider-settings'], old => ({ ...(old ?? {}), ...sent }) as ProviderSettingsDto)
+      // starts from this one, and nothing on screen waits for the refetch to say it is saved. The save moved the row's version and the
+      // answer doesn't say to what, so the cached one is dropped (a second save then sends none) until the refetch brings the new one.
+      qc.setQueryData<ProviderSettingsDto | null>(['provider-settings'], old => ({ ...(old ?? {}), ...sent, updatedAt: undefined }) as unknown as ProviderSettingsDto)
       qc.invalidateQueries({ queryKey: ['provider-settings'] })
       qc.invalidateQueries({ queryKey: ['missed-guidance-contact'] })
     },
+    // A 409 means the row changed since this form loaded it: refetch, so the next save goes out with the version that is there now.
+    onError: () => { qc.invalidateQueries({ queryKey: ['provider-settings'] }) },
   })
 }
 
