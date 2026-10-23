@@ -322,7 +322,9 @@ public class RosterConflictServiceTests
 
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { TripBetween(staff, new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 22)) }));
 
-        Assert.Equal(1, findings.Count(f => f.Code == RosterConflictService.DoubleBookedTrip));
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.DoubleBookedTrip);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.Equal($"{staff.FullName} is assigned to a trip covering 20 Oct 2026.", finding.Message);
     }
 
     [Fact]
@@ -358,7 +360,9 @@ public class RosterConflictServiceTests
 
         var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, tripAssignments: new[] { TripBetween(staff, new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 22)) }));
 
-        Assert.Equal(1, findings.Count(f => f.Code == RosterConflictService.DoubleBookedTrip));
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.DoubleBookedTrip);
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.Equal($"{staff.FullName} is assigned to a trip covering 22 Oct 2026.", finding.Message);
     }
 
     // ── STAFF_UNAVAILABLE ────────────────────────────────────
@@ -890,7 +894,8 @@ public class RosterConflictServiceTests
         var findings = new RosterConflictService().CheckStaffAssignment(
             new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), Guid.Empty, ctx);
 
-        Assert.True(HasCode(findings, RosterConflictService.DoubleBookedTrip));
+        var finding = Assert.Single(findings, f => f.Code == RosterConflictService.DoubleBookedTrip);
+        Assert.Equal($"{staff.FullName} is assigned to a trip covering 11 Sep 2026-12 Sep 2026.", finding.Message);
     }
 
     [Fact]

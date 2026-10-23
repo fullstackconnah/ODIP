@@ -268,8 +268,8 @@ public sealed class RosterConflictService
 
     /// <summary>Core overlap rule, decoupled from Shift so CheckStaffAssignment can reuse it against a
     /// multi-day AssignmentStart..AssignmentEnd range; excludeAssignmentId skips the assignment's own
-    /// prior row on an update. For the Shift path rangeStart == rangeEnd, so the message text is
-    /// byte-identical to the pre-extraction version.</summary>
+    /// prior row on an update. The message names the days the trip and the range share; for a
+    /// same-day Shift that is the single service date, as before the extraction.</summary>
     private static void CheckDoubleBookedTripForRange(DateOnly rangeStart, DateOnly rangeEnd, Guid excludeAssignmentId, RosterCheckContext ctx, List<RosterFinding> findings)
     {
         foreach (var assignment in ctx.TripAssignments)
@@ -279,7 +279,9 @@ public sealed class RosterConflictService
 
             if (assignment.AssignmentStart <= rangeEnd && rangeStart <= assignment.AssignmentEnd)
             {
-                var when = rangeStart == rangeEnd ? Fmt(rangeStart) : $"{Fmt(rangeStart)}-{Fmt(rangeEnd)}";
+                var from = rangeStart > assignment.AssignmentStart ? rangeStart : assignment.AssignmentStart;
+                var to = rangeEnd < assignment.AssignmentEnd ? rangeEnd : assignment.AssignmentEnd;
+                var when = from == to ? Fmt(from) : $"{Fmt(from)}-{Fmt(to)}";
                 findings.Add(new RosterFinding(DoubleBookedTrip, RosterFindingSeverity.Warning,
                     $"{ctx.Staff.FullName} is assigned to a trip covering {when}."));
             }
