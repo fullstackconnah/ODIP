@@ -16,6 +16,7 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Api.Services;
@@ -1354,6 +1355,7 @@ public class RosteringController : ControllerBase
         shift!.Status = ShiftStatus.Completed;
         shift.UpdatedAt = now;
 
+        await EmploymentHeroTimesheets.EnqueueAsync(_db, shift.TenantId, [(shift, completion)], now, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
@@ -1456,6 +1458,7 @@ public class RosteringController : ControllerBase
 
         var now = DateTime.UtcNow;
         var results = new List<ApproveBatchResultDto>();
+        var approved = new List<(Shift Shift, ShiftCompletion Completion)>();
 
         // De-dup: EF identity resolution would hand the second occurrence the already-approved tracked entity and report a false SHIFT_NOT_PENDING_REVIEW.
         var distinctIds = dto.ShiftIds.Distinct().ToList();
@@ -1504,9 +1507,12 @@ public class RosteringController : ControllerBase
             resolvedShift!.Status = ShiftStatus.Completed;
             resolvedShift.UpdatedAt = now;
 
+            approved.Add((resolvedShift, resolvedCompletion));
             results.Add(new ApproveBatchResultDto(shiftId, true, null, null));
         }
 
+        foreach (var group in approved.GroupBy(p => p.Shift.TenantId))
+            await EmploymentHeroTimesheets.EnqueueAsync(_db, group.Key, group.ToList(), now, ct);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<List<ApproveBatchResultDto>>.Ok(results));
     }

@@ -54,6 +54,7 @@ const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
 const CompatibilityPage = React.lazy(() => import('@/pages/rostering/CompatibilityPage'))
 const LeaveApprovalsPage = React.lazy(() => import('@/pages/rostering/LeaveApprovalsPage'))
 const CompletionReviewPage = React.lazy(() => import('@/pages/rostering/CompletionReviewPage'))
+const PayrollPage = React.lazy(() => import('@/pages/rostering/PayrollPage'))
 const MedicationsPage = React.lazy(() => import('@/pages/MedicationsPage'))
 const MedicationFormPage = React.lazy(() => import('@/pages/MedicationFormPage'))
 const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPage'))
@@ -173,6 +174,8 @@ const router = createBrowserRouter(
         <Route path="/rostering/compatibility" element={<PrivateRoute page="rostering"><CompatibilityPage /></PrivateRoute>} />
         <Route path="/rostering/leave" element={<PrivateRoute page="leave-approvals"><LeaveApprovalsPage /></PrivateRoute>} />
         <Route path="/rostering/completions" element={<PrivateRoute page="rostering"><CompletionReviewPage /></PrivateRoute>} />
+
+        <Route path="/rostering/payroll" element={<PrivateRoute page="rostering"><PayrollPage /></PrivateRoute>} />
         <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
         <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
         <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite viewableByReadOnly><MedicationFormPage /></PrivateRoute>} />

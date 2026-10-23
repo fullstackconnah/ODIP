@@ -511,6 +511,10 @@ export const ADL_LEVELS = ['Independent', 'Supervision', 'Assistance', 'FullSupp
 export type AdlLevel = typeof ADL_LEVELS[number]
 
 // ── Contact Role Status ───────────────────────────────────
+/** What the Payroll page prints for a shift's hours (C# PayrollShiftStatus, derived server side from the Employment Hero outbox). */
+export const PAYROLL_SHIFT_STATUSES = ['Sent', 'Waiting', 'Failed', 'Changed', 'NotLinked'] as const
+export type PayrollShiftStatus = typeof PAYROLL_SHIFT_STATUSES[number]
+
 export const CONTACT_ROLE_STATUSES = ['Active', 'Expired', 'Superseded'] as const
 export type ContactRoleStatus = typeof CONTACT_ROLE_STATUSES[number]
 
