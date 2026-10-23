@@ -435,8 +435,8 @@ export default function TenantFormPanel({
 
         {!isEdit && (
           <div>
-            <label id="tf-state-label" className={labelClass}>State *</label>
-            <ToggleGroup className="flex-wrap rounded-[var(--radius-md)] border border-[var(--color-border)] p-1 w-fit max-w-full" ariaLabel="State" options={AUSTRALIAN_STATES} value={state} onChange={setState} />
+            <span id="tf-state-label" className={labelClass}>State <span aria-hidden="true">*</span></span>
+            <ToggleGroup className="flex-wrap" aria-labelledby="tf-state-label" aria-required="true" options={AUSTRALIAN_STATES} value={state} onChange={setState} />
           </div>
         )}
 

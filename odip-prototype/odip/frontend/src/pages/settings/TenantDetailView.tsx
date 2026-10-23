@@ -91,7 +91,7 @@ export default function TenantDetailView({
       </div>
 
       {/* ── Summary Cards ──────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <SummaryCard
           icon={<Users className="w-5 h-5 text-[var(--color-secondary)]" />}
           value={users.length}
@@ -109,7 +109,7 @@ export default function TenantDetailView({
           value={formatInstantDateAu(tenant.createdAt)}
           label="Created"
           loading={false}
-          className="col-span-2 sm:col-span-1"
+          className="col-span-2 lg:col-span-1"
         />
       </div>
 

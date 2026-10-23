@@ -27,6 +27,11 @@ describe('TenantFormPanel create: optional domain, required state', () => {
     screen.getAllByRole('radio', { name: /^(ACT|NSW|NT|QLD|SA|TAS|VIC|WA)$/ }).forEach(r => expect(r).not.toBeChecked())
   })
 
+  it('names the state group "State" and marks it required', () => {
+    render(<TenantFormPanel isOpen onClose={vi.fn()} />)
+    expect(screen.getByRole('radiogroup', { name: 'State' })).toBeRequired()
+  })
+
   it('waits for a name and a state, but not for a domain', async () => {
     const u = userEvent.setup()
     render(<TenantFormPanel isOpen onClose={vi.fn()} />)

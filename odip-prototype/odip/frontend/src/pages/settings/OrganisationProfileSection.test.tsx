@@ -44,8 +44,20 @@ describe('Organisation profile: state and manager', () => {
   it('does not pick Victoria for an organisation with no profile row yet', async () => {
     api.get.mockResolvedValue(null)
     show()
-    await screen.findByRole('radiogroup', { name: 'State' })
+    await screen.findByRole('radiogroup', { name: 'State *' })
     screen.getAllByRole('radio').forEach(r => expect(r).not.toBeChecked())
+  })
+
+  it('ties the required flag and the error to the state group, so a screen reader hears them', async () => {
+    api.get.mockResolvedValue(null)
+    const user = userEvent.setup()
+    show()
+    const group = await screen.findByRole('radiogroup', { name: 'State *' })
+    expect(group).toBeRequired()
+    expect(group).not.toHaveAttribute('aria-invalid')
+    await user.type(screen.getByRole('textbox', { name: 'Address' }), '1 Example Street')
+    expect(group).toHaveAttribute('aria-invalid', 'true')
+    expect(group).toHaveAccessibleDescription("Choose the organisation's state.")
   })
 
   it('keeps Save off until a state is chosen, so no organisation is put on Victoria by saving', async () => {

@@ -38,8 +38,8 @@ export default function OrganisationProfileSection(frame: SectionFrame) {
             <SettingsGroup title="Address">
               <div className={formGrid}>
                 <TextField label="Address" className={span.long} value={p.form.address} readOnly={readOnly} onChange={e => p.edit({ address: e.target.value })} />
-                <FormField label="State" required error={p.dirty && !p.form.state ? "Choose the organisation's state." : undefined} className={span.short}>
-                  <ToggleGroup className="flex-wrap rounded-[var(--radius-md)] border border-[var(--color-border)] p-1 w-fit max-w-full" ariaLabel="State" options={STATES} value={p.form.state} onChange={v => p.edit({ state: v })} disabled={readOnly} />
+                <FormField label="State" required error={p.dirty && !p.form.state ? "Choose the organisation's state." : undefined} className={span.medium}>
+                  <ToggleGroup className="flex-wrap" options={STATES} value={p.form.state} onChange={v => p.edit({ state: v })} disabled={readOnly} />
                 </FormField>
               </div>
             </SettingsGroup>
