@@ -268,6 +268,12 @@ export type ContactType = typeof CONTACT_TYPES[number]
 export const TRIP_CLAIM_STATUSES = ['Draft', 'Ready', 'Submitted', 'Approved', 'Paid', 'PartiallyPaid', 'Rejected', 'Cancelled'] as const
 export type TripClaimStatus = typeof TRIP_CLAIM_STATUSES[number]
 
+// ── Invoice Status (Xero PR1) ───────────────────────────
+export const INVOICE_STATUSES = ['Issued', 'Voided', 'Credited'] as const
+export type InvoiceStatus = typeof INVOICE_STATUSES[number]
+export const INVOICE_KINDS = ['Invoice', 'CreditNote'] as const
+export type InvoiceKind = typeof INVOICE_KINDS[number]
+
 // ── Claim Line Item Status ──────────────────────────────
 export const CLAIM_LINE_ITEM_STATUSES = ['Draft', 'Submitted', 'Approved', 'Paid', 'PartiallyPaid', 'Rejected'] as const
 export type ClaimLineItemStatus = typeof CLAIM_LINE_ITEM_STATUSES[number]
@@ -511,6 +517,10 @@ export const ADL_LEVELS = ['Independent', 'Supervision', 'Assistance', 'FullSupp
 export type AdlLevel = typeof ADL_LEVELS[number]
 
 // ── Contact Role Status ───────────────────────────────────
+/** What the Payroll page prints for a shift's hours (C# PayrollShiftStatus, derived server side from the Employment Hero outbox). */
+export const PAYROLL_SHIFT_STATUSES = ['Sent', 'Waiting', 'Failed', 'Changed', 'NotLinked'] as const
+export type PayrollShiftStatus = typeof PAYROLL_SHIFT_STATUSES[number]
+
 export const CONTACT_ROLE_STATUSES = ['Active', 'Expired', 'Superseded'] as const
 export type ContactRoleStatus = typeof CONTACT_ROLE_STATUSES[number]
 

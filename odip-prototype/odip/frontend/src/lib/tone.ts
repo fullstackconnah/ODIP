@@ -163,6 +163,10 @@ export const STATUS_TONE: Record<string, Tone> = {
   notinvoiced: 'neutral',
   invoicesent: 'info',
   partial: 'warning',
+  // Invoices: an issued one is in the pipeline; voided and credited ones no longer stand.
+  issued: 'info',
+  voided: 'neutral',
+  credited: 'neutral',
 
   // QSC
   reportedwithin24h: 'success',
@@ -232,6 +236,11 @@ export const STATUS_TONE: Record<string, Tone> = {
   sent: 'success',
   failed: 'danger',
   skipped: 'neutral',
+
+  // Hours sent to Employment Hero (sent and failed are above): waiting for something, changed after the pay run closed, staff not linked.
+  waiting: 'warning',
+  changed: 'danger',
+  notlinked: 'warning',
 
   // Service agreement drafts
   unapproveddraft: 'warning',

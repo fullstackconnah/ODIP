@@ -11,11 +11,11 @@ namespace Odip.Tests.Support;
 /// </summary>
 internal static class TestDb
 {
-    /// <summary>A SuperAdmin context (no tenant filter) on the named InMemory database, or on a fresh one when no name is given.</summary>
-    public static OdipDbContext Create(string? dbName = null)
+    /// <summary>A SuperAdmin context (no tenant filter) on the named InMemory database, or on a fresh one when no name is given. Pass <paramref name="viewingAs"/> (rows default to Guid.Empty) for a SuperAdmin viewing as that organisation.</summary>
+    public static OdipDbContext Create(string? dbName = null, Guid? viewingAs = null)
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.TenantId).Returns(viewingAs);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
         return Build(dbName, tenant.Object);
     }

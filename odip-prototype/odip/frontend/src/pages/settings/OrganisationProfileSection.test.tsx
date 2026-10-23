@@ -20,6 +20,7 @@ const row: ProviderSettingsDto = {
   bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
   managerName: 'Priya Sharma', managerPhone: '0412 345 007', participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
   updatedAt: '2026-10-23T01:00:00.123456Z',
+  invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false,
 }
 const clients: QueryClient[] = []
 function show() {

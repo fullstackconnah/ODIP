@@ -261,6 +261,9 @@ Odip.Infrastructure.Integrations.EmploymentHeroClientLogging.QuietEmploymentHero
 builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroStaffSync>();
 // Every 30 minutes, each connected organisation. EmploymentHero:Enabled (default true) switches the loop off; Sync now still works.
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroSyncBackgroundService>();
+builder.Services.AddScoped<Odip.Infrastructure.Integrations.EmploymentHeroTimesheetSender>();
+// Every minute, each connected organisation: approved hours go to Employment Hero as timesheets. Same EmploymentHero:Enabled switch.
+builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.EmploymentHeroTimesheetBackgroundService>();
 
 // ── Public early-access form (landing page) ──────────────────────
 // EarlyAccessService stores the request; EarlyAccessNotifier is the opt-in operator email (needs BOTH

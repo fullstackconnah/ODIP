@@ -50,6 +50,7 @@ public static class ExportTables
         [typeof(PublicHoliday)] = "The public holiday calendar, which is the same for every organisation.",
         [typeof(PublicHolidayOverride)] = "Changes to the public holiday calendar, which apply to every organisation.",
         [typeof(EarlyAccessRequest)] = "Early access requests from the ODIP website, which aren't your organisation's records.",
+        [typeof(InvoiceNumberCounter)] = "ODIP's next-number counter; the numbers themselves are in invoices.csv.",
         [typeof(EarlyAccessLaterSubmission)] = "Repeat early access requests from the ODIP website, which aren't your organisation's records.",
     };
 
@@ -243,6 +244,8 @@ public static class ExportTables
         Via("claims.csv", "Claims: reference, period, status, totals and dates.", (db, t) => Claims(db, t)),
         Via("claim-lines.csv", "The lines of each claim: support item, dates, hours and price.",
             (db, t) => { var claims = Claims(db, t); return db.ClaimLineItems.Where(l => claims.Any(c => c.Id == l.TripClaimId)); }),
+        Own<Invoice>("invoices.csv", "Numbered invoices and credit notes as issued: payer, seller and bank details, totals, and voids, including those whose claim was deleted."),
+        Own<InvoiceLine>("invoice-lines.csv", "The lines of each invoice and credit note, as issued."),
 
         // Tasks and imports
         Own<BookingTask>("tasks.csv", "Tasks: what, for whom, when due, and their status."),
@@ -255,6 +258,10 @@ public static class ExportTables
         {
             Omit = new Dictionary<string, string> { [nameof(EmploymentHeroAttention.Key)] = "ODIP's own label for the item (its kind and the person's id, both already in the file)" },
         },
-        Own<EmploymentHeroSyncLog>("employment-hero-sync-log.csv", "Each Employment Hero sync of the last 90 days: when, which business, what changed, and any error."),
+        Own<EmploymentHeroSyncLog>("employment-hero-sync-log.csv", "Each Employment Hero staff sync and timesheet send of the last 90 days: when, which business, what changed, and any error."),
+        Own<EmploymentHeroOutbox>("employment-hero-timesheets.csv", "Hours sent to or waiting for Employment Hero Payroll: one row per approved shift, with what happened.") with
+        {
+            Omit = new Dictionary<string, string> { [nameof(EmploymentHeroOutbox.PayloadHash)] = "a fingerprint of the last payload sent, not data" },
+        },
     ];
 }

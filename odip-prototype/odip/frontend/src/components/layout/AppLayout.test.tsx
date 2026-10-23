@@ -264,6 +264,21 @@ describe('AppLayout — Completions nav entry', () => {
   })
 })
 
+describe('AppLayout — Payroll nav entry', () => {
+  afterEach(() => mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }))
+
+  it('hides Payroll until Employment Hero is connected', () => {
+    renderAt('/rostering')
+    expect(screen.queryByRole('link', { name: /Payroll$/ })).not.toBeInTheDocument()
+  })
+
+  it('shows Payroll under Rostering once connected, linking to /rostering/payroll', () => {
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, employmentHeroConnected: true } as never, isError: false })
+    renderAt('/rostering')
+    expect(screen.getByRole('link', { name: /Payroll$/ })).toHaveAttribute('href', '/rostering/payroll')
+  })
+})
+
 describe('AppLayout — witness-approval nav badge (leave-2, shares NavCountBadge/navBadgeLabel with the Leave badge)', () => {
   afterEach(() => {
     localStorage.clear()

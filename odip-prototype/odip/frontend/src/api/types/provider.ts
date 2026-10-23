@@ -31,6 +31,15 @@ export interface ProviderSettingsDto {
   employmentHeroConnected?: boolean
   /** The row's version: a save sends it back as `expectedUpdatedAt`. */
   updatedAt: string
+
+  invoiceNumberPrefix: string
+  creditNotePrefix: string
+  invoiceStartNumber: number
+  paymentTermsDays: number
+  /** Read-only: the number the next invoice takes, e.g. INV-0043. Never sent back. */
+  nextInvoiceDisplayNumber: string
+  /** Read-only: an invoice has been issued, so the starting number is fixed. Never sent back. */
+  invoicesIssued: boolean
 }
 
 export interface UpsertProviderSettingsDto {
@@ -59,4 +68,10 @@ export interface UpsertProviderSettingsDto {
   medicationCompetencyMode?: MedicationCompetencyMode
   /** The `updatedAt` the form loaded. Another save since then makes the PUT a 409 (nothing saves). Omit to skip the check (the row is unknown, or an older client). */
   expectedUpdatedAt?: string
+
+  /** Omit to leave as is; each change writes one audit row. The starting number is refused (409) once an invoice is issued. */
+  invoiceNumberPrefix?: string
+  creditNotePrefix?: string
+  invoiceStartNumber?: number
+  paymentTermsDays?: number
 }

@@ -2,8 +2,12 @@ import { useState } from 'react'
 import { useProviderSettings, useUpsertProviderSettings } from '@/api/hooks'
 import type { ProviderSettingsDto, UpsertProviderSettingsDto } from '@/api/types'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
+import { extractErrorMessage } from '@/lib/utils'
 import type { SaveResult } from './SettingsSection'
 import { notSavedText } from './settingsSections'
+
+/** ProviderSettingsController.ChangedByOther: the 409 for a stale save, as opposed to the 409 that locks the invoice starting number. */
+const SERVER_CHANGED_BY_OTHER = 'Settings were changed by someone else. Reload and try again.'
 
 /** The server's 400 for a blank required field names the field in an errors object, not a sentence, so the foot says this. */
 const REQUIRED_FIELDS = 'Fill in the registration number, ABN, organisation name and address.'
@@ -18,10 +22,11 @@ const CHANGED_BY_OTHER = 'Not saved. Someone else changed these settings. Their 
  * after that), a save writes what it sent into the cache, and the cache refetches after every save; so "as the server last gave it" is
  * that cache. It also carries the row's version back as expectedUpdatedAt, so a save from a form that another Admin has since outdated is refused (409),
  * the row is refetched, and when it arrives the form is reseeded from it with only the person's changed fields laid back over it: the screen then shows
- * exactly what the retry will write, and the fields the other Admin changed say so in their hint (`hint`; naming them in the foot pushed Save past 21px at 390). The two modes are never echoed: Safety checks adds
- * one through `extra` only when the person changed it.
+ * exactly what the retry will write, and the fields the other Admin changed say so in their hint (`hint`; naming them in the foot pushed Save past 21px at 390).
+ * The two modes and the four invoice numbering fields are never echoed: Safety checks adds a mode through `extra` only when the person changed it, and Billing
+ * details sends a numbering field only when its form changed it (the server reads a missing field as unchanged; once an invoice is issued it also sends the row's own start number back).
  */
-export function useProviderRow<F extends Record<string, string | boolean>>(pick: (row: ProviderSettingsDto | null) => F) {
+export function useProviderRow<F extends Record<string, string | boolean | number>>(pick: (row: ProviderSettingsDto | null) => F) {
   const query = useProviderSettings(true, 'always')
   const upsert = useUpsertProviderSettings()
   // No row reads as null (the mock API answers [] for a route it doesn't know).
@@ -56,6 +61,13 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
     delete body.medicationCompetencyMode
     delete body.employmentHeroConnected   // computed by the server on GET; never written
     delete body.updatedAt   // the version goes back as expectedUpdatedAt
+    delete body.nextInvoiceDisplayNumber   // likewise (Xero PR1)
+    delete body.invoicesIssued
+    // The numbering fields go only when this section changed them (below): a stale cached copy must not put back what another Admin set.
+    delete body.invoiceNumberPrefix
+    delete body.creditNotePrefix
+    delete body.invoiceStartNumber
+    delete body.paymentTermsDays
     for (const k of changed) Object.assign(body, { [k]: form[k] })
     setResult(null)
     setRefusedAt(null)
@@ -63,8 +75,11 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
     upsert.mutate({ ...body, ...extra, expectedUpdatedAt: row?.updatedAt } as UpsertProviderSettingsDto, {
       onSuccess: () => { setBase(form); setMoved([]); setResult('saved') },
       onError: e => {
-        if (apiErrorStatus(e) === 409) setRefusedAt(sentVersion ?? null)
-        setResult({ error: apiErrorStatus(e) === 409 ? CHANGED_BY_OTHER : notSavedText(e, REQUIRED_FIELDS) })
+        // Only the server's lost-update 409 reseeds the form. Another refusal can mean the row moved on (an invoice issued since it loaded fixes the starting number): read it again.
+        const lostUpdate = apiErrorStatus(e) === 409 && extractErrorMessage(e, '') === SERVER_CHANGED_BY_OTHER
+        if (lostUpdate) setRefusedAt(sentVersion ?? null)
+        else void query.refetch()
+        setResult({ error: lostUpdate ? CHANGED_BY_OTHER : notSavedText(e, REQUIRED_FIELDS) })
       },
     })
   }

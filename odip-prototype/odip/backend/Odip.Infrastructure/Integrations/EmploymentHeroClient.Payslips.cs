@@ -28,7 +28,7 @@ public partial class EmploymentHeroClient
         try
         {
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-            // shortcut: the status mapping repeats GetAsync's, kept apart so PR 2's GetAsync changes merge cleanly; fold the two together once both PRs are on main.
+            // The one status map: SendAsync uses it too (after its own 400 and 429 Retry-After handling).
             ThrowForStatus(response);
             var body = await ReadCappedAsync(response.Content, MaxPayslipBytes / 3 * 4 + 1024, ct);
             // By the bytes, not the Content-Type: produces lists json, xml, text/plain and octet-stream.

@@ -8,7 +8,7 @@ import {
   SCHEDULED_ACTIVITY_STATUSES, TASK_PRIORITIES, TASK_ITEM_STATUSES, INCIDENT_SEVERITIES, INCIDENT_STATUSES,
   QSC_REPORTING_STATUSES, INSURANCE_STATUSES, PAYMENT_STATUSES, TRIP_CLAIM_STATUSES, CLAIM_LINE_ITEM_STATUSES,
   CLAIM_STATUSES, SHIFT_STATUSES, MEDICATION_STATUSES, MEDICATION_ADMINISTRATION_STATUSES, WITNESS_STATUSES,
-  CONTACT_ROLE_STATUSES, PLAN_TYPES,
+  CONTACT_ROLE_STATUSES, PLAN_TYPES, INVOICE_STATUSES, PAYROLL_SHIFT_STATUSES,
 } from '@/api/types/enums'
 import { LEAVE_STATUSES, LEAVE_STATUS_COLORS } from '@/api/types/leave'
 import { NOTIFICATION_OUTBOX_STATUSES, NOTIFICATION_STATUS_COLORS } from '@/api/types/notifications'
@@ -41,6 +41,7 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
   InsuranceStatus: INSURANCE_STATUSES,
   PaymentStatus: PAYMENT_STATUSES,
   TripClaimStatus: TRIP_CLAIM_STATUSES,
+  InvoiceStatus: INVOICE_STATUSES,
   ClaimLineItemStatus: CLAIM_LINE_ITEM_STATUSES,
   ClaimStatus: CLAIM_STATUSES,
   ShiftStatus: SHIFT_STATUSES,
@@ -53,6 +54,7 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
   NotificationOutboxStatus: NOTIFICATION_OUTBOX_STATUSES,
   CaregiverSubmissionStatus: CAREGIVER_SUBMISSION_STATUSES,
   BudgetStatus: BUDGET_STATUSES,
+  PayrollShiftStatus: PAYROLL_SHIFT_STATUSES,
 }
 
 /** C# enums called `*Status` that are never printed through a status pill, and why. */
@@ -63,6 +65,7 @@ const NOT_A_PILL: Record<string, string> = {
   DemoTickStatus: 'the outcome of one demo-data top-up tick, read from logs and tests; no API sends it and no screen shows it',
   DemoFixtureStatus: 'the result of the operator-run Demo participant fixture seeder CLI; no API sends it and no screen shows it',
   ApprovalStatus: 'what a call to approve (or preview) an agreement revision came to, between the service and its controller; the controller turns it into an HTTP status and the screen reads the reasons, never this word',
+  EmploymentHeroOutboxStatus: 'never printed: the payroll check prints PayrollShiftStatus, derived from it',
 }
 
 /** The extra enums the walk treats as statuses although their names do not end in "Status" (they are pills too). */

@@ -1,9 +1,12 @@
+using Microsoft.EntityFrameworkCore;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Support;
 using Xunit;
+using static Odip.Tests.Claims.InvoiceKit;
 using static Odip.Tests.PlanPricing.DraftSigningAndPdfTests;
 
 namespace Odip.Tests.Claims;
@@ -70,6 +73,41 @@ public class InvoiceGstTests
 
         Assert.DoesNotContain(Skeleton("GST: $"), text);
         Assert.Contains(Skeleton("Total: $100.00"), text);
+    }
+
+    /// <summary>Submits one self-managed claim with the given lines (one payer) and returns the kit and the claim.</summary>
+    private static async Task<(InvoiceKit Kit, TripClaim Claim)> Submitted(bool gstRegistered, params (decimal Amount, GSTCode Code)[] lines)
+    {
+        var kit = Create();
+        kit.Settings(gst: gstRegistered, bsb: "062-000", account: "12345678");
+        var trip = kit.Trip();
+        var booking = kit.Book(trip, kit.Person("Alex", "Able", PlanType.SelfManaged));
+        var claim = kit.TripClaim(trip, TripClaimStatus.Draft, lines.Select(l => (booking, 1m, l.Amount, l.Amount, l.Code)).ToArray());
+        Assert.Equal(200, StatusOf(await kit.Controller().UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, CancellationToken.None)));
+        return (kit, claim);
+    }
+
+    [Fact]
+    public async Task A_registered_providers_invoice_and_credit_note_carry_gst_from_the_taxable_lines_exactly()
+    {
+        var (kit, claim) = await Submitted(gstRegistered: true, (100m, GSTCode.P1), (430.58m, GSTCode.P2));
+        var invoice = kit.Db.Invoices.AsNoTracking().Single(i => i.Kind == InvoiceKind.Invoice);
+        Assert.Equal((530.58m, 10.00m, 540.58m), (invoice.Subtotal, invoice.Gst, invoice.Total));
+
+        foreach (var line in kit.Db.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == claim.Id).ToList())
+            await kit.Controller().UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid }, CancellationToken.None);
+        Assert.Equal(200, StatusOf(await kit.Controller().IssueCreditNote(invoice.Id, new InvoiceReasonDto { Reason = "Wrong rate" }, CancellationToken.None)));
+
+        var credit = kit.Db.Invoices.AsNoTracking().Single(i => i.Kind == InvoiceKind.CreditNote);
+        Assert.Equal((530.58m, 10.00m, 540.58m), (credit.Subtotal, credit.Gst, credit.Total));
+    }
+
+    [Fact]
+    public async Task An_unregistered_providers_invoice_stores_no_gst_even_for_a_taxable_line()
+    {
+        var (kit, _) = await Submitted(gstRegistered: false, (100m, GSTCode.P1));
+        var invoice = kit.Db.Invoices.AsNoTracking().Single();
+        Assert.Equal((100m, 0m, 100m), (invoice.Subtotal, invoice.Gst, invoice.Total));
     }
 
     private static (Guid ClaimId, Guid BookingId) Seed(OdipDbContext db, bool gstRegistered, params (decimal Amount, GSTCode Code)[] lines)

@@ -45,3 +45,19 @@ describe('ConfirmDialog inside a form', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 })
+
+describe('ConfirmDialog confirmDisabled', () => {
+  it('holds the confirm button while set, and lets it go once cleared', async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    const { rerender } = render(<ConfirmDialog open onCancel={() => {}} onConfirm={onConfirm} title="Submit?" message="Sure?" confirmLabel="Submit" confirmDisabled />)
+
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Submit' }))
+    expect(onConfirm).not.toHaveBeenCalled()
+
+    rerender(<ConfirmDialog open onCancel={() => {}} onConfirm={onConfirm} title="Submit?" message="Sure?" confirmLabel="Submit" />)
+    await user.click(screen.getByRole('button', { name: 'Submit' }))
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+  })
+})

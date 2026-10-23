@@ -60,7 +60,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
     /// </summary>
     public async Task<List<PublicHolidayRef>> PublicHolidaysAsync(DateOnly start, DateOnly end, CancellationToken ct)
     {
-        var state = await db.ProviderSettings.Select(s => s.State).FirstOrDefaultAsync(ct);
+        var state = await db.ScopedProviderSettings().Select(s => s.State).FirstOrDefaultAsync(ct);
         return PublicHolidayLoader.RosterRefsFor(await PublicHolidayLoader.LoadAsync(db, start, end, includePartDay: false, ct), state);
     }
 

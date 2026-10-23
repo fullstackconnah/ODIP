@@ -43,7 +43,9 @@ public class ClaimEditGuardsTests
         };
         var first = Line(2m, 50m);
         var second = Line(1m, 30m);
-        db.AddRange(participant, claim, first, second);
+        // Its organisation has invoice details, so a move to Submitted can issue the (self-managed) participant's invoice (Xero PR1).
+        var settings = new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId ?? TenantA, RegistrationNumber = "PR001", ABN = "12345678901", OrganisationName = "Test Provider", Address = "1 Test St", State = "NSW" };
+        db.AddRange(participant, claim, first, second, settings);
         db.SaveChanges();
         return (claim, first, second);
     }

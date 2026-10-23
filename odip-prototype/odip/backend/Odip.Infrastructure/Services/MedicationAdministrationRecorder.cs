@@ -170,7 +170,7 @@ public sealed class MedicationAdministrationRecorder
     public async Task<RecordingAccess> CheckRecordingAccessAsync(Guid? userId, CancellationToken ct)
     {
         var check = await CheckCompetencyAsync(userId, ct);
-        var mode = await _db.ProviderSettings.Select(p => (MedicationCompetencyMode?)p.MedicationCompetencyMode).FirstOrDefaultAsync(ct)
+        var mode = await _db.ScopedProviderSettings().Select(p => (MedicationCompetencyMode?)p.MedicationCompetencyMode).FirstOrDefaultAsync(ct)
             ?? MedicationCompetencyMode.Warn;
         return DescribeAccess(check, mode);
     }
@@ -202,7 +202,7 @@ public sealed class MedicationAdministrationRecorder
         // ── 1. Medication Competency (before any validation: in Enforce mode a worker without the credential should be
         //       told that first, not asked to fix a reason field they cannot then submit). In Warn mode the record goes ahead and
         //       is flagged RecordedWithoutCompetency. ──
-        var settings = await _db.ProviderSettings.Select(p => new { p.State, p.MedicationCompetencyMode }).FirstOrDefaultAsync(ct);
+        var settings = await _db.ScopedProviderSettings().Select(p => new { p.State, p.MedicationCompetencyMode }).FirstOrDefaultAsync(ct);
         var provider = ProviderTimeZoneResolver.FromState(settings?.State);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(nowUtc, provider.Zone));
         var competency = MedicationCompetencyGate.Evaluate(administeringUser, providerToday);

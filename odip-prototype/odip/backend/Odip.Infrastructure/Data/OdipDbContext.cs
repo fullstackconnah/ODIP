@@ -88,6 +88,21 @@ public class OdipDbContext : DbContext
     public DbSet<SupportActivityGroup> SupportActivityGroups => Set<SupportActivityGroup>();
     public DbSet<SupportCatalogueItem> SupportCatalogueItems => Set<SupportCatalogueItem>();
     public DbSet<ProviderSettings> ProviderSettings => Set<ProviderSettings>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+    public DbSet<InvoiceNumberCounter> InvoiceNumberCounters => Set<InvoiceNumberCounter>();
+
+    /// <summary>
+    /// The caller's own provider-settings row. A SuperAdmin's query filter is off, so a plain <c>FirstOrDefault</c> on <see cref="ProviderSettings"/> lands on an arbitrary
+    /// organisation: unscoped there is no row (callers use their no-row defaults), viewing as an organisation only that organisation's row. Everyone else is filtered as usual.
+    /// </summary>
+    public IQueryable<ProviderSettings> ScopedProviderSettings()
+    {
+        if (!_tenant.IsSuperAdmin) return ProviderSettings;
+        var tenantId = _tenant.TenantId;
+        return ProviderSettings.Where(p => tenantId != null && p.TenantId == tenantId);
+    }
+
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<PublicHolidayOverride> PublicHolidayOverrides => Set<PublicHolidayOverride>();
     public DbSet<PlanPricingSettings> PlanPricingSettings => Set<PlanPricingSettings>();
@@ -139,6 +154,7 @@ public class OdipDbContext : DbContext
     public DbSet<EmploymentHeroConnection> EmploymentHeroConnections => Set<EmploymentHeroConnection>();
     public DbSet<EmploymentHeroAttention> EmploymentHeroAttentions => Set<EmploymentHeroAttention>();
     public DbSet<EmploymentHeroSyncLog> EmploymentHeroSyncLogs => Set<EmploymentHeroSyncLog>();
+    public DbSet<EmploymentHeroOutbox> EmploymentHeroOutbox => Set<EmploymentHeroOutbox>();
 
     /// <summary>
     /// Who the audit rows this context writes name when no person did the work (the Employment Hero sync sets "Employment Hero sync"). When set it wins
@@ -920,6 +936,12 @@ public class OdipDbContext : DbContext
             // The row's version, as on ParticipantInquiry: a save from a form loaded before another Admin's save matches no row and gets a 409.
             // The migration adds the column with a constant default, so existing rows are metadata-only and every one reads 0001-01-01 until first saved.
             entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+
+            // Invoice numbering and terms (Xero PR1): NOT NULL with constant defaults, so adding them is deploy-safe.
+            entity.Property(e => e.InvoiceNumberPrefix).HasMaxLength(10).IsRequired().HasDefaultValue("INV-");
+            entity.Property(e => e.CreditNotePrefix).HasMaxLength(10).IsRequired().HasDefaultValue("CN-");
+            entity.Property(e => e.InvoiceStartNumber).HasDefaultValue(1);
+            entity.Property(e => e.PaymentTermsDays).HasDefaultValue(14);
 
             entity.HasOne(e => e.Tenant)
                 .WithMany()
@@ -1877,6 +1899,60 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.EntityId);
         });
 
+        // ── Invoices (Xero PR1) ────────────────────────────────────
+        modelBuilder.Entity<Invoice>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DisplayNumber).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.ClaimReference).HasMaxLength(50).IsRequired();
+            // Bill-to and participant names are unbounded: their sources are not capped (a contact's address; "Name — Organisation"), and a too-long
+            // copy inside the issuing save would make the claim unsubmittable for good.
+            entity.Property(e => e.ParticipantName).HasColumnType("text").IsRequired();
+            entity.Property(e => e.BillToName).HasColumnType("text").IsRequired();
+            entity.Property(e => e.BillToAddress).HasColumnType("text").IsRequired();
+            entity.Property(e => e.NdisNumber).HasMaxLength(20);
+            entity.Property(e => e.ServiceReference).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.BillToEmail).HasMaxLength(200);
+            entity.Property(e => e.SellerOrganisationName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.SellerAbn).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.SellerRegistrationNumber).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.SellerAddress).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.SellerState).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.BankAccountName).HasMaxLength(200);
+            entity.Property(e => e.Bsb).HasMaxLength(10);
+            entity.Property(e => e.AccountNumber).HasMaxLength(20);
+            entity.Property(e => e.FooterNotes).HasMaxLength(2000);
+            entity.Property(e => e.CreditsDisplayNumber).HasMaxLength(30);
+            entity.Property(e => e.VoidReason).HasMaxLength(500);
+            entity.Property(e => e.Subtotal).HasPrecision(18, 2);
+            entity.Property(e => e.Gst).HasPrecision(18, 2);
+            entity.Property(e => e.Total).HasPrecision(18, 2);
+            // The backstop for the counter: a number is never given twice in one organisation.
+            entity.HasIndex(e => new { e.TenantId, e.Kind, e.Number }).IsUnique();
+            entity.HasIndex(e => e.TripClaimId);
+            entity.HasIndex(e => e.ParticipantId);
+            entity.HasIndex(e => e.ParticipantBookingId);
+            // The voided row and its number outlive the claim. ParticipantId/ParticipantBookingId have no FK on purpose: the snapshot must not
+            // stop a booking being removed after its claim was voided and deleted.
+            entity.HasOne<TripClaim>().WithMany().HasForeignKey(e => e.TripClaimId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<Invoice>().WithMany().HasForeignKey(e => e.CreditsInvoiceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(e => e.Lines).WithOne().HasForeignKey(l => l.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<InvoiceLine>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SupportItemCode).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Hours).HasPrecision(18, 2);
+            entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+            entity.Property(e => e.LineTotal).HasPrecision(18, 2);
+            entity.HasIndex(e => e.ClaimLineItemId);
+            entity.HasOne<ClaimLineItem>().WithMany().HasForeignKey(e => e.ClaimLineItemId).OnDelete(DeleteBehavior.SetNull);
+        });
+        modelBuilder.Entity<InvoiceNumberCounter>(entity =>
+        {
+            entity.HasKey(e => new { e.TenantId, e.Kind });
+        });
+
         // ── Employment Hero Payroll ────────────────────────────────
         modelBuilder.Entity<EmploymentHeroConnection>(entity =>
         {
@@ -1885,6 +1961,10 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.BusinessName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.ConnectedByName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.LastSyncError).HasMaxLength(300);
+            entity.Property(e => e.WorkTypeStandard).HasMaxLength(20);
+            entity.Property(e => e.WorkTypeActiveNight).HasMaxLength(20);
+            entity.Property(e => e.WorkTypePassiveNight).HasMaxLength(20);
+            entity.Property(e => e.WorkTypeSleepover).HasMaxLength(20);
             // One connection per organisation.
             entity.HasIndex(e => e.TenantId).IsUnique();
         });
@@ -1903,6 +1983,18 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.BusinessId).HasMaxLength(20).IsRequired();
             entity.Property(e => e.ErrorClass).HasMaxLength(50);
             entity.HasIndex(e => new { e.TenantId, e.StartedAt });
+        });
+        modelBuilder.Entity<EmploymentHeroOutbox>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.LastError).HasMaxLength(300);
+            entity.Property(e => e.PayloadHash).HasMaxLength(64);
+            entity.Property(e => e.ExternalId).HasMaxLength(50);
+            entity.Property(e => e.ExternalEmployeeId).HasMaxLength(20);
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+            entity.HasIndex(e => new { e.TenantId, e.Kind, e.EntityId }).IsUnique().HasDatabaseName(Domain.Integrations.EmploymentHeroOutbox.OneRowIndexName);
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt });
+            entity.HasIndex(e => e.TenantId);
         });
 
         // ── Multi-Tenancy Query Filters ─────────────────────────────────────────────
@@ -2158,6 +2250,14 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<EmploymentHeroAttention>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<EmploymentHeroSyncLog>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<EmploymentHeroOutbox>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<Invoice>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<InvoiceLine>()
+            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<InvoiceNumberCounter>()
             .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
     }
 

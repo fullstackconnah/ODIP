@@ -1,4 +1,4 @@
-import type { TripClaimStatus, ClaimLineItemStatus, ClaimDayType, ClaimType, GSTCode, PlanType, ClaimKind } from './enums'
+import type { TripClaimStatus, ClaimLineItemStatus, ClaimDayType, ClaimType, GSTCode, PlanType, ClaimKind, InvoiceKind, InvoiceStatus } from './enums'
 import type { BudgetStatus } from './funding'
 
 // Shift-completion design spec §1/§2, PR 3 — TripClaim gained a Kind discriminator. Trip-kind
@@ -214,4 +214,68 @@ export interface ClaimBudgetParticipantDto {
 /** The budget effect of a claim for each participant it covers (a trip claim covers several): one row for each affected pool and period. */
 export interface ClaimBudgetDto {
   participants: ClaimBudgetParticipantDto[]
+}
+
+// ── Invoices (Xero PR1). Null fields are omitted from the JSON, so they are optional here. ──
+
+/** GET /claims/{id}/invoices: what the claim's Invoices section shows. */
+export interface ClaimInvoicesDto {
+  /** preview: not submitted, no rows; issued: has rows; legacy: submitted before numbering; none: no plan- or self-managed payer. */
+  invoiceState: 'preview' | 'issued' | 'legacy' | 'none'
+  /** By number, each credit note directly under the invoice it credits. */
+  invoices: InvoiceSummaryDto[]
+  /** Every plan- and self-managed payer (the preview and legacy rows). */
+  groups: PayerGroupDto[]
+  agencyCount: number
+}
+
+export interface InvoiceSummaryDto {
+  id: string
+  kind: InvoiceKind
+  number: number
+  displayNumber: string
+  status: InvoiceStatus
+  /** The booking (trip claim) or participant (shift claim) it bills for. */
+  groupId: string
+  participantName: string
+  billToName: string
+  payerKind: PlanType
+  issueDate: string
+  dueDate?: string
+  total: number
+  creditsDisplayNumber?: string
+  creditedByDisplayNumber?: string
+  /** A payment is recorded: it can only be credited, never voided. */
+  paymentRecorded: boolean
+}
+
+export interface PayerGroupDto {
+  groupId: string
+  participantName: string
+  billToName: string
+  payerKind: PlanType
+  total: number
+}
+
+/** POST /claims/submit-preview: what marking these claims as submitted would issue now. Numbers are predictions. */
+export interface SubmitPreviewDto {
+  claims: ClaimSubmitPreviewDto[]
+  invoiceCount: number
+}
+
+export interface ClaimSubmitPreviewDto {
+  claimId: string
+  toIssue: PendingInvoiceDto[]
+  alreadyIssued: number
+  /** An invoice is due and the organisation has no billing details: submitting would be refused. */
+  missingSettings: boolean
+}
+
+export interface PendingInvoiceDto {
+  groupId: string
+  participantName: string
+  billToName: string
+  total: number
+  /** Absent when the settings are missing. */
+  predictedNumber?: string
 }
