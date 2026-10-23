@@ -30,7 +30,7 @@ public sealed class NotificationRaiser : INotificationRaiser
     }
 
     public async Task RaiseAsync(NotificationEventType type, string entityType, Guid entityId,
-        IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default)
+        IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default, bool dedupe = true)
     {
         var payloadJson = JsonSerializer.Serialize(payload);
         // The bell's text: one per event, the same for every recipient (the payload's own RecipientEmail never reaches it).
@@ -49,7 +49,7 @@ public sealed class NotificationRaiser : INotificationRaiser
                 .OrderByDescending(o => o.CreatedAt)
                 .Select(o => (NotificationEventType?)o.EventType)
                 .FirstOrDefaultAsync(ct);
-            if (newest == type) continue;
+            if (dedupe && newest == type) continue;
 
             // Select an anonymous projection (not just .Select(u => u.TenantId)) so a missing
             // user (null result) is distinguishable from a found user whose TenantId happens to

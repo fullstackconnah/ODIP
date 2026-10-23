@@ -74,6 +74,23 @@ public class DedupeTests
     }
 
     [Fact]
+    public async Task RaiseAsync_DedupeFalse_SameTripleWithinFiveMinutes_YieldsTwoRows()
+    {
+        var db = CreateDb();
+        var recipient = SeedUser(db);
+        var raiser = new NotificationRaiser(db);
+        var entityId = Guid.NewGuid();
+
+        await raiser.RaiseAsync(NotificationEventType.ShiftAssigned, "Shift", entityId, new[] { recipient.Id }, new { }, CancellationToken.None, dedupe: false);
+        await db.SaveChangesAsync();
+        await raiser.RaiseAsync(NotificationEventType.ShiftAssigned, "Shift", entityId, new[] { recipient.Id }, new { }, CancellationToken.None, dedupe: false);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(2, await db.NotificationOutbox.CountAsync());
+        Assert.Equal(2, await db.InAppNotifications.CountAsync());
+    }
+
+    [Fact]
     public async Task RaiseAsync_AfterTheOppositeNoticeForTheSameShift_IsNotDeduped()
     {
         var db = CreateDb();
