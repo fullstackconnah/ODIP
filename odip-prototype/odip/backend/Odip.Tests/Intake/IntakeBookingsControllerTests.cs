@@ -285,10 +285,10 @@ public class IntakeBookingsControllerTests
     internal sealed class InterleavingRaiser(INotificationRaiser inner, Func<Task> once) : INotificationRaiser
     {
         private Func<Task>? _once = once;
-        public async Task RaiseAsync(NotificationEventType type, string entityType, Guid entityId, IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default)
+        public async Task RaiseAsync(NotificationEventType type, string entityType, Guid entityId, IEnumerable<Guid> recipientUserIds, object payload, CancellationToken ct = default, bool dedupe = true)
         {
             if (Interlocked.Exchange(ref _once, null) is { } run) await run();
-            await inner.RaiseAsync(type, entityType, entityId, recipientUserIds, payload, ct);
+            await inner.RaiseAsync(type, entityType, entityId, recipientUserIds, payload, ct, dedupe);
         }
     }
 
