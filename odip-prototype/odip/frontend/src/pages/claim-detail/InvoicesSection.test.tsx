@@ -77,6 +77,7 @@ beforeEach(() => {
 
 afterEach(() => {
   apiClient.defaults.adapter = originalAdapter
+  delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
   localStorage.clear()
   vi.restoreAllMocks()
 })
@@ -367,6 +368,10 @@ describe('InvoicesSection', () => {
     ['Issue credit note for INV-0043', 'Issue credit note', '/invoices/inv-43/credit-note',
       row({ id: 'cn-8', kind: 'CreditNote', number: 8, displayNumber: 'CN-0008', creditsDisplayNumber: 'INV-0043' }), 'CN-0008 issued. INV-0043 is credited.', 'INV-0043'],
   ])('after "%s" the page announces it and focus lands on that row\'s Download', async (open, confirm, url, answer, said, number) => {
+    // jsdom has no scrollIntoView; record who it was called on.
+    const scrolled: Element[] = []
+    const scrollIntoView = vi.fn(function (this: Element) { scrolled.push(this) })
+    Element.prototype.scrollIntoView = scrollIntoView
     serveInvoices(issued)
     serve(`post ${url}`, async config => ok(answer, config))
     const { onAnnounce } = renderSection()
@@ -378,6 +383,9 @@ describe('InvoicesSection', () => {
     await waitFor(() => expect(onAnnounce).toHaveBeenCalledWith(said))
     expect(calls.find(c => c.method === 'post')).toEqual({ method: 'post', url, body: { reason: 'Wrong rate' } })
     await waitFor(() => expect(screen.getByRole('button', { name: `Download ${number}` })).toHaveFocus())
+    // The table box can reset to scrollLeft 0 after the refetch (1024 Admin), so focus is brought into view on the next frame.
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }))
+    expect(scrolled).toContain(screen.getByRole('button', { name: `Download ${number}` }))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 })

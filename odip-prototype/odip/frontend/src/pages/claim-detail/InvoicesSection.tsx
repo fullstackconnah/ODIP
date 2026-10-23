@@ -53,7 +53,10 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
     const id = focusAfter.current
     if (!id) return
     focusAfter.current = null
-    sectionRef.current?.querySelector<HTMLButtonElement>(`[data-download-id="${id}"]`)?.focus()
+    const download = sectionRef.current?.querySelector<HTMLButtonElement>(`[data-download-id="${id}"]`)
+    download?.focus()
+    // The table box can reset to scrollLeft 0 after the refetch, which leaves a focused Download clipped at its edge (1024 Admin).
+    requestAnimationFrame(() => download?.scrollIntoView({ block: 'nearest', inline: 'nearest' }))
   })
 
   const data = query.data
