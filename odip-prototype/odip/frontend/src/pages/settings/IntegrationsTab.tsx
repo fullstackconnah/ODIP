@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   useConnectEmploymentHero, useDisconnectEmploymentHero, useDismissEmploymentHeroItem, useEmploymentHeroBusinesses,
@@ -196,6 +196,13 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
   )
 }
 
+/** TanStack clears `error` the moment a retry starts; keep the last one so the banner keeps the server's words (and its height) through the retry. */
+function useLastError(error: unknown): unknown {
+  const last = useRef<unknown>(null)
+  if (error != null) last.current = error
+  return error ?? last.current
+}
+
 const WORK_TYPE_FIELDS: { key: keyof EmploymentHeroWorkTypesDto; label: string; none: string }[] = [
   { key: 'standard', label: 'Day and evening shifts', none: 'Usual pay (no work type)' },
   { key: 'activeNight', label: 'Active nights', none: 'Not chosen' },
@@ -206,6 +213,7 @@ const WORK_TYPE_FIELDS: { key: keyof EmploymentHeroWorkTypesDto; label: string; 
 /** Which Employment Hero work type each kind of approved hours is sent under. Read live from EH; saving queues the waiting shifts. */
 function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
   const types = useEmploymentHeroWorkTypes(true)
+  const loadError = useLastError(types.error)
   const save = useSaveEmploymentHeroWorkTypes()
   const [draft, setDraft] = useState<EmploymentHeroWorkTypesDto | null>(null)
   const value = draft ?? saved
@@ -218,8 +226,8 @@ function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
         <p className={MUTED} role="status">Reading Employment Hero's work types…</p>
       ) : types.isError || !types.data ? (
         <Callout tone="danger">
-          <p>{extractErrorMessage(types.error, "Employment Hero's work types couldn't be loaded.")}</p>
-          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" onClick={() => types.refetch()}>Try again</Button>
+          <p>{extractErrorMessage(loadError, "Employment Hero's work types couldn't be loaded.")}</p>
+          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" disabled={types.isFetching} onClick={() => types.refetch()}>{types.isFetching ? 'Trying…' : 'Try again'}</Button>
         </Callout>
       ) : (
         <>
@@ -267,6 +275,7 @@ const LEAVE_CATEGORY_FIELDS: { key: keyof EmploymentHeroLeaveCategoriesDto; labe
 /** Which Employment Hero leave category each kind of approved ODIP leave is recorded as. Read live from EH; saving queues the waiting leave. */
 function LeaveCategories({ saved }: { saved: EmploymentHeroLeaveCategoriesDto }) {
   const categories = useEmploymentHeroLeaveCategories(true)
+  const loadError = useLastError(categories.error)
   const save = useSaveEmploymentHeroLeaveCategories()
   const [draft, setDraft] = useState<EmploymentHeroLeaveCategoriesDto | null>(null)
   const value = draft ?? saved
@@ -279,8 +288,8 @@ function LeaveCategories({ saved }: { saved: EmploymentHeroLeaveCategoriesDto })
         <p className={MUTED} role="status">Reading Employment Hero's leave categories…</p>
       ) : categories.isError || !categories.data ? (
         <Callout tone="danger">
-          <p>{extractErrorMessage(categories.error, "Employment Hero's leave categories couldn't be loaded.")}</p>
-          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" onClick={() => categories.refetch()}>Try again</Button>
+          <p>{extractErrorMessage(loadError, "Employment Hero's leave categories couldn't be loaded.")}</p>
+          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" disabled={categories.isFetching} onClick={() => categories.refetch()}>{categories.isFetching ? 'Trying…' : 'Try again'}</Button>
         </Callout>
       ) : (
         <>

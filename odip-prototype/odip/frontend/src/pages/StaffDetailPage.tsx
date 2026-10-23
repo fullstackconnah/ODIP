@@ -182,6 +182,7 @@ export default function StaffDetailPage() {
           <LeaveBalances
             query={balances}
             noneMessage="Employment Hero has no leave balances for this person yet."
+            loadingMessage="Reading balances from Employment Hero…"
             headingLevel={3}
             notLinked={
               <>

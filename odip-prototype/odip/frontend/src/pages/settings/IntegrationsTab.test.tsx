@@ -9,6 +9,7 @@ const { state, calls } = vi.hoisted(() => ({
   state: { status: undefined as unknown, employees: [] as unknown[], dismissError: null as unknown, dismissVariables: undefined as string | undefined, disconnectError: null as unknown,
     workTypes: [{ id: '5', name: 'Ordinary' }, { id: '6', name: 'Night' }] as unknown, workTypesError: false, workTypesLoading: false, saveError: null as unknown,
     leaveCats: [{ id: '5', name: 'Annual Leave' }, { id: '7', name: 'Personal/Carer\'s Leave' }] as unknown, leaveCatsError: false, leaveCatsLoading: false, leaveSaveError: null as unknown,
+    loadError: null as unknown, loadRetrying: false,
     retryError: null as unknown, retryVariables: undefined as string | undefined, retryPending: false },
   calls: { businesses: vi.fn(), connect: vi.fn(), sync: vi.fn(), disconnect: vi.fn(), link: vi.fn(), dismiss: vi.fn(), saveWorkTypes: vi.fn(), saveLeaveCats: vi.fn(), retryLeave: vi.fn() },
 }))
@@ -21,9 +22,9 @@ vi.mock('@/api/hooks', () => ({
   useDisconnectEmploymentHero: () => ({ mutate: calls.disconnect, isPending: false, error: state.disconnectError }),
   useEmploymentHeroEmployees: () => ({ data: state.employees, isLoading: false, isError: false, error: null }),
   useLinkEmploymentHeroStaff: () => ({ mutate: calls.link, isPending: false, error: null }),
-  useEmploymentHeroWorkTypes: () => ({ data: state.workTypesError || state.workTypesLoading ? undefined : state.workTypes, isLoading: state.workTypesLoading, isError: state.workTypesError, error: null, refetch: vi.fn() }),
+  useEmploymentHeroWorkTypes: () => ({ data: state.workTypesError || state.workTypesLoading ? undefined : state.workTypes, isLoading: state.workTypesLoading || state.loadRetrying, isError: state.workTypesError && !state.loadRetrying, error: state.loadRetrying ? null : state.loadError, isFetching: state.loadRetrying, errorUpdateCount: state.workTypesError ? 1 : 0, refetch: vi.fn() }),
   useSaveEmploymentHeroWorkTypes: () => ({ mutate: calls.saveWorkTypes, isPending: false, isSuccess: false, error: state.saveError }),
-  useEmploymentHeroLeaveCategories: () => ({ data: state.leaveCatsError || state.leaveCatsLoading ? undefined : state.leaveCats, isLoading: state.leaveCatsLoading, isError: state.leaveCatsError, error: null, refetch: vi.fn() }),
+  useEmploymentHeroLeaveCategories: () => ({ data: state.leaveCatsError || state.leaveCatsLoading ? undefined : state.leaveCats, isLoading: state.leaveCatsLoading || state.loadRetrying, isError: state.leaveCatsError && !state.loadRetrying, error: state.loadRetrying ? null : state.loadError, isFetching: state.loadRetrying, errorUpdateCount: state.leaveCatsError ? 1 : 0, refetch: vi.fn() }),
   useSaveEmploymentHeroLeaveCategories: () => ({ mutate: calls.saveLeaveCats, isPending: false, isSuccess: false, error: state.leaveSaveError }),
   useRetryEmploymentHeroLeave: () => ({ mutate: calls.retryLeave, isPending: state.retryPending, error: state.retryError, variables: state.retryVariables }),
   useDismissEmploymentHeroItem: () => ({ mutate: calls.dismiss, isPending: false, error: state.dismissError, variables: state.dismissVariables }),
@@ -56,6 +57,8 @@ afterEach(() => {
   state.leaveCatsError = false
   state.leaveCatsLoading = false
   state.leaveSaveError = null
+  state.loadError = null
+  state.loadRetrying = false
   state.retryError = null
   state.retryVariables = undefined
   state.retryPending = false
@@ -330,6 +333,20 @@ describe('IntegrationsTab — timesheets and work types', () => {
     expect(screen.getByText("The work types couldn't be saved. Try again.")).toBeInTheDocument()
   })
 
+  it("keeps the server's words and a disabled Trying… button while the work types retry", () => {
+    state.status = connected()
+    state.workTypesError = true
+    state.loadError = { response: { data: { message: 'Employment Hero is not answering.' } } }
+    const { rerender } = renderTab()
+    expect(screen.getByText('Employment Hero is not answering.')).toBeInTheDocument()
+    state.loadRetrying = true
+    rerender(<MemoryRouter><IntegrationsTab /></MemoryRouter>)
+    expect(screen.getByText('Employment Hero is not answering.')).toBeInTheDocument()
+    expect(screen.queryByText("Employment Hero's work types couldn't be loaded.")).not.toBeInTheDocument()
+    const button = screen.getByRole('button', { name: 'Trying…' })
+    expect(button).toBeDisabled()
+  })
+
   it('offers a retry when the work types cannot be loaded', () => {
     state.status = connected()
     state.workTypesError = true
@@ -416,6 +433,20 @@ describe('IntegrationsTab — leave', () => {
     renderTab()
     expect(screen.getByText("Employment Hero's leave categories couldn't be loaded.")).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
+  it("keeps the server's words and a disabled Trying… button while the leave categories retry", () => {
+    state.status = connected()
+    state.leaveCatsError = true
+    state.loadError = { response: { data: { message: 'Employment Hero is not answering.' } } }
+    const { rerender } = renderTab()
+    expect(screen.getByText('Employment Hero is not answering.')).toBeInTheDocument()
+    state.loadRetrying = true
+    rerender(<MemoryRouter><IntegrationsTab /></MemoryRouter>)
+    expect(screen.getByText('Employment Hero is not answering.')).toBeInTheDocument()
+    expect(screen.queryByText("Employment Hero's leave categories couldn't be loaded.")).not.toBeInTheDocument()
+    const button = screen.getByRole('button', { name: 'Trying…' })
+    expect(button).toBeDisabled()
   })
 
   it('lists leave not sent, a cancellation, and Try again with a specific name', async () => {

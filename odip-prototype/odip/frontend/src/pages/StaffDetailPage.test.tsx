@@ -517,13 +517,13 @@ describe('StaffDetailPage — leave balances', () => {
     expect(mockBalances).toHaveBeenCalledWith('staff-1', true)
   })
 
-  it('titles the balances like the Availability card beside it (an h3) and reads with the shared loading words', () => {
+  it('titles the balances like the Availability card beside it (an h3) and does not call them your own', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
     mockVisibility.mockReturnValue({ data: { employmentHeroConnected: true } })
     mockBalances.mockReturnValue({ ...ready, data: undefined, isLoading: true })
     renderAt('staff-1')
     expect(screen.getByRole('heading', { level: 3, name: 'Leave balances' })).toBeInTheDocument()
-    expect(screen.getByText('Reading your balances from Employment Hero…')).toBeInTheDocument()
+    expect(screen.getByText('Reading balances from Employment Hero…')).toBeInTheDocument()
   })
 
   it('says a person who is not linked is not linked, with a link to Integrations', () => {
