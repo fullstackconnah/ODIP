@@ -85,14 +85,14 @@ export default function BillingDetailsSection(frame: SectionFrame) {
             )}
             <SettingsGroup title="Invoice numbers">
               <div className={formGrid}>
-                <TextField label="Invoice prefix" hint="Printed before the number, as in INV-0042. New invoices only." maxLength={10} className={span.short} value={p.form.invoiceNumberPrefix} error={errors.invoiceNumberPrefix} readOnly={locked} onChange={e => p.edit({ invoiceNumberPrefix: e.target.value })} />
-                <TextField label="Credit note prefix" hint="As in CN-0007. New credit notes only." maxLength={10} className={span.short} value={p.form.creditNotePrefix} error={errors.creditNotePrefix} readOnly={locked} onChange={e => p.edit({ creditNotePrefix: e.target.value })} />
+                <TextField label="Invoice prefix" hint={p.hint('invoiceNumberPrefix', 'Printed before the number, as in INV-0042. New invoices only.')} maxLength={10} className={span.short} value={p.form.invoiceNumberPrefix} error={errors.invoiceNumberPrefix} readOnly={locked} onChange={e => p.edit({ invoiceNumberPrefix: e.target.value })} />
+                <TextField label="Credit note prefix" hint={p.hint('creditNotePrefix', 'As in CN-0007. New credit notes only.')} maxLength={10} className={span.short} value={p.form.creditNotePrefix} error={errors.creditNotePrefix} readOnly={locked} onChange={e => p.edit({ creditNotePrefix: e.target.value })} />
                 {/* One cell for both states, as tall as the longer hint: the invisible skeleton keeps the height when it flips (SHAPE C10). */}
                 <div className={`grid ${span.short}`}>
                   {issued ? (
                     <TextField label="Next invoice" hint="Set by the invoices already issued." className="[grid-area:1/1] [&_input]:bg-transparent" value={p.row!.nextInvoiceDisplayNumber} readOnly />
                   ) : (
-                    <NumberField label="First invoice number" hint={START_HINT} min={1} max={99_999_999} step={1} className="[grid-area:1/1]" value={p.form.invoiceStartNumber} error={errors.invoiceStartNumber} readOnly={locked} onChange={n => p.edit({ invoiceStartNumber: n })} />
+                    <NumberField label="First invoice number" hint={p.hint('invoiceStartNumber', START_HINT)} min={1} max={99_999_999} step={1} className="[grid-area:1/1]" value={p.form.invoiceStartNumber} error={errors.invoiceStartNumber} readOnly={locked} onChange={n => p.edit({ invoiceStartNumber: n })} />
                   )}
                   <div aria-hidden="true" className="invisible [grid-area:1/1]">
                     <span className={labelClass}>&nbsp;</span>
@@ -104,7 +104,7 @@ export default function BillingDetailsSection(frame: SectionFrame) {
             </SettingsGroup>
             <SettingsGroup title="Payment terms">
               <div className={formGrid}>
-                <NumberField label="Days to pay" hint="Each invoice is due this many days after it's issued. 0 means due on issue." min={0} max={365} step={1} className={span.short} value={p.form.paymentTermsDays} error={errors.paymentTermsDays} readOnly={locked} onChange={n => p.edit({ paymentTermsDays: n })} />
+                <NumberField label="Days to pay" hint={p.hint('paymentTermsDays', "Each invoice is due this many days after it's issued. 0 means due on issue.")} min={0} max={365} step={1} className={span.short} value={p.form.paymentTermsDays} error={errors.paymentTermsDays} readOnly={locked} onChange={n => p.edit({ paymentTermsDays: n })} />
               </div>
             </SettingsGroup>
             <SettingsGroup title="Tax and claiming">

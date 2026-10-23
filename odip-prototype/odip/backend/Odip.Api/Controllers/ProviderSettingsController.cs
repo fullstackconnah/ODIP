@@ -115,7 +115,9 @@ public class ProviderSettingsController : ControllerBase
         // The version the form loaded goes into the UPDATE's WHERE (not a read-then-compare, which would race): another Admin's save since then is a 409.
         // A new row has nothing to compare with. No version sent (an older open tab) saves as before.
         if (dto.ExpectedUpdatedAt is DateTime expected && _db.Entry(s).State != EntityState.Added)
+        {
             _db.Entry(s).Property(x => x.UpdatedAt).OriginalValue = expected;
+        }
         s.UpdatedAt = DateTime.UtcNow;
 
         // Numbering changes only when a field is sent AND differs: every settings section echoes the whole row, so an unchanged echo is never a change.
@@ -189,7 +191,7 @@ public class ProviderSettingsController : ControllerBase
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Conflict(ApiResponse<bool>.Fail(ChangedByOther));
+            return Conflict(ApiResponse<bool>.Fail(ChangedByOther, ProviderSettingsErrorCodes.ProviderSettingsChanged));
         }
         // The row's new version, so the form can send it with its next save without waiting for a refetch.
         return Ok(ApiResponse<DateTime>.Ok(s.UpdatedAt));

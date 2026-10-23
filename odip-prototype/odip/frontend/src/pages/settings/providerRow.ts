@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useProviderSettings, useUpsertProviderSettings } from '@/api/hooks'
 import type { ProviderSettingsDto, UpsertProviderSettingsDto } from '@/api/types'
-import { apiErrorStatus } from '@/lib/shiftPackageErrors'
-import { extractErrorMessage } from '@/lib/utils'
+import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import type { SaveResult } from './SettingsSection'
 import { notSavedText } from './settingsSections'
 
-/** ProviderSettingsController.ChangedByOther: the 409 for a stale save, as opposed to the 409 that locks the invoice starting number. */
+/** ProviderSettingsErrorCodes.ProviderSettingsChanged: the code on the 409 for a stale save, as opposed to the 409 that locks the invoice starting number, so a reworded sentence cannot switch the reseed off. */
+const CHANGED_BY_OTHER_CODE = 'PROVIDER_SETTINGS_CHANGED'
+
+/** ProviderSettingsController.ChangedByOther, word for word. The fallback for a server from before the code existed. */
 const SERVER_CHANGED_BY_OTHER = 'Settings were changed by someone else. Reload and try again.'
 
 /** The server's 400 for a blank required field names the field in an errors object, not a sentence, so the foot says this. */
@@ -76,7 +78,7 @@ export function useProviderRow<F extends Record<string, string | boolean | numbe
       onSuccess: () => { setBase(form); setMoved([]); setResult('saved') },
       onError: e => {
         // Only the server's lost-update 409 reseeds the form. Another refusal can mean the row moved on (an invoice issued since it loaded fixes the starting number): read it again.
-        const lostUpdate = apiErrorStatus(e) === 409 && extractErrorMessage(e, '') === SERVER_CHANGED_BY_OTHER
+        const lostUpdate = apiErrorStatus(e) === 409 && (apiErrorCode(e) === CHANGED_BY_OTHER_CODE || apiErrorMessages(e).includes(SERVER_CHANGED_BY_OTHER))
         if (lostUpdate) setRefusedAt(sentVersion ?? null)
         else void query.refetch()
         setResult({ error: lostUpdate ? CHANGED_BY_OTHER : notSavedText(e, REQUIRED_FIELDS) })

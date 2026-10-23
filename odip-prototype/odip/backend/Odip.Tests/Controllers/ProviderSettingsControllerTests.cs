@@ -395,7 +395,9 @@ public class ProviderSettingsControllerTests
 
         Assert.IsType<OkObjectResult>(first.Result);
         var conflict = Assert.IsType<ConflictObjectResult>(second.Result);
-        Assert.Equal(["Settings were changed by someone else. Reload and try again."], Assert.IsType<ApiResponse<bool>>(conflict.Value).Errors);
+        var refusal = Assert.IsType<ApiResponse<bool>>(conflict.Value);
+        Assert.Equal(["Settings were changed by someone else. Reload and try again."], refusal.Errors);
+        Assert.Equal("PROVIDER_SETTINGS_CHANGED", refusal.Code);
         using var check = CreateDb(name);
         var row = await check.ProviderSettings.SingleAsync();
         Assert.Equal("222", row.AccountNumber);

@@ -356,6 +356,7 @@ describe('Billing details: invoice numbers and payment terms', () => {
   const prefix = () => screen.getByLabelText('Invoice prefix')
   const startNumber = () => screen.getByLabelText('First invoice number')
   const daysToPay = () => screen.getByLabelText('Days to pay')
+  const rowReads = () => mockApiGet.mock.calls.filter(([url]) => url === '/provider-settings').length
   async function open() {
     renderSection('billing')
     await screen.findByLabelText('Invoice prefix')
@@ -459,6 +460,58 @@ describe('Billing details: invoice numbers and payment terms', () => {
     // The typed start number is dropped once the cell flips: the row's own value goes back, which the server reads as unchanged.
     expect(putBody(1)).toEqual(rowWithoutModes(makeSettings({ invoicesIssued: true }), { paymentTermsDays: 30, invoiceStartNumber: 1 }))
     expect(await screen.findByText('Saved')).toBeInTheDocument()
+  })
+
+  it('after a refused save, the four billing numbering fields the other Admin moved say so in their hints, and a field they left alone keeps its own', async () => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, screen.getByLabelText('BSB'), '063-000')
+    server = makeSettings({ invoiceNumberPrefix: 'OAS-', creditNotePrefix: 'OCN-', invoiceStartNumber: 500, paymentTermsDays: 30, updatedAt: V2 })
+
+    await user.click(saveButton())
+
+    await waitFor(() => expect(daysToPay()).toHaveValue(30))
+    expect(daysToPay()).toHaveAccessibleDescription("Changed by someone else. Each invoice is due this many days after it's issued. 0 means due on issue.")
+    expect(prefix()).toHaveAccessibleDescription('Changed by someone else. Printed before the number, as in INV-0042. New invoices only.')
+    expect(screen.getByLabelText('Credit note prefix')).toHaveAccessibleDescription('Changed by someone else. As in CN-0007. New credit notes only.')
+    expect(startNumber()).toHaveAccessibleDescription("Changed by someone else. Carry on from your old system's numbers. It can't change once an invoice is issued.")
+    expect(screen.getByLabelText('Account number')).not.toHaveAccessibleDescription()
+    await retype(user, daysToPay(), '45')
+    expect(daysToPay()).toHaveAccessibleDescription("Each invoice is due this many days after it's issued. 0 means due on issue.")
+  })
+
+  it("the stale-save code alone reseeds the form, whatever the server's sentence says (the copy was edited)", async () => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, screen.getByLabelText('BSB'), '063-000')
+    server = makeSettings({ accountNumber: '99999999', updatedAt: V2 })
+    mockApiPut.mockRejectedValueOnce({ response: { status: 409, data: { success: false, code: 'PROVIDER_SETTINGS_CHANGED', errors: ['Somebody reworded this sentence.'] } } })
+
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Someone else changed these settings. Their changes are shown and your edits kept; save again.')
+    await waitFor(() => expect(screen.getByLabelText('Account number')).toHaveValue('99999999'))
+    expect(screen.getByLabelText('Account number')).toHaveAccessibleDescription('Changed by someone else.')
+    expect(screen.getByLabelText('BSB')).toHaveValue('063-000')
+  })
+
+  it("a start-number 409 shows the server's words and leaves the form alone: no reseed, no hint", async () => {
+    const user = userEvent.setup()
+    await open()
+    await retype(user, startNumber(), '1001')
+    // Another Admin also changed the days to pay, so a reseed would show it; the start-number refusal must not.
+    server = makeSettings({ paymentTermsDays: 30, updatedAt: V2 })
+    const readsBefore = rowReads()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ["Invoice numbers have started, so the starting number can't change."] } } })
+
+    await user.click(saveButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Not saved. Invoice numbers have started, so the starting number can't change.")
+    await waitFor(() => expect(rowReads()).toBeGreaterThan(readsBefore))
+    expect(startNumber()).toHaveValue(1001)
+    expect(daysToPay()).toHaveValue(14)
+    expect(daysToPay()).toHaveAccessibleDescription("Each invoice is due this many days after it's issued. 0 means due on issue.")
+    expect(screen.queryByText(/Changed by someone else/)).not.toBeInTheDocument()
   })
 
   it('a save from another section sends none of the numbering fields from its cached row, so it cannot put back what another Admin set', async () => {
