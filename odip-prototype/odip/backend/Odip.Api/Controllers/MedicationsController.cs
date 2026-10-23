@@ -186,7 +186,11 @@ public class MedicationsController : ControllerBase
     [HttpGet("medications/missed-guidance-contact")]
     public async Task<ActionResult<ApiResponse<MissedMedicationContactDto>>> GetMissedGuidanceContact(CancellationToken ct)
     {
-        var s = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        // A SuperAdmin's query filter is off: with no organisation chosen there is no manager to show, and with one chosen only that row.
+        var tenantId = _currentTenant.TenantId;
+        var s = _currentTenant.IsSuperAdmin && tenantId is null
+            ? null
+            : await _db.ProviderSettings.Where(p => tenantId == null || p.TenantId == tenantId).FirstOrDefaultAsync(ct);
         if (s == null) return Ok(ApiResponse<MissedMedicationContactDto?>.Ok(null));
         return Ok(ApiResponse<MissedMedicationContactDto>.Ok(new MissedMedicationContactDto
         {

@@ -91,7 +91,7 @@ export default function TenantDetailView({
       </div>
 
       {/* ── Summary Cards ──────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
         <SummaryCard
           icon={<Users className="w-5 h-5 text-[var(--color-secondary)]" />}
           value={users.length}
@@ -109,6 +109,7 @@ export default function TenantDetailView({
           value={formatInstantDateAu(tenant.createdAt)}
           label="Created"
           loading={false}
+          className="col-span-2 xl:col-span-1"
         />
       </div>
 
@@ -228,22 +229,24 @@ function SummaryCard({
   value,
   label,
   loading,
+  className,
 }: {
   icon: React.ReactNode
   value: string | number
   label: string
   loading: boolean
+  className?: string
 }) {
   return (
-    <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex items-center gap-4">
-      <div className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-accent)]">
+    <div className={`bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] flex items-center gap-4 ${className ?? ''}`}>
+      <div className="flex shrink-0 items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-accent)]">
         {icon}
       </div>
-      <div>
+      <div className="min-w-0">
         {loading ? (
           <div className="h-6 w-10 rounded bg-[var(--color-accent)] animate-pulse" />
         ) : (
-          <p className="text-xl font-bold text-[var(--color-foreground)]">{value}</p>
+          <p className="text-xl font-bold text-[var(--color-foreground)] break-words">{value}</p>
         )}
         <p className="text-xs text-[var(--color-muted-foreground)]">{label}</p>
       </div>

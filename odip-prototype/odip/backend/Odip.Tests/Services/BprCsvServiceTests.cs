@@ -90,7 +90,7 @@ public class BprCsvServiceTests
             Id = Guid.NewGuid(), TripInstanceId = Guid.NewGuid(), ParticipantId = participant.Id,
             BookingStatus = BookingStatus.Confirmed,
         };
-        var claim = new TripClaim { Id = Guid.NewGuid(), ClaimReference = "TC-1", PeriodFrom = new DateOnly(2026, 9, 7), PeriodTo = new DateOnly(2026, 9, 7) };
+        var claim = new TripClaim { Id = Guid.NewGuid(), ParticipantId = participant.Id, ClaimReference = "TC-1", PeriodFrom = new DateOnly(2026, 9, 7), PeriodTo = new DateOnly(2026, 9, 7) };
         db.Participants.Add(participant);
         db.ParticipantBookings.Add(booking);
         db.TripClaims.Add(claim);
