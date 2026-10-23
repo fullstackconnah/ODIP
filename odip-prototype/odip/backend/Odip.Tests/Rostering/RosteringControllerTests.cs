@@ -442,6 +442,39 @@ public class RosteringControllerTests
         Assert.DoesNotContain(staffRow.Shifts, s => s.Id == unfilledShift.Id);
     }
 
+    [Theory]
+    [InlineData(22, 6, true, true)]
+    [InlineData(9, 17, false, false)]
+    public async Task GetBoard_StaffMode_SundayShiftIntoMondayTrip_WarnsOnlyWhenTheShiftRunsOvernight(int startHour, int endHour, bool endsNextDay, bool expectFinding)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var sunday = ServiceDate.AddDays(6);
+        var shift = new Shift
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, UserId = staff.Id, ServiceDate = sunday,
+            StartTime = new TimeOnly(startHour, 0), EndTime = new TimeOnly(endHour, 0), EndsNextDay = endsNextDay,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft
+        };
+        var trip = new TripInstance { Id = Guid.NewGuid(), TripCode = "NEXT", TripName = "Next week", StartDate = sunday.AddDays(1), DurationDays = 3 };
+        db.TripInstances.Add(trip);
+        db.StaffAssignments.Add(new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, UserId = staff.Id,
+            AssignmentStart = sunday.AddDays(1), AssignmentEnd = sunday.AddDays(3), Status = AssignmentStatus.Confirmed
+        });
+        db.Shifts.Add(shift);
+        db.SaveChanges();
+
+        var result = await new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db)).GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var board = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal(expectFinding, board.Exceptions!.Any(e => e.ShiftId == shift.Id && e.Finding.Code == RosterConflictService.DoubleBookedTrip));
+        // The wider trip load feeds findings only: next week's trip is not drawn on this week.
+        Assert.Empty(Assert.Single(board.StaffRows!, r => r.StaffId == staff.Id).TripBars);
+    }
+
     [Fact]
     public async Task GetBoard_StaffMode_IncludesEveryActiveRole_NoRoleFilter()
     {
