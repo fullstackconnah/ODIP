@@ -1617,6 +1617,29 @@ describe('ShiftSlideOver — the length of a shift', () => {
     expect(screen.getAllByRole('alert').every(alert => alert.tagName === 'P')).toBe(true)
   })
 
+  it('scrolls to a live-check refusal once, not again when an edit re-checks and the same refusal returns', async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = Element.prototype.scrollIntoView
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy   // jsdom has no layout, so the call is what is checked
+    try {
+      type PreviewCallbacks = { onError?: (err: unknown) => void }
+      mockCheckMutate.mockImplementation((_candidate: unknown, opts?: PreviewCallbacks) => opts?.onError?.(badRequest('Staff cannot take this shift.')))
+      openNew()
+      expect(await screen.findByText('Staff cannot take this shift.')).toBeInTheDocument()
+      expect(spy).toHaveBeenCalledTimes(1)
+
+      mockCheckMutate.mockClear()
+      await user.clear(screen.getByLabelText(/^Start time/))
+      await user.type(screen.getByLabelText(/^Start time/), '08:00')
+      await waitFor(() => expect(mockCheckMutate).toHaveBeenCalled())   // the 400 ms re-check ran and the same refusal came back
+      expect(await screen.findByText('Staff cannot take this shift.')).toBeInTheDocument()
+      expect(spy).toHaveBeenCalledTimes(1)
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView
+    }
+  })
+
   // The server's 400 carries a code; the panel recognises the refusal by it, so a sentence it has never seen is still said under End time and never in the alert at the foot.
   const REWORDED = 'Pick an end time that is after the start time.'
   const noLengthByCode = () => ({ response: { status: 400, data: { success: false, errors: [REWORDED], code: 'shift-no-length' } } })

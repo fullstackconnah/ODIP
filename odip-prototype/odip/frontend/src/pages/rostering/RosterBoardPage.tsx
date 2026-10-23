@@ -65,6 +65,7 @@ const HINT_DISMISSED_KEY = 'odip.roster.hintDismissed'
 
 /** How long "The board is up to date." stays on screen after Refresh the board: a confirmation, not a standing claim about a board others keep changing. */
 const UP_TO_DATE_MS = 6000
+const noop = () => {}
 
 export default function RosterBoardPage() {
   const { canWrite } = usePermissions()
@@ -104,15 +105,16 @@ export default function RosterBoardPage() {
   // The server's refusal of an assign / unassign that is NOT the 422 findings protocol (e.g. Enforce mode's 400 "Participant is not ready
   // for booking or rostering."). It used to be swallowed, leaving a drag that silently snapped back.
   // boardChanged: the board-changed 409 (lib/boardChanged), whose notice offers Refresh the board. Every write below reports through showWriteError.
-  // done: the same slot after Refresh the board went through, as a success notice that clears itself (the next refusal replaces it, as it replaces any notice here).
-  const [assignError, setAssignError] = useState<{ message: string; boardChanged: boolean; done?: boolean } | null>(null)
+  // done: the same slot after Refresh the board went through, as a success notice that clears itself (the next refusal replaces it, as it replaces any notice here), but not while a person is carried: the grid is
+  // under their hand. reserve: the refusal it replaced, kept invisible in the notice so the grid does not move when Refresh succeeds or when the notice goes.
+  const [carry, setCarry] = useState<DragCarry | null>(null)
+  const [assignError, setAssignError] = useState<{ message: string; boardChanged: boolean; done?: boolean; reserve?: string } | null>(null)
   const showWriteError = (err: unknown, fallback: string) => setAssignError({ message: extractErrorMessage(err, fallback), boardChanged: isBoardChanged(err) })
   useEffect(() => {
-    if (!assignError?.done) return
+    if (!assignError?.done || carry) return
     const timer = setTimeout(() => setAssignError(null), UP_TO_DATE_MS)
     return () => clearTimeout(timer)
-  }, [assignError])
-  const [carry, setCarry] = useState<DragCarry | null>(null)
+  }, [assignError, carry])
   const [dropPending, setDropPending] = useState<PendingDrop | null>(null)
   const [prompt, setPrompt] = useState<DropPrompt | null>(null)
   // Decision 6: a person carried off a puck onto an empty day MOVES. Their old shift waits here until the new one saves; the panel's Cancel forgets it.
@@ -537,7 +539,7 @@ export default function RosterBoardPage() {
 
   /** Refresh the board went through: the stale notice becomes "up to date" (shown, and said once), and focus goes to the week heading, never to body (as after Publish). */
   function boardRefreshed() {
-    setAssignError({ message: BOARD_REFRESHED, boardChanged: false, done: true })
+    setAssignError(prev => ({ message: BOARD_REFRESHED, boardChanged: false, done: true, reserve: prev?.message }))
     setAnnouncement(BOARD_REFRESHED)
     requestAnimationFrame(() => document.getElementById(WEEK_HEADING_ID)?.focus())
   }
@@ -655,7 +657,16 @@ export default function RosterBoardPage() {
                 </Button>
               )}
             >
-              {assignError.message}
+              {assignError.reserve ? (
+                // The refusal's sentence and the action row sit invisible in the same cell as the live line: one size in every state (the text is drawn from an attribute so it is not findable twice).
+                <>
+                  <span className="grid">
+                    <span aria-hidden="true" data-reserve={assignError.reserve} className="invisible col-start-1 row-start-1 before:content-[attr(data-reserve)]" />
+                    <span className="col-start-1 row-start-1">{assignError.message}</span>
+                  </span>
+                  <div aria-hidden="true" className="invisible"><RefreshBoardAction onRefreshed={noop} announce={noop} /></div>
+                </>
+              ) : assignError.message}
               {assignError.boardChanged && <RefreshBoardAction onRefreshed={boardRefreshed} announce={setAnnouncement} />}
             </Callout>
           )}
