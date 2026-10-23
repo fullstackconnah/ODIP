@@ -110,5 +110,36 @@ public class MedicationHistoryFrameTests : IClassFixture<PostgresFixture>
         var list = await c.GetParticipantAdministrations(p.Id, day, day, Ct);
         Assert.Equal(new[] { tonight.Id, given.Id }.OrderBy(x => x), Assert.IsType<ApiResponse<List<AdministrationDto>>>(Assert.IsType<OkObjectResult>(list.Result).Value).Data!.Select(a => a.Id).OrderBy(x => x));
     }
+
+    // An unscoped SuperAdmin's report over two organisations: the per-organisation ranges are UNION ALLed inside an IN, which Npgsql must translate.
+    [SkippableFact]
+    public async Task Report_TwoOrganisationsInOneRange_OnPostgres()
+    {
+        Skip.IfNot(_pg.Available, "no pg");
+        var (perthDb, perth) = await _pg.NewTenantContextAsync();
+        var (sydneyDb, sydney) = await _pg.NewTenantContextAsync();
+        await perthDb.DisposeAsync(); await sydneyDb.DisposeAsync();
+        var tenant = new Mock<ICurrentTenant>(); tenant.Setup(t => t.TenantId).Returns((Guid?)null); tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString, tenant.Object);
+        db.ProviderSettings.AddRange(new ProviderSettings { Id = Guid.NewGuid(), TenantId = perth, State = "WA" }, new ProviderSettings { Id = Guid.NewGuid(), TenantId = sydney, State = "NSW" });
+        // The same instant, 15:00 UTC on the 13th: 23:00 on the 13th in Perth, 01:00 on the 14th in Sydney.
+        var doses = new List<MedicationAdministration>();
+        foreach (var t in new[] { perth, sydney })
+        {
+            var p = new Participant { Id = Guid.NewGuid(), TenantId = t, FirstName = "A", LastName = "B", IsActive = true };
+            var med = new ParticipantMedication { Id = Guid.NewGuid(), TenantId = t, ParticipantId = p.Id, Name = "Lev", DoseDescription = "1", Type = MedicationType.Regular, TimesOfDay = "09:00", StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active };
+            db.Participants.Add(p); db.ParticipantMedications.Add(med);
+            doses.Add(Given(med, new DateTime(2026, 7, 13, 15, 0, 0)));
+        }
+        db.MedicationAdministrations.AddRange(doses);
+        await db.SaveChangesAsync(Ct);
+        var c = new MedicationsController(db, tenant.Object);
+
+        Assert.Equal(new[] { doses[1].Id }, await ReportAsync(c, new DateTime(2026, 7, 14), new DateTime(2026, 7, 14)));
+        Assert.Equal(new[] { doses[0].Id }, await ReportAsync(c, new DateTime(2026, 7, 13), new DateTime(2026, 7, 13)));
+        var paged = Assert.IsType<ApiResponse<PagedResult<AdministrationDto>>>(Assert.IsType<OkObjectResult>((await c.GetAdministrationReport(null, new DateTime(2026, 7, 13), new DateTime(2026, 7, 14), 1, 1, Ct)).Result).Value).Data!;
+        Assert.Equal(2, paged.TotalCount);
+        Assert.Single(paged.Items);
+    }
 }
 
