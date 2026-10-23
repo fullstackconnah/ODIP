@@ -119,6 +119,33 @@ public class MedicationOrgZoneTests
         Assert.Equal(new DateOnly(2026, 7, 14), Data(await c.GetMar(null, f.Participant.Id, default)).Date);
     }
 
+    /// <summary>23:00 on the 14th is not yet late in Perth (it is 23:00 there now) but is two hours late in Sydney; the row is Perth's.</summary>
+    [Fact]
+    public async Task GetMar_NoParticipant_OverdueFollowsEachRowsZone()
+    {
+        var (f, med, c) = await Unscoped();
+        med.TimesOfDay = "23:00";
+        await f.Db.SaveChangesAsync();
+
+        var entry = Assert.Single(Data(await c.GetMar(new DateOnly(2026, 7, 14), null, default)).Entries);
+
+        Assert.False(entry.IsOverdue);
+    }
+
+    [Fact]
+    public async Task GetMar_ScopedUser_OverdueIsUnchanged()
+    {
+        var (f, med, c) = await Unscoped();
+        med.TimesOfDay = "09:00,23:00";
+        await f.Db.SaveChangesAsync();
+        f.Tenant.Setup(t => t.TenantId).Returns(WaOrg);
+        f.Tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+
+        var entries = Data(await c.GetMar(new DateOnly(2026, 7, 14), null, default)).Entries.OrderBy(e => e.ScheduledTime).ToList();
+
+        Assert.Equal(new[] { true, false }, entries.Select(e => e.IsOverdue));
+    }
+
     /// <summary>Given at 15:00 UTC on the 13th: 23:00 on the 13th in Perth, 01:00 on the 14th in Sydney, so a "from 14 July" range holds it in Sydney only.</summary>
     private static async Task<(ShiftPackageFixture F, MedicationsController C)> WithAnEarlyDose()
     {
@@ -147,5 +174,14 @@ public class MedicationOrgZoneTests
         var (f, c) = await WithAnEarlyDose();
 
         Assert.Empty(Data(await c.GetAdministrationReport(f.Participant.Id, new DateTime(2026, 7, 14), null, 1, 50, default)).Items);
+    }
+
+    [Fact]
+    public async Task GetAdministrationReport_NoParticipant_DayRangeFollowsEachRowsZone()
+    {
+        var (_, c) = await WithAnEarlyDose();
+
+        Assert.Empty(Data(await c.GetAdministrationReport(null, new DateTime(2026, 7, 14), null, 1, 50, default)).Items);
+        Assert.Single(Data(await c.GetAdministrationReport(null, new DateTime(2026, 7, 13), new DateTime(2026, 7, 13), 1, 50, default)).Items);
     }
 }

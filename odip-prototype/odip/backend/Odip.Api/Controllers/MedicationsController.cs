@@ -207,7 +207,8 @@ public class MedicationsController : ControllerBase
         // The MAR's "one calendar day" is the provider-local window [00:00, next 00:00). "Today" (when no
         // date is supplied) and "overdue" are both the PROVIDER's local notion, never UTC: a slot is an
         // unrecorded dose more than 60 minutes past its provider-local time.
-        // shortcut: with no participant the window spans every organisation the caller can see but takes one zone (the scoped one); add a per-slot zone if a SuperAdmin needs the all-orgs MAR.
+        // With no participant the window spans every organisation the caller can see: the date window (and so "today") takes the caller's
+        // zone, but each slot's overdue flag is judged on its own medication's organisation (below), so no slot is dropped or doubled.
         var provider = await ParticipantZoneAsync(participantId, ct);
         var targetDate = date ?? DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(_slots.UtcNow, provider.Zone));
         var dateStart = targetDate.ToDateTime(TimeOnly.MinValue);
@@ -220,6 +221,7 @@ public class MedicationsController : ControllerBase
         var dayIncidentIds = await GetIncidentIdsByAdministrationIdsAsync(
             window.Slots.Where(s => s.Administration != null).Select(s => s.Administration!.Id).ToList(), ct);
 
+        var zones = await ProviderZonesAsync(window.Slots.Select(s => s.Medication.TenantId), ct);
         var entries = new List<MarEntryDto>();
         foreach (var slot in window.Slots)
         {
@@ -245,7 +247,7 @@ public class MedicationsController : ControllerBase
                 ScheduledAt = slot.ScheduledAt,
                 IsHighRisk = m.IsHighRisk,
                 SupportLevel = m.SupportLevel,
-                IsOverdue = slot.IsOverdue,
+                IsOverdue = MedicationSlotCalculator.IsOverdue(slot.ScheduledAt, admin != null, _slots.UtcNow, zones[m.TenantId]),
                 Administration = admin == null ? null : ToAdministrationDto(admin, participantName, m.Name, m.DoseDescription, incidentId),
                 IncidentId = incidentId,
             });
@@ -478,9 +480,22 @@ public class MedicationsController : ControllerBase
             .AsQueryable();
 
         if (participantId.HasValue) query = query.Where(a => a.ParticipantId == participantId.Value);
-        var (fromUtc, toUtcExclusive) = await DayRangeUtcAsync(participantId, from, to, ct);
-        if (from.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt >= fromUtc : a.ScheduledAt != null ? a.ScheduledAt >= from.Value.Date : a.CreatedAt >= fromUtc);
-        if (to.HasValue) query = query.Where(a => a.AdministeredAt != null ? a.AdministeredAt < toUtcExclusive : a.ScheduledAt != null ? a.ScheduledAt < to.Value.Date.AddDays(1) : a.CreatedAt < toUtcExclusive);
+        if (from.HasValue || to.HasValue)
+        {
+            // A date range names whole days in each ROW's organisation: an unscoped SuperAdmin's report spans organisations, and the scoped zone is their home one.
+            IQueryable<Guid>? inRange = null;
+            foreach (var (tenantId, zone) in await ProviderZonesAsync(await query.Select(a => a.TenantId).Distinct().ToListAsync(ct), ct))
+            {
+                var rows = query.Where(a => a.TenantId == tenantId);
+                var fromUtc = from.HasValue ? ProviderLocalTime.LocalToUtc(from.Value.Date, zone) : (DateTime?)null;
+                var toUtcExclusive = to.HasValue ? ProviderLocalTime.LocalToUtc(to.Value.Date.AddDays(1), zone) : (DateTime?)null;
+                if (from.HasValue) rows = rows.Where(a => a.AdministeredAt != null ? a.AdministeredAt >= fromUtc : a.ScheduledAt != null ? a.ScheduledAt >= from.Value.Date : a.CreatedAt >= fromUtc);
+                if (to.HasValue) rows = rows.Where(a => a.AdministeredAt != null ? a.AdministeredAt < toUtcExclusive : a.ScheduledAt != null ? a.ScheduledAt < to.Value.Date.AddDays(1) : a.CreatedAt < toUtcExclusive);
+                var ids = rows.Select(a => a.Id);
+                inRange = inRange == null ? ids : inRange.Concat(ids);
+            }
+            if (inRange != null) query = query.Where(a => inRange.Contains(a.Id));
+        }
 
         var ordered = query.OrderByDescending(a => a.AdministeredAt ?? a.ScheduledAt ?? a.CreatedAt);
 
@@ -653,6 +668,14 @@ public class MedicationsController : ControllerBase
         var todays = new Dictionary<Guid, DateOnly>();
         foreach (var id in tenantIds.Distinct()) todays[id] = await ProviderTodayAsync(id, ct);
         return todays;
+    }
+
+    /// <summary>Each named organisation's own zone, resolved once per organisation.</summary>
+    private async Task<Dictionary<Guid, TimeZoneInfo>> ProviderZonesAsync(IEnumerable<Guid> tenantIds, CancellationToken ct)
+    {
+        var zones = new Dictionary<Guid, TimeZoneInfo>();
+        foreach (var id in tenantIds.Distinct()) zones[id] = (await ProviderTimeZoneResolver.ResolveAsync(_db, id, ct)).Zone;
+        return zones;
     }
 
     /// <summary>The zone of the named participant's organisation; with none named (or found) the scoped zone, which is all a list across organisations has.</summary>
