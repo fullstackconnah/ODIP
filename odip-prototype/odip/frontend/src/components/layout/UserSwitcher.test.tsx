@@ -168,7 +168,7 @@ describe('UserSwitcher — touch target and small-screen trigger', () => {
     const trigger = screen.getByRole('button', { name: 'USR Jamie Support' })
     expect(trigger).toHaveAttribute('title', 'Jamie Support')
     const name = screen.getByText('Jamie Support', { selector: 'span' })
-    expect(name).toHaveClass('hidden', 'sm:inline')
+    expect(name).toHaveClass('hidden', 'sm:block')
     expect(screen.getByText('USR')).not.toHaveClass('hidden')
   })
 
@@ -283,3 +283,14 @@ describe("UserSwitcher dismissal", () => {
     expect(localStorage.getItem("odip_viewing_tenant")).toBe(originalViewingTenant);
   });
 });
+
+describe('UserSwitcher — label stays on one line in the header bar', () => {
+  it('keeps "View as user…" on one line and truncates a long name, full name still the accessible name', () => {
+    setSuperAdminSignedIn()
+    render(<UserSwitcher />)
+    const idle = screen.getByText('View as user…')
+    expect(idle.className).toContain('whitespace-nowrap')
+    expect(idle.className).toContain('truncate')
+    expect(idle.className).toContain('min-w-0')
+  })
+})

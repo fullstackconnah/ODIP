@@ -68,7 +68,7 @@ describe('TenantSwitcher — touch target and small-screen trigger', () => {
     const trigger = screen.getByRole('button', { name: 'SA Demo' })
     expect(trigger).toHaveAttribute('title', 'Demo')
     const name = screen.getByText('Demo', { selector: 'span' })
-    expect(name).toHaveClass('hidden', 'sm:inline')
+    expect(name).toHaveClass('hidden', 'sm:block')
     // The SA badge and the caret stay on every width.
     expect(screen.getByText('SA')).not.toHaveClass('hidden')
   })
@@ -151,3 +151,18 @@ describe("TenantSwitcher dismissal", () => {
     expect(localStorage.getItem("odip_viewing_tenant")).toBe(originalViewing);
   });
 });
+
+describe('TenantSwitcher — label stays on one line in the header bar', () => {
+  it('truncates a long name instead of wrapping, and keeps the full name as the accessible name and title', () => {
+    const name = 'Jo Care Disability Services And Supports Pty'
+    mockUseAdminTenantsSummary.mockReturnValue({ data: [{ id: 'tenant-1', name, isActive: true }] })
+    render(<TenantSwitcher />)
+
+    const trigger = screen.getByRole('button', { name: `SA ${name}` })
+    expect(trigger).toHaveAttribute('title', name)
+    const label = screen.getByText(name)
+    expect(label.className).toContain('whitespace-nowrap')
+    expect(label.className).toContain('truncate')
+    expect(label.className).toContain('min-w-0')
+  })
+})
