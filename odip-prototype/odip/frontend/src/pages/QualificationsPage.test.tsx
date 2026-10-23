@@ -259,44 +259,45 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
     expect(screen.getByLabelText('Expiry date')).toBeInTheDocument()
   })
 
-  // Row A's PUT is sent and held; the user then opens another row's Edit. Returns the callbacks A's PUT was sent with.
-  async function holdIvyPutThenOpenAnotherRow() {
+  // Row A's PUT is sent and held. Returns the callbacks A's PUT was sent with.
+  async function holdIvyPut() {
     mockApiGet.mockResolvedValue({ ...STAFF[4] })
     openIvyEdit()
     mockPending.current = true // the mutation reports its PUT in flight from the moment Save is pressed
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
     expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled() // A's own row says so
-    fireEvent.click(screen.getAllByRole('button', { name: /^Edit: .+, (?!Ivy OneIssue$)/ })[0])
     return mockMutate.mock.calls[0][1]
   }
+  const otherRowEdit = () => screen.getAllByRole('button', { name: /^Edit: .+, (?!Ivy OneIssue$)/ })[0]
 
-  it('leaves the editor of row B open, with no error, when the PUT of row A succeeds after B was opened', async () => {
-    const sent = await holdIvyPutThenOpenAnotherRow()
-    act(() => sent.onSuccess())
+  it('holds the Edit of every other row while the PUT of row A is in flight, and shows its failure under the open editor of A', async () => {
+    const sent = await holdIvyPut()
+    expect(otherRowEdit()).toBeDisabled()
+    fireEvent.click(otherRowEdit())
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeInTheDocument() // still A's editor: the click opened nothing
+
+    mockPending.current = false
+    act(() => { sent.onError(); sent.onSettled() })
     expect(screen.getByLabelText('Expiry date')).toBeInTheDocument()
-    expect(screen.queryByText(/Failed to save/)).not.toBeInTheDocument()
+    expect(screen.getByText('Failed to save. Please try again.')).toBeInTheDocument()
   })
 
-  it('does not show the failed PUT of row A under the open editor of row B', async () => {
-    const sent = await holdIvyPutThenOpenAnotherRow()
-    act(() => sent.onError())
-    expect(screen.getByLabelText('Expiry date')).toBeInTheDocument()
-    expect(screen.queryByText(/Failed to save/)).not.toBeInTheDocument()
+  it('disables Cancel on the row whose PUT is in flight, and shows its failure under that editor', async () => {
+    const sent = await holdIvyPut()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+
+    mockPending.current = false
+    act(() => { sent.onError(); sent.onSettled() })
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+    expect(screen.getByText('Failed to save. Please try again.')).toBeInTheDocument()
   })
 
-  it('says Saving… only on the row being saved, and holds the Save of every other row until the PUT of row A lands', async () => {
-    await holdIvyPutThenOpenAnotherRow()
-    const saveB = screen.getByRole('button', { name: 'Save' })
-    expect(saveB).toBeDisabled() // B would re-read the record before A landed and write A's old value back
-    expect(screen.queryByRole('button', { name: 'Saving…' })).not.toBeInTheDocument()
-
-    mockApiGet.mockClear()
-    fireEvent.click(saveB)
-    await Promise.resolve()
-    expect(mockApiGet).not.toHaveBeenCalled()
-    expect(mockMutate).toHaveBeenCalledTimes(1) // still only A's PUT
-    expect(mockMutate.mock.calls[0][0].data).toEqual(expect.objectContaining({ isActive: true, medicationCompetencyExpiryDate: '2027-01-02' }))
+  it('enables the Edit of other rows again once the PUT of row A succeeds', async () => {
+    const sent = await holdIvyPut()
+    mockPending.current = false
+    act(() => { sent.onSuccess(); sent.onSettled() })
+    expect(otherRowEdit()).toBeEnabled()
   })
 
   it('falls back to the record loaded with the page when the re-read fails', async () => {
