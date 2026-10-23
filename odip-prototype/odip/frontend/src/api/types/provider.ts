@@ -29,6 +29,14 @@ export interface ProviderSettingsDto {
   medicationCompetencyMode: MedicationCompetencyMode
   /** Staff come from Employment Hero: "New staff member" and the staff import are hidden (the server refuses them too). Absent or false otherwise. */
   employmentHeroConnected?: boolean
+  invoiceNumberPrefix: string
+  creditNotePrefix: string
+  invoiceStartNumber: number
+  paymentTermsDays: number
+  /** Read-only: the number the next invoice takes, e.g. INV-0043. Never sent back. */
+  nextInvoiceDisplayNumber: string
+  /** Read-only: an invoice has been issued, so the starting number is fixed. Never sent back. */
+  invoicesIssued: boolean
 }
 
 export interface UpsertProviderSettingsDto {
@@ -55,4 +63,9 @@ export interface UpsertProviderSettingsDto {
    * would silently undo another admin's change. Only Warn and Enforce are accepted (400 otherwise). A request that changes the stored mode writes one
    * audit row (who, old, new). */
   medicationCompetencyMode?: MedicationCompetencyMode
+  /** Omit to leave as is; each change writes one audit row. The starting number is refused (409) once an invoice is issued. */
+  invoiceNumberPrefix?: string
+  creditNotePrefix?: string
+  invoiceStartNumber?: number
+  paymentTermsDays?: number
 }

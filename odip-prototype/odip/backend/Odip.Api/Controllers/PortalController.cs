@@ -189,7 +189,7 @@ public class PortalController : ControllerBase
         // is about to (Published, from 48 hours before its rostered start). A worker whose shift is PendingReview, Completed, Cancelled or Draft - or a
         // Published shift further out than that - keeps seeing the shift itself but not the participant's phone numbers, address or the latest handover
         // through it. Withheld = explicit null, with the reason.
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, shift.TenantId, ct);
         var sensitiveWithheldReason = SensitiveInfoWithheld(shift, provider);
         var showSensitive = sensitiveWithheldReason is null;
 
@@ -343,7 +343,7 @@ public class PortalController : ControllerBase
                 "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished));
         }
 
-        var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+        var providerSettings = await _db.ProviderSettings.Where(p => p.TenantId == shift.TenantId).FirstOrDefaultAsync(ct); // the shift's own organisation: the zone is saved on the completion, so an unscoped SuperAdmin must not pick another
         var now = NowUtc;
         var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
 
@@ -493,7 +493,7 @@ public class PortalController : ControllerBase
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                     "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
 
-            var providerSettings = await _db.ProviderSettings.FirstOrDefaultAsync(ct);
+            var providerSettings = await _db.ProviderSettings.Where(p => p.TenantId == shift.TenantId).FirstOrDefaultAsync(ct); // the shift's own organisation: the zone is saved on the completion, so an unscoped SuperAdmin must not pick another
             var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
 
             // F4: Legacy Npgsql timestamp behaviour persists Kind verbatim; treat unsuffixed values as UTC.
@@ -719,7 +719,7 @@ public class PortalController : ControllerBase
     /// </summary>
     private async Task<DateTime> EarliestDoseTimeAsync(Shift shift, CancellationToken ct)
     {
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, shift.TenantId, ct);
         var (rosteredStartLocal, _) = ProviderLocalTime.RosteredWindowLocal(shift);
         var rosteredLimit = ProviderLocalTime.LocalToUtc(rosteredStartLocal, provider.Zone).AddMinutes(-MedicationAdministrationRecorder.EarlyAdministrationMinutes);
 
@@ -773,7 +773,7 @@ public class PortalController : ControllerBase
 
         // A Published shift whose need-to-know window has not opened does not show the handover, so there is nothing the worker has seen to mark as read
         // (an acknowledge without a completionId would otherwise record the latest handover as read, unseen).
-        var withheld = SensitiveInfoWithheld(shift, await ProviderTimeZoneResolver.ResolveAsync(_db, ct));
+        var withheld = SensitiveInfoWithheld(shift, await ProviderTimeZoneResolver.ResolveAsync(_db, shift.TenantId, ct));
         if (withheld is not null)
             return NotFound(ApiResponse<PortalShiftDetailDto>.Fail(withheld, ShiftErrorCodes.ShiftHandoverNotFound));
 

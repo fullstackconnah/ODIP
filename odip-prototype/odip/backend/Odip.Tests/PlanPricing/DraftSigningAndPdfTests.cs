@@ -242,6 +242,13 @@ public class DraftSigningAndPdfTests
         return Skeleton(string.Join(" ", document.GetPages().SelectMany(page => page.GetWords()).Select(word => word.Text)));
     }
 
+    /// <summary>The words of a PDF as extracted, joined with spaces and NOT reduced: for checks on signs and symbols ("-$430.58"), with strings that hold no f, t or i (ligatures).</summary>
+    internal static string RawTextOf(byte[] pdf)
+    {
+        using var document = PdfDocument.Open(pdf);
+        return string.Join(" ", document.GetPages().SelectMany(page => page.GetWords()).Select(word => word.Text));
+    }
+
     // Code review N14: the PDF is what a family reads, and nothing pinned that it prints the caveats: the test above reads the first five bytes. Dropping the section would have passed.
     [Fact]
     public void The_pdf_prints_what_the_total_leaves_out_under_it_and_says_nothing_of_it_when_nothing_is_left_out()

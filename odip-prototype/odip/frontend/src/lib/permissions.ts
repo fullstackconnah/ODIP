@@ -284,6 +284,12 @@ export function usePermissions() {
     canManageIntegrations: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
 
     /**
+     * Void an invoice or issue a credit note. Those routes admit Admin and SuperAdmin; an invoice belongs to one organisation, so a SuperAdmin
+     * gets the actions only while viewing one, as Integrations does.
+     */
+    canCorrectInvoices: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+
+    /**
      * Whether an organisation's settings are in scope: an Admin or a Coordinator always has one, a SuperAdmin only while viewing one
      * (the tenant switcher's odip_viewing_tenant). Settings shows its Organisation, Pricing and budgets, Content and Data groups only then.
      */

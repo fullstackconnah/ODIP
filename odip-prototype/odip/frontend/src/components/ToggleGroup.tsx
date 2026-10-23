@@ -76,7 +76,7 @@ export function ToggleGroup({ options, value, onChange, className, ariaLabel, ar
             disabled={disabled}
             onClick={() => onChange(opt.key)}
             onKeyDown={e => handleKeyDown(e, index)}
-            className={`h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
+            className={`h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 ${
               checked
                 ? 'bg-[var(--color-primary)] text-white'
                 : `text-[var(--color-muted-foreground)] ${disabled ? '' : 'hover:bg-[var(--color-accent)]'}`
