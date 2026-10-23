@@ -189,6 +189,46 @@ public class EmploymentHeroTimesheetCardTests
         Assert.Equal(first, (await db.EmploymentHeroConnections.SingleAsync()).ConnectedAt);   // not today
     }
 
+    private static DateTime Day(int month, int day) => new(2026, month, day, 0, 0, 0, DateTimeKind.Utc);
+
+    private static EmploymentHeroSyncLog LogOn(Guid tenant, string business, DateTime at) =>
+        new() { Id = Guid.NewGuid(), TenantId = tenant, BusinessId = business, StartedAt = at, FinishedAt = at };
+
+    [Fact]
+    public async Task A_reconnect_after_switching_away_and_back_restores_the_cutoff_of_the_last_stint_only()
+    {
+        var tenant = Guid.NewGuid();
+        await using var db = Db(Guid.NewGuid().ToString(), tenant);
+        await ConnectAsync(db, tenant);
+        db.EmploymentHeroSyncLogs.AddRange(LogOn(tenant, Business, Day(1, 15)), LogOn(tenant, "888", Day(2, 1)), LogOn(tenant, Business, Day(2, 15)));
+        await db.SaveChangesAsync();
+        var eh = new StubHttpHandler().On("/api/v2/business/777", HttpStatusCode.OK, new { id = 777, name = "Acme Care" });
+
+        await Controller(db, tenant, eh).Disconnect(CancellationToken.None);
+        await Controller(db, tenant, eh).Connect(new EmploymentHeroConnectDto(ApiKey, "777"), CancellationToken.None);
+
+        Assert.Equal(Day(2, 15), (await db.EmploymentHeroConnections.SingleAsync()).ConnectedAt);   // not 15 Jan: 1-15 Feb went to the other business
+    }
+
+    [Fact]
+    public async Task A_reconnect_falls_back_to_the_oldest_queued_line_of_the_last_stint_when_it_predates_the_logs()
+    {
+        var tenant = Guid.NewGuid();
+        await using var db = Db(Guid.NewGuid().ToString(), tenant);
+        await ConnectAsync(db, tenant);
+        var (stale, queued) = (Row(tenant, EmploymentHeroOutboxStatus.Sent), Row(tenant, EmploymentHeroOutboxStatus.Sent));
+        (stale.CreatedAt, queued.CreatedAt) = (Day(1, 20), Day(2, 5));
+        db.EmploymentHeroOutbox.AddRange(stale, queued);
+        db.EmploymentHeroSyncLogs.AddRange(LogOn(tenant, "888", Day(2, 1)), LogOn(tenant, Business, Day(2, 10)));
+        await db.SaveChangesAsync();
+        var eh = new StubHttpHandler().On("/api/v2/business/777", HttpStatusCode.OK, new { id = 777, name = "Acme Care" });
+
+        await Controller(db, tenant, eh).Disconnect(CancellationToken.None);
+        await Controller(db, tenant, eh).Connect(new EmploymentHeroConnectDto(ApiKey, "777"), CancellationToken.None);
+
+        Assert.Equal(Day(2, 5), (await db.EmploymentHeroConnections.SingleAsync()).ConnectedAt);   // the row before the other business's log is not this stint's
+    }
+
     [Fact]
     public async Task Reconnecting_to_another_business_clears_the_queue_and_the_same_business_keeps_it()
     {

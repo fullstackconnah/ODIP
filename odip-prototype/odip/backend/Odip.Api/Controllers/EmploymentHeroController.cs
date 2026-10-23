@@ -133,11 +133,12 @@ public class EmploymentHeroController : ControllerBase
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
     }
 
-    /// <summary>When this business was first connected, from the oldest thing the connection left behind (a sync log or a queued line). Null if it left nothing.</summary>
+    /// <summary>When this business was first connected in its latest stint, from the oldest thing the connection left behind (a sync log or a queued line). Only what is newer than the last sync log of any other business counts: lines sent to that business must not be queued again. Null if it left nothing.</summary>
     private async Task<DateTime?> FirstConnectedAsync(Guid tenantId, string businessId, CancellationToken ct)
     {
-        var log = await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId && l.BusinessId == businessId).Select(l => (DateTime?)l.StartedAt).MinAsync(ct);
-        var queued = await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId).Select(r => (DateTime?)r.CreatedAt).MinAsync(ct);
+        var since = await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId && l.BusinessId != businessId).Select(l => (DateTime?)l.StartedAt).MaxAsync(ct);
+        var log = await _db.EmploymentHeroSyncLogs.Where(l => l.TenantId == tenantId && l.BusinessId == businessId && (since == null || l.StartedAt > since)).Select(l => (DateTime?)l.StartedAt).MinAsync(ct);
+        var queued = await _db.EmploymentHeroOutbox.Where(r => r.TenantId == tenantId && (since == null || r.CreatedAt > since)).Select(r => (DateTime?)r.CreatedAt).MinAsync(ct);
         return log is null ? queued : queued is null ? log : log < queued ? log : queued;
     }
 
