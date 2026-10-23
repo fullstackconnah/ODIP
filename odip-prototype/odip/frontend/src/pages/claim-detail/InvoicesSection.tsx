@@ -42,6 +42,9 @@ type InvoicesSectionProps = {
 export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSectionProps) {
   const query = useClaimInvoices(claim.id)
   const { canCorrectInvoices } = usePermissions()
+  // An Admin's row is too wide to pin anything at 1024: a pinned cell would cover the sign of a credit note's Total. Every column opts out,
+  // because opting out only the first hands the start pin to the next one (DataTable pinsOf).
+  const unpinned = canCorrectInvoices ? false : undefined
   const [downloading, setDownloading] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [correction, setCorrection] = useState<Correction | null>(null)
@@ -136,6 +139,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
             columns={[
               {
                 key: 'number',
+                pin: unpinned,
                 header: 'Number',
                 mobile: 'primary',
                 render: (row: InvoiceRow) => row.invoice ? (
@@ -149,6 +153,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
               },
               {
                 key: 'billTo',
+                pin: unpinned,
                 header: 'Bill to',
                 render: (row: InvoiceRow) => (
                   <div className="md:max-w-[15rem] 2xl:max-w-[24rem]">
@@ -159,6 +164,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
               },
               {
                 key: 'total',
+                pin: unpinned,
                 header: 'Total',
                 align: 'right' as const,
                 render: (row: InvoiceRow) => (
@@ -169,6 +175,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
               },
               {
                 key: 'status',
+                pin: unpinned,
                 header: 'Status',
                 mobile: 'status',
                 // Wider than the widest pill, so Issued turning Voided or Credited never moves the table (SHAPE C3).
@@ -179,6 +186,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
               },
               {
                 key: 'issueDate',
+                pin: unpinned,
                 header: 'Issued',
                 mobile: 'meta',
                 // An absent date is the bare dash string, which DataTable drops from the phone card (a labelled "—" would stay).
@@ -190,6 +198,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
               },
               {
                 key: 'dueDate',
+                pin: unpinned,
                 header: 'Due',
                 mobile: 'meta',
                 render: (row: InvoiceRow) => row.invoice?.dueDate
@@ -200,7 +209,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
                 key: 'actions',
                 header: '',
                 // An Admin's pair is too wide to pin at 1024: scrolling it keeps Total and Status whole (the cut lands in a date).
-                pin: canCorrectInvoices ? false : undefined,
+                pin: unpinned,
                 // Reserved for the widest pair (Download and "Issue credit note") in every state, so the column keeps its width when Void goes.
                 minWidth: canCorrectInvoices ? '17.75rem' : undefined,
                 className: 'max-md:basis-full',
