@@ -34,7 +34,9 @@ export default function BillingDetailsSection(frame: SectionFrame) {
     gstRegistered: row?.gstRegistered ?? false,
     isPaceProvider: row?.isPaceProvider ?? false,
     invoiceFooterNotes: row?.invoiceFooterNotes ?? '',
-  }))
+  }), {
+    bankAccountName: 'Account name', bsb: 'BSB', accountNumber: 'Account number', gstRegistered: 'Registered for GST', isPaceProvider: 'PACE provider', invoiceFooterNotes: 'Invoice note',
+  })
   // Nothing here can be saved until the profile is complete, so the fields are locked as well as the foot left off.
   const locked = frame.readOnly || p.incomplete
 

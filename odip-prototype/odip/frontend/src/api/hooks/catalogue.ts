@@ -24,12 +24,11 @@ export function useUpsertProviderSettings() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: UpsertProviderSettingsDto) =>
-      apiPut<ProviderSettingsDto>('/provider-settings', data),
-    onSuccess: (_saved, { expectedUpdatedAt: _version, ...sent }) => {
-      // The PUT answers true, not the row: write what was sent into the cache at once, so a second save before the refetch lands
-      // starts from this one, and nothing on screen waits for the refetch to say it is saved. The save moved the row's version and the
-      // answer doesn't say to what, so the cached one is dropped (a second save then sends none) until the refetch brings the new one.
-      qc.setQueryData<ProviderSettingsDto | null>(['provider-settings'], old => ({ ...(old ?? {}), ...sent, updatedAt: undefined }) as unknown as ProviderSettingsDto)
+      apiPut<string>('/provider-settings', data),
+    onSuccess: (updatedAt, sent) => {
+      // The PUT answers the row's new version, not the row: write what was sent, with that version, into the cache at once, so a second
+      // save before the refetch lands starts from this one (and is still checked), and nothing on screen waits for the refetch to say it is saved.
+      qc.setQueryData<ProviderSettingsDto | null>(['provider-settings'], old => ({ ...(old ?? {}), ...sent, expectedUpdatedAt: undefined, updatedAt }) as unknown as ProviderSettingsDto)
       qc.invalidateQueries({ queryKey: ['provider-settings'] })
       qc.invalidateQueries({ queryKey: ['missed-guidance-contact'] })
     },

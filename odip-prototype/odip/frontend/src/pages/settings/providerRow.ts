@@ -1,21 +1,27 @@
 import { useState } from 'react'
 import { useProviderSettings, useUpsertProviderSettings } from '@/api/hooks'
 import type { ProviderSettingsDto, UpsertProviderSettingsDto } from '@/api/types'
+import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import type { SaveResult } from './SettingsSection'
 import { notSavedText } from './settingsSections'
 
 /** The server's 400 for a blank required field names the field in an errors object, not a sentence, so the foot says this. */
 const REQUIRED_FIELDS = 'Fill in the registration number, ABN, organisation name and address.'
 
+/** A 409: another Admin saved since this form loaded. The server's sentence says to reload; the screen has already done it (see the reseed below). */
+const CHANGED_BY_OTHER = 'Not saved. Someone else changed these settings. Their changes are shown and your edits kept; save again.'
+
 /**
  * The one provider settings row behind Organisation profile, Billing details and Safety checks. Its PUT overwrites every text and flag
  * field from the body, so a section sends the row as the server last gave it with only the fields it changed replaced: an untouched null
  * stays null, and another section's fields go back exactly as they came. The query refetches when a section opens (the form seeds only
  * after that), a save writes what it sent into the cache, and the cache refetches after every save; so "as the server last gave it" is
- * that cache. It also carries the row's version back as expectedUpdatedAt, so a save from a form that another Admin has since outdated is refused (409, "Not saved. Settings were changed by someone else..."), the row is refetched, and the retry sends the person's changed fields over the fresh row. The two modes are never echoed: Safety checks adds
+ * that cache. It also carries the row's version back as expectedUpdatedAt, so a save from a form that another Admin has since outdated is refused (409),
+ * the row is refetched, and when it arrives the form is reseeded from it with only the person's changed fields laid back over it: the screen then shows
+ * exactly what the retry will write, and the foot names the fields the other Admin changed (`labels`, the section's own). The two modes are never echoed: Safety checks adds
  * one through `extra` only when the person changed it.
  */
-export function useProviderRow<F extends Record<string, string | boolean>>(pick: (row: ProviderSettingsDto | null) => F) {
+export function useProviderRow<F extends Record<string, string | boolean>>(pick: (row: ProviderSettingsDto | null) => F, labels: Record<keyof F, string>) {
   const query = useProviderSettings(true, 'always')
   const upsert = useUpsertProviderSettings()
   // No row reads as null (the mock API answers [] for a route it doesn't know).
@@ -23,12 +29,22 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
   const [form, setForm] = useState<F | null>(null)
   const [base, setBase] = useState<F | null>(null)
   const [result, setResult] = useState<SaveResult>(null)
+  // The version the refused save sent; set from a 409 until the refetched row (a different version) has been laid into the form.
+  const [refusedAt, setRefusedAt] = useState<string | null>(null)
   if (form === null && query.isFetchedAfterMount && !query.isFetching && !query.isError) {
     const loaded = pick(row)
     setForm(loaded)
     setBase(loaded)
   }
   const changed = form && base ? (Object.keys(form) as (keyof F)[]).filter(k => form[k] !== base[k]) : []
+  if (refusedAt !== null && form && base && row && row.updatedAt !== refusedAt && !query.isFetching) {
+    const fresh = pick(row)
+    const moved = (Object.keys(fresh) as (keyof F)[]).filter(k => fresh[k] !== base[k]).map(k => labels[k])
+    setForm({ ...fresh, ...Object.fromEntries(changed.map(k => [k, form[k]])) } as F)
+    setBase(fresh)
+    setRefusedAt(null)
+    setResult({ error: moved.length ? `${CHANGED_BY_OTHER} Changed by someone else: ${moved.join(', ')}.` : CHANGED_BY_OTHER })
+  }
   // Billing details and Safety checks are saved together with the profile's four required fields, so they wait for them.
   const incomplete = !row || [row.registrationNumber, row.abn, row.organisationName, row.address].some(v => !v?.trim())
 
@@ -41,9 +57,14 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
     delete body.updatedAt   // the version goes back as expectedUpdatedAt
     for (const k of changed) Object.assign(body, { [k]: form[k] })
     setResult(null)
+    setRefusedAt(null)
+    const sentVersion = row?.updatedAt
     upsert.mutate({ ...body, ...extra, expectedUpdatedAt: row?.updatedAt } as UpsertProviderSettingsDto, {
       onSuccess: () => { setBase(form); setResult('saved') },
-      onError: e => setResult({ error: notSavedText(e, REQUIRED_FIELDS) }),
+      onError: e => {
+        if (apiErrorStatus(e) === 409) setRefusedAt(sentVersion ?? null)
+        setResult({ error: apiErrorStatus(e) === 409 ? CHANGED_BY_OTHER : notSavedText(e, REQUIRED_FIELDS) })
+      },
     })
   }
 

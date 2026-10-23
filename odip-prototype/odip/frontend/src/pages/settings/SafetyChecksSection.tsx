@@ -85,7 +85,7 @@ function useModePick(server: Mode) {
 }
 
 export default function SafetyChecksSection(frame: SectionFrame) {
-  const p = useProviderRow(row => ({ managerName: row?.managerName ?? '', managerPhone: row?.managerPhone ?? '' }))
+  const p = useProviderRow(row => ({ managerName: row?.managerName ?? '', managerPhone: row?.managerPhone ?? '' }), { managerName: 'Manager name', managerPhone: 'Manager phone' })
   const serverReadiness: ParticipantReadinessMode = p.row?.participantReadinessMode ?? 'Warn'
   const serverMedication: MedicationCompetencyMode = p.row?.medicationCompetencyMode ?? 'Warn'
   const readinessMode = useModePick(serverReadiness)

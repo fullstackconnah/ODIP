@@ -19,7 +19,9 @@ export default function OrganisationProfileSection(frame: SectionFrame) {
     state: row?.state ?? '',
     managerName: row?.managerName ?? '',
     managerPhone: row?.managerPhone ?? '',
-  }))
+  }), {
+    organisationName: 'Organisation name', abn: 'ABN', registrationNumber: 'NDIS registration number', address: 'Address', state: 'State', managerName: 'Manager name', managerPhone: 'Manager phone',
+  })
   const { readOnly } = frame
 
   return (

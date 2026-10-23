@@ -52,7 +52,7 @@ beforeEach(() => {
     const { expectedUpdatedAt, ...fields } = body
     if (expectedUpdatedAt && expectedUpdatedAt !== server?.updatedAt) throw { response: { status: 409, data: { success: false, errors: [CHANGED_BY_OTHER] } } }
     server = { ...(server ?? ({} as ProviderSettingsDto)), ...fields, updatedAt: `${new Date().toISOString().slice(0, -1)}000Z` }
-    return true
+    return server.updatedAt   // the PUT answers the row's new version
   })
   mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
   screenSize.belowMd = false
@@ -144,6 +144,8 @@ describe('Organisation profile', () => {
     mockApiGet.mockImplementation((url: string) => (url === '/provider-settings' ? new Promise(() => {}) : Promise.resolve([])))
     await user.click(saveButton())
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    const putVersion = server?.updatedAt
+    expect(putVersion).not.toBe(V1)
 
     const abn = screen.getByLabelText('ABN')
     await user.clear(abn)
@@ -151,8 +153,8 @@ describe('Organisation profile', () => {
     await user.click(saveButton())
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
-    // The first save moved the version and the refetch that would say to what never lands, so the second save sends none rather than a stale one.
-    expect(putBody(1)).toEqual({ ...rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }), expectedUpdatedAt: undefined })
+    // The first save moved the version and the refetch that would say to what never lands, so the second save carries the version the first PUT answered.
+    expect(putBody(1)).toEqual({ ...rowWithoutModes(makeSettings(), { organisationName: 'Sunrise Care', abn: '12345678901' }), expectedUpdatedAt: putVersion })
   })
 
   it('never writes back the Employment Hero flag the GET computes', async () => {
@@ -277,7 +279,7 @@ describe('Billing details', () => {
     expect(server?.bsb).toBe('064-000')
   })
 
-  it("a save from an older form is refused with the server's words, keeps the edit, refetches, and the retry brings the other Admin's change along", async () => {
+  it("a save from an older form is refused in the section's words, reseeds from the refetched row keeping the edit, names what moved, and the retry sends what the screen shows", async () => {
     const user = userEvent.setup()
     renderSection('billing')
     const bsb = await screen.findByLabelText('BSB')
@@ -285,22 +287,45 @@ describe('Billing details', () => {
     await user.type(bsb, '063-000')
     // Another Admin saves a new account number after this form loaded.
     server = makeSettings({ accountNumber: '99999999', updatedAt: V2 })
-    const getsBefore = mockApiGet.mock.calls.filter(c => c[0] === '/provider-settings').length
 
     await user.click(saveButton())
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(`Not saved. ${CHANGED_BY_OTHER}`)
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Not saved. Someone else changed these settings. Their changes are shown and your edits kept; save again.')
     expect(putBody()).toMatchObject({ expectedUpdatedAt: V1, bsb: '063-000' })
-    expect(screen.getByLabelText('BSB')).toHaveValue('063-000')
     expect(server?.bsb).toBe('064-000')
-    await waitFor(() => expect(mockApiGet.mock.calls.filter(c => c[0] === '/provider-settings').length).toBeGreaterThan(getsBefore))
+    // The refetch lands: the untouched field shows the other Admin's value, the edited one keeps what was typed, and the foot names the change.
+    await waitFor(() => expect(screen.getByLabelText('Account number')).toHaveValue('99999999'))
+    expect(screen.getByLabelText('BSB')).toHaveValue('063-000')
+    expect(screen.getByRole('alert')).toHaveTextContent('Changed by someone else: Account number.')
+    expect(saveButton()).toBeEnabled()
 
     await user.click(saveButton())
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
     expect(putBody(1)).toMatchObject({ expectedUpdatedAt: V2, bsb: '063-000', accountNumber: '99999999' })
     expect(await screen.findByRole('status')).toHaveTextContent('Saved')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Account number')).toHaveValue('99999999')
     expect(server).toMatchObject({ bsb: '063-000', accountNumber: '99999999' })
+  })
+
+  it('after a refused save, an edit to the same field the other Admin changed keeps the typed value and the foot still names the field', async () => {
+    const user = userEvent.setup()
+    renderSection('billing')
+    const account = await screen.findByLabelText('Account number')
+    await user.clear(account)
+    await user.type(account, '12345679')
+    server = makeSettings({ accountNumber: '99999999', bsb: '063-000', updatedAt: V2 })
+
+    await user.click(saveButton())
+
+    await waitFor(() => expect(screen.getByLabelText('BSB')).toHaveValue('063-000'))
+    expect(screen.getByLabelText('Account number')).toHaveValue('12345679')
+    expect(screen.getByRole('alert')).toHaveTextContent('Changed by someone else: BSB, Account number.')
+    await user.click(saveButton())
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(putBody(1)).toMatchObject({ expectedUpdatedAt: V2, bsb: '063-000', accountNumber: '12345679' })
   })
 
   it('hides the bank account from a Coordinator, and has no Save', async () => {
