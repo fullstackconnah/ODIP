@@ -85,7 +85,7 @@ function useModePick(server: Mode) {
 }
 
 export default function SafetyChecksSection(frame: SectionFrame) {
-  const p = useProviderRow(row => ({ managerName: row?.managerName ?? '', managerPhone: row?.managerPhone ?? '' }), { managerName: 'Manager name', managerPhone: 'Manager phone' })
+  const p = useProviderRow(row => ({ managerName: row?.managerName ?? '', managerPhone: row?.managerPhone ?? '' }))
   const serverReadiness: ParticipantReadinessMode = p.row?.participantReadinessMode ?? 'Warn'
   const serverMedication: MedicationCompetencyMode = p.row?.medicationCompetencyMode ?? 'Warn'
   const readinessMode = useModePick(serverReadiness)
@@ -120,8 +120,8 @@ export default function SafetyChecksSection(frame: SectionFrame) {
             <CheckBlock check="medication" value={medicationMode.shown} saved={serverMedication} disabled={locked} onChange={medicationMode.choose} />
             <SettingsGroup title="Who staff call about a missed dose">
               <div className={formGrid}>
-                <TextField label="Manager name" placeholder="For example: Priya Sharma" className={span.medium} value={p.form.managerName} readOnly={locked} onChange={e => p.edit({ managerName: e.target.value })} />
-                <TextField label="Manager phone" placeholder="For example: 0412 345 007" inputMode="tel" className={span.short} value={p.form.managerPhone} readOnly={locked} onChange={e => p.edit({ managerPhone: e.target.value })} />
+                <TextField label="Manager name" hint={p.hint('managerName')} placeholder="For example: Priya Sharma" className={span.medium} value={p.form.managerName} readOnly={locked} onChange={e => p.edit({ managerName: e.target.value })} />
+                <TextField label="Manager phone" hint={p.hint('managerPhone')} placeholder="For example: 0412 345 007" inputMode="tel" className={span.short} value={p.form.managerPhone} readOnly={locked} onChange={e => p.edit({ managerPhone: e.target.value })} />
               </div>
               <p className="text-xs text-[var(--color-muted-foreground)]">Shown first to staff who need guidance on a missed medication.</p>
             </SettingsGroup>

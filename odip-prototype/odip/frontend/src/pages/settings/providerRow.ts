@@ -18,10 +18,10 @@ const CHANGED_BY_OTHER = 'Not saved. Someone else changed these settings. Their 
  * after that), a save writes what it sent into the cache, and the cache refetches after every save; so "as the server last gave it" is
  * that cache. It also carries the row's version back as expectedUpdatedAt, so a save from a form that another Admin has since outdated is refused (409),
  * the row is refetched, and when it arrives the form is reseeded from it with only the person's changed fields laid back over it: the screen then shows
- * exactly what the retry will write, and the foot names the fields the other Admin changed (`labels`, the section's own). The two modes are never echoed: Safety checks adds
+ * exactly what the retry will write, and the fields the other Admin changed say so in their hint (`hint`; naming them in the foot pushed Save past 21px at 390). The two modes are never echoed: Safety checks adds
  * one through `extra` only when the person changed it.
  */
-export function useProviderRow<F extends Record<string, string | boolean>>(pick: (row: ProviderSettingsDto | null) => F, labels: Record<keyof F, string>) {
+export function useProviderRow<F extends Record<string, string | boolean>>(pick: (row: ProviderSettingsDto | null) => F) {
   const query = useProviderSettings(true, 'always')
   const upsert = useUpsertProviderSettings()
   // No row reads as null (the mock API answers [] for a route it doesn't know).
@@ -30,6 +30,7 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
   const [base, setBase] = useState<F | null>(null)
   const [result, setResult] = useState<SaveResult>(null)
   // The version the refused save sent; set from a 409 until the refetched row (a different version) has been laid into the form.
+  const [moved, setMoved] = useState<(keyof F)[]>([])
   const [refusedAt, setRefusedAt] = useState<string | null>(null)
   if (form === null && query.isFetchedAfterMount && !query.isFetching && !query.isError) {
     const loaded = pick(row)
@@ -39,11 +40,11 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
   const changed = form && base ? (Object.keys(form) as (keyof F)[]).filter(k => form[k] !== base[k]) : []
   if (refusedAt !== null && form && base && row && row.updatedAt !== refusedAt && !query.isFetching) {
     const fresh = pick(row)
-    const moved = (Object.keys(fresh) as (keyof F)[]).filter(k => fresh[k] !== base[k]).map(k => labels[k])
     setForm({ ...fresh, ...Object.fromEntries(changed.map(k => [k, form[k]])) } as F)
     setBase(fresh)
+    setMoved((Object.keys(fresh) as (keyof F)[]).filter(k => fresh[k] !== base[k]))
     setRefusedAt(null)
-    setResult({ error: moved.length ? `${CHANGED_BY_OTHER} Changed by someone else: ${moved.join(', ')}.` : CHANGED_BY_OTHER })
+    setResult({ error: CHANGED_BY_OTHER })
   }
   // Billing details and Safety checks are saved together with the profile's four required fields, so they wait for them.
   const incomplete = !row || [row.registrationNumber, row.abn, row.organisationName, row.address].some(v => !v?.trim())
@@ -60,7 +61,7 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
     setRefusedAt(null)
     const sentVersion = row?.updatedAt
     upsert.mutate({ ...body, ...extra, expectedUpdatedAt: row?.updatedAt } as UpsertProviderSettingsDto, {
-      onSuccess: () => { setBase(form); setResult('saved') },
+      onSuccess: () => { setBase(form); setMoved([]); setResult('saved') },
       onError: e => {
         if (apiErrorStatus(e) === 409) setRefusedAt(sentVersion ?? null)
         setResult({ error: apiErrorStatus(e) === 409 ? CHANGED_BY_OTHER : notSavedText(e, REQUIRED_FIELDS) })
@@ -68,6 +69,11 @@ export function useProviderRow<F extends Record<string, string | boolean>>(pick:
     })
   }
 
-  const edit = (patch: Partial<F>) => setForm(f => (f ? { ...f, ...patch } : f))
-  return { query, row, form, base, edit, dirty: changed.length > 0, incomplete, save, pending: upsert.isPending, result }
+  const edit = (patch: Partial<F>) => {
+    setForm(f => (f ? { ...f, ...patch } : f))
+    setMoved(m => m.filter(k => !(k in patch)))
+  }
+  /** A field's hint: its own, led by "Changed by someone else." while the other Admin's value is the one shown (or sits under the person's edit). */
+  const hint = (key: keyof F, own?: string) => [moved.includes(key) && 'Changed by someone else.', own].filter(Boolean).join(' ') || undefined
+  return { query, row, form, base, edit, hint, dirty: changed.length > 0, incomplete, save, pending: upsert.isPending, result }
 }

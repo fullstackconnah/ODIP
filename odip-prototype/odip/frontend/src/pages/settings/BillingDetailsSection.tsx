@@ -34,9 +34,7 @@ export default function BillingDetailsSection(frame: SectionFrame) {
     gstRegistered: row?.gstRegistered ?? false,
     isPaceProvider: row?.isPaceProvider ?? false,
     invoiceFooterNotes: row?.invoiceFooterNotes ?? '',
-  }), {
-    bankAccountName: 'Account name', bsb: 'BSB', accountNumber: 'Account number', gstRegistered: 'Registered for GST', isPaceProvider: 'PACE provider', invoiceFooterNotes: 'Invoice note',
-  })
+  }))
   // Nothing here can be saved until the profile is complete, so the fields are locked as well as the foot left off.
   const locked = frame.readOnly || p.incomplete
 
@@ -50,21 +48,22 @@ export default function BillingDetailsSection(frame: SectionFrame) {
             {showBankDetails && (
               <SettingsGroup title="Bank account">
                 <div className={formGrid}>
-                  <TextField label="Account name" className={span.medium} value={p.form.bankAccountName} readOnly={locked} onChange={e => p.edit({ bankAccountName: e.target.value })} />
-                  <TextField label="BSB" hint="6 digits." inputMode="numeric" className={span.short} value={p.form.bsb} readOnly={locked} onChange={e => p.edit({ bsb: e.target.value })} />
-                  <TextField label="Account number" inputMode="numeric" className={span.short} value={p.form.accountNumber} readOnly={locked} onChange={e => p.edit({ accountNumber: e.target.value })} />
+                  <TextField label="Account name" hint={p.hint('bankAccountName')} className={span.medium} value={p.form.bankAccountName} readOnly={locked} onChange={e => p.edit({ bankAccountName: e.target.value })} />
+                  <TextField label="BSB" hint={p.hint('bsb', '6 digits.')} inputMode="numeric" className={span.short} value={p.form.bsb} readOnly={locked} onChange={e => p.edit({ bsb: e.target.value })} />
+                  <TextField label="Account number" hint={p.hint('accountNumber')} inputMode="numeric" className={span.short} value={p.form.accountNumber} readOnly={locked} onChange={e => p.edit({ accountNumber: e.target.value })} />
                 </div>
               </SettingsGroup>
             )}
             <SettingsGroup title="Tax and claiming">
-              <CheckboxField label="Registered for GST" checked={p.form.gstRegistered} disabled={locked} onChange={e => p.edit({ gstRegistered: e.target.checked })} />
-              <CheckboxField label="PACE provider" hint="Claim files use the 16-column PACE bulk payment request layout." checked={p.form.isPaceProvider} disabled={locked} onChange={e => p.edit({ isPaceProvider: e.target.checked })} />
+              <CheckboxField label="Registered for GST" hint={p.hint('gstRegistered')} checked={p.form.gstRegistered} disabled={locked} onChange={e => p.edit({ gstRegistered: e.target.checked })} />
+              <CheckboxField label="PACE provider" hint={p.hint('isPaceProvider', 'Claim files use the 16-column PACE bulk payment request layout.')} checked={p.form.isPaceProvider} disabled={locked} onChange={e => p.edit({ isPaceProvider: e.target.checked })} />
             </SettingsGroup>
             <SettingsGroup title="Invoice note">
               <TextAreaField
                 label="Note at the foot of every invoice"
                 rows={3}
                 placeholder="For example: All services are delivered in line with the NDIS Code of Conduct."
+                hint={p.hint('invoiceFooterNotes')}
                 value={p.form.invoiceFooterNotes}
                 readOnly={locked}
                 onChange={e => p.edit({ invoiceFooterNotes: e.target.value })}
