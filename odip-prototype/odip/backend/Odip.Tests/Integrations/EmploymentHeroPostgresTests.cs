@@ -410,7 +410,8 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
 
             await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, false, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, false, CancellationToken.None));
 
-            Assert.Equal(10, eh.Requests.Count(r => r.Method == HttpMethod.Post && r.RequestUri!.AbsolutePath == EhLeaveFixture.Requests42));
+            // The stub answers every POST with id 9001, so only the scan's rows are counted here.
+            Assert.Equal(10, await db1.EmploymentHeroOutbox.IgnoreQueryFilters().CountAsync(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Leave));
         }
     }
 
