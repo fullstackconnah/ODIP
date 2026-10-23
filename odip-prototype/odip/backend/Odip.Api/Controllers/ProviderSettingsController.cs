@@ -30,6 +30,8 @@ public class ProviderSettingsController : ControllerBase
         _tenant = tenant;
     }
 
+    private const string ChangedByOther = "Settings were changed by someone else. Reload and try again.";
+
     private bool NoOrganisationInScope => _tenant is { IsSuperAdmin: true, TenantId: null };
 
     // A SuperAdmin's query filter is off, so the row is chosen by organisation here.
@@ -62,12 +64,13 @@ public class ProviderSettingsController : ControllerBase
             InvoiceNumberPrefix = s.InvoiceNumberPrefix, CreditNotePrefix = s.CreditNotePrefix,
             InvoiceStartNumber = s.InvoiceStartNumber, PaymentTermsDays = s.PaymentTermsDays,
             NextInvoiceDisplayNumber = next, InvoicesIssued = issued,
+            UpdatedAt = s.UpdatedAt
         }));
     }
 
     [HttpPut]
     [Authorize(Roles = "SuperAdmin,Admin")]
-    public async Task<ActionResult<ApiResponse<bool>>> Upsert([FromBody] UpsertProviderSettingsDto dto, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<DateTime>>> Upsert([FromBody] UpsertProviderSettingsDto dto, CancellationToken ct)
     {
         // Each mode changes ONLY when the request carries it, so a client that does not know about it (or a stale tab saving an unrelated
         // field) can never revert it. Validate before anything is touched, so a refused request writes nothing.
@@ -108,6 +111,14 @@ public class ProviderSettingsController : ControllerBase
             s = new ProviderSettings { Id = Guid.NewGuid() };
             _db.ProviderSettings.Add(s);
         }
+
+        // The version the form loaded goes into the UPDATE's WHERE (not a read-then-compare, which would race): another Admin's save since then is a 409.
+        // A new row has nothing to compare with. No version sent (an older open tab) saves as before.
+        if (dto.ExpectedUpdatedAt is DateTime expected && _db.Entry(s).State != EntityState.Added)
+        {
+            _db.Entry(s).Property(x => x.UpdatedAt).OriginalValue = expected;
+        }
+        s.UpdatedAt = DateTime.UtcNow;
 
         // Numbering changes only when a field is sent AND differs: every settings section echoes the whole row, so an unchanged echo is never a change.
         var prefixChanged = dto.InvoiceNumberPrefix is { } p && p != s.InvoiceNumberPrefix;
@@ -174,8 +185,16 @@ public class ProviderSettingsController : ControllerBase
             s.PaymentTermsDays = dto.PaymentTermsDays!.Value;
         }
 
-        await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<bool>.Ok(true));
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<bool>.Fail(ChangedByOther, ProviderSettingsErrorCodes.ProviderSettingsChanged));
+        }
+        // The row's new version, so the form can send it with its next save without waiting for a refetch.
+        return Ok(ApiResponse<DateTime>.Ok(s.UpdatedAt));
     }
 
     /// <summary>A prefix ends up in the PDF's file name: 1 to 10 letters, digits, - _ or . (null = not sent).</summary>

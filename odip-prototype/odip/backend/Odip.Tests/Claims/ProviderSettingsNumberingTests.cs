@@ -57,8 +57,8 @@ public class ProviderSettingsNumberingTests
         InvoiceNumberPrefix = prefix, CreditNotePrefix = cnPrefix, InvoiceStartNumber = start, PaymentTermsDays = terms,
     };
 
-    private static int StatusOf(ActionResult<ApiResponse<bool>> r) => Assert.IsAssignableFrom<ObjectResult>(r.Result).StatusCode ?? 200;
-    private static string RefusalOf(ActionResult<ApiResponse<bool>> r) => Assert.Single(Assert.IsType<ApiResponse<bool>>(Assert.IsAssignableFrom<ObjectResult>(r.Result).Value).Errors!);
+    private static int StatusOf(ActionResult<ApiResponse<DateTime>> r) => Assert.IsAssignableFrom<ObjectResult>(r.Result).StatusCode ?? 200;
+    private static string RefusalOf(ActionResult<ApiResponse<DateTime>> r) => Assert.Single(Assert.IsType<ApiResponse<bool>>(Assert.IsAssignableFrom<ObjectResult>(r.Result).Value).Errors!);
 
     private static async Task<ProviderSettingsDto> GetDto(ProviderSettingsController c) =>
         Assert.IsType<ApiResponse<ProviderSettingsDto>>(Assert.IsType<OkObjectResult>((await c.Get(Ct)).Result).Value).Data!;

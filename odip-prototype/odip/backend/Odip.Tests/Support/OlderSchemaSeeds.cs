@@ -16,6 +16,7 @@ internal static class OlderSchemaSeeds
         ("ProviderSettings", "InvoiceNumberPrefix", "character varying(10)"),
         ("ProviderSettings", "InvoiceStartNumber", "integer"),
         ("ProviderSettings", "PaymentTermsDays", "integer"),
+        ("ProviderSettings", "UpdatedAt", "timestamp without time zone"),
     ];
 
     public static async Task SaveWithLaterColumnsAsync(DbContext db)
