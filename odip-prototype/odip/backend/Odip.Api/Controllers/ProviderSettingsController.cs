@@ -29,6 +29,8 @@ public class ProviderSettingsController : ControllerBase
         _tenant = tenant;
     }
 
+    private const string ChangedByOther = "Settings were changed by someone else. Reload and try again.";
+
     private bool NoOrganisationInScope => _tenant is { IsSuperAdmin: true, TenantId: null };
 
     // A SuperAdmin's query filter is off, so the row is chosen by organisation here.
@@ -56,7 +58,8 @@ public class ProviderSettingsController : ControllerBase
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
             ParticipantReadinessMode = s.ParticipantReadinessMode,
             MedicationCompetencyMode = s.MedicationCompetencyMode,
-            EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, s.TenantId, ct)
+            EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, s.TenantId, ct),
+            UpdatedAt = s.UpdatedAt
         }));
     }
 
@@ -99,6 +102,12 @@ public class ProviderSettingsController : ControllerBase
             _db.ProviderSettings.Add(s);
         }
 
+        // The version the form loaded goes into the UPDATE's WHERE (not a read-then-compare, which would race): another Admin's save since then is a 409.
+        // A new row has nothing to compare with. No version sent (an older open tab) saves as before.
+        if (dto.ExpectedUpdatedAt is DateTime expected && _db.Entry(s).State != EntityState.Added)
+            _db.Entry(s).Property(x => x.UpdatedAt).OriginalValue = expected;
+        s.UpdatedAt = DateTime.UtcNow;
+
         // A brand-new row starts at the defaults (Warn for both modes), which is what applied until now.
         var previousReadiness = s.ParticipantReadinessMode;
         var previousCompetency = s.MedicationCompetencyMode;
@@ -129,7 +138,14 @@ public class ProviderSettingsController : ControllerBase
                 previousCompetency.ToString(), newCompetency.ToString(), User));
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<bool>.Fail(ChangedByOther));
+        }
         return Ok(ApiResponse<bool>.Ok(true));
     }
 }
