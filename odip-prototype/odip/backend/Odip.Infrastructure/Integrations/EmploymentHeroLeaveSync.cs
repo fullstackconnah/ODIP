@@ -90,17 +90,22 @@ public sealed class EmploymentHeroLeaveSync
             .Where(l => l.Status == LeaveStatus.Approved && l.Source == LeaveSource.Odip && l.ExternalLeaveId == null && l.DecidedAt >= cutoff && l.EndDate >= from
                         && !have.Contains(l.Id) && db.Users.Any(u => u.Id == l.UserId && u.TenantId == tenantId))
             .Select(l => l.Id).Take(ScanSize).ToListAsync(ct);
-        if (missing.Count == 0) return;
-        db.EmploymentHeroOutbox.AddRange(missing.Select(id => EmploymentHeroLeave.NewRow(tenantId, EmploymentHeroOutboxKind.Leave, id, now)));
-        try
+        // One row per save: EF sorts a batch's inserts by their random row Ids, so two scans insert the same leave in different orders and deadlock on the unique index.
+        var collided = 0;
+        foreach (var id in missing)
         {
-            await db.SaveChangesAsync(ct);
+            db.EmploymentHeroOutbox.Add(EmploymentHeroLeave.NewRow(tenantId, EmploymentHeroOutboxKind.Leave, id, now));
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                db.ChangeTracker.Clear();
+                collided++;
+            }
         }
-        catch (DbUpdateException ex)
-        {
-            db.ChangeTracker.Clear();
-            _logger.LogInformation("Employment Hero leave scan for organisation {TenantId} collided with another run ({Error})", tenantId, ex.GetType().Name);
-        }
+        if (collided > 0) _logger.LogInformation("Employment Hero leave scan for organisation {TenantId} collided with another run on {Collided} rows", tenantId, collided);
     }
 
     /// <summary>A sent leave whose employee or dates changed goes back in the queue; a row flagged after a finalised pay run clears when the data matches what was sent again.</summary>
@@ -261,8 +266,8 @@ public sealed class EmploymentHeroLeaveSync
         }
 
         // S6, S7: a reconnect or disconnect while EH was being read drops the batch. N1: a decision made meanwhile is not overwritten.
-        var current = await db.EmploymentHeroConnections.AsNoTracking().Where(c => c.TenantId == tenantId).Select(c => c.BusinessId).FirstOrDefaultAsync(ct);
-        if (current != businessId)
+        async Task<bool> Reconnected() => await db.EmploymentHeroConnections.AsNoTracking().Where(c => c.TenantId == tenantId).Select(c => c.BusinessId).FirstOrDefaultAsync(ct) != businessId;
+        if (await Reconnected())
         {
             db.ChangeTracker.Clear();
             return new(0, 0);
@@ -277,7 +282,6 @@ public sealed class EmploymentHeroLeaveSync
             await tasks.CompleteByLeaveAsync(l.Id, ct);
             changed++;
         }
-        db.LeaveRequests.AddRange(created);
         try
         {
             await db.SaveChangesAsync(ct);
@@ -288,7 +292,24 @@ public sealed class EmploymentHeroLeaveSync
             _logger.LogInformation("Employment Hero leave pull for organisation {TenantId} collided with another run ({Error})", tenantId, ex.GetType().Name);
             return new(0, 0);
         }
-        return new(created.Count, changed);
+        // One leave per save: EF sorts a batch's inserts by their random row Ids, so two pulls insert the same EH leaves in different orders and deadlock on the unique index.
+        if (created.Count > 0 && await Reconnected()) return new(0, changed);
+        var imported = 0;
+        foreach (var leave in created)
+        {
+            db.LeaveRequests.Add(leave);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                imported++;
+            }
+            catch (DbUpdateException ex)
+            {
+                db.ChangeTracker.Clear();
+                _logger.LogInformation("Employment Hero leave pull for organisation {TenantId} found {ExternalLeaveId} already imported by another run ({Error})", tenantId, leave.ExternalLeaveId, ex.GetType().Name);
+            }
+        }
+        return new(imported, changed);
     }
 
     private sealed record DrainResult(int Sent, int Failed, int Flagged, EmploymentHeroFailure? StoppedBy);
