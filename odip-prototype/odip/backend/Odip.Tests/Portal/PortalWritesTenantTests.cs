@@ -31,13 +31,13 @@ public class PortalWritesTenantTests
         return f;
     }
 
-    private static ParticipantMedication AddMed(ShiftPackageFixture f)
+    private static ParticipantMedication AddMed(ShiftPackageFixture f, bool highRisk = false)
     {
         var med = new ParticipantMedication
         {
             Id = Guid.NewGuid(), TenantId = WaOrg, ParticipantId = f.Participant.Id, Name = "Levetiracetam", Strength = "500mg",
             DoseDescription = "1 tablet", Type = MedicationType.Regular, TimesOfDay = "09:00", StartDate = new DateTime(2026, 1, 1),
-            Status = MedicationStatus.Active, SupportLevel = MedicationSupportLevel.Administer, IsHighRisk = true,
+            Status = MedicationStatus.Active, SupportLevel = MedicationSupportLevel.Administer, IsHighRisk = highRisk,
         };
         f.Db.ParticipantMedications.Add(med);
         f.Db.SaveChanges();
@@ -171,7 +171,7 @@ public class PortalWritesTenantTests
     public async Task RecordShiftDose_UnscopedSuperAdmin_TheWitnessTaskIsInTheMedicationsOrganisationDueTomorrowInItsZone()
     {
         var f = await Unscoped(ShiftStatus.InProgress);
-        var med = AddMed(f);
+        var med = AddMed(f, highRisk: true);
         var witness = f.AddWorker("Wanda", "Witness");
 
         await f.Controller.RecordShiftDose(f.Shift.Id, med.Id, Dose("k1", witness.Id), default);
