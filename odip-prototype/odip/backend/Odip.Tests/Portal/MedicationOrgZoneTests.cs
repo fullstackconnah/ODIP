@@ -184,4 +184,35 @@ public class MedicationOrgZoneTests
         Assert.Empty(Data(await c.GetAdministrationReport(null, new DateTime(2026, 7, 14), null, 1, 50, default)).Items);
         Assert.Single(Data(await c.GetAdministrationReport(null, new DateTime(2026, 7, 13), new DateTime(2026, 7, 13), 1, 50, default)).Items);
     }
+
+    /// <summary>The same instant (15:00 UTC on the 13th) is the 13th in Perth and the 14th in Sydney, so two organisations' rows split across a one-day range.</summary>
+    [Fact]
+    public async Task GetAdministrationReport_RowsFromTwoOrganisations_EachFollowsItsOwnZone()
+    {
+        var (f, c) = await WithAnEarlyDose();
+        var sydney = new Participant { Id = Guid.NewGuid(), TenantId = HomeOrg, FirstName = "Syd", LastName = "Ney", IsActive = true };
+        var sydneyMed = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), TenantId = HomeOrg, ParticipantId = sydney.Id, Name = "Lev", DoseDescription = "1", Type = MedicationType.Regular,
+            TimesOfDay = "09:00", StartDate = new DateTime(2026, 1, 1), Status = MedicationStatus.Active,
+        };
+        var sydneyDose = new MedicationAdministration
+        {
+            Id = Guid.NewGuid(), TenantId = HomeOrg, ParticipantMedicationId = sydneyMed.Id, ParticipantId = sydney.Id,
+            Status = MedicationAdministrationStatus.Administered, AdministeredAt = new DateTime(2026, 7, 13, 15, 0, 0, DateTimeKind.Utc),
+            WitnessStatus = WitnessStatus.NotRequired, RecordedByName = "Test",
+        };
+        f.Db.Participants.Add(sydney);
+        f.Db.ParticipantMedications.Add(sydneyMed);
+        f.Db.MedicationAdministrations.Add(sydneyDose);
+        await f.Db.SaveChangesAsync();
+
+        var from14 = Data(await c.GetAdministrationReport(null, new DateTime(2026, 7, 14), null, 1, 50, default));
+        Assert.Equal(new[] { sydneyDose.Id }, from14.Items.Select(a => a.Id));
+        Assert.Equal(1, from14.TotalCount);
+        var on13 = Data(await c.GetAdministrationReport(null, new DateTime(2026, 7, 13), new DateTime(2026, 7, 13), 1, 50, default));
+        Assert.Equal(1, on13.TotalCount);
+        Assert.NotEqual(sydneyDose.Id, Assert.Single(on13.Items).Id);
+        Assert.Equal(2, Data(await c.GetAdministrationReport(null, null, null, 1, 50, default)).TotalCount);
+    }
 }
