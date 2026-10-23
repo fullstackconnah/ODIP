@@ -29,6 +29,9 @@ export interface ProviderSettingsDto {
   medicationCompetencyMode: MedicationCompetencyMode
   /** Staff come from Employment Hero: "New staff member" and the staff import are hidden (the server refuses them too). Absent or false otherwise. */
   employmentHeroConnected?: boolean
+  /** The row's version: a save sends it back as `expectedUpdatedAt`. */
+  updatedAt: string
+
   invoiceNumberPrefix: string
   creditNotePrefix: string
   invoiceStartNumber: number
@@ -63,6 +66,9 @@ export interface UpsertProviderSettingsDto {
    * would silently undo another admin's change. Only Warn and Enforce are accepted (400 otherwise). A request that changes the stored mode writes one
    * audit row (who, old, new). */
   medicationCompetencyMode?: MedicationCompetencyMode
+  /** The `updatedAt` the form loaded. Another save since then makes the PUT a 409 (nothing saves). Omit to skip the check (the row is unknown, or an older client). */
+  expectedUpdatedAt?: string
+
   /** Omit to leave as is; each change writes one audit row. The starting number is refused (409) once an invoice is issued. */
   invoiceNumberPrefix?: string
   creditNotePrefix?: string
