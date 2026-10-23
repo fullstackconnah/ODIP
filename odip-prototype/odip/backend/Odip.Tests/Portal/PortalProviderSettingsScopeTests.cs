@@ -81,7 +81,7 @@ public class PortalProviderSettingsScopeTests
 
         var body = Failure(await f.Controller.AcknowledgeHandover(f.Shift.Id, null, default), 404);
 
-        Assert.Contains("09:00 on Sunday 12 July", body.Message);
+        Assert.Contains("09:00 on Sunday 12 July", Assert.Single(body.Errors!));
     }
 
     [Fact]
