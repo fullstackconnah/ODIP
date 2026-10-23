@@ -280,7 +280,7 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
     mockPending.current = false
     act(() => { sent.onError(); sent.onSettled() })
     expect(screen.getByLabelText('Expiry date')).toBeInTheDocument()
-    expect(screen.getByText('Failed to save. Please try again.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to save. Please try again.')
   })
 
   it('disables Cancel on the row whose PUT is in flight, and shows its failure under that editor', async () => {
@@ -290,7 +290,7 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
     mockPending.current = false
     act(() => { sent.onError(); sent.onSettled() })
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
-    expect(screen.getByText('Failed to save. Please try again.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to save. Please try again.')
   })
 
   it('enables the Edit of other rows again once the PUT of row A succeeds', async () => {

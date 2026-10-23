@@ -275,7 +275,7 @@ export default function QualificationsPage() {
                                 aria-label="Expiry date"
                                 className="border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                               />
-                              {saveError && <p className="text-xs text-[var(--color-destructive)]">{saveError}</p>}
+                              {saveError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{saveError}</p>}
                             </div>
                           ),
                         },
