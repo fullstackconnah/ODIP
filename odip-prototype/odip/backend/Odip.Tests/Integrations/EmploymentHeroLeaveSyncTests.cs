@@ -172,6 +172,31 @@ public class EmploymentHeroLeaveSyncTests
     }
 
     [Fact]
+    public async Task A_retry_never_adopts_an_EH_request_marked_for_another_leave()
+    {
+        var (db, tenant, _, clock, worker, monday) = await OrgAsync();
+        await using var _ = db;
+        var first = await ApprovedLeaveAsync(db, tenant, worker, monday, monday.AddDays(4));
+        first.ExternalLeaveId = "9001";
+        var second = await ApprovedLeaveAsync(db, tenant, worker, monday, monday.AddDays(4));
+        var now = clock.GetUtcNow().UtcDateTime;
+        var row = EmploymentHeroLeave.NewRow(tenant, EmploymentHeroOutboxKind.Leave, second.Id, now);
+        row.Attempts = 1;
+        row.NextAttemptAt = now.AddMinutes(-1);
+        db.EmploymentHeroOutbox.Add(row);
+        await db.SaveChangesAsync();
+        var eh = Eh().On(HttpMethod.Get, ListPath(monday, monday.AddDays(4)), HttpStatusCode.OK, new[]
+        {
+            new { id = 9001, employeeId = 42, leaveCategoryId = 5, fromDate = monday.ToString("yyyy-MM-dd") + "T00:00:00", toDate = monday.AddDays(4).ToString("yyyy-MM-dd") + "T00:00:00", status = "Approved", notes = EmploymentHeroLeave.Marker(first.Id) },
+        });
+
+        await Sync(eh, clock).RunAsync(db, tenant, false, default);
+
+        Assert.Equal(1, Count(eh, HttpMethod.Post, Requests42));
+        Assert.Equal(0, Count(eh, HttpMethod.Put, Requests42 + "/9001"));
+    }
+
+    [Fact]
     public async Task A_leave_cancelled_with_its_send_still_queued_is_never_posted()
     {
         var (db, tenant, _, clock, worker, monday) = await OrgAsync();

@@ -153,6 +153,22 @@ public class LeaveBalancesControllerTests
         Assert.Empty(eh.Requests);
     }
 
+    [Fact]
+    public async Task A_staff_member_of_another_organisation_is_404_even_when_no_query_filter_hides_them()
+    {
+        var (theirDb, name, _, theirs) = await OrganisationAsync();
+        await using var _ = theirDb;
+        var mine = Guid.NewGuid();
+        await using var db = Odip.Tests.Support.TestDb.Create(name);
+        await ConnectAsync(db, mine);
+        var eh = Eh();
+
+        var result = await Controller(db, mine, Guid.NewGuid(), eh).ForStaff(theirs.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Empty(eh.Requests);
+    }
+
     [Theory]
     [InlineData("401")]
     [InlineData("404")]

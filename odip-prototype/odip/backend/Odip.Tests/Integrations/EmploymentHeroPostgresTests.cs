@@ -391,6 +391,51 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task Two_leave_scans_queueing_the_same_leave_never_deadlock_on_Postgres()
+    {
+        RequirePostgres();
+        for (var i = 0; i < 50; i++)
+        {
+            var (db1, tenantId) = await _pg.NewTenantContextAsync();
+            await using var _1 = db1;
+            var first = await SeedLeaveAsync(db1, tenantId);
+            db1.LeaveRequests.AddRange(Enumerable.Range(1, 9).Select(k => new LeaveRequest
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, UserId = first.UserId, LeaveType = LeaveType.Annual, StartDate = first.StartDate.AddDays(7 * k), EndDate = first.StartDate.AddDays(7 * k),
+                Status = LeaveStatus.Approved, RequestedByUserId = first.UserId, RequestedAt = first.DecidedAt!.Value, DecidedByUserId = first.UserId, DecidedAt = first.DecidedAt,
+            }));
+            await db1.SaveChangesAsync();
+            await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+            var eh = EhLeaveFixture.Eh();
+
+            await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, false, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, false, CancellationToken.None));
+
+            Assert.Equal(10, eh.Requests.Count(r => r.Method == HttpMethod.Post && r.RequestUri!.AbsolutePath == EhLeaveFixture.Requests42));
+        }
+    }
+
+    [SkippableFact]
+    public async Task Two_pulls_importing_the_same_EH_leaves_never_deadlock_on_Postgres()
+    {
+        RequirePostgres();
+        for (var i = 0; i < 20; i++)
+        {
+            var (db1, tenantId) = await _pg.NewTenantContextAsync();
+            await using var _1 = db1;
+            await ConnectAsync(db1, tenantId);
+            await EhTimesheetFixture.WorkerAsync(db1, tenantId);
+            await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+            string Day(int n) => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(n).ToString("yyyy-MM-dd") + "T00:00:00";
+            var eh = EhLeaveFixture.Eh().OnAnyQuery("/api/v2/business/777/leaverequest", HttpStatusCode.OK,
+                Enumerable.Range(0, 4).Select(k => new { id = 9001 + k, employeeId = 42, leaveCategoryId = 5, fromDate = Day(3 + k), toDate = Day(3 + k), status = "Approved", notes = (string?)null }).ToArray());
+
+            await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, true, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, true, CancellationToken.None));
+
+            Assert.Equal(new[] { "9001", "9002", "9003", "9004" }, (await db1.LeaveRequests.IgnoreQueryFilters().Where(l => l.TenantId == tenantId).Select(l => l.ExternalLeaveId!).ToListAsync()).Order().ToArray());
+        }
+    }
+
+    [SkippableFact]
     public async Task Two_drains_at_once_post_each_shift_once_on_Postgres()
     {
         RequirePostgres();
