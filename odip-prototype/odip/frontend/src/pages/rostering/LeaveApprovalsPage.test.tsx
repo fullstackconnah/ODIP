@@ -768,4 +768,15 @@ describe('LeaveApprovalsPage — Employment Hero leave', () => {
     expect(screen.getByText("In Employment Hero \u00b7 22.8 h (7.6 h a day: ODIP's default)")).toBeInTheDocument()
     expect(screen.getByText('In Employment Hero \u00b7 36 h')).toBeInTheDocument()
   })
+
+  // The table squeezes wrapping columns before it scrolls, so no text ends up under the pinned buttons (approvals-1024).
+  it('lets Type, Dates and Requested wrap instead of capping them with an ellipsis', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [rows()[1]], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    for (const header of ['Type', 'Dates', 'Requested']) {
+      const cell = screen.getAllByRole('cell').find(c => c.getAttribute('data-label') === header)!
+      expect(cell.className).not.toContain('whitespace-nowrap')
+      expect(cell.querySelector('.truncate, [class*="md:truncate"]')).toBeNull()
+    }
+  })
 })
