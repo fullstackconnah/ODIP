@@ -693,13 +693,13 @@ describe('IncidentsPage — flagged notes Age column', () => {
   })
 })
 
-// Raw enum labels: the register printed "UnderReview" (the detail page already prints "Under Review").
+// Raw enum labels: the register printed "UnderReview" (the detail page already prints "Under review").
 describe('IncidentsPage — status labels', () => {
-  it('prints UnderReview as "Under Review", never the raw enum name', () => {
+  it('prints UnderReview as "Under review", never the raw enum name', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident({ status: 'UnderReview' })], isLoading: false })
     renderPage()
 
-    expect(screen.getByText('Under Review')).toBeInTheDocument()
+    expect(screen.getByText('Under review')).toBeInTheDocument()
     expect(screen.queryByText('UnderReview')).not.toBeInTheDocument()
   })
 })

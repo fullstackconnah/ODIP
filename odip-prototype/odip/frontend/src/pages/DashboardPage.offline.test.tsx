@@ -79,7 +79,7 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
     client.setQueryData(['dashboard'], ZERO_SUMMARY) // the summary is on screen (stale, its refetch paused); everything else has never answered
     renderDashboard(client)
 
-    const tile = within(band()).getByRole('link', { name: 'Critical Participant Alerts Loading' })
+    const tile = within(band()).getByRole('link', { name: 'Critical participant alerts Loading' })
     expect(tile).toHaveAttribute('href', '/participants')
     expect(tile).toHaveAttribute('aria-busy', 'true')
     expect(tile).not.toHaveAttribute('data-attention')
@@ -102,7 +102,7 @@ describe('DashboardPage — offline: a paused request is not a settled zero', ()
     client.setQueryData(['dashboard'], ZERO_SUMMARY)
     renderDashboard(client)
 
-    expect(within(band()).getByRole('link', { name: 'Qualification Issues Loading' })).toBeInTheDocument()
+    expect(within(band()).getByRole('link', { name: 'Qualification issues Loading' })).toBeInTheDocument()
     expect(within(band()).getAllByText('Loading')).toHaveLength(1)
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })

@@ -38,6 +38,6 @@ export function useIncidentsGroup(enabled: boolean): GroupModel {
     refetch: () => { void overdueQsc.refetch(); void needsAttention.refetch() },
     count: needsAttention.data?.totalCount ?? 0,
     rows,
-    link: { to: '/incidents', openLabel: 'Open Incidents' },
+    link: { to: '/incidents', openLabel: 'Open incidents' },
   }
 }
