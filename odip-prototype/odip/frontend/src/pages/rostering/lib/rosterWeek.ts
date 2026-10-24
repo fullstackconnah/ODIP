@@ -57,7 +57,9 @@ export function regularConfirm(shift: ShiftDto, replacing?: string): { title: st
   if (shift.isRegular) {
     return {
       title: `Stop ${first} being the regular?`,
-      lines: [`From the next week you start, ${slot} is made open, with nobody on it. Weeks already started keep ${first}.`],
+      lines: [`From the next week you start, ${slot} is made open, with nobody on it. Weeks already started keep ${first}.`,
+        // The server leaves a renewal's own regular alone (SetRegular); the board does not carry the renewal, so this is conditional.
+        'If this agreement has been renewed, the renewal keeps its own regular when someone set a different one.'],
       confirmLabel: 'Stop being the regular',
     }
   }
