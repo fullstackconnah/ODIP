@@ -3,6 +3,7 @@ import { usePreviewClaim, useGenerateClaim } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { DataTable } from '@/components/DataTable'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
+import { LeftOutCallout } from '@/components/LeftOutCallout'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
@@ -222,6 +223,17 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
                 ]}
               />
             </div>
+
+            {/* Confirmed participants the claim skips (no NDIS number): never dropped silently. */}
+            {(previewData.leftOut?.length ?? 0) > 0 && (
+              <div className="mt-[var(--section-gap)]">
+                <LeftOutCallout
+                  items={(previewData.leftOut ?? []).map(p => ({ key: p.participantId, description: p.description, reason: p.reason }))}
+                  heading={`${plural(previewData.leftOut?.length ?? 0, 'participant')} will be left out of this claim`}
+                  footer="Their bookings are not part of this claim. Nothing here is billed for them."
+                />
+              </div>
+            )}
 
             {/* What this claim would use of each participant's recorded plan: a warning, never a block. Absent when none of them has a plan that has started. */}
             <div className="mt-[var(--section-gap)]">

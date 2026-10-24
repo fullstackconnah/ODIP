@@ -133,6 +133,18 @@ public record ClaimPreviewResponseDto
     public decimal TotalAmount { get; init; }
     /// <summary>What generating this claim would do to each participant's budget (budget feature, phase 2a); omitted when none has a plan that has started. A warning, never a block.</summary>
     public ClaimBudgetDto? Budget { get; init; }
+    /// <summary>The confirmed participants this claim leaves out, and why (no NDIS number; funded another way): never dropped silently. Empty when nobody is left out.</summary>
+    public List<TripClaimLeftOutDto> LeftOut { get; init; } = new();
+}
+
+/// <summary>A confirmed participant a trip claim leaves out, in the shape of <see cref="ShiftClaimLeftOutDto"/>: who (Description) and why (Reason). Their booking is not claimed.</summary>
+public record TripClaimLeftOutDto
+{
+    public Guid ParticipantId { get; init; }
+    /// <summary>The participant's name.</summary>
+    public string Description { get; init; } = string.Empty;
+    /// <summary>Why, as a sentence that does not repeat the name ("NDIS number missing. Add it to the participant's profile, then generate the claim again.").</summary>
+    public string Reason { get; init; } = string.Empty;
 }
 
 public record ClaimPreviewLineItemDto
