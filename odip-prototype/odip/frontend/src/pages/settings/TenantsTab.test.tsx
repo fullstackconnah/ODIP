@@ -42,6 +42,6 @@ describe('Tenant tables: row actions', () => {
     expect(edit).toHaveClass('h-[var(--control-h-sm)]')
     await userEvent.setup().click(edit)
 
-    expect(onEditUser).toHaveBeenCalledWith('u-1')
+    expect(onEditUser).toHaveBeenCalledWith(expect.objectContaining({ id: 'u-1' }))
   })
 })
