@@ -1,11 +1,13 @@
 import WorkspaceVisibilitySection from '@/pages/settings/WorkspaceVisibilitySection'
-import { Fragment, useState, type ReactNode } from 'react'
+import { Fragment, useRef, useState, type ReactNode } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
-import type { AdminUserDto, TenantSummaryDto } from '@/api/types'
+import { apiGet } from '@/api/client'
+import type { AdminUserDto, TenantSummaryDto, TenantUserDto } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
+import { NoticesRegion } from '@/components/NoticesRegion'
 import { PageHeader } from '@/components/PageHeader'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
-import { useNotices } from '@/hooks/useNotices'
+import { useNotices, type Notice } from '@/hooks/useNotices'
 import { usePermissions } from '@/lib/permissions'
 import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
@@ -65,15 +67,45 @@ export default function SettingsPage() {
   const [tenantPanelOpen, setTenantPanelOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<TenantSummaryDto | undefined>()
   const [tenantDetail, setTenantDetail] = useState<TenantSummaryDto | undefined>()
-  // Leaving Tenants closes a tenant's detail view, as leaving the tab did.
-  if (tenantDetail && key !== 'tenants') setTenantDetail(undefined)
   const [userPanelOpen, setUserPanelOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<AdminUserDto | undefined>()
   const [defaultTenantId, setDefaultTenantId] = useState<string | undefined>()
   // What became of each Users "Send set-password email". Held here, not in the section, because the section is unmounted whenever another
   // is shown: an unacknowledged failure must still be there on return, and a send that finishes while it is away must still report.
   const userNotices = useNotices()
-  const addUser = (tenantId?: string) => { setDefaultTenantId(tenantId); setEditingUser(undefined); setUserPanelOpen(true) }
+  // What the tenant detail says when Edit cannot load the user.
+  const editNotices = useNotices()
+  // The tenant detail lists users by id and name only, but the panel reads and saves every field: it opens on the full record, once that has arrived.
+  // One load at a time (the rows say "busy", as the Users tab's send buttons do). Everything else that changes what the panel shows, or leaves the
+  // detail, calls cancelEdit, so a load that lands after it opens nothing and says nothing.
+  const [openingUserId, setOpeningUserId] = useState<string | null>(null)
+  const editSeq = useRef(0)
+  const cancelEdit = () => { editSeq.current++; setOpeningUserId(null) }
+  // Leaving Tenants closes a tenant's detail view, as leaving the tab did, and with it any user still loading.
+  if (tenantDetail && key !== 'tenants') { cancelEdit(); setTenantDetail(undefined) }
+  async function editTenantUser(user: TenantUserDto) {
+    if (openingUserId !== null) return
+    const seq = ++editSeq.current
+    setOpeningUserId(user.id)
+    try {
+      const full = await apiGet<AdminUserDto>(`/admin/users/${user.id}`)
+      if (seq !== editSeq.current) return
+      setEditingUser(full)
+      setUserPanelOpen(true)
+      // A retry that works leaves nothing of the earlier failure on screen.
+      editNotices.notices.filter(n => n.subject === user.id).forEach(n => editNotices.dismiss(n.id))
+    } catch {
+      if (seq === editSeq.current) {
+        editNotices.notify('danger', user.fullName, "Couldn't load their details, so nothing was opened or changed. Check your connection and use Edit again.", user.id)
+      }
+    } finally {
+      if (seq === editSeq.current) setOpeningUserId(null)
+    }
+  }
+  const addUser = (tenantId?: string) => { cancelEdit(); setDefaultTenantId(tenantId); setEditingUser(undefined); setUserPanelOpen(true) }
+  // Dismissing the last notice about someone hands focus back to their Edit, which is still in the detail's table.
+  const focusEditButtonOf = (dismissed: Notice) =>
+    dismissed.subject ? document.querySelector<HTMLElement>(`[data-edit-user="${dismissed.subject}"]`) : null
 
   function body(def: SectionDef): ReactNode {
     const frame: SectionFrame = { title: def.label, description: def.description, readOnly: def.readOnly?.(perms) ?? false, focusOnMount: switched }
@@ -100,14 +132,17 @@ export default function SettingsPage() {
       case 'failed-sends': return framed(<AdminNotificationsTab />)
       case 'alpha-signups': return framed(<AlphaSignupsTab />)
       case 'catalogue': return framed(<SupportCatalogueSection />)
-      case 'users': return framed(<UsersTab notices={userNotices} onAddUser={addUser} onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }} />)
+      case 'users': return framed(<UsersTab notices={userNotices} onAddUser={addUser} onEditUser={(u) => { cancelEdit(); setEditingUser(u); setUserPanelOpen(true) }} />)
       case 'tenants': return framed(tenantDetail ? (
         <TenantDetailView
           tenant={tenantDetail}
-          onBack={() => setTenantDetail(undefined)}
-          onEditTenant={() => { setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
+          onBack={() => { cancelEdit(); setTenantDetail(undefined) }}
+          onEditTenant={() => { cancelEdit(); setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
           onAddUser={addUser}
-          onEditUser={() => { setUserPanelOpen(true) }}
+          onEditUser={editTenantUser}
+          openingUserId={openingUserId}
+          // Always mounted, so a live region exists before its content; while empty its box cancels the gap below it.
+          usersNotice={<NoticesRegion notices={editNotices.notices} onDismiss={editNotices.dismiss} focusAfterDismiss={focusEditButtonOf} className="empty:-mb-[var(--section-gap)]" />}
         />
       ) : (
         <TenantsTab
@@ -147,7 +182,7 @@ export default function SettingsPage() {
       />
       <UserFormPanel
         isOpen={userPanelOpen}
-        onClose={() => { setUserPanelOpen(false); setEditingUser(undefined); setDefaultTenantId(undefined) }}
+        onClose={() => { cancelEdit(); setUserPanelOpen(false); setEditingUser(undefined); setDefaultTenantId(undefined) }}
         user={editingUser}
         defaultTenantId={defaultTenantId}
       />

@@ -684,6 +684,7 @@ export default function LeaveApprovalsPage() {
           submitting={updateStaffAvailability.isPending}
           errorMessage={editError}
           initialValues={legacyEditInitialValues}
+          record={editTarget.data}
         />
       )}
 

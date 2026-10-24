@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type ReactNode } from 'react'
 import { Users, UserCheck, Clock, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { BackButton } from '@/components/BackButton'
 import { useAdminTenantUsers } from '@/api/hooks/settings'
@@ -18,7 +18,11 @@ interface TenantDetailViewProps {
   onBack: () => void
   onEditTenant: () => void
   onAddUser: (tenantId: string) => void
-  onEditUser: (userId: string) => void
+  onEditUser: (user: TenantUserDto) => void
+  /** The user whose full record is loading for Edit: that row says busy and every Edit waits, so only one load runs. */
+  openingUserId?: string | null
+  /** What became of an Edit (the page's notices region), drawn directly above the Users table. */
+  usersNotice?: ReactNode
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +47,8 @@ export default function TenantDetailView({
   onEditTenant,
   onAddUser,
   onEditUser,
+  openingUserId = null,
+  usersNotice,
 }: TenantDetailViewProps) {
   const { data: usersResponse, isLoading: usersLoading } = useAdminTenantUsers(tenant.id)
   const users: TenantUserDto[] = useMemo(() => usersResponse?.data ?? [], [usersResponse?.data])
@@ -113,6 +119,8 @@ export default function TenantDetailView({
         />
       </div>
 
+      {usersNotice}
+
       {/* ── Users Table ────────────────────────────────────────── */}
       <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-4 py-3 border-b border-[var(--color-border)]">
@@ -168,7 +176,16 @@ export default function TenantDetailView({
                 align: 'right',
                 render: (user: TenantUserDto) => (
                   <RowActions>
-                    <Button variant="ghost" size="sm" onClick={() => onEditUser(user.id)} aria-label={`Edit: ${user.fullName}`}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onEditUser(user)}
+                      data-edit-user={user.id}
+                      aria-disabled={openingUserId !== null || undefined}
+                      aria-busy={openingUserId === user.id || undefined}
+                      className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                      aria-label={`Edit: ${user.fullName}`}
+                    >
                       Edit
                     </Button>
                   </RowActions>

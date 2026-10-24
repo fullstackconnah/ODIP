@@ -148,7 +148,7 @@ export type IncidentStatus = typeof INCIDENT_STATUSES[number]
 export const INCIDENT_STATUS_LABELS: Record<IncidentStatus, string> = {
   Draft: 'Draft',
   Submitted: 'Submitted',
-  UnderReview: 'Under Review',
+  UnderReview: 'Under review',
   Escalated: 'Escalated',
   Resolved: 'Resolved',
   Closed: 'Closed',

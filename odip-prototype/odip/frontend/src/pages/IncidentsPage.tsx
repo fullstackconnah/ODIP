@@ -146,7 +146,7 @@ const INCIDENTS_PAGE_SIZE = 50
 const INCIDENT_STATUS_FILTER_ITEMS: DropdownItem[] = [
   { value: 'Draft', label: 'Draft' },
   { value: 'Submitted', label: 'Submitted' },
-  { value: 'UnderReview', label: 'Under Review' },
+  { value: 'UnderReview', label: 'Under review' },
   { value: 'Escalated', label: 'Escalated' },
   { value: 'Resolved', label: 'Resolved' },
   { value: 'Closed', label: 'Closed' },

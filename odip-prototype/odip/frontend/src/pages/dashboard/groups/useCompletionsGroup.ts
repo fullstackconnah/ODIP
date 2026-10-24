@@ -97,7 +97,7 @@ export function useCompletionsGroup(enabled: boolean): GroupModel {
     },
     count: queue.data?.totalCount ?? 0,
     rows,
-    link: { to: '/rostering/completions', openLabel: 'Open Completions' },
+    link: { to: '/rostering/completions', openLabel: 'Open completions' },
     approveBatch: (ids) => approveBatch.mutateAsync(ids),
   }
 }

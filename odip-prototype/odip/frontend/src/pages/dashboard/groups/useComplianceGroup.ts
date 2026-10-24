@@ -70,6 +70,6 @@ export function useComplianceGroup(enabled: boolean, { staff, today, warningDays
     refetch: () => { void staff.refetch() },
     count: rows.length,
     rows,
-    link: { to: '/qualifications', openLabel: 'Open Qualifications' },
+    link: { to: '/qualifications', openLabel: 'Open qualifications' },
   }
 }
