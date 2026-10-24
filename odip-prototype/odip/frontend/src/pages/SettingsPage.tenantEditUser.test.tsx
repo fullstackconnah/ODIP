@@ -50,9 +50,10 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
+let router: ReturnType<typeof createMemoryRouter>
 async function openTenantDetail() {
   const u = userEvent.setup()
-  const router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings?section=tenants'] })
+  router = createMemoryRouter([{ path: '/settings', element: <SettingsPage /> }], { initialEntries: ['/settings?section=tenants'] })
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <RouterProvider router={router} />
@@ -178,7 +179,27 @@ describe('Settings > Tenants > tenant detail user actions', () => {
       await u.click(screen.getByRole('button', { name: /New user/ }))
       await act(async () => { arrive(Promise.reject(new Error('boom'))) })
 
-      expect(screen.queryByText(/couldn.t load their details/i)).not.toBeInTheDocument()
+      // Independent of the notice wording: no notice at all, whatever it says.
+      expect(screen.queryByRole('button', { name: /dismiss notice/i })).not.toBeInTheDocument()
+    })
+
+    it('opens nothing when another Settings section is shown before the user arrives', async () => {
+      const u = await openTenantDetail()
+      await u.click(await screen.findByRole('button', { name: 'Edit: Ann One' }))
+      await act(async () => { await router.navigate('/settings?section=profile') })
+      await annArrives()
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('opens only the tenant panel when Edit on the tenant is used before the user arrives', async () => {
+      const u = await openTenantDetail()
+      await u.click(await screen.findByRole('button', { name: 'Edit: Ann One' }))
+      await u.click(screen.getByRole('button', { name: 'Edit' }))
+      await annArrives()
+
+      expect(screen.getByRole('dialog', { name: 'Edit Tenant' })).toBeInTheDocument()
+      expect(screen.queryByRole('dialog', { name: 'Edit User' })).not.toBeInTheDocument()
     })
   })
 

@@ -67,8 +67,6 @@ export default function SettingsPage() {
   const [tenantPanelOpen, setTenantPanelOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<TenantSummaryDto | undefined>()
   const [tenantDetail, setTenantDetail] = useState<TenantSummaryDto | undefined>()
-  // Leaving Tenants closes a tenant's detail view, as leaving the tab did.
-  if (tenantDetail && key !== 'tenants') setTenantDetail(undefined)
   const [userPanelOpen, setUserPanelOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<AdminUserDto | undefined>()
   const [defaultTenantId, setDefaultTenantId] = useState<string | undefined>()
@@ -83,6 +81,8 @@ export default function SettingsPage() {
   const [openingUserId, setOpeningUserId] = useState<string | null>(null)
   const editSeq = useRef(0)
   const cancelEdit = () => { editSeq.current++; setOpeningUserId(null) }
+  // Leaving Tenants closes a tenant's detail view, as leaving the tab did, and with it any user still loading.
+  if (tenantDetail && key !== 'tenants') { cancelEdit(); setTenantDetail(undefined) }
   async function editTenantUser(user: TenantUserDto) {
     if (openingUserId !== null) return
     const seq = ++editSeq.current
@@ -137,7 +137,7 @@ export default function SettingsPage() {
         <TenantDetailView
           tenant={tenantDetail}
           onBack={() => { cancelEdit(); setTenantDetail(undefined) }}
-          onEditTenant={() => { setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
+          onEditTenant={() => { cancelEdit(); setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
           onAddUser={addUser}
           onEditUser={editTenantUser}
           openingUserId={openingUserId}
