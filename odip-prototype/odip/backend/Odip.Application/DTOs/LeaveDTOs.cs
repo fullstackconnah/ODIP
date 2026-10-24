@@ -25,6 +25,11 @@ public record LeaveRequestDto
     public Guid? DecidedByUserId { get; init; }
     public DateTime? DecidedAt { get; init; }
     public string? DecisionNote { get; init; }
+    /// <summary>Where it was entered; leave entered in Employment Hero is read-only in ODIP.</summary>
+    public LeaveSource Source { get; init; }
+    /// <summary>The hours ODIP sent to Employment Hero, when it has; Defaulted says the 7.6 h a day fallback was used.</summary>
+    public decimal? SentHours { get; init; }
+    public bool? SentHoursDefaulted { get; init; }
 }
 
 public record CreateLeaveRequestDto

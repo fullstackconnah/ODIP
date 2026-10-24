@@ -746,3 +746,26 @@ describe('LeaveApprovalsPage — a failed load', () => {
     expect(refetch).toHaveBeenCalled()
   })
 })
+
+describe('LeaveApprovalsPage — Employment Hero leave', () => {
+  const rows = () => [
+    makeLeaveRequest({ id: 'eh-1', userFullName: 'Alex Rivera', status: 'Approved', source: 'EmploymentHero' }),
+    makeLeaveRequest({ id: 'sent-1', userFullName: 'Alex Rivera', status: 'Approved', sentHours: 22.8, sentHoursDefaulted: true }),
+    makeLeaveRequest({ id: 'sent-2', userFullName: 'Alex Rivera', status: 'Approved', sentHours: 36, sentHoursDefaulted: false }),
+  ]
+
+  it('gives an Employment Hero row no actions and says where to change it', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [rows()[0]], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    expect(screen.getAllByText('Entered in Employment Hero').length).toBeGreaterThan(0)
+    expect(screen.getByText('Change it in Employment Hero')).toBeInTheDocument()
+    for (const name of [/^Edit/, /^Approve/, /^Decline/, /^Cancel leave/]) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+  })
+
+  it('says how many hours EH has for an ODIP row, and when they were the default', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: rows().slice(1), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    expect(screen.getByText("In Employment Hero \u00b7 22.8 h (7.6 h a day: ODIP's default)")).toBeInTheDocument()
+    expect(screen.getByText('In Employment Hero \u00b7 36 h')).toBeInTheDocument()
+  })
+})

@@ -113,7 +113,9 @@ public partial class EmploymentHeroClient
             if (method == HttpMethod.Delete) return default!;
             try
             {
-                return await response.Content.ReadFromJsonAsync<T>(ct) ?? throw new JsonException("empty");
+                var text = await response.Content.ReadAsStringAsync(ct);
+                if (method != HttpMethod.Get && string.IsNullOrWhiteSpace(text)) return default!;   // EH's leave PUT and approve document no body
+                return JsonSerializer.Deserialize<T>(text, WireJson) ?? throw new JsonException("empty");
             }
             catch (JsonException)
             {

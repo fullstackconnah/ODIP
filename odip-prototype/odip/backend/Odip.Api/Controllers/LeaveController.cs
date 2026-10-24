@@ -11,7 +11,9 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
+using Odip.Domain.Integrations;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -89,10 +91,11 @@ public class LeaveController : ControllerBase
         {
             Id = Guid.NewGuid(), UserId = dto.UserId.Value, LeaveType = dto.LeaveType,
             StartDate = dto.StartDate, EndDate = dto.EndDate, Reason = dto.Reason,
-            Status = LeaveStatus.Approved, RequestedByUserId = callerId.Value, RequestedAt = DateTime.UtcNow,
-            DecidedByUserId = callerId.Value, DecidedAt = DateTime.UtcNow,
+            Status = LeaveStatus.Approved, RequestedByUserId = callerId.Value, RequestedAt = _clock.GetUtcNow().UtcDateTime,
+            DecidedByUserId = callerId.Value, DecidedAt = _clock.GetUtcNow().UtcDateTime,
         };
         _db.LeaveRequests.Add(leave);
+        await EmploymentHeroLeave.EnqueueAsync(_db, leave, _clock.GetUtcNow().UtcDateTime, ct);
         await _db.SaveChangesAsync(ct);
         // Design spec (docs/specs/2026-09-07-staff-leave-unavailability-design.md:184): POST /leave is 201, not 200 — no GetById route exists, so no CreatedAtAction.
         return StatusCode(StatusCodes.Status201Created, ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
@@ -110,10 +113,12 @@ public class LeaveController : ControllerBase
         if (approveCallerId is null) return Unauthorized(ApiResponse<LeaveApprovalResultDto>.Fail("Caller identity could not be resolved."));
         if (leave.UserId == approveCallerId.Value) return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<LeaveApprovalResultDto>.Fail(OwnRequestMessage, LeaveErrorCodes.LeaveOwnRequest));
 
+        var now = _clock.GetUtcNow().UtcDateTime;
         leave.Status = LeaveStatus.Approved;
         leave.DecidedByUserId = approveCallerId.Value;
-        leave.DecidedAt = DateTime.UtcNow;
-        leave.UpdatedAt = DateTime.UtcNow;
+        leave.DecidedAt = now;
+        leave.UpdatedAt = now;
+        await EmploymentHeroLeave.EnqueueAsync(_db, leave, now, ct);
 
         // NotificationEventType.LeaveRequestDecided — recipient is leave.UserId (the staff
         // member whose leave it is), not RequestedByUserId (the coordinator on an on-behalf
@@ -126,7 +131,11 @@ public class LeaveController : ControllerBase
         var overlappingShifts = await FindOverlappingPublishedShiftsAsync(leave.UserId, leave.StartDate, leave.EndDate, ct);
         await RaiseLeaveCoverageTasksAsync(leave, overlappingShifts, ct);
 
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateException ex) when (EmploymentHeroLeave.IsOutboxCollision(ex))
+        {
+            return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail("This request has already been decided."));
+        }
 
         var overlaps = await BuildOverlapFindingsAsync(overlappingShifts, leave.UserId, leave.StartDate, leave.EndDate, ct);
         return Ok(ApiResponse<LeaveApprovalResultDto>.Ok(new LeaveApprovalResultDto
@@ -176,6 +185,7 @@ public class LeaveController : ControllerBase
     {
         var leave = await _db.LeaveRequests.FirstOrDefaultAsync(l => l.Id == id, ct);
         if (leave == null) return NotFound(ApiResponse<LeaveApprovalResultDto>.Fail("Leave request not found."));
+        if (leave.Source == LeaveSource.EmploymentHero) return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail(EmploymentHeroLeave.FromEhMessage));
         if (leave.Status == LeaveStatus.Declined || leave.Status == LeaveStatus.Cancelled)
             return Conflict(ApiResponse<LeaveApprovalResultDto>.Fail(AlreadyClosedMessage(leave.Status)));
 
@@ -227,20 +237,29 @@ public class LeaveController : ControllerBase
         if (leave == null) return NotFound(ApiResponse<LeaveRequestDto>.Fail("Leave request not found."));
         if (leave.Status != LeaveStatus.Pending && leave.Status != LeaveStatus.Approved)
             return Conflict(ApiResponse<LeaveRequestDto>.Fail(AlreadyClosedMessage(leave.Status)));
+        // EH owns leave entered there; one ODIP has no EH id for was never sent, so it can still be cancelled here.
+        if (leave.Source == LeaveSource.EmploymentHero && leave.ExternalLeaveId != null)
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail(EmploymentHeroLeave.FromEhMessage));
 
         var cancelCallerId = ResolveCallerId();
         if (cancelCallerId is null) return Unauthorized(ApiResponse<LeaveRequestDto>.Fail("Caller identity could not be resolved."));
 
+        var cancelNow = _clock.GetUtcNow().UtcDateTime;
         leave.Status = LeaveStatus.Cancelled;
         leave.DecidedByUserId = cancelCallerId.Value;
-        leave.DecidedAt = DateTime.UtcNow;
-        leave.UpdatedAt = DateTime.UtcNow;
+        leave.DecidedAt = cancelNow;
+        leave.UpdatedAt = cancelNow;
+        await EmploymentHeroLeave.WithdrawAsync(_db, leave, cancelNow, ct);
 
         // Item 9: cancelling the leave removes the coverage obligation entirely, regardless of
         // which shifts it was raised against.
         await _obligationTasks.CompleteByLeaveAsync(leave.Id, ct);
 
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateException ex) when (EmploymentHeroLeave.IsOutboxCollision(ex))
+        {
+            return Conflict(ApiResponse<LeaveRequestDto>.Fail(AlreadyClosedMessage(LeaveStatus.Cancelled)));
+        }
         return Ok(ApiResponse<LeaveRequestDto>.Ok(await LoadLeaveDtoAsync(leave.Id, ct)));
     }
 
@@ -568,6 +587,7 @@ public class LeaveController : ControllerBase
         StartDate = l.StartDate, EndDate = l.EndDate, Status = l.Status, Reason = l.Reason,
         RequestedByUserId = l.RequestedByUserId, RequestedAt = l.RequestedAt,
         DecidedByUserId = l.DecidedByUserId, DecidedAt = l.DecidedAt, DecisionNote = l.DecisionNote,
+        Source = l.Source, SentHours = l.SentHours, SentHoursDefaulted = l.SentHoursDefaulted,
     };
 
     private static RecurringUnavailabilityDto ToDto(RecurringUnavailability r) => new()
