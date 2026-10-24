@@ -92,7 +92,7 @@ export default function ImportDataTab() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {fromPayroll ? <Button variant="secondary" to="/settings?section=integrations">Open Integrations</Button> : (
+                {fromPayroll ? <Button variant="secondary" to="/settings?section=integrations">Open integrations</Button> : (
                   <>
                     <Button variant="secondary" onClick={() => template.mutate(k.kind)}>Download template</Button>
                     <Button to={`/settings/import/${k.kind}`}>Import {k.title.toLowerCase()}</Button>
