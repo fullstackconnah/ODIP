@@ -94,7 +94,7 @@ describe('PayrollPage', () => {
   it('points to Completions when shifts are not approved yet', () => {
     setup(check({ awaitingApproval: 2 }))
     expect(screen.getByText(/2 shifts in this period aren't approved yet/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open Completions' })).toHaveAttribute('href', '/rostering/completions')
+    expect(screen.getByRole('link', { name: 'Open completions' })).toHaveAttribute('href', '/rostering/completions')
   })
 
   it('marks an unlinked worker', () => {

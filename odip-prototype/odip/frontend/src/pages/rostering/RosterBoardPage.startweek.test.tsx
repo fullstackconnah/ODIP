@@ -463,7 +463,8 @@ describe('Make or Stop the regular', () => {
     renderPage()
     await choose(user, 'Make Sam the regular')
     const dialog = screen.getByRole('alertdialog', { name: 'Make Sam the regular?' })
-    expect(dialog).toHaveTextContent("Sam goes on Mia Chen's Wednesday 9am–3pm shift in every week you start from now on, unless they're away. Weeks already started don't change, this one included.")
+    expect(dialog).toHaveTextContent("Sam goes on Mia Chen's Wednesday 9am–3pm shift in every week of this agreement you start from now on, unless they're away. Weeks already started don't change, this one included.")
+    expect(dialog).toHaveTextContent("If the same shift in a renewal of this agreement has no regular, Sam goes on it there too.")
     await user.click(within(dialog).getByRole('button', { name: 'Make Sam the regular' }))
 
     expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', shiftId: 'sam-wed', staffId: 'staff-2', expectedRegularId: '00000000-0000-0000-0000-000000000000' })
@@ -476,7 +477,7 @@ describe('Make or Stop the regular', () => {
     showBoard(withSam({ regularUserId: 'staff-9' }))
     const { unmount } = renderPage()
     await choose(user, 'Make Sam the regular')
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Alex stops being the regular.')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Alex stops being the regular.If Alex is also the regular on the same shift in a renewal of this agreement, Sam takes that over too.')
     unmount()
 
     showBoard(withSam({ regularUserId: 'staff-404' }))

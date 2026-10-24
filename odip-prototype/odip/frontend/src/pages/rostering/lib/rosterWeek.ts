@@ -66,8 +66,12 @@ export function regularConfirm(shift: ShiftDto, replacing?: string): { title: st
   return {
     title: `Make ${first} the regular?`,
     lines: [
-      `${first} goes on ${slot} in every week you start from now on, unless they're away. Weeks already started don't change, this one included.`,
+      `${first} goes on ${slot} in every week of this agreement you start from now on, unless they're away. Weeks already started don't change, this one included.`,
       ...(replacing ? [`${firstName(replacing)} stops being the regular.`] : []),
+      // The server copies a Make to a renewal whose regular is the one being replaced, or has none (SetRegular); a renewal with a different regular keeps it.
+      replacing
+        ? `If ${firstName(replacing)} is also the regular on the same shift in a renewal of this agreement, ${first} takes that over too.`
+        : `If the same shift in a renewal of this agreement has no regular, ${first} goes on it there too.`,
     ],
     confirmLabel: `Make ${first} the regular`,
   }
