@@ -702,7 +702,7 @@ describe('LeaveApprovalsPage', () => {
     it('edits a record: opens the modal pre-filled and submits PUT with the edited body', async () => {
       const user = userEvent.setup()
       mockUseStaffAvailabilityRecords.mockReturnValue({
-        data: [makeAvailabilityRecord({ id: 'av-1', staffId: 'staff-1', availabilityType: 'Training', startDateTime: '2026-09-14T00:00:00', endDateTime: '2026-09-18T23:59:59', notes: 'Refresher.' })],
+        data: [makeAvailabilityRecord({ id: 'av-1', staffId: 'staff-1', availabilityType: 'Training', startDateTime: '2026-09-14T09:00:00', endDateTime: '2026-09-18T23:59:59', notes: 'Refresher.', isRecurring: true, recurrenceNotes: 'Every Monday' })],
         isLoading: false, isError: false, refetch: vi.fn(),
       })
       mockUpdateStaffAvailabilityMutateAsync.mockResolvedValue({ id: 'av-1' })
@@ -720,8 +720,8 @@ describe('LeaveApprovalsPage', () => {
       expect(mockUpdateStaffAvailabilityMutateAsync).toHaveBeenCalledWith({
         id: 'av-1',
         data: {
-          staffId: 'staff-1', startDateTime: '2026-09-14T00:00:00', endDateTime: '2026-09-18T23:59:59',
-          availabilityType: 'Training', isRecurring: false, notes: 'Refresher.',
+          staffId: 'staff-1', startDateTime: '2026-09-14T09:00:00', endDateTime: '2026-09-18T23:59:59',
+          availabilityType: 'Training', isRecurring: true, recurrenceNotes: 'Every Monday', notes: 'Refresher.',
         },
       })
     })

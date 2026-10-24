@@ -10,14 +10,14 @@ vi.mock('./dashboard/useDecisionGroups', async () => ({ useDecisionGroups: (awai
 
 installDashboardDefaults()
 
-describe('DashboardPage — Pending Leave card (I-6)', () => {
+describe('DashboardPage — Pending leave card (I-6)', () => {
   it('links to the leave approvals queue with the pending count for a SuperAdmin with no organisation', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
     renderPage()
 
-    const tile = screen.getByRole('group', { name: 'Pending Leave 3' })
+    const tile = screen.getByRole('group', { name: 'Pending leave 3' })
     expect(within(tile).getByRole('link', { name: 'Review leave requests' })).toHaveAttribute('href', '/rostering/leave')
     expect(within(tile).getByText('3')).toBeInTheDocument()
   })
@@ -28,7 +28,7 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
     renderPage()
 
-    expect(screen.queryByRole('group', { name: /Pending Leave/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Pending leave/ })).not.toBeInTheDocument()
     expect(screen.getByText(/^Checked and at zero:.*pending leave/)).toBeInTheDocument()
   })
 
@@ -38,14 +38,14 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
 
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
     const { unmount } = renderPage()
-    expect(screen.getByRole('link', { name: 'Pending Leave Loading' })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.getByRole('link', { name: 'Pending leave Loading' })).toHaveAttribute('href', '/rostering/leave')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
     expect(screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p')).not.toHaveTextContent('pending leave')
     unmount()
 
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { error: true }))
     renderPage()
-    expect(screen.getByRole('link', { name: "Pending Leave Couldn't load" })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.getByRole('link', { name: "Pending leave Couldn't load" })).toHaveAttribute('href', '/rostering/leave')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
@@ -55,15 +55,15 @@ describe('DashboardPage — Pending Leave card (I-6)', () => {
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(3))
     renderPage()
 
-    expect(screen.queryByText(/Pending Leave/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Pending leave/)).not.toBeInTheDocument()
   })
 })
 
 describe('DashboardPage — needs-attention band: no "All clear" without data', () => {
-  const qualification = () => tileFor('Qualification Issues')
-  const alerts = () => tileFor('Critical Participant Alerts')
-  const leave = () => tileFor('Pending Leave')
-  const completions = () => tileFor('Shift Completions')
+  const qualification = () => tileFor('Qualification issues')
+  const alerts = () => tileFor('Critical participant alerts')
+  const leave = () => tileFor('Pending leave')
+  const completions = () => tileFor('Shift completions')
   const inFlight = { data: undefined, isPending: true, isLoading: true, isError: false }
   const failed = { data: undefined, isLoading: false, isError: true }
 
@@ -82,60 +82,60 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   }
   const clearNames = () => clearRow()?.textContent ?? ''
 
-  it('shows an en dash on Qualification Issues while the staff list loads: busy, untinted, a link to the page, no "All clear"', () => {
+  it('shows an en dash on Qualification issues while the staff list loads: busy, untinted, a link to the page, no "All clear"', () => {
     asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(inFlight)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     renderPage()
 
     expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
-    expect(within(band()).getByRole('link', { name: 'Qualification Issues Loading' })).toHaveAttribute('href', '/qualifications')
+    expect(within(band()).getByRole('link', { name: 'Qualification issues Loading' })).toHaveAttribute('href', '/qualifications')
     // The rest of the band HAS its data, so it says so, but not for the item that is waiting, and the band is not the all-clear field.
     expect(clearNames()).not.toMatch(/qualification issues/)
     expect(clearNames()).toMatch(/critical participant alerts/)
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
-  it('shows an en dash and "Couldn\'t load" on Qualification Issues when the staff request fails: not busy, no "All clear"', () => {
+  it('shows an en dash and "Couldn\'t load" on Qualification issues when the staff request fails: not busy, no "All clear"', () => {
     asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(failed)
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     renderPage()
 
     expectPlaceholder(qualification(), { busy: false, say: "Couldn't load" })
-    expect(within(band()).getByRole('link', { name: "Qualification Issues Couldn't load" })).toHaveAttribute('href', '/qualifications')
+    expect(within(band()).getByRole('link', { name: "Qualification issues Couldn't load" })).toHaveAttribute('href', '/qualifications')
     expect(clearNames()).not.toMatch(/qualification issues/)
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
-  it('shows an en dash and "Couldn\'t load" on Critical Participant Alerts when the alerts request fails: not busy, no "All clear"', () => {
+  it('shows an en dash and "Couldn\'t load" on Critical participant alerts when the alerts request fails: not busy, no "All clear"', () => {
     asRole('SuperAdmin')
     mockUseParticipantAlertsAggregate.mockReturnValue(failed)
     renderPage()
 
     expectPlaceholder(alerts(), { busy: false, say: "Couldn't load" })
-    expect(within(band()).getByRole('link', { name: "Critical Participant Alerts Couldn't load" })).toHaveAttribute('href', '/participants')
+    expect(within(band()).getByRole('link', { name: "Critical participant alerts Couldn't load" })).toHaveAttribute('href', '/participants')
     expect(clearNames()).not.toMatch(/critical participant alerts/)
     expect(clearNames()).toMatch(/qualification issues/)
     // No participant alerts section is invented from a failed request.
-    expect(screen.queryByRole('heading', { name: 'Critical Participant Alerts' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Critical participant alerts' })).not.toBeInTheDocument()
   })
 
-  it('shows an en dash on Pending Leave while the queue loads or after it failed, for a role that approves leave: never a clear queue', () => {
+  it('shows an en dash on Pending leave while the queue loads or after it failed, for a role that approves leave: never a clear queue', () => {
     asRole('SuperAdmin')
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
 
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { loading: true }))
     const first = renderPage()
     expectPlaceholder(leave(), { busy: true, say: 'Loading' })
-    expect(within(band()).getByRole('link', { name: 'Pending Leave Loading' })).toHaveAttribute('href', '/rostering/leave')
+    expect(within(band()).getByRole('link', { name: 'Pending leave Loading' })).toHaveAttribute('href', '/rostering/leave')
     expect(clearNames()).not.toMatch(/pending leave/)
     first.unmount()
 
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0, { error: true }))
     renderPage()
     expectPlaceholder(leave(), { busy: false, say: "Couldn't load" })
-    expect(within(band()).getByRole('link', { name: "Pending Leave Couldn't load" })).toHaveAttribute('href', '/rostering/leave')
+    expect(within(band()).getByRole('link', { name: "Pending leave Couldn't load" })).toHaveAttribute('href', '/rostering/leave')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
@@ -146,7 +146,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
     mockUseDashboard.mockReturnValue(summaryData({ overdueTaskCount: 2, tripsMissingStaff: 1 }))
     renderPage()
 
-    expect(tileLabels()).toEqual(['Qualification Issues', 'Overdue', 'Missing Staff'])
+    expect(tileLabels()).toEqual(['Qualification issues', 'Overdue', 'Missing staff'])
   })
 
   it('claims "All clear" for none of the items while their requests are all in flight', () => {
@@ -242,13 +242,13 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
   })
 })
 
-describe('DashboardPage — Shift Completions: the band counts what the nav badge counts', () => {
+describe('DashboardPage — Shift completions: the band counts what the nav badge counts', () => {
   it('is a tile for a SuperAdmin with no organisation, linked to the review queue: an Admin and a Coordinator get the group instead, and no other role either', () => {
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(2))
     for (const role of ['SuperAdmin']) {
       asRole(role)
       const { unmount } = renderPage()
-      const tile = screen.getByRole('group', { name: 'Shift Completions 2' })
+      const tile = screen.getByRole('group', { name: 'Shift completions 2' })
       expect(within(tile).getByText('Submitted shifts waiting for review before they are billed.'), role).toBeInTheDocument()
       expect(within(tile).getByRole('link', { name: 'Review completions' }), role).toHaveAttribute('href', '/rostering/completions')
       expect(tile, role).toHaveAttribute('data-attention', 'warning')
@@ -258,7 +258,7 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
     for (const role of ['Admin', 'Coordinator', 'ReadOnly', 'SupportWorker']) {
       asRole(role)
       const { unmount } = renderPage()
-      expect(screen.queryByText(/Shift Completions/), role).not.toBeInTheDocument()
+      expect(screen.queryByText(/Shift completions/), role).not.toBeInTheDocument()
       unmount()
       localStorage.clear()
     }
@@ -286,14 +286,14 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
     renderPage()
 
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    expect(tileLabels()).toEqual(['Shift Completions'])
+    expect(tileLabels()).toEqual(['Shift completions'])
     expect(clearRow()).toHaveTextContent(
       'All clear on qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports and pending leave',
     )
     expect(clearRow()).not.toHaveTextContent('shift completions')
   })
 
-  it('names Shift Completions among the items it checked once the queue is empty', () => {
+  it('names Shift completions among the items it checked once the queue is empty', () => {
     asRole('SuperAdmin')
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0))
     renderPage()
@@ -307,7 +307,7 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
 
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0, { loading: true }))
     const first = renderPage()
-    const loading = screen.getByRole('link', { name: 'Shift Completions Loading' })
+    const loading = screen.getByRole('link', { name: 'Shift completions Loading' })
     expect(loading).toHaveAttribute('href', '/rostering/completions')
     expect(loading).toHaveAttribute('aria-busy', 'true')
     expect(loading).not.toHaveAttribute('data-attention')
@@ -317,23 +317,23 @@ describe('DashboardPage — Shift Completions: the band counts what the nav badg
 
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0, { error: true }))
     renderPage()
-    const failed = screen.getByRole('link', { name: "Shift Completions Couldn't load" })
+    const failed = screen.getByRole('link', { name: "Shift completions Couldn't load" })
     expect(failed).toHaveAttribute('href', '/rostering/completions')
     expect(failed).not.toHaveAttribute('aria-busy')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
-  it('sits after Pending Leave: the two queues the Staff & roster badge adds together', () => {
+  it('sits after Pending leave: the two queues the Staff & roster badge adds together', () => {
     showAll()
     renderPage()
 
     const labels = tileLabels()
-    expect(labels.slice(-2)).toEqual(['Pending Leave', 'Shift Completions'])
+    expect(labels.slice(-2)).toEqual(['Pending leave', 'Shift completions'])
   })
 })
 
 // Budgets at risk (budget phase 2b): one more item in the page's existing needs-attention band, counted from the participant alerts the page already reads. A tile only when somebody is over or forecast
-// to go over; at zero a name in the All clear row; while the alerts load or fail no tile at all (the Critical Participant Alerts tile, from the same request, is already the en dash that says so).
+// to go over; at zero a name in the All clear row; while the alerts load or fail no tile at all (the Critical participant alerts tile, from the same request, is already the en dash that says so).
 describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
   const critical = (type: string) => type === 'budget-over' || type === 'budget-ndia-exhausted'
   const budgetParticipant = (id: string, name: string, type: string, extra: Record<string, unknown> = {}) => ({
@@ -432,8 +432,8 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isPending: true, isLoading: true, isError: false })
     renderPage()
 
-    expect(tileLabels()).toEqual(['Critical Participant Alerts'])
-    expect(tileFor('Critical Participant Alerts')).toHaveAttribute('aria-busy', 'true')
+    expect(tileLabels()).toEqual(['Critical participant alerts'])
+    expect(tileFor('Critical participant alerts')).toHaveAttribute('aria-busy', 'true')
     expect(band()).not.toHaveTextContent('Budgets at risk')
     expect(band()).not.toHaveTextContent('budgets at risk')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
@@ -444,8 +444,8 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isLoading: false, isError: true })
     renderPage()
 
-    expect(tileLabels()).toEqual(['Critical Participant Alerts'])
-    expect(within(tileFor('Critical Participant Alerts')).getByText("Couldn't load")).toBeInTheDocument()
+    expect(tileLabels()).toEqual(['Critical participant alerts'])
+    expect(within(tileFor('Critical participant alerts')).getByText("Couldn't load")).toBeInTheDocument()
     expect(band()).not.toHaveTextContent('Budgets at risk')
     expect(band()).not.toHaveTextContent('budgets at risk')
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
@@ -495,7 +495,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
       renderPage()
 
       expect(budgetTile()).toHaveAccessibleName('Budgets at risk 1')
-      expect(tileLabels()).not.toContain('Critical Participant Alerts')   // its only Critical alert is the one the budget tile counts
+      expect(tileLabels()).not.toContain('Critical participant alerts')   // its only Critical alert is the one the budget tile counts
       expect(screen.queryByText('Core is $1,000 over this period\'s $8,000 (to 31 Dec 2026)')).not.toBeInTheDocument()   // nor is it listed with the Critical alerts below the band
     })
 
@@ -508,7 +508,7 @@ describe('DashboardPage — Budgets at risk (budget phase 2b)', () => {
 
       expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
       expect(grid()).toBeNull()   // no Budgets at risk tile, and the loaded Critical count is the disclosure, not a tile
-      expect(screen.getByText('NDIA says the funds ran out')).toBeInTheDocument()
+      expect(screen.getByText('NDIA says the funds ran out')).not.toHaveClass('uppercase')   // the type reads as a sentence, severity is the row tone and icon, not caps
       const card = screen.getByText('NDIA rejected a claim for Core on 8 Oct 2026: not enough funds in the funding period (V27)').closest('a')!
       expect(card).toHaveAttribute('href', '/participants/p1?tab=funding')
     })
@@ -562,10 +562,10 @@ describe('DashboardPage — Critical participant alerts: the band tile and the d
   const two = [criticalAlertFor('p1', 'Jamie Smith'), criticalAlertFor('p2', 'Alex Rivera')]
   it.each([
     ['loaded positive', { data: [criticalAlertFor('p1', 'Jamie Smith')], isLoading: false, isError: false }, null, 'Critical participant alerts (1)'],
-    ['loading', { data: undefined, isPending: true, isLoading: true, isError: false }, 'Critical Participant Alerts Loading', null],
-    ['paused offline', { data: undefined, isPending: true, isLoading: false, fetchStatus: 'paused', isError: false }, 'Critical Participant Alerts Loading', null],
-    ['failed with no data', { data: undefined, isLoading: false, isError: true }, "Critical Participant Alerts Couldn't load", null],
-    ['failed with held data', { data: two, isLoading: false, isError: true }, "Critical Participant Alerts Couldn't load", 'Critical participant alerts (2)'],
+    ['loading', { data: undefined, isPending: true, isLoading: true, isError: false }, 'Critical participant alerts Loading', null],
+    ['paused offline', { data: undefined, isPending: true, isLoading: false, fetchStatus: 'paused', isError: false }, 'Critical participant alerts Loading', null],
+    ['failed with no data', { data: undefined, isLoading: false, isError: true }, "Critical participant alerts Couldn't load", null],
+    ['failed with held data', { data: two, isLoading: false, isError: true }, "Critical participant alerts Couldn't load", 'Critical participant alerts (2)'],
     ['zero', { data: [], isLoading: false, isError: false }, null, null],
   ] as const)('no positive tile, but failed and unknown warnings are kept (T7: %s)', (name, alertsQuery, tile, heading) => {
     everythingElseZero()
@@ -581,7 +581,7 @@ describe('DashboardPage — Critical participant alerts: the band tile and the d
       expect(clearNames()).not.toMatch(/critical participant alerts/)
     }
     if (tile) expect(within(band()).getByRole('link', { name: tile })).toBeInTheDocument()
-    else if (name !== 'zero') expect(within(band()).queryByText('Critical Participant Alerts')).toBeNull()
+    else if (name !== 'zero') expect(within(band()).queryByText('Critical participant alerts')).toBeNull()
     if (heading) expect(disclosure()).toHaveAccessibleName(heading)
     else expect(disclosure()).toBeNull()
   })

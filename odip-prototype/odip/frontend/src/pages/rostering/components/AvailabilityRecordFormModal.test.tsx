@@ -89,6 +89,41 @@ describe('AvailabilityRecordFormModal', () => {
       })
     })
 
+    describe('the record being edited', () => {
+      // What GET /staff-availability returns: the form shows only some of it, but the PUT replaces all of it.
+      const record = {
+        id: 'rec-1', staffId: 'staff-1', startDateTime: '2026-09-14T09:00:00', endDateTime: '2026-09-18T17:30:00',
+        availabilityType: 'Training' as const, isRecurring: true, recurrenceNotes: 'Every Tue', notes: 'Fire warden refresher.',
+      }
+      const values = { staffId: 'staff-1', availabilityType: 'Training' as const, startDate: '2026-09-14', endDate: '2026-09-18', notes: 'Fire warden refresher.' }
+
+      it("sends the record's recurrence unchanged when only the notes change", async () => {
+        const user = userEvent.setup()
+        const onSubmit = vi.fn(async () => {})
+        renderModal({ open: true, onClose: noop, onSubmit, submitting: false, mode: 'edit', initialValues: values, record })
+
+        await user.clear(screen.getByLabelText(/notes/i))
+        await user.type(screen.getByLabelText(/notes/i), 'New notes')
+        await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+
+        expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ isRecurring: true, recurrenceNotes: 'Every Tue', notes: 'New notes' }))
+      })
+
+      it('keeps the time of day of each end while its date is unchanged, and uses the whole day for a date that moved', async () => {
+        const user = userEvent.setup()
+        const onSubmit = vi.fn(async () => {})
+        renderModal({ open: true, onClose: noop, onSubmit, submitting: false, mode: 'edit', initialValues: values, record })
+
+        await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+        expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ startDateTime: '2026-09-14T09:00:00', endDateTime: '2026-09-18T17:30:00' }))
+
+        await user.clear(screen.getByLabelText(/end date/i))
+        await user.type(screen.getByLabelText(/end date/i), '2026-09-19')
+        await user.click(screen.getByRole('button', { name: /^save changes$/i }))
+        expect(onSubmit).toHaveBeenLastCalledWith(expect.objectContaining({ startDateTime: '2026-09-14T09:00:00', endDateTime: '2026-09-19T23:59:59' }))
+      })
+    })
+
     it('submits initialValues.staffId even though no staff picker is rendered', async () => {
       const user = userEvent.setup()
       const onSubmit = vi.fn(async () => {})

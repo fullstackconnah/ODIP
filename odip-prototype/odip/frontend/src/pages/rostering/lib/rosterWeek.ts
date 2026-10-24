@@ -57,15 +57,24 @@ export function regularConfirm(shift: ShiftDto, replacing?: string): { title: st
   if (shift.isRegular) {
     return {
       title: `Stop ${first} being the regular?`,
-      lines: [`From the next week you start, ${slot} is made open, with nobody on it. Weeks already started keep ${first}.`],
+      lines: [`From the next week you start, ${slot} is made open, with nobody on it. Weeks already started keep ${first}.`,
+        // The server copies the stop to a renewal whose regular is the same person (SetRegular); the board does not carry the renewal, so this is conditional.
+        `If ${first} is also the regular on the same shift in a renewal of this agreement, that stops too.`],
       confirmLabel: 'Stop being the regular',
     }
   }
   return {
     title: `Make ${first} the regular?`,
     lines: [
-      `${first} goes on ${slot} in every week you start from now on, unless they're away. Weeks already started don't change, this one included.`,
+      `${first} goes on ${slot} in every week of this agreement you start from now on, unless they're away. Weeks already started don't change, this one included.`,
       ...(replacing ? [`${firstName(replacing)} stops being the regular.`] : []),
+      // The server copies a Make to a renewal whose regular is the one being replaced, or has none (SetRegular); a renewal with a different regular keeps it.
+      // A regular id the board cannot name (replacing undefined) must not read as "no regular".
+      replacing
+        ? `If ${firstName(replacing)} is also the regular on the same shift in a renewal of this agreement, ${first} takes that over too.`
+        : shift.regularUserId
+          ? `If the same shift in a renewal of this agreement has the same regular, ${first} takes that over too.`
+          : `If the same shift in a renewal of this agreement has no regular, ${first} goes on it there too.`,
     ],
     confirmLabel: `Make ${first} the regular`,
   }

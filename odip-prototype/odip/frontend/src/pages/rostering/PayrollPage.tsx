@@ -188,7 +188,7 @@ export default function PayrollPage() {
           icon={Plug}
           title="Employment Hero isn't connected"
           description="Connect it in Settings → Integrations, and approved hours go to payroll from then on."
-          action={canSend ? { label: 'Open Integrations', to: '/settings?section=integrations' } : undefined}
+          action={canSend ? { label: 'Open integrations', to: '/settings?section=integrations' } : undefined}
         />
       </>
     )
@@ -256,7 +256,7 @@ export default function PayrollPage() {
         {data && data.awaitingApproval > 0 && (
           <Callout
             tone="info"
-            actions={<Button to="/rostering/completions" variant="secondary" size="sm" className="min-h-[var(--tap-min)]">Open Completions</Button>}
+            actions={<Button to="/rostering/completions" variant="secondary" size="sm" className="min-h-[var(--tap-min)]">Open completions</Button>}
           >
             {plural(data.awaitingApproval, 'shift')} in this period {data.awaitingApproval === 1 ? "isn't" : "aren't"} approved yet, so {data.awaitingApproval === 1 ? "it can't" : "they can't"} go to payroll.
           </Callout>
