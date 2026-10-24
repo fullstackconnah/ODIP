@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { format } from 'date-fns'
 import { CalendarOff, Plus } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
@@ -29,7 +30,6 @@ import type {
 } from '@/api/types'
 import { formatEffectiveRange, formatShiftTimeRange } from './lib/roster'
 import { extractErrorMessage, formatDateAu, parseApiDate } from '@/lib/utils'
-import { localIsoDate } from '@/lib/dateOnly'
 import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
 import { Button } from '@/components/Button'
@@ -68,8 +68,9 @@ function rowWindow(row: ApprovalRow) {
   return formatEffectiveRange(row.data.startDateTime.slice(0, 10), row.data.endDateTime.slice(0, 10))
 }
 
-// Dates wrap at the dash only: no-break spaces inside each date and before the dash, a word joiner after the dash of a time range.
-const rowWindowText = (row: ApprovalRow) => rowWindow(row).replace(/(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})/g, '$1\u00a0$2\u00a0$3').replace(/ –/g, '\u00a0–').replace(/–(?=\d)/g, '–\u2060')
+// Dates (here and in Requested) wrap at the dash only: no-break spaces inside each date and before the dash, a word joiner after the dash of a time range.
+const keepDatesWhole = (text: string) => text.replace(/(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})/g, '$1\u00a0$2\u00a0$3')
+const rowWindowText = (row: ApprovalRow) => keepDatesWhole(rowWindow(row)).replace(/ –/g, '\u00a0–').replace(/–(?=\d)/g, '–\u2060')
 
 /** Sort key for the merged table — requestedAt for leave/unavailability rows; a legacy row has no
  * requestedAt (there's no request workflow), so it falls back to createdAt if the DTO ever grows
@@ -480,11 +481,11 @@ export default function LeaveApprovalsPage() {
 
   function rowRequestedBy(row: ApprovalRow) {
     if (row.rowKind === 'legacy') return '—'
-    if (fromEh(row)) return 'Entered in Employment Hero'
+    if (fromEh(row)) return 'Entered in Employment\u00a0Hero'
     const { requestedByUserId, userId, requestedAt } = row.data
     const who = requestedByUserId === userId ? 'Self' : (staffNameById.get(requestedByUserId) ?? 'Coordinator')
     // requestedAt is an INSTANT: the day it was requested is the viewer's local date, not the first ten characters (the UTC date).
-    return `${who} · ${localIsoDate(parseApiDate(requestedAt))}`
+    return keepDatesWhole(`${who} · ${format(parseApiDate(requestedAt), 'd MMM yyyy')}`)
   }
 
   // Column budget (density §4): the Edit / Decline / Approve buttons took ~260px at md (~170px now they are sm), so with uncapped text columns this table needed ~1170px

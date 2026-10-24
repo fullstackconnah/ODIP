@@ -124,6 +124,18 @@ describe('LeaveApprovalsPage', () => {
     expect(screen.getByRole('button', { name: 'Approve: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
   })
 
+  it('keeps a Requested date and "Employment Hero" from splitting across lines', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [
+      makeLeaveRequest({ id: 'l-self', userFullName: 'Alex Rivera', requestedAt: '2026-09-07T09:00:00Z' }),
+      makeLeaveRequest({ id: 'l-eh', userFullName: 'Eve Hero', source: 'EmploymentHero', status: 'Approved' }),
+    ], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    // textContent keeps the U+00A0 that Testing Library's text matchers would normalise away.
+    expect(screen.getByText('Alex Rivera').closest('tr')!.textContent).toContain('Self · 7\u00a0Sep\u00a02026')
+    expect(screen.getByText('Eve Hero').closest('tr')!.textContent).toContain('Entered in Employment Hero')
+  })
+
   it('never breaks a recurring row time range at its dash', () => {
     mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ userFullName: 'Jordan Smith', dayOfWeek: 'Monday', startTime: '09:00:00', endTime: '12:00:00' })], isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
