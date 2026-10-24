@@ -211,7 +211,7 @@ public class PortalController : ControllerBase
         // slots already fetched above, so the detail never queries them twice. In ENFORCE mode a worker without a current Medication
         // Competency cannot record a dose, so no dose blocks them; in WARN mode (the default) they can record (flagged), so doses block
         // them like anyone (see ShiftPackageService). A dose whose time has not arrived yet never blocks either.
-        var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, ct);
+        var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, shift.TenantId, ct);
         var finishBlockers = shift.Status == ShiftStatus.InProgress
             ? ShiftPackageService.BuildFinishBlockers(
                 doses.Slots, breakRunning: breakDtos.Any(b => b.IsRunning), access.CanRecord, NowUtc, provider.Zone)
@@ -474,7 +474,7 @@ public class PortalController : ControllerBase
         if (shift.Status == ShiftStatus.InProgress)
         {
             var checkedCompletion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
-            var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, ct);
+            var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, shift.TenantId, ct);
             var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, access.CanRecord, ct);
             if (blockers.Count > 0)
             {
@@ -613,7 +613,7 @@ public class PortalController : ControllerBase
         var workerName = await _db.Users.Where(u => u.Id == shift.UserId!.Value)
             .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
         var reviewRecipients = await _db.Users
-            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .Where(u => u.TenantId == shift.TenantId && u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
             .ToListAsync(ct);
         foreach (var recipient in reviewRecipients)
         {
@@ -1325,9 +1325,10 @@ public class PortalController : ControllerBase
             && l.EndDate == dto.EndDate && l.Status != LeaveStatus.Cancelled && l.Status != LeaveStatus.Declined, ct);
         if (duplicate) return Conflict(ApiResponse<LeaveRequestDto>.Fail("An identical request already exists."));
 
+        var staffTenantId = await StaffTenantIdAsync(staffId.Value, ct);
         var leave = new LeaveRequest
         {
-            Id = Guid.NewGuid(), UserId = staffId.Value, LeaveType = dto.LeaveType,
+            Id = Guid.NewGuid(), TenantId = staffTenantId, UserId = staffId.Value, LeaveType = dto.LeaveType,
             StartDate = dto.StartDate, EndDate = dto.EndDate, Reason = dto.Reason,
             Status = LeaveStatus.Pending, RequestedByUserId = staffId.Value, RequestedAt = DateTime.UtcNow,
         };
@@ -1339,7 +1340,7 @@ public class PortalController : ControllerBase
         var requesterName = await _db.Users.Where(u => u.Id == staffId.Value)
             .Select(u => (u.FirstName + " " + u.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "A staff member";
         var leaveRecipients = await _db.Users
-            .Where(u => u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
+            .Where(u => u.TenantId == staffTenantId && u.IsActive && (u.Role == UserRole.Admin || u.Role == UserRole.Coordinator))
             .ToListAsync(ct);
         foreach (var recipient in leaveRecipients)
         {
@@ -1397,7 +1398,7 @@ public class PortalController : ControllerBase
 
         var rule = new RecurringUnavailability
         {
-            Id = Guid.NewGuid(), UserId = staffId.Value, DayOfWeek = dto.DayOfWeek,
+            Id = Guid.NewGuid(), TenantId = await StaffTenantIdAsync(staffId.Value, ct), UserId = staffId.Value, DayOfWeek = dto.DayOfWeek,
             StartTime = dto.StartTime, EndTime = dto.EndTime, EffectiveFrom = dto.EffectiveFrom,
             EffectiveTo = dto.EffectiveTo, Notes = dto.Notes,
             Status = LeaveStatus.Pending, RequestedByUserId = staffId.Value, RequestedAt = DateTime.UtcNow,
@@ -1450,6 +1451,10 @@ public class PortalController : ControllerBase
         var exists = await _db.Users.AnyAsync(u => u.Id == userId.Value, ct);
         return exists ? userId : null;
     }
+
+    /// <summary>The staff user's own organisation: an unscoped SuperAdmin has no current tenant for the context to stamp a new row from.</summary>
+    private Task<Guid> StaffTenantIdAsync(Guid staffId, CancellationToken ct) =>
+        _db.Users.Where(u => u.Id == staffId).Select(u => u.TenantId).FirstAsync(ct);
 
     private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(
         s.Id, s.ParticipantId, s.Participant?.FullName ?? string.Empty, s.ServiceDate, s.StartTime, s.EndTime,

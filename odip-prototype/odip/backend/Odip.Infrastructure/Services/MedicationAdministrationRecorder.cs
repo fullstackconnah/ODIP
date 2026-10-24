@@ -158,19 +158,19 @@ public sealed class MedicationAdministrationRecorder
     }
 
     /// <summary>Evaluates the Medication Competency credential for a user at the provider-local "today" (the credential only; see <see cref="CheckRecordingAccessAsync"/> for what the provider mode makes of it).</summary>
-    public async Task<MedicationCompetencyCheck> CheckCompetencyAsync(Guid? userId, CancellationToken ct)
+    public async Task<MedicationCompetencyCheck> CheckCompetencyAsync(Guid? userId, Guid tenantId, CancellationToken ct)
     {
         var user = userId.HasValue ? await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value, ct) : null;
-        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(_clock.GetUtcNow().UtcDateTime, provider.Zone));
         return MedicationCompetencyGate.Evaluate(user, providerToday);
     }
 
     /// <summary>Whether <paramref name="userId"/> may record a dose now: the credential check combined with the provider mode (default Warn when there are no settings).</summary>
-    public async Task<RecordingAccess> CheckRecordingAccessAsync(Guid? userId, CancellationToken ct)
+    public async Task<RecordingAccess> CheckRecordingAccessAsync(Guid? userId, Guid tenantId, CancellationToken ct)
     {
-        var check = await CheckCompetencyAsync(userId, ct);
-        var mode = await _db.ScopedProviderSettings().Select(p => (MedicationCompetencyMode?)p.MedicationCompetencyMode).FirstOrDefaultAsync(ct)
+        var check = await CheckCompetencyAsync(userId, tenantId, ct);
+        var mode = await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => (MedicationCompetencyMode?)p.MedicationCompetencyMode).FirstOrDefaultAsync(ct)
             ?? MedicationCompetencyMode.Warn;
         return DescribeAccess(check, mode);
     }
@@ -202,7 +202,7 @@ public sealed class MedicationAdministrationRecorder
         // ── 1. Medication Competency (before any validation: in Enforce mode a worker without the credential should be
         //       told that first, not asked to fix a reason field they cannot then submit). In Warn mode the record goes ahead and
         //       is flagged RecordedWithoutCompetency. ──
-        var settings = await _db.ScopedProviderSettings().Select(p => new { p.State, p.MedicationCompetencyMode }).FirstOrDefaultAsync(ct);
+        var settings = await _db.ProviderSettings.Where(p => p.TenantId == med.TenantId).Select(p => new { p.State, p.MedicationCompetencyMode }).FirstOrDefaultAsync(ct);
         var provider = ProviderTimeZoneResolver.FromState(settings?.State);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(nowUtc, provider.Zone));
         var competency = MedicationCompetencyGate.Evaluate(administeringUser, providerToday);
@@ -309,10 +309,9 @@ public sealed class MedicationAdministrationRecorder
 
             if (dto.WitnessStaffId.HasValue)
             {
-                // Same-tenant scoping comes for free here: _db.Users is ambient-tenant-filtered
-                // by OdipDbContext for any non-SuperAdmin caller, so a cross-tenant witness id
-                // simply resolves to no row, same as "not found" (§4.4).
-                witnessStaff = await _db.Users.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value && s.IsActive, ct);
+                // Scoped callers get same-tenant scoping from the _db.Users filter; an unscoped SuperAdmin has none, so the
+                // medication's own organisation is matched here. Either way a cross-tenant id reads as "not found" (§4.4).
+                witnessStaff = await _db.Users.FirstOrDefaultAsync(s => s.Id == dto.WitnessStaffId.Value && s.IsActive && s.TenantId == med.TenantId, ct);
                 if (witnessStaff == null)
                     return Fail(RecordAdministrationOutcome.Invalid, "Selected witness staff member was not found.");
 
@@ -344,6 +343,7 @@ public sealed class MedicationAdministrationRecorder
         var admin = new MedicationAdministration
         {
             Id = Guid.NewGuid(),
+            TenantId = med.TenantId,   // an unscoped SuperAdmin has no current tenant to stamp it from, and the replay checks look it up by med.TenantId
             ParticipantMedicationId = med.Id,
             ParticipantId = med.ParticipantId,
             TripInstanceId = dto.TripInstanceId,
@@ -391,9 +391,9 @@ public sealed class MedicationAdministrationRecorder
                 SourceKey: $"med-witness:{admin.Id}",
                 Type: TaskType.MedicationWitness,
                 Title: $"Witness sign-off needed: {med.Name} for {participantName}",
-                DueDate: providerToday.AddDays(1),
+                DueDate: (await ProviderTimeZoneResolver.TodayAsync(_db, med.TenantId, _clock, ct)).AddDays(1),
                 LinkTo: "/portal/witness-approvals",
-                MedicationAdministrationId: admin.Id), ct);
+                MedicationAdministrationId: admin.Id, TenantId: med.TenantId), ct);
         }
 
         try
