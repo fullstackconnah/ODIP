@@ -178,7 +178,7 @@ public class ClaimGenerationServiceTests
     }
 
     [Theory]
-    [InlineData(ParticipantFundingSource.Ndis, "NDIS number missing")]
+    [InlineData(ParticipantFundingSource.Ndis, "NDIS number missing. Add it to their profile, then preview the claim again to include them.")]
     [InlineData(ParticipantFundingSource.Other, "Invoice them directly")]
     public async Task PreviewClaimAsync_ABookingWithNoNdisNumber_IsListedAsLeftOutWithTheReason_AndTheClaimIsUnchanged(ParticipantFundingSource funding, string reasonContains)
     {

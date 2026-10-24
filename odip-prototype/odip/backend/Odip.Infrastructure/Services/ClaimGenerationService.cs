@@ -276,7 +276,7 @@ public class ClaimGenerationService
                     Description = booking.Participant.FullName,
                     Reason = booking.Participant.FundingSource == ParticipantFundingSource.Other
                         ? "Funded another way, so not claimed to the NDIS. Invoice them directly."
-                        : "NDIS number missing. Add it to the participant's profile, then generate the claim again."
+                        : "NDIS number missing. Add it to their profile, then preview the claim again to include them."
                 });
                 continue;
             }

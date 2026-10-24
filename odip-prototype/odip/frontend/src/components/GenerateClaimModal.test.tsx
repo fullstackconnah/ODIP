@@ -37,7 +37,7 @@ describe('GenerateClaimModal — dates and money', () => {
 
 // A trip claim skips a booking whose participant has no NDIS number. It says who, and why, as a shift claim does.
 describe('GenerateClaimModal — who the claim leaves out', () => {
-  const noNumber = { participantId: 'p-2', description: 'Lee Left', reason: 'NDIS number missing. Add it to the participant\x27s profile, then generate the claim again.' }
+  const noNumber = { participantId: 'p-2', description: 'Lee Left', reason: 'NDIS number missing. Add it to their profile, then preview the claim again to include them.' }
   const selfFunded = { participantId: 'p-3', description: 'Sam Self', reason: 'Funded another way, so not claimed to the NDIS. Invoice them directly.' }
 
   async function openPreview() {
@@ -52,10 +52,10 @@ describe('GenerateClaimModal — who the claim leaves out', () => {
 
     expect(screen.getByText('2 participants will be left out of this claim')).toBeInTheDocument()
     expect(screen.getByText(/Lee Left/)).toBeInTheDocument()
-    expect(screen.getByText(/NDIS number missing./)).toBeInTheDocument()
+    expect(screen.getByText(/Add it to their profile, then preview the claim again to include them\./)).toBeInTheDocument()
     expect(screen.getByText(/Sam Self/)).toBeInTheDocument()
     expect(screen.getByText(/Invoice them directly./)).toBeInTheDocument()
-    expect(screen.getByText(/Nothing here is billed for them/)).toBeInTheDocument()
+    expect(screen.getByText("Their bookings stay confirmed. Nothing here is billed for them.")).toBeInTheDocument()
   })
 
   it('says it in the singular for one participant', async () => {
@@ -65,7 +65,13 @@ describe('GenerateClaimModal — who the claim leaves out', () => {
     expect(screen.getByText('1 participant will be left out of this claim')).toBeInTheDocument()
   })
 
-  it('says nothing when nobody is left out, or when the server sends no leftOut at all', async () => {
+  it('says nothing when nobody is left out', async () => {
+    await openPreview()
+    expect(screen.queryByText(/left out of this claim/)).not.toBeInTheDocument()
+  })
+
+  it('says nothing when the server sends no leftOut at all', async () => {
+    shown.leftOut = undefined as never
     await openPreview()
 
     expect(screen.queryByText(/left out of this claim/)).not.toBeInTheDocument()

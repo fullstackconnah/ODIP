@@ -230,7 +230,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
                 <LeftOutCallout
                   items={(previewData.leftOut ?? []).map(p => ({ key: p.participantId, description: p.description, reason: p.reason }))}
                   heading={`${plural(previewData.leftOut?.length ?? 0, 'participant')} will be left out of this claim`}
-                  footer="Their bookings are not part of this claim. Nothing here is billed for them."
+                  footer="Their bookings stay confirmed. Nothing here is billed for them."
                 />
               </div>
             )}

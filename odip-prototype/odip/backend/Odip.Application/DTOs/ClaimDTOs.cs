@@ -143,7 +143,7 @@ public record TripClaimLeftOutDto
     public Guid ParticipantId { get; init; }
     /// <summary>The participant's name.</summary>
     public string Description { get; init; } = string.Empty;
-    /// <summary>Why, as a sentence that does not repeat the name ("NDIS number missing. Add it to the participant's profile, then generate the claim again.").</summary>
+    /// <summary>Why, as a sentence that does not repeat the name ("NDIS number missing. Add it to their profile, then preview the claim again to include them.").</summary>
     public string Reason { get; init; } = string.Empty;
 }
 
