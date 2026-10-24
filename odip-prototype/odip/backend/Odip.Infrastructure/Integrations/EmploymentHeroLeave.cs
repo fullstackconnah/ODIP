@@ -22,8 +22,8 @@ public static class EmploymentHeroLeave
     private const string CategoryReasonStart = "Choose the Employment Hero leave category for ";
     public const decimal DefaultDailyHours = 7.6m;
 
-    // shortcut: a placeholder ship time; the lead sets it to the real ship time in the merge commit. Leave decided before it may already be entered in EH by payroll.
-    public static readonly DateTime LeaveSyncEpoch = new(2026, 10, 24, 0, 0, 0, DateTimeKind.Utc);
+    // PR 3's ship time (2026-10-24): leave decided before it is never sent automatically; payroll may already hold it in EH.
+    public static readonly DateTime LeaveSyncEpoch = new(2026, 10, 24, 2, 0, 0, DateTimeKind.Utc);
     public static DateTime Cutoff(DateTime connectedAt) => connectedAt > LeaveSyncEpoch ? connectedAt : LeaveSyncEpoch;
 
     public sealed record LeaveMapping(string? Annual, string? Sick, string? Personal, string? Other);
