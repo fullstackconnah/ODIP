@@ -85,6 +85,6 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
     },
     count: rows.length,
     rows,
-    link: { to: '/tasks', openLabel: 'Open Tasks' },
+    link: { to: '/tasks', openLabel: 'Open tasks' },
   }
 }

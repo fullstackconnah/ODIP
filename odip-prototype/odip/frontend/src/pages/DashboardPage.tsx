@@ -1,6 +1,8 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue, useModuleVisibility } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
+import { TRIP_STATUS_LABELS } from '@/lib/tone'
+import type { TripStatus } from '@/api/types'
 import { formatRatio, plural } from '@/lib/format'
 import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
 import { awaitsData, retryingAfterError } from '@/lib/queryPhase'
@@ -414,7 +416,7 @@ export default function DashboardPage() {
                       {formatRatio(t.currentParticipantCount, t.maxParticipants || '—')} pax
                     </span>
                     {/* The trip status is coloured by StatusBadge's own tones (lib/tone.ts), the same as the trip header, the schedule and the trips list. */}
-                    <StatusBadge status={t.status} label={t.status.replace(/(?<=.)([A-Z])/g, (c: string) => ' ' + c.toLowerCase())} className="shrink-0 font-bold" />
+                    <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status as TripStatus] ?? t.status} className="shrink-0 font-bold" />
                     <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />
                   </Link>
                 )

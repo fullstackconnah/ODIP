@@ -137,6 +137,6 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
     count: (leave.data?.length ?? 0) + (unavailability.data?.length ?? 0),
     // Soonest start first: the nearest one is the most urgent decision (SHAPE §5).
     rows: [...leaveRows, ...ruleRows].sort((a, b) => a.start.localeCompare(b.start)).map((r) => r.row),
-    link: { to: '/rostering/leave', openLabel: 'Open Leave' },
+    link: { to: '/rostering/leave', openLabel: 'Open leave' },
   }
 }

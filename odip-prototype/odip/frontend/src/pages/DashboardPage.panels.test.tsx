@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
-import { TONE } from '@/lib/tone'
+import { TONE, TRIP_STATUS_LABELS } from '@/lib/tone'
 import { mockUseDashboard, mockUseParticipantAlertsAggregate } from './dashboard/dashboardHookMocks'
 import { installDashboardDefaults, renderPage, summaryData, asRole } from './dashboard/dashboardTestKit'
 
@@ -294,6 +294,14 @@ describe('DashboardPage — trip status and task priority chips use the shared t
     id: `t-${status}`, tripName: `Trip ${status}`, startDate: '2026-08-14', destination: 'Somewhere', currentParticipantCount: 1, maxParticipants: 6, status,
   })
 
+  it('prints OpenForBookings as "Open for bookings", the Trips page wording', () => {
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    mockUseDashboard.mockReturnValue(dashboardWith({ upcomingTripCount: 1, upcomingTrips: [trip('OpenForBookings')] }))
+    renderPage()
+
+    expect(screen.getByText('Open for bookings')).toBeInTheDocument()
+  })
+
   it.each([
     ['Draft', 'neutral'],
     ['Planning', 'info'],
@@ -309,7 +317,7 @@ describe('DashboardPage — trip status and task priority chips use the shared t
     mockUseDashboard.mockReturnValue(dashboardWith({ upcomingTripCount: 1, upcomingTrips: [trip(status)] }))
     renderPage()
 
-    const chip = screen.getByText(status.replace(/(?<=.)([A-Z])/g, (c: string) => ' ' + c.toLowerCase()))
+    const chip = screen.getByText(TRIP_STATUS_LABELS[status])
     expect(chip).toHaveClass('rounded-full', 'text-xs', 'font-bold', 'shrink-0', ...TONE[tone].solid.split(' '))
   })
 
