@@ -39,7 +39,7 @@ describe('DashboardPage — who decides what (SHAPE §3)', () => {
     asRole('Coordinator')
     renderPage()
 
-    expect(tileLabels()).toEqual(['Budgets at risk', 'Missing Accommodation', 'Missing Vehicles', 'Missing Staff'])
+    expect(tileLabels()).toEqual(['Budgets at risk', 'Missing accommodation', 'Missing vehicles', 'Missing staff'])
   })
 
   it('shows ReadOnly no decisions at all: no heading, no line', () => {
@@ -158,7 +158,7 @@ describe('DashboardPage — groups at zero (SHAPE §6)', () => {
       'All clear on shift completions, leave requests, open incidents, staff credentials to update and tasks due')
     expect(within(decisions).queryAllByRole('row')).toHaveLength(0)
     expect(within(decisions).queryByRole('tablist')).not.toBeInTheDocument()
-    expect(tileLabels()).toEqual(['Missing Staff'])
+    expect(tileLabels()).toEqual(['Missing staff'])
   })
 })
 

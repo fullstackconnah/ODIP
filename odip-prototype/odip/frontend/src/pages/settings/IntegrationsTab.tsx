@@ -2,12 +2,14 @@ import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   useConnectEmploymentHero, useDisconnectEmploymentHero, useDismissEmploymentHeroItem, useEmploymentHeroBusinesses,
-  useEmploymentHeroEmployees, useEmploymentHeroStatus, useEmploymentHeroWorkTypes, useLinkEmploymentHeroStaff,
-  useSaveEmploymentHeroWorkTypes, useSyncEmploymentHero,
+  useEmploymentHeroEmployees, useEmploymentHeroLeaveCategories, useEmploymentHeroStatus, useEmploymentHeroWorkTypes, useLinkEmploymentHeroStaff,
+  useRetryEmploymentHeroLeave, useSaveEmploymentHeroLeaveCategories, useSaveEmploymentHeroWorkTypes, useSyncEmploymentHero,
 } from '@/api/hooks'
 import type {
-  EmploymentHeroAttentionDto, EmploymentHeroAttentionKind, EmploymentHeroBusinessDto, EmploymentHeroStatusDto, EmploymentHeroWorkTypesDto,
+  EmploymentHeroAttentionDto, EmploymentHeroAttentionKind, EmploymentHeroBusinessDto, EmploymentHeroLeaveCategoriesDto,
+  EmploymentHeroLeaveProblemDto, EmploymentHeroStatusDto, EmploymentHeroWorkTypesDto,
 } from '@/api/types'
+import { LEAVE_TYPE_LABELS } from '@/api/types'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -23,6 +25,7 @@ import { formatDateTimeAu, formatRelative, plural } from '@/lib/format'
 import type { Tone } from '@/lib/tone'
 import { extractErrorMessage, parseApiDate } from '@/lib/utils'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { formatDateRange } from '@/lib/dateRange'
 
 const MUTED = 'text-sm text-[var(--color-muted-foreground)]'
 /** The pickers and the key field take a name's width, not the card's (formGrid's "medium"). */
@@ -147,6 +150,12 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
             </>
           ),
         },
+        {
+          label: 'Leave',
+          value: eh.leaveSent + eh.leaveWaiting === 0
+            ? 'None sent yet'
+            : `${eh.leaveSent.toLocaleString('en-AU')} sent${eh.leaveWaiting > 0 ? `, ${eh.leaveWaiting} waiting` : ''}`,
+        },
       ]} />
       {/* Failures sit under the facts and above the buttons, never at the bottom of the card. */}
       {eh.lastSyncError && (
@@ -164,6 +173,8 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
       </div>
       <AnnouncementRegion message={sync.isSuccess ? 'Sync finished.' : ''} />
       <WorkTypes saved={eh.workTypes} />
+      <LeaveCategories saved={eh.leaveCategories} />
+      <LeaveNotSent items={eh.leaveProblems} />
       {(eh.lastSyncAt || eh.attention.length > 0) && <Attention items={eh.attention} />}
       <ConfirmDialog
         open={confirming}
@@ -185,6 +196,13 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
   )
 }
 
+/** TanStack clears `error` the moment a retry starts; keep the last one so the banner keeps the server's words (and its height) through the retry. */
+function useLastError(error: unknown): unknown {
+  const [last, setLast] = useState<unknown>(null)
+  if (error != null && error !== last) setLast(error)
+  return error ?? last
+}
+
 const WORK_TYPE_FIELDS: { key: keyof EmploymentHeroWorkTypesDto; label: string; none: string }[] = [
   { key: 'standard', label: 'Day and evening shifts', none: 'Usual pay (no work type)' },
   { key: 'activeNight', label: 'Active nights', none: 'Not chosen' },
@@ -195,6 +213,7 @@ const WORK_TYPE_FIELDS: { key: keyof EmploymentHeroWorkTypesDto; label: string; 
 /** Which Employment Hero work type each kind of approved hours is sent under. Read live from EH; saving queues the waiting shifts. */
 function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
   const types = useEmploymentHeroWorkTypes(true)
+  const loadError = useLastError(types.error)
   const save = useSaveEmploymentHeroWorkTypes()
   const [draft, setDraft] = useState<EmploymentHeroWorkTypesDto | null>(null)
   const value = draft ?? saved
@@ -207,8 +226,8 @@ function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
         <p className={MUTED} role="status">Reading Employment Hero's work types…</p>
       ) : types.isError || !types.data ? (
         <Callout tone="danger">
-          <p>{extractErrorMessage(types.error, "Employment Hero's work types couldn't be loaded.")}</p>
-          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" onClick={() => types.refetch()}>Try again</Button>
+          <p>{extractErrorMessage(loadError, "Employment Hero's work types couldn't be loaded.")}</p>
+          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" disabled={types.isFetching} onClick={() => types.refetch()}>{types.isFetching ? 'Trying…' : 'Try again'}</Button>
         </Callout>
       ) : (
         <>
@@ -242,6 +261,108 @@ function WorkTypes({ saved }: { saved: EmploymentHeroWorkTypesDto }) {
           </div>
         </>
       )}
+    </section>
+  )
+}
+
+const LEAVE_CATEGORY_FIELDS: { key: keyof EmploymentHeroLeaveCategoriesDto; label: string }[] = [
+  { key: 'annual', label: 'Annual leave' },
+  { key: 'sick', label: 'Sick leave' },
+  { key: 'personal', label: 'Personal leave' },
+  { key: 'other', label: 'Other leave' },
+]
+
+/** Which Employment Hero leave category each kind of approved ODIP leave is recorded as. Read live from EH; saving queues the waiting leave. */
+function LeaveCategories({ saved }: { saved: EmploymentHeroLeaveCategoriesDto }) {
+  const categories = useEmploymentHeroLeaveCategories(true)
+  const loadError = useLastError(categories.error)
+  const save = useSaveEmploymentHeroLeaveCategories()
+  const [draft, setDraft] = useState<EmploymentHeroLeaveCategoriesDto | null>(null)
+  const value = draft ?? saved
+  const known = new Set((categories.data ?? []).map(c => c.id))
+  return (
+    <section aria-labelledby="eh-leave-categories" className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-[var(--section-gap)]">
+      <h4 id="eh-leave-categories" tabIndex={-1} className="text-sm font-semibold outline-none">Leave categories</h4>
+      <p className={MUTED}>Which Employment Hero leave category each kind of ODIP leave is recorded as. Approved leave of a kind with no category waits until one is chosen. A change applies to leave not yet sent.</p>
+      {categories.isLoading && !retryingAfterError(categories) ? (
+        <p className={MUTED} role="status">Reading Employment Hero's leave categories…</p>
+      ) : categories.isError || !categories.data ? (
+        <Callout tone="danger">
+          <p>{extractErrorMessage(loadError, "Employment Hero's leave categories couldn't be loaded.")}</p>
+          <Button variant="secondary" size="sm" className="min-h-[var(--tap-min)]" disabled={categories.isFetching} onClick={() => categories.refetch()}>{categories.isFetching ? 'Trying…' : 'Try again'}</Button>
+        </Callout>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            {LEAVE_CATEGORY_FIELDS.map(f => {
+              const id = value[f.key]
+              const gone = id != null && !known.has(id)
+              return (
+                <SelectField
+                  key={f.key}
+                  className={FIELD_WIDTH}
+                  label={f.label}
+                  value={id ?? ''}
+                  error={gone ? 'Pick again.' : undefined}
+                  onChange={e => setDraft({ ...value, [f.key]: e.target.value || null })}
+                  options={[
+                    { value: '', label: 'Not chosen' },
+                    ...(gone ? [{ value: id, label: 'Not in Employment Hero any more' }] : []),
+                    ...categories.data.map(c => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+              )
+            })}
+          </div>
+          {save.error != null && <Callout tone="danger">{extractErrorMessage(save.error, "The leave categories couldn't be saved. Try again.")}</Callout>}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="secondary" className="min-w-[12rem]" disabled={draft === null || save.isPending} onClick={() => draft && save.mutate(draft, { onSuccess: () => setDraft(null) })}>
+              {save.isPending ? 'Saving…' : 'Save leave categories'}
+            </Button>
+            <span className={`${MUTED} min-h-5 basis-full`} role="status">{save.isSuccess && draft === null ? 'Leave categories saved. Waiting leave is queued to send.' : ''}</span>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+/** Leave Employment Hero didn't take, or a cancellation it didn't accept. Waiting items need a category or a link, so they have no Try again. */
+function LeaveNotSent({ items }: { items: EmploymentHeroLeaveProblemDto[] }) {
+  const retry = useRetryEmploymentHeroLeave()
+  if (items.length === 0) return null
+  // The item leaves when the card refetches, so focus goes to the heading that is left: this block's, or Leave categories' when it was the last.
+  const afterRetry = () => document.getElementById(items.length > 1 ? 'eh-leave-problems' : 'eh-leave-categories')?.focus()
+  return (
+    <section aria-labelledby="eh-leave-problems" className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-[var(--section-gap)]">
+      <h4 id="eh-leave-problems" tabIndex={-1} className="text-sm font-semibold outline-none">{`Leave not sent (${items.length})`}</h4>
+      <ul className="flex flex-col divide-y divide-[var(--color-border)]">
+        {items.map(item => {
+          const range = formatDateRange(item.startDate, item.endDate)
+          const kind = LEAVE_TYPE_LABELS[item.leaveType].toLowerCase()
+          const busy = retry.isPending && retry.variables === item.id
+          return (
+            <li key={item.id} className="flex flex-col gap-2 py-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-[1_1_20rem]">
+                  <p className="text-sm font-medium [overflow-wrap:anywhere]">{item.name}</p>
+                  <p className={`${MUTED} [overflow-wrap:anywhere]`}>{item.cancelling ? `Cancelling ${kind} leave` : `${LEAVE_TYPE_LABELS[item.leaveType]} leave`}{` · ${range}`}</p>
+                  <p className={`${MUTED} break-words`}>{item.reason}</p>
+                </div>
+                {!item.waiting && (
+                  <Button size="sm" variant="secondary" className="min-h-[var(--tap-min)] min-w-[6rem] w-full sm:w-auto" disabled={busy} aria-label={`Try again: ${item.name}, ${range}`}
+                    onClick={() => retry.mutate(item.id, { onSuccess: afterRetry })}>
+                    {busy ? 'Trying…' : 'Try again'}
+                  </Button>
+                )}
+              </div>
+              {retry.error != null && retry.variables === item.id && (
+                <Callout tone="danger">{extractErrorMessage(retry.error, "That couldn't be tried again. Try again in a minute.")}</Callout>
+              )}
+            </li>
+          )
+        })}
+      </ul>
     </section>
   )
 }

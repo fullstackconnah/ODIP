@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CalendarOff, Plus } from 'lucide-react'
-import { useMyLeave, useCreateLeaveRequest, useCancelMyLeave, useCreateMyUnavailability, useCancelMyUnavailability } from '@/api/hooks'
+import { useMyLeave, useCreateLeaveRequest, useCancelMyLeave, useCreateMyUnavailability, useCancelMyUnavailability, useModuleVisibility, useMyLeaveBalances } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
 import { BackButton } from '@/components/BackButton'
@@ -18,6 +18,7 @@ import { formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { LeaveBalances } from '@/components/LeaveBalances'
 
 type WithdrawTarget = { kind: 'leave' | 'unavailability'; id: string }
 
@@ -26,6 +27,8 @@ export default function PortalLeavePage() {
   const [tab, setTab] = useState<'leave' | 'unavailability'>('leave')
   const { data, isLoading, isError, refetch } = useMyLeave()
   const createLeave = useCreateLeaveRequest()
+  const connected = useModuleVisibility().data?.employmentHeroConnected === true
+  const balances = useMyLeaveBalances(connected && tab === 'leave')
   const cancelLeave = useCancelMyLeave()
   const createUnavailability = useCreateMyUnavailability()
   const cancelUnavailability = useCancelMyUnavailability()
@@ -77,7 +80,12 @@ export default function PortalLeavePage() {
   }
 
   const leaveColumns: Column<LeaveRequestDto>[] = [
-    { key: 'leaveType', header: 'Type', render: r => LEAVE_TYPE_LABELS[r.leaveType] ?? r.leaveType },
+    { key: 'leaveType', header: 'Type', render: r => (
+      <div>
+        {LEAVE_TYPE_LABELS[r.leaveType] ?? r.leaveType}
+        {r.source === 'EmploymentHero' && <p className="text-xs text-[var(--color-muted-foreground)]">Entered in Employment Hero</p>}
+      </div>
+    ) },
     { key: 'startDate', header: 'Start', type: 'date' },
     { key: 'endDate', header: 'End', type: 'date' },
     { key: 'status', header: 'Status', render: r => (
@@ -169,6 +177,15 @@ export default function PortalLeavePage() {
         />
       ) : (
         <DataTable data={unavailability} columns={unavailabilityColumns} keyField="id" emptyMessage="No regular unavailability" />
+      )}
+
+      {/* After the list: it answers later than the list, so it never pushes the list down. */}
+      {connected && tab === 'leave' && (
+        <LeaveBalances
+          query={balances}
+          noneMessage="Employment Hero has no leave balances for you yet."
+          notLinked="Your balances show here once an Admin links you to Employment Hero."
+        />
       )}
 
       {formOpen && (tab === 'leave' ? (

@@ -102,8 +102,8 @@ export const tileFor = (label: string) => tiles().find((tile) => labelOf(tile) =
 export const clearRow = () => screen.queryByText('All clear', { selector: 'span.font-semibold' })?.closest('p') ?? null
 
 export const FULL_ORDER = [
-  'Qualification Issues', 'Critical Participant Alerts', 'Budgets at risk', 'Overdue', 'Missing Accommodation',
-  'Missing Vehicles', 'Missing Staff', 'Open Incidents', 'QSC Overdue', 'Pending Leave', 'Shift Completions',
+  'Qualification issues', 'Critical participant alerts', 'Budgets at risk', 'Overdue', 'Missing accommodation',
+  'Missing vehicles', 'Missing staff', 'Open incidents', 'QSC overdue', 'Pending leave', 'Shift completions',
 ]
 
 // The same alerts, with three more participants whose budgets are at risk (two over, one forecast to go over). The Critical alerts are still the three on two participants: an over-budget alert is

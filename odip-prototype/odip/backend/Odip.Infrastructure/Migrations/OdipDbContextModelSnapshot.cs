@@ -5284,6 +5284,22 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<string>("LeaveCategoryAnnual")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("LeaveCategoryOther")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("LeaveCategoryPersonal")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("LeaveCategorySick")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -5670,6 +5686,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly>("EndDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("ExternalLeaveId")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<int>("LeaveType")
                         .HasColumnType("integer");
 
@@ -5682,6 +5702,16 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid>("RequestedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal?>("SentHours")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<bool?>("SentHoursDefaulted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
 
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
@@ -5703,6 +5733,11 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "ExternalLeaveId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LeaveRequests_TenantId_ExternalLeaveId")
+                        .HasFilter("\"ExternalLeaveId\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "StartDate", "EndDate");
 

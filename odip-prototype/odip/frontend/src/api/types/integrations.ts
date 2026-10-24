@@ -1,3 +1,4 @@
+import type { LeaveType } from './leave'
 /** Settings → Integrations → Employment Hero. There is never an API-key field: the key is write-only. */
 import type { PayrollShiftStatus, SleepoverType } from './enums'
 export type EmploymentHeroAttentionKind = 'NotLinked' | 'FixInEmploymentHero' | 'FixInOdip' | 'MissingFromEmploymentHero'
@@ -30,7 +31,37 @@ export interface EmploymentHeroStatusDto {
   timesheetsSent: number
   timesheetsWaiting: number
   workTypes: EmploymentHeroWorkTypesDto
+  /** Leave sent to EH, and leave queued to send or waiting for its category. */
+  leaveSent: number
+  leaveWaiting: number
+  leaveCategories: EmploymentHeroLeaveCategoriesDto
+  /** Leave (or a cancellation) EH didn't take. waiting: held for a category or a link, so no Try again. reason is the server's words. */
+  leaveProblems: EmploymentHeroLeaveProblemDto[]
 }
+
+/** The EH leave category id (a string) each kind of ODIP leave is sent under; null is not set. */
+export interface EmploymentHeroLeaveCategoriesDto {
+  annual: string | null
+  sick: string | null
+  personal: string | null
+  other: string | null
+}
+export interface EmploymentHeroLeaveCategoryDto { id: string; name: string }
+export interface EmploymentHeroLeaveProblemDto {
+  id: string
+  leaveId: string
+  name: string
+  leaveType: LeaveType
+  startDate: string
+  endDate: string
+  cancelling: boolean
+  waiting: boolean
+  reason: string
+}
+
+/** GET portal/leave/balances and staff/{id}/leave-balances. */
+export interface LeaveBalanceDto { category: string; amount: number; unit: string }
+export interface LeaveBalancesDto { status: 'NotConnected' | 'NotLinked' | 'Ready'; balances: LeaveBalanceDto[] }
 
 /** The EH work type id (a string) each kind of hours is sent under; null is not set. */
 export interface EmploymentHeroWorkTypesDto {

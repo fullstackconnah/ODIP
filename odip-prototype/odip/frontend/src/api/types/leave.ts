@@ -60,6 +60,11 @@ export interface LeaveRequestDto {
   decidedByUserId: string | null
   decidedAt: string | null
   decisionNote: string | null
+  /** Leave entered in Employment Hero is read-only here. */
+  source?: 'Odip' | 'EmploymentHero'
+  /** Hours ODIP sent to EH; defaulted says the 7.6 h a day fallback was used. */
+  sentHours?: number | null
+  sentHoursDefaulted?: boolean | null
 }
 
 export interface CreateLeaveRequestDto {
