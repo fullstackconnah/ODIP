@@ -1,8 +1,10 @@
 import WorkspaceVisibilitySection from '@/pages/settings/WorkspaceVisibilitySection'
 import { Fragment, useState, type ReactNode } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
+import { apiGet } from '@/api/client'
 import type { AdminUserDto, TenantSummaryDto } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
+import { NoticesRegion } from '@/components/NoticesRegion'
 import { PageHeader } from '@/components/PageHeader'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { useNotices } from '@/hooks/useNotices'
@@ -73,6 +75,17 @@ export default function SettingsPage() {
   // What became of each Users "Send set-password email". Held here, not in the section, because the section is unmounted whenever another
   // is shown: an unacknowledged failure must still be there on return, and a send that finishes while it is away must still report.
   const userNotices = useNotices()
+  // What the tenant detail says when Edit cannot load the user.
+  const editNotices = useNotices()
+  // The tenant detail lists users by id and name only, but the panel reads and saves every field: it opens on the full record, once that has arrived.
+  async function editTenantUser(id: string) {
+    try {
+      setEditingUser(await apiGet<AdminUserDto>(`/admin/users/${id}`))
+      setUserPanelOpen(true)
+    } catch {
+      editNotices.notify('danger', 'Edit user', "Couldn't open that user, and nothing was changed. Try Edit again.", id)
+    }
+  }
   const addUser = (tenantId?: string) => { setDefaultTenantId(tenantId); setEditingUser(undefined); setUserPanelOpen(true) }
 
   function body(def: SectionDef): ReactNode {
@@ -102,13 +115,17 @@ export default function SettingsPage() {
       case 'catalogue': return framed(<SupportCatalogueSection />)
       case 'users': return framed(<UsersTab notices={userNotices} onAddUser={addUser} onEditUser={(u) => { setEditingUser(u); setUserPanelOpen(true) }} />)
       case 'tenants': return framed(tenantDetail ? (
-        <TenantDetailView
-          tenant={tenantDetail}
-          onBack={() => setTenantDetail(undefined)}
-          onEditTenant={() => { setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
-          onAddUser={addUser}
-          onEditUser={() => { setUserPanelOpen(true) }}
-        />
+        <div className="flex flex-col gap-[var(--section-gap)]">
+          {/* Always mounted, so a live region exists before its content; while empty its box cancels the gap above the detail. */}
+          <NoticesRegion notices={editNotices.notices} onDismiss={editNotices.dismiss} className="empty:-mb-[var(--section-gap)]" />
+          <TenantDetailView
+            tenant={tenantDetail}
+            onBack={() => setTenantDetail(undefined)}
+            onEditTenant={() => { setEditingTenant(tenantDetail); setTenantPanelOpen(true) }}
+            onAddUser={addUser}
+            onEditUser={editTenantUser}
+          />
+        </div>
       ) : (
         <TenantsTab
           onAddTenant={() => { setEditingTenant(undefined); setTenantPanelOpen(true) }}
