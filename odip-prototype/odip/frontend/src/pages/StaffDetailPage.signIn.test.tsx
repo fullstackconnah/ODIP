@@ -19,6 +19,8 @@ const { mockUseStaffOverview, mockEnsure, sendPasswordResetEmail, firebase } = v
 vi.mock('@/api/hooks', () => ({
   useStaffOverview: mockUseStaffOverview,
   useSettings: () => ({ data: { qualificationWarningDays: 30 } }),
+  useModuleVisibility: () => ({ data: { employmentHeroConnected: false } }),
+  useStaffLeaveBalances: () => ({ data: undefined, isLoading: false, isError: false, refetch: () => undefined }),
   useEnsureStaffSignInAccount: () => ({ mutateAsync: mockEnsure }),
 }))
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))

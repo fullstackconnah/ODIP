@@ -63,6 +63,7 @@ describe('the Start, banner and guard copy (2026-10-16)', () => {
     const make = "Kim goes on Mia Chen's Monday 9am–3pm shift in every week you start from now on, unless they're away. Weeks already started don't change, this one included."
 
     it('Make: the slot, every week started from now, and who it replaces', () => {
+      expect(regularConfirm(shift).lines.join(" ")).not.toContain("renewal")
       expect(regularConfirm(shift)).toEqual({ title: 'Make Kim the regular?', lines: [make], confirmLabel: 'Make Kim the regular' })
       expect(regularConfirm(shift, 'Sam Wilson').lines).toEqual([make, 'Sam stops being the regular.'])
     })
@@ -70,7 +71,7 @@ describe('the Start, banner and guard copy (2026-10-16)', () => {
     it('Stop: its own words', () => {
       expect(regularConfirm({ ...shift, isRegular: true })).toEqual({
         title: 'Stop Kim being the regular?',
-        lines: ["From the next week you start, Mia Chen's Monday 9am–3pm shift is made open, with nobody on it. Weeks already started keep Kim."],
+        lines: ["From the next week you start, Mia Chen's Monday 9am–3pm shift is made open, with nobody on it. Weeks already started keep Kim.", "If Kim is also the regular on the same shift in a renewal of this agreement, that stops too."],
         confirmLabel: 'Stop being the regular',
       })
     })

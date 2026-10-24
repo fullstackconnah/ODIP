@@ -26,6 +26,11 @@ public class EmploymentHeroConnection : ITenantEntity
     public string? WorkTypeActiveNight { get; set; }
     public string? WorkTypePassiveNight { get; set; }
     public string? WorkTypeSleepover { get; set; }
+    /// <summary>The EH leave category ids sent on a leave request, by ODIP leave type. Null = none chosen: that leave waits.</summary>
+    public string? LeaveCategoryAnnual { get; set; }
+    public string? LeaveCategorySick { get; set; }
+    public string? LeaveCategoryPersonal { get; set; }
+    public string? LeaveCategoryOther { get; set; }
 }
 
 /// <summary>What a Needs-attention item asks of the Admin. Append-only, stored as an int; the API sends the name.</summary>

@@ -6,10 +6,12 @@ import PortalLeavePage from './PortalLeavePage'
 import { makeLeaveRequest, makeRecurringRule } from '@/pages/rostering/test-fixtures-leave'
 
 const {
-  mockUseMyLeave, mockCreateLeaveMutateAsync, mockCancelLeaveMutateAsync,
+  mockUseMyLeave, mockVisibility, mockBalances, mockCreateLeaveMutateAsync, mockCancelLeaveMutateAsync,
   mockCreateUnavailabilityMutateAsync, mockCancelUnavailabilityMutateAsync,
 } = vi.hoisted(() => ({
   mockUseMyLeave: vi.fn(),
+  mockVisibility: vi.fn(),
+  mockBalances: vi.fn(),
   mockCreateLeaveMutateAsync: vi.fn(),
   mockCancelLeaveMutateAsync: vi.fn(),
   mockCreateUnavailabilityMutateAsync: vi.fn(),
@@ -18,6 +20,8 @@ const {
 
 vi.mock('@/api/hooks', () => ({
   useMyLeave: mockUseMyLeave,
+  useModuleVisibility: mockVisibility,
+  useMyLeaveBalances: mockBalances,
   useCreateLeaveRequest: () => ({ mutateAsync: mockCreateLeaveMutateAsync, isPending: false }),
   useCancelMyLeave: () => ({ mutateAsync: mockCancelLeaveMutateAsync, isPending: false }),
   useCreateMyUnavailability: () => ({ mutateAsync: mockCreateUnavailabilityMutateAsync, isPending: false }),
@@ -43,6 +47,9 @@ beforeEach(() => {
   localStorage.clear()
   setUserRole('SupportWorker')
   mockUseMyLeave.mockReturnValue({ data: { leave: [], unavailability: [] }, isLoading: false, isError: false, refetch: vi.fn() })
+  mockVisibility.mockReturnValue({ data: { employmentHeroConnected: false } })
+  mockBalances.mockReset()
+  mockBalances.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })
   mockCreateLeaveMutateAsync.mockReset()
   mockCancelLeaveMutateAsync.mockReset()
   mockCreateUnavailabilityMutateAsync.mockReset()
@@ -228,5 +235,45 @@ describe('PortalLeavePage — a failed load', () => {
   it('offers Back to My shifts beside the title', () => {
     renderPage()
     expect(screen.getByRole('link', { name: 'Back to my shifts' })).toHaveAttribute('href', '/portal')
+  })
+})
+
+describe('PortalLeavePage — Employment Hero', () => {
+  const ready = { data: { status: 'Ready', balances: [{ category: 'Annual Leave', amount: 76, unit: 'Hours' }, { category: 'Time in lieu', amount: -3.75, unit: 'Hours' }] }, isLoading: false, isError: false, refetch: vi.fn() }
+
+  it('shows no balances and reads none when the organisation is not connected', () => {
+    renderPage()
+    expect(screen.queryByRole('heading', { name: 'Leave balances' })).not.toBeInTheDocument()
+    expect(mockBalances).toHaveBeenCalledWith(false)
+  })
+
+  it('shows the balances after the list, with one decimal and a real minus', () => {
+    mockVisibility.mockReturnValue({ data: { employmentHeroConnected: true } })
+    mockBalances.mockReturnValue(ready)
+    renderPage()
+    expect(mockBalances).toHaveBeenCalledWith(true)
+    expect(screen.getByRole('heading', { name: 'Leave balances' })).toBeInTheDocument()
+    expect(screen.getByText('76.0 hours')).toBeInTheDocument()
+    expect(screen.getByText('\u22123.8 hours')).toBeInTheDocument()
+    expect(screen.getByText('From Employment Hero, as at today.')).toBeInTheDocument()
+  })
+
+  it('keeps balances off the Regular unavailability tab', async () => {
+    const user = userEvent.setup()
+    mockVisibility.mockReturnValue({ data: { employmentHeroConnected: true } })
+    mockBalances.mockReturnValue(ready)
+    renderPage()
+    await user.click(screen.getByRole('tab', { name: 'Regular unavailability' }))
+    expect(screen.queryByRole('heading', { name: 'Leave balances' })).not.toBeInTheDocument()
+  })
+
+  it('marks leave entered in Employment Hero, with no Withdraw', () => {
+    mockUseMyLeave.mockReturnValue({
+      data: { leave: [makeLeaveRequest({ id: 'eh-1', status: 'Approved', source: 'EmploymentHero' })], unavailability: [] },
+      isLoading: false, isError: false, refetch: vi.fn(),
+    })
+    renderPage()
+    expect(screen.getByText('Entered in Employment Hero')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /withdraw/i })).not.toBeInTheDocument()
   })
 })

@@ -1,7 +1,8 @@
 import { useParams, Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
-import { useStaffOverview, useSettings, useEnsureStaffSignInAccount } from '@/api/hooks'
+import { useStaffOverview, useSettings, useEnsureStaffSignInAccount, useModuleVisibility, useStaffLeaveBalances } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
+import { LeaveBalances } from '@/components/LeaveBalances'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
@@ -63,6 +64,10 @@ export default function StaffDetailPage() {
   const { data: overview, isLoading, isError, error, refetch } = pageQuery
   const { data: settings } = useSettings()
   const warningDays = settings?.qualificationWarningDays ?? 30
+  // Balances are payroll data: Admin and SuperAdmin only (the endpoint refuses the rest), and only once the organisation is connected.
+  const ehConnected = useModuleVisibility().data?.employmentHeroConnected === true
+  const showBalances = (isAdmin || isSuperAdmin) && ehConnected
+  const balances = useStaffLeaveBalances(id ?? '', showBalances && !!id && tab === 'availability')
 
   const credentialRows = useMemo(
     () => (overview ? staffCredentials(overview.staff, { warnDays: warningDays }) : []),
@@ -169,6 +174,23 @@ export default function StaffDetailPage() {
           <div className="[&>div]:p-0">
             <AvailabilityList staffId={id!} availability={overview.availability} />
           </div>
+        </Card>
+      )}
+
+      {tab === 'availability' && showBalances && (
+        <Card>
+          <LeaveBalances
+            query={balances}
+            noneMessage="Employment Hero has no leave balances for this person yet."
+            loadingMessage="Reading balances from Employment Hero…"
+            headingLevel={3}
+            notLinked={
+              <>
+                <span>Not linked to Employment Hero, so ODIP can't show balances.</span>
+                <Link className="flex w-fit items-center text-[13px] underline pointer-coarse:min-h-[var(--tap-min)]" to="/settings?section=integrations">Link in Settings → Integrations</Link>
+              </>
+            }
+          />
         </Card>
       )}
 

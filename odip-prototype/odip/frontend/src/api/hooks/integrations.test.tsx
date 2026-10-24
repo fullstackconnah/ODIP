@@ -16,6 +16,7 @@ import {
   useConnectEmploymentHero, useDisconnectEmploymentHero, useDismissEmploymentHeroItem, useEmploymentHeroBusinesses,
   useEmploymentHeroEmployees, useEmploymentHeroStatus, useEmploymentHeroWorkTypes, useLinkEmploymentHeroStaff, usePayPeriods, usePayrollCheck,
   useSaveEmploymentHeroWorkTypes, useSendMissingTimesheets, useSyncEmploymentHero,
+  useMyLeaveBalances, useRetryEmploymentHeroLeave, useSaveEmploymentHeroLeaveCategories, useStaffLeaveBalances,
 } from './integrations'
 
 const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
@@ -100,5 +101,39 @@ describe('Employment Hero hooks', () => {
     await result.current.mutateAsync({ from: '2026-10-06', to: '2026-10-19' })
     expect(mockPost).toHaveBeenCalledWith(`${BASE}/payroll/send-missing`, { from: '2026-10-06', to: '2026-10-19' })
     expect(qc.getQueryData(['employment-hero', 'payroll', 'check', '2026-10-06', '2026-10-19'])).toEqual(check)
+  })
+
+  it('saves the four leave categories with PUT, the full body, and marks the card stale', async () => {
+    const qc = new QueryClient()
+    qc.setQueryData(['employment-hero'], {})
+    const { result } = renderHook(() => useSaveEmploymentHeroLeaveCategories(), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>,
+    })
+    await result.current.mutateAsync({ annual: '5', sick: '7', personal: '7', other: null })
+    expect(mockPut).toHaveBeenCalledWith(`${BASE}/leave-categories`, { annual: '5', sick: '7', personal: '7', other: null })
+    expect(qc.getQueryState(['employment-hero'])?.isInvalidated).toBe(true)
+  })
+
+  it('Try again on leave posts to the leave id and marks the card stale', async () => {
+    const qc = new QueryClient()
+    qc.setQueryData(['employment-hero'], {})
+    const { result } = renderHook(() => useRetryEmploymentHeroLeave(), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>,
+    })
+    await result.current.mutateAsync('row-1')
+    expect(mockPost).toHaveBeenCalledWith(`${BASE}/leave/row-1/retry`)
+    expect(qc.getQueryState(['employment-hero'])?.isInvalidated).toBe(true)
+  })
+
+  it('reads balances for me and for one person, and does not call while disabled', async () => {
+    const off = renderHook(() => ({ a: useMyLeaveBalances(false), b: useStaffLeaveBalances('u1', false) }), { wrapper })
+    expect(off.result.current.a.fetchStatus).toBe('idle')
+    expect(off.result.current.b.fetchStatus).toBe('idle')
+    expect(mockGet).not.toHaveBeenCalled()
+    const mine = renderHook(() => useMyLeaveBalances(true), { wrapper })
+    const staff = renderHook(() => useStaffLeaveBalances('u1', true), { wrapper })
+    await waitFor(() => expect(mine.result.current.isSuccess && staff.result.current.isSuccess).toBe(true))
+    expect(mockGet).toHaveBeenCalledWith('/portal/leave/balances')
+    expect(mockGet).toHaveBeenCalledWith('/staff/u1/leave-balances')
   })
 })

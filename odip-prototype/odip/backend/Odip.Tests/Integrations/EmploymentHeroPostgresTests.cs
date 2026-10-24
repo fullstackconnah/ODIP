@@ -8,6 +8,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
 using Odip.Tests.Imports;
@@ -287,6 +288,154 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(2, await db.EmploymentHeroOutbox.IgnoreQueryFilters().CountAsync(r => r.TenantId == tenantId && r.Status == EmploymentHeroOutboxStatus.Sent));
     }
 
+    private static async Task<LeaveRequest> SeedLeaveAsync(OdipDbContext db, Guid tenantId)
+    {
+        await ConnectAsync(db, tenantId);
+        var conn = await db.EmploymentHeroConnections.IgnoreQueryFilters().SingleAsync(c => c.TenantId == tenantId);
+        conn.LeaveCategoryAnnual = "5";
+        var worker = await EhTimesheetFixture.WorkerAsync(db, tenantId);
+        var monday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        while (monday.DayOfWeek != DayOfWeek.Monday) monday = monday.AddDays(1);
+        var decided = EmploymentHeroLeave.Cutoff(conn.ConnectedAt).AddDays(1);
+        var leave = new LeaveRequest
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, UserId = worker.Id, LeaveType = LeaveType.Annual, StartDate = monday, EndDate = monday.AddDays(2),
+            Status = LeaveStatus.Approved, RequestedByUserId = worker.Id, RequestedAt = decided, DecidedByUserId = worker.Id, DecidedAt = decided,
+        };
+        db.LeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+        return leave;
+    }
+
+    private static EmploymentHeroLeaveSync LeaveSync(StubHttpHandler eh) =>
+        new(StubHttpHandler.Client(eh), EhFixture.Keys, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<EmploymentHeroLeaveSync>.Instance, TimeSpan.Zero);
+
+    [SkippableFact]
+    public async Task The_leave_sync_runs_on_Postgres()
+    {
+        RequirePostgres();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        var leave = await SeedLeaveAsync(db, tenantId);
+        var eh = EhLeaveFixture.Eh();
+        var sync = LeaveSync(eh);
+
+        await sync.RunAsync(db, tenantId, false, CancellationToken.None);
+        leave.EndDate = leave.EndDate.AddDays(1);
+        await db.SaveChangesAsync();
+        await sync.RunAsync(db, tenantId, false, CancellationToken.None);
+
+        Assert.Equal(1, eh.Requests.Count(r => r.Method == HttpMethod.Post && r.RequestUri!.AbsolutePath == EhLeaveFixture.Requests42));
+        Assert.Equal(1, eh.Requests.Count(r => r.Method == HttpMethod.Put));
+        Assert.Equal(EmploymentHeroOutboxStatus.Sent, (await db.EmploymentHeroOutbox.IgnoreQueryFilters().SingleAsync(r => r.TenantId == tenantId)).Status);
+    }
+
+    [SkippableFact]
+    public async Task Two_leave_drains_at_once_post_the_leave_once_on_Postgres()
+    {
+        RequirePostgres();
+        var (db1, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _1 = db1;
+        await SeedLeaveAsync(db1, tenantId);
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+        var eh = EhLeaveFixture.Eh();
+        eh.BeforeAnswer = _ => Thread.Sleep(50);
+
+        await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, false, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, false, CancellationToken.None));
+
+        Assert.Equal(1, eh.Requests.Count(r => r.Method == HttpMethod.Post && r.RequestUri!.AbsolutePath == EhLeaveFixture.Requests42));
+    }
+
+    private static StubHttpHandler EhHolding(string fromDate, string toDate, string? notes) =>
+        EhLeaveFixture.Eh().OnAnyQuery("/api/v2/business/777/leaverequest", HttpStatusCode.OK,
+            new[] { new { id = 9001, employeeId = 42, leaveCategoryId = 5, fromDate, toDate, status = "Approved", notes } });
+
+    [SkippableFact]
+    public async Task A_pull_and_a_drain_on_one_EH_leave_keep_one_row_on_Postgres()
+    {
+        RequirePostgres();
+        var (db1, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _1 = db1;
+        var leave = await SeedLeaveAsync(db1, tenantId);
+        var now = DateTime.UtcNow;
+        var row = EmploymentHeroLeave.NewRow(tenantId, EmploymentHeroOutboxKind.Leave, leave.Id, now.AddMinutes(-20));
+        (row.Attempts, row.NextAttemptAt) = (1, now.AddMinutes(-10));
+        db1.EmploymentHeroOutbox.Add(row);
+        await db1.SaveChangesAsync();
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+        var eh = EhHolding(leave.StartDate.ToString("yyyy-MM-dd") + "T00:00:00", leave.EndDate.ToString("yyyy-MM-dd") + "T00:00:00", EmploymentHeroLeave.Marker(leave.Id));
+
+        await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, true, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, false, CancellationToken.None));
+
+        Assert.Equal(0, eh.Requests.Count(r => r.Method == HttpMethod.Post && r.RequestUri!.AbsolutePath == EhLeaveFixture.Requests42));
+        var all = await db1.LeaveRequests.AsNoTracking().ToListAsync();
+        Assert.Equal(("9001", LeaveSource.Odip), (Assert.Single(all).ExternalLeaveId, all[0].Source));
+    }
+
+    [SkippableFact]
+    public async Task Two_pulls_at_once_import_each_EH_leave_once_on_Postgres()
+    {
+        RequirePostgres();
+        var (db1, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _1 = db1;
+        await ConnectAsync(db1, tenantId);
+        await EhTimesheetFixture.WorkerAsync(db1, tenantId);
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+        var day = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(3).ToString("yyyy-MM-dd") + "T00:00:00";
+        var eh = EhHolding(day, day, null);
+        eh.BeforeAnswer = _ => Thread.Sleep(50);
+
+        await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, true, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, true, CancellationToken.None));
+
+        Assert.Equal(1, await db1.LeaveRequests.IgnoreQueryFilters().CountAsync(l => l.TenantId == tenantId && l.ExternalLeaveId == "9001"));
+    }
+
+    [SkippableFact]
+    public async Task Two_leave_scans_queueing_the_same_leave_never_deadlock_on_Postgres()
+    {
+        RequirePostgres();
+        for (var i = 0; i < 50; i++)
+        {
+            var (db1, tenantId) = await _pg.NewTenantContextAsync();
+            await using var _1 = db1;
+            var first = await SeedLeaveAsync(db1, tenantId);
+            db1.LeaveRequests.AddRange(Enumerable.Range(1, 9).Select(k => new LeaveRequest
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, UserId = first.UserId, LeaveType = LeaveType.Annual, StartDate = first.StartDate.AddDays(7 * k), EndDate = first.StartDate.AddDays(7 * k),
+                Status = LeaveStatus.Approved, RequestedByUserId = first.UserId, RequestedAt = first.DecidedAt!.Value, DecidedByUserId = first.UserId, DecidedAt = first.DecidedAt,
+            }));
+            await db1.SaveChangesAsync();
+            await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+            var eh = EhLeaveFixture.Eh();
+
+            await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, false, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, false, CancellationToken.None));
+
+            // The stub answers every POST with id 9001, so only the scan's rows are counted here.
+            Assert.Equal(10, await db1.EmploymentHeroOutbox.IgnoreQueryFilters().CountAsync(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Leave));
+        }
+    }
+
+    [SkippableFact]
+    public async Task Two_pulls_importing_the_same_EH_leaves_never_deadlock_on_Postgres()
+    {
+        RequirePostgres();
+        for (var i = 0; i < 20; i++)
+        {
+            var (db1, tenantId) = await _pg.NewTenantContextAsync();
+            await using var _1 = db1;
+            await ConnectAsync(db1, tenantId);
+            await EhTimesheetFixture.WorkerAsync(db1, tenantId);
+            await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+            string Day(int n) => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(n).ToString("yyyy-MM-dd") + "T00:00:00";
+            var eh = EhLeaveFixture.Eh().OnAnyQuery("/api/v2/business/777/leaverequest", HttpStatusCode.OK,
+                Enumerable.Range(0, 4).Select(k => new { id = 9001 + k, employeeId = 42, leaveCategoryId = 5, fromDate = Day(3 + k), toDate = Day(3 + k), status = "Approved", notes = (string?)null }).ToArray());
+
+            await Task.WhenAll(LeaveSync(eh).RunAsync(db1, tenantId, true, CancellationToken.None), LeaveSync(eh).RunAsync(db2, tenantId, true, CancellationToken.None));
+
+            Assert.Equal(new[] { "9001", "9002", "9003", "9004" }, (await db1.LeaveRequests.IgnoreQueryFilters().Where(l => l.TenantId == tenantId).Select(l => l.ExternalLeaveId!).ToListAsync()).Order().ToArray());
+        }
+    }
+
     [SkippableFact]
     public async Task Two_drains_at_once_post_each_shift_once_on_Postgres()
     {
@@ -342,5 +491,43 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(2, data.Queued);
         Assert.Equal(2, data.Check.Waiting);
         Assert.Single(data.Check.Workers);
+    }
+
+    [SkippableFact]
+    public async Task An_EH_leave_id_is_unique_per_organisation_only_when_set()
+    {
+        RequirePostgres();
+        var (dbA, tenantA) = await _pg.NewTenantContextAsync();
+        var (dbB, tenantB) = await _pg.NewTenantContextAsync();
+        await using var _a = dbA;
+        await using var _b = dbB;
+        LeaveRequest Leave(Guid tenantId, string? ehId) => new()
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, UserId = Guid.NewGuid(), RequestedByUserId = Guid.NewGuid(), ExternalLeaveId = ehId,
+            StartDate = new DateOnly(2026, 11, 2), EndDate = new DateOnly(2026, 11, 6),
+        };
+        var userA = Person(tenantA, "ann", null);
+        var userB = Person(tenantB, "bob", null);
+        dbA.Users.Add(userA);
+        dbB.Users.Add(userB);
+        await dbA.SaveChangesAsync();
+        await dbB.SaveChangesAsync();
+
+        // Any number without an id, and the same id in two organisations: allowed.
+        var l1 = Leave(tenantA, null); l1.UserId = userA.Id;
+        var l2 = Leave(tenantA, null); l2.UserId = userA.Id;
+        var l3 = Leave(tenantA, "9001"); l3.UserId = userA.Id;
+        var l4 = Leave(tenantB, "9001"); l4.UserId = userB.Id;
+        dbA.LeaveRequests.AddRange(l1, l2, l3);
+        dbB.LeaveRequests.Add(l4);
+        await dbA.SaveChangesAsync();
+        await dbB.SaveChangesAsync();
+
+        var again = Leave(tenantA, "9001"); again.UserId = userA.Id;
+        dbA.LeaveRequests.Add(again);
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => dbA.SaveChangesAsync());
+        var pg = Assert.IsType<PostgresException>(failure.InnerException);
+        Assert.Equal("23505", pg.SqlState);
+        Assert.Equal(LeaveRequest.ExternalLeaveIdIndexName, pg.ConstraintName);
     }
 }
