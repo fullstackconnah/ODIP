@@ -492,7 +492,7 @@ describe('Make or Stop the regular', () => {
     await choose(user, 'Stop being the regular')
     const dialog = screen.getByRole('alertdialog', { name: 'Stop Sam being the regular?' })
     expect(dialog).toHaveTextContent("From the next week you start, Mia Chen's Wednesday 9am–3pm shift is made open, with nobody on it. Weeks already started keep Sam.")
-    expect(dialog).toHaveTextContent("If this agreement has been renewed, the renewal keeps its own regular when someone set a different one.")
+    expect(dialog).toHaveTextContent("If Sam is also the regular on the same shift in a renewal of this agreement, that stops too.")
     await user.click(within(dialog).getByRole('button', { name: 'Stop being the regular' }))
     expect(h.setRegular).toHaveBeenCalledWith({ patternId: 'pat-wed', shiftId: 'sam-wed', staffId: null, expectedRegularId: 'staff-2' })
     expect(await screen.findByText("Mia Chen's Wednesday shift has no regular now.")).toBeInTheDocument()

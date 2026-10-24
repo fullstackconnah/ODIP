@@ -71,7 +71,7 @@ describe('the Start, banner and guard copy (2026-10-16)', () => {
     it('Stop: its own words', () => {
       expect(regularConfirm({ ...shift, isRegular: true })).toEqual({
         title: 'Stop Kim being the regular?',
-        lines: ["From the next week you start, Mia Chen's Monday 9am–3pm shift is made open, with nobody on it. Weeks already started keep Kim.", "If this agreement has been renewed, the renewal keeps its own regular when someone set a different one."],
+        lines: ["From the next week you start, Mia Chen's Monday 9am–3pm shift is made open, with nobody on it. Weeks already started keep Kim.", "If Kim is also the regular on the same shift in a renewal of this agreement, that stops too."],
         confirmLabel: 'Stop being the regular',
       })
     })
