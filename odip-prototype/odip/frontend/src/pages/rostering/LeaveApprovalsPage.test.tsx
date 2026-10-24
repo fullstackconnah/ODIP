@@ -113,6 +113,37 @@ describe('LeaveApprovalsPage', () => {
     expect(screen.getByText('To')).toBeVisible()
   })
 
+  it('keeps each date in the Dates cell on one line: no-break spaces inside a date and before the dash', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ userFullName: 'Alex Rivera', startDate: '2026-09-14', endDate: '2026-09-18' })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr')!
+    // textContent keeps the U+00A0 that Testing Library's text matchers would normalise away.
+    expect(row.textContent).toContain('14\u00a0Sep\u00a02026\u00a0– 18\u00a0Sep\u00a02026')
+    // The accessible names keep ordinary spaces.
+    expect(screen.getByRole('button', { name: 'Approve: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+  })
+
+  it('keeps a Requested date and "Employment Hero" from splitting across lines', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [
+      makeLeaveRequest({ id: 'l-self', userFullName: 'Alex Rivera', requestedAt: '2026-09-07T09:00:00Z' }),
+      makeLeaveRequest({ id: 'l-eh', userFullName: 'Eve Hero', source: 'EmploymentHero', status: 'Approved' }),
+    ], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    // textContent keeps the U+00A0 that Testing Library's text matchers would normalise away.
+    expect(screen.getByText('Alex Rivera').closest('tr')!.textContent).toContain('Self · 7\u00a0Sep\u00a02026')
+    expect(screen.getByText('Eve Hero').closest('tr')!.textContent).toContain('Entered in Employment Hero')
+  })
+
+  it('never breaks a recurring row time range at its dash', () => {
+    mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ userFullName: 'Jordan Smith', dayOfWeek: 'Monday', startTime: '09:00:00', endTime: '12:00:00' })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    // Word joiner after the en dash: a break after an en dash is otherwise allowed.
+    expect(screen.getByText('Jordan Smith').closest('tr')!.textContent).toContain('Monday 09:00–\u206012:00')
+  })
+
   it('renders both leave requests and recurring unavailability rows in one table', () => {
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ userFullName: 'Alex Rivera', leaveType: 'Sick' })], isLoading: false, isError: false, refetch: vi.fn() })
     mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ userFullName: 'Jordan Smith', dayOfWeek: 'Tuesday' })], isLoading: false, isError: false, refetch: vi.fn() })
@@ -767,5 +798,16 @@ describe('LeaveApprovalsPage — Employment Hero leave', () => {
     renderPage()
     expect(screen.getByText("In Employment Hero \u00b7 22.8 h (7.6 h a day: ODIP's default)")).toBeInTheDocument()
     expect(screen.getByText('In Employment Hero \u00b7 36 h')).toBeInTheDocument()
+  })
+
+  // The table squeezes wrapping columns before it scrolls, so no text ends up under the pinned buttons (approvals-1024).
+  it('lets Type, Dates and Requested wrap instead of capping them with an ellipsis', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [rows()[1]], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    for (const header of ['Type', 'Dates', 'Requested']) {
+      const cell = screen.getAllByRole('cell').find(c => c.getAttribute('data-label') === header)!
+      expect(cell.className).not.toContain('whitespace-nowrap')
+      expect(cell.querySelector('.truncate, [class*="md:truncate"]')).toBeNull()
+    }
   })
 })

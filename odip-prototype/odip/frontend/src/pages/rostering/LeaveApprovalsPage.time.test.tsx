@@ -34,9 +34,9 @@ afterEach(() => {
 // of the string are the UTC date, which is yesterday for a request made before 10:00 (11:00 in daylight time) in Sydney.
 describe('LeaveApprovalsPage "Requested by" date', () => {
   it.each([
-    ['Australia/Sydney', 'Self · 2026-10-01'],   // 22:00Z on 30 Sep is 08:00 on 1 Oct
-    ['UTC', 'Self · 2026-09-30'],
-    ['America/New_York', 'Self · 2026-09-30'],   // 18:00 on 30 Sep
+    ['Australia/Sydney', 'Self · 1 Oct 2026'],   // 22:00Z on 30 Sep is 08:00 on 1 Oct
+    ['UTC', 'Self · 30 Sep 2026'],
+    ['America/New_York', 'Self · 30 Sep 2026'],   // 18:00 on 30 Sep
   ])('in %s reads %s', (zone, expected) => {
     if (!setZone(zone)) return
     mockUseLeaveRequests.mockReturnValue({

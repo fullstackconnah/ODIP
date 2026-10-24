@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { format } from 'date-fns'
 import { CalendarOff, Plus } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
@@ -29,7 +30,6 @@ import type {
 } from '@/api/types'
 import { formatEffectiveRange, formatShiftTimeRange } from './lib/roster'
 import { extractErrorMessage, formatDateAu, parseApiDate } from '@/lib/utils'
-import { localIsoDate } from '@/lib/dateOnly'
 import type { Tone } from '@/lib/tone'
 import { plural } from '@/lib/format'
 import { Button } from '@/components/Button'
@@ -67,6 +67,10 @@ function rowWindow(row: ApprovalRow) {
   }
   return formatEffectiveRange(row.data.startDateTime.slice(0, 10), row.data.endDateTime.slice(0, 10))
 }
+
+// Dates (here and in Requested) wrap at the dash only: no-break spaces inside each date and before the dash, a word joiner after the dash of a time range.
+const keepDatesWhole = (text: string) => text.replace(/(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})/g, '$1\u00a0$2\u00a0$3')
+const rowWindowText = (row: ApprovalRow) => keepDatesWhole(rowWindow(row)).replace(/ –/g, '\u00a0–').replace(/–(?=\d)/g, '–\u2060')
 
 /** Sort key for the merged table — requestedAt for leave/unavailability rows; a legacy row has no
  * requestedAt (there's no request workflow), so it falls back to createdAt if the DTO ever grows
@@ -477,16 +481,16 @@ export default function LeaveApprovalsPage() {
 
   function rowRequestedBy(row: ApprovalRow) {
     if (row.rowKind === 'legacy') return '—'
-    if (fromEh(row)) return 'Entered in Employment Hero'
+    if (fromEh(row)) return 'Entered in Employment\u00a0Hero'
     const { requestedByUserId, userId, requestedAt } = row.data
     const who = requestedByUserId === userId ? 'Self' : (staffNameById.get(requestedByUserId) ?? 'Coordinator')
     // requestedAt is an INSTANT: the day it was requested is the viewer's local date, not the first ten characters (the UTC date).
-    return `${who} · ${localIsoDate(parseApiDate(requestedAt))}`
+    return keepDatesWhole(`${who} · ${format(parseApiDate(requestedAt), 'd MMM yyyy')}`)
   }
 
   // Column budget (density §4): the Edit / Decline / Approve buttons took ~260px at md (~170px now they are sm), so with uncapped text columns this table needed ~1170px
-  // against a ~1006px box at 1280 and pushed the buttons off-screen. The text columns are capped (ellipsis, full text in the tooltip);
-  // Requested (who asked, and when) stays, and the buttons stay pinned while the table scrolls in its box (DataTable's column rule).
+  // against a ~1006px box at 1280 and pushed the buttons off-screen. Staff is capped (ellipsis, full text in the tooltip); Type, Dates and Requested wrap to two lines above a floor width, so the table squeezes
+  // them before it scrolls and no text ends up under the pinned buttons. The buttons stay pinned while a still-too-wide table scrolls in its box (DataTable's column rule).
   const columns: Column<ApprovalRow>[] = [
     { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => isOwn(row) ? (
       <span className="flex min-w-0 items-center gap-2">
@@ -494,9 +498,9 @@ export default function LeaveApprovalsPage() {
         <StatusBadge tone="neutral" label="Your request" className="shrink-0 whitespace-nowrap" />
       </span>
     ) : row.data.userFullName },
-    { key: 'type', header: 'Type', maxWidth: '8rem', render: rowType },
-    { key: 'window', header: 'Dates', maxWidth: '16rem', render: rowWindow },
-    { key: 'requestedAt', header: 'Requested', maxWidth: '12rem', render: rowRequestedBy },
+    { key: 'type', header: 'Type', wrap: true, minWidth: '6rem', render: rowType },
+    { key: 'window', header: 'Dates', wrap: true, minWidth: '11rem', render: rowWindowText },
+    { key: 'requestedAt', header: 'Requested', wrap: true, minWidth: '9rem', render: rowRequestedBy },
     { key: 'status', header: 'Status', render: row => row.rowKind === 'legacy' ? (
       <StatusBadge status="Record" colorMap={LEGACY_RECORD_COLOR} />
     ) : (
@@ -506,7 +510,7 @@ export default function LeaveApprovalsPage() {
           <p className="mt-1 text-xs text-[var(--color-muted-foreground)] md:max-w-[12rem] md:truncate" title={row.data.decisionNote}>{row.data.decisionNote}</p>
         )}
         {row.rowKind === 'leave' && row.data.sentHours != null && (
-          <p className="mt-1 whitespace-normal text-xs text-[var(--color-muted-foreground)] md:min-w-[14rem]">
+          <p className="mt-1 whitespace-normal text-xs text-[var(--color-muted-foreground)] md:min-w-[12rem]">
             {`In Employment Hero · ${hoursLabel(row.data.sentHours)}${row.data.sentHoursDefaulted ? " (7.6 h a day: ODIP's default)" : ''}`}
           </p>
         )}
