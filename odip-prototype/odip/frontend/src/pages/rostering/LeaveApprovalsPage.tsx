@@ -68,6 +68,9 @@ function rowWindow(row: ApprovalRow) {
   return formatEffectiveRange(row.data.startDateTime.slice(0, 10), row.data.endDateTime.slice(0, 10))
 }
 
+// Dates wrap at the dash only: no-break spaces inside each date and before the dash, a word joiner after the dash of a time range.
+const rowWindowText = (row: ApprovalRow) => rowWindow(row).replace(/(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})/g, '$1\u00a0$2\u00a0$3').replace(/ –/g, '\u00a0–').replace(/–(?=\d)/g, '–\u2060')
+
 /** Sort key for the merged table — requestedAt for leave/unavailability rows; a legacy row has no
  * requestedAt (there's no request workflow), so it falls back to createdAt if the DTO ever grows
  * one, else startDateTime. */
@@ -495,7 +498,7 @@ export default function LeaveApprovalsPage() {
       </span>
     ) : row.data.userFullName },
     { key: 'type', header: 'Type', wrap: true, minWidth: '6rem', render: rowType },
-    { key: 'window', header: 'Dates', wrap: true, minWidth: '10rem', render: rowWindow },
+    { key: 'window', header: 'Dates', wrap: true, minWidth: '11rem', render: rowWindowText },
     { key: 'requestedAt', header: 'Requested', wrap: true, minWidth: '9rem', render: rowRequestedBy },
     { key: 'status', header: 'Status', render: row => row.rowKind === 'legacy' ? (
       <StatusBadge status="Record" colorMap={LEGACY_RECORD_COLOR} />

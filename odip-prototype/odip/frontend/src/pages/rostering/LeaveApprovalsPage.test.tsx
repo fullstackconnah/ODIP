@@ -113,6 +113,25 @@ describe('LeaveApprovalsPage', () => {
     expect(screen.getByText('To')).toBeVisible()
   })
 
+  it('keeps each date in the Dates cell on one line: no-break spaces inside a date and before the dash', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ userFullName: 'Alex Rivera', startDate: '2026-09-14', endDate: '2026-09-18' })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr')!
+    // textContent keeps the U+00A0 that Testing Library's text matchers would normalise away.
+    expect(row.textContent).toContain('14\u00a0Sep\u00a02026\u00a0– 18\u00a0Sep\u00a02026')
+    // The accessible names keep ordinary spaces.
+    expect(screen.getByRole('button', { name: 'Approve: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+  })
+
+  it('never breaks a recurring row time range at its dash', () => {
+    mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ userFullName: 'Jordan Smith', dayOfWeek: 'Monday', startTime: '09:00:00', endTime: '12:00:00' })], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    // Word joiner after the en dash: a break after an en dash is otherwise allowed.
+    expect(screen.getByText('Jordan Smith').closest('tr')!.textContent).toContain('Monday 09:00–\u206012:00')
+  })
+
   it('renders both leave requests and recurring unavailability rows in one table', () => {
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest({ userFullName: 'Alex Rivera', leaveType: 'Sick' })], isLoading: false, isError: false, refetch: vi.fn() })
     mockUseRecurringUnavailabilities.mockReturnValue({ data: [makeRecurringRule({ userFullName: 'Jordan Smith', dayOfWeek: 'Tuesday' })], isLoading: false, isError: false, refetch: vi.fn() })
