@@ -8,7 +8,7 @@ import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import type { CreateStaffAvailabilityDto } from '@/api/types'
+import type { CreateStaffAvailabilityDto, StaffAvailabilityDto } from '@/api/types'
 
 // Deliberately excludes 'Leave' — the 2026-09-09 product ruling put leave exclusively in
 // LeaveRequest/RecurringUnavailability; this legacy-record form only ever writes the other
@@ -62,13 +62,16 @@ export type AvailabilityRecordFormModalProps = {
   /** Pre-fills the form in edit mode. Applied on every open so re-opening the modal for a
    * different row re-seeds it. */
   initialValues?: Partial<AvailabilityFormValues>
+  /** The record being edited. The form shows only part of it, but the PUT replaces all of it, so what the form cannot edit (recurrence, the time of day of a
+   * date left alone) is sent back as it was. */
+  record?: Pick<StaffAvailabilityDto, 'startDateTime' | 'endDateTime' | 'isRecurring' | 'recurrenceNotes'>
 }
 
 /** Legacy StaffAvailability record form (CreateStaffAvailabilityDto). Coordinator-only — always
  * requires a staff picker in create mode (there is no self-service equivalent of this legacy
  * table). See LeaveRequestFormModal's doc comment for the reuse/validation-testing/edit-mode
  * notes — identical here. */
-export function AvailabilityRecordFormModal({ open, onClose, onSubmit, submitting, errorMessage, staffOptions, mode = 'create', initialValues }: AvailabilityRecordFormModalProps) {
+export function AvailabilityRecordFormModal({ open, onClose, onSubmit, submitting, errorMessage, staffOptions, mode = 'create', initialValues, record }: AvailabilityRecordFormModalProps) {
   const isEdit = mode === 'edit'
   const requireStaff = !isEdit && !!staffOptions
   const schema = useMemo(() => buildSchema(requireStaff), [requireStaff])
@@ -87,10 +90,11 @@ export function AvailabilityRecordFormModal({ open, onClose, onSubmit, submittin
   const submit = handleSubmit(async values => {
     await onSubmit({
       staffId: values.staffId,
-      startDateTime: toStartDt(values.startDate),
-      endDateTime: toEndDt(values.endDate),
+      startDateTime: record && values.startDate === record.startDateTime.slice(0, 10) ? record.startDateTime : toStartDt(values.startDate),
+      endDateTime: record && values.endDate === record.endDateTime.slice(0, 10) ? record.endDateTime : toEndDt(values.endDate),
       availabilityType: values.availabilityType,
-      isRecurring: false,
+      isRecurring: record?.isRecurring ?? false,
+      recurrenceNotes: record?.recurrenceNotes ?? undefined,
       notes: values.notes.trim() || undefined,
     })
   })
