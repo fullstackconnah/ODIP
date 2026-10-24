@@ -484,6 +484,7 @@ describe('Make or Stop the regular', () => {
     renderPage()
     await choose(user, 'Make Sam the regular')
     expect(screen.getByRole('alertdialog')).not.toHaveTextContent('stops being the regular')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('has the same regular, Sam takes that over too.')
   })
 
   it('Stop being the regular: its own words, staffId null, and the notice', async () => {

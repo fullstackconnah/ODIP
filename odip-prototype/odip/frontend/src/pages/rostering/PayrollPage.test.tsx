@@ -102,9 +102,9 @@ describe('PayrollPage', () => {
     expect(screen.getAllByText('Not linked').length).toBeGreaterThan(0)
   })
 
-  it('offers Open Integrations to an Admin when Employment Hero is not connected', () => {
+  it('offers Open integrations to an Admin when Employment Hero is not connected', () => {
     setup(check(), { connected: false, today: '2026-10-14', periods: [] })
-    expect(screen.getByRole('link', { name: 'Open Integrations' })).toHaveAttribute('href', '/settings?section=integrations')
+    expect(screen.getByRole('link', { name: 'Open integrations' })).toHaveAttribute('href', '/settings?section=integrations')
   })
   it.each([['loading', true, false], ['failed', false, true]])('claims no count while the check is %s', (_n, loading, failed) => {
     state.periods = { connected: true, today: '2026-10-14', periods: [period()] }

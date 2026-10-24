@@ -188,7 +188,7 @@ export default function PayrollPage() {
           icon={Plug}
           title="Employment Hero isn't connected"
           description="Connect it in Settings → Integrations, and approved hours go to payroll from then on."
-          action={canSend ? { label: 'Open Integrations', to: '/settings?section=integrations' } : undefined}
+          action={canSend ? { label: 'Open integrations', to: '/settings?section=integrations' } : undefined}
         />
       </>
     )

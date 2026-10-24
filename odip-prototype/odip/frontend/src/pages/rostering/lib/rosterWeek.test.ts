@@ -68,6 +68,10 @@ describe('the Start, banner and guard copy (2026-10-16)', () => {
       expect(regularConfirm(shift, 'Sam Wilson').lines).toEqual([make, 'Sam stops being the regular.', 'If Sam is also the regular on the same shift in a renewal of this agreement, Kim takes that over too.'])
     })
 
+    it('Make: a regular the board cannot name is not called "no regular"', () => {
+      expect(regularConfirm({ ...shift, regularUserId: 'gone' }).lines).toEqual([make, 'If the same shift in a renewal of this agreement has the same regular, Kim takes that over too.'])
+    })
+
     it('Stop: its own words', () => {
       expect(regularConfirm({ ...shift, isRegular: true })).toEqual({
         title: 'Stop Kim being the regular?',
