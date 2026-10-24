@@ -288,4 +288,35 @@ public class RosterWriteSafetyPostgresTests : IClassFixture<PostgresFixture>
             Assert.Equal(1, made.Count(codes => codes != null && codes.Contains("DOUBLE_BOOKED_SHIFT")));
         }
     }
+
+    // The Generate button put a regular on shifts under the participant lock alone, so it ran beside a plain create for the same worker; it now waits for the organisation's board lock as Start week does.
+    [SkippableFact]
+    public async Task GeneratePattern_WhileTheRosterLockIsHeld_Is409Busy_AndMakesNoShifts()
+    {
+        RequirePostgres();
+        var tenantId = await NewOrganisationAsync();
+        Guid patternId;
+        await using (var db = Open(tenantId))
+        {
+            var samId = Worker(db, "Sam").Id;
+            patternId = db.ShiftPatterns.Add(new ShiftPattern
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = Person(db, "Mia").Id, DefaultUserId = samId, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(15, 0),
+                Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 8, 1), IsActive = true,
+            }).Entity.Id;
+            await db.SaveChangesAsync();
+        }
+
+        await using (var holder = Open(tenantId))
+        await using (var held = await RosterGenerationLock.AcquireAsync(holder, tenantId, default, scope: "roster-board"))
+        await using (var db = Open(tenantId))
+        {
+            var result = await Controller(db, tenantId, TimeSpan.FromMilliseconds(400)).GeneratePattern(patternId, Monday, Monday.AddDays(6), default);
+            var busy = Assert.IsType<ApiResponse<GeneratePatternResultDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+            Assert.Equal(RosterBusyException.Words, Assert.Single(busy.Errors!));
+        }
+
+        await using var check = Open(tenantId);
+        Assert.False(await check.Shifts.AnyAsync());
+    }
 }
