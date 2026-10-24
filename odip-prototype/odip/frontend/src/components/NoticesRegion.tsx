@@ -77,6 +77,7 @@ export function NoticesRegion({ notices, onDismiss, focusAfterDismiss, className
                   variant="ghost"
                   size="sm"
                   iconOnly
+                  className="min-h-[var(--tap-min)] min-w-[var(--tap-min)]"
                   data-dismiss-notice={notice.id}
                   onClick={() => dismiss(notice)}
                   aria-label={`Dismiss notice about ${notice.title}`}
