@@ -163,7 +163,7 @@ describe('QualificationsPage: the list', () => {
 })
 
 describe('QualificationsPage and the Dashboard agree', () => {
-  it('the Dashboard\'s Qualification Issues figure is the sum of the list\'s issue counts', () => {
+  it('the Dashboard\'s Qualification issues figure is the sum of the list\'s issue counts', () => {
     const { unmount } = renderList()
     const listTotal = screen.getAllByText(/^\d+ issues?$/).reduce((sum, el) => sum + Number.parseInt(el.textContent!, 10), 0)
     unmount()
@@ -171,8 +171,8 @@ describe('QualificationsPage and the Dashboard agree', () => {
     // A Coordinator now updates these in the Staff compliance group (the same sum); the tile is a SuperAdmin's with no organisation (SHAPE call 6).
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     render(<MemoryRouter><DashboardPage /></MemoryRouter>)
-    // With issues, Qualification Issues is a tall tile: a named group ("Qualification Issues 12") whose figure is the count.
-    const tile = within(screen.getByRole('region', { name: 'Alerts' })).getByRole('group', { name: /^Qualification Issues \d+$/ })
+    // With issues, Qualification issues is a tall tile: a named group ("Qualification issues 12") whose figure is the count.
+    const tile = within(screen.getByRole('region', { name: 'Alerts' })).getByRole('group', { name: /^Qualification issues \d+$/ })
 
     expect(listTotal).toBe(12)
     expect(tile.querySelector('.text-display')!.textContent).toBe(String(listTotal))

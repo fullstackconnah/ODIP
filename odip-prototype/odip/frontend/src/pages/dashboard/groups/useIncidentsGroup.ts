@@ -4,6 +4,9 @@ import { toneForStatus } from '@/lib/tone'
 import { formatWallClock } from '@/lib/wallClock'
 import { groupPhase, type GroupModel, type QuickRow } from '../quickGroupModel'
 
+// The status labels are Title Case on the Incidents pages; a flag in a dashboard row reads as a sentence ("Under review").
+const sentenceCase = (s: string) => s.charAt(0) + s.slice(1).toLowerCase()
+
 /**
  * The Incidents group (SHAPE §5, call 12), links only in PR A: what still needs somebody, QSC-overdue first. The QSC-overdue page fills the rows first, the
  * needsAttention page (open, or QSC overdue even resolved or closed) fills them to five, and its total is the count, so every row is inside the count.
@@ -16,7 +19,7 @@ export function useIncidentsGroup(enabled: boolean): GroupModel {
   const rows = listed.filter((i, n) => listed.findIndex((other) => other.id === i.id) === n).map((i): QuickRow => {
     const flags: QuickRow['flags'] = []
     if (i.isOverdue24h) flags.push({ label: 'QSC overdue', tone: 'danger' })
-    flags.push({ label: INCIDENT_STATUS_LABELS[i.status], tone: toneForStatus(i.status) ?? 'neutral' })
+    flags.push({ label: sentenceCase(INCIDENT_STATUS_LABELS[i.status]), tone: toneForStatus(i.status) ?? 'neutral' })
     return {
       id: i.id,
       subject: i.title,

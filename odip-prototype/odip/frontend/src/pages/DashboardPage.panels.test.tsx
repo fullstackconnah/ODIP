@@ -45,7 +45,7 @@ describe('DashboardPage — density layout', () => {
   })
 })
 
-describe('DashboardPage — Critical Participant Alerts card', () => {
+describe('DashboardPage — Critical participant alerts card', () => {
   it('lists a Critical alert with the participant name and message for a Coordinator', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
     mockUseParticipantAlertsAggregate.mockReturnValue({
@@ -70,7 +70,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     renderPage()
 
     // A loaded count has no band tile (card42): the disclosure heading carries it, and its rows are one press away.
-    expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Critical participant alerts/ })).not.toBeInTheDocument()
     fireEvent.click(within(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).getByRole('button'))
     expect(screen.getByText('Jamie Smith')).toBeInTheDocument()
     expect(screen.getByText('NDIS plan end date has passed')).toBeInTheDocument()
@@ -126,7 +126,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     })
     renderPage()
 
-    expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Critical participant alerts/ })).not.toBeInTheDocument()
     const toggle = within(screen.getByRole('heading', { name: 'Critical participant alerts (3)' })).getByRole('button')
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(toggle).toHaveAttribute('type', 'button')
@@ -134,9 +134,9 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     expect(panel).not.toBeVisible()
     expect(screen.queryByRole('link', { name: /Jamie Smith/ })).toBeNull()
     expect(screen.getByText('across 2 participants')).toBeVisible()
-    expect(screen.getAllByRole('link', { name: 'View All' })[0]).toHaveAttribute('href', '/participants')
+    expect(screen.getAllByRole('link', { name: 'See all' })[0]).toHaveAttribute('href', '/participants')
     // 44 x 44 on touch: the floor gives the height, and the 12px words alone are about 40px wide (N7).
-    expect(screen.getAllByRole('link', { name: 'View All' })[0]).toHaveClass('pointer-coarse:min-w-11')
+    expect(screen.getAllByRole('link', { name: 'See all' })[0]).toHaveClass('pointer-coarse:min-w-11')
 
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
@@ -156,8 +156,8 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     renderPage()
 
     // The list section is omitted entirely when empty, and a zero is not a tile.
-    expect(screen.queryByRole('heading', { name: 'Critical Participant Alerts' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Critical participant alerts' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Critical participant alerts/ })).not.toBeInTheDocument()
     expect(screen.getByText(/^Checked and at zero:.*critical participant alerts/)).toBeInTheDocument()
   })
 
@@ -166,7 +166,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     renderPage()
 
-    expect(screen.queryByText('Critical Participant Alerts')).not.toBeInTheDocument()
+    expect(screen.queryByText('Critical participant alerts')).not.toBeInTheDocument()
   })
 
   it('excludes an inactive participant\'s Critical alert from the tile count and list, even if the aggregate mock includes one (fix round 1 — review finding)', () => {
@@ -207,7 +207,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: undefined, isPending: true, isLoading: true })
     renderPage()
 
-    expect(screen.getByText('Critical Participant Alerts')).toBeInTheDocument()
+    expect(screen.getByText('Critical participant alerts')).toBeInTheDocument()
     // The rest of the band IS clear (the useStaff mock's empty list, the zeros of the summary), so it still says so, but it does not name the item whose
     // request is in flight, and the band is not the all-clear field while that item is waiting.
     const row = screen.getByText('All clear', { selector: 'span.font-semibold' }).closest('p') as HTMLElement
@@ -217,7 +217,7 @@ describe('DashboardPage — Critical Participant Alerts card', () => {
   })
 })
 
-// Density polish (touch): the "View All" links (16px) and the upcoming-trip
+// Density polish (touch): the "See all" links (16px) and the upcoming-trip
 // rows (40px) were all under 44px on a phone. Each takes a `--tap-min` floor: 0px on a mouse, so the desktop
 // dashboard is exactly what it was, 44px tall under `pointer: coarse`. jsdom has no CSS, so the class contract is
 // what is pinned here.
@@ -246,11 +246,11 @@ describe('DashboardPage — 44px touch targets', () => {
     return renderPage()
   }
 
-  it('floors both "View All" links (Upcoming trips, Critical Participant Alerts) at --tap-min', () => {
+  it('floors both "See all" links (Upcoming trips, Critical participant alerts) at --tap-min', () => {
     renderWithLists()
 
-    const viewAll = screen.getAllByRole('link', { name: 'View All' })
-    // In page order: the Critical Participant Alerts cards (Alerts) come before Upcoming trips now. The Overdue Tasks panel is gone; the decision groups' links carry TAP_FLOOR too (QuickGroup.test.tsx).
+    const viewAll = screen.getAllByRole('link', { name: 'See all' })
+    // In page order: the Critical participant alerts cards (Alerts) come before Upcoming trips now. The Overdue Tasks panel is gone; the decision groups' links carry TAP_FLOOR too (QuickGroup.test.tsx).
     expect(viewAll.map(a => a.getAttribute('href'))).toEqual(['/participants', '/trips'])
     for (const link of viewAll) {
       expect(link).toHaveClass('pointer-coarse:inline-flex', ...FLOOR, 'pointer-coarse:items-center', 'font-bold', 'hover:underline')
@@ -260,7 +260,7 @@ describe('DashboardPage — 44px touch targets', () => {
   it('sets both at text-xs: the alerts list takes the panels\' own link size now, so the band stays the loudest thing on the page', () => {
     renderWithLists()
 
-    for (const link of screen.getAllByRole('link', { name: 'View All' })) expect(link).toHaveClass('text-xs')
+    for (const link of screen.getAllByRole('link', { name: 'See all' })) expect(link).toHaveClass('text-xs')
   })
 
   it('lifts each upcoming-trip row to --tap-min while it stays h-10 (40px) on a mouse', () => {
@@ -309,7 +309,7 @@ describe('DashboardPage — trip status and task priority chips use the shared t
     mockUseDashboard.mockReturnValue(dashboardWith({ upcomingTripCount: 1, upcomingTrips: [trip(status)] }))
     renderPage()
 
-    const chip = screen.getByText(status.replace(/([A-Z])/g, ' $1').trim())
+    const chip = screen.getByText(status.replace(/(?<=.)([A-Z])/g, (c: string) => ' ' + c.toLowerCase()))
     expect(chip).toHaveClass('rounded-full', 'text-xs', 'font-bold', 'shrink-0', ...TONE[tone].solid.split(' '))
   })
 

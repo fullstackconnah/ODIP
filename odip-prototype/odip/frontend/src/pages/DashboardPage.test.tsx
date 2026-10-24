@@ -21,7 +21,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     showAll()
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Critical Participant Alerts'))
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Critical participant alerts'))
     // The band is the only region: one landmark, named by what it is for.
     expect(screen.getAllByRole('region')).toHaveLength(1)
     expect(clearRow()).toBeNull()
@@ -38,14 +38,14 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     }))
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical Participant Alerts', 'Missing Vehicles', 'Budgets at risk'].includes(label)))
-    expect(screen.queryByRole('group', { name: /Missing Vehicles/ })).not.toBeInTheDocument()
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical participant alerts', 'Missing vehicles', 'Budgets at risk'].includes(label)))
+    expect(screen.queryByRole('group', { name: /Missing vehicles/ })).not.toBeInTheDocument()
     // No budget is in force for anybody here, so the band does not name Budgets at risk at all: it cannot say it checked what nobody recorded. The other zero is a name in the row.
     expect(clearRow()).toHaveTextContent('All clear on trips missing vehicles')
     expect(clearRow()).not.toHaveTextContent(/budgets/)
   })
 
-  it('leaves out the alerts item, Pending Leave, Shift Completions and Qualification Issues for a role without canViewAlerts / canApproveLeave / canReviewCompletions / the Qualifications page', () => {
+  it('leaves out the alerts item, Pending leave, Shift completions and Qualification issues for a role without canViewAlerts / canApproveLeave / canReviewCompletions / the Qualifications page', () => {
     asRole('SupportWorker')
     mockUseStaff.mockReturnValue(staffWithThreeIssues)
     mockUseParticipantAlertsAggregate.mockReturnValue(threeAlertsOnTwoParticipantsAndThreeBudgetsAtRisk)
@@ -56,20 +56,20 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     }))
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical Participant Alerts', 'Budgets at risk', 'Pending Leave', 'Shift Completions', 'Qualification Issues'].includes(label)))
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => !['Critical participant alerts', 'Budgets at risk', 'Pending leave', 'Shift completions', 'Qualification issues'].includes(label)))
     expect(screen.queryByText(/Budgets at risk/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Critical Participant Alerts/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Pending Leave/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Shift Completions/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Qualification Issues/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Critical participant alerts/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Pending leave/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Shift completions/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Qualification issues/)).not.toBeInTheDocument()
   })
 
-  it('shows Qualification Issues, linked to the Qualifications page, to every role without the Staff compliance group, and to none that cannot', () => {
+  it('shows Qualification issues, linked to the Qualifications page, to every role without the Staff compliance group, and to none that cannot', () => {
     mockUseStaff.mockReturnValue(staffWithOneIssue)
     for (const role of ['SuperAdmin', 'ReadOnly']) {
       asRole(role)
       const { unmount } = renderPage()
-      const tile = screen.getByRole('group', { name: 'Qualification Issues 1' })
+      const tile = screen.getByRole('group', { name: 'Qualification issues 1' })
       expect(within(tile).getByRole('link', { name: 'Review qualifications' }), role).toHaveAttribute('href', '/qualifications')
       unmount()
       localStorage.clear()
@@ -78,14 +78,14 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     for (const role of ['Admin', 'Coordinator']) {
       asRole(role)
       const { unmount } = renderPage()
-      expect(screen.queryByRole('group', { name: 'Qualification Issues 1' }), role).toBeNull()
+      expect(screen.queryByRole('group', { name: 'Qualification issues 1' }), role).toBeNull()
       unmount()
       localStorage.clear()
     }
     // The tile used to link a SupportWorker to a page that bounced them back to the Dashboard.
     asRole('SupportWorker')
     renderPage()
-    expect(screen.queryByText('Qualification Issues')).not.toBeInTheDocument()
+    expect(screen.queryByText('Qualification issues')).not.toBeInTheDocument()
     expect(document.querySelector('a[href="/qualifications"]')).toBeNull()
   })
 
@@ -93,7 +93,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingAccommodation: 1 }))
     renderPage()
 
-    expect(screen.getByText('Missing Accommodation')).toBeInTheDocument()
+    expect(screen.getByText('Missing accommodation')).toBeInTheDocument()
     expect(screen.queryByText('Missing Accomm.')).not.toBeInTheDocument()
   })
 
@@ -106,7 +106,7 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
 
     const figures = Object.fromEntries(tiles().map((tile) => [labelOf(tile), tile.querySelector('.text-display')]))
     expect(Object.fromEntries(Object.entries(figures).map(([label, el]) => [label, el!.textContent]))).toEqual({
-      Overdue: '7', 'Missing Accommodation': '6', 'Missing Vehicles': '5', 'Missing Staff': '4', 'Open Incidents': '3', 'QSC Overdue': '2',
+      Overdue: '7', 'Missing accommodation': '6', 'Missing vehicles': '5', 'Missing staff': '4', 'Open incidents': '3', 'QSC overdue': '2',
     })
     for (const el of Object.values(figures)) expect(el).toHaveClass('text-display', 'tabular-nums')
   })
@@ -117,8 +117,8 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
 
     expect(screen.getByRole('heading', { name: 'Critical participant alerts (3)' })).toBeInTheDocument()
     expect(screen.getByText('across 2 participants')).toBeInTheDocument()
-    expect(within(tileFor('Qualification Issues')).getByText('3')).toBeInTheDocument()
-    expect(tileFor('Qualification Issues')).toHaveTextContent('Expired, undated or due within 30 days, across 2 staff members.')
+    expect(within(tileFor('Qualification issues')).getByText('3')).toBeInTheDocument()
+    expect(tileFor('Qualification issues')).toHaveTextContent('Expired, undated or due within 30 days, across 2 staff members.')
   })
 
   it('keeps the inactive participant\'s Critical alert out of the tile count, as it is out of the list', () => {
@@ -136,16 +136,16 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
 describe('DashboardPage — needs-attention band: each tile says what it means and where it is fixed', () => {
   // [label, the honest line at 3, the link's text, where it goes]. The Missing counts are of the trips the server calls upcoming (start today or within 60 days).
   const EXPECTED = [
-    ['Qualification Issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications'],
+    ['Qualification issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications'],
     ['Budgets at risk', '3 participants: 2 over, 1 forecast to go over', 'Review budgets', '/budgets'],
     ['Overdue', 'Tasks past their due date and still open.', 'Open overdue tasks', '/tasks?status=Overdue'],
-    ['Missing Accommodation', 'Trips start within 60 days with no accommodation reserved.', 'Open trips', '/trips'],
-    ['Missing Vehicles', 'Trips start within 60 days with no vehicle assigned.', 'Assign vehicles', '/schedule'],
-    ['Missing Staff', 'Trips start within 60 days with no staff assigned.', 'Assign staff', '/schedule'],
-    ['Open Incidents', 'Incidents not yet resolved or closed.', 'Open incidents', '/incidents'],
-    ['QSC Overdue', 'Reportable incidents with no QSC report after 24 hours.', 'Review QSC reports', '/incidents?qsc=overdue'],
-    ['Pending Leave', 'Leave and unavailability requests waiting for a decision.', 'Review leave requests', '/rostering/leave'],
-    ['Shift Completions', 'Submitted shifts waiting for review before they are billed.', 'Review completions', '/rostering/completions'],
+    ['Missing accommodation', 'Trips start within 60 days with no accommodation reserved.', 'Open trips', '/trips'],
+    ['Missing vehicles', 'Trips start within 60 days with no vehicle assigned.', 'Assign vehicles', '/schedule'],
+    ['Missing staff', 'Trips start within 60 days with no staff assigned.', 'Assign staff', '/schedule'],
+    ['Open incidents', 'Incidents not yet resolved or closed.', 'Open incidents', '/incidents'],
+    ['QSC overdue', 'Reportable incidents with no QSC report after 24 hours.', 'Review QSC reports', '/incidents?qsc=overdue'],
+    ['Pending leave', 'Leave and unavailability requests waiting for a decision.', 'Review leave requests', '/rostering/leave'],
+    ['Shift completions', 'Submitted shifts waiting for review before they are billed.', 'Review completions', '/rostering/completions'],
   ] as const
 
   it.each(EXPECTED)('%s: its figure and label, the line "%s", and a "%s" link to %s', (label, line, linkText, href) => {
@@ -153,7 +153,7 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     renderPage()
 
     const tile = screen.getByRole('group', { name: `${label} 3` })
-    expect(within(tile).getByText(label)).toBeInTheDocument()
+    expect(within(tile).getAllByText(label)[0]).toHaveClass('font-semibold')   // the label is first; "Open incidents" is also the link text
     expect(within(tile).getByText('3')).toHaveClass('text-display')
     expect(within(tile).getByText(line)).toBeInTheDocument()
     const links = within(tile).getAllByRole('link')
@@ -198,16 +198,16 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     showAll()
     renderPage()
 
-    expect(within(tileFor('Missing Vehicles')).getByRole('link')).toHaveAttribute('href', '/schedule')
-    expect(within(tileFor('Missing Staff')).getByRole('link')).toHaveAttribute('href', '/schedule')
-    expect(within(tileFor('Missing Accommodation')).getByRole('link')).toHaveAttribute('href', '/trips')
+    expect(within(tileFor('Missing vehicles')).getByRole('link')).toHaveAttribute('href', '/schedule')
+    expect(within(tileFor('Missing staff')).getByRole('link')).toHaveAttribute('href', '/schedule')
+    expect(within(tileFor('Missing accommodation')).getByRole('link')).toHaveAttribute('href', '/trips')
   })
 
-  it('opens QSC Overdue on the Incidents list already filtered to it, and Overdue on the Tasks list filtered to Overdue', () => {
+  it('opens QSC overdue on the Incidents list already filtered to it, and Overdue on the Tasks list filtered to Overdue', () => {
     showAll()
     renderPage()
 
-    expect(within(tileFor('QSC Overdue')).getByRole('link')).toHaveAttribute('href', '/incidents?qsc=overdue')
+    expect(within(tileFor('QSC overdue')).getByRole('link')).toHaveAttribute('href', '/incidents?qsc=overdue')
     expect(within(tileFor('Overdue')).getByRole('link')).toHaveAttribute('href', '/tasks?status=Overdue')
   })
 
@@ -218,10 +218,10 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingAccommodation: 1, tripsMissingVehicles: 1, tripsMissingStaff: 1 }))
     renderPage()
 
-    expect(tileFor('Missing Accommodation')).toHaveTextContent('Trip starts within 60 days with no accommodation reserved.')
-    expect(tileFor('Missing Vehicles')).toHaveTextContent('Trip starts within 60 days with no vehicle assigned.')
-    expect(tileFor('Missing Staff')).toHaveTextContent('Trip starts within 60 days with no staff assigned.')
-    expect(tileFor('Qualification Issues')).toHaveTextContent('across 1 staff member.')
+    expect(tileFor('Missing accommodation')).toHaveTextContent('Trip starts within 60 days with no accommodation reserved.')
+    expect(tileFor('Missing vehicles')).toHaveTextContent('Trip starts within 60 days with no vehicle assigned.')
+    expect(tileFor('Missing staff')).toHaveTextContent('Trip starts within 60 days with no staff assigned.')
+    expect(tileFor('Qualification issues')).toHaveTextContent('across 1 staff member.')
     expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
     expect(screen.getByText('across 1 participant')).toBeInTheDocument()
   })
@@ -230,17 +230,17 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(staffWithOneIssue)
     renderPage()
-    expect(tileFor('Qualification Issues')).toHaveTextContent('due within 30 days')
+    expect(tileFor('Qualification issues')).toHaveTextContent('due within 30 days')
     cleanup()
 
     mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 90 } })
     renderPage()
-    expect(tileFor('Qualification Issues')).toHaveTextContent('due within 90 days')
+    expect(tileFor('Qualification issues')).toHaveTextContent('due within 90 days')
     cleanup()
 
     mockUseSettings.mockReturnValue({ data: { qualificationWarningDays: 1 } })
     renderPage()
-    expect(tileFor('Qualification Issues')).toHaveTextContent('due within 1 day,')
+    expect(tileFor('Qualification issues')).toHaveTextContent('due within 1 day,')
   })
 })
 
@@ -250,8 +250,8 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     renderPage()
 
     // danger -> the error container; warning -> the warning container (the trip glance strip's own tints).
-    const danger = ['Qualification Issues', 'Budgets at risk', 'Overdue', 'QSC Overdue']
-    const warning = ['Missing Accommodation', 'Missing Vehicles', 'Missing Staff', 'Open Incidents', 'Pending Leave', 'Shift Completions']
+    const danger = ['Qualification issues', 'Budgets at risk', 'Overdue', 'QSC overdue']
+    const warning = ['Missing accommodation', 'Missing vehicles', 'Missing staff', 'Open incidents', 'Pending leave', 'Shift completions']
     for (const label of danger) {
       expect(tileFor(label)).toHaveAttribute('data-attention', 'error')
       expect(tileFor(label)).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
@@ -331,7 +331,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     mockUseDashboard.mockReturnValue(summaryData({ qscOverdueCount: 1 }))
     rerender(<MemoryRouter><DashboardPage /></MemoryRouter>)
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    expect(tileLabels()).toEqual(['QSC Overdue'])
+    expect(tileLabels()).toEqual(['QSC overdue'])
     expect(clearRow()).toHaveTextContent('All clear on qualification issues')
   })
 
@@ -345,7 +345,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
 })
 
 describe('DashboardPage — the Schedule links say what the role can do', () => {
-  const scheduleLinks = () => ['Missing Vehicles', 'Missing Staff'].map((label) => within(tileFor(label)).getByRole('link'))
+  const scheduleLinks = () => ['Missing vehicles', 'Missing staff'].map((label) => within(tileFor(label)).getByRole('link'))
 
   it('offers "Assign vehicles" and "Assign staff" to the roles that can write, both to the Schedule', () => {
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingVehicles: 1, tripsMissingStaff: 2 }))
@@ -383,7 +383,7 @@ describe('DashboardPage — the Schedule links say what the role can do', () => 
 })
 
 describe('DashboardPage — the All clear row and field name the items by nouns', () => {
-  it('says "overdue tasks" and "overdue QSC reports": the tile labels "Overdue" and "QSC Overdue" read as the same thing once they leave their tiles', () => {
+  it('says "overdue tasks" and "overdue QSC reports": the tile labels "Overdue" and "QSC overdue" read as the same thing once they leave their tiles', () => {
     asRole('SuperAdmin')
     mockUseDashboard.mockReturnValue(summaryData({ tripsMissingStaff: 1 }))
     renderPage()
@@ -414,9 +414,9 @@ describe('DashboardPage — the All clear row and field name the items by nouns'
     showAll()
     renderPage()
 
-    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Critical Participant Alerts'))
+    expect(tileLabels()).toEqual(FULL_ORDER.filter((label) => label !== 'Critical participant alerts'))
     expect(screen.getByRole('group', { name: 'Overdue 3' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'QSC Overdue 3' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'QSC overdue 3' })).toBeInTheDocument()
   })
 })
 
@@ -428,7 +428,7 @@ describe('DashboardPage — needs-attention band: accessibility', () => {
     expect(screen.getByRole('region', { name: 'Alerts' })).toBe(band())
     for (const link of within(band()).getAllByRole('link')) expect(link).toHaveAccessibleName()
     const names = within(band()).getAllByRole('group').map((group) => group.getAttribute('aria-label'))
-    expect(names).toEqual(FULL_ORDER.filter((label) => label !== 'Critical Participant Alerts').map((label) => `${label} 3`))
+    expect(names).toEqual(FULL_ORDER.filter((label) => label !== 'Critical participant alerts').map((label) => `${label} 3`))
   })
 
   it('floors every action link at --tap-min and makes the whole tile its hit area, so it keeps a 44px target on touch', () => {

@@ -67,7 +67,7 @@ describe('Dashboard "Overdue" figure', () => {
   })
 })
 
-describe('Dashboard "Critical Participant Alerts" figure', () => {
+describe('Dashboard "Critical participant alerts" figure', () => {
   it('says how many participants the alerts belong to, so the figure matches the flagged rows on the Participants page', () => {
     // Two participants holding 2 and 1 Critical alerts: the tile counts alerts (3), the Participants table shows 2 flagged rows.
     mockUseParticipantAlertsAggregate.mockReturnValue({
@@ -86,14 +86,14 @@ describe('Dashboard "Critical Participant Alerts" figure', () => {
     renderPage()
 
     // A loaded count is the disclosure under the band, not a tile (card42); its header keeps the tile's honesty line.
-    expect(screen.queryByRole('group', { name: /Critical Participant Alerts/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Critical participant alerts/ })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Critical participant alerts (3)' })).toBeInTheDocument()
     expect(screen.getByText('across 2 participants')).toBeInTheDocument()
   })
 })
 
-describe('Dashboard "Qualification Issues" figure', () => {
-  // Qualification Issues is a tile only for a viewer without the Staff compliance group (SHAPE call 6): a SuperAdmin with no organisation.
+describe('Dashboard "Qualification issues" figure', () => {
+  // Qualification issues is a tile only for a viewer without the Staff compliance group (SHAPE call 6): a SuperAdmin with no organisation.
   beforeEach(() => localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' })))
 
   it('says how many staff the issues belong to, so it reads against the Qualifications page headline (a staff count)', () => {
@@ -108,7 +108,7 @@ describe('Dashboard "Qualification Issues" figure', () => {
 
     renderPage()
 
-    const tile = screen.getByRole('group', { name: 'Qualification Issues 5' })
+    const tile = screen.getByRole('group', { name: 'Qualification issues 5' })
     expect(tile).toHaveTextContent('5')
     expect(tile).toHaveTextContent('2 staff members')
   })

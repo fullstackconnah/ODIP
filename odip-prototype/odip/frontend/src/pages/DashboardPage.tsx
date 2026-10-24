@@ -155,7 +155,7 @@ export default function DashboardPage() {
   // The tile links to the Qualifications page, so a role that cannot open it (a SupportWorker) gets no tile rather than one that bounces.
   if (canAccessPage('qualifications') && !gates.compliance) {
     attentionItems.push({
-      label: 'Qualification Issues',
+      label: 'Qualification issues',
       noun: 'qualification issues',
       count: qualIssueCount,
       tone: 'danger',
@@ -171,7 +171,7 @@ export default function DashboardPage() {
   // disclosure under the band instead.
   if (canViewAlerts && (!criticalListed || alertsLoading || alertsError)) {
     attentionItems.push({
-      label: 'Critical Participant Alerts',
+      label: 'Critical participant alerts',
       noun: 'critical participant alerts',
       count: criticalAlertItems.length,
       tone: 'danger',
@@ -207,30 +207,30 @@ export default function DashboardPage() {
       // The three "Missing" counts are of the trips the server calls upcoming (they start today or within 60 days). A vehicle or a staff member is assigned to a trip on the
       // Schedule (the same assignments the count reads), and accommodation on the trip's own tab, so that one opens the Trips list to choose the trip.
       {
-        label: 'Missing Accommodation', noun: 'trips missing accommodation', count: d.tripsMissingAccommodation, tone: 'warning',
+        label: 'Missing accommodation', noun: 'trips missing accommodation', count: d.tripsMissingAccommodation, tone: 'warning',
         detail: `${tripsStart(d.tripsMissingAccommodation)} within 60 days with no accommodation reserved.`,
         action: { label: 'Open trips', to: '/trips' },
       },
       {
-        label: 'Missing Vehicles', noun: 'trips missing vehicles', count: d.tripsMissingVehicles, tone: 'warning',
+        label: 'Missing vehicles', noun: 'trips missing vehicles', count: d.tripsMissingVehicles, tone: 'warning',
         detail: `${tripsStart(d.tripsMissingVehicles)} within 60 days with no vehicle assigned.`,
         action: { label: scheduleVerb('Assign vehicles'), to: '/schedule' },
       },
       {
-        label: 'Missing Staff', noun: 'trips missing staff', count: d.tripsMissingStaff, tone: 'warning',
+        label: 'Missing staff', noun: 'trips missing staff', count: d.tripsMissingStaff, tone: 'warning',
         detail: `${tripsStart(d.tripsMissingStaff)} within 60 days with no staff assigned.`,
         action: { label: scheduleVerb('Assign staff'), to: '/schedule' },
       },
     )
     if (!gates.incidents) attentionItems.push(
       {
-        label: 'Open Incidents', noun: 'open incidents', count: d.openIncidentCount, tone: 'warning',
+        label: 'Open incidents', noun: 'open incidents', count: d.openIncidentCount, tone: 'warning',
         detail: 'Incidents not yet resolved or closed.',
         action: { label: 'Open incidents', to: '/incidents' },
       },
       // The Incidents list already has this filter (?qsc=overdue): the same rule the figure counts.
       {
-        label: 'QSC Overdue', noun: 'overdue QSC reports', count: d.qscOverdueCount, tone: 'danger',
+        label: 'QSC overdue', noun: 'overdue QSC reports', count: d.qscOverdueCount, tone: 'danger',
         detail: 'Reportable incidents with no QSC report after 24 hours.',
         action: { label: 'Review QSC reports', to: '/incidents?qsc=overdue' },
       },
@@ -238,7 +238,7 @@ export default function DashboardPage() {
   }
   if (canApproveLeave && !gates.leave) {
     attentionItems.push({
-      label: 'Pending Leave',
+      label: 'Pending leave',
       noun: 'pending leave',
       count: pendingLeave.count,
       tone: 'warning',
@@ -252,7 +252,7 @@ export default function DashboardPage() {
   // The other half of what the Staff & roster badge counts (leave plus completions): without it the band could say nothing needs anybody beside a red badge.
   if (canReviewCompletions && !gates.completions) {
     attentionItems.push({
-      label: 'Shift Completions',
+      label: 'Shift completions',
       noun: 'shift completions',
       count: pendingCompletions.count,
       tone: 'warning',
@@ -326,7 +326,7 @@ export default function DashboardPage() {
                         across {plural(criticalParticipantCount, 'participant')}
                       </span>
                       <Link to="/participants" className={`${TAP_FLOOR} pointer-coarse:min-w-11 pointer-coarse:justify-end ml-auto text-xs font-bold text-[var(--color-primary)] hover:underline`}>
-                        View All
+                        See all
                       </Link>
                     </div>
 
@@ -350,7 +350,7 @@ export default function DashboardPage() {
                               <ShieldAlert className="h-4 w-4 opacity-60" /> {participantName}
                             </h5>
                             {typeLabel && (
-                              <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">{typeLabel}</p>
+                              <p className="mb-0.5 text-xs font-semibold text-[var(--color-muted-foreground)]">{typeLabel}</p>
                             )}
                             <p className="text-xs text-[var(--color-muted-foreground)]">{alert.message}</p>
                             </div>
@@ -385,7 +385,7 @@ export default function DashboardPage() {
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold">Upcoming trips</h2>
             <Link to="/trips" className={`${TAP_FLOOR} text-xs font-bold text-[var(--color-primary)] hover:underline`}>
-              View All
+              See all
             </Link>
           </div>
 
@@ -414,7 +414,7 @@ export default function DashboardPage() {
                       {formatRatio(t.currentParticipantCount, t.maxParticipants || '—')} pax
                     </span>
                     {/* The trip status is coloured by StatusBadge's own tones (lib/tone.ts), the same as the trip header, the schedule and the trips list. */}
-                    <StatusBadge status={t.status} label={t.status.replace(/([A-Z])/g, ' $1').trim()} className="shrink-0 font-bold" />
+                    <StatusBadge status={t.status} label={t.status.replace(/(?<=.)([A-Z])/g, (c: string) => ' ' + c.toLowerCase())} className="shrink-0 font-bold" />
                     <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" aria-hidden="true" />
                   </Link>
                 )

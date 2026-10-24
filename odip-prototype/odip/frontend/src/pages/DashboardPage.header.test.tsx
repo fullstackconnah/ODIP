@@ -201,7 +201,7 @@ describe('DashboardPage — the qualification count follows the day', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Wednesday 30 September')
-    expect(screen.queryByRole('group', { name: /Qualification Issues/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Qualification issues/ })).not.toBeInTheDocument()
     expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
 
     act(() => {
@@ -209,7 +209,7 @@ describe('DashboardPage — the qualification count follows the day', () => {
     })
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Thursday 1 October')
-    expect(screen.getByRole('group', { name: 'Qualification Issues 1' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Qualification issues 1' })).toBeInTheDocument()
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
   })
 
@@ -220,13 +220,13 @@ describe('DashboardPage — the qualification count follows the day', () => {
     const staff = { data: [{ isFirstAidQualified: true, firstAidExpiryDate: '2026-10-31' }] }
     mockUseStaff.mockReturnValue(staff)
     renderPage()
-    expect(screen.queryByRole('group', { name: /Qualification Issues/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Qualification issues/ })).not.toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(5 * 60_000)
     })
 
-    expect(screen.queryByRole('group', { name: /Qualification Issues/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Qualification issues/ })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Wednesday 30 September')
   })
 })
@@ -314,13 +314,13 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
     expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
   })
 
-  it('shows an en dash, busy, on Qualification Issues and Critical Participant Alerts while their requests are paused, and never names them clear', () => {
+  it('shows an en dash, busy, on Qualification issues and Critical participant alerts while their requests are paused, and never names them clear', () => {
     asRole('SuperAdmin')
     mockUseStaff.mockReturnValue(paused)
     mockUseParticipantAlertsAggregate.mockReturnValue(paused)
     renderPage()
 
-    for (const label of ['Qualification Issues', 'Critical Participant Alerts']) {
+    for (const label of ['Qualification issues', 'Critical participant alerts']) {
       const tile = tileFor(label)
       expect(tile, label).toHaveAttribute('aria-busy', 'true')
       expect(tile, label).not.toHaveAttribute('data-attention')
@@ -346,7 +346,7 @@ describe('DashboardPage — a paused request is waiting, not a settled zero', ()
     mockUseStaff.mockReturnValue({ data: undefined, isPending: false, isLoading: false, isError: true, fetchStatus: 'idle' })
     renderPage()
 
-    expect(tileFor('Qualification Issues')).not.toHaveAttribute('aria-busy')
-    expect(within(tileFor('Qualification Issues')).getByText("Couldn't load")).toBeInTheDocument()
+    expect(tileFor('Qualification issues')).not.toHaveAttribute('aria-busy')
+    expect(within(tileFor('Qualification issues')).getByText("Couldn't load")).toBeInTheDocument()
   })
 })
