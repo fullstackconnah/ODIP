@@ -546,6 +546,37 @@ public class ClaimsController : ControllerBase
         return pdf is { } p ? File(p.Content, "application/pdf", p.FileName) : NotFound(ApiResponse<bool>.Fail("Invoice not found"));
     }
 
+    // GET /api/v1/invoices — the register: every invoice and credit note in scope, a deleted claim's too (TripClaimId null). Invoices is tenant-filtered (a SuperAdmin with no organisation chosen sees all).
+    [HttpGet("invoices")]
+    public async Task<ActionResult<ApiResponse<PagedResult<InvoiceRegisterRowDto>>>> GetInvoiceRegister(
+        [FromQuery] InvoiceKind? kind, [FromQuery] InvoiceStatus? status, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] string? search, [FromQuery] bool deletedClaimOnly = false,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = PagingParams.DefaultPageSize, CancellationToken ct = default)
+    {
+        (page, pageSize) = PagingParams.Clamp(page, pageSize);
+        var query = _db.Invoices.AsNoTracking();
+        if (kind is { } k) query = query.Where(i => i.Kind == k);
+        if (status is { } st) query = query.Where(i => i.Status == st);
+        if (from is { } f) query = query.Where(i => i.IssueDate >= f);
+        if (to is { } t) query = query.Where(i => i.IssueDate <= t);
+        if (deletedClaimOnly) query = query.Where(i => i.TripClaimId == null);
+        if (search?.Trim().ToLower() is { Length: > 0 } term)
+            query = query.Where(i => i.DisplayNumber.ToLower().Contains(term) || i.ParticipantName.ToLower().Contains(term)
+                || i.BillToName.ToLower().Contains(term) || i.ClaimReference.ToLower().Contains(term));
+
+        // Id last: SQL gives no order among ties, so a row could land on two pages or none.
+        var rows = query.OrderByDescending(i => i.IssueDate).ThenByDescending(i => i.Number).ThenBy(i => i.Id).Select(i => new InvoiceRegisterRowDto
+        {
+            Id = i.Id, Kind = i.Kind, DisplayNumber = i.DisplayNumber, Status = i.Status, IssueDate = i.IssueDate, DueDate = i.DueDate,
+            ParticipantName = i.ParticipantName, BillToName = i.BillToName, PayerKind = i.PayerKind, ClaimReference = i.ClaimReference, TripClaimId = i.TripClaimId,
+            CreditsDisplayNumber = i.CreditsDisplayNumber,
+            CreditedByDisplayNumber = _db.Invoices.Where(c => c.CreditsInvoiceId == i.Id).Select(c => c.DisplayNumber).FirstOrDefault(),
+            Total = i.Kind == InvoiceKind.CreditNote ? -i.Total : i.Total,
+            OrganisationName = i.SellerOrganisationName,
+        });
+        return Ok(ApiResponse<PagedResult<InvoiceRegisterRowDto>>.Ok(await PagedResult<InvoiceRegisterRowDto>.CreateAsync(rows, page, pageSize, ct)));
+    }
+
     // POST /api/v1/invoices/{invoiceId}/void — an invoice with no payment recorded; its number is kept and never used again.
     [HttpPost("invoices/{invoiceId:guid}/void")]
     [Authorize(Roles = "Admin,SuperAdmin")]
