@@ -69,6 +69,9 @@ public class DemoUniqueIndexAccountingTests
             "Every pack task's SourceKey is built from the id of the row it belongs to (flagged-note:{note}, med-witness:{dose}, incident-qsc:{incident}) and is written in the same " +
             "save as that row, so a person cannot hold the key first; leave coverage asks for the keys it wants first (DemoQueries.ExistingTaskKeys) and raises through the app's own " +
             "IObligationTaskService.EnsureAsync."),
+
+        ["LeaveRequest|IX_LeaveRequests_TenantId_ExternalLeaveId"] = new(
+            "The packs never set ExternalLeaveId (null is outside the filtered index); only the Employment Hero sync writes it, and demo organisations have no connection."),
     };
 
     /// <summary>

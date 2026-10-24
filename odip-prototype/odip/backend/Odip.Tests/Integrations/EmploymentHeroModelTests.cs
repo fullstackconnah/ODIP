@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Integrations;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Tests.Imports;
@@ -77,5 +78,25 @@ public class EmploymentHeroModelTests
         Assert.Equal(["TenantId", "Kind", "EntityId"], one.Properties.Select(p => p.Name));
         Assert.Contains(type.GetIndexes(), i => i.Properties.Select(p => p.Name).SequenceEqual(["Status", "NextAttemptAt"]));
         Assert.True(type.FindProperty(nameof(EmploymentHeroOutbox.UpdatedAt))!.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public void A_leave_request_records_its_source_and_EH_id_in_the_model()
+    {
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        using var db = new OdipDbContext(options, ImportTestSupport.Tenant(Guid.NewGuid()));
+        Assert.Equal(LeaveSource.Odip, new LeaveRequest().Source);
+
+        var leave = db.Model.FindEntityType(typeof(LeaveRequest))!;
+        var index = Assert.Single(leave.GetIndexes(), i => i.GetDatabaseName() == LeaveRequest.ExternalLeaveIdIndexName);
+        Assert.Equal("IX_LeaveRequests_TenantId_ExternalLeaveId", LeaveRequest.ExternalLeaveIdIndexName);
+        Assert.True(index.IsUnique);
+        Assert.Equal(["TenantId", "ExternalLeaveId"], index.Properties.Select(p => p.Name));
+        Assert.Equal("\"ExternalLeaveId\" IS NOT NULL", index.GetFilter());
+        Assert.Equal(20, leave.FindProperty(nameof(LeaveRequest.ExternalLeaveId))!.GetMaxLength());
+
+        var connection = db.Model.FindEntityType(typeof(EmploymentHeroConnection))!;
+        foreach (var name in new[] { "LeaveCategoryAnnual", "LeaveCategorySick", "LeaveCategoryPersonal", "LeaveCategoryOther" })
+            Assert.Equal(20, connection.FindProperty(name)!.GetMaxLength());
     }
 }

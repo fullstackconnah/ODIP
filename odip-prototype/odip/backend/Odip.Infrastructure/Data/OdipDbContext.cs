@@ -1318,6 +1318,12 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Reason).HasMaxLength(2000);
             entity.Property(e => e.DecisionNote).HasMaxLength(2000);
+            entity.Property(e => e.ExternalLeaveId).HasMaxLength(20);
+            entity.Property(e => e.SentHours).HasPrecision(6, 2);
+            entity.HasIndex(e => new { e.TenantId, e.ExternalLeaveId })
+                .IsUnique()
+                .HasDatabaseName(LeaveRequest.ExternalLeaveIdIndexName)
+                .HasFilter("\"ExternalLeaveId\" IS NOT NULL");
 
             // Restrict: same idiom as Shift -> User — a staff member with leave history must not
             // be silently cascade-deleted out from under it.
@@ -1965,6 +1971,10 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.WorkTypeActiveNight).HasMaxLength(20);
             entity.Property(e => e.WorkTypePassiveNight).HasMaxLength(20);
             entity.Property(e => e.WorkTypeSleepover).HasMaxLength(20);
+            entity.Property(e => e.LeaveCategoryAnnual).HasMaxLength(20);
+            entity.Property(e => e.LeaveCategorySick).HasMaxLength(20);
+            entity.Property(e => e.LeaveCategoryPersonal).HasMaxLength(20);
+            entity.Property(e => e.LeaveCategoryOther).HasMaxLength(20);
             // One connection per organisation.
             entity.HasIndex(e => e.TenantId).IsUnique();
         });

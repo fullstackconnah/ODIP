@@ -17,6 +17,9 @@ public enum LeaveType { Annual, Sick, Personal, Other }
 /// </summary>
 public enum LeaveStatus { Pending, Approved, Declined, Cancelled }
 
+/// <summary>Where a leave request started. Append-only, stored as an int.</summary>
+public enum LeaveSource { Odip = 0, EmploymentHero = 1 }
+
 /// <summary>
 /// A staff member's date-range leave request (Annual/Sick/Personal/Other), whole days only.
 /// Tenant-scoped directly (unlike the <see cref="Entities.StaffAvailability"/> rows it
@@ -39,6 +42,13 @@ public class LeaveRequest : ITenantEntity
     public Guid? DecidedByUserId { get; set; }
     public DateTime? DecidedAt { get; set; }
     public string? DecisionNote { get; set; }          // optional on Declined
+    public LeaveSource Source { get; set; } = LeaveSource.Odip;
+    /// <summary>Employment Hero's leave request id, for either source, once known. Unique per organisation over non-null values (<see cref="ExternalLeaveIdIndexName"/>).</summary>
+    public string? ExternalLeaveId { get; set; }
+    public const string ExternalLeaveIdIndexName = "IX_LeaveRequests_TenantId_ExternalLeaveId";
+    /// <summary>The hours last sent to Employment Hero, and whether they used ODIP's 7.6 h default.</summary>
+    public decimal? SentHours { get; set; }
+    public bool? SentHoursDefaulted { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

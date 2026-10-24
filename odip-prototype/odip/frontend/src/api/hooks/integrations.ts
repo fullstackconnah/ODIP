@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost, apiPut } from '../client'
 import type {
-  EmploymentHeroBusinessDto, EmploymentHeroEmployeeDto, EmploymentHeroStatusDto, EmploymentHeroWorkTypeDto, EmploymentHeroWorkTypesDto,
-  PayPeriodsDto, PayrollCheckDto, PayrollRangeDto, SendMissingResultDto,
+  EmploymentHeroBusinessDto, EmploymentHeroEmployeeDto, EmploymentHeroStatusDto, EmploymentHeroLeaveCategoriesDto, EmploymentHeroLeaveCategoryDto, EmploymentHeroWorkTypeDto, EmploymentHeroWorkTypesDto,
+  LeaveBalancesDto, PayPeriodsDto, PayrollCheckDto, PayrollRangeDto, SendMissingResultDto,
 } from '../types'
 
 const BASE = '/integrations/employment-hero'
@@ -47,6 +47,24 @@ export function useEmploymentHeroWorkTypes(enabled: boolean) {
 }
 export const useSaveEmploymentHeroWorkTypes = () =>
   useEmploymentHeroChange((body: EmploymentHeroWorkTypesDto) => apiPut<EmploymentHeroStatusDto>(`${BASE}/work-types`, body))
+
+/** The leave categories ODIP may send leave under, read live from EH for the card's pickers. */
+export function useEmploymentHeroLeaveCategories(enabled: boolean) {
+  return useQuery({ queryKey: ['employment-hero', 'leave-categories'], queryFn: () => apiGet<EmploymentHeroLeaveCategoryDto[]>(`${BASE}/leave-categories`), enabled })
+}
+export const useSaveEmploymentHeroLeaveCategories = () =>
+  useEmploymentHeroChange((body: EmploymentHeroLeaveCategoriesDto) => apiPut<EmploymentHeroStatusDto>(`${BASE}/leave-categories`, body))
+export const useRetryEmploymentHeroLeave = () =>
+  useEmploymentHeroChange((id: string) => apiPost<EmploymentHeroStatusDto>(`${BASE}/leave/${id}/retry`))
+
+/** Live balances from EH, never stored here. Read once per visit and kept five minutes; a failure is shown, not retried behind the person's back. */
+const BALANCES_STALE_MS = 5 * 60 * 1000
+export function useMyLeaveBalances(enabled: boolean) {
+  return useQuery({ queryKey: ['leave-balances', 'me'], queryFn: () => apiGet<LeaveBalancesDto>('/portal/leave/balances'), enabled, staleTime: BALANCES_STALE_MS, retry: false })
+}
+export function useStaffLeaveBalances(userId: string, enabled: boolean) {
+  return useQuery({ queryKey: ['leave-balances', userId], queryFn: () => apiGet<LeaveBalancesDto>(`/staff/${userId}/leave-balances`), enabled, staleTime: BALANCES_STALE_MS, retry: false })
+}
 
 const PAYROLL = `${BASE}/payroll`
 

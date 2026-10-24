@@ -71,6 +71,7 @@ public sealed class EmploymentHeroTimesheetBackgroundService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var dbOptions = scope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>();
         var sender = scope.ServiceProvider.GetRequiredService<EmploymentHeroTimesheetSender>();
+        var leave = scope.ServiceProvider.GetRequiredService<EmploymentHeroLeaveSync>();
 
         List<Guid> tenantIds;
         await using (var across = new OdipDbContext(dbOptions, new ScopedTenantOverride { IsSuperAdmin = true }))
@@ -79,6 +80,7 @@ public sealed class EmploymentHeroTimesheetBackgroundService : BackgroundService
         var failures = 0;
         foreach (var tenantId in tenantIds)
         {
+            // Each step has its own try, so a throwing timesheet step never starves the organisation's leave (S3).
             try
             {
                 await using var db = new OdipDbContext(dbOptions, new ScopedTenantOverride { TenantId = tenantId });
@@ -88,6 +90,16 @@ public sealed class EmploymentHeroTimesheetBackgroundService : BackgroundService
             {
                 failures++;
                 _logger.LogError("Employment Hero timesheets failed for organisation {TenantId} ({Error}); the others carry on", tenantId, ex.GetType().Name);
+            }
+            try
+            {
+                await using var db = new OdipDbContext(dbOptions, new ScopedTenantOverride { TenantId = tenantId });
+                await leave.RunAsync(db, tenantId, checkChanges, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                failures++;
+                _logger.LogError("Employment Hero leave failed for organisation {TenantId} ({Error}); the others carry on", tenantId, ex.GetType().Name);
             }
         }
 
