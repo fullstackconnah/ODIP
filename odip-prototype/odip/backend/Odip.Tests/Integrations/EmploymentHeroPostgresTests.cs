@@ -373,6 +373,23 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task A_pull_whose_loaded_leave_was_linked_by_another_run_meanwhile_keeps_one_row_on_Postgres()
+    {
+        RequirePostgres();
+        var (db1, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _1 = db1;
+        var leave = await SeedLeaveAsync(db1, tenantId);   // db1 still tracks it with no EH id
+        await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
+        await db2.LeaveRequests.Where(l => l.Id == leave.Id).ExecuteUpdateAsync(s => s.SetProperty(l => l.ExternalLeaveId, "9001"));
+        var eh = EhHolding(leave.StartDate.ToString("yyyy-MM-dd") + "T00:00:00", leave.EndDate.ToString("yyyy-MM-dd") + "T00:00:00", EmploymentHeroLeave.Marker(leave.Id));
+
+        await LeaveSync(eh).RunAsync(db1, tenantId, true, CancellationToken.None);
+
+        var all = await db1.LeaveRequests.AsNoTracking().ToListAsync();
+        Assert.Equal(("9001", LeaveSource.Odip), (Assert.Single(all).ExternalLeaveId, all[0].Source));
+    }
+
+    [SkippableFact]
     public async Task Two_pulls_at_once_import_each_EH_leave_once_on_Postgres()
     {
         RequirePostgres();
