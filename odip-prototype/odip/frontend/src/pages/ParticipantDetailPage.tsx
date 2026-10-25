@@ -170,7 +170,7 @@ export default function ParticipantDetailPage() {
   // The support profile, read once for Health, Daily and Overview. A 404 is a participant with no profile yet, so an empty one, not an error.
   // While it loads (or failed) the cards built from it count as recorded, so nothing folds on data that has not arrived.
   const sp: SupportProfileState = {
-    profile: supportProfile.data, loading: supportProfile.isLoading, error: supportProfile.isError && !isNotFoundError(supportProfile.error),
+    profile: supportProfile.data, loading: supportProfile.isLoading, error: supportProfile.isError && !supportProfile.data && !isNotFoundError(supportProfile.error),
     retry: () => { void supportProfile.refetch() },
   }
   const spSettled = !sp.loading && !sp.error

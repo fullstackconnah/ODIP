@@ -104,4 +104,10 @@ describe('ParticipantCulturalBackgroundSection — unanswered yes/no (N11)', () 
     expect([...container.querySelectorAll('dd')].filter(d => d.textContent?.trim() === '\u2014')).toHaveLength(0)
     expect(screen.getByText(/Not recorded:.*LGBTIQA\+/)).toBeInTheDocument()
   })
+
+  it('keeps a recorded No as a value, never moving it into the Not recorded line', () => {
+    render(<ParticipantCulturalBackgroundSection p={makeParticipant({ isCald: true, isLgbtqi: false })} participantId="participant-1" canEdit />)
+    expect(screen.getByText('No')).toBeInTheDocument()
+    expect(screen.queryByText(/Not recorded:.*LGBTIQA\+/)).not.toBeInTheDocument()
+  })
 })

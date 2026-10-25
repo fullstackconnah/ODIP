@@ -102,4 +102,10 @@ describe('ParticipantBehaviourCommunicationSection — unanswered yes/no (N11)',
     expect([...container.querySelectorAll('dd')].filter(d => d.textContent?.trim() === '\u2014')).toHaveLength(0)
     expect(screen.getByText(/Not recorded:.*Impaired Understanding/)).toBeInTheDocument()
   })
+
+  it('keeps a recorded No as a value, never moving it into the Not recorded line', () => {
+    const { container } = render(<ParticipantBehaviourCommunicationSection p={makeParticipant({ memoryAids: true, ridsLogged: false })} participantId="participant-1" canEdit />)
+    expect([...container.querySelectorAll('dd')].some(d => d.textContent?.trim() === 'No')).toBe(true)
+    expect(screen.queryByText(/Not recorded:.*RIDS Logged/)).not.toBeInTheDocument()
+  })
 })

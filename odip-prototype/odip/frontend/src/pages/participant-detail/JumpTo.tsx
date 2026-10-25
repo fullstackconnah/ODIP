@@ -25,7 +25,7 @@ function useJumpItems(ref: React.RefObject<HTMLElement | null>): JumpItem[] {
   return items
 }
 
-/** The section the reader is in: the last one whose top has passed the upper 30% of the viewport. */
+/** The section the reader is in: the last one touching the top 30% band of the viewport (the previous one can still be partly in it). */
 function useScrollSpy(ids: string[]): string | undefined {
   const [current, setCurrent] = useState<string>()
   const key = ids.join('|')
@@ -37,7 +37,7 @@ function useScrollSpy(ids: string[]): string | undefined {
         if (e.isIntersecting) seen.add(e.target.id)
         else seen.delete(e.target.id)
       }
-      setCurrent(key.split('|').find(id => seen.has(id)) ?? undefined)
+      setCurrent(key.split('|').reverse().find(id => seen.has(id)))
     }, { rootMargin: '0px 0px -70% 0px' })
     for (const id of key.split('|')) { const el = document.getElementById(id); if (el) io.observe(el) }
     return () => io.disconnect()

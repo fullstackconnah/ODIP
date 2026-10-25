@@ -1096,6 +1096,47 @@ function LocationProbe({ onChange }: { onChange: (value: string) => void }) {
   return null
 }
 
+describe('ParticipantDetailPage — support profile refetch and Health Jump to', () => {
+  const defaultProfile = () => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() })
+  beforeEach(() => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    setUserRole('Coordinator')
+  })
+  afterEach(() => mockUseSupportProfile.mockImplementation(defaultProfile))
+
+  function renderHealth() {
+    return render(
+      <MemoryRouter initialEntries={['/participants/x-1?tab=health']}>
+        <Routes><Route path="/participants/:id" element={<PageWithClient />} /></Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('keeps the topic cards and their Edit when only a background refetch failed', () => {
+    mockUseSupportProfile.mockReturnValue({ ...defaultProfile(), data: { emergencyConsiderations: 'Call the on-call coordinator first' }, isError: true, error: new Error('Network Error') })
+    renderHealth()
+    expect(screen.getByText('Call the on-call coordinator first')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Edit' }).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Couldn't load/)).not.toBeInTheDocument()
+  })
+
+  it('still shows the error card with Retry when the first load failed and there is nothing cached', () => {
+    mockUseSupportProfile.mockReturnValue({ ...defaultProfile(), isError: true, error: new Error('Network Error') })
+    renderHealth()
+    expect(screen.getAllByText(/Couldn't load/).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Retry' }).length).toBeGreaterThan(0)
+  })
+
+  it('lists Restrictive practices, with the other top-level Health sections, in Jump to', async () => {
+    const user = userEvent.setup()
+    renderHealth()
+    await user.click(await screen.findByRole('button', { name: /Jump to/ }))
+    const labels = screen.getAllByRole('option').map(o => o.textContent)
+    expect(labels).toEqual(expect.arrayContaining(['Health conditions', 'Medications', 'Risks and hazards', 'Restrictive practices']))
+    expect(labels.indexOf('Restrictive practices')).toBeGreaterThan(labels.indexOf('Risks and hazards'))
+  })
+})
+
 describe('ParticipantDetailPage — the tab lives in the URL (useTabParam)', () => {
   function renderWithUrl(url: string) {
     let current = url

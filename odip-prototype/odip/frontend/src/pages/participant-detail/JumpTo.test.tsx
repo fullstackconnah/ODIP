@@ -62,4 +62,18 @@ describe('JumpPanel (T12)', () => {
     const rail = screen.getByRole('navigation', { name: 'On this page', hidden: true })
     expect(rail.querySelector('[aria-current="location"]')).toHaveTextContent('RISKS')
   })
+
+  it('marks the LAST section in the top band when two intersect (the previous one is still partly in view)', () => {
+    let callback: IntersectionObserverCallback = () => {}
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(cb: IntersectionObserverCallback) { callback = cb }
+      observe() {}
+      disconnect() {}
+    })
+    renderPanel(['allergies', 'risks', 'medications'])
+    const entry = (id: string) => ({ isIntersecting: true, target: document.getElementById(id)! }) as unknown as IntersectionObserverEntry
+    act(() => callback([entry('risks'), entry('medications')], {} as IntersectionObserver))
+    const rail = screen.getByRole('navigation', { name: 'On this page', hidden: true })
+    expect(rail.querySelector('[aria-current="location"]')).toHaveTextContent('MEDICATIONS')
+  })
 })

@@ -30,7 +30,7 @@ export function FixedListFrame<T>({
     <p className="text-[13px] text-[var(--color-muted-foreground)]">{missing} of {rows.length} {unit}</p>
   ) : null
 
-  if (rows.length > 0 && answered.length === 0) {
+  if (answered.length === 0) {
     if (!canAdd) return <p className="text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {title}</p>
     return <NotRecordedFold summary={title}>{children(rows)}{count}</NotRecordedFold>
   }
