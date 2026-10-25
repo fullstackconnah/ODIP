@@ -30,6 +30,9 @@ public class CaregiverProfileSubmission : ITenantEntity
     public string? Payload { get; set; }
     public int PayloadVersion { get; set; } = 1;
 
+    /// <summary>JSON-serialised PatchParticipantDto: the values the caregiver loaded, written together with <see cref="Payload"/>. Null = a submission made before change tracking (applied in full).</summary>
+    public string? BasePayload { get; set; }
+
     public Guid CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; }

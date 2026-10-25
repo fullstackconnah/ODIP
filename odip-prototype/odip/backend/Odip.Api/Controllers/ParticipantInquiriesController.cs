@@ -499,7 +499,7 @@ public class ParticipantInquiriesController : ControllerBase
     private async Task<ParticipantInquiryDto> FullDtoAsync(ParticipantInquiry x, CancellationToken ct)
     {
         // Keyed on the enquiry's organisation: a SuperAdmin's context has no query filter.
-        var staff = x.IntakeStaffUserId is Guid staffId ? await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == staffId && u.TenantId == x.TenantId, ct) : null;
+        var staff = x.IntakeStaffUserId is Guid staffId ? await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(u => u.Id == staffId && u.TenantId == x.TenantId, ct) : null;
         return ToDto(x, staff, (await ProviderTimeZoneResolver.ResolveAsync(_db, x.TenantId, ct)).Id);
     }
 

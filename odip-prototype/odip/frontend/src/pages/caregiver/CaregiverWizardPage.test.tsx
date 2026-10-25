@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import type { CaregiverFormDto } from '@/api/types/caregiver'
 import { ACKNOWLEDGEMENT_OF_COUNTRY } from '@/lib/platformFacts'
+import projection from '@/test/fixtures/golden/caregiver-projection.json'
 
 const { mockUsePublicCaregiverForm, mockSaveDraftMutateAsync, mockSubmitMutateAsync } = vi.hoisted(() => ({
   mockUsePublicCaregiverForm: vi.fn(),
@@ -363,5 +364,49 @@ describe('CaregiverWizardPage — Save and continue later', () => {
     await user.type(screen.getByLabelText(/your name/i), 's')
     expect(saved).toBeInTheDocument()
     expect(saved).toHaveTextContent(/^$/)
+  })
+})
+
+// A caregiver who opens the form and changes nothing must send a payload equal to the base they loaded,
+// so Accept has nothing to apply and cannot undo anyone's later edit.
+describe('CaregiverWizardPage — sends the base it loaded', () => {
+  it('an untouched wizard submits a payload deep-equal to its base', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({
+      isLoading: false, isError: false,
+      data: makeDto({ current: projection as Record<string, unknown>, caregiverName: 'Jane Doe' }),
+    })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    for (let i = 0; i < 7; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+      await waitFor(() => expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(i + 1))
+    }
+    await user.click(screen.getByRole('button', { name: /submit for review/i }))
+    await waitFor(() => expect(mockSubmitMutateAsync).toHaveBeenCalledTimes(1))
+    const body = mockSubmitMutateAsync.mock.calls[0][0]
+    expect(body.base).toBeTruthy()
+    expect(Object.keys(body.base)).toEqual(Object.keys(body.payload))
+    expect(body.payload).toEqual(body.base)
+  })
+
+  it('shows the draft for the field the caregiver changed and the live value for the rest, even when the draft still equals the stored base', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({
+      isLoading: false, isError: false,
+      data: makeDto({
+        current: { firstName: 'Sophie', lastName: 'Rivers', medicareNumber: '111111111', pensionCardNumber: '333333333' },
+        base: { keyIdentifiers: { medicareNumber: '000000000', pensionCardNumber: '222222222' } } as never,
+        draft: { keyIdentifiers: { medicareNumber: '999888777', pensionCardNumber: '222222222' } } as never,
+      }),
+    })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await waitFor(() => expect(screen.getByLabelText(/medicare number/i)).toHaveValue('999888777'))
+    expect(screen.getByLabelText(/pension card number/i)).toHaveValue('333333333')
+    const saved = mockSaveDraftMutateAsync.mock.calls[0][0]
+    expect(saved.base.keyIdentifiers).toMatchObject({ medicareNumber: '000000000' })
   })
 })

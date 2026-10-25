@@ -52,3 +52,41 @@ describe('computeCaregiverDiff', () => {
     expect(checklistRows[0].field).toBe('checklistItems.FallsRisk')
   })
 })
+
+describe('computeCaregiverDiff against the base the caregiver loaded', () => {
+  const live = { firstName: 'Sophie', lastName: 'Brown', phone: '0400000002', likesDislikes: 'Reading' }
+  const pd = (phone: string) => ({ firstName: 'Sophie', lastName: 'Brown', phone })
+
+  it('lists only what the caregiver changed from the base, and flags a row staff changed since', () => {
+    const rows = computeCaregiverDiff(
+      live,
+      { personalDetails: pd('0400000003'), aboutMe: { likesDislikes: 'Reading' } },
+      { personalDetails: pd('0400000001'), aboutMe: { likesDislikes: 'Reading' } },
+    )
+    expect(rows).toEqual([expect.objectContaining({ field: 'phone', current: '0400000002', proposed: '0400000003', staffChanged: true })])
+  })
+
+  it('does not flag a row staff left alone', () => {
+    const rows = computeCaregiverDiff(live, { personalDetails: pd('0400000003') }, { personalDetails: pd('0400000002') })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].staffChanged).toBeFalsy()
+  })
+
+  it('compares a collection row column by column, so a live row with extra columns is not a change', () => {
+    const rows = computeCaregiverDiff(
+      { consents: [{ consentType: 'PhotoVideo', granted: true, signedByName: 'Staff', id: 'x1' }] },
+      { consents: [{ consentType: 'PhotoVideo', granted: null }] },
+      { consents: [{ consentType: 'PhotoVideo', granted: null }] },
+    )
+    expect(rows).toEqual([])
+  })
+
+  it('lists a collection row when a column differs from the base', () => {
+    const rows = computeCaregiverDiff(
+      { consents: [{ consentType: 'PhotoVideo', granted: true, id: 'x1' }] },
+      { consents: [{ consentType: 'PhotoVideo', granted: false }] },
+      { consents: [{ consentType: 'PhotoVideo', granted: null }] },
+    )
+    expect(rows).toEqual([expect.objectContaining({ field: 'consents.PhotoVideo', staffChanged: true })])
+  })
+})

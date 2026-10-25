@@ -59,19 +59,20 @@ public class TenantFilterCoverageTests
         var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         using var db = new OdipDbContext(options, tenant.Object);
 
+        // Unfiltered means no declared filter named TenantFilter.Name: a soft-delete filter alongside it does not count as tenant filtering.
         var unfiltered = db.Model.GetEntityTypes()
-            .Where(t => t.BaseType == null && t.GetQueryFilter() == null)
+            .Where(t => t.BaseType == null && !t.GetDeclaredQueryFilters().Any(f => f.Key == TenantFilter.Name))
             .Select(t => t.ClrType.Name)
             .ToHashSet();
 
         var missing = unfiltered.Except(Unfiltered.Keys).Order().ToList();
-        Assert.True(missing.Count == 0, "No query filter and not on the allow-list (filter it, or add it with the reason it is safe): " + string.Join(", ", missing));
+        Assert.True(missing.Count == 0, "No tenant query filter and not on the allow-list (filter it, or add it with the reason it is safe): " + string.Join(", ", missing));
 
-        // A filter that is not about the tenant (a soft-delete filter, say) must not take a table off the list.
+        // The filter named TenantFilter.Name must compare TenantId. Other named filters (soft delete, say) are allowed.
         var notTenantFilters = db.Model.GetEntityTypes()
-            .Where(t => t.BaseType == null && t.GetQueryFilter() is { } filter && !ComparesTenantId(filter))
+            .Where(t => t.BaseType == null && t.GetDeclaredQueryFilters().Any(f => f.Key == TenantFilter.Name && !(f.Expression is { } filter && ComparesTenantId(filter))))
             .Select(t => t.ClrType.Name).Order().ToList();
-        Assert.True(notTenantFilters.Count == 0, "Has a query filter that does not compare the entity's TenantId: " + string.Join(", ", notTenantFilters));
+        Assert.True(notTenantFilters.Count == 0, "Has a tenant query filter that does not compare the entity's TenantId: " + string.Join(", ", notTenantFilters));
 
         var stale = Unfiltered.Keys.Except(unfiltered).Order().ToList();
         Assert.True(stale.Count == 0, "On the allow-list but now filtered or gone, remove: " + string.Join(", ", stale));

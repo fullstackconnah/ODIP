@@ -40,7 +40,7 @@ public class AdminNotificationsController : ControllerBase
         var rows = await query.OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
 
         var recipientIds = rows.Select(o => o.RecipientUserId).Distinct().ToList();
-        var names = await _db.Users.IgnoreQueryFilters()
+        var names = await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
             .Where(u => recipientIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => (u.FirstName + " " + u.LastName).Trim(), ct);
 
@@ -63,7 +63,7 @@ public class AdminNotificationsController : ControllerBase
         row.LastError = null;
         await _db.SaveChangesAsync(ct);
 
-        var name = await _db.Users.IgnoreQueryFilters()
+        var name = await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
             .Where(u => u.Id == row.RecipientUserId)
             .Select(u => (u.FirstName + " " + u.LastName).Trim())
             .FirstOrDefaultAsync(ct);

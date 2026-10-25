@@ -524,7 +524,7 @@ public class PortalBreaksTests
         var running = Assert.Single(entity.GetIndexes(), i => i.GetDatabaseName() == ShiftBreak.OneRunningIndexName);
         Assert.True(running.IsUnique);
         Assert.Equal("\"EndedAt\" IS NULL", running.GetFilter());
-        Assert.NotNull(entity.GetQueryFilter());
+        Assert.NotEmpty(entity.GetDeclaredQueryFilters());
         Assert.True(typeof(Odip.Domain.Interfaces.ITenantEntity).IsAssignableFrom(typeof(ShiftBreak)));
     }
 }

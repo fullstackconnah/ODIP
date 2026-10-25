@@ -80,7 +80,7 @@ public static class EmploymentHeroLeave
     }
 
     public static async Task<LeaveMapping> MappingAsync(OdipDbContext db, Guid tenantId, CancellationToken ct) =>
-        await db.EmploymentHeroConnections.IgnoreQueryFilters().AsNoTracking().Where(c => c.TenantId == tenantId)
+        await db.EmploymentHeroConnections.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().Where(c => c.TenantId == tenantId)
             .Select(c => new LeaveMapping(c.LeaveCategoryAnnual, c.LeaveCategorySick, c.LeaveCategoryPersonal, c.LeaveCategoryOther)).FirstOrDefaultAsync(ct)
         ?? new LeaveMapping(null, null, null, null);
 
@@ -93,9 +93,9 @@ public static class EmploymentHeroLeave
     public static async Task EnqueueAsync(OdipDbContext db, LeaveRequest leave, DateTime now, CancellationToken ct)
     {
         if (leave.Source != LeaveSource.Odip || leave.DecidedAt is not { } decidedAt) return;
-        var tenantId = await db.Users.IgnoreQueryFilters().AsNoTracking().Where(u => u.Id == leave.UserId).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
+        var tenantId = await db.Users.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().Where(u => u.Id == leave.UserId).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
         if (tenantId is not { } tenant) return;
-        var connectedAt = await db.EmploymentHeroConnections.IgnoreQueryFilters().AsNoTracking().Where(c => c.TenantId == tenant)
+        var connectedAt = await db.EmploymentHeroConnections.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().Where(c => c.TenantId == tenant)
             .Select(c => (DateTime?)c.ConnectedAt).FirstOrDefaultAsync(ct);
         if (connectedAt is not { } at || decidedAt < Cutoff(at)) return;
         db.EmploymentHeroOutbox.Add(NewRow(tenant, EmploymentHeroOutboxKind.Leave, leave.Id, now));
@@ -104,9 +104,9 @@ public static class EmploymentHeroLeave
     /// <summary>Takes a leave back from EH, in the caller's save: only when ODIP queued or sent it (a Leave row, or an adopted EH id). EH-entered leave is never withdrawn from here.</summary>
     public static async Task WithdrawAsync(OdipDbContext db, LeaveRequest leave, DateTime now, CancellationToken ct)
     {
-        var tenantId = await db.Users.IgnoreQueryFilters().AsNoTracking().Where(u => u.Id == leave.UserId).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
+        var tenantId = await db.Users.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().Where(u => u.Id == leave.UserId).Select(u => (Guid?)u.TenantId).FirstOrDefaultAsync(ct);
         if (tenantId is not { } tenant) return;
-        var queued = leave.ExternalLeaveId is not null || await db.EmploymentHeroOutbox.IgnoreQueryFilters().AsNoTracking()
+        var queued = leave.ExternalLeaveId is not null || await db.EmploymentHeroOutbox.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking()
             .AnyAsync(r => r.TenantId == tenant && r.Kind == EmploymentHeroOutboxKind.Leave && r.EntityId == leave.Id, ct);
         if (queued) db.EmploymentHeroOutbox.Add(NewRow(tenant, EmploymentHeroOutboxKind.LeaveCancel, leave.Id, now));
     }

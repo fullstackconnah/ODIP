@@ -500,7 +500,7 @@ public class InvoiceService
         var tenantId = TenantOf(claim);
         var settings = due.Count == 0 ? null : await SettingsForAsync(tenantId, ct);
         var next = settings == null ? 0
-            : await _db.InvoiceNumberCounters.IgnoreQueryFilters().Where(c => c.TenantId == tenantId && c.Kind == InvoiceKind.Invoice)
+            : await _db.InvoiceNumberCounters.IgnoreQueryFilters([TenantFilter.Name]).Where(c => c.TenantId == tenantId && c.Kind == InvoiceKind.Invoice)
                 .Select(c => (int?)c.NextNumber).FirstOrDefaultAsync(ct) ?? settings.InvoiceStartNumber;
         return new ClaimSubmitPreviewDto
         {
@@ -547,9 +547,9 @@ public class InvoiceService
     /// <summary>The settings row's own organisation's next invoice number and whether it has issued one (never the query filter's: a SuperAdmin's is off).</summary>
     public static async Task<(string Next, bool Issued)> NumberingOfAsync(OdipDbContext db, ProviderSettings s, CancellationToken ct)
     {
-        var next = await db.InvoiceNumberCounters.IgnoreQueryFilters()
+        var next = await db.InvoiceNumberCounters.IgnoreQueryFilters([TenantFilter.Name])
             .Where(c => c.TenantId == s.TenantId && c.Kind == InvoiceKind.Invoice).Select(c => (int?)c.NextNumber).FirstOrDefaultAsync(ct);
-        var issued = await db.Invoices.IgnoreQueryFilters().AnyAsync(i => i.TenantId == s.TenantId && i.Kind == InvoiceKind.Invoice, ct);
+        var issued = await db.Invoices.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(i => i.TenantId == s.TenantId && i.Kind == InvoiceKind.Invoice, ct);
         return (FormatNumber(s.InvoiceNumberPrefix, next ?? s.InvoiceStartNumber), issued);
     }
 

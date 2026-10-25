@@ -640,7 +640,7 @@ public class ParticipantsControllerPatchTests
     }
 
     [Fact]
-    public async Task Patch_CommunityAccessBehaviourGroup_WithRatingOmitted_ClearsTheRating()
+    public async Task Patch_CommunityAccessBehaviourGroup_WithExplicitNullRating_ClearsTheRating()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
@@ -651,11 +651,10 @@ public class ParticipantsControllerPatchTests
             CommunityAccessBehaviour = new PatchCommunityAccessBehaviourDto { OverallCommunityAccessRiskRating = RiskRatingLevel.High },
         }, CancellationToken.None);
 
-        // A present group is a mini full-submit: a sender that leaves the rating out clears it, so
-        // every sender of this group must echo the current rating (the participant-detail card did not).
+        // The group is replaced wholesale, so every sender must send each member, the rating included (the participant-detail card did not).
         var result = await controller.Patch(id, new PatchParticipantDto
         {
-            CommunityAccessBehaviour = new PatchCommunityAccessBehaviourDto { SignsHappyAndSettled = "Humming quietly." },
+            CommunityAccessBehaviour = new PatchCommunityAccessBehaviourDto { SignsHappyAndSettled = "Humming quietly.", OverallCommunityAccessRiskRating = null },
         }, CancellationToken.None);
         Assert.IsType<OkObjectResult>(result.Result);
 

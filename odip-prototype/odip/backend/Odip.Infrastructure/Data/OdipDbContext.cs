@@ -748,6 +748,7 @@ public class OdipDbContext : DbContext
             e.Property(x => x.CaregiverName).HasMaxLength(300);
             e.Property(x => x.CaregiverRelationship).HasMaxLength(100);
             e.Property(x => x.Payload).HasColumnType("jsonb");
+            e.Property(x => x.BasePayload).HasColumnType("jsonb");
             e.Property(x => x.RejectionNote).HasMaxLength(4000);
 
             e.HasOne(x => x.Participant)
@@ -2038,59 +2039,59 @@ public class OdipDbContext : DbContext
         // Applied to all root aggregate entities. SuperAdmin bypasses all filters.
 
         modelBuilder.Entity<User>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<User>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<Participant>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Participant>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantInquiry>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<InquiryContact>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantOnboarding>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantIntakeSnapshot>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ServiceAgreementDraft>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ServiceAgreementDraftApproval>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ElectronicSigningSnapshot>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ElectronicSigningEvidence>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // TenantId index for CaregiverProfileSubmission is declared on its own configuration
         // block above, so only the query filter is added here.
         modelBuilder.Entity<CaregiverProfileSubmission>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<Vehicle>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Vehicle>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<AccommodationProperty>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<AccommodationProperty>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<EventTemplate>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<EventTemplate>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<Activity>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Activity>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<TripInstance>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<TripInstance>()
             .HasIndex(e => e.TenantId);
 
@@ -2099,33 +2100,33 @@ public class OdipDbContext : DbContext
         // tasks have no trip), it needs its own TenantId — auto-stamped on insert by
         // SaveChangesAsync below, same as every other row here.
         modelBuilder.Entity<BookingTask>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<BookingTask>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<AppSettings>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<AppSettings>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ProviderSettings>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ProviderSettings>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<PlanPricingSettings>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // Participant budgets (phase 1): every table carries its own TenantId and the standard filter, so a pool or a period is never reached across tenants
         // even by a query that does not go through its plan.
         modelBuilder.Entity<FundingPlan>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<FundingPool>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<FundingPeriod>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<BudgetSettings>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         // Tenants table — unique index on EmailDomain (null for an organisation with none; PostgreSQL treats NULLs as distinct)
         modelBuilder.Entity<Tenant>()
@@ -2133,169 +2134,169 @@ public class OdipDbContext : DbContext
 
         // ── Rostering tenant query filters ────────────────────────────────────────
         modelBuilder.Entity<Shift>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Shift>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ShiftPattern>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftPattern>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<RosterWeek>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<StaffParticipantCompatibility>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<StaffParticipantCompatibility>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ShiftNote>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftNote>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ShiftCompletion>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftCompletion>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ShiftBreak>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftBreak>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<HandoverAcknowledgement>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<HandoverAcknowledgement>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ShiftRoutineCheck>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ShiftRoutineCheck>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<LeaveRequest>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<LeaveRequest>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<RecurringUnavailability>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<RecurringUnavailability>()
             .HasIndex(e => e.TenantId);
 
         // ── Notifications tenant query filters ─────────────────────────────────────
         modelBuilder.Entity<NotificationOutbox>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<NotificationOutbox>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<NotificationPreference>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<NotificationPreference>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<NotificationLog>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<NotificationLog>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<InAppNotification>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<InAppNotification>()
             .HasIndex(e => e.TenantId);
 
         // ── Medication Management tenant query filters ────────────────────────────
         modelBuilder.Entity<ParticipantMedication>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantMedication>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<MedicationAdministration>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<MedicationAdministration>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantNote>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantNote>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantRoutine>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantRoutine>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantRiskEntry>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantRiskEntry>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantConsent>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantConsent>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantHealthCondition>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantHealthCondition>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantAdlAssessment>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantAdlAssessment>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantChecklistItem>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantChecklistItem>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantCommunityAccessRiskItem>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantCommunityAccessRiskItem>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<RestrictivePractice>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<RestrictivePractice>()
             .HasIndex(e => e.TenantId);
 
         // ── Contacts (CONTACT-01/02/03) tenant query filters ───────────────────────
         modelBuilder.Entity<Person>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Person>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ParticipantContactRole>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<ParticipantContactRole>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<ImportBatch>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<IncidentReport>()
             // Fail closed: a caller with no tenant must not match NULL-tenant rows (EF null semantics).
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || (e.TenantId != null && e.TenantId == _tenant.TenantId));
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || (e.TenantId != null && e.TenantId == _tenant.TenantId));
         modelBuilder.Entity<IncidentReport>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<EmploymentHeroConnection>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<EmploymentHeroAttention>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<EmploymentHeroSyncLog>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<EmploymentHeroOutbox>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Invoice>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<InvoiceLine>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<InvoiceNumberCounter>()
-            .HasQueryFilter(e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

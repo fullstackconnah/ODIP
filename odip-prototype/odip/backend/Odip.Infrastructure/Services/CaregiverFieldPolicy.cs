@@ -96,43 +96,104 @@ public static class CaregiverFieldPolicy
     }
 
     /// <summary>
-    /// Make a caregiver payload safe to apply. Internal GROUPS become null (absent = untouched by
-    /// PATCH's group-level atomicity). Internal SCALARS that live inside caregiver-editable groups
-    /// are overwritten with the participant's current value — nulling them would CLEAR them, since
-    /// a present group with a null member clears that member exactly as a full Create/Update would.
-    ///
-    /// The four internal groups nulled here are exactly InternalFields' ndisPlan/serviceProfile/
-    /// preferredStaff/risksHazardsSummary members, mapped to their PatchParticipantDto group:
-    ///   PreferredStaff          — preferredStaffId (+ preferredStaffName, read-only/derived, has
-    ///                             no Patch member at all)
-    ///   NdisPlan                — ndisNumber, planStartDate, planEndDate, planType, fundingSource,
-    ///                             fundingOrganisation, isDsoa, isRepeatClient
-    ///   ServiceProfile          — region (serviceStreams is NOT internal, but the whole group is
-    ///                             still server-controlled — the caregiver never edits serviceStreams
-    ///                             via this form either)
-    ///   RisksHazardsSummary     — behaviourRiskSummary, notes
-    ///
-    /// Cross-checking InternalFields against every member of PatchParticipantDto's other 12
-    /// (caregiver-editable) groups — PersonalDetails, Address, LivingArrangement, KeyIdentifiers,
-    /// CulturalBackground, SupportNeedsMobility, Medical, BehaviourCommunication,
-    /// CommunityAccessBehaviour, MealsAndDiet, AboutMe, SupportsLookLike — finds exactly ONE
-    /// overlap: BehaviourRiskRating inside BehaviourCommunication. hasRestrictivePracticeFlag has
-    /// no Patch member anywhere (derived, read-only), so there is nothing to preserve for it beyond
-    /// the fact that PATCH never reads it.
+    /// Make a caregiver payload safe to apply: an allow-list of the groups the caregiver form sends (PersonalDetails,
+    /// KeyIdentifiers, CulturalBackground, SupportNeedsMobility, Medical, BehaviourCommunication, MealsAndDiet, AboutMe,
+    /// Consents, HealthConditions, AdlAssessments). Every other group (NdisPlan, ServiceProfile, PreferredStaff,
+    /// RisksHazardsSummary, and any group added to PatchParticipantDto later) becomes null, which PATCH treats as untouched.
+    /// Inside the allowed BehaviourCommunication group, BehaviourRiskRating is internal, so it is overwritten with the
+    /// participant's current value: nulling it would clear it, since a present group with a null member clears that member.
+    /// Accept runs this on the payload and the base before the merge, and again on the merged result.
     /// </summary>
     public static PatchParticipantDto Sanitise(PatchParticipantDto payload, Participant current)
     {
-        var clean = payload with
+        // Allow-list: only the groups the caregiver form sends. A group added to PatchParticipantDto later is blocked until listed here.
+        var clean = new PatchParticipantDto
         {
-            PreferredStaff = null,
-            NdisPlan = null,
-            ServiceProfile = null,
-            RisksHazardsSummary = null,
+            PersonalDetails = payload.PersonalDetails,
+            KeyIdentifiers = payload.KeyIdentifiers,
+            CulturalBackground = payload.CulturalBackground,
+            SupportNeedsMobility = payload.SupportNeedsMobility,
+            Medical = payload.Medical,
+            BehaviourCommunication = payload.BehaviourCommunication,
+            MealsAndDiet = payload.MealsAndDiet,
+            AboutMe = payload.AboutMe,
+            Consents = payload.Consents,
+            HealthConditions = payload.HealthConditions,
+            AdlAssessments = payload.AdlAssessments,
         };
 
         if (clean.BehaviourCommunication is { } bc)
             clean = clean with { BehaviourCommunication = bc with { BehaviourRiskRating = current.BehaviourRiskRating } };
 
         return clean;
+    }
+
+    private static readonly (string Group, string Key)[] CollectionGroups =
+        [("consents", "consentType"), ("healthConditions", "conditionType"), ("adlAssessments", "adlType")];
+
+    /// <summary>
+    /// Three-way merge: keep only what the caregiver changed from the form they loaded (<paramref name="base"/>);
+    /// every other member takes the live value from <paramref name="current"/> (the projection). Both sides changed: the caregiver wins.
+    /// A group with no change is dropped. Collection rows match by key and are compared column by column.
+    /// </summary>
+    public static PatchParticipantDto MergeAgainstBase(JsonObject current, PatchParticipantDto payload, PatchParticipantDto @base)
+    {
+        var p = (JsonObject)JsonSerializer.SerializeToNode(payload, Web)!;
+        var b = (JsonObject)JsonSerializer.SerializeToNode(@base, Web)!;
+        var merged = new JsonObject();
+        foreach (var (group, pv) in p)
+        {
+            if (pv is JsonObject pg)
+            {
+                if (b[group] is not JsonObject bg) { merged[group] = pg.DeepClone(); continue; }
+                var o = new JsonObject();
+                var changed = false;
+                foreach (var (m, v) in pg)
+                {
+                    if (Differs(v, bg[m])) { o[m] = v?.DeepClone(); changed = true; }
+                    else o[m] = current[m]?.DeepClone();
+                }
+                if (changed) merged[group] = o;
+            }
+            else if (pv is JsonArray pa)
+            {
+                var key = CollectionGroups.FirstOrDefault(c => c.Group == group).Key;
+                if (key is null || b[group] is not JsonArray ba) { merged[group] = pa.DeepClone(); continue; }
+                var rows = MergeRows(key, pa, ba, current[group] as JsonArray);
+                if (rows.Count > 0) merged[group] = rows;
+            }
+        }
+        return merged.Deserialize<PatchParticipantDto>(Web)!;
+    }
+
+    private static JsonArray MergeRows(string key, JsonArray payload, JsonArray @base, JsonArray? live)
+    {
+        // Last row wins for a repeated key; never ToDictionary.
+        static Dictionary<string, JsonObject> ByKey(string key, JsonArray? rows)
+        {
+            var d = new Dictionary<string, JsonObject>();
+            foreach (var r in rows ?? []) if (r is JsonObject o && o[key]?.ToString() is { } k) d[k] = o;
+            return d;
+        }
+        var baseRows = ByKey(key, @base);
+        var liveRows = ByKey(key, live);
+        var result = new JsonArray();
+        foreach (var (k, row) in ByKey(key, payload))
+        {
+            baseRows.TryGetValue(k, out var baseRow);
+            var changedCols = row.Where(c => c.Key != key && Differs(c.Value, baseRow?[c.Key])).ToList();
+            if (changedCols.Count == 0) continue;
+            var outRow = liveRows.TryGetValue(k, out var l) ? (JsonObject)l.DeepClone() : new JsonObject { [key] = row[key]?.DeepClone() };
+            foreach (var c in changedCols) outRow[c.Key] = c.Value?.DeepClone();
+            result.Add(outRow);
+        }
+        return result;
+    }
+
+    // null and "" are the same value; lists compare in order.
+    private static bool Differs(JsonNode? a, JsonNode? b)
+    {
+        static bool Blank(JsonNode? n) => n is null || (n is JsonValue v && v.TryGetValue<string>(out var s) && s.Length == 0);
+        return !(Blank(a) && Blank(b)) && !JsonNode.DeepEquals(a, b);
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
 
@@ -50,7 +51,7 @@ public sealed class CurrentTenant : ICurrentTenant
         // out-of-tenant ViewAsUserId simply resolves to no row (null StaffId / not-linked),
         // never a cross-tenant read. This does NOT generalise: any future consumer that reads
         // ViewAsUserId directly against a query that bypasses the Users tenant filter (a raw
-        // SQL query, `IgnoreQueryFilters()`, or a non-ITenantEntity table keyed by user id)
+        // SQL query, `IgnoreQueryFilters([TenantFilter.Name])`, or a non-ITenantEntity table keyed by user id)
         // would need its own validation that the viewed user actually belongs to TenantId
         // before trusting this value.
         if (wasSuperAdmin && TenantId.HasValue)

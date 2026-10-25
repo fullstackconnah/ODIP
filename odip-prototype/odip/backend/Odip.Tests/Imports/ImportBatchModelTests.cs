@@ -13,7 +13,7 @@ public class ImportBatchModelTests
     {
         using var db = TestDb.Create();
         var batch = db.Model.FindEntityType(typeof(ImportBatch))!;
-        Assert.NotNull(batch.GetQueryFilter());
+        Assert.NotEmpty(batch.GetDeclaredQueryFilters());
         var key = Assert.Single(batch.GetIndexes(), i => i.Properties.Select(p => p.Name).SequenceEqual(new[] { "TenantId", "IdempotencyKey" }));
         Assert.True(key.IsUnique);
         Assert.Contains(typeof(ImportBatch), AuditedEntities.Types);

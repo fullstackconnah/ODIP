@@ -204,7 +204,7 @@ public class AuthController : ControllerBase
         if (domain == superAdminDomain)
         {
             var superAdmin = await _db.Users
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters([TenantFilter.Name])
                 .FirstOrDefaultAsync(u => u.Email.ToLower() == email && u.IsActive, ct);
 
             if (superAdmin is null)
@@ -240,7 +240,7 @@ public class AuthController : ControllerBase
         // enough to tell one from many, and the order makes the two ids the refusal's log line names the same two every time. Tenant.EmailDomain
         // plays no part in signing in.
         var matches = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .Where(u => u.Email.ToLower() == email && u.IsActive)
             .OrderBy(u => u.Id)
             .Take(2)
@@ -314,7 +314,7 @@ public class AuthController : ControllerBase
         var username = string.IsNullOrEmpty(dto?.Username) ? "admin" : dto.Username;
 
         var user = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .FirstOrDefaultAsync(u => u.Username == username && u.IsActive, ct);
 
         if (user is null)
@@ -344,7 +344,7 @@ public class AuthController : ControllerBase
         }
 
         var tenant = await _db.Tenants
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .FirstOrDefaultAsync(t => t.Id == user.TenantId, ct);
 
         if (tenant is null)
@@ -383,7 +383,7 @@ public class AuthController : ControllerBase
             return NotFound();
 
         var users = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .Where(u => u.IsActive)
             .OrderBy(u => u.Username)
             .Select(u => new

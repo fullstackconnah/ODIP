@@ -119,18 +119,19 @@ public class CaregiverSubmissionsController : ControllerBase
         return Ok(ApiResponse<List<CaregiverSubmissionListItemDto>>.Ok(rows));
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<ApiResponse<CaregiverSubmissionDetailDto>>> Get(Guid id, CancellationToken ct)
-    {
-        var s = await _db.CaregiverProfileSubmissions
+    private IQueryable<CaregiverProfileSubmission> WithParticipant() => _db.CaregiverProfileSubmissions
             .Include(x => x.Participant).ThenInclude(p => p.PreferredUser)
             .Include(x => x.Participant).ThenInclude(p => p.RestrictivePractices)
             .Include(x => x.Participant).ThenInclude(p => p.Consents)
             .Include(x => x.Participant).ThenInclude(p => p.HealthConditions)
             .Include(x => x.Participant).ThenInclude(p => p.AdlAssessments)
             .Include(x => x.Participant).ThenInclude(p => p.ChecklistItems)
-            .Include(x => x.Participant).ThenInclude(p => p.CommunityAccessRiskItems)
-            .FirstOrDefaultAsync(x => x.Id == id, ct);
+            .Include(x => x.Participant).ThenInclude(p => p.CommunityAccessRiskItems);
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<CaregiverSubmissionDetailDto>>> Get(Guid id, CancellationToken ct)
+    {
+        var s = await WithParticipant().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<CaregiverSubmissionDetailDto>.Fail("Submission not found"));
 
         var dto = new CaregiverSubmissionDetailDto
@@ -142,6 +143,7 @@ public class CaregiverSubmissionsController : ControllerBase
             ReviewedAt = s.ReviewedAt, RejectionNote = s.RejectionNote,
             Current = await BuildProjectionAsync(s.Participant, ct),
             Payload = s.Payload is null ? null : JsonSerializer.Deserialize<PatchParticipantDto>(s.Payload, Json),
+            Base = s.BasePayload is null ? null : JsonSerializer.Deserialize<PatchParticipantDto>(s.BasePayload, Json),
         };
         return Ok(ApiResponse<CaregiverSubmissionDetailDto>.Ok(dto));
     }
@@ -149,14 +151,21 @@ public class CaregiverSubmissionsController : ControllerBase
     [HttpPost("{id:guid}/accept")]
     public async Task<IActionResult> Accept(Guid id, CancellationToken ct)
     {
-        var s = await _db.CaregiverProfileSubmissions.Include(x => x.Participant).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var s = await WithParticipant().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<object>.Fail("Submission not found"));
         if (s.Status != CaregiverSubmissionStatus.Submitted)
             return Conflict(ApiResponse<object>.Fail("Only a submitted form can be accepted."));
         if (s.Payload is null)
             return BadRequest(ApiResponse<object>.Fail("This submission has no content."));
 
-        var payload = JsonSerializer.Deserialize<PatchParticipantDto>(s.Payload, Json) ?? new PatchParticipantDto();
+        // Allow-list before the merge: a crafted group (ndisPlan) must not reach it, since the projection lacks that group's internal members.
+        var payload = CaregiverFieldPolicy.Sanitise(JsonSerializer.Deserialize<PatchParticipantDto>(s.Payload, Json) ?? new PatchParticipantDto(), s.Participant);
+        // A stored base means apply only what the caregiver changed from it; without one (sent before change tracking) the whole payload applies.
+        if (s.BasePayload is not null)
+        {
+            var baseDto = CaregiverFieldPolicy.Sanitise(JsonSerializer.Deserialize<PatchParticipantDto>(s.BasePayload, Json) ?? new PatchParticipantDto(), s.Participant);
+            payload = CaregiverFieldPolicy.MergeAgainstBase(await BuildProjectionAsync(s.Participant, ct), payload, baseDto);
+        }
         payload = CaregiverFieldPolicy.Sanitise(payload, s.Participant);
 
         var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, s.Participant, payload, ct);

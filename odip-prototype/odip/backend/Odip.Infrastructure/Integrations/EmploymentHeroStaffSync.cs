@@ -413,7 +413,7 @@ public sealed class EmploymentHeroStaffSync
     /// <summary>Why a linked person can't take this address. It may already belong to another ODIP account, it may be at another organisation's domain, or it may be the SuperAdmin domain.</summary>
     private static async Task<string?> EmailProblemAsync(OdipDbContext db, StaffCreateService creator, string email, Guid userId, Guid tenantId, CancellationToken ct)
     {
-        var holder = await db.Users.IgnoreQueryFilters().Where(u => u.Id != userId && u.Email.ToLower() == email)
+        var holder = await db.Users.IgnoreQueryFilters([TenantFilter.Name]).Where(u => u.Id != userId && u.Email.ToLower() == email)
             .Select(u => new { u.TenantId, u.FirstName, u.LastName }).FirstOrDefaultAsync(ct);
         if (holder is not null)
             return holder.TenantId == tenantId ? $"Their email in Employment Hero is already used by {(holder.FirstName + " " + holder.LastName).Trim()} in ODIP." : OtherOrganisationEmail;

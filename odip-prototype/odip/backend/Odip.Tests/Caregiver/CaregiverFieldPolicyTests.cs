@@ -126,4 +126,32 @@ public class CaregiverFieldPolicyTests
         Assert.Equal(RiskRatingLevel.Low, clean.BehaviourCommunication!.BehaviourRiskRating);   // preserved, not cleared
         Assert.Equal(MemoryLevel.Excellent, clean.BehaviourCommunication.Memory);                  // caregiver edit kept
     }
+
+    [Fact]
+    public void Sanitise_DropsGroupsTheCaregiverFormNeverSends()
+    {
+        var p = new Participant { Id = Guid.NewGuid(), FirstName = "S", LastName = "B" };
+        var crafted = new PatchParticipantDto
+        {
+            Address = new PatchAddressDto(),
+            LivingArrangement = new PatchLivingArrangementDto(),
+            SupportsLookLike = new PatchSupportsLookLikeDto(),
+            CommunityAccessBehaviour = new PatchCommunityAccessBehaviourDto(),
+            ChecklistItems = [new CreateParticipantChecklistItemDto()],
+            AboutMe = new PatchAboutMeDto { Goals = "Live independently" },
+            Consents = [new CreateParticipantConsentDto()],
+            HealthConditions = [new CreateParticipantHealthConditionDto()],
+            AdlAssessments = [new CreateParticipantAdlAssessmentDto()],
+        };
+        var clean = CaregiverFieldPolicy.Sanitise(crafted, p);
+        Assert.Null(clean.Address);
+        Assert.Null(clean.LivingArrangement);
+        Assert.Null(clean.SupportsLookLike);
+        Assert.Null(clean.CommunityAccessBehaviour);
+        Assert.Null(clean.ChecklistItems);
+        Assert.Equal("Live independently", clean.AboutMe!.Goals);
+        Assert.Single(clean.Consents!);
+        Assert.Single(clean.HealthConditions!);
+        Assert.Single(clean.AdlAssessments!);
+    }
 }
