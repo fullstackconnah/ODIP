@@ -12,7 +12,7 @@ import { ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageState } from '@/components/PageState'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { StatusBadge } from '@/components/StatusBadge'
-import { chipToneOf, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence, unpricedTripDaySentence } from '@/lib/budgetLedger'
+import { chipToneOf, focusPeriodOf, money, paceSentence, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence, unpricedTripDaySentence } from '@/lib/budgetLedger'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { plural } from '@/lib/format'
@@ -159,6 +159,9 @@ function PoolLedger({ pool }: { pool: LedgerPool }) {
         <>
           <GlanceStrip period={focus} />
           <p className="mt-3 text-sm text-[var(--color-foreground)]">{poolSentence(pool, focus)}</p>
+          {focus.paceRunsOutOn && (
+            <p className="mt-2 text-[13px] text-[var(--color-on-warning-container)]">{paceSentence(focus.paceRunsOutOn, focus.periodEnd)}</p>
+          )}
           {focus.pastUnresolvedCount > 0 && (
             <p className="mt-2 text-[13px] text-[var(--color-on-warning-container)]">
               {plural(focus.pastUnresolvedCount, 'past shift')} not completed or cancelled, counted as pending.

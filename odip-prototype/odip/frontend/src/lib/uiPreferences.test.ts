@@ -8,13 +8,13 @@ describe('uiPreferences', () => {
   })
 
   it('round-trips a written preference back out for the same user', () => {
-    writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system' })
+    writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system', sidebarCollapsed: false })
 
-    expect(readUiPreferences('user-1')).toEqual({ tableVerticalDividers: true, theme: 'system' })
+    expect(readUiPreferences('user-1')).toEqual({ tableVerticalDividers: true, theme: 'system', sidebarCollapsed: false })
   })
 
   it('does not leak one user\'s preference onto another user id', () => {
-    writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system' })
+    writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system', sidebarCollapsed: false })
 
     expect(readUiPreferences('user-2')).toEqual(DEFAULT_UI_PREFERENCES)
   })
@@ -61,14 +61,14 @@ describe('uiPreferences', () => {
       throw new Error('QuotaExceededError')
     })
 
-    expect(() => writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system' })).not.toThrow()
+    expect(() => writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system', sidebarCollapsed: false })).not.toThrow()
   })
 
   it('returns defaults and performs no write for a null userId', () => {
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem')
 
     expect(readUiPreferences(null)).toEqual(DEFAULT_UI_PREFERENCES)
-    writeUiPreferences(null, { tableVerticalDividers: true, theme: 'system' })
+    writeUiPreferences(null, { tableVerticalDividers: true, theme: 'system', sidebarCollapsed: false })
 
     expect(setItemSpy).not.toHaveBeenCalled()
   })
@@ -88,7 +88,7 @@ describe('uiPreferences theme', () => {
   it('reads prefs saved before the theme existed as System, keeping the dividers setting', () => {
     localStorage.setItem('odip_ui_prefs:user-1', JSON.stringify({ tableVerticalDividers: true }))
 
-    expect(readUiPreferences('user-1')).toEqual({ tableVerticalDividers: true, theme: 'system' })
+    expect(readUiPreferences('user-1')).toEqual({ tableVerticalDividers: true, theme: 'system', sidebarCollapsed: false })
   })
 
   it.each([['sepia', '"sepia"'], ['a number', '1'], ['null', 'null']])('reads a stored theme of %s as System', (_name, json) => {
@@ -105,9 +105,42 @@ describe('uiPreferences theme', () => {
   })
 
   it('keeps Dark per user: user A on Dark leaves user B on System', () => {
-    writeUiPreferences('user-a', { tableVerticalDividers: false, theme: 'dark' })
+    writeUiPreferences('user-a', { tableVerticalDividers: false, theme: 'dark', sidebarCollapsed: false })
 
     expect(readUiPreferences('user-a').theme).toBe('dark')
     expect(readUiPreferences('user-b').theme).toBe('system')
+  })
+})
+
+describe('uiPreferences sidebarCollapsed', () => {
+  afterEach(() => {
+    localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
+  it('defaults to the wide sidebar', () => {
+    expect(DEFAULT_UI_PREFERENCES.sidebarCollapsed).toBe(false)
+    expect(readUiPreferences('nobody').sidebarCollapsed).toBe(false)
+  })
+
+  it('reads a stored true as true, per user', () => {
+    writeUiPreferences('user-a', { ...DEFAULT_UI_PREFERENCES, sidebarCollapsed: true })
+
+    expect(readUiPreferences('user-a').sidebarCollapsed).toBe(true)
+    expect(readUiPreferences('user-b').sidebarCollapsed).toBe(false)
+  })
+
+  it.each([['a string', '"yes"'], ['a number', '1'], ['null', 'null']])('reads a stored %s as false', (_name, json) => {
+    localStorage.setItem('odip_ui_prefs:user-1', `{"sidebarCollapsed":${json}}`)
+
+    expect(readUiPreferences('user-1').sidebarCollapsed).toBe(false)
+  })
+
+  it('reads missing, malformed and unreadable storage as false', () => {
+    expect(readUiPreferences('user-1').sidebarCollapsed).toBe(false)
+    localStorage.setItem('odip_ui_prefs:user-1', '{nope')
+    expect(readUiPreferences('user-1').sidebarCollapsed).toBe(false)
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
+    expect(readUiPreferences('user-1').sidebarCollapsed).toBe(false)
   })
 })

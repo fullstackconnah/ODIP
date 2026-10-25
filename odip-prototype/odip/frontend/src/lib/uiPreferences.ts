@@ -11,6 +11,8 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 export type UiPreferences = {
   tableVerticalDividers: boolean
   theme: ThemePreference
+  /** The desktop sidebar as a 64px icon rail (from lg; the phone drawer ignores it). */
+  sidebarCollapsed: boolean
 }
 
 // public/theme.js applies the theme before first paint and exposes set() for React; keep its validation in step with readUiPreferences.
@@ -23,6 +25,7 @@ declare global {
 export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   tableVerticalDividers: false,
   theme: 'system',
+  sidebarCollapsed: false,
 }
 
 function storageKey(userId: string): string {
@@ -62,7 +65,10 @@ export function readUiPreferences(userId: string | null): UiPreferences {
         ? candidate.theme
         : DEFAULT_UI_PREFERENCES.theme
 
-    return { tableVerticalDividers, theme }
+    const sidebarCollapsed =
+      typeof candidate.sidebarCollapsed === 'boolean' ? candidate.sidebarCollapsed : DEFAULT_UI_PREFERENCES.sidebarCollapsed
+
+    return { tableVerticalDividers, theme, sidebarCollapsed }
   } catch {
     // localStorage itself threw (e.g. Safari private mode) — degrade to defaults.
     return { ...DEFAULT_UI_PREFERENCES }

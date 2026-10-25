@@ -232,7 +232,7 @@ public class DemoDataWiringTests
     [Fact]
     public async Task TheHostedService_WaitsBeforeTheFirstTick_ThenTicksOnTheInterval_AndStopsWhenAsked()
     {
-        // Nothing below depends on how fast the test thread gets to run, because this test runs inside the image build on a loaded runner
+        // Nothing below depends on how fast the test thread gets to run, because this test runs in CI on a loaded runner
         // (it used to assert "no tick yet" a few milliseconds after StartAsync, against a 40 ms first-run delay). The first tick is held
         // on a gate the test opens, and the delay is long next to a scheduling stall and to the coarse timers of a Windows machine.
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

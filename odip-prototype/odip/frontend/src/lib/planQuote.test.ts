@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { PlanBlock, PlanFailureReason, PlanIssue, PlanQuote } from '@/api/types'
 import { emptyBlock } from './planBlocks'
 
-// The backend does not always sit beside the frontend (an image build has only the frontend). A test that reads the C# is skipped THEN, where the run says so, and is never a pass that checked nothing.
+// The backend does not always sit beside the frontend (a frontend-only checkout). A test that reads the C# is skipped THEN, where the run says so, and is never a pass that checked nothing.
 const BACKEND = resolve(__dirname, '../../../backend')
 const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
 const hasBackend = existsSync(PRICING)

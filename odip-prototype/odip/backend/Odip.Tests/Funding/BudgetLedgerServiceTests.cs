@@ -716,6 +716,45 @@ public class BudgetLedgerServiceTests
         Assert.Equal(8m * 108m, q2.BookedAhead);
     }
 
+    [Theory]
+    [InlineData(2026, 10, 3, 13, 59, 2026, 11, 1)]   // 23:59 on Saturday 3 Oct in Sydney: 29 days in, so 58 days from the start
+    [InlineData(2026, 10, 3, 14, 0, 2026, 11, 3)]    // 00:00 on Sunday 4 Oct, the day daylight saving starts: 30 days in, so 60 days from the start
+    public async Task ThePaceDateComesFromTheProvidersToday_AMinuteAcrossLocalMidnightMovesItByOneDay(int y, int mo, int d, int h, int mi, int ey, int em, int ed)
+    {
+        var kit = LedgerKit.Create(now: new DateTimeOffset(y, mo, d, h, mi, 0, TimeSpan.Zero));
+        kit.SeedProvider("NSW");
+        kit.SeedCommunityAccessCatalogue();
+        var person = kit.SeedParticipant();
+        kit.SeedPlan(person, new DateOnly(2026, 9, 4), new DateOnly(2026, 12, 3), Core(PlanType.PlanManaged, new PeriodSpec(new DateOnly(2026, 9, 4), new DateOnly(2026, 12, 3), 8000m)));
+        kit.SeedShiftClaim(person, TripClaimStatus.Paid, 4000m, kit.SeedShift(person, new DateOnly(2026, 9, 20), ShiftStatus.Completed));
+
+        var dto = (await kit.Ledger.GetLedgerAsync(kit.TenantId, person.Id, Ct))!;
+
+        Assert.Equal(new DateOnly(ey, em, ed), Assert.Single(dto.Pools).Periods.Single().PaceRunsOutOn);
+    }
+
+    [Fact]
+    public async Task TheLedgerDtoCarriesPaceRunsOutOn_OnlyOnTheCurrentPeriod_AndTheJsonOmitsItWhenNull()
+    {
+        var kit = LedgerKit.Create(now: new DateTimeOffset(2026, 11, 4, 3, 0, 0, TimeSpan.Zero));   // 34 of the quarter's 92 days in
+        kit.SeedProvider("NSW");
+        kit.SeedCommunityAccessCatalogue();
+        var person = kit.SeedParticipant();
+        kit.SeedPlan(person, CoreQuarters(each: 8000m));
+        kit.SeedShiftClaim(person, TripClaimStatus.Paid, 8000m, kit.SeedShift(person, new DateOnly(2026, 8, 1), ShiftStatus.Completed));   // Q1, spent in full (nothing carries) and ended
+        kit.SeedShiftClaim(person, TripClaimStatus.Paid, 4000m, kit.SeedShift(person, new DateOnly(2026, 10, 10), ShiftStatus.Completed));
+
+        var periods = (await kit.Ledger.GetLedgerAsync(kit.TenantId, person.Id, Ct))!.Pools.Single().Periods;
+
+        Assert.Null(periods[0].PaceRunsOutOn);
+        Assert.Equal(new DateOnly(2026, 12, 8), periods[1].PaceRunsOutOn);   // floor(8000 x 34 / 4000) = 68 days from 1 Oct
+        Assert.Null(periods[2].PaceRunsOutOn);
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        Odip.Api.Serialization.ApiJsonOptions.Configure(options);
+        Assert.DoesNotContain("paceRunsOutOn", System.Text.Json.JsonSerializer.Serialize(periods[0], options));
+        Assert.Contains("\"paceRunsOutOn\":\"2026-12-05\"", System.Text.Json.JsonSerializer.Serialize(new LedgerPeriodDto { PaceRunsOutOn = new DateOnly(2026, 12, 5) }, options));
+    }
+
     [Fact]
     public async Task TheProvidersStateDecidesTheZone_APerthProviderIsEightHoursAheadOfUtc()
     {

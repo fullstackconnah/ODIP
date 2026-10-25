@@ -2,7 +2,7 @@ namespace Odip.Tests.Catalogue;
 
 /// <summary>
 /// The catalogue workbooks the importer tests read. They are committed under <c>Catalogue/Fixtures</c> and copied beside the test
-/// assembly (Odip.Tests.csproj), so nothing here reads outside the repository: the Docker image build runs these tests with
+/// assembly (Odip.Tests.csproj), so nothing here reads outside the repository: CI runs these tests with
 /// only the backend tree present.
 /// <list type="bullet">
 /// <item><c>support-catalogue-2026-27.xlsx</c>: the official NDIA "Support Catalogue 2026-27" workbook, byte for byte

@@ -29,6 +29,7 @@ public static class BudgetAlertRules
     public const string ForecastOverType = "budget-forecast-over";
     public const string OverType = "budget-over";
     public const string NdiaExhaustedType = "budget-ndia-exhausted";
+    public const string PaceType = "budget-pace";
 
     /// <summary>The participant page's tab every budget alert opens.</summary>
     public const string FundingTab = "funding";
@@ -49,6 +50,7 @@ public static class BudgetAlertRules
 
             var label = BudgetText.PoolLabel(pool.Pool, severalCorePools);
             if (StatusAlert(label, period) is { } status) alerts.Add(status);
+            else if (period.PaceAt(ledger.Today) is { } pace) alerts.Add(PaceAlert(label, pace, period));   // one alert per pool: an Approaching or worse pool keeps its own
             if (ndiaByPool.TryGetValue(pool.Pool.Id, out var rejection)) alerts.Add(NdiaAlert(label, rejection));
         }
 
@@ -73,6 +75,10 @@ public static class BudgetAlertRules
                 return null;
         }
     }
+
+    /// <summary>A pool that is on track but spending faster than its period allows: when it runs out at this rate, and when the period ends. Dates only, no money, so no gap sentence.</summary>
+    private static ParticipantAlertDto PaceAlert(string label, PaceWarning pace, PeriodLedger period) =>
+        Alert(PaceType, AlertSeverity.Warning, $"{label} runs out around {BudgetText.Day(pace.RunsOutOn)} at this rate, before the period ends on {BudgetText.Day(period.Period.PeriodEnd)}");
 
     /// <summary>
     /// Shifts the shift claim cannot price are $0 in every figure, so the figures leave them out: an alert about a status says so, rather than reading as the whole picture. Only the period the alert is

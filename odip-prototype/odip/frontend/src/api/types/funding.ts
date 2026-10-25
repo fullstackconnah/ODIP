@@ -203,6 +203,8 @@ export interface LedgerPeriod extends LedgerFigures {
   periodEnd: string
   /** The period holding the provider's today. */
   isCurrent: boolean
+  /** The date the money runs out at the pace so far, when that is before the period ends; only the current period carries it, and it is not a status. Left out when none. */
+  paceRunsOutOn?: string
   /** Shifts in the period never completed or cancelled although their day has passed (counted as pending). */
   pastUnresolvedCount: number
   /** Confirmed trip bookings in the period whose trip has started and has no claim yet (counted as pending: the trip claim waits for the trip to be completed). */
@@ -302,6 +304,8 @@ export interface BudgetListRow {
   /** Used plus booked ahead. */
   forecast: number
   status: BudgetStatus
+  /** The date the money runs out at the pace so far, when that is before the period ends. Not a status: filters and counts ignore it. Left out when none. */
+  paceRunsOutOn?: string
   /** How many shifts of this period the shift claim cannot price yet (a sleepover, a passive night, a group shift): each is $0 in every figure above, so they leave those shifts out. 0 when every shift priced. */
   unpricedShiftCount: number
   /** The NDIA's own word that this pool's funds ran out (a claim of the pool refused for want of funds, while its funding period is the one running); left out when it has none. ODIP's figures can say On track beside it. */
