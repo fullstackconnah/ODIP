@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import indexHtml from './index.html?raw'
 import mainTs from './main.ts?raw'
-import fontsCss from '../src/fonts.css?raw'
 import appMainTsx from '../src/main.tsx?raw'
 import appIndexHtml from '../index.html?raw'
 import manifestRaw from './assets/screens/manifest.json?raw'
@@ -11,6 +10,7 @@ import { ACKNOWLEDGEMENT_OF_COUNTRY } from '../src/lib/platformFacts'
 
 // CSS is read from disk: the test run does not process CSS (vite.config.ts `css: false`).
 const css = readFileSync(join(__dirname, 'welcome.css'), 'utf-8')
+const fontsCss = readFileSync(join(__dirname, '../src/fonts.css'), 'utf-8')
 
 // Guards for the landing page's contract: the CSP it must satisfy, the copy and claims it must keep (SHAPE section 3,
 // spec L4), the form's markup, the footer's bound facts, and the proof it must show.
