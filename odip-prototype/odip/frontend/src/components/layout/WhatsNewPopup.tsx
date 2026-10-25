@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { useMarkWhatsNewPopupSeen, useWhatsNew } from '@/api/hooks'
 import type { WhatsNewEntry } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -55,7 +56,8 @@ export function WhatsNewPopup({ panelOpen, onSeeAll, returnFocusRef }: WhatsNewP
   }
 
   const more = items.length > MAX_SHOWN
-  return (
+  // A portal, as for the SlideOver in the button: the header's backdrop-blur would otherwise make it the containing block of the Modal's fixed overlay.
+  return createPortal(
     <Modal
       open={open}
       onClose={() => dismiss(true)}
@@ -73,6 +75,7 @@ export function WhatsNewPopup({ panelOpen, onSeeAll, returnFocusRef }: WhatsNewP
         {items.slice(0, MAX_SHOWN).map(entry => <WhatsNewEntryItem key={entry.id} entry={entry} />)}
       </div>
       {more && <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">Showing {MAX_SHOWN} of {items.length} important updates.</p>}
-    </Modal>
+    </Modal>,
+    document.body,
   )
 }

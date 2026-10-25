@@ -79,6 +79,8 @@ describe('WhatsNewPopup', () => {
     expect(within(dialog).getByText('Important 1')).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'See all' })).toBeNull()
     expect(dialog.textContent).not.toMatch(/ODIP/i)
+    // Portalled out of the header: its backdrop-blur would clip the fixed overlay to the 48px bar.
+    expect(screen.getByRole('button', { name: /What's new$/ }).parentElement?.contains(dialog)).toBe(false)
   })
 
   it.each([
