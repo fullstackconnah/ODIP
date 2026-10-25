@@ -191,6 +191,8 @@ public class ParticipantsController : ControllerBase
         // set here and nowhere else.
         var readinessIssues = await ParticipantReadiness.IssuesAsync(_db, new[] { p.Id }, ct);
         dto = dto with { ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, p.Id) };
+        // Masked here and not in the mapper, which the caregiver forms share. Only the office roles see full ID numbers.
+        if (ParticipantIdMask.AppliesTo(User)) dto = ParticipantIdMask.Apply(dto);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(dto));
     }
 
