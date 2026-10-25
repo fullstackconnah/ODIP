@@ -53,10 +53,13 @@ describe('SupportProfileTopicCard (T15)', () => {
     expect(state.retry).toHaveBeenCalled()
   })
 
-  it('an all-empty card has the header Edit and no Add; viewers get neither', () => {
+  it('an all-empty card has the header Edit and no Add; viewers get neither', async () => {
+    const user = userEvent.setup()
     const { unmount } = render(<SupportProfileTopicCard title="Emergency" field="emergencyConsiderations" participantId="participant-1" canEdit state={ready(undefined)} />)
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('textbox')).toBeInTheDocument()
     unmount()
     render(<SupportProfileTopicCard title="Emergency" field="emergencyConsiderations" participantId="participant-1" canEdit={false} state={ready(undefined)} />)
     expect(screen.queryByRole('button')).not.toBeInTheDocument()

@@ -85,7 +85,8 @@ export function useScrollToHash(participantId: string | undefined) {
       el.closest('details')?.setAttribute('open', '')
       const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
       el.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' })
-      const target = el.querySelector<HTMLElement>('h2,h3') ?? el
+      // A heading inside a still-closed fold is not rendered, so focusing it would drop focus: skip those.
+      const target = [...el.querySelectorAll<HTMLElement>('h2,h3')].find(h => !h.closest('details:not([open])')) ?? el
       target.tabIndex = -1
       target.focus({ preventScroll: true })
       // Sections above the target can still grow after this (their own lists load late): hold the target at the top for 3 s unless the person scrolls.
