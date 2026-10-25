@@ -309,6 +309,20 @@ describe('IntakeWizardPage', () => {
     expect(document.getElementById('planType')).toHaveTextContent('Self Managed')
   })
 
+  it('O3: a contact row on the Contacts step has a visible "Primary contact" pill that toggles', async () => {
+    const user = userEvent.setup()
+    renderPage('/participants/new')
+    await fillNameAndAdvance(user)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/contacts/i)
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    const primary = screen.getByRole('checkbox', { name: 'Primary contact' })
+    expect(primary).not.toBeChecked()
+    expect(primary.closest('label')).toHaveClass('rounded-full')
+    await user.click(primary)
+    expect(primary).toBeChecked()
+  })
+
   it('saves a resumed draft (edit mode) and lands on the Enquiries tab too', async () => {
     const user = userEvent.setup()
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })

@@ -160,6 +160,20 @@ describe('AddContactRoleForm', () => {
     expect(onSaved).toHaveBeenCalledTimes(1)
   })
 
+  it('O3: Primary is a visible "Primary contact" pill with the one-per-role rule beside it, and toggling it is what saves', async () => {
+    const user = userEvent.setup()
+    render(<AddContactRoleForm participantId="participant-1" mode="edit" role={makeRole({ isPrimary: true })} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    const primary = screen.getByRole('checkbox', { name: 'Primary contact' })
+    expect(primary).toBeChecked()
+    expect(primary.closest('label')).toHaveClass('rounded-full')
+    expect(screen.getByText(/only one active primary per role type/i)).toBeInTheDocument()
+
+    await user.click(primary)
+    await user.click(screen.getByRole('button', { name: 'Save contact' }))
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toMatchObject({ isPrimary: false })
+  })
+
   // PF-4 acceptance: "the same role-type gating (contactRoleGateError/availableContactRoleTypes)
   // applies here as on the Contacts tab — no duplicated, potentially-drifting gating logic."
   it('edit mode: surfaces the ProviderContact/Agency-managed gate error and blocks saving until resolved', async () => {
