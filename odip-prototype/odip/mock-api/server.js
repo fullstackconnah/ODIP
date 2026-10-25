@@ -2254,6 +2254,28 @@ function markInAppRead(id) {
   return null
 }
 
+// What's new (Settings > What's new, the top-bar button): GET whats-new serves the live rows for every role with nothing unread, so the e2e runs and the shots see a calm bell;
+// the admin writes change this array for the life of the process. Live rows omit archivedAtUtc, as the API omits nulls.
+const whatsNewRows = [
+  { id: 'wn-0004', key: '2026-10-dark-mode', title: 'Dark mode is here', body: 'Bunya Support now has a dark theme. Go to Settings, then Appearance, and choose Light, Dark or System under Theme.', important: true, roles: ['Admin', 'Coordinator', 'SupportWorker', 'ReadOnly'], publishedAtUtc: '2026-10-25T01:00:00Z', updatedAt: '2026-10-25T01:00:00Z' },
+  { id: 'wn-0003', key: '2026-10-rp-authorisation-badge', title: "Restrictive practices show whether they're authorised", body: 'On a participant\'s Restrictive Practices tab, every active practice now shows Authorised or Not authorised.', important: false, roles: ['Admin', 'Coordinator'], publishedAtUtc: '2026-10-24T01:00:00Z', updatedAt: '2026-10-24T01:00:00Z' },
+  { id: 'wn-0002', key: '2026-10-roster-draft-shifts', title: 'Draft shifts stand out on the roster, and you can publish one at a time', body: 'Draft shifts on the roster board now have an amber background and the word Draft.\n\nTo publish a single shift, open its menu and choose Publish.', important: false, roles: ['Admin', 'Coordinator'], publishedAtUtc: '2026-10-23T01:00:00Z', updatedAt: '2026-10-23T01:00:00Z' },
+  { id: 'wn-0001', key: '2026-10-invoices-page', title: 'Invoices have their own page', body: 'Open Invoices in the menu to see every invoice and credit note in one list.', important: false, roles: ['Admin', 'Coordinator'], publishedAtUtc: '2026-10-22T01:00:00Z', updatedAt: '2026-10-22T01:00:00Z' },
+]
+const whatsNewPublic = ({ key, roles, updatedAt, archivedAtUtc, ...entry }) => entry
+const whatsNewFeed = () => {
+  const entries = whatsNewRows.filter((r) => !r.archivedAtUtc).map(whatsNewPublic)
+  return { entries, unreadCount: 0, popup: [] }
+}
+const whatsNewSave = (row, body) => Object.assign(row, { title: body.title, body: body.body, roles: body.roles, important: !!body.important, updatedAt: new Date().toISOString() })
+const whatsNewArchive = (id, archived) => {
+  const row = whatsNewRows.find((r) => r.id === id)
+  if (!row) return null
+  if (archived) row.archivedAtUtc = new Date().toISOString()
+  else delete row.archivedAtUtc
+  return { ...row }
+}
+
 // Connection map item 12 (staff hub) — staffId linkage for the three portalShiftBase fixture
 // shifts, derived from shiftCompletions.submittedByUserId where a completion exists (shift-0001/
 // 0002) and from the shift-0003 note's authorUserId otherwise (shift-0003 has no completion yet —
@@ -2779,6 +2801,8 @@ const routes = [
   // Settings › Alpha sign-ups (DELETE: earlyAccessDelete).
   ['admin/early-access', () => paged(earlyAccessSignups)],
   ['notifications/inbox', () => inAppInboxView()],
+  ['whats-new', () => whatsNewFeed()],
+  ['admin/whats-new', () => whatsNewRows.map((r) => ({ ...r }))],
 ]
 
 // POST routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -3002,6 +3026,15 @@ const postRoutes = [
   ['admin/notifications/test-email', () => ({ sent: true, error: undefined })],
   ['notifications/inbox/read-all', () => markInAppRead()],
   ['notifications/inbox/:id/read', (id) => markInAppRead(id)],
+  ['whats-new/seen', () => true],
+  ['whats-new/popup-seen', () => true],
+  ['admin/whats-new', (body) => {
+    const row = whatsNewSave({ id: 'wn-' + String(whatsNewRows.length + 1).padStart(4, '0'), key: 'admin-' + Date.now(), publishedAtUtc: new Date().toISOString() }, body)
+    whatsNewRows.unshift(row)
+    return { ...row }
+  }],
+  ['admin/whats-new/:id/archive', (id) => whatsNewArchive(id, true)],
+  ['admin/whats-new/:id/restore', (id) => whatsNewArchive(id, false)],
 ]
 
 // PUT routes needing a specific response shape rather than the generic echo-body-back fallback
@@ -3012,6 +3045,7 @@ const postRoutes = [
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
   ...packageRoutesPut,
+  ['admin/whats-new/:id', (id, body) => { const row = whatsNewRows.find((r) => r.id === id); return row ? { ...whatsNewSave(row, body) } : null }],
   ...funding.put,
   ['provider-settings', (body) => {
     const refused = invoiceMock.saveNumbering(body)
