@@ -179,7 +179,7 @@ describe('SupportProfileTab — Support Profile section (the /support-profile su
 
     expect(mockUpdateSupportProfileMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: expect.objectContaining({ communicationNotes: 'Uses AAC device.' }),
+      fields: expect.objectContaining({ communicationNotes: 'Uses AAC device.' }),
     })
   })
 

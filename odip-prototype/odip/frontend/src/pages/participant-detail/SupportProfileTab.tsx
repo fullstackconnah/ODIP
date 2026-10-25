@@ -616,7 +616,7 @@ function SupportProfileSection({ participantId, canEdit, onViewRestrictivePracti
     try {
       await updateSupportProfile.mutateAsync({
         id: participantId,
-        data: {
+        fields: {
           communicationNotes: draft.communicationNotes.trim() || undefined,
           behaviourSupportNotes: draft.behaviourSupportNotes.trim() || undefined,
           manualHandlingNotes: draft.manualHandlingNotes.trim() || undefined,
