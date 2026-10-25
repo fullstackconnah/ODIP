@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AlertCircle } from 'lucide-react'
 import { useCaregiverSubmission, useAcceptCaregiverSubmission, useRejectCaregiverSubmission } from '@/api/hooks/caregiver'
 import { computeCaregiverDiff, type DiffRow } from '@/lib/caregiverDiff'
 import { usePermissions } from '@/lib/permissions'
@@ -38,7 +39,7 @@ export default function CaregiverSubmissionReviewPage() {
   const [showReject, setShowReject] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const rows = useMemo(() => (s ? computeCaregiverDiff(s.current, s.payload) : []), [s])
+  const rows = useMemo(() => (s ? computeCaregiverDiff(s.current, s.payload, s.base) : []), [s])
   const byGroup = useMemo(
     () => rows.reduce<Record<string, DiffRow[]>>((acc, r) => { (acc[r.group] ??= []).push(r); return acc }, {}),
     [rows],
@@ -51,6 +52,8 @@ export default function CaregiverSubmissionReviewPage() {
       : <PageState kind="not-found" noun="submission" backTo="/caregiver-submissions" backLabel="caregiver submissions" />
   }
   const canAct = canWriteParticipantDetails && s.status === 'Submitted'
+  // Staff edits since the form was opened only matter while there is still something to accept.
+  const flagStaffChanges = s.status === 'Submitted'
 
   // A refusal (409 when someone else reviewed it first) closes the dialog, says why and reloads the submission's real state.
   const act = async (request: () => Promise<unknown>, fallback: string) => {
@@ -102,8 +105,10 @@ export default function CaregiverSubmissionReviewPage() {
 
       {actionError && <Callout tone="error">{actionError}</Callout>}
 
+      {!s.base && rows.length > 0 && <Callout tone="info">Sent before change tracking: every value shown here will be applied.</Callout>}
+
       {rows.length === 0 ? (
-        <p className="text-sm text-[var(--color-muted-foreground)]">The caregiver submitted the form without changing any values.</p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">No changes from the caregiver.</p>
       ) : (
         Object.entries(byGroup).map(([group, groupRows]) => (
           <section key={group} className="rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
@@ -121,7 +126,15 @@ export default function CaregiverSubmissionReviewPage() {
                   {groupRows.map((r) => (
                     <tr key={r.field}>
                       <td className="px-[var(--cell-px)] py-[7px] font-medium">{r.label}</td>
-                      <td className="px-[var(--cell-px)] py-[7px]">{r.current}</td>
+                      <td className="px-[var(--cell-px)] py-[7px]">
+                        {r.current}
+                        {flagStaffChanges && r.staffChanged && (
+                          <p className="mt-1 flex items-center gap-1 text-xs font-medium text-[var(--color-on-warning-container)]">
+                            <AlertCircle aria-hidden className="h-3.5 w-3.5 shrink-0" />
+                            Changed by staff since the form was opened
+                          </p>
+                        )}
+                      </td>
                       <td className="px-[var(--cell-px)] py-[7px]">{r.proposed}</td>
                     </tr>
                   ))}

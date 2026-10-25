@@ -14,12 +14,15 @@ export type CaregiverFormDto = {
   current: Record<string, unknown>
   editable: string[]
   draft: PatchParticipantDto | null
+  /** The form the caregiver loaded; null for a draft saved before change tracking. */
+  base?: PatchParticipantDto | null
 }
 
 export type CaregiverDraftDto = {
   caregiverName: string
   caregiverRelationship?: string | null
   payload: PatchParticipantDto
+  base?: PatchParticipantDto | null
 }
 
 export type CaregiverLinkDto = { token: string; expiresAt: string }
@@ -41,4 +44,5 @@ export type CaregiverSubmissionDetailDto = CaregiverSubmissionListItemDto & {
   rejectionNote: string | null
   current: Record<string, unknown>
   payload: PatchParticipantDto | null
+  base?: PatchParticipantDto | null
 }

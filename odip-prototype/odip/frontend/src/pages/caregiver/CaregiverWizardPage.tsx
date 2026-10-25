@@ -20,7 +20,7 @@
 import { useParams } from 'react-router-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import type { Control, FieldErrors, UseFieldArrayReturn, UseFormRegister } from 'react-hook-form'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 import { usePublicCaregiverForm, useSaveCaregiverDraft, useSubmitCaregiverForm } from '@/api/hooks/caregiver'
 import {
@@ -35,7 +35,7 @@ import {
   PROFILE_STEP_MOBILITY_FIELDS, PROFILE_STEP_BEHAVIOUR_FIELDS, PROFILE_STEP_DAILY_LIVING_FIELDS,
   type ParticipantFormData,
 } from '@/lib/participantSchema'
-import { buildProfileStepPatch } from '@/lib/participantPatchGroups'
+import { buildCaregiverWire } from '@/lib/caregiverPayload'
 import { CAREGIVER_INTERNAL_FIELDS } from '@/lib/caregiverFields'
 import { label as fieldLabel, norm as normValue } from '@/lib/caregiverDiff'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
@@ -47,14 +47,12 @@ import { MobilityFunctionalStep } from '../profile/steps/MobilityFunctionalStep'
 import { BehaviourCognitionStep } from '../profile/steps/BehaviourCognitionStep'
 import { DailyLivingStep } from '../profile/steps/DailyLivingStep'
 import { AboutYouStep } from './steps/AboutYouStep'
-import { hydrateFormFromProjection } from './hydrate'
+import { hydrateFormFromProjection, hydrateBase } from './hydrate'
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
 
 const ABOUT_YOU_FIELDS = ['caregiverName', 'caregiverRelationship'] as const
 const aboutYouSchema = z.object({ caregiverName: z.string().trim().min(1, 'Please enter your name') })
-
-const PROFILE_STEP_GROUP_KEYS = ['keyIdentifiers', 'culturalDepth', 'medical', 'mobility', 'behaviourCognition', 'dailyLiving'] as const
 
 export default function CaregiverWizardPage() {
   const { token } = useParams<{ token: string }>()
@@ -92,8 +90,11 @@ export default function CaregiverWizardPage() {
 
   // Hydrate once from the projection + any saved draft. The draft (a PatchParticipantDto) wins
   // over the projection for the fields/groups it carries — see hydrate.ts.
+  // The form the caregiver started from, sent with every save so Accept can tell their edits from the record's later ones.
+  const baseRef = useRef<PatchParticipantDto | null>(null)
   useEffect(() => {
     if (!form.data) return
+    baseRef.current = hydrateBase(form.data)
     reset(hydrateFormFromProjection(form.data) as unknown as CaregiverFormData, { keepDefaultValues: false })
   }, [form.data, reset])
 
@@ -113,13 +114,12 @@ export default function CaregiverWizardPage() {
     // One PatchParticipantDto for the whole form: merge every editable step's group patch. The
     // backend's accept-time sanitiser drops internal groups/scalars regardless — the frontend
     // additionally never renders them (hiddenFields), so nothing internal is ever user-editable.
-    const payload = PROFILE_STEP_GROUP_KEYS
-      .map((k) => buildProfileStepPatch(k, values, false) ?? {})
-      .reduce((acc, part) => ({ ...acc, ...part }), {} as Record<string, unknown>) as PatchParticipantDto
+    const payload = buildCaregiverWire(values)
     return {
       caregiverName: values.caregiverName.trim(),
       caregiverRelationship: values.caregiverRelationship?.trim() || null,
       payload,
+      base: baseRef.current,
     }
   }
 

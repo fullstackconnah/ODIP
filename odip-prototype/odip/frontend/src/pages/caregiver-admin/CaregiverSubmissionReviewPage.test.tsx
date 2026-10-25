@@ -92,7 +92,45 @@ describe('CaregiverSubmissionReviewPage', () => {
     })
     renderPage()
 
-    expect(screen.getByText(/without changing any values/i)).toBeInTheDocument()
+    expect(screen.getByText(/no changes from the caregiver/i)).toBeInTheDocument()
+  })
+
+  // The base is the form the caregiver loaded; staff may have edited the same detail since.
+  const withBase = (overrides: Partial<CaregiverSubmissionDetailDto> = {}) => {
+    mockUseCaregiverSubmission.mockReturnValue({
+      data: makeSubmission({
+        current: { firstName: "Sophie", lastName: "Brown", phone: "0400000002" },
+        payload: { personalDetails: { firstName: "Sophie", lastName: "Brown", phone: "0400000003" } },
+        base: { personalDetails: { firstName: "Sophie", lastName: "Brown", phone: "0400000001" } },
+        ...overrides,
+      }),
+      isLoading: false,
+    })
+  }
+
+  it("flags a row staff changed since the form was opened, while the submission is waiting", () => {
+    withBase()
+    renderPage()
+    expect(screen.getByText("Changed by staff since the form was opened")).toBeInTheDocument()
+    expect(screen.queryByText(/sent before change tracking/i)).not.toBeInTheDocument()
+  })
+
+  it("does not flag once the submission is no longer waiting", () => {
+    withBase({ status: "Accepted" })
+    renderPage()
+    expect(screen.queryByText("Changed by staff since the form was opened")).not.toBeInTheDocument()
+  })
+
+  it("says a submission without a base applies every value shown", () => {
+    renderPage()
+    expect(screen.getByText("Sent before change tracking: every value shown here will be applied.")).toBeInTheDocument()
+    expect(screen.queryByText("Changed by staff since the form was opened")).not.toBeInTheDocument()
+  })
+
+  it("shows no changes from the caregiver when payload equals base, even if the live record differs", () => {
+    withBase({ payload: { personalDetails: { firstName: "Sophie", lastName: "Brown", phone: "0400000001" } } })
+    renderPage()
+    expect(screen.getByText(/no changes from the caregiver/i)).toBeInTheDocument()
   })
 
   it('hides Accept/Reject when status is not Submitted', () => {
