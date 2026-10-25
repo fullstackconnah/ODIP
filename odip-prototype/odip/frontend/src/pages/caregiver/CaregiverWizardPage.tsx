@@ -62,6 +62,8 @@ export default function CaregiverWizardPage() {
   const submit = useSubmitCaregiverForm(token)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [progressSaved, setProgressSaved] = useState(false)
+  // Set synchronously so two clicks in one tick send one request; isPending only lands a render later.
+  const savingLater = useRef(false)
 
   const { control, register, getValues, setValue, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
     defaultValues: {
@@ -171,11 +173,15 @@ export default function CaregiverWizardPage() {
       setError('caregiverName', { type: 'manual', message })
       return
     }
+    if (savingLater.current) return
+    savingLater.current = true
     try {
       await saveDraft.mutateAsync(buildDraftBody())
       setProgressSaved(true)
     } catch {
       setSaveError("We couldn't save your progress. Please check your connection and try again.")
+    } finally {
+      savingLater.current = false
     }
   }
 
@@ -252,11 +258,11 @@ export default function CaregiverWizardPage() {
           onBack={wizard.handleBack}
           onNext={wizard.handleNext}
           isReviewStep={wizard.isReviewStep}
-          secondaryActions={[{ key: 'saveLater', label: 'Save and continue later', onClick: saveForLater }]}
+          secondaryActions={[{ key: 'saveLater', label: saveDraft.isPending ? 'Saving…' : 'Save and continue later', onClick: saveForLater, disabled: saveDraft.isPending || submit.isPending }]}
           cancelTo={`/caregiver/${token}`}
           history={false}
           submitLabel={submit.isPending ? 'Submitting…' : 'Submit for review'}
-          isSubmitting={submit.isPending || wizard.isAdvancing}
+          isSubmitting={submit.isPending || wizard.isAdvancing || saveDraft.isPending}
         />
       </form>
     </PublicShell>
