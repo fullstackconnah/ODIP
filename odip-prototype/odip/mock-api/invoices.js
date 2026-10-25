@@ -229,7 +229,7 @@ function create({ respond, failEnvelope, claims, lineItemsByClaimId }) {
       }],
       ['claims/:id/invoices/:id', () => file()],
       ['invoices', (params) => registerPage(params)],
-      ['invoices/:id/pdf', (id) => (find(id) || (id.startsWith('reg-') && id !== 'reg-nopdf') ? file() : fail(404, 'Invoice not found.'))],
+      ['invoices/:id/pdf', (id) => (id === 'reg-nopdf' ? respond(500, failEnvelope(null, [])) : find(id) || id.startsWith('reg-') ? file() : fail(404, 'Invoice not found.'))],
     ],
     delete: [['claims/:id', (id) => refuseDelete(id) ?? true]],
     post: [
