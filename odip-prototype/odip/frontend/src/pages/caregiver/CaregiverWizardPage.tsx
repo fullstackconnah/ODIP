@@ -258,7 +258,7 @@ export default function CaregiverWizardPage() {
           onBack={wizard.handleBack}
           onNext={wizard.handleNext}
           isReviewStep={wizard.isReviewStep}
-          secondaryActions={[{ key: 'saveLater', label: saveDraft.isPending ? 'Saving…' : 'Save and continue later', onClick: saveForLater, disabled: saveDraft.isPending || submit.isPending }]}
+          secondaryActions={[{ key: 'saveLater', label: saveDraft.isPending ? 'Saving your progress…' : 'Save and continue later', onClick: saveForLater, disabled: saveDraft.isPending || submit.isPending }]}
           cancelTo={`/caregiver/${token}`}
           history={false}
           submitLabel={submit.isPending ? 'Submitting…' : 'Submit for review'}

@@ -289,7 +289,7 @@ describe('CaregiverWizardPage - one save per click', () => {
     await user.dblClick(saveLater())
 
     expect(mockPut).toHaveBeenCalledTimes(1)
-    const saving = await screen.findByRole('button', { name: 'Saving…' })
+    const saving = await screen.findByRole('button', { name: 'Saving your progress…' })
     expect(saving).toBeDisabled()
 
     release()
