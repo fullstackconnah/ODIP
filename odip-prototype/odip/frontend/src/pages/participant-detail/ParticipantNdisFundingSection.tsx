@@ -64,7 +64,7 @@ export function ParticipantNdisFundingSection({ p, participantId, canEdit }: { p
 
   return (
     <SectionEditPanel title="NDIS & Funding" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>
             <FormField label="Funding Source" className={span.short}>
@@ -99,7 +99,7 @@ export function ParticipantNdisFundingSection({ p, participantId, canEdit }: { p
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Funding Source', value: FUNDING_SOURCE_LABELS[(p.fundingSource as FundingSource) ?? 'Ndis'] },
             ...(p.fundingSource !== 'Other' ? [

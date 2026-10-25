@@ -135,7 +135,7 @@ export function SupportNeedsSection({ p, participantId, canEdit, restrictiveLink
 
   return (
     <SectionEditPanel title="Support Needs" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <FormField label="High Support" layout="checkbox">
             <input type="checkbox" checked={draft.isHighSupport} onChange={(e) => setDraft((d) => ({ ...d, isHighSupport: e.target.checked }))} className="w-4 h-4 rounded border-[var(--color-border)]" />
@@ -153,7 +153,7 @@ export function SupportNeedsSection({ p, participantId, canEdit, restrictiveLink
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'High Support', value: p.isHighSupport ? 'Yes' : 'No' },
             { label: 'Intensive Support', value: p.isIntensiveSupport ? 'Yes' : 'No' },
@@ -208,7 +208,7 @@ export function MobilityAidsSection({ p, participantId, canEdit }: CommonSection
 
   return (
     <SectionEditPanel title="Mobility Aids & Support" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <fieldset className="m-0 p-0 border-0">
             <legend className={labelClass}>Mobility Aids</legend>
@@ -246,7 +246,7 @@ export function MobilityAidsSection({ p, participantId, canEdit }: CommonSection
           </fieldset>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Mobility Aids', value: readMobilityAidBadges.length ? <TagList labels={readMobilityAidBadges} /> : undefined },
             { label: 'Mobility Support', value: p.mobilitySupportOptions?.length ? <TagList labels={p.mobilitySupportOptions} /> : undefined },
@@ -297,7 +297,7 @@ export function OvernightSupportSection({ p, participantId, canEdit }: CommonSec
 
   return (
     <SectionEditPanel title="Overnight Support" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <FormField label="Overnight Support">
             <Dropdown
@@ -319,7 +319,7 @@ export function OvernightSupportSection({ p, participantId, canEdit }: CommonSec
           )}
         </div>
       ) : (
-        <FactList items={[{ label: 'Overnight Support', value: overnightSupportText(p) }]} />
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined} items={[{ label: 'Overnight Support', value: overnightSupportText(p) }]} />
       )}
     </SectionEditPanel>
   )
@@ -365,7 +365,7 @@ export function EquipmentSection({ p, participantId, canEdit }: CommonSectionPro
 
   return (
     <SectionEditPanel title="Equipment" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <fieldset className="m-0 p-0 border-0 space-y-2">
           <legend className="sr-only">Equipment</legend>
           {EQUIPMENT_FIELDS.map((f) => (
@@ -375,7 +375,7 @@ export function EquipmentSection({ p, participantId, canEdit }: CommonSectionPro
           ))}
         </fieldset>
       ) : (
-        <FactList items={[{ label: 'Equipment', value: equipmentBadges.length ? <TagList labels={equipmentBadges} /> : undefined }]} />
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined} items={[{ label: 'Equipment', value: equipmentBadges.length ? <TagList labels={equipmentBadges} /> : undefined }]} />
       )}
     </SectionEditPanel>
   )

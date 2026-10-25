@@ -8,7 +8,7 @@ export function ServicesCard({ p }: { p: ParticipantDetailDto }) {
   const streams = parseServiceStreams(p.serviceStreams)
   return (
     <Card title="Services">
-      <FactList items={[
+      <FactList hideEmpty items={[
         { label: 'Region', value: p.region || undefined },
         { label: 'Service streams', value: streams.length ? <ServiceStreamBadges value={p.serviceStreams} /> : undefined },
       ]} />

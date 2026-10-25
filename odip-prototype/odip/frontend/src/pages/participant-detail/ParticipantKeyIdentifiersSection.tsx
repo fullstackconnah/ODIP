@@ -68,7 +68,7 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
 
   return (
     <SectionEditPanel title="Key Identifiers" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           <FormField label="Pension Card Number" className={span.medium}>
             <input value={draft.pensionCardNumber} onChange={(e) => setDraft((d) => ({ ...d, pensionCardNumber: e.target.value }))} />
@@ -111,7 +111,7 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Pension Card', value: p.pensionCardNumber ? <MaskedValue value={`${p.pensionCardNumber}${p.pensionCardExpiry ? ` (expires ${formatDateAu(p.pensionCardExpiry)})` : ''}`} /> : undefined },
             { label: 'Medicare', value: p.medicareNumber ? <MaskedValue value={`${p.medicareNumber}${p.medicareExpiry ? ` (expires ${formatDateAu(p.medicareExpiry)})` : ''}`} /> : undefined },

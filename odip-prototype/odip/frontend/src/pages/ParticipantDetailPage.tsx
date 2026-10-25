@@ -394,7 +394,7 @@ export default function ParticipantDetailPage() {
       <TabPanel tab={tab} id="people">
         <JumpPanel>
           <div className={CARD_GRID}>
-            <Section id="contacts" label="Contacts" srHeading wide><ContactsTab participantId={id} /></Section>
+            <Section id="contacts" label="Contacts" srHeading wide><ContactsTab participantId={id} participant={p} /></Section>
             {canAccessRostering && <Section id="roster" label="Rostering" srHeading wide><RosteringTab participantId={id!} /></Section>}
             <Section id="trips" label="Bookings" srHeading wide><BookingsTab participantId={id} /></Section>
           </div>

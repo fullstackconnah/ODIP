@@ -221,17 +221,17 @@ describe('ContactsTab — long list (T10)', () => {
 })
 
 describe('ContactsTab — one-home copies (T11)', () => {
-  const renderRouted = () => render(<MemoryRouter><ContactsTab participantId="participant-1" /></MemoryRouter>)
+  const renderRouted = (p = makeParticipant()) => render(<MemoryRouter><ContactsTab participantId="participant-1" participant={p} /></MemoryRouter>)
 
   it('shows Preferred staff with a link worded by the viewer gate on Identity', () => {
-    mockUseParticipant.mockReturnValue({ data: makeParticipant({ preferredStaffName: 'Alex Rivera' }) })
+    const p = makeParticipant({ preferredStaffName: 'Alex Rivera' })
     setUserRole('SupportWorker')
-    const { unmount } = renderRouted()
+    const { unmount } = renderRouted(p)
     expect(screen.getByText(/Preferred staff: Alex Rivera/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See Identity' })).toHaveAttribute('href', '/?tab=about#identity')
     unmount()
     setUserRole('Coordinator')
-    renderRouted()
+    renderRouted(p)
     expect(screen.getByRole('link', { name: 'Edit in Identity' })).toBeInTheDocument()
   })
 
@@ -240,8 +240,7 @@ describe('ContactsTab — one-home copies (T11)', () => {
     expect(screen.queryByText(/Recorded in Home and living/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Preferred staff/)).not.toBeInTheDocument()
     unmount()
-    mockUseParticipant.mockReturnValue({ data: makeParticipant({ mainSupportPersonName: 'Jo Brown' }) })
-    renderRouted()
+    renderRouted(makeParticipant({ mainSupportPersonName: 'Jo Brown' }))
     expect(screen.getByText(/Recorded in Home and living: Jo Brown. Add them as a contact to keep their details./)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Home and living/ })).toHaveAttribute('href', '/?tab=about#home-and-living')
   })

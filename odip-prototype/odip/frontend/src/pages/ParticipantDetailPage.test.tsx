@@ -273,15 +273,15 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.getByText('Jamie Lee')).toBeInTheDocument()
   })
 
-  it('falls back to "—" for Preferred Name when unset, per this card\'s always-visible empty-state idiom', () => {
+  it('lists Preferred Name in the card\'s Not recorded line when unset, with no dash row', () => {
     mockUseParticipant.mockReturnValue({
       data: makeParticipant({ preferredName: null }),
       isLoading: false,
     })
     renderAtTab('participant-1', 'about')
 
-    const row = screen.getByText('Preferred Name').nextElementSibling
-    expect(row).toHaveTextContent('—')
+    expect(screen.queryByText('Preferred Name')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/^Not recorded:.*Preferred Name/).length).toBeGreaterThan(0)
   })
 
   it('renders the NDIS & Funding group split out from Identity, including the DSOA/repeat-client flags', () => {
@@ -401,7 +401,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123' }), isLoading: false })
     renderAtTab('participant-1', 'about')
 
-    const fold = screen.getByText(/^Not recorded:/).closest('details') as HTMLElement
+    const fold = document.querySelector('details') as HTMLElement
     expect(fold).not.toHaveAttribute('open')
     expect(fold.querySelector('summary')).toHaveTextContent('Not recorded: Address & Living Arrangements, Cultural Background and About Me')
     // The cards inside are the real ones, Edit and all; a card with something recorded stays in the grid.
@@ -416,6 +416,38 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
 
     expect(screen.getByText(/^Not recorded:/).closest('details')).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Medical' })).not.toBeInTheDocument()
+  })
+
+  // T6: a sparse About, for a role that cannot edit.
+  it.each(['SupportWorker', 'ReadOnly'])('%s sees Not recorded lines, no dashes and no Add buttons in a sparse About', role => {
+    setUserRole(role)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123' }), isLoading: false })
+    renderAtTab('participant-1', 'about')
+    const panel = (document.querySelector('section[id]') as HTMLElement).closest('[class~="@container"]') as HTMLElement
+    expect(within(panel).getAllByText(/^Not recorded/).length).toBeGreaterThan(0)
+    expect(panel.textContent).not.toContain('—')
+    expect(within(panel).queryByRole('button', { name: /^Add/ })).not.toBeInTheDocument()
+    expect(panel.querySelector('details')).toBeNull()
+  })
+
+  // T7: the same page for editors; Add on a part-filled Home and living card opens edit with focus in its first empty input.
+  it.each(['Coordinator', 'Admin', 'SuperAdmin'])('%s gets Add buttons and a fold of empty cards in a sparse About', async role => {
+    const user = userEvent.setup()
+    setUserRole(role)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123', mainSupportPersonName: 'Jo Brown' }), isLoading: false })
+    renderAtTab('participant-1', 'about')
+    const panel = (document.querySelector('section[id]') as HTMLElement).closest('[class~="@container"]') as HTMLElement
+    const fold = panel.querySelector('details') as HTMLElement
+    expect(fold).not.toHaveAttribute('open')
+    expect(fold.textContent).toContain('Cultural Background')
+
+    const home = panel.querySelector('#home-and-living') as HTMLElement
+    await user.click(within(home).getByRole('button', { name: 'Add' }))
+    await waitFor(() => {
+      const active = document.activeElement as HTMLInputElement
+      expect(home).toContainElement(active)
+      expect(active.value).toBe('')
+    })
   })
 
   it('uses the auto-fill items-start section grid with a min(26rem,100%) floor, and gives the table-based Health/ADL sections a bare wrapper instead of a second bordered Card', () => {

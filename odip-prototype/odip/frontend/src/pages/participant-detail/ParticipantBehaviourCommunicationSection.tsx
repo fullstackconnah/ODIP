@@ -86,7 +86,7 @@ export function ParticipantBehaviourCommunicationSection({ p, participantId, can
 
   return (
     <SectionEditPanel title="Behaviour & Communication" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>
             <FormField label="Memory" className={span.short}>
@@ -144,7 +144,7 @@ export function ParticipantBehaviourCommunicationSection({ p, participantId, can
           </div>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Memory', value: p.memory ? MEMORY_LEVEL_LABELS[p.memory] : undefined },
             { label: 'Memory Aids', value: yesNoUnset(p.memoryAids) },
