@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, within, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import IntakeWizardPage from './IntakeWizardPage'
@@ -293,6 +293,20 @@ describe('IntakeWizardPage', () => {
     // NAV F2: a saved draft is listed on the Enquiries tab (as a Draft intake row), so that is where Save as draft goes.
     expect(await screen.findByText('Participants list')).toBeInTheDocument()
     expect(screen.getByTestId('arrival-search')).toHaveTextContent('?tab=enquiries')
+  })
+
+  it('O5: a new intake starts on Plan Managed; a resumed participant keeps their saved plan type', async () => {
+    const user = userEvent.setup()
+    renderPage('/participants/new')
+    await fillNameAndAdvance(user)
+    expect(document.getElementById('planType')).toHaveTextContent('Plan Managed')
+    cleanup()
+
+    mockParticipant.mockReturnValue({ data: draft({ planType: 'SelfManaged' }), isLoading: false })
+    renderPage('/participants/draft-1/intake')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/ndis & funding/i)
+    expect(document.getElementById('planType')).toHaveTextContent('Self Managed')
   })
 
   it('saves a resumed draft (edit mode) and lands on the Enquiries tab too', async () => {
