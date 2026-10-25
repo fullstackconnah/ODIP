@@ -128,7 +128,7 @@ npm run lint
   explicitly rejects the literal dev placeholder secret — so local setup needs a real secret
   value, not just any non-empty string.
 
-- Middleware runs in a fixed order in `Program.cs`: security headers →
+- Middleware runs in a fixed order in `Program.cs`: security headers → `RequestTimingMiddleware` (observes only; logs `Odip.RequestTiming`) →
   `ExceptionHandlingMiddleware` → rate limiter ("login"/"api" policies) → CORS → Auth →
   `ReadOnlyMiddleware` (403s writes for the "ReadOnly" role) → controllers. Because the order
   matters, inserting new middleware in the wrong slot can silently change what gets
