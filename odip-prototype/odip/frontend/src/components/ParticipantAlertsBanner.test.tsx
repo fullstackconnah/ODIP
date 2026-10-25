@@ -151,4 +151,28 @@ describe('ParticipantAlertsBanner — alert text is never cut', () => {
     expect(row).toHaveClass('flex', 'items-start')
     expect(screen.getByText('Critical')).toHaveClass('shrink-0')
   })
+  describe('severity filter', () => {
+    const more = (n: number): ParticipantAlertDto[] => Array.from({ length: n }, (_, i) => ({ ...criticalAlert, type: 'c' + i, message: 'Critical ' + i }))
+
+    it('critical shows every Critical row with no cap and no more-toggle, and skips the rest', () => {
+      renderWithRouter(<ParticipantAlertsBanner severity="critical" alerts={[...more(5), warningAlert]} />)
+      expect(screen.getAllByRole('button')).toHaveLength(5)
+      expect(screen.queryByText(/more alert/)).toBeNull()
+      expect(screen.queryByText('No active routines recorded')).toBeNull()
+    })
+
+    it('other keeps the cap of 3 over the non-critical rows only', () => {
+      const warnings = Array.from({ length: 5 }, (_, i) => ({ ...warningAlert, type: 'w' + i, message: 'Warning ' + i }))
+      renderWithRouter(<ParticipantAlertsBanner severity="other" alerts={[criticalAlert, ...warnings]} />)
+      expect(screen.queryByText('NDIS plan end date has passed')).toBeNull()
+      expect(screen.getByText('Warning 2')).toBeInTheDocument()
+      expect(screen.queryByText('Warning 3')).toBeNull()
+      expect(screen.getByText('+2 more alerts')).toBeInTheDocument()
+    })
+
+    it('renders nothing when the filter leaves no rows', () => {
+      const { container } = renderWithRouter(<ParticipantAlertsBanner severity="critical" alerts={[warningAlert]} />)
+      expect(container).toBeEmptyDOMElement()
+    })
+  })
 })

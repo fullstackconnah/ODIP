@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useBeginServices, useCreateParticipant, useMakeParticipantActive, usePatchParticipant, useParticipants } from './participants'
+import { useBeginServices, useCreateParticipant, useDeleteParticipant, useMakeParticipantActive, usePatchParticipant, useParticipants } from './participants'
 import type { PatchParticipantDto } from '../types'
 
 // CORE-02: usePatchParticipant is a thin TanStack Query mutation wrapper around apiPatchRaw — only
 // that named export needs mocking (the rest of the module, e.g. apiPutRaw used by
 // useUpdateParticipant, stays real).
-const { mockApiPatchRaw, mockApiPostRaw, mockApiGet } = vi.hoisted(() => ({
+const { mockApiPatchRaw, mockApiPostRaw, mockApiGet, mockApiDeleteRaw } = vi.hoisted(() => ({
+  mockApiDeleteRaw: vi.fn(),
   mockApiPatchRaw: vi.fn(),
   mockApiPostRaw: vi.fn(),
   mockApiGet: vi.fn(),
@@ -16,7 +17,7 @@ const { mockApiPatchRaw, mockApiPostRaw, mockApiGet } = vi.hoisted(() => ({
 
 vi.mock('../client', async () => {
   const actual = await vi.importActual<typeof import('../client')>('../client')
-  return { ...actual, apiPatchRaw: mockApiPatchRaw, apiPostRaw: mockApiPostRaw, apiGet: mockApiGet }
+  return { ...actual, apiPatchRaw: mockApiPatchRaw, apiPostRaw: mockApiPostRaw, apiGet: mockApiGet, apiDeleteRaw: mockApiDeleteRaw }
 })
 
 function createWrapper(queryClient: QueryClient) {
@@ -194,5 +195,21 @@ describe('useBeginServices / useMakeParticipantActive', () => {
     expect(mockApiPostRaw).toHaveBeenCalledWith(`/participants/p7/${action}`, {})
     for (const key of [['onboarding', 'p7'], ['participant-onboarding-worklist'], ['participants'], ['roster-board']])
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: key })
+  })
+})
+
+describe('useDeleteParticipant', () => {
+  it('refreshes the list and the detail page it archived from', async () => {
+    mockApiDeleteRaw.mockResolvedValue({ success: true, data: true, message: null, errors: null })
+    const queryClient = new QueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useDeleteParticipant(), { wrapper: createWrapper(queryClient) })
+
+    result.current.mutate('p9')
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(mockApiDeleteRaw).toHaveBeenCalledWith('/participants/p9')
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participants'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participant', 'p9'] })
   })
 })

@@ -213,7 +213,10 @@ export function useDeleteParticipant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiDeleteRaw<boolean>(`/participants/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['participants'] }),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['participant', id] })
+    },
   })
 }
 

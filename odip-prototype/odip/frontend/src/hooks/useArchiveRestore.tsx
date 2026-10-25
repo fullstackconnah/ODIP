@@ -28,6 +28,9 @@ type ArchiveRestoreReturn<T> = {
   /** A dismissible banner with the server's message for the last archive or restore that failed, else null. Render it above the list. */
   errorNotice: ReactNode
   actionButtons: (item: T) => ReactNode
+  /** Open `confirmDialog` for an item without a row button (a page's More menu). */
+  requestArchive: (item: T) => void
+  requestRestore: (item: T) => void
 }
 
 export function useArchiveRestore<T>(config: ArchiveRestoreConfig<T>): ArchiveRestoreReturn<T> {
@@ -140,5 +143,6 @@ export function useArchiveRestore<T>(config: ArchiveRestoreConfig<T>): ArchiveRe
   return {
     showArchived, setShowArchived: changeView, params,
     toggleButtons, confirmDialog, errorNotice, actionButtons,
+    requestArchive: handleDelete, requestRestore: handleRestore,
   }
 }
